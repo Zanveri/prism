@@ -1,0 +1,578 @@
+/*
+ * O site do Prism: CSS escrito à mão, sem framework, sem fonte de fora e sem script. As cores são as da marca do app
+ * (src/client/src/styles/globals.css): o Prism Escuro é o padrão, e o Prism Claro vale quando o sistema pede o claro
+ * (prefers-color-scheme). Os pares de texto e fundo passam de 4,5:1.
+ */
+:root {
+  color-scheme: dark light;
+  --fundo: #0e1114;
+  --painel: #14181d;
+  --elevado: #1b2027;
+  --selecionado: #232a33;
+  --linha: #2a313b;
+  --linha-forte: #38414d;
+  --tinta: #e6eaf0;
+  --corpo: #c9d1dc;
+  --apagado: #b4bcc8;
+  --sutil: #8e99a8;
+  --acento: #f2b644;
+  --sobre-acento: #1b2027;
+  --link: #7db2ff;
+  --verde: #5ed3a3;
+  --perigo: #ff8a7a;
+  --sombra: 0 18px 48px rgb(0 0 0 / 0.45);
+  --fonte: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --fundo: #f7f8fa;
+    --painel: #eceff3;
+    --elevado: #ffffff;
+    --selecionado: #e3e8ee;
+    --linha: #d5dae1;
+    --linha-forte: #b4bcc8;
+    --tinta: #1b2027;
+    --corpo: #323a45;
+    --apagado: #47505d;
+    --sutil: #5f6875;
+    --acento: #8a5200;
+    --sobre-acento: #ffffff;
+    --link: #1d5fd1;
+    --verde: #097244;
+    --perigo: #b32a1a;
+    --sombra: 0 18px 48px rgb(20 24 29 / 0.16);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--corpo);
+  font: 1.0625rem/1.65 var(--fonte);
+  overflow-wrap: break-word;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--acento);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.pular {
+  position: absolute;
+  left: 0.75rem;
+  top: -4rem;
+  z-index: 10;
+  padding: 0.5rem 0.9rem;
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font-weight: 600;
+  border-radius: 0.4rem;
+}
+
+.pular:focus {
+  top: 0.75rem;
+}
+
+/* ---- o topo ---- */
+.topo {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--fundo) 92%, transparent);
+  border-bottom: 1px solid var(--linha);
+  backdrop-filter: blur(6px);
+}
+
+.topo-dentro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--tinta);
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.marca img {
+  width: 1.9rem;
+  height: 1.9rem;
+}
+
+.topo nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.1rem;
+  font-size: 0.95rem;
+}
+
+.topo nav a {
+  color: var(--apagado);
+  text-decoration: none;
+}
+
+.topo nav a:hover {
+  color: var(--tinta);
+  text-decoration: underline;
+}
+
+/* ---- botões ---- */
+.botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0;
+}
+
+.botao {
+  display: inline-block;
+  padding: 0.7rem 1.3rem;
+  border: 1px solid var(--linha-forte);
+  border-radius: 0.5rem;
+  background: var(--elevado);
+  color: var(--tinta);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.botao:hover {
+  background: var(--selecionado);
+}
+
+.botao-principal {
+  border-color: var(--acento);
+  background: var(--acento);
+  color: var(--sobre-acento);
+}
+
+.botao-principal:hover {
+  background: var(--acento);
+  filter: brightness(1.08);
+}
+
+.botao-grande {
+  padding: 0.95rem 1.8rem;
+  font-size: 1.15rem;
+}
+
+/* ---- a página ---- */
+.pagina {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 0 1rem 4rem;
+}
+
+.unica {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 0 1rem 4rem;
+}
+
+.sumario {
+  margin: 1.25rem 0 0;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--linha);
+}
+
+.sumario ol {
+  display: flex;
+  gap: 0.3rem 1rem;
+  margin: 0;
+  padding: 0 0 0.4rem;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.sumario a {
+  color: var(--apagado);
+  text-decoration: none;
+}
+
+.sumario a:hover {
+  color: var(--tinta);
+  text-decoration: underline;
+}
+
+.sumario-titulo {
+  margin: 0 0 0.35rem;
+  color: var(--sutil);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+main {
+  min-width: 0;
+}
+
+section {
+  scroll-margin-top: 4.5rem;
+  padding-top: 2.5rem;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--tinta);
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.1rem);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--linha);
+  font-size: clamp(1.5rem, 4vw, 1.9rem);
+}
+
+h3 {
+  margin: 2rem 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+p,
+ul,
+ol,
+dl {
+  margin: 0.75rem 0;
+}
+
+ul,
+ol {
+  padding-left: 1.4rem;
+}
+
+li {
+  margin: 0.3rem 0;
+}
+
+strong {
+  color: var(--tinta);
+}
+
+code,
+kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+code {
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: var(--selecionado);
+  color: var(--tinta);
+}
+
+kbd {
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--linha-forte);
+  border-bottom-width: 2px;
+  border-radius: 0.3rem;
+  background: var(--elevado);
+  color: var(--tinta);
+  white-space: nowrap;
+}
+
+pre {
+  margin: 0.9rem 0;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--linha);
+  border-radius: 0.5rem;
+  background: var(--painel);
+  line-height: 1.5;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.9rem;
+}
+
+/* ---- o começo ---- */
+.abertura {
+  padding-top: 2rem;
+}
+
+.logotipo {
+  width: min(24rem, 100%);
+  margin: 0 0 1.5rem;
+}
+
+.lide {
+  max-width: 44rem;
+  margin: 1rem 0 0;
+  color: var(--apagado);
+  font-size: 1.2rem;
+}
+
+/* ---- avisos ---- */
+.aviso {
+  margin: 1.25rem 0;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--linha);
+  border-left: 4px solid var(--acento);
+  border-radius: 0.5rem;
+  background: var(--painel);
+}
+
+.aviso > :first-child {
+  margin-top: 0;
+}
+
+.aviso > :last-child {
+  margin-bottom: 0;
+}
+
+.aviso-perigo {
+  border-left-color: var(--perigo);
+}
+
+.aviso-ok {
+  border-left-color: var(--verde);
+}
+
+.aviso-titulo {
+  display: block;
+  color: var(--tinta);
+  font-weight: 700;
+}
+
+/* ---- tabelas ---- */
+.tabela {
+  margin: 1rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--linha);
+  border-radius: 0.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.97rem;
+}
+
+th,
+td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--linha);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--painel);
+  color: var(--tinta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ---- as capturas ---- */
+figure {
+  margin: 1.5rem 0;
+}
+
+figure a {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+figure img {
+  width: auto;
+  border: 1px solid var(--linha-forte);
+  border-radius: 0.6rem;
+  box-shadow: var(--sombra);
+  background: var(--painel);
+}
+
+figcaption {
+  margin-top: 0.6rem;
+  color: var(--sutil);
+  font-size: 0.92rem;
+}
+
+.figura-estreita img {
+  max-width: min(100%, 22rem);
+}
+
+.lado-a-lado {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.lado-a-lado figure {
+  margin: 0;
+}
+
+.passos {
+  padding-left: 1.5rem;
+}
+
+.passos > li {
+  margin: 0.55rem 0;
+  padding-left: 0.2rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chips li {
+  margin: 0;
+  padding: 0.25rem 0.8rem;
+  border: 1px solid var(--linha-forte);
+  border-radius: 999px;
+  background: var(--elevado);
+  color: var(--tinta);
+  font-size: 0.95rem;
+}
+
+.rodape {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--linha);
+  color: var(--sutil);
+  font-size: 0.95rem;
+}
+
+.rodape p {
+  margin: 0.4rem 0;
+}
+
+/* ---- telas largas: o sumário vira uma coluna ao lado ---- */
+@media (min-width: 62rem) {
+  .pagina {
+    display: grid;
+    grid-template-columns: 14rem minmax(0, 1fr);
+    gap: 0 3rem;
+  }
+
+  .sumario {
+    position: sticky;
+    top: 4.6rem;
+    align-self: start;
+    max-height: calc(100vh - 6rem);
+    margin: 2rem 0 0;
+    padding: 0;
+    overflow-y: auto;
+    border-bottom: 0;
+  }
+
+  .sumario ol {
+    flex-direction: column;
+    gap: 0.15rem;
+    overflow: visible;
+    white-space: normal;
+    font-size: 0.95rem;
+  }
+
+  .sumario a {
+    display: block;
+    padding: 0.3rem 0.6rem;
+    border-left: 2px solid var(--linha);
+  }
+
+  .sumario a:hover {
+    border-left-color: var(--acento);
+  }
+
+  .lado-a-lado {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lado-a-lado.proporcao {
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 40rem) {
+  .lado-a-lado.duas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 30rem) {
+  .topo nav a:nth-child(2),
+  .topo nav a:nth-child(3) {
+    display: none;
+  }
+}
+
+@media print {
+  .topo,
+  .sumario,
+  .botoes {
+    display: none;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
