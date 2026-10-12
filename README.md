@@ -30,8 +30,8 @@ cifrado com as pastas e as conexões dele.
 
 ## Estado
 
-**Beta.** A primeira versão publicada é a [v0.1.0-beta.1](https://github.com/Zanveri/prism/releases/tag/v0.1.0-beta.1). Hoje só há
-versões beta: cada merge na `develop` publica uma, marcada como pré-lançamento, e ela pode ter defeitos. A primeira estável será a 0.1.0.
+**Em uso, ainda no começo.** As versões saem sozinhas pela pipeline: cada merge na `develop` publica um beta (marcado como
+pré-lançamento, pode ter defeitos) e cada merge na `main` publica a estável. A lista está na [página de releases](https://github.com/Zanveri/prism/releases).
 
 | Banco | Estado |
 | --- | --- |
@@ -78,10 +78,10 @@ hash e o grava na sua máquina; depois reinicia o serviço e pede a sua senha de
 
 ### [Baixar o Prism na página de releases](https://github.com/Zanveri/prism/releases)
 
-**Hoje só há versões beta.** A primeira é a `v0.1.0-beta.1`; as seguintes saem a cada merge na `develop`, aparecem marcadas como
-**Pre-release** e podem ter defeitos. A primeira estável será a 0.1.0, e a estável mais nova passa a ficar marcada como **Latest**.
+**Estável ou beta.** A estável mais nova fica marcada como **Latest**: é a recomendada. Os betas saem a cada merge na `develop`,
+aparecem marcados como **Pre-release** e podem ter defeitos.
 Na página, abra a versão mais nova (a de cima) e, em **Assets**, escolha o arquivo do seu sistema. Nos nomes, `<versão>` é a da
-release, como `0.1.0-beta.1`:
+release, como `0.1.0` ou `0.1.1-beta.1`:
 
 | Sistema | Arquivo | Para quê |
 | --- | --- | --- |
@@ -148,7 +148,7 @@ No Windows, "Atualizar agora" roda o instalador conferido, que reabre o Prism. N
 conferido na pasta de downloads e diz o que fazer.
 
 O que **não** foi exercitado: o instalador de verdade rodando por cima de uma instalação, o caminho do Linux e o do macOS, e o
-app diante de uma versão mais nova publicada no GitHub de verdade (as provas usaram um servidor de mentira, e hoje só existe o primeiro beta).
+app diante de uma versão mais nova publicada no GitHub de verdade (as provas usaram um servidor de mentira).
 
 ## Segurança
 
