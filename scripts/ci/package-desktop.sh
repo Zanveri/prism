@@ -64,6 +64,13 @@ cp -a "api-bundles/$rid" src/client/resources/api
 
 cd src/client
 corepack pnpm install --frozen-lockfile
+# O electron-builder lista os módulos chamando `pnpm` direto (`pnpm list --prod --json`): sem um `pnpm` no PATH ele falha
+# (macOS: ENOENT), e com o `pnpm` de outra versão que a imagem do runner traga a saída vem com aviso e não é JSON (Windows).
+# Os atalhos do corepack, numa pasta só deste job e na frente do PATH, fazem o `pnpm` ser o do packageManager.
+shims=$(mktemp -d)
+corepack enable pnpm --install-directory "$shims"
+export PATH="$shims:$PATH"
+pnpm --version
 corepack pnpm dist -- "${dist_args[@]}"
 
 # O `dist` grava a origem das atualizações e não confere o resultado: na pipeline, quem confere é este script, no pacote que
