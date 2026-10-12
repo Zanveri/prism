@@ -694,8 +694,9 @@ com as fontes, está em os registros internos do projeto.
 - **RN-VERSAO-003.** A versão mora em um lugar só: o campo `version` de
   `src/client/package.json`. A API recebe o mesmo número na publicação (`-p:Version=`), e
   nenhum `.csproj` declara versão. A tag de uma versão é sempre `v` + esse número, criada pelo lançamento (RN-VERSAO-008); a
-  pipeline recusa versão fora do formato da RN-VERSAO-001 e versão menor que a última lançada
-  na mesma linha.
+  pipeline recusa versão fora do formato da RN-VERSAO-001. O campo só muda para subir a versão de
+  propósito (a `0.2.0`, por exemplo): a versão que cada merge lança é calculada pela pipeline
+  (RN-VERSAO-008), e um campo menor que a última estável é corrigido com um aviso à vista.
 - **RN-VERSAO-004.** A tela de login e o splash mostram a versão do app, para que um relato de
   defeito diga de que versão é. A API escreve a própria versão no log ao iniciar.
 - **RN-VERSAO-005.** O formato do cofre tem um número próprio no cabeçalho, independente da
@@ -712,24 +713,27 @@ com as fontes, está em os registros internos do projeto.
   changelog.
 - **RN-VERSAO-007.** O `CHANGELOG.md` segue o formato Keep a Changelog e é gerado pelo
   `git-cliff` a partir do histórico local (configuração em `cliff.toml`, versionada). As notas
-  de uma versão estável são a seção dela no `CHANGELOG.md`, seguidas das somas SHA-256 dos
-  pacotes; lançar uma versão estável sem seção no changelog não acontece (RN-VERSAO-008). As
+  de uma versão estável são a seção dela no `CHANGELOG.md`, quando existe, ou, sem ela, as do
+  `git-cliff` com os commits desde a estável anterior; nos dois casos seguidas das somas SHA-256
+  dos pacotes (decisão do dono em 2026-10-12: a estável sai sozinha no merge em `main`). As
   notas de um pré-lançamento são geradas pelo `git-cliff` na hora, com os commits desde a tag
   anterior, seguidas das somas, e NÃO são gravadas no `CHANGELOG.md` (um commit a cada merge na
   `develop` encheria o histórico). Uma versão estável reúne tudo desde a estável anterior.
 - **RN-VERSAO-008.** Lançar uma versão (decisões do dono em 2026-10-10 e 2026-10-12): os ramos
   de trabalho entram por pull request em `develop`; `develop` entra em `main`. A pipeline só roda
   no merge (RN-ABERTO-005) e faz o lançamento sozinha; ninguém cria tag à mão.
+  - **A versão da vez** (decisão do dono em 2026-10-12, "automático"): sem nenhuma estável, é a
+    do `package.json`; com estáveis, é a do `package.json` se ela for maior que a última estável,
+    e senão a última estável com o terceiro número mais um. Depois da `v0.1.0`, a versão da vez é
+    `0.1.1` sem ninguém mexer no `package.json`; subir o campo para `0.2.0` faz a versão da vez
+    ser `0.2.0`.
   - **Em `develop`, cada merge lança um pré-lançamento** (decisão do dono em 2026-10-12: "a cada
-    merge na develop"): a versão do `package.json` é a próxima versão estável (`X.Y.Z`, sem
-    sufixo) e o merge publica `vX.Y.Z-beta.N`, com `N` um a mais que o maior já publicado para
-    aquela versão (o primeiro é 1), marcado como pré-lançamento. Se a versão do `package.json`
-    já tem tag estável, a `develop` não lança (o beta seria mais velho que a estável): a pipeline
-    verifica e empacota, e avisa à vista que a versão precisa subir. `-rc.N` não é usado nesta
+    merge na develop"): `vX.Y.Z-beta.N` da versão da vez, com `N` um a mais que o maior já
+    publicado para ela (o primeiro é 1), marcado como pré-lançamento. `-rc.N` não é usado nesta
     entrega.
-  - **Em `main`, a versão estável**: quando a versão do `package.json` não tem tag e o
-    `CHANGELOG.md` tem a seção dela, o merge lança `vX.Y.Z`. Versão sem seção no changelog, ou
-    que já tem tag, não lança: a pipeline verifica e empacota, com o aviso à vista.
+  - **Em `main`, cada merge lança a estável** `vX.Y.Z` da versão da vez. Só não lança quando não
+    há commit novo desde a última estável (o merge está na história dela): a pipeline verifica e
+    empacota, com o aviso "nada novo desde a vX.Y.Z" à vista.
   - Lançar é, nesta ordem: gerar os pacotes de todas as plataformas; criar a release como
     rascunho; anexar cada pacote e o `SHA256SUMS`; publicar (é a publicação que cria a tag, no
     commit do merge). Com as releases imutáveis ligadas (RN-ABERTO-007), um pacote publicado não
