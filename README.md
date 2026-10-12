@@ -1,11 +1,20 @@
 # Prism
 
+[![Pipeline](https://github.com/Zanveri/prism/actions/workflows/pipeline.yml/badge.svg?branch=develop)](https://github.com/Zanveri/prism/actions/workflows/pipeline.yml?query=branch%3Adevelop)
+[![Versão](https://img.shields.io/github/v/release/Zanveri/prism?include_prereleases&sort=semver&label=vers%C3%A3o)](https://github.com/Zanveri/prism/releases)
+[![Downloads](https://img.shields.io/github/downloads/Zanveri/prism/total?label=downloads)](https://github.com/Zanveri/prism/releases)
+[![Licença](https://img.shields.io/github/license/Zanveri/prism?label=licen%C3%A7a)](LICENSE)
+[![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#baixar)
+[![Documentação](https://img.shields.io/badge/documenta%C3%A7%C3%A3o-zanveri.github.io%2Fprism-blue)](https://zanveri.github.io/prism/)
+
+**[Baixar](https://github.com/Zanveri/prism/releases)** · [Documentação](https://zanveri.github.io/prism/) · [Relatar um problema](https://github.com/Zanveri/prism/issues)
+
 > **Prism** is a desktop database client for people who work every day with Informix, Db2 and PostgreSQL.
 > Its goal is to be faster and more direct than DBeaver at the same tasks: open, connect, browse objects, run SQL and see the result.
 > It is an Electron app that starts a local ASP.NET Core API on `127.0.0.1`. Each user has an encrypted vault (Argon2id key derivation, AES-256-GCM) with their folders and connections.
-> Status: under development, no release yet. PostgreSQL works today; Db2 and Informix are in development. Packages are not code-signed.
+> Status: beta. The first public version, [v0.1.0-beta.1](https://github.com/Zanveri/prism/releases/tag/v0.1.0-beta.1), is out. PostgreSQL, Db2 and Informix work; the Db2 and Informix drivers are not bundled: Prism downloads them on demand, under IBM's license. Packages are not code-signed.
 > Releases (Windows, Linux and macOS packages) are published on the GitHub releases page of the project, with a `SHA256SUMS` file; every merge into `develop` publishes a beta, and the app offers betas only when "Receive beta versions" is on.
-> The documentation is in Brazilian Portuguese. License: Apache-2.0.
+> The documentation is in Brazilian Portuguese: <https://zanveri.github.io/prism/>. License: Apache-2.0.
 
 ## O que é e para quem
 
@@ -17,25 +26,26 @@ tarefas: abrir, conectar, navegar pelos objetos, rodar SQL e ver o resultado.
 `127.0.0.1`, numa porta efêmera, e fala com ela por HTTP com um token de lançamento. Cada usuário tem um cofre
 cifrado com as pastas e as conexões dele.
 
-<img src="docs/images/login.png" alt="Tela de entrada do Prism: usuário e senha, com o aviso de que a senha gera a chave do cofre" width="720">
+<img src="site/img/editor-resultado.png" alt="O Prism com o navegador de objetos de um PostgreSQL, um comando SQL no editor e o resultado em grade, com as 200 primeiras linhas e o tempo" width="800">
 
 ## Estado
 
-Em desenvolvimento e sem versão publicada. A primeira será a 0.1.0.
+**Beta.** A primeira versão publicada é a [v0.1.0-beta.1](https://github.com/Zanveri/prism/releases/tag/v0.1.0-beta.1). Hoje só há
+versões beta: cada merge na `develop` publica uma, marcada como pré-lançamento, e ela pode ter defeitos. A primeira estável será a 0.1.0.
 
 | Banco | Estado |
 | --- | --- |
-| PostgreSQL | Funciona: conectar, navegar pelos objetos e rodar SQL. |
-| Db2 | Em desenvolvimento. O projeto decidiu não levar o driver da IBM no pacote: quem usa o baixa pela tela de Drivers (também em desenvolvimento). |
-| Informix | Em desenvolvimento. O projeto decidiu não levar o driver da IBM no pacote: quem usa o baixa pela tela de Drivers (também em desenvolvimento). |
+| PostgreSQL | Funciona: conectar, navegar pelos objetos, rodar SQL e abrir os registros, a estrutura e o diagrama de uma tabela. O driver vai no pacote. |
+| Db2 | Funciona (conferido com o Db2 12.1). O driver da IBM não vai no pacote: você o baixa em Configurações › Drivers e aceita a licença do fabricante. A IBM não publica o driver para Mac com processador Intel: lá o Prism diz "Sem driver para esta plataforma". |
+| Informix | Funciona (conferido com o Informix 14.10), pela porta DRDA, que é a que a tela sugere (9089). O driver é o mesmo da IBM, baixa-se do mesmo jeito e também não existe para Mac Intel. |
 
 | Plataforma | Pacotes | O que foi conferido |
 | --- | --- | --- |
-| Windows x64 | Instalador e zip | Gerados, no Windows e a partir de Linux. O zip foi aberto sem janela visível (tela de entrada, versão e API respondendo). O instalador foi gerado e não foi executado. |
-| Linux x64 | AppImage, deb, rpm e tar.gz | Gerados em contêiner. O tar.gz e o deb abriram sem janela (o deb, num Ubuntu 22.04 limpo, instalou as dependências sozinho); o AppImage foi só extraído e o rpm só listado. O deb e o rpm dependem da URL do projeto (variável `PRISM_HOMEPAGE`, que a pipeline preenche). |
-| macOS | dmg e zip, para Apple Silicon (arm64) e Intel (x64) | Previsto na pipeline, no runner de macOS hospedado pelo GitHub; **o job nunca rodou**. O dmg só se gera no macOS. O zip saiu numa tentativa em Linux; o app nunca foi aberto no macOS. |
+| Windows x64 | Instalador e zip | Publicados no beta, gerados pela pipeline no runner de Windows do GitHub; antes, gerados também numa máquina Windows e a partir de Linux. O zip foi aberto sem janela visível (tela de entrada, versão e API respondendo). O instalador foi gerado e não foi executado. |
+| Linux x64 | AppImage, deb, rpm e tar.gz | Publicados no beta. Gerados em contêiner. O tar.gz e o deb abriram sem janela (o deb, num Ubuntu 22.04 limpo, instalou as dependências sozinho); o AppImage foi só extraído e o rpm só listado. O deb e o rpm dependem da URL do projeto (variável `PRISM_HOMEPAGE`, que a pipeline preenche). |
+| macOS | dmg e zip, para Apple Silicon (arm64) e Intel (x64) | Publicados no beta, gerados pela pipeline no runner de macOS do GitHub. O app nunca foi aberto no macOS. |
 
-A pipeline do projeto (GitHub Actions) gera esses pacotes e lança as versões sozinha; nenhuma execução rodou ainda. Ela só roda
+A pipeline do projeto (GitHub Actions) gera esses pacotes e lança as versões sozinha. Ela só roda
 no merge: **cada merge na `develop` publica um beta** (`vX.Y.Z-beta.N`, marcado como pré-lançamento), e o merge do pull request de
 lançamento na `main` publica a versão estável (`vX.Y.Z`), sem ninguém criar tag à mão. O que ela faz e o que não faz, e o que o
 repositório precisa ter configurado, está em [docs/ci.md](docs/ci.md); o passo a passo de um lançamento, em
@@ -44,25 +54,34 @@ repositório precisa ter configurado, está em [docs/ci.md](docs/ci.md); o passo
 O projeto decidiu não levar o driver da IBM (Db2 e Informix) dentro do pacote: quem o usa o baixa pela tela de Drivers e aceita a
 licença do fabricante. A pipeline confere, a cada pacote, que a API publicada não leva nenhum arquivo do driver.
 
-O que a primeira entrega cobre:
+O que o Prism faz hoje:
 
-- login e cofre por usuário;
-- pastas (criar, renomear, mover e excluir) e conexões (criar, editar, excluir e testar);
-- árvore de objetos: esquemas, tabelas, visões, rotinas, colunas (com a chave primária marcada), índices e chaves estrangeiras;
-- editor SQL: um comando por execução, enviado como está ao banco e sempre em auto-commit; os comandos de controle de transação (`BEGIN`, `COMMIT`, `ROLLBACK` e afins) são recusados nesta entrega. O resultado mostra as 200 primeiras linhas e o tempo, "Carregar mais 200" traz as seguintes e "Contar total" só conta quando você pede; "Cancelar" interrompe um comando demorado; o erro do banco aparece como ele veio.
+- login e cofre por usuário: criar o usuário, trocar a senha (Configurações › Conta) e o bloqueio por inatividade (Configurações › Segurança);
+- pastas (criar, renomear, mover e excluir, com subpastas) e conexões (criar, editar, mover, excluir e testar), cada conexão com um ambiente (nome e cor) opcional;
+- navegador de objetos: esquemas, tabelas, visões, rotinas, colunas (com a chave primária marcada), índices e chaves estrangeiras, com uma busca (“Filtrar objetos”) sobre o que já está carregado na árvore;
+- editor SQL: um comando por execução, enviado como está ao banco e sempre em auto-commit; os comandos de controle de transação (`BEGIN`, `COMMIT`, `ROLLBACK` e afins) são recusados nesta entrega. O resultado mostra as 200 primeiras linhas e o tempo, "Carregar mais 200" traz as seguintes e "Contar total" só conta quando você pede; "Cancelar" interrompe um comando demorado; o erro do banco aparece como ele veio;
+- a aba de uma tabela ou visão: Registros (filtro `WHERE`, ordem pelo cabeçalho das colunas, links das chaves estrangeiras e "Exportar CSV", que grava as linhas carregadas), Estrutura (colunas, chaves estrangeiras, índices e um DDL aproximado) e Diagrama (a tabela e as que ela referencia);
+- Configurações: seis temas (Prism Escuro, Prism Claro, Monokai, Dracula, Nord e GitHub Claro), o editor (fonte, tamanho, tabulação, autocompletar), os resultados, as atualizações (e o canal beta) e os drivers;
+- os drivers do Db2 e do Informix, baixados sob demanda (Configurações › Drivers);
+- a procura por versões novas nas releases do GitHub ([Atualizações](#atualizações)).
 
-O que fica para as próximas entregas, sem data: aba de registros e de estrutura da tabela, edição de célula,
-transação manual, somente leitura e confirmação antes de comando irreversível, encerramento por ociosidade,
-bloqueio por inatividade, diagrama ER, temas, troca de senha e instalador. Fora do escopo por enquanto: assinatura de
-código. Hoje o texto das abas de SQL se perde ao fechar o app.
+O que fica para as próximas entregas, sem data: transação manual e nível de isolamento (hoje tudo roda em auto-commit), edição de
+célula, copiar e exportar a partir da seleção da grade (hoje só o "Exportar CSV" dos Registros de uma tabela, com as linhas carregadas), abas de esquema e de banco,
+somente leitura e confirmação antes de comando irreversível, encerramento de sessão por ociosidade, barra própria da janela e zoom do
+programa. Fora do escopo por enquanto: assinatura de código. Hoje o texto das abas de SQL se perde ao fechar o app.
 
 O suporte a Db2 e Informix depende do driver .NET da IBM, que é proprietário e tem licença própria: quem o usa o baixa e aceita
-a licença do fabricante. O download dentro do Prism está em desenvolvimento e ainda não existe.
+a licença do fabricante. O download é feito dentro do Prism, em Configurações › Drivers: ele baixa o driver do nuget.org, confere o
+hash e o grava na sua máquina; depois reinicia o serviço e pede a sua senha de novo.
 
-## Instalar
+## Baixar
 
-Não há pacote publicado ainda. Quando houver, ele estará na **página de releases do projeto no GitHub**, com um arquivo
-`SHA256SUMS` e as mesmas somas no fim das notas da versão. Cada versão traz os pacotes de cada sistema:
+### [Baixar o Prism na página de releases](https://github.com/Zanveri/prism/releases)
+
+**Hoje só há versões beta.** A primeira é a `v0.1.0-beta.1`; as seguintes saem a cada merge na `develop`, aparecem marcadas como
+**Pre-release** e podem ter defeitos. A primeira estável será a 0.1.0, e a estável mais nova passa a ficar marcada como **Latest**.
+Na página, abra a versão mais nova (a de cima) e, em **Assets**, escolha o arquivo do seu sistema. Nos nomes, `<versão>` é a da
+release, como `0.1.0-beta.1`:
 
 | Sistema | Arquivo | Para quê |
 | --- | --- | --- |
@@ -75,18 +94,28 @@ Não há pacote publicado ainda. Quando houver, ele estará na **página de rele
 | macOS Apple Silicon | `Prism-<versão>-mac-arm64.dmg` e `….zip` | os Macs com processador M |
 | macOS Intel | `Prism-<versão>-mac-x64.dmg` e `….zip` | os Macs com processador Intel |
 
-As versões marcadas como **Pre-release** (`<versão>` como `0.2.0-beta.3`) são betas: saem a cada merge na `develop`, para
-experimentar, e podem ter defeitos. A versão estável mais nova fica marcada como **Latest**. Um Prism instalado procura as versões
-seguintes sozinho: veja [Atualizações](#atualizações).
+A página de cada versão traz também o `SHA256SUMS`, com a soma de todos os pacotes, e as mesmas somas no fim das notas da versão.
+Um Prism instalado procura as versões seguintes sozinho: veja [Atualizações](#atualizações).
 
-Para conferir um pacote baixado à mão, calcule o SHA-256 dele (`sha256sum <arquivo>` no Linux, `shasum -a 256 <arquivo>` no macOS,
-`Get-FileHash -Algorithm SHA256 <arquivo>` no PowerShell do Windows) e compare com a linha dele no `SHA256SUMS` **e** no bloco
-"Somas SHA-256" das notas.
+### Conferir o pacote baixado
 
-Nenhum pacote é assinado. O que isso implica:
+Calcule o SHA-256 do arquivo baixado e compare com a linha dele no `SHA256SUMS` **e** no bloco "Somas SHA-256" das notas da
+versão. Se a soma não bater, não abra o arquivo: baixe de novo.
 
-- **Windows:** o SmartScreen avisa na primeira abertura, por ser um aplicativo sem assinatura.
-- **macOS:** o Gatekeeper bloqueia aplicativo sem assinatura, e é preciso liberá-lo manualmente.
+- Linux: `sha256sum <arquivo>`
+- macOS: `shasum -a 256 <arquivo>`
+- Windows (PowerShell): `Get-FileHash -Algorithm SHA256 <arquivo>`
+
+### Nenhum pacote é assinado
+
+O sistema avisa na primeira abertura, e o aviso é esperado. O que isso implica e como abrir:
+
+- **Windows:** o SmartScreen avisa na primeira abertura, por ser um aplicativo sem assinatura ("O Windows protegeu o computador").
+  Clique em **Mais informações** e depois em **Executar assim mesmo**.
+- **macOS:** o Gatekeeper bloqueia aplicativo sem assinatura, e é preciso liberá-lo manualmente. Depois de arrastar o Prism para a
+  pasta Aplicativos, clique nele com o botão direito, escolha **Abrir** e confirme em **Abrir**. No macOS 15 (Sequoia) ou mais novo
+  isso não basta: tente abrir uma vez, vá em **Ajustes do Sistema › Privacidade e Segurança** e clique em **Abrir Mesmo Assim**.
+  Pelo Terminal, serve em qualquer versão: `xattr -dr com.apple.quarantine /Applications/Prism.app`.
 - **Linux:** nada que dependa de assinatura: o AppImage e o tar.gz abrem sem ela, e o deb e o rpm se instalam pelo
   gerenciador de pacotes. O que foi observado de verdade foi em contêiner, não numa instalação de Linux: o tar.gz e o deb
   abriram sem janela (o contêiner exige `--no-sandbox`), e o deb instalado num Ubuntu 22.04 limpo trouxe as bibliotecas de
@@ -119,16 +148,16 @@ No Windows, "Atualizar agora" roda o instalador conferido, que reabre o Prism. N
 conferido na pasta de downloads e diz o que fazer.
 
 O que **não** foi exercitado: o instalador de verdade rodando por cima de uma instalação, o caminho do Linux e o do macOS, e o
-app diante de uma release de verdade do GitHub (as provas usaram um servidor de mentira, e nenhuma versão foi publicada ainda).
+app diante de uma versão mais nova publicada no GitHub de verdade (as provas usaram um servidor de mentira, e hoje só existe o primeiro beta).
 
 ## Segurança
 
 **Cofre por usuário.** Pastas e conexões (nomes, hosts, usuários e senhas dos bancos) ficam num arquivo cifrado por
 usuário. Da senha do usuário sai, por Argon2id, a chave que protege uma chave aleatória do cofre, e o conteúdo é
 cifrado com AES-256-GCM. A senha do usuário não é gravada em lugar nenhum: quem a esquece perde o cofre, que não
-tem recuperação. Ver a senha de uma conexão exige digitar a senha do usuário de novo. Não há bloqueio
-automático por inatividade nesta entrega: o cofre fecha em "Sair", ao fechar o app, ao entrar com outro usuário ou no quinto
-erro seguido ao revelar uma senha.
+tem recuperação. Ver a senha de uma conexão exige digitar a senha do usuário de novo. O cofre fecha em "Sair", ao fechar
+o app, ao entrar com outro usuário, no quinto erro seguido ao revelar uma senha e pelo bloqueio por inatividade, que vem ligado, em 10
+minutos sem uso (Configurações › Segurança muda o prazo, de 1 a 240 minutos, ou o desliga).
 
 **API local.** A API só escuta em `127.0.0.1`, numa porta escolhida pelo sistema a cada abertura do app, e exige um
 token gerado a cada abertura. Requisição sem o token recebe 401, e a API aceita uma única origem de página. O
@@ -215,6 +244,7 @@ app empacotado sem tocar nos dados de ninguém). O log do processo principal tra
 | `src/api/` | A API em C# (.NET 10) e os testes. Orientação em [src/api/AGENTS.md](src/api/AGENTS.md). |
 | `docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md` | Especificação da primeira entrega: regras `RN-*`, rotas, códigos de erro e critérios de aceite. |
 | `docs/design/canvas/` | Canvas de design aprovado: a medida de cores, espaçamentos e textos. |
+| `site/` | O site de documentação (HTML e CSS estáticos, em português), publicado no GitHub Pages pela pipeline em <https://zanveri.github.io/prism/>. |
 | `docs/versionamento.md` | Como o Prism é versionado e como se lança uma versão (o pull request de lançamento da `develop` para a `main`). |
 | `docs/ci.md` | A pipeline: o que cada workflow e cada job faz, o que cada merge publica, como rodar na máquina, os runners, a lista de conferência do repositório no GitHub e o ensaio com o repositório privado. |
 | `.github/workflows/`, `.github/actions/`, `scripts/ci/` | A pipeline (GitHub Actions: o workflow de entrada, os reutilizáveis e as actions compostas) e os roteiros que ela chama, um por passo, com os testes deles. |
