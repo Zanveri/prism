@@ -18,8 +18,8 @@
 # o `dist` grava dentro do pacote. NA PIPELINE (GITHUB_ACTIONS) elas têm de ser as do PRÓPRIO repositório do workflow
 # (packages.sh, `launch_origin_problem`): o script recusa antes de empacotar e confere, depois, que o pacote gerado as traz
 # gravadas. Fora da pipeline o pacote sai com a origem que a pessoa der, ou sem nenhuma, e aí o app não procura atualização.
-# A versão do pacote é a do campo `version` de src/client/package.json; num beta, a pipeline a trocou antes pela do beta
-# (set-build-version.sh), e é com ela que a lista de arquivos é conferida.
+# A versão do pacote é a do campo `version` de src/client/package.json; num lançamento, a pipeline a trocou antes pela da vez (a do
+# beta, ou a estável seguinte à maior já lançada: set-build-version.sh), e é com ela que a lista de arquivos é conferida.
 # Atenção: apaga src/client/release e src/client/resources/api. Na própria máquina, rode numa cópia descartável.
 # (Sem `mapfile` nem nada do bash 4: este script roda também no bash 3.2 do macOS.)
 set -euo pipefail

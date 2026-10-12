@@ -3,15 +3,18 @@
 #
 # A decisão é a de version.sh (`decide_release`), refeita aqui na hora, com o estado do remoto: o plano que o job `versao` fez no
 # começo da execução (`--expect <tag>`) só é seguido se for o mesmo que a decisão de agora, porque os pacotes desta execução foram
-# gerados com a versão do plano (set-build-version.sh). Assim:
-#  - não lança (a versão já tem a estável, o beta saiu de um commit à frente, a main sem versão nova ou sem a seção no changelog):
-#    o aviso à vista e saída 0, sem escrever nada;
-#  - já lançada daqui (a tag aponta para este commit): confere que a release está publicada e completa, e sai;
+# gerados com a versão do plano (set-build-version.sh). A versão da vez é a do package.json ou, se ela já saiu como estável, a
+# maior estável com o patch + 1. Assim:
+#  - não lança (o beta saiu de um commit à frente, ou a main sem commit novo desde a maior estável): o aviso à vista e saída 0, sem
+#    escrever nada;
+#  - já lançada daqui (a tag do beta, ou a da maior estável na main, aponta para este commit): confere que a release está publicada
+#    e completa, e sai;
 #  - lança: o caminho abaixo, nesta ordem.
 #
 # O caminho, nesta ordem (o que a documentação de releases imutáveis recomenda: rascunho, anexos, publicação):
 #  1. as conferências de antes de escrever: o plano, os pacotes (os dez da lista de packages.txt, com a versão da tag) e o
-#     SHA256SUMS, as notas (release-notes.sh: a seção do changelog numa estável; o git-cliff desde a tag anterior num beta) e o
+#     SHA256SUMS, as notas (release-notes.sh: a seção do changelog numa estável, se ela existir; senão, e num beta, o git-cliff desde a
+#     tag anterior; na estável, a estável anterior) e o
 #     commit, que não pode acrescentar nem mudar arquivo de .github/workflows/ em relação ao ramo padrão (a API de releases
 #     responde 404 a um GITHUB_TOKEN nesse caso: ele não pode ter a permissão de workflows);
 #  2. o RASCUNHO da release: um rascunho com a mesma tag e este commit, deixado por uma tentativa que parou no meio, é retomado;
@@ -35,7 +38,7 @@
 # Uso (só na pipeline): bash scripts/ci/publish-release.sh --expect <tag>
 #      … --remote <remoto>      só para os testes: o remoto de mentira (a pipeline nunca passa isto)
 # Variáveis: GH_TOKEN, e as padrão do GitHub Actions: GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_REF_NAME e GITHUB_SHA.
-# Precisa de bash, git, gh, jq, sha256sum e, num beta, do Docker (a imagem do git-cliff).
+# Precisa de bash, git, gh, jq, sha256sum e, num beta (ou numa estável sem seção no changelog), do Docker (a imagem do git-cliff).
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -178,7 +181,7 @@ case "$decision" in
   error) fail "$decision_detail Nada foi publicado." ;;
   launch | done) ;;
   *)
-    ci_warning "Não lança" "$(no_launch_message "$version")"
+    ci_warning "Não lança" "$(no_launch_message)"
     exit 0
     ;;
 esac
@@ -216,7 +219,9 @@ if [ "$prerelease" = true ]; then
   previous=$(previous_tag "$commit") || fail "o commit de uma tag de versão não está neste clone: o job precisa do histórico inteiro, com as tags."
   bash "$here/release-notes.sh" --beta ${previous:+--since "$previous"} "$release_version" || fail "as notas do beta não saíram. Nada foi publicado."
 else
-  bash "$here/release-notes.sh" "$release_version" || fail "as notas da versão não saíram. Nada foi publicado."
+  # Sem a seção da versão no changelog, as notas saem do git-cliff desde a estável anterior (release-notes.sh).
+  previous=$(previous_tag "$commit" stable) || fail "o commit de uma tag de versão não está neste clone: o job precisa do histórico inteiro, com as tags."
+  bash "$here/release-notes.sh" ${previous:+--since "$previous"} "$release_version" || fail "as notas da versão não saíram. Nada foi publicado."
 fi
 
 default_ref=$(remote_git ls-remote --symref "$(release_remote)" HEAD | awk '$1 == "ref:" && $3 == "HEAD" { print $2 }') || true

@@ -35,8 +35,13 @@ case_() {
 
 case_ "o beta da versão do package.json é gravado, e só no campo do primeiro nível" 0 0.2.0-beta.3 0.2.0-beta.3
 case_ "a própria versão do package.json não muda nada" 0 0.2.0 0.2.0
-case_ "o beta de OUTRA versão é recusado, e o package.json não muda" 1 0.2.0 0.3.0-beta.1
-case_ "outra versão estável é recusada" 1 0.2.0 0.2.1
+# A versão da vez pode ser MAIOR que a do package.json (a seguinte à maior estável, quando o campo já saiu: version.sh), nunca menor.
+case_ "o beta da versão da vez, maior que a do package.json, é gravado" 0 0.2.1-beta.1 0.2.1-beta.1
+case_ "a estável da vez, maior que a do package.json, é gravada" 0 0.2.1 0.2.1
+case_ "o beta de uma versão MAIOR no segundo número também" 0 0.3.0-beta.1 0.3.0-beta.1
+case_ "a comparação é número a número: 0.10.0 é maior que a 0.2.0" 0 0.10.0 0.10.0
+case_ "o beta de uma versão MENOR que a do package.json é recusado, e o package.json não muda" 1 0.2.0 0.1.9-beta.1
+case_ "uma estável menor que a do package.json é recusada" 1 0.2.0 0.1.9
 for hostile in "0.2.0-beta.01" "0.2.0-beta" "0.2.0;id" '0.2.0-beta.1$(id)' "0.2.0-beta.1/x" "v0.2.0-beta.1" "0.2.0-beta.1 "; do
   case_ "a versão \"$hostile\" é recusada pelo formato, e o package.json não muda" 1 0.2.0 "$hostile"
 done

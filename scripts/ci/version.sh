@@ -1,34 +1,41 @@
 #!/usr/bin/env bash
 # Para ser lido com `source`, da raiz do repositório: o que os scripts do lançamento (RN-VERSAO-008) têm em comum, e a decisão ÚNICA
 # de lançar ou não, que o check-version.sh e o publish-release.sh usam (`decide_release`). Quem decide é o estado do REMOTO (as
-# tags) e do CHANGELOG.md, lidos na hora: nada passa de um job a outro por variável, e repetir um job dá o mesmo resultado.
+# tags), do histórico do git e do CHANGELOG.md, lidos na hora: nada passa de um job a outro por variável, e repetir um job dá o
+# mesmo resultado.
 #
-# A pipeline só roda no merge em `develop` e em `main` (RN-ABERTO-005). Nos dois ramos o campo `version` de
-# src/client/package.json é a PRÓXIMA versão estável, X.Y.Z, sem sufixo: o sufixo -beta.N quem põe é a pipeline.
+# A pipeline só roda no merge em `develop` e em `main` (RN-ABERTO-005). O campo `version` de src/client/package.json (V) nunca leva
+# sufixo (o -beta.N quem põe é a pipeline) e diz a versão que o dono QUER. A pipeline lança a versão DA VEZ (E), que ela mesma
+# calcula ("automático", decisão do dono), a partir da maior tag ESTÁVEL do remoto (S):
+#   nenhuma tag estável                       E = V
+#   V maior que S                             E = V                         (quem quer a 0.2.0 sobe o campo)
+#   V igual a S (a versão já saiu)            E = S com o patch + 1         (depois da v0.1.0, a 0.1.1, sozinha)
+#   V menor que S (o campo ficou para trás)   E = S com o patch + 1, e um AVISO (`version_regressed`; não é erro)
 #
 #   develop                                                  decisão
-#   a tag estável vX.Y.Z já existe                           stable-exists: não lança (o beta seria mais velho que a estável)
-#   um beta vX.Y.Z-beta.K já aponta para este commit         done: já lançado daqui
-#   o último beta saiu de um commit que este não contém      behind: não lança (execução repetida ou fora de ordem)
-#   senão                                                    launch: o beta vX.Y.Z-beta.N, N = um a mais que o maior
+#   um beta vE-beta.K já aponta para este commit             done: já lançado daqui
+#   o último beta de E saiu de um commit que este não contém behind: não lança (execução repetida ou fora de ordem)
+#   senão                                                    launch: o beta vE-beta.N, N = um a mais que o maior de E (o primeiro é 1)
 #
 #   main                                                     decisão
-#   a tag vX.Y.Z aponta para este commit                     done: já lançada daqui
-#   a tag vX.Y.Z aponta para outro commit                    tagged-elsewhere: não lança
-#   sem a tag e sem a seção "## [X.Y.Z] - AAAA-MM-DD"        no-notes: não lança
-#   sem a tag e com a seção                                  launch: a estável vX.Y.Z
+#   a maior estável vS aponta para este commit               done: já lançada daqui (nada novo desde a vS)
+#   este commit está na história da vS (um ancestral)        nothing-new: não lança, "nada novo desde a vS"
+#   senão                                                    launch: a estável vE, SEMPRE, com a seção "## [E] - AAAA-MM-DD" do
+#                                                            CHANGELOG.md se ela existir e, sem ela, com as notas do git-cliff
 #
-# São ERRO, sempre (nunca aviso, nunca "não existe"): a versão fora do formato ou com sufixo, a versão que regrediu (o que seria
-# lançado não é maior que toda tag de versão que já existe), um título do CHANGELOG.md que cita a versão fora do formato exato
-# (a seção não seria lida, e o merge passaria sem lançar), outro ramo, e o remoto que não responde.
+# São ERRO, sempre (nunca aviso, nunca "não existe"): a versão fora do formato ou com sufixo; a versão da vez que não é maior que toda
+# tag de versão que já existe (um beta de uma versão MAIOR, por exemplo: a versão regrediu; a menor que a maior ESTÁVEL não é erro,
+# é corrigida); na main, um título do CHANGELOG.md que cita a versão da vez fora do formato exato (o texto escrito seria trocado,
+# sem ninguém ver, pelas notas do git-cliff); o commit de uma tag que o clone não tem; outro ramo; e o remoto que não responde.
 #
 #  - A versão. `package_version` lê o campo `version` de src/client/package.json, o único lugar onde ela mora (RN-VERSAO-003).
 #    `version_fields` só aceita X.Y.Z, X.Y.Z-beta.N e X.Y.Z-rc.N (RN-VERSAO-001), cada número sem zero à esquerda e com até nove
 #    dígitos: é a regra do atualizador do app (src/client/electron/update/version.ts), e uma versão que o app não entende não é
 #    lançada. A versão só vira nome de tag, nome de arquivo ou pedaço de endereço DEPOIS de passar por aqui.
 #  - As notas de uma estável. `version_notes` devolve o texto da seção da versão no CHANGELOG.md. O título é EXATAMENTE
-#    "## [X.Y.Z] - AAAA-MM-DD" (com " [YANKED]" no fim, se for o caso); um título parecido não é a seção. As notas de um beta não
-#    vêm daqui: o release-notes.sh as gera com o git-cliff, desde a tag anterior (`previous_tag`).
+#    "## [X.Y.Z] - AAAA-MM-DD" (com " [YANKED]" no fim, se for o caso); um título parecido não é a seção. Sem a seção, ou com ela
+#    vazia, as notas saem do git-cliff, como as de um beta, com os commits desde a estável anterior (`previous_tag <commit>
+#    stable`): quem escolhe é o release-notes.sh.
 #  - O remoto. Na pipeline é SEMPRE a URL limpa do repositório, $GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git, sem usuário nem token;
 #    fora dela é `origin`. Só o ARGUMENTO `--remote <remoto>` de cada script troca isso, e a pipeline nunca o passa (os testes passam
 #    um repositório de mentira). As variáveis GITHUB_* não podem ser sobrescritas por quem configura o repositório (documentação
@@ -218,13 +225,15 @@ is_ancestor() {
   git merge-base --is-ancestor "$1" "$2"
 }
 
-# previous_tag <commit>: a maior tag de versão (estável ou beta) cujo commit está na história de <commit> e não é ele: é "a tag
-# anterior" de onde as notas de um beta começam. Nada se não há nenhuma (o primeiro beta). Usa `version_refs`, que quem chama já
-# leu com `remote_version_refs`; sai com 1 se o commit de uma tag não está no clone.
+# previous_tag <commit> [stable]: a maior tag de versão (estável ou beta) cujo commit está na história de <commit> e não é ele: é "a
+# tag anterior" de onde as notas de um beta começam. Com `stable`, só as estáveis contam: é a "estável anterior" de onde as notas de
+# uma estável sem seção no changelog começam. Nada se não há nenhuma (o primeiro beta, a primeira estável). Usa `version_refs`, que
+# quem chama já leu com `remote_version_refs`; sai com 1 se o commit de uma tag não está no clone.
 previous_tag() {
-  local commit=$1 version tag_commit candidates=() status
+  local commit=$1 only=${2:-} version tag_commit candidates=() status
   while read -r version tag_commit; do
     [ -n "$version" ] || continue
+    [ "$only" != stable ] || [[ "$version" =~ $stable_pattern ]] || continue
     [ "$tag_commit" != "$commit" ] || continue
     status=0
     is_ancestor "$tag_commit" "$commit" || status=$?
@@ -235,22 +244,39 @@ previous_tag() {
   [ -z "$version" ] || echo "v$version"
 }
 
+# next_patch <X.Y.Z>: a mesma versão com o patch + 1 (0.1.0 vira 0.1.1). Sai com 1 se a conta passa do formato (nove dígitos).
+next_patch() {
+  local fields next
+  fields=$(version_fields "$1") || return 1
+  fields=($fields)
+  next="${fields[0]}.${fields[1]}.$(( fields[2] + 1 ))"
+  version_fields "$next" > /dev/null || return 1
+  echo "$next"
+}
+
 # decide_release <versão> <ramo> <commit>: a decisão única do lançamento (as tabelas do topo). Não escreve nada: deixa em
 # `decision` uma destas palavras, em `decision_detail` o motivo ou o commit que importa, em `release_tag` a tag (a lançar, ou a
-# que já existe neste commit) e em `version_refs` as tags de versão do remoto, como `remote_version_refs` as escreve.
-#   launch | done | stable-exists | behind | tagged-elsewhere | no-notes | error
+# que já existe neste commit, ou a da estável que não deixa lançar), em `release_version` a versão da vez (E), em `version_notice`
+# o porquê de E não ser a do package.json (vazio quando é, e `version_regressed` 1 quando o campo é MENOR que a maior estável), em
+# `release_notes_from` (changelog ou git-cliff, na estável que lança) de onde saem as notas, e em `version_refs` as tags de versão
+# do remoto, como `remote_version_refs` as escreve.
+#   launch | done | behind | nothing-new | error
 decide_release() {
-  local version=$1 branch=$2 commit=$3 greatest candidate tag_commit loose notes
+  local version=$1 branch=$2 commit=$3 greatest stable stable_commit candidate loose notes status
   decision=error
   decision_detail=
   release_tag=
+  release_version=
+  release_notes_from=
+  version_notice=
+  version_regressed=0
   version_refs=
   if ! version_fields "$version" > /dev/null; then
     decision_detail="a versão \"$version\" de src/client/package.json não segue o formato X.Y.Z, com cada número sem zero à esquerda (RN-VERSAO-001)."
     return 0
   fi
   if [[ ! "$version" =~ $stable_pattern ]]; then
-    decision_detail="o campo \"version\" de src/client/package.json é \"$version\": nos ramos develop e main ele é a próxima versão estável, X.Y.Z, sem sufixo. O sufixo -beta.N de um pré-lançamento quem põe é a pipeline (docs/versionamento.md)."
+    decision_detail="o campo \"version\" de src/client/package.json é \"$version\": nos ramos develop e main ele é a versão estável que o dono quer, X.Y.Z, sem sufixo. O sufixo -beta.N de um pré-lançamento quem põe é a pipeline (docs/versionamento.md)."
     return 0
   fi
   case "$branch" in
@@ -265,46 +291,73 @@ decide_release() {
     return 0
   fi
   greatest=$(greatest_version $(printf '%s\n' "$version_refs" | awk 'NF { print $1 }'))
-  tag_commit=$(printf '%s\n' "$version_refs" | awk -v v="$version" '$1 == v { print $2 }')
+  stable=$(greatest_version $(printf '%s\n' "$version_refs" | awk 'NF && $1 !~ /-/ { print $1 }'))
+  stable_commit=
+  [ -z "$stable" ] || stable_commit=$(printf '%s\n' "$version_refs" | awk -v v="$stable" '$1 == v { print $2 }')
+
+  # A versão da vez: a do package.json, se ela é maior que a maior estável; senão, a maior estável com o patch + 1.
+  release_version=$version
+  if [ -n "$stable" ] && ! version_greater "$version" "$stable"; then
+    if ! release_version=$(next_patch "$stable"); then
+      release_version=
+      decision_detail="a versão seguinte à $stable, a maior estável já lançada (tag v$stable), passa do formato (cada número com até nove dígitos)."
+      return 0
+    fi
+    if [ "$version" = "$stable" ]; then
+      version_notice="O campo \"version\" de src/client/package.json diz $version, que já saiu (tag v$stable): a versão da vez é a $release_version, a seguinte à $stable. Para lançar outra, suba o campo."
+    else
+      version_regressed=1
+      version_notice="O campo \"version\" de src/client/package.json diz $version, menor que a $stable, a maior estável já lançada (tag v$stable): a versão da vez é a $release_version, a seguinte à $stable. Corrija o campo na develop (docs/versionamento.md)."
+    fi
+  fi
 
   if [ "$branch" = main ]; then
-    release_tag=v$version
-    if [ -n "$tag_commit" ]; then
-      decision_detail=$tag_commit
-      if [ "$tag_commit" = "$commit" ]; then decision=done; else decision=tagged-elsewhere; fi
+    release_tag=v$release_version
+    # Nada novo desde a maior estável: o commit é o dela (já lançada daqui) ou está na história dela.
+    if [ -n "$stable" ]; then
+      status=0
+      [ "$stable_commit" = "$commit" ] || is_ancestor "$commit" "$stable_commit" || status=$?
+      case $status in
+        0)
+          release_tag=v$stable
+          decision_detail=$stable_commit
+          if [ "$stable_commit" = "$commit" ]; then decision=done; else decision=nothing-new; fi
+          return 0
+          ;;
+        1) ;;
+        *)
+          decision_detail="o commit $stable_commit da tag v$stable não está neste clone: o job precisa do histórico inteiro, com as tags (git fetch --tags)."
+          return 0
+          ;;
+      esac
+    fi
+    if [ -n "$greatest" ] && ! version_greater "$release_version" "$greatest"; then
+      decision_detail="a versão da vez, $release_version, não é maior que a $greatest, a maior já lançada (tag v$greatest): a versão regrediu. Um número já usado ou mais antigo não é lançado. Suba o campo \"version\" de src/client/package.json para uma versão maior que a $greatest."
       return 0
     fi
-    if [ -n "$greatest" ] && ! version_greater "$version" "$greatest"; then
-      decision_detail="a versão \"$version\" de src/client/package.json não é maior que a $greatest, a maior já lançada (tag v$greatest): a versão regrediu. Um número já usado ou mais antigo não é lançado."
-      return 0
-    fi
-    loose=$(loose_headings "$version")
+    loose=$(loose_headings "$release_version")
     if [ -n "$loose" ]; then
-      decision_detail="o CHANGELOG.md tem o título \"$(printf '%s' "$loose" | head -n 1)\", que cita a versão $version e não está no formato exato \"$(notes_heading "$version")\" (a versão sem o v, entre colchetes, e a data com ano, mês e dia). Com outro título a seção não é lida, e o merge passaria sem lançar."
+      decision_detail="o CHANGELOG.md tem o título \"$(printf '%s' "$loose" | head -n 1)\", que cita a versão $release_version e não está no formato exato \"$(notes_heading "$release_version")\" (a versão sem o v, entre colchetes, e a data com ano, mês e dia). Com outro título a seção não é lida, e a versão sairia com as notas do git-cliff no lugar do texto escrito."
       return 0
     fi
-    notes=$(version_notes "$version")
-    if [ -n "${notes//[[:space:]]/}" ]; then decision=launch; else decision=no-notes; fi
+    notes=$(version_notes "$release_version")
+    if [ -n "${notes//[[:space:]]/}" ]; then release_notes_from=changelog; else release_notes_from=git-cliff; fi
+    decision=launch
     return 0
   fi
 
-  # develop: um beta da próxima versão estável.
-  if [ -n "$tag_commit" ]; then
-    decision=stable-exists
-    decision_detail=$tag_commit
-    return 0
-  fi
-  local betas here= latest= latest_commit= n
-  betas=$(printf '%s\n' "$version_refs" | awk -v prefix="$version-beta." 'index($1, prefix) == 1 { print substr($1, length(prefix) + 1), $2 }' | sort -n)
-  while read -r n tag_commit; do
+  # develop: um beta da versão da vez.
+  local betas here= latest= latest_commit= n beta_commit
+  betas=$(printf '%s\n' "$version_refs" | awk -v prefix="$release_version-beta." 'index($1, prefix) == 1 { print substr($1, length(prefix) + 1), $2 }' | sort -n)
+  while read -r n beta_commit; do
     [ -n "$n" ] || continue
-    [ "$tag_commit" != "$commit" ] || here=$n
+    [ "$beta_commit" != "$commit" ] || here=$n
     latest=$n
-    latest_commit=$tag_commit
+    latest_commit=$beta_commit
   done <<< "$betas"
   if [ -n "$here" ]; then
     decision=done
-    release_tag=v$version-beta.$here
+    release_tag=v$release_version-beta.$here
     decision_detail=$commit
     return 0
   fi
@@ -315,34 +368,40 @@ decide_release() {
       0) ;;
       1)
         decision=behind
-        release_tag=v$version-beta.$latest
+        release_tag=v$release_version-beta.$latest
         decision_detail=$latest_commit
         return 0
         ;;
       *)
-        decision_detail="o commit $latest_commit da tag v$version-beta.$latest não está neste clone: o job precisa do histórico inteiro, com as tags."
+        decision_detail="o commit $latest_commit da tag v$release_version-beta.$latest não está neste clone: o job precisa do histórico inteiro, com as tags."
         return 0
         ;;
     esac
   fi
-  candidate=$version-beta.$(( ${latest:-0} + 1 ))
+  candidate=$release_version-beta.$(( ${latest:-0} + 1 ))
   if [ -n "$greatest" ] && ! version_greater "$candidate" "$greatest"; then
-    decision_detail="o beta $candidate não seria maior que a $greatest, a maior versão já lançada (tag v$greatest): a versão de src/client/package.json regrediu."
+    decision_detail="o beta $candidate não seria maior que a $greatest, a maior versão já lançada (tag v$greatest): a versão regrediu. Suba o campo \"version\" de src/client/package.json para uma versão maior que a $greatest."
     return 0
   fi
   decision=launch
   release_tag=v$candidate
 }
 
-# no_launch_message <versão>: o porquê de não lançar, para a decisão que `decide_release` deixou (stable-exists, behind,
-# tagged-elsewhere ou no-notes). É o mesmo texto no check-version.sh, no começo da execução, e no publish-release.sh.
+# no_launch_message: o porquê de não lançar, para a decisão que `decide_release` deixou (behind ou nothing-new). É o mesmo texto no
+# check-version.sh, no começo da execução, e no publish-release.sh.
 no_launch_message() {
-  local version=$1
   case "$decision" in
-    stable-exists) echo "a versão $version já tem a tag estável v$version (no commit $decision_detail): um beta dela seria mais velho que a estável. Os pacotes são gerados e nada é publicado. Suba o campo \"version\" de src/client/package.json na develop (docs/versionamento.md)." ;;
     behind) echo "o beta $release_tag saiu do commit $decision_detail, que não está na história deste: este commit é mais antigo (uma execução repetida ou fora de ordem). Nada é publicado; o próximo merge na develop publica o beta seguinte." ;;
-    tagged-elsewhere) echo "a versão $version já tem a tag v$version, no commit $decision_detail. Um merge na main sem versão nova não lança: a estável sai do pull request de lançamento (docs/versionamento.md)." ;;
-    no-notes) echo "a versão $version não tem tag e o CHANGELOG.md não tem a seção dela, com o título \"$(notes_heading "$version")\" e com texto. Os pacotes são gerados e nada é publicado (docs/versionamento.md)." ;;
+    nothing-new) echo "nada novo desde a $release_tag: este commit está na história do commit $decision_detail, onde a $release_tag foi lançada, e uma estável só sai com um commit novo. Os pacotes são gerados e nada é publicado (docs/versionamento.md)." ;;
     *) return 1 ;;
   esac
+}
+
+# notes_message: de onde saem as notas da estável que lança (para as mensagens), conforme `release_notes_from`.
+notes_message() {
+  if [ "$release_notes_from" = changelog ]; then
+    echo "As notas saem da seção \"$(notes_heading "$release_version")\" do CHANGELOG.md."
+  else
+    echo "O CHANGELOG.md não tem a seção \"$(notes_heading "$release_version")\" com texto: as notas saem do git-cliff, com os commits desde a estável anterior (sem ela, o histórico inteiro)."
+  fi
 }

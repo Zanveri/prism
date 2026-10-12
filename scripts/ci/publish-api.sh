@@ -8,7 +8,7 @@
 # manda empacotar em tar para mantê-lo).
 #
 # OS PARÂMETROS DO `dotnet publish` NÃO ESTÃO AQUI. A fonte única deles é src/client/scripts/publish-api.mjs (que também põe a
-# versão do package.json na API, RN-VERSAO-003; num beta, a do beta, que o set-build-version.sh gravou antes); este script só
+# versão do package.json na API, RN-VERSAO-003; a da vez, que o set-build-version.sh gravou antes: num beta, a do beta); este script só
 # chama esse arquivo, uma vez por identificador.
 #
 # RN-ABERTO-001: o driver da IBM é proprietário e não vai em pacote nenhum. Depois de cada publicação o script confere que a pasta

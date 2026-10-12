@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # O ensaio do lançamento inteiro (RN-VERSAO-008), sem GitHub: o projeto de mentira de fake-project.sh (um repositório `bare` local
 # no papel do remoto) e um `gh` de mentira (fake-gh.py) no papel da API de releases. Exercita o publish-release.sh: o beta da
-# develop e a estável da main; o rascunho que recebe os pacotes e só depois é publicado (é a publicação que cria a tag); a
+# develop e a estável da main (com a seção no changelog ou sem ela, com as notas do git-cliff); a versão da vez depois de uma estável;
+# o rascunho que recebe os pacotes e só depois é publicado (é a publicação que cria a tag); a
 # repetição depois de uma falha em cada ponto; o rascunho velho de outro commit; o plano que não bate com o estado das tags; a
 # release de um commit que muda .github/workflows/; e por onde o token passa.
 # Rode com `bash scripts/ci/release.test.sh`; sai com 1 se algum caso falhar.
@@ -33,6 +34,7 @@ mkdir -p "$FAKE" "$sandbox/bin"
 : > "$FAKE/calls"
 : > "$FAKE/gh.argv"
 : > "$FAKE/git.argv"
+: > "$FAKE/cliff.argv"
 
 # O git de sempre, anotando os argumentos de cada chamada; e o gh de mentira.
 cat > "$sandbox/bin/git" <<'SH'
@@ -43,9 +45,10 @@ SH
 printf '#!/usr/bin/env bash\nexec python3 -I %q "$@"\n' "$here/fake-gh.py" > "$sandbox/bin/gh"
 chmod +x "$sandbox/bin/git" "$sandbox/bin/gh"
 
-# O git-cliff de mentira: as notas de um beta, sem Docker.
+# O git-cliff de mentira: as notas de um beta (ou de uma estável sem seção no changelog), sem Docker. Anota os argumentos.
 cat > "$work/scripts/ci/git-cliff.sh" <<'SH'
 #!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE/cliff.argv"
 printf '\n### Adicionado\n\n- Coisa do beta, com "aspas".\n- ::error::uma mensagem que imita um comando de workflow\n'
 SH
 
@@ -262,7 +265,7 @@ check "9. não é pré-lançamento, e é a mais recente" is "$(release_field v0.
 check "9. as notas são a seção do changelog, com as somas" eval "release_field v0.1.0 .body | grep -q 'Coisa da 0.1.0' && release_field v0.1.0 .body | grep -q '^### Somas SHA-256$'"
 check "9. e não têm o texto do git-cliff" eval "! release_field v0.1.0 .body | grep -q 'Coisa do beta'"
 
-# ============ 10. a develop depois da estável, e o que não lança ============
+# ============ 10. a develop depois da estável: a versão da vez é a seguinte ============
 
 branch=develop
 git -C "$work" checkout -q "$eighth"
@@ -270,8 +273,13 @@ ninth=$(release_commit 0.1.0 "feat: depois da estável")
 packages_at 0.1.0-beta.8
 reset_calls
 pipeline develop -- --expect v0.1.0-beta.8
-expect "10. develop com a versão já lançada como estável: não lança (job verde), com o aviso" 0 "já tem a tag estável v0.1.0" "Prism 0.1.0-beta.8 publicado"
+expect "10. o plano ainda diz beta 8 da 0.1.0, e a 0.1.0 já saiu como estável: FALHA sem publicar (a versão da vez é a 0.1.1)" 1 "planejou v0.1.0-beta.8"
 check "10. nada escrito" is "$(writes)" "0 0 0"
+packages_at 0.1.1-beta.1
+pipeline develop -- --expect v0.1.1-beta.1
+expect "10. develop com o package.json na versão que já saiu como estável: lança o beta da seguinte, o 0.1.1-beta.1 (o número volta a 1)" 0 "Prism 0.1.1-beta.1 publicado. A tag v0.1.1-beta.1 aponta para $ninth" "já tem a tag estável"
+check "10. pré-lançamento, com o título da versão da vez" is "$(release_field v0.1.1-beta.1 '"\(.draft) \(.prerelease) \(.name)"')" "false true Prism 0.1.1-beta.1"
+check "10. e os anexos levam a versão da vez" eval "release_json v0.1.1-beta.1 | jq -r '.assets[].name' | grep -qx 'Prism-0.1.1-beta.1-win-x64.exe'"
 
 # ============ 11. a release de um commit que muda .github/workflows/ em relação ao ramo padrão ============
 
@@ -307,6 +315,29 @@ pipeline main GH_TOKEN= -- --expect v0.2.0
 expect "12. sem o token: FALHA" 1 "GH_TOKEN"
 pipeline main GH_DEBUG=api -- --expect v0.2.0
 expect "12. GH_DEBUG no ambiente (o gh escreveria o tráfego HTTP no log) não chega ao gh: o lançamento segue" 0 "Prism 0.2.0 publicado"
+
+# ============ 12b. a main depois da estável: repetir, a seguinte sem seção no changelog, e o que não tem commit novo ============
+
+reset_calls
+pipeline main -- --expect v0.2.0
+expect "12b. repetir o lançamento da v0.2.0: a tag é a deste commit e a release está completa, nada a publicar" 0 "já foi lançado deste commit" "Prism 0.2.0 publicado"
+check "12b. a repetição só leu" is "$(writes) $(wc -l < "$FAKE/uploads" | tr -d ' ')" "0 0 0 0"
+
+next=$(commit_all "fix: depois da 0.2.0")
+packages_at 0.2.1
+: > "$FAKE/cliff.argv"
+reset_calls
+pipeline main -- --expect v0.2.1
+expect "12b. main com a 0.2.0 no package.json e commit novo, SEM a seção da 0.2.1 no changelog: lança a v0.2.1 do mesmo jeito" 0 "Prism 0.2.1 publicado. A tag v0.2.1 aponta para $next"
+check "12b. as notas são as do git-cliff, e não a seção da 0.2.0" eval "release_field v0.2.1 .body | grep -q 'Coisa do beta' && ! release_field v0.2.1 .body | grep -q 'Coisa da 0.2.0' && release_field v0.2.1 .body | grep -q '^### Somas SHA-256\$'"
+check "12b. o git-cliff partiu da estável anterior (v0.2.0)" is "$(cat "$FAKE/cliff.argv")" "--config cliff.toml --unreleased --strip all v0.2.0..HEAD"
+check "12b. a estável é a mais recente, e não é pré-lançamento" is "$(release_field v0.2.1 '"\(.prerelease) \(.make_latest)"')" "false true"
+
+git -C "$work" checkout -q "$stable"
+reset_calls
+pipeline main -- --expect v0.2.1
+expect "12b. main num commit da história da maior estável (a v0.2.1): não lança (job verde), nada novo desde ela" 0 "nada novo desde a v0.2.1" "Prism 0.2.1 publicado"
+check "12b. nada escrito" is "$(writes) $(wc -l < "$FAKE/uploads" | tr -d ' ')" "0 0 0 0"
 
 # ============ 13. a leitura que falha uma vez é repetida; o resto não ============
 
