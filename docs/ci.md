@@ -99,7 +99,7 @@ repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote �
 | `pipeline.yml` | `verificar` | Verificar | (chama `verificar.yml`) | — | `contents: read` |
 | `pipeline.yml` | `integrar` | Integrar | (chama `integrar.yml`) | — | `contents: read` |
 | `pipeline.yml` | `seguranca` | Segurança | (chama `seguranca.yml`) | — | `contents: read`, `security-events: write` (só o CodeQL a usa) |
-| `pipeline.yml` | `empacotar` | Empacotar | (chama `empacotar.yml`) | verificar, integrar, seguranca | `contents: read` |
+| `pipeline.yml` | `empacotar` | Empacotar | (chama `empacotar.yml`) | verificar, seguranca | `contents: read` |
 | `pipeline.yml` | `lancar` | Lançar | (chama `lancar.yml`) | verificar, empacotar; só com o plano `lanca` | `contents: write` |
 | `verificar.yml` | `versao` | Conferir a versão | `ubuntu-24.04` | — | `contents: read` |
 | `verificar.yml` | `interface` | Interface | `ubuntu-24.04` | — | `contents: read` |
@@ -148,6 +148,9 @@ que não saiu imutável) sai como uma anotação `::warning` e uma seção no re
 página da execução mesmo com tudo verde (`scripts/ci/actions.sh`).
 
 ### Integrar
+
+A integração não segura o empacotamento nem o lançamento (decisão do dono): ela roda junto, o resultado fica à vista na
+execução, e o beta sai mesmo com uma falha dela.
 
 **`api`** (`integration-api.sh`): os testes de integração da API, que sobem PostgreSQL, Informix e Db2 em contêiner pelo Docker do
 runner. O Db2 só sobe privilegiado; o runner hospedado aceita (o job define `PRISM_CI_PRIVILEGED`). O driver da IBM dos testes é

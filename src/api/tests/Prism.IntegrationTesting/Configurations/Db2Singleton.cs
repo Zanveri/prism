@@ -29,7 +29,7 @@ public static class Db2Singleton
     private const string UserName = "db2inst1";
     private const string SeedPath = "/tmp/prism-seed.sql";
 
-    /// <summary>Uma conta comum do sistema do contêiner, sem nenhuma autoridade no banco além do que é dado a todos (`PUBLIC`): o Db2 autentica pelo sistema.</summary>
+    /// <summary>Uma conta comum do sistema do contêiner, sem nenhuma autoridade no banco além de conectar e do que é dado a todos (`PUBLIC`): o Db2 autentica pelo sistema.</summary>
     private const string ReaderName = "prismleitor";
 
     private static readonly Lock CreationLock = new();
@@ -94,6 +94,11 @@ public static class Db2Singleton
         var reader = await container.ExecAsync(["bash", "-c", $"useradd -m {ReaderName} && chpasswd < /tmp/prism-reader && rm /tmp/prism-reader"]);
         if (reader.ExitCode != 0)
             throw new InvalidOperationException($"A conta comum do Db2 de teste não foi criada: {reader.Stdout}{reader.Stderr}");
+
+        // O direito de conectar vai explícito: na imagem da pipeline (12.1) o PUBLIC não o tem, e a conta nem entraria (SQL1060N).
+        var connect = await container.ExecAsync(["su", "-", UserName, "-c", $"db2 connect to {Database} > /dev/null && db2 grant connect on database to user {ReaderName}"]);
+        if (connect.ExitCode >= 4)
+            throw new InvalidOperationException($"A conta comum do Db2 de teste não recebeu o CONNECT: {connect.Stdout}{connect.Stderr}");
 
         return new ConnectionSettings(EDatabaseEngine.Db2, ContainerAddress.Of(container), container.GetMappedPublicPort(Port), Database, UserName, password);
     }

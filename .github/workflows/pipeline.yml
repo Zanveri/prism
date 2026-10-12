@@ -59,7 +59,7 @@ jobs:
 
   empacotar:
     name: Empacotar
-    needs: [verificar, integrar, seguranca]
+    needs: [verificar, seguranca]
     uses: ./.github/workflows/empacotar.yml
     permissions:
       contents: read
