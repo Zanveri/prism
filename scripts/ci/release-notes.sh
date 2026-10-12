@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # As notas de uma release (RN-VERSAO-007), em release-notes.md, seguidas das somas SHA-256 dos pacotes (o SHA256SUMS que o
 # publish-release.sh escreveu):
-#  - versão ESTÁVEL: a seção dela no CHANGELOG.md, de título EXATO "## [X.Y.Z] - AAAA-MM-DD" (a que o git-cliff gerou, ou a
-#    escrita à mão, como a da 0.1.0). Sem ela o script FALHA: uma estável não sai sem notas. A pipeline nem chega aqui nesse caso
-#    (version.sh, `decide_release`); esta é a segunda trava;
+#  - versão ESTÁVEL: a seção dela no CHANGELOG.md, de título EXATO "## [X.Y.Z] - AAAA-MM-DD" (a que o git-cliff gerou, ou a escrita
+#    à mão, como a da 0.1.0), SE ela existir e tiver texto. Sem ela, as notas saem do git-cliff, do mesmo jeito que as do beta, com
+#    os commits desde a estável anterior (`--since <tag>`; sem ela, o histórico inteiro): uma estável sai sempre, com o changelog
+#    escrito ou sem ele (version.sh, `decide_release`);
 #  - BETA (`--beta`, X.Y.Z-beta.N): as notas do git-cliff, geradas na hora com os commits desde a tag anterior (`--since <tag>`;
-#    sem ela, o histórico inteiro), e NÃO gravadas no CHANGELOG.md. O git-cliff roda com o cliff.toml do repositório, pela imagem
-#    fixada de scripts/ci/git-cliff.sh. As mensagens de commit viram texto das notas: é texto de fora, e o app o desenha com o
-#    interpretador próprio (RN-ATUALIZA-004).
+#    sem ela, o histórico inteiro), e NÃO gravadas no CHANGELOG.md.
+# O git-cliff roda com o cliff.toml do repositório, pela imagem fixada de scripts/ci/git-cliff.sh. As mensagens de commit viram
+# texto das notas: é texto de fora, e o app o desenha com o interpretador próprio (RN-ATUALIZA-004).
 #
 # O BLOCO DAS SOMAS É CONTRATO COM O ATUALIZADOR DO APP (RN-ATUALIZA-005). Quem o lê é src/client/electron/update/ (checksums.ts,
 # `splitNotes`), do jeito mais estrito: o ÚLTIMO título exatamente igual a `sums_heading`, uma linha em branco, a cerca, as
@@ -16,10 +17,11 @@
 # linguagem na cerca ou um parágrafo depois dele, todo Prism instalado passa a RECUSAR a atualização. O título e a cerca moram só
 # nas duas variáveis abaixo, e o release-notes.test.sh falha se o formato mudar: mudou aqui, mude o leitor no mesmo pull request.
 #
-# Uso: bash scripts/ci/release-notes.sh [--sums <arquivo>] [versão]                      (a estável; sem a versão, a do package.json)
+# Uso: bash scripts/ci/release-notes.sh [--sums <arquivo>] [--since <tag>] [versão]      (a estável; sem a versão, a do package.json)
 #      bash scripts/ci/release-notes.sh [--sums <arquivo>] --beta [--since <tag>] <versão-beta>
 # Precisa de src/client/release/SHA256SUMS; `--sums` aponta outro arquivo, para rodar na própria máquina. O arquivo das somas só
-# troca por ARGUMENTO, que a pipeline nunca passa. O beta precisa do Docker (a imagem do git-cliff) e do histórico do git.
+# troca por ARGUMENTO, que a pipeline nunca passa. O git-cliff (o beta e a estável sem seção no changelog) precisa do Docker (a
+# imagem dele) e do histórico do git.
 set -euo pipefail
 
 sums_heading='### Somas SHA-256'
@@ -38,7 +40,7 @@ fail() {
 }
 
 usage() {
-  echo "Uso: release-notes.sh [--sums <arquivo>] [versão] | release-notes.sh [--sums <arquivo>] --beta [--since <tag>] <versão>" >&2
+  echo "Uso: release-notes.sh [--sums <arquivo>] [--since <tag>] [versão] | release-notes.sh [--sums <arquivo>] --beta [--since <tag>] <versão>" >&2
   exit 2
 }
 
@@ -67,30 +69,40 @@ if grep -qvE '^[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*$' "$sums"; then
   fail "o $sums tem linha fora do formato \"<64 dígitos hexadecimais>  <nome do arquivo>\", que é o que o atualizador do app lê."
 fi
 
-if [ "$beta" -eq 1 ]; then
-  [[ "$version" =~ -beta\.[0-9]+$ ]] || fail "\"$version\" não é a versão de um beta (X.Y.Z-beta.N)."
-  range=()
+# cliff_notes <o que dizer sem tag anterior>: as notas do git-cliff com os commits desde $since (sem ela, o histórico inteiro), em
+# `notes`, e de onde elas partem, em `origin`.
+cliff_notes() {
+  local range=()
   if [ -n "$since" ]; then
     version_fields "${since#v}" > /dev/null && [[ "$since" == v* ]] || fail "\"$since\" não é uma tag de versão (vX.Y.Z ou vX.Y.Z-beta.N)."
     range=("$since..HEAD")
     origin="com os commits desde a $since"
   else
-    origin="com os commits do histórico inteiro (é o primeiro pré-lançamento)"
+    origin="com os commits do histórico inteiro ($1)"
   fi
   # Só o corpo: "--unreleased" fica com o que vem depois da última estável, e "--strip all" tira o cabeçalho do CHANGELOG.md.
-  notes=$(bash "$here/git-cliff.sh" --config cliff.toml --unreleased --strip all "${range[@]+"${range[@]}"}") || fail "o git-cliff falhou: as notas do beta $version não saíram."
+  notes=$(bash "$here/git-cliff.sh" --config cliff.toml --unreleased --strip all "${range[@]+"${range[@]}"}") || fail "o git-cliff falhou: as notas de $version não saíram."
   if [ -z "${notes//[[:space:]]/}" ]; then
     notes="
 Nenhum commit no formato dos commits do projeto (Conventional Commits) desde a tag anterior."
   fi
+}
+
+if [ "$beta" -eq 1 ]; then
+  [[ "$version" =~ -beta\.[0-9]+$ ]] || fail "\"$version\" não é a versão de um beta (X.Y.Z-beta.N)."
+  cliff_notes "é o primeiro pré-lançamento"
   header="> Versão beta (pré-lançamento), $origin."
   echo "release-notes: beta $version, notas do git-cliff $origin."
 else
   [[ "$version" =~ $stable_pattern ]] || fail "\"$version\" é um pré-lançamento: as notas dele vêm do git-cliff, não do changelog (use --beta)."
-  notes=$(version_notes "$version")
-  [ -n "${notes//[[:space:]]/}" ] || fail "o CHANGELOG.md não tem a seção \"## [$version]\" com o título no formato exato (\"$(notes_heading "$version")\"), ou ela está vazia. Uma versão estável sai com o changelog escrito: o pull request de lançamento traz a seção da versão (docs/versionamento.md)."
-  echo "release-notes: seção $version do CHANGELOG.md."
   header=
+  notes=$(version_notes "$version")
+  if [ -n "${notes//[[:space:]]/}" ]; then
+    echo "release-notes: seção $version do CHANGELOG.md."
+  else
+    cliff_notes "é a primeira estável"
+    echo "release-notes: estável $version, sem a seção \"$(notes_heading "$version")\" com texto no CHANGELOG.md: notas do git-cliff $origin."
+  fi
 fi
 
 {

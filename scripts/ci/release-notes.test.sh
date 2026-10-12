@@ -103,9 +103,6 @@ expect "sem argumento vale a versão de src/client/package.json" 0 "seção 0.2.
 run v0.2.0
 expect "aceita a versão com o v na frente" 0 "seção 0.2.0 do CHANGELOG.md"
 
-run 0.3.0
-expect "versão estável SEM seção no CHANGELOG.md falha" 1 'não tem a seção "## [0.3.0]"'
-
 # --- beta: as notas do git-cliff desde a tag anterior, e o mesmo bloco das somas ---
 
 # O git-cliff de mentira: anota os argumentos e escreve o corpo que o caso pediu ($work/cliff-body), como o de verdade escreveria.
@@ -166,6 +163,56 @@ run 0.2.0-beta.1
 expect "um beta sem --beta é recusado (as notas dele não vêm do changelog)" 1 "use --beta"
 run 0.2.0-rc.1
 expect "rc também não sai do changelog" 1 "use --beta"
+
+# --- estável SEM a seção no changelog: as notas do git-cliff, como as do beta, desde a estável anterior ---
+
+printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n' > "$work/cliff-body"
+rm -f "$work/cliff-args"
+run --since v0.1.0 0.2.0
+expect "estável COM a seção: é a seção que vale (o --since é ignorado)" 0 "seção 0.2.0 do CHANGELOG.md" "git-cliff"
+total=$((total + 1))
+if [ ! -e "$work/cliff-args" ]; then echo "ok   $total - e o git-cliff nem roda"; else failures=$((failures + 1)); echo "FALHA $total - o git-cliff rodou, com a seção no changelog"; fi
+
+run --since v0.2.0 0.3.0
+expect "estável SEM a seção: as notas são as do git-cliff" 0 "Coisa nova do beta" "Defeito da 0.2.0."
+expect "e a saída diz que a seção falta e desde que tag as notas partem" 0 'sem a seção "## [0.3.0] - AAAA-MM-DD"' "falha"
+expect "sem o título da versão nem a faixa de beta: a estável não leva cabeçalho" 0 "" "Versão beta"
+total=$((total + 1))
+if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --unreleased --strip all v0.2.0..HEAD" ]; then echo "ok   $total - estável: o git-cliff roda como no beta, desde a estável anterior"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff na estável: $(cat "$work/cliff-args")"; fi
+total=$((total + 1))
+expected=$(printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n\n### Somas SHA-256\n\n```\n%s  Prism-0.2.0-win-x64.exe\n%s  Prism-0.2.0-linux-x64.tar.gz\n```\nfim' "$a" "$b")
+if [ "$(cat "$work/release-notes.md"; printf fim)" = "$expected" ]; then
+  echo "ok   $total - CONTRATO (estável do git-cliff): as notas terminam com o mesmo bloco das somas, e nada depois dele"
+else
+  failures=$((failures + 1))
+  echo "FALHA $total - CONTRATO (estável do git-cliff): o arquivo não é o esperado"
+  diff <(cat "$work/release-notes.md"; printf fim) <(printf '%s' "$expected") | sed 's/^/       | /'
+fi
+
+run 0.3.0
+expect "estável sem a seção e sem a tag anterior (a primeira estável): o histórico inteiro" 0 "com os commits do histórico inteiro"
+total=$((total + 1))
+if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --unreleased --strip all" ]; then echo "ok   $total - e o git-cliff roda sem intervalo"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff sem tag anterior: $(cat "$work/cliff-args")"; fi
+
+printf '# Changelog\n\n## [0.3.0] - 2026-02-01\n\n## [0.2.0] - 2026-01-02\n\n- Defeito da 0.2.0.\n' > "$work/CHANGELOG.md"
+run --since v0.2.0 0.3.0
+expect "a seção com o título certo e sem texto não conta: as notas saem do git-cliff" 0 "Coisa nova do beta"
+rm "$work/CHANGELOG.md"
+run --since v0.2.0 0.3.0
+expect "sem CHANGELOG.md: as notas saem do git-cliff" 0 "Coisa nova do beta"
+write_changelog
+
+printf '\n\n' > "$work/cliff-body"
+run --since v0.2.0 0.3.0
+expect "estável sem nenhum commit no formato: as notas dizem isso (nunca ficam vazias)" 0 "Nenhum commit no formato dos commits do projeto"
+printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n' > "$work/cliff-body"
+
+touch "$work/cliff-falha"
+run --since v0.2.0 0.3.0
+expect "o git-cliff que falha derruba as notas da estável também" 1 "o git-cliff falhou"
+rm "$work/cliff-falha"
+run --since 'v0.2.0;id' 0.3.0
+expect "a tag anterior da estável fora do formato é recusada (ela vira argumento do git-cliff)" 1 "não é uma tag de versão"
 
 run '0.2.0;id'
 expect "versão fora do formato falha" 1 "não segue o formato"
