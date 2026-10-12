@@ -47,7 +47,7 @@ número é comparado como número), que vem antes da `0.2.0`. O formato `-rc.N` 
 regra, mas não é usado nesta entrega.
 
 No Prism, **cada merge na `develop` publica um beta** (decisão do dono em 2026-10-12): ninguém escolhe o número, a pipeline põe o
-seguinte. A `0.2.0` estável reúne tudo desde a estável anterior, e o changelog não repete as betas. Na página de releases do GitHub
+seguinte (o primeiro de cada versão é o `beta.1`). A `0.2.0` estável reúne tudo desde a estável anterior, e o changelog não repete as betas. Na página de releases do GitHub
 um beta aparece marcado como "Pre-release". O Prism instalado só oferece beta a quem ligou "Receber versões beta" em Configurações ›
 Atualizações; com a opção desligada, quem está numa beta recebe a próxima estável.
 
@@ -70,10 +70,24 @@ A versão mora em **um lugar só**: o campo `version` de `src/client/package.jso
 (`-p:Version=<versão>`, posto por `src/client/scripts/publish-api.mjs`), e nenhum `.csproj` declara versão. É desse campo que a
 pipeline tira tudo: o nome da tag (`v` + a versão), o dos pacotes e o título da release.
 
-Nos ramos `develop` e `main` o campo é a **próxima versão estável**, `X.Y.Z`, sem sufixo. Num beta, a pipeline grava o número do beta
-(`X.Y.Z-beta.N`) na cópia de trabalho dela, antes de gerar os pacotes, e não o comita: o app empacotado diz que é aquele beta, e o
-`package.json` do repositório continua em `X.Y.Z` ([ci.md](ci.md#empacotar)). Uma versão com sufixo escrita no `package.json` é
-recusada.
+Nos ramos `develop` e `main` o campo é a versão estável que o dono **quer**, `X.Y.Z`, sem sufixo (uma versão com sufixo escrita nele
+é recusada, e o formato inválido também). O que a pipeline lança é a **versão da vez**, que ela mesma calcula a partir das tags
+estáveis do repositório ("automático", decisão do dono em 2026-10-12):
+
+| O campo `version` | A versão da vez |
+| --- | --- |
+| não há tag estável nenhuma (a primeira versão) | a do campo |
+| é **maior** que a maior tag estável | a do campo |
+| é **igual** à maior tag estável (a versão já saiu) | a maior estável com o **patch + 1** |
+| é **menor** que a maior tag estável | a maior estável com o **patch + 1**, e um **aviso** (o campo ficou para trás) |
+
+Assim, depois da `v0.1.0` a versão da vez é a `0.1.1` sozinha, sem mexer em arquivo nenhum: o próximo beta é o `v0.1.1-beta.1`, e a
+próxima estável, a `v0.1.1`. Quem quer outra (a `0.2.0`, por exemplo) muda o campo, num pull request para a `develop`; vale enquanto
+o campo for maior que a maior estável. `bash scripts/ci/check-version.sh main` (ou `develop`) diz qual é a versão da vez.
+
+Nos pacotes de um lançamento a pipeline grava a versão da vez (`X.Y.Z-beta.N` num beta, `X.Y.Z` numa estável) na cópia de trabalho
+dela, antes de gerar os pacotes, e não a comita: o app empacotado diz que é aquela versão, e o `package.json` do repositório continua
+como está ([ci.md](ci.md#empacotar)).
 
 ## 3. Commits, tags e ramos
 
@@ -97,15 +111,18 @@ com as mudanças de cada versão agrupadas por categoria (adicionado, alterado, 
 `AAAA-MM-DD`. Ele é gerado pelo [`git-cliff`](https://git-cliff.org/docs/) a partir do histórico do git, com a configuração versionada
 no próprio repositório, o [`cliff.toml`](../cliff.toml).
 
-- **As notas de uma versão estável** são a seção dela no `CHANGELOG.md`, seguidas das somas SHA-256 dos pacotes
-  (`scripts/ci/release-notes.sh`, que o job `publicar` chama). Uma estável **sem seção** no changelog **não é lançada**: a pipeline
-  avisa e não publica.
+- **As notas de uma versão estável** são a seção dela no `CHANGELOG.md`, **se ela existir** (título exato `## [X.Y.Z] - AAAA-MM-DD`
+  e com texto), seguidas das somas SHA-256 dos pacotes (`scripts/ci/release-notes.sh`, que o job `publicar` chama). **Sem a seção, a
+  estável sai do mesmo jeito**, com as notas geradas pelo `git-cliff` na hora, como as de um beta: os commits desde a estável
+  anterior (na primeira, o histórico inteiro). Essas notas não são gravadas no `CHANGELOG.md`. Escrever a seção é opcional, para quem
+  quer notas curadas; **mas um título que cita a versão da vez fora do formato exato** (`## [0.1.1]`, `## 0.1.1 - 2026-10-12`) **reprova a
+  conferência na `main`**, para o texto escrito não ser trocado, sem ninguém ver, pelo do `git-cliff`.
 - **As notas de um beta** são geradas pelo `git-cliff` na hora, com os commits desde a tag de versão anterior (no primeiro beta, o
   histórico inteiro), seguidas das somas, e **não** são gravadas no `CHANGELOG.md`: um commit a cada merge encheria o histórico.
-- **A seção da `0.1.0` é escrita à mão**: as mensagens de commit anteriores a ela falam de tarefas internas e não servem de changelog.
-  Até o pull request de lançamento, ela fica sob "Não lançado".
-- **Da versão seguinte em diante o `git-cliff` gera a seção nova e a acrescenta no topo, sem reescrever o resto** (`--prepend`, passo 3
-  da seção 5), com os commits desde a estável anterior.
+- **A seção da `0.1.0` é escrita à mão**: as mensagens de commit anteriores a ela falam de tarefas internas e não servem de changelog,
+  e por isso vale escrevê-la e fechá-la antes de lançar a `0.1.0`. Até lá, ela fica sob "Não lançado".
+- **Quem quiser a seção de uma versão no arquivo** (e não só nas notas da release) pede ao `git-cliff` que a gere e a acrescente no topo,
+  sem reescrever o resto (`--prepend`, passo 3 da seção 5), com os commits desde a estável anterior.
 - Os tipos dos commits viram as categorias do Keep a Changelog em português: `feat` em Adicionado; `perf` e `refactor` em
   Alterado; `fix` em Corrigido; os commits de escopo `security` (`fix(security): ...`) em Segurança; `docs` em Documentação;
   `build` e `ci` em Empacotamento e pipeline; `test` e `chore` em Testes e manutenção. Um `!` depois do tipo leva o commit à
@@ -118,11 +135,12 @@ no próprio repositório, o [`cliff.toml`](../cliff.toml).
 
 ## 5. Como lançar uma versão
 
-**Lançar é fazer dois merges.** O primeiro leva a seção da versão ao `CHANGELOG.md` da `develop`; o segundo, o pull request de
-lançamento `release: vX.Y.Z`, leva a `develop` à `main`. No merge na `main`, a pipeline vê que a versão de `src/client/package.json`
-ainda não tem tag e que o changelog tem a seção dela, e faz o resto sozinha: gera os pacotes de todas as plataformas, cria a release
-como rascunho, anexa os pacotes e o `SHA256SUMS`, e publica, o que cria a tag `vX.Y.Z` no commit do merge. **Ninguém cria tag à
-mão.**
+**Lançar é fazer um merge**: o pull request de lançamento, `release: vX.Y.Z`, que leva a `develop` à `main`. No merge na `main`, a
+pipeline calcula a versão da vez (seção 2), vê que há commit novo desde a última estável, e faz o resto sozinha: gera os pacotes de
+todas as plataformas, cria a release como rascunho, anexa os pacotes e o `SHA256SUMS`, e publica, o que cria a tag `vX.Y.Z` no commit
+do merge. As notas são a seção `## [X.Y.Z]` do `CHANGELOG.md`, se você a levou à `develop` antes (um merge a mais, opcional); senão, o
+`git-cliff` as gera dos commits. **Ninguém cria tag à mão.** Um merge na `main` sem commit novo desde a última estável não lança nada:
+a pipeline avisa "nada novo desde a vX.Y.Z".
 
 Quem lança precisa ser [mantenedor](../CONTRIBUTING.md#mantenedores): é quem faz o merge na `main`.
 
@@ -135,9 +153,10 @@ Uma vez só, no GitHub, faça a [lista de conferência do repositório](ci.md#li
 [ensaio](ci.md#ensaio-com-o-repositório-privado). A reescrita do histórico (Tarefa 19) vem antes de o repositório ficar público, e
 a primeira versão de verdade sai depois dela.
 
-**A `0.1.0` é diferente das outras num ponto.** O campo `version` já está em `0.1.0`, e essa versão ainda não tem tag. Então, desde o
-primeiro merge na `develop`, cada merge publica um beta da `0.1.0` (`v0.1.0-beta.1`, `v0.1.0-beta.2`…), e cada merge na `main` avisa
-que falta a seção `## [0.1.0]` (o texto dela está sob "Não lançado"). É o pull request de lançamento que a fecha.
+**A `0.1.0` é a única sem estável anterior.** O campo `version` já está em `0.1.0`, e não há tag estável, então a versão da vez é a
+`0.1.0`. Desde o primeiro merge na `develop`, cada merge publica um beta dela (`v0.1.0-beta.1`, `v0.1.0-beta.2`…). O merge na `main`
+lança a `v0.1.0`; as notas são a seção `## [0.1.0]` se ela estiver fechada no `CHANGELOG.md` (o texto dela está sob "Não lançado") e,
+senão, o `git-cliff` com o histórico inteiro, que fala de tarefas internas: feche a seção antes (passo 3).
 
 ### O passo a passo
 
@@ -146,15 +165,17 @@ que falta a seção `## [0.1.0]` (o texto dela está sob "Não lançado"). É o 
    ou crítica numa dependência, nada é empacotado nem lançado até ela ser trocada. Num repositório público, o `leak-guard` também
    trava.
 
-2. **Confira o número.** O campo `version` da `develop` já é a próxima versão estável (é ela que os betas numeram). Veja o que entrou
-   desde a última estável: `git log --oneline vX.Y.Z..origin/develop` (na primeira versão, `git log --oneline origin/develop`). Se
-   algo quebra o contrato, o número de quebra tem de ter subido (o segundo, enquanto estiver na `0.x`); se só entrou funcionalidade,
-   o segundo; se só entrou correção, o terceiro. O `git cliff --bumped-version` sugere o número a partir dos tipos dos commits, mas os
-   mantenedores decidem. Se o número precisa mudar, mude o campo num pull request para a `develop` antes de seguir.
+2. **Confira o número.** A versão da vez é a do campo `version` da `develop` se ela for maior que a última estável; senão, é a última
+   estável com o patch + 1 (seção 2; `bash scripts/ci/check-version.sh main` diz qual). Veja o que entrou desde a última estável:
+   `git log --oneline vX.Y.Z..origin/develop` (na primeira versão, `git log --oneline origin/develop`). Se algo quebra o contrato, o
+   número de quebra tem de ter subido (o segundo, enquanto estiver na `0.x`); se só entrou funcionalidade, o segundo; se só entrou
+   correção, o terceiro. O `git cliff --bumped-version` sugere o número a partir dos tipos dos commits, mas os mantenedores decidem.
+   O patch + 1 vem sozinho; **para outro número, mude o campo** num pull request para a `develop` antes de seguir.
 
-3. **Escreva a seção do changelog**, num ramo de trabalho a partir da `develop` atualizada
-   (`git switch -c chore/release-X.Y.Z origin/develop`), e abra um pull request para a `develop` com o título `release: vX.Y.Z`. Ele
-   altera **só o `CHANGELOG.md`**.
+3. **(Opcional) Escreva a seção do changelog**, se quiser notas curadas em vez das geradas na hora pelo `git-cliff`, num ramo de
+   trabalho a partir da `develop` atualizada (`git switch -c chore/release-X.Y.Z origin/develop`), e abra um pull request para a
+   `develop` com o título `release: vX.Y.Z`. Ele altera **só o `CHANGELOG.md`**, e o título da seção é exatamente
+   `## [X.Y.Z] - AAAA-MM-DD`, com a versão da vez. Sem este passo, vá ao 5.
 
    **Na `0.1.0`** a seção já está escrita à mão no arquivo, sob o título "Não lançado", e o pull request só a fecha: troque esse título
    por `## [0.1.0] - AAAA-MM-DD` (a data do lançamento) e deixe, no topo, um `## Não lançado` vazio, como o cabeçalho do `cliff.toml`
@@ -188,7 +209,8 @@ que falta a seção `## [0.1.0]` (o texto dela está sob "Não lançado"). É o 
    `--prepend`, que reescreveria o arquivo inteiro. **O texto da seção é o que vai aparecer na página da release e na tela do app**,
    quando ele oferecer a atualização: escreva para quem usa.
 
-4. **Mescle esse pull request na `develop`.** O merge publica mais um beta da versão (as notas dele não usam o changelog).
+4. **Mescle esse pull request na `develop`** (se o escreveu). O merge publica mais um beta da versão (as notas dele não usam o
+   changelog).
 
 5. **Confira antes do lançamento.** Na `develop` atualizada, rode:
 
@@ -196,9 +218,11 @@ que falta a seção `## [0.1.0]` (o texto dela está sob "Não lançado"). É o 
    bash scripts/ci/check-version.sh main
    ```
 
-   Ele lê a versão, o changelog e as tags do remoto e diz o que o merge na `main` vai fazer: `LANÇA a versão estável vX.Y.Z`, ou o que
-   falta (a versão fora do formato, menor que uma já lançada, a seção ausente ou com o título fora do formato exato). Nenhum pull
-   request roda a pipeline: é este comando que diz, antes do merge, o que a pipeline vai decidir.
+   Ele lê a versão, o changelog, as tags do remoto e o histórico, e diz o que o merge na `main` vai fazer: `LANÇA a versão estável
+   vX.Y.Z`, com a origem das notas (a seção do changelog ou o `git-cliff`); `nada novo desde a vX.Y.Z`, se não há commit novo; ou o que
+   reprova (a versão fora do formato, um beta de versão maior já publicado, o título da seção fora do formato exato). Se a versão do
+   campo ficou para trás, avisa qual é a da vez. Nenhum pull request roda a pipeline: é este comando que diz, antes do merge, o que a
+   pipeline vai decidir.
 
 6. **Abra o pull request de lançamento**, da `develop` para a `main`, com o título `release: vX.Y.Z`, e faça o merge com
    **"Create a merge commit"** (o método que as regras da `main` pedem: a `main` recebe a história da `develop` inteira). É neste
@@ -226,8 +250,8 @@ que falta a seção `## [0.1.0]` (o texto dela está sob "Não lançado"). É o 
      O primeiro é o comando do Windows (PowerShell) e o segundo, o do Linux. No macOS, use `shasum -a 256 NOME-DO-ARQUIVO`.
    - Num Prism de uma versão anterior, "Verificar atualizações" (ao lado da versão) deve mostrar a versão nova e as notas.
 
-9. **Suba a versão na `develop` logo em seguida**, num pull request (`chore: a próxima versão é a X.Y+1.0`, por exemplo): até lá, cada
-   merge na `develop` avisa que a versão já tem a estável e não publica beta.
+9. **Não há versão a subir depois.** O próximo beta da `develop` já é o da versão seguinte (`v0.1.1-beta.1`, com o número voltando a
+   1), e a próxima estável sai com o patch + 1. O campo `version` só muda quando você quer outro número (um MINOR ou um MAJOR).
 
 ### Se a pipeline falhar
 
@@ -238,16 +262,17 @@ Em resumo:
 
 | Onde parou | O que aconteceu | O que fazer |
 | --- | --- | --- |
-| `Conferir a versão` | a versão está fora do formato, é menor que uma já lançada, ou o título da seção está errado. Nada foi gerado | corrija num pull request |
+| `Conferir a versão` | a versão está fora do formato, a versão da vez não é maior que um beta já publicado, ou o título da seção do changelog cita a versão da vez fora do formato. Nada foi gerado | corrija num pull request |
 | testes, auditoria ou um pacote | nada foi publicado | corrija e faça o merge, ou repita o job |
 | `Publicar a release`, antes de publicar | um rascunho, talvez com parte dos arquivos; **não há tag**: para o app e para a página de releases, a versão não existe | leia a mensagem do job, conserte a causa e repita o job |
-| `Publicar a release` diz que o plano não bate com as tags | outra coisa mudou as tags durante a execução | rode a execução inteira de novo ("Re-run all jobs") |
+| `Publicar a release` diz que o plano não bate com as tags | outra coisa mudou as tags durante a execução (uma estável saiu enquanto um beta era empacotado, por exemplo: a versão da vez mudou) | rode a execução inteira de novo ("Re-run all jobs") |
 
 ### Os betas
 
-Não há o que fazer: **cada merge na `develop` publica um beta** da versão do `package.json`, com o número seguinte (`v0.2.0-beta.1`,
-`v0.2.0-beta.2`…) e as notas do `git-cliff` desde a tag de versão anterior. As execuções de um ramo correm uma de cada vez, na ordem
-dos merges; com a versão já lançada como estável, o merge avisa e não publica (passo 9 acima). Um beta não ganha seção no changelog.
+Não há o que fazer: **cada merge na `develop` publica um beta** da versão da vez (seção 2), com o número seguinte (`v0.2.0-beta.1`,
+`v0.2.0-beta.2`…) e as notas do `git-cliff` desde a tag de versão anterior. O número conta só os betas da versão da vez: depois de uma
+estável, o primeiro beta da seguinte é o `beta.1` (`v0.1.1-beta.1`). As execuções de um ramo correm uma de cada vez, na ordem dos
+merges. Um beta não ganha seção no changelog.
 
 ### Se a versão saiu errada
 
