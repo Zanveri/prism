@@ -1,7 +1,7 @@
 # A pipeline do Prism (RN-ABERTO-005 e RN-GITHUB-002): o workflow de ENTRADA. Ele só existe para dizer QUANDO a pipeline roda e
 # em que ordem os assuntos vêm; cada assunto é um workflow reutilizável deste mesmo diretório (verificar, integrar, seguranca,
-# empacotar e lancar), e cada passo deles chama um roteiro de scripts/ci/. O que cada arquivo faz, a ordem das etapas e o que o
-# repositório precisa ter configurado estão em docs/ci.md.
+# empacotar, lancar e paginas), e cada passo deles chama um roteiro de scripts/ci/ (o das páginas só usa actions do GitHub). O que
+# cada arquivo faz, a ordem das etapas e o que o repositório precisa ter configurado estão em docs/ci.md.
 #
 # QUANDO: só no merge em `develop` e em `main` (um push nesses ramos, que as regras de ramo só deixam acontecer pelo merge de um
 # pull request). Pull request, tag, outro ramo e qualquer outro evento não disparam nada: não há `pull_request`,
@@ -10,12 +10,16 @@
 # tag com o GITHUB_TOKEN, e um evento do GITHUB_TOKEN não cria execução nova.
 #
 # O TOKEN: `permissions: {}` aqui e em todo workflow; cada job pede só o que usa, e só o de lançamento tem `contents: write`
-# (cria a release, que cria a tag). O de CodeQL tem `security-events: write`, que só grava os achados da varredura.
+# (cria a release, que cria a tag). O de CodeQL tem `security-events: write`, que só grava os achados da varredura. O de páginas
+# tem `pages: write` e `id-token: write`, que só servem para publicar o site no GitHub Pages.
 #
 # UM MERGE DE CADA VEZ em cada ramo, na ordem em que chegaram, sem cancelar o que está rodando: a execução de um merge planeja o
 # número do beta no começo e grava esse número dentro dos pacotes (o app empacotado diz que é o beta), e por isso a execução
 # seguinte do mesmo ramo só começa quando a anterior termina. `queue: max` guarda até 100 execuções na fila (sem ele, a que espera
 # é cancelada quando chega outra). As execuções da develop e as da main são filas separadas.
+#
+# AS PÁGINAS: o site de `site/` é publicado a cada merge na `develop` (o ramo padrão, o único que o ambiente `github-pages` deixa
+# publicar), sem esperar o empacotamento e sem que ninguém espere por ele. Na `main` não rodam.
 #
 # Nenhum workflow nem action de fora: só `actions/*` e `github/*`, fixadas pelo SHA do commit, e as daqui (.github/actions/).
 # Só runners hospedados pelo GitHub, com rótulo de imagem fixo. Nenhum segredo obrigatório: o único segredo, LEAK_GUARD_EXTRA,
@@ -75,3 +79,12 @@ jobs:
       contents: write
     with:
       tag: ${{ needs.verificar.outputs.tag }}
+
+  paginas:
+    name: Páginas
+    if: github.ref_name == 'develop'
+    uses: ./.github/workflows/paginas.yml
+    permissions:
+      contents: read
+      pages: write
+      id-token: write

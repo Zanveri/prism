@@ -8,8 +8,8 @@
 #    `actions/*` ou `github/*` fixada pelo SHA de 40 caracteres com o comentário da versão; o workflow chamado não tem
 #    `workflow_call`;
 #  - um workflow não começa com `permissions: {}`; um job pede escrita fora do que o projeto aceita (só `contents: write` no job de
-#    lançamento, e `security-events: write` no do CodeQL, com os jobs que os chamam); `read-all`/`write-all`; um job que chama um
-#    workflow reutilizável não diz as permissões dele;
+#    lançamento, `security-events: write` no do CodeQL, e `pages: write` com `id-token: write` no que publica as páginas, com os
+#    jobs que os chamam); `read-all`/`write-all`; um job que chama um workflow reutilizável não diz as permissões dele;
 #  - um segredo aparece fora do passo do leak-guard (e do job que o repassa a ele), ou há `secrets: inherit`;
 #  - um passo `run:` não é UMA chamada a um roteiro de scripts/ci/ que existe, ou tem uma expressão `${{ }}` (o valor de fora
 #    entra por variável de ambiente, nunca colado no comando);
@@ -135,7 +135,9 @@ for file in "${workflows[@]}"; do
       *:read | *:none) ;;
       contents:write) [ "$name:$job" = lancar.yml:publicar ] || [ "$name:$job" = pipeline.yml:lancar ] || problem "$file: o job $job pede contents: write; escrita só no job de lançamento." ;;
       security-events:write) [ "$name:$job" = seguranca.yml:codeql ] || [ "$name:$job" = pipeline.yml:seguranca ] || problem "$file: o job $job pede security-events: write; essa escrita só no job do CodeQL." ;;
-      *) problem "$file: o job $job pede \"$scope: $level\": escrita só no job de lançamento (contents) e no do CodeQL (security-events), e nunca read-all ou write-all." ;;
+      pages:write) [ "$name:$job" = paginas.yml:publicar ] || [ "$name:$job" = pipeline.yml:paginas ] || problem "$file: o job $job pede pages: write; essa escrita só no job que publica as páginas." ;;
+      id-token:write) [ "$name:$job" = paginas.yml:publicar ] || [ "$name:$job" = pipeline.yml:paginas ] || problem "$file: o job $job pede id-token: write; essa escrita só no job que publica as páginas." ;;
+      *) problem "$file: o job $job pede \"$scope: $level\": escrita só no job de lançamento (contents), no do CodeQL (security-events) e no que publica as páginas (pages e id-token), e nunca read-all ou write-all." ;;
     esac
   done < "$tmp/perms"
 

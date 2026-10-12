@@ -1,0 +1,55 @@
+# Páginas (RN-GITHUB-002): o site de documentação, o que está em `site/`, publicado no GitHub Pages. HTML e CSS escritos à mão: não há
+# build, nem dependência, nem roteiro. O workflow de entrada o chama só na `develop`, o ramo padrão, e ele não espera o empacotamento
+# nem é esperado por ninguém: um defeito aqui não segura os pacotes, e um pacote que falha não segura o site.
+#
+# Dois jobs, para o token de cada um ter só o que usa. O `montar` lê o repositório e junta `site/` num artefato; o `publicar`, que
+# nunca vê o código, entrega o artefato ao GitHub Pages. O `publicar` é o ÚNICO job com `pages: write` e `id-token: write` (o
+# `check-workflows.sh` reprova essas escritas em qualquer outro): a primeira deixa criar a publicação, e a segunda deixa o GitHub
+# conferir de que execução e de que ramo o artefato veio ([deploy-pages](https://github.com/actions/deploy-pages#security-considerations)).
+# O `montar` pede `pages: read` porque o `configure-pages` lê a configuração do Pages (`GET /repos/{dono}/{repo}/pages`), que a
+# documentação dos tokens de instalação lista como `pages: read`; ele falha, com a mensagem dizendo o que ligar, quando o Pages ainda
+# não está com a fonte "GitHub Actions" (Settings › Pages; passo 13 da lista de conferência de docs/ci.md).
+#
+# O ambiente `github-pages` o GitHub cria sozinho ao ligar o Pages por Actions, e só deixa publicar a partir do ramo padrão.
+name: Páginas
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  montar:
+    name: Montar o site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Conferir que o GitHub Pages está ligado por Actions
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Juntar o site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  publicar:
+    name: Publicar no GitHub Pages
+    needs: montar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+    steps:
+      - name: Publicar o site
+        id: publicacao
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

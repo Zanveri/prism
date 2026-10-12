@@ -101,6 +101,20 @@ sabotage "packages: write no job de lançamento reprova (só contents)" "escrita
 sabotage "security-events: write fora do CodeQL reprova" "escrita" .github/workflows/seguranca.yml '0,/      contents: read/s//      contents: read\n      security-events: write/'
 sabotage "o job que chama um reutilizável sem permissions reprova" "permissions" .github/workflows/pipeline.yml '/^    uses: .\/.github\/workflows\/integrar.yml$/{n;N;d}'
 
+# --- as páginas: pages: write e id-token: write só no job que publica o site (e no que o chama) ---
+sabotage "pages: write num job que não publica as páginas reprova" "só no job que publica as páginas" .github/workflows/verificar.yml '0,/      contents: read/s//      contents: read\n      pages: write/'
+sabotage "id-token: write num job que não publica as páginas reprova" "só no job que publica as páginas" .github/workflows/empacotar.yml '0,/      contents: read/s//      contents: read\n      id-token: write/'
+sabotage "pages: write no job que monta o site reprova (só o que publica)" "só no job que publica as páginas" .github/workflows/paginas.yml 's/^      pages: read$/      pages: write/'
+sabotage "id-token: write no job que monta o site reprova (só o que publica)" "só no job que publica as páginas" .github/workflows/paginas.yml 's/^      pages: read$/      pages: read\n      id-token: write/'
+sabotage "pages: write em outro job do workflow de entrada reprova" "só no job que publica as páginas" .github/workflows/pipeline.yml '0,/      contents: read/s//      contents: read\n      pages: write/'
+sabotage "id-token: write em outro job do workflow de entrada reprova" "só no job que publica as páginas" .github/workflows/pipeline.yml '0,/      contents: read/s//      contents: read\n      id-token: write/'
+sabotage "contents: write no job que publica as páginas reprova (a escrita do conteúdo é só do lançamento)" "escrita" .github/workflows/paginas.yml 's/^      id-token: write$/      id-token: write\n      contents: write/'
+sabotage "uma permissão de escrita a mais no job que publica as páginas reprova" "escrita" .github/workflows/paginas.yml 's/^      id-token: write$/      id-token: write\n      packages: write/'
+sabotage "action de fora no workflow das páginas reprova" "uses" .github/workflows/paginas.yml 's/uses: actions\/deploy-pages@[0-9a-f]* # v5.0.1/uses: alguem\/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1/'
+sabotage "action das páginas por tag (sem o SHA) reprova" "uses" .github/workflows/paginas.yml 's/uses: actions\/configure-pages@[0-9a-f]* # v6.0.0/uses: actions\/configure-pages@v6 # v6/'
+sabotage "as páginas sem permissions: {} no topo reprovam" "permissions: {}" .github/workflows/paginas.yml 's/^permissions: {}$/permissions:\n  contents: read/'
+sabotage "o job de páginas que não está na tabela do docs/ci.md reprova" "docs/ci.md" docs/ci.md '/^| `paginas.yml` | `publicar` |/d'
+
 # --- os segredos ---
 sabotage "secrets: inherit reprova" "segredo" .github/workflows/pipeline.yml 's/^    secrets:$/    secrets: inherit\n    x-segredos:/'
 append "um segredo usado fora do passo do leak-guard reprova" "segredo" .github/workflows/integrar.yml '      - name: Vazar
