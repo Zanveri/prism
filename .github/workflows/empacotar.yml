@@ -1,0 +1,220 @@
+# Empacotar (RN-ABERTO-006 e RN-GITHUB-005): a API publicada para as quatro plataformas, num job Linux, e o pacote de cada
+# plataforma no runner dela: Windows x64 (instalador e zip), Linux x64 (AppImage, deb, rpm e tar.gz, no contêiner do
+# electron-builder fixado por digest) e macOS (dmg e zip, Apple Silicon e Intel, os dois no runner de macOS Apple Silicon, porque o
+# dmg só se gera no macOS). Toda execução empacota, lance ou não; quem publica é o workflow lancar.
+#
+# A versão dos pacotes é a do plano (input `versao`, do job `versao` do workflow verificar): num beta, X.Y.Z-beta.N, gravada na
+# cópia de trabalho antes de publicar a API e de empacotar (set-build-version.sh), para o app empacotado dizer que é o beta.
+#
+# A origem das atualizações que cada pacote grava (RN-ATUALIZA-001) sai do contexto `github` do próprio workflow: o endereço da
+# API, o do site e o dono/repositório. Nenhuma variável (`vars.`) nem segredo a troca, e o package-desktop.sh confere, antes e
+# depois de empacotar, que é a deste repositório.
+#
+# Os artefatos entre os jobs duram pouco (a API, um dia; os pacotes, dois): eles só levam os arquivos ao job seguinte da mesma
+# execução, e o armazenamento de artefatos conta na cota do plano enquanto o repositório for privado. A API vai num tar, que
+# guarda o bit de execução que o artefato perderia.
+name: Empacotar
+
+on:
+  workflow_call:
+    inputs:
+      versao:
+        description: A versão com que os pacotes desta execução são gerados (o plano do job versao).
+        required: true
+        type: string
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  api:
+    name: API das quatro plataformas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o .NET
+        uses: ./.github/actions/preparar-dotnet
+      - name: Preparar o Node e o pnpm
+        uses: ./.github/actions/preparar-node
+      - name: Gravar a versão dos pacotes
+        env:
+          PRISM_BUILD_VERSION: ${{ inputs.versao }}
+        run: bash scripts/ci/set-build-version.sh "$PRISM_BUILD_VERSION"
+      - name: Publicar a API para cada plataforma
+        run: bash scripts/ci/publish-api.sh
+      - name: Guardar a API de Windows
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prism-api-win-x64
+          path: api-bundles/prism-api-win-x64.tar
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+      - name: Guardar a API de Linux
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prism-api-linux-x64
+          path: api-bundles/prism-api-linux-x64.tar
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+      - name: Guardar a API de macOS (Apple Silicon)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prism-api-osx-arm64
+          path: api-bundles/prism-api-osx-arm64.tar
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+      - name: Guardar a API de macOS (Intel)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prism-api-osx-x64
+          path: api-bundles/prism-api-osx-x64.tar
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  windows:
+    name: Pacote de Windows
+    needs: api
+    runs-on: windows-2025
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o Node e o pnpm
+        uses: ./.github/actions/preparar-node
+      - name: Gravar a versão dos pacotes
+        env:
+          PRISM_BUILD_VERSION: ${{ inputs.versao }}
+        run: bash scripts/ci/set-build-version.sh "$PRISM_BUILD_VERSION"
+      - name: Buscar a API de Windows
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: prism-api-win-x64
+          path: api-bundles
+      - name: Empacotar
+        env:
+          PRISM_UPDATE_API: ${{ github.api_url }}
+          PRISM_UPDATE_SITE: ${{ github.server_url }}
+          PRISM_UPDATE_REPOSITORY: ${{ github.repository }}
+          PRISM_HOMEPAGE: ${{ github.server_url }}/${{ github.repository }}
+        run: bash scripts/ci/package-desktop.sh win
+      - name: Guardar os pacotes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pacote-windows
+          path: |
+            src/client/release/Prism-*
+            !src/client/release/*.blockmap
+          if-no-files-found: error
+          retention-days: 2
+          overwrite: true
+
+  linux:
+    name: Pacote de Linux
+    needs: api
+    runs-on: ubuntu-24.04
+    container:
+      image: electronuserland/builder:24-05.26@sha256:e41cd059a4fdc0831ccd2a55cb59cbc6b73dc5f44c625778f7fda38874a70df3
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o Node e o pnpm
+        uses: ./.github/actions/preparar-node
+      - name: Gravar a versão dos pacotes
+        env:
+          PRISM_BUILD_VERSION: ${{ inputs.versao }}
+        run: bash scripts/ci/set-build-version.sh "$PRISM_BUILD_VERSION"
+      - name: Buscar a API de Linux
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: prism-api-linux-x64
+          path: api-bundles
+      - name: Empacotar
+        env:
+          PRISM_UPDATE_API: ${{ github.api_url }}
+          PRISM_UPDATE_SITE: ${{ github.server_url }}
+          PRISM_UPDATE_REPOSITORY: ${{ github.repository }}
+          PRISM_HOMEPAGE: ${{ github.server_url }}/${{ github.repository }}
+        run: bash scripts/ci/package-desktop.sh linux
+      - name: Guardar os pacotes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pacote-linux
+          path: |
+            src/client/release/Prism-*
+            !src/client/release/*.blockmap
+          if-no-files-found: error
+          retention-days: 2
+          overwrite: true
+
+  macos:
+    name: Pacote de macOS (${{ matrix.arquitetura }})
+    needs: api
+    runs-on: macos-26
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        arquitetura: [arm64, x64]
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o Node e o pnpm
+        uses: ./.github/actions/preparar-node
+      - name: Gravar a versão dos pacotes
+        env:
+          PRISM_BUILD_VERSION: ${{ inputs.versao }}
+        run: bash scripts/ci/set-build-version.sh "$PRISM_BUILD_VERSION"
+      - name: Buscar a API de macOS
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: prism-api-osx-${{ matrix.arquitetura }}
+          path: api-bundles
+      - name: Empacotar
+        env:
+          PRISM_ARCH: ${{ matrix.arquitetura }}
+          PRISM_UPDATE_API: ${{ github.api_url }}
+          PRISM_UPDATE_SITE: ${{ github.server_url }}
+          PRISM_UPDATE_REPOSITORY: ${{ github.repository }}
+          PRISM_HOMEPAGE: ${{ github.server_url }}/${{ github.repository }}
+        run: bash scripts/ci/package-desktop.sh mac "$PRISM_ARCH"
+      - name: Guardar os pacotes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pacote-macos-${{ matrix.arquitetura }}
+          path: |
+            src/client/release/Prism-*
+            !src/client/release/*.blockmap
+          if-no-files-found: error
+          retention-days: 2
+          overwrite: true

@@ -1,0 +1,18 @@
+# Os arquivos que cada plataforma gera (RN-ABERTO-006): "grupo  arquivo", com @VERSION@ no lugar da versão. É a lista que o
+# package-desktop.sh confere depois do empacotamento e que o publish-release.sh anexa à release do GitHub (com o SHA256SUMS).
+#
+# ESTA LISTA É CONTRATO COM O ATUALIZADOR DO APP (RN-ATUALIZA-005). O outro lado dela é src/client/electron/update/packages.ts,
+# que a repete (o app não lê arquivo do repositório) e monta com ela o endereço do pacote que baixa; um teste do cliente
+# (packages.test.ts) compara as duas, grupo por grupo e na mesma ordem, e o packages.test.sh daqui fixa as linhas abaixo. Mudou
+# um alvo no electron-builder.yml: mude aqui, em packages.ts, no packages.test.sh e em docs/ci.md, no mesmo pull request. Um nome
+# que muda só de um lado faz o app procurar um arquivo que a release não tem.
+win        Prism-@VERSION@-win-x64.exe
+win        Prism-@VERSION@-win-x64.zip
+linux      Prism-@VERSION@-linux-x86_64.AppImage
+linux      Prism-@VERSION@-linux-amd64.deb
+linux      Prism-@VERSION@-linux-x86_64.rpm
+linux      Prism-@VERSION@-linux-x64.tar.gz
+mac-arm64  Prism-@VERSION@-mac-arm64.dmg
+mac-arm64  Prism-@VERSION@-mac-arm64.zip
+mac-x64    Prism-@VERSION@-mac-x64.dmg
+mac-x64    Prism-@VERSION@-mac-x64.zip

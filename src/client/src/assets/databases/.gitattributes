@@ -1,0 +1,4 @@
+# As logos são os arquivos da fonte, byte a byte (o SHA-256 está no README): sem conversão de fim de linha no checkout do
+# Windows, que mudaria os bytes e a soma.
+*.svg -text
+*.png -text

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Splash de inicialização</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; width: 640px; height: 400px; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; background: #0E1114; border: 1px solid #2A313B; color: #E6EAF0; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 22px">
+<svg viewBox="0 34 720 281" role="img" aria-label="Um feixe de luz entra no prisma e sai em três faixas de cor, cada uma chegando a um banco de dados" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex: none; display: block; width: 638px; height: 249px">
+<defs>
+<filter id="prism-splash-glow" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="10"></feGaussianBlur></filter>
+<linearGradient id="prism-splash-ifx" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.45"></stop></linearGradient>
+<linearGradient id="prism-splash-db2" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.45"></stop></linearGradient>
+<linearGradient id="prism-splash-pg" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.45"></stop></linearGradient>
+<linearGradient id="prism-splash-face" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient>
+</defs>
+<g filter="url(#prism-splash-glow)" opacity="0.5">
+<path d="M0 214 L220 186" stroke="#F3F5F8" stroke-width="8"></path>
+<path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path>
+<path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path>
+<path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path>
+</g>
+<path d="M0 214 L220 186" stroke="#F3F5F8" stroke-width="3"></path>
+<path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-splash-ifx)"></path>
+<path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-splash-db2)"></path>
+<path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-splash-pg)"></path>
+<path d="M300 44 L444 300 H156 Z" fill="#1A2028"></path>
+<path d="M300 44 L156 300 L292 226 Z" fill="url(#prism-splash-face)"></path>
+<path d="M156 300 L292 226 L444 300 Z" fill="#11151A"></path>
+<path d="M300 44 L292 226 M156 300 L292 226 M444 300 L292 226" stroke="#46505D" stroke-width="1"></path>
+<path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.14"></path>
+<path d="M220 186 L369.2 167" stroke="#F591B6" stroke-width="1.25" stroke-opacity="0.9"></path>
+<path d="M220 186 L374.2 176" stroke="#5ED3A3" stroke-width="1.25" stroke-opacity="0.9"></path>
+<path d="M220 186 L379.3 185" stroke="#7DB2FF" stroke-width="1.25" stroke-opacity="0.9"></path>
+<path d="M288.8 78 L241.3 162.6" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.5"></path>
+<path d="M300 44 L444 300 H156 Z" stroke="#E6EAF0" stroke-width="1.75"></path>
+<circle cx="220" cy="186" r="10" fill="#FFFFFF" fill-opacity="0.12"></circle>
+<circle cx="220" cy="186" r="5.5" fill="#FFFFFF" fill-opacity="0.28"></circle>
+<circle cx="220" cy="186" r="2.5" fill="#FFFFFF"></circle>
+<path d="M654 69 v34 a22 8 0 0 0 44 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="2"></path>
+<path d="M654 86 a22 8 0 0 0 44 0" stroke="#F591B6" stroke-width="2" stroke-opacity="0.55"></path>
+<ellipse cx="676" cy="69" rx="22" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="2"></ellipse>
+<path d="M654 145 v34 a22 8 0 0 0 44 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="2"></path>
+<path d="M654 162 a22 8 0 0 0 44 0" stroke="#5ED3A3" stroke-width="2" stroke-opacity="0.55"></path>
+<ellipse cx="676" cy="145" rx="22" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="2"></ellipse>
+<path d="M654 221 v34 a22 8 0 0 0 44 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="2"></path>
+<path d="M654 238 a22 8 0 0 0 44 0" stroke="#7DB2FF" stroke-width="2" stroke-opacity="0.55"></path>
+<ellipse cx="676" cy="221" rx="22" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="2"></ellipse>
+</svg>
+<div style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 32px 18px">
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: 0.01em">Prism</span>
+<span style="color: #B4BCC8">Informix, Db2 e PostgreSQL no mesmo lugar.</span>
+</div>
+<span style="flex: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; line-height: 22px; color: #8E99A8">versão 0.1.0</span>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 12px; line-height: 18px; color: #B4BCC8">
+<span>Iniciando o serviço local…</span>
+<span style="flex: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #8E99A8">1 de 2</span>
+</div>
+</div>
+<div role="progressbar" aria-label="Inicialização do Prism" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45" style="flex: none; height: 4px; background: #232A33"><div style="width: 45%; height: 100%; background: {{accent}}"></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"$preview":{"width":640,"height":400}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#F2B644' };
+}
+}
+</script>
+</body>
+</html>

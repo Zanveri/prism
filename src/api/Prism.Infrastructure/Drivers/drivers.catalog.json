@@ -1,0 +1,75 @@
+{
+  "drivers": [
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL",
+      "vendor": "Npgsql",
+      "kind": "bundled",
+      "engines": [1],
+      "version": "10.0.3",
+      "license": { "name": "PostgreSQL License", "url": "https://licenses.nuget.org/PostgreSQL" }
+    },
+    {
+      "id": "ibm-data-server",
+      "name": "IBM Data Server",
+      "vendor": "IBM",
+      "kind": "downloadable",
+      "engines": [2, 3],
+      "version": "10.0.0.300",
+      "unavailableNote": "A IBM não publica este driver para esta plataforma: ele existe para Windows x64, Linux x64 e macOS com Apple Silicon.",
+      "packages": {
+        "win-x64": {
+          "id": "Net.IBM.Data.Db2",
+          "sha512": "4RPQxDO2EdYTXV8QoqXgO4FYBRtItiC0Meki2lgysDRgS8tmg/DxGubvwXv9NMY/TxUVmG6Y2h5exc+zSwiejA==",
+          "sizeBytes": 45564268,
+          "license": { "name": "IBM License Information L-CVPF-JN2TFC (IBM Data Server Provider for .NET 10.0)", "url": "https://www.nuget.org/packages/Net.IBM.Data.Db2/10.0.0.300/license" },
+          "files": [
+            { "from": "lib/net10.0/IBM.Data.Db2.dll", "to": "IBM.Data.Db2.dll" },
+            { "from": "Lic_en.txt", "to": "Lic_en.txt" },
+            { "from": "REDIST.txt", "to": "REDIST.txt" }
+          ],
+          "trees": [ { "from": "buildTransitive/clidriver/", "to": "clidriver/" } ],
+          "managedAssembly": "IBM.Data.Db2.dll",
+          "nativeLibrary": "clidriver/bin/db2app64.dll"
+        },
+        "linux-x64": {
+          "id": "Net.IBM.Data.Db2-lnx",
+          "sha512": "R4mgxZlKKueDqzAZ2jq0G4nSgahAqJ20u2DqtBAr/oAEhjRUaQlBXIYk3GZzS54bBE5w1/VmAFRG98G18qZPDQ==",
+          "sizeBytes": 42137857,
+          "license": { "name": "IBM License Information L-CVPF-JN2TFC (IBM Data Server Provider for .NET 10.0)", "url": "https://www.nuget.org/packages/Net.IBM.Data.Db2-lnx/10.0.0.300/license" },
+          "files": [
+            { "from": "lib/net10.0/IBM.Data.Db2.dll", "to": "IBM.Data.Db2.dll" },
+            { "from": "Lic_en.txt", "to": "Lic_en.txt" },
+            { "from": "REDIST.txt", "to": "REDIST.txt" }
+          ],
+          "trees": [ { "from": "buildTransitive/clidriver/", "to": "clidriver/" } ],
+          "managedAssembly": "IBM.Data.Db2.dll",
+          "nativeLibrary": "clidriver/lib/libdb2.so",
+          "note": "No Linux, este driver precisa da biblioteca libxml2 (arquivo libxml2.so.2) instalada no sistema."
+        },
+        "osx-arm64": {
+          "id": "Net.IBM.Data.Db2-osx",
+          "sha512": "+VdXmF1G0wS1mwO8LaatnrKu7z3WDPE9Jom6z1+ZGy725uwEtPUFk5bdSfJaNfeUaTPby5CfGr2mgI3gsyVoyQ==",
+          "sizeBytes": 18714364,
+          "license": { "name": "IBM License Information L-CVPF-JN2TFC (IBM Data Server Provider for .NET 10.0)", "url": "https://www.nuget.org/packages/Net.IBM.Data.Db2-osx/10.0.0.300/license" },
+          "files": [
+            { "from": "lib/net10.0/IBM.Data.Db2.dll", "to": "IBM.Data.Db2.dll" },
+            { "from": "Lic_en.txt", "to": "Lic_en.txt" },
+            { "from": "REDIST.txt", "to": "REDIST.txt" }
+          ],
+          "trees": [ { "from": "buildTransitive/clidriver/", "to": "clidriver/" } ],
+          "managedAssembly": "IBM.Data.Db2.dll",
+          "nativeLibrary": "clidriver/lib/libdb2.dylib"
+        }
+      }
+    },
+    { "id": "sqlite", "name": "SQLite", "vendor": "SQLite Consortium", "kind": "comingSoon" },
+    { "id": "mysql", "name": "MySQL", "vendor": "Oracle", "kind": "comingSoon" },
+    { "id": "mariadb", "name": "MariaDB", "vendor": "MariaDB Foundation", "kind": "comingSoon" },
+    { "id": "sql-server", "name": "Microsoft SQL Server", "vendor": "Microsoft", "kind": "comingSoon" },
+    { "id": "oracle", "name": "Oracle", "vendor": "Oracle", "kind": "comingSoon" },
+    { "id": "firebird", "name": "Firebird", "vendor": "Firebird Project", "kind": "comingSoon" },
+    { "id": "duckdb", "name": "DuckDB", "vendor": "DuckDB Foundation", "kind": "comingSoon" },
+    { "id": "clickhouse", "name": "ClickHouse", "vendor": "ClickHouse, Inc.", "kind": "comingSoon" }
+  ]
+}

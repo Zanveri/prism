@@ -1,0 +1,76 @@
+using Prism.Application.Common.Vault;
+using Prism.Core.Api.Models.Dtos;
+using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Vault.Models;
+
+namespace Prism.Application.DatabaseSessions.Models;
+
+/// <summary>
+/// A tradução das recusas do registro de sessões (`DatabaseFailure`) para o erro da API, num lugar só: toda rota que fala com um banco
+/// responde a mesma falha do mesmo jeito. Os códigos e os status são os da seção 6 da especificação.
+///
+/// Em `ConnectionFailed` e `ExecutionFailed` o `detail` é a mensagem do banco, sem alteração (decisão 4 da seção 8 da especificação,
+/// RN-SESSAO-003 e RN-SQL-009): num cliente de banco ela é o produto. Nos demais, é o texto do próprio Prism.
+///
+/// O que a tela decide sem ler texto (Ruling 135) vai em extensões: `outcome` no `SQL_EXECUTION_FAILED` que terminou depois de um pedido
+/// de cancelamento (RN-SQL-010) e `executed` no `TRANSACTION_CONTROL_NOT_SUPPORTED` do comando que rodou (RN-SESSAO-005).
+/// </summary>
+internal static class DatabaseSessionErrors
+{
+    public static ApiErrorDto From(DatabaseFailure failure)
+        => failure.Kind switch
+        {
+            EDatabaseFailure.ConnectionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao conectar no banco de dados.", "DATABASE_CONNECTION_FAILED", failure.Message),
+            EDatabaseFailure.ExecutionFailed => ApiErrorDto.CreateUnprocessableEntity("Falha ao executar o comando.", "SQL_EXECUTION_FAILED", failure.Message, SqlDetails(failure)),
+            EDatabaseFailure.SessionNotFound => ApiErrorDto.CreateNotFound("Sessão com o banco não localizada.", "DATABASE_SESSION_NOT_FOUND", failure.Message),
+            EDatabaseFailure.SessionBusy => ApiErrorDto.CreateConflict("A sessão está ocupada.", "SESSION_BUSY", failure.Message),
+            EDatabaseFailure.NoOpenCursor => ApiErrorDto.CreateConflict("Não há resultado aberto.", "NO_OPEN_CURSOR", failure.Message),
+            EDatabaseFailure.NoQueryToCount => ApiErrorDto.CreateConflict("Não há consulta para contar.", "NO_QUERY_TO_COUNT", failure.Message),
+            EDatabaseFailure.TransactionControlNotSupported => ApiErrorDto.CreateUnprocessableEntity("Controle de transação não é aceito.", "TRANSACTION_CONTROL_NOT_SUPPORTED", failure.Message, ExecutedDetails(failure)),
+            EDatabaseFailure.MultipleStatementsNotSupported => ApiErrorDto.CreateUnprocessableEntity("Só um comando por execução.", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", failure.Message),
+
+            // RN-DRIVER-006: o detalhe diz o nome do driver que falta, e a extensão `driverID` leva a tela até a linha dele ("Instalar driver").
+            EDatabaseFailure.DriverNotInstalled => ApiErrorDto.CreateUnprocessableEntity("Driver não instalado.", "DRIVER_NOT_INSTALLED", failure.Message, new Dictionary<string, object?>(StringComparer.Ordinal) { ["driverID"] = failure.DriverID }),
+
+            // O cofre aberto mudou enquanto a sessão abria: para quem chamou, é o cofre que ele usava que fechou.
+            EDatabaseFailure.VaultChanged => VaultErrors.From(EVaultError.Locked),
+            _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")
+        };
+
+    /// <summary>
+    /// RN-SQL-009: o SQLSTATE e a posição do erro só vão quando o driver os informa; `query.schema.ts` da tela os lê como `sqlState` e
+    /// `position`. RN-SQL-010: `outcome` só vai quando houve pedido de cancelamento para o comando, e é com ele, e não com o texto, que a
+    /// tela diz "Comando cancelado." (`canceled`) ou avisa que o desfecho é incerto (`unknown`) ou que o que foi gravado ficou (`partial`).
+    /// </summary>
+    private static Dictionary<string, object?> SqlDetails(DatabaseFailure failure)
+    {
+        var details = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        if (failure.SqlState is not null)
+            details["sqlState"] = failure.SqlState;
+
+        if (failure.Position is { } position)
+            details["position"] = position;
+
+        if (failure.Outcome is { } outcome)
+            details["outcome"] = OutcomeText(outcome);
+
+        return details;
+    }
+
+    private static string OutcomeText(ECancelOutcome outcome)
+        => outcome switch
+        {
+            ECancelOutcome.Canceled => "canceled",
+            ECancelOutcome.Unknown => "unknown",
+            ECancelOutcome.Partial => "partial",
+            _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")
+        };
+
+    /// <summary>
+    /// RN-SESSAO-005: `executed: true` diz que o comando rodou e o Prism desfez a transação que ele deixou aberta, e que o cursor anterior
+    /// fechou; sem a extensão, o comando foi recusado antes de executar, e o resultado anterior continua.
+    /// </summary>
+    private static Dictionary<string, object?>? ExecutedDetails(DatabaseFailure failure)
+        => failure.Executed ? new Dictionary<string, object?>(StringComparer.Ordinal) { ["executed"] = true } : null;
+}

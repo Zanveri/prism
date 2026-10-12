@@ -1,0 +1,265 @@
+import { byName, type TreeNode } from "@/app/connections/_lib/connection-tree";
+
+import type { Column, DatabaseObject, DatabaseSchema, ForeignKey, TableIndex } from "./database-sessions.schema";
+import { workbenchCopy } from "./workbench.copy";
+
+const copy = workbenchCopy.navigator;
+
+/**
+ * Uma linha da árvore (RN-ARVORE-001). `loading` e `error` são as linhas que o modelo cria no
+ * lugar dos filhos de um nó aberto que ainda não carregou ou que falhou (RN-ARVORE-005).
+ */
+export type NavKind = "folder" | "connection" | "database" | "schema" | "group" | "table" | "view" | "routine" | "column" | "index" | "foreignKey" | "error" | "loading";
+
+export type NavNode = {
+  key: string;
+  kind: NavKind;
+  label: string;
+  depth: number;
+  hasChildren: boolean;
+  /** O que acompanha o nome, em texto apagado: o tipo da coluna, as colunas do índice, a contagem do grupo. */
+  detail?: string;
+  /** Uma marca curta ao lado do detalhe: `PK` na coluna, `único` no índice. */
+  badge?: string;
+  /** Só na linha de erro: a chave do nó que falhou, para "Tentar de novo". */
+  retryKey?: string;
+  /** Só na linha de erro: o código que a API deu à falha. É por ele que a linha oferece mais que "Tentar de novo" ("Instalar driver"). */
+  errorCode?: string;
+  /** Só na linha de erro do driver que falta: o `driverID` do 422, para o "Instalar driver" apontar a linha dele. */
+  errorDriverID?: string;
+};
+
+export type ObjectsKind = "tables" | "views" | "routines";
+export type TableLevel = "columns" | "indexes" | "foreignKeys";
+
+/**
+ * Onde um nó que abre está na árvore. A chave do nó é este caminho em JSON: nome de esquema ou de
+ * tabela pode ter barra, aspas e espaço, e qualquer separador faria dois caminhos colidirem. A
+ * chave basta para saber o que buscar quando o nó abre, sem procurar o nó.
+ */
+export type NavPath =
+  | { type: "folder"; id: string }
+  | { type: "connection"; connectionId: string }
+  | { type: "database"; connectionId: string }
+  | { type: "schema"; connectionId: string; schema: string }
+  | { type: "objects"; connectionId: string; schema: string; objects: ObjectsKind }
+  | { type: "table"; connectionId: string; schema: string; table: string }
+  | { type: "tableLevel"; connectionId: string; schema: string; table: string; level: TableLevel };
+
+export type TableLevelPath = Extract<NavPath, { type: "tableLevel" }>;
+
+export const navKey = (path: NavPath): string => JSON.stringify(path);
+
+/** Só para chave de nó que abre (`hasChildren`): as das linhas de folha e de aviso não são caminhos. */
+export const parseNavKey = (key: string): NavPath => JSON.parse(key) as NavPath;
+
+/** A chave sob a qual os filhos de um nó ficam guardados em `LoadedLevels`; separada da do nó para uma não passar pela outra. */
+export const childrenKey = (node: { key: string }): string => `children:${node.key}`;
+
+/** Os filhos de um nó aberto, ou a falha de buscá-los. Sem entrada, ainda não chegaram. */
+export type LevelState = { status: "loaded"; children: NavNode[] } | { status: "error"; message: string; code?: string; driverID?: string };
+
+export type LoadedLevels = ReadonlyMap<string, LevelState>;
+
+/**
+ * As linhas que a lista desenha, em ordem: cada nó aberto é seguido pelos filhos, com um nível a
+ * mais de recuo (`depth` do filho é sempre o do pai mais um, qualquer que seja o que ele trouxe).
+ * Aberto e ainda sem entrada em `loaded`: uma linha "Carregando…". Um grupo carregado diz quantos
+ * filhos tem. A lista é plana para a virtualização desenhar só o que se vê.
+ */
+export function flattenVisible(roots: NavNode[], expanded: ReadonlySet<string>, loaded: LoadedLevels): NavNode[] {
+  const rows: NavNode[] = [];
+
+  function walk(nodes: NavNode[], depth: number | null) {
+    for (const node of nodes) {
+      const open = node.hasChildren && expanded.has(node.key);
+      const level = open ? loaded.get(childrenKey(node)) : undefined;
+      const placed = depth === null || node.depth === depth ? node : { ...node, depth };
+      const row = node.kind === "group" && level?.status === "loaded" ? { ...placed, detail: String(level.children.length) } : placed;
+      rows.push(row);
+
+      if (!open) continue;
+      if (level === undefined) rows.push({ key: `${node.key}#loading`, kind: "loading", label: copy.loading, depth: row.depth + 1, hasChildren: false });
+      else if (level.status === "error") rows.push({ key: `${node.key}#error`, kind: "error", label: level.message, depth: row.depth + 1, hasChildren: false, retryKey: node.key, errorCode: level.code, errorDriverID: level.driverID });
+      else walk(level.children, row.depth + 1);
+    }
+  }
+
+  walk(roots, null);
+  return rows;
+}
+
+/** A conexão, o esquema e o nome da tabela ou da visão de uma linha. */
+export type TableRef = { connectionId: string; schema: string; name: string };
+
+/**
+ * Onde está a tabela ou a visão de uma linha (RN-TABELA-001), ou `null` se a linha é de outra coisa. A tabela traz tudo na
+ * própria chave. A visão é folha, e a chave de folha é o caminho do pai mais a posição (`leafKey`): o esquema sai do pai
+ * (o que vem antes do último `#`, que o nome do esquema pode ter, mas o sufixo `#view:N` não) e o nome, do rótulo.
+ */
+export function tableTargetOf(node: NavNode): TableRef | null {
+  if (node.kind === "table") {
+    const path = parseNavKey(node.key);
+    return path.type === "table" ? { connectionId: path.connectionId, schema: path.schema, name: path.table } : null;
+  }
+
+  if (node.kind === "view") {
+    const parent = parseNavKey(node.key.slice(0, node.key.lastIndexOf("#")));
+    return parent.type === "objects" ? { connectionId: parent.connectionId, schema: parent.schema, name: node.label } : null;
+  }
+
+  return null;
+}
+
+/**
+ * A conexão a que a linha pertence, para as ações do menu (nova consulta, atualizar, abrir a tabela…). A pasta não é de conexão
+ * nenhuma, e as folhas que só copiam o nome (rotina, coluna, índice, chave) não precisam dela: a chave delas nem é um caminho.
+ */
+export function ownerConnectionId(node: NavNode): string | null {
+  switch (node.kind) {
+    case "connection":
+    case "database":
+    case "schema":
+    case "group":
+    case "table": {
+      const path = parseNavKey(node.key);
+      return path.type === "folder" ? null : path.connectionId;
+    }
+    case "view":
+      return tableTargetOf(node)?.connectionId ?? null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * O que um clique na linha faz: alternar o nó (abrir ou fechar) ou nada além de selecionar.
+ * - O segundo clique de um duplo clique não alterna de novo (`detail` > 1): o nó abriria e fecharia. O chevron é a exceção, para
+ *   quem abre e fecha depressa.
+ * - Na tabela o clique no nome só seleciona: o duplo clique abre a aba dela (RN-TABELA-001), e abrir a árvore fica para o
+ *   chevron e as setas. Senão cada tabela aberta deixaria três linhas a mais na lista.
+ * - Sem contagem de cliques (`detail` 0) o clique veio do teclado (Espaço): alterna, como as setas.
+ */
+export function clickEffect(node: NavNode, click: { detail: number; onChevron: boolean }): "toggle" | "none" {
+  if (!node.hasChildren) return "none";
+  if (click.onChevron || click.detail === 0) return "toggle";
+  if (click.detail > 1 || tableTargetOf(node) !== null) return "none";
+  return "toggle";
+}
+
+/** Recebe foco (e entra na ordem do Tab): tudo menos "Carregando…". A linha de erro, sim: é onde fica o "Tentar de novo". */
+export const isFocusable = (node: NavNode | undefined): node is NavNode => node !== undefined && node.kind !== "loading";
+
+/**
+ * A única linha que o Tab alcança na lista (as demais só pelas setas): a selecionada, se está entre
+ * as linhas desenhadas (`rendered`, índices em `rows`); senão a primeira desenhada que recebe foco.
+ * Sem esse recuo, selecionar uma linha e rolar até ela sair da janela virtual deixaria a árvore sem
+ * nenhum elemento na ordem do Tab, e o Tab pularia o navegador inteiro.
+ */
+export function tabbableKey(rows: readonly NavNode[], selectedKey: string | null, rendered: readonly number[]): string | null {
+  const candidates = rendered.map((index) => rows[index]).filter(isFocusable);
+  return (candidates.find((row) => row.key === selectedKey) ?? candidates[0])?.key ?? null;
+}
+
+/**
+ * Pastas e conexões salvas como nós; os filhos de cada pasta já vêm como nível carregado.
+ * `folderKeys` são as pastas, que começam abertas (a tela guarda só as que o usuário recolheu).
+ */
+export function treeNodes(tree: TreeNode[]): { roots: NavNode[]; levels: Map<string, LevelState>; folderKeys: string[] } {
+  const levels = new Map<string, LevelState>();
+  const folderKeys: string[] = [];
+
+  function convert(nodes: TreeNode[]): NavNode[] {
+    return nodes.map((node): NavNode => {
+      if (node.kind === "connection") return { key: navKey({ type: "connection", connectionId: node.id }), kind: "connection", label: node.name, depth: node.depth, hasChildren: true };
+
+      const children = convert(node.children);
+      const folder: NavNode = { key: navKey({ type: "folder", id: node.id }), kind: "folder", label: node.name, depth: node.depth, hasChildren: children.length > 0 };
+      levels.set(childrenKey(folder), { status: "loaded", children });
+      folderKeys.push(folder.key);
+      return folder;
+    });
+  }
+
+  return { roots: convert(tree), levels, folderKeys };
+}
+
+/** Uma folha é identificada pela posição na lista que a trouxe: sobrecarga de rotina repete o nome. */
+const leafKey = (parent: NavPath, kind: NavKind, index: number) => `${navKey(parent)}#${kind}:${index}`;
+
+/** O banco a que a sessão da conexão se ligou (RN-ARVORE-001): o único filho da conexão. */
+export function databaseNodes(connectionId: string, database: string): NavNode[] {
+  return [{ key: navKey({ type: "database", connectionId }), kind: "database", label: database, depth: 0, hasChildren: true }];
+}
+
+/** Esquemas comuns primeiro, os de sistema depois (RN-ARVORE-004); cada grupo em ordem alfabética. */
+export function schemaNodes(connectionId: string, schemas: DatabaseSchema[]): NavNode[] {
+  return [...schemas]
+    .sort((a, b) => Number(a.isSystem) - Number(b.isSystem) || byName(a, b))
+    .map((schema): NavNode => ({ key: navKey({ type: "schema", connectionId, schema: schema.name }), kind: "schema", label: schema.name, depth: 0, hasChildren: true, ...(schema.isSystem ? { detail: copy.system } : {}) }));
+}
+
+/** Tabelas, Visões e Rotinas: fixos, sem ir ao banco. */
+export function schemaGroupNodes(connectionId: string, schema: string): NavNode[] {
+  return (["tables", "views", "routines"] as const).map((objects): NavNode => ({ key: navKey({ type: "objects", connectionId, schema, objects }), kind: "group", label: copy.groups[objects], depth: 0, hasChildren: true }));
+}
+
+/** Só a tabela abre (RN-ARVORE-001); visão e rotina são folhas. */
+export function objectNodes(connectionId: string, schema: string, objects: ObjectsKind, items: DatabaseObject[]): NavNode[] {
+  const parent: NavPath = { type: "objects", connectionId, schema, objects };
+
+  return [...items].sort(byName).map((item, index): NavNode => {
+    if (item.kind === "table") return { key: navKey({ type: "table", connectionId, schema, table: item.name }), kind: "table", label: item.name, depth: 0, hasChildren: true };
+    if (item.kind === "view") return { key: leafKey(parent, "view", index), kind: "view", label: item.name, depth: 0, hasChildren: false };
+    return { key: leafKey(parent, "routine", index), kind: "routine", label: item.name, depth: 0, hasChildren: false, detail: copy.routineKinds[item.kind] };
+  });
+}
+
+/** Colunas, Índices e Chaves estrangeiras de uma tabela: fixos, sem ir ao banco. */
+export function tableGroupNodes(connectionId: string, schema: string, table: string): NavNode[] {
+  return (["columns", "indexes", "foreignKeys"] as const).map((level): NavNode => ({ key: navKey({ type: "tableLevel", connectionId, schema, table, level }), kind: "group", label: copy.groups[level], depth: 0, hasChildren: true }));
+}
+
+/** Nome, tipo, "nulo" quando aceita e a marca da chave primária (RN-ARVORE-003), na ordem das colunas. */
+export function columnNodes(parent: TableLevelPath, columns: Column[]): NavNode[] {
+  return [...columns]
+    .sort((a, b) => a.position - b.position)
+    .map((column, index): NavNode => ({
+      key: leafKey(parent, "column", index),
+      kind: "column",
+      label: column.name,
+      depth: 0,
+      hasChildren: false,
+      detail: column.isNullable ? `${column.type} · ${copy.nullable}` : column.type,
+      ...(column.isPrimaryKey ? { badge: copy.primaryKey } : {}),
+    }));
+}
+
+/** Nome, colunas e a marca de único (RN-ARVORE-003). */
+export function indexNodes(parent: TableLevelPath, indexes: TableIndex[]): NavNode[] {
+  return indexes.map((index, position): NavNode => ({
+    key: leafKey(parent, "index", position),
+    kind: "index",
+    label: index.name,
+    depth: 0,
+    hasChildren: false,
+    detail: index.columns.join(", "),
+    ...(index.isUnique ? { badge: copy.unique } : {}),
+  }));
+}
+
+/** Nome e `colunas → tabela(colunas)` (RN-ARVORE-003); o esquema da tabela referenciada só aparece quando é outro. */
+export function foreignKeyNodes(parent: TableLevelPath, foreignKeys: ForeignKey[]): NavNode[] {
+  return foreignKeys.map((foreignKey, position): NavNode => {
+    const table = foreignKey.referencedSchema === parent.schema ? foreignKey.referencedTable : `${foreignKey.referencedSchema}.${foreignKey.referencedTable}`;
+
+    return {
+      key: leafKey(parent, "foreignKey", position),
+      kind: "foreignKey",
+      label: foreignKey.name,
+      depth: 0,
+      hasChildren: false,
+      detail: `${foreignKey.columns.join(", ")} → ${table}(${foreignKey.referencedColumns.join(", ")})`,
+    };
+  });
+}

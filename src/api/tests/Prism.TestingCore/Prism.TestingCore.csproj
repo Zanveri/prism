@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Não tem testes: é a biblioteca de extensões e fakers dos outros dois projetos
+       (skill back-end-testing-best-practices, §3), e o ponto único dos pacotes
+       Bogus, AutoBogus e Moq, que chegam a eles pelo ProjectReference. Sem Moq.Dapper:
+       o Prism não usa Dapper. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Os fakers de domínio devolvem tipos internal do Prism.Application, então são
+       internal também; quem os usa é o projeto de testes unitários. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Prism.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AutoBogus" Version="2.13.1" />
+    <PackageReference Include="Bogus" Version="35.6.5" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Prism.Application\Prism.Application.csproj" />
+  </ItemGroup>
+
+</Project>

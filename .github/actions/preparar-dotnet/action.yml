@@ -1,0 +1,24 @@
+# O SDK do .NET na versão fixada (RN-GITHUB-002: um passo repetido, uma action composta). A action do GitHub instala o SDK; o
+# check-tools.sh grava um global.json só na cópia de trabalho do runner, para o `dotnet` usar ESTE SDK e não o mais novo que a
+# imagem do runner traga, e confere a versão. O cache do NuGet da action fica desligado (é o padrão dela). Pede o repositório já
+# clonado.
+name: Preparar o .NET
+description: O SDK do .NET na versão fixada, e só ele.
+inputs:
+  sdk:
+    description: A versão exata do SDK do .NET (a mesma que a pipeline fixava antes desta migração).
+    default: '10.0.401'
+runs:
+  using: composite
+  steps:
+    - name: Instalar o SDK do .NET
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: ${{ inputs.sdk }}
+    - name: Fixar e conferir o SDK
+      shell: bash
+      env:
+        PRISM_DOTNET_SDK: ${{ inputs.sdk }}
+        DOTNET_NOLOGO: '1'
+        DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      run: bash scripts/ci/check-tools.sh dotnet "$PRISM_DOTNET_SDK"

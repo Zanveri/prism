@@ -1,0 +1,3 @@
+# Os arquivos da Zanveri são os que a empresa entregou, byte a byte (o SHA-256 está no README): sem conversão de fim de linha
+# no checkout do Windows, que mudaria os bytes e a soma.
+zanveri/** -text

@@ -1,0 +1,75 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using Prism.Infrastructure.Databases.Clients;
+using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Drivers;
+using Prism.Infrastructure.Drivers.Clients;
+using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Vault.Clients;
+using Prism.Infrastructure.Vault.Models;
+using Prism.Infrastructure.Vault.Services;
+using Serilog;
+
+namespace Prism.Infrastructure;
+
+public static class DependencyInjection
+{
+    /// <param name="dataDirectory">`PRISM_DATA_DIR`. A Infrastructure não enxerga o `PrismHostOptions`, que é da Api, então recebe só a pasta: é nela que ficam os cofres.</param>
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string dataDirectory)
+    {
+        // Os clients de integração logam pelo Serilog. Quem registra o logger de verdade é o `UseSerilog`
+        // do Program.cs; este é o reserva para o host que não o chama (o ApiHost dos testes), e por ser
+        // `TryAdd` nunca toma o lugar do outro.
+        services.TryAddSingleton(_ => Log.Logger);
+
+        services.Configure<VaultOptions>(options => options.DataDirectory = dataDirectory);
+        services.AddTransient<IVaultFileClient, VaultFileClient>();
+
+        // Singleton de propósito, ao contrário dos demais services: é ele que guarda o cofre aberto (a
+        // chave e o documento) de uma requisição para a outra, já que os dados do Prism são o cofre e
+        // não há banco do produto (decisões 2 e 3 da seção 8 da especificação). Registrado por fábrica,
+        // e não por instância pronta: o contêiner só descarta o que ele mesmo cria, e é o descarte no
+        // desligamento da API que zera a chave (RN-COFRE-008).
+        services.AddSingleton<IVaultService>(provider => new VaultService(provider.GetRequiredService<IVaultFileClient>(), provider.GetRequiredService<IOptions<VaultOptions>>(), VaultCrypto.DeriveKey, VaultCrypto.NewKey, provider.GetRequiredService<ILogger>()));
+
+        // Um client por banco, sem estado: o registro de sessões escolhe pelo `Engine` da conexão. Os do Db2 e do Informix só existem
+        // nas plataformas para as quais a IBM publica o driver (RN-ABERTO-006); nas outras o registro de sessões responde que o Prism
+        // daquela plataforma ainda não conecta nesses bancos.
+        services.AddTransient<IDatabaseClient, PostgresClient>();
+#if PRISM_IBM_DRIVER
+        services.AddTransient(provider => IbmClient(provider, EDatabaseEngine.Db2, logger => new Db2Client(logger)));
+        services.AddTransient(provider => IbmClient(provider, EDatabaseEngine.Informix, logger => new InformixClient(logger)));
+#endif
+
+        // O relógio do temporizador do cursor ocioso (RN-SQL-007). TryAdd: o `AddApplication` registra o mesmo, e o host de teste que
+        // registra um relógio falso por último continua mandando.
+        services.TryAddSingleton(TimeProvider.System);
+
+        // Singleton, como o cofre: uma conexão aberta com um banco atravessa várias requisições (decisão 3 da seção 8 da
+        // especificação). Registrado pelo tipo, e não por instância pronta, para o contêiner descartá-lo no desligamento da API, que é
+        // quando as sessões fecham (RN-SESSAO-004).
+        services.AddSingleton<IDatabaseSessionService, DatabaseSessionService>();
+
+        // O gerenciador de drivers sob demanda (seção 16 da especificação): catálogo, instalação e estado.
+        services.AddDrivers(dataDirectory);
+
+        return services;
+    }
+
+#if PRISM_IBM_DRIVER
+    /// <summary>
+    /// RN-DRIVER-005 e 006. O driver da IBM não vem com a API: o client de verdade do Db2 e do Informix só entra quando a conferência
+    /// da partida aprovou o driver instalado, que é o que esta execução carrega. Sem isso entra o client que só responde a recusa
+    /// (`DRIVER_NOT_INSTALLED`), e nenhum caminho toca num tipo de `IBM.Data.Db2`, cujo assembly não está ao lado da API. O `create` só
+    /// é chamado no primeiro caso, e é ele quem menciona a classe do client.
+    /// </summary>
+    private static IDatabaseClient IbmClient(IServiceProvider provider, EDatabaseEngine engine, Func<ILogger, IDatabaseClient> create)
+    {
+        var drivers = provider.GetRequiredService<IDriverService>();
+
+        return drivers.RefusalFor(engine) is null ? create(provider.GetRequiredService<ILogger>()) : new MissingDriverDatabaseClient(engine, drivers);
+    }
+#endif
+}

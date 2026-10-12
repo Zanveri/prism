@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "CSharpFunctionalExtensions": {
+        "type": "Direct",
+        "requested": "[3.7.0, )",
+        "resolved": "3.7.0",
+        "contentHash": "eMZp8tc88O96eEFutiIskF3LE8lFY3fjbNRGfNa1ca0CD9sB8A00r5ltyYDih/7UFdJdVbhVq7tGeHI8xj6DlQ=="
+      },
+      "FluentValidation": {
+        "type": "Direct",
+        "requested": "[12.1.1, )",
+        "resolved": "12.1.1",
+        "contentHash": "EPpkIe1yh1a0OXyC100oOA8WMbZvqUu5plwhvYcb7oSELfyUZzfxV48BLhvs3kKo4NwG7MGLNgy1RJiYtT8Dpw=="
+      },
+      "Serilog": {
+        "type": "Direct",
+        "requested": "[4.4.0, )",
+        "resolved": "4.4.0",
+        "contentHash": "ZC6Le3rr4TVJJjS4KsQAesxeF1EhW9qcZmmG7eP5Y2G3+gTGkJEUXkq4+tZNPtyp05I0wWOxnIjwtxFweJsObw=="
+      }
+    },
+    "net10.0/linux-x64": {},
+    "net10.0/osx-arm64": {},
+    "net10.0/osx-x64": {},
+    "net10.0/win-x64": {}
+  }
+}

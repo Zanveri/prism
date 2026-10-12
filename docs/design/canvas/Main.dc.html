@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Login</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap-reverse; background: #0E1114; color: #E6EAF0; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 22px">
+<section style="flex: 999 1 520px; min-width: 0; box-sizing: border-box; padding: 40px 48px; display: flex; flex-direction: column; justify-content: space-between; gap: 40px">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; letter-spacing: 0.01em">
+<svg width="74" height="28" viewBox="0 40 700 264" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><defs><filter id="prism-mark-glow-main" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="14"></feGaussianBlur></filter><linearGradient id="prism-mark-ifx-main" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-db2-main" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-pg-main" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-face-main" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient></defs><g filter="url(#prism-mark-glow-main)" opacity="0.6"><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="26"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path></g><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="14"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-mark-ifx-main)"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-mark-db2-main)"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-mark-pg-main)"></path><path d="M300 50 L440 298 H160 Z" fill="#1A2028"></path><path d="M300 50 L160 298 L292 226 Z" fill="url(#prism-mark-face-main)"></path><path d="M160 298 L292 226 L440 298 Z" fill="#11151A"></path><path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.16"></path><path d="M300 50 L440 298 H160 Z" stroke="#E6EAF0" stroke-width="13"></path><circle cx="220" cy="186" r="15" fill="#FFFFFF"></circle><path d="M656 69 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="10"></path><ellipse cx="676" cy="69" rx="20" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="10"></ellipse><path d="M656 145 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="10"></path><ellipse cx="676" cy="145" rx="20" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="10"></ellipse><path d="M656 221 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="10"></path><ellipse cx="676" cy="221" rx="20" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="10"></ellipse></svg>
+<span>Prism</span>
+</div>
+<svg viewBox="0 0 720 360" role="img" aria-label="Um feixe de luz entra no prisma e sai em três faixas de cor, cada uma chegando a um banco de dados" fill="none" stroke-linecap="round" stroke-linejoin="round" style="width: 100%; max-width: 720px; height: auto">
+<defs>
+<filter id="prism-hero-glow" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="10"></feGaussianBlur></filter>
+<linearGradient id="prism-hero-ifx" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.45"></stop></linearGradient>
+<linearGradient id="prism-hero-db2" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.45"></stop></linearGradient>
+<linearGradient id="prism-hero-pg" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.45"></stop></linearGradient>
+<linearGradient id="prism-hero-face" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient>
+</defs>
+<path d="M24 300.5 H696" stroke="#38414D" stroke-width="1" stroke-linecap="butt"></path>
+<path d="M36 301v9M60 301v5M84 301v5M108 301v5M132 301v5M156 301v9M180 301v5M204 301v5M228 301v5M252 301v5M276 301v9M300 301v5M324 301v5M348 301v5M372 301v5M396 301v9M420 301v5M444 301v5M468 301v5M492 301v5M516 301v9M540 301v5M564 301v5M588 301v5M612 301v5M636 301v9M660 301v5M684 301v5" stroke="#38414D" stroke-width="1" stroke-linecap="butt"></path>
+<g filter="url(#prism-hero-glow)" opacity="0.5">
+<path d="M0 214 L220 186" stroke="#F3F5F8" stroke-width="8"></path>
+<path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path>
+<path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path>
+<path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path>
+</g>
+<path d="M0 214 L220 186" stroke="#F3F5F8" stroke-width="3"></path>
+<path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-hero-ifx)"></path>
+<path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-hero-db2)"></path>
+<path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-hero-pg)"></path>
+<path d="M300 44 L444 300 H156 Z" fill="#1A2028"></path>
+<path d="M300 44 L156 300 L292 226 Z" fill="url(#prism-hero-face)"></path>
+<path d="M156 300 L292 226 L444 300 Z" fill="#11151A"></path>
+<path d="M300 44 L292 226 M156 300 L292 226 M444 300 L292 226" stroke="#46505D" stroke-width="1"></path>
+<path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.14"></path>
+<path d="M220 186 L369.2 167" stroke="#F591B6" stroke-width="1.25" stroke-opacity="0.9"></path>
+<path d="M220 186 L374.2 176" stroke="#5ED3A3" stroke-width="1.25" stroke-opacity="0.9"></path>
+<path d="M220 186 L379.3 185" stroke="#7DB2FF" stroke-width="1.25" stroke-opacity="0.9"></path>
+<path d="M288.8 78 L241.3 162.6" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.5"></path>
+<path d="M300 44 L444 300 H156 Z" stroke="#E6EAF0" stroke-width="1.75"></path>
+<circle cx="220" cy="186" r="10" fill="#FFFFFF" fill-opacity="0.12"></circle>
+<circle cx="220" cy="186" r="5.5" fill="#FFFFFF" fill-opacity="0.28"></circle>
+<circle cx="220" cy="186" r="2.5" fill="#FFFFFF"></circle>
+<path d="M654 69 v34 a22 8 0 0 0 44 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="2"></path>
+<path d="M654 86 a22 8 0 0 0 44 0" stroke="#F591B6" stroke-width="2" stroke-opacity="0.55"></path>
+<ellipse cx="676" cy="69" rx="22" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="2"></ellipse>
+<path d="M654 145 v34 a22 8 0 0 0 44 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="2"></path>
+<path d="M654 162 a22 8 0 0 0 44 0" stroke="#5ED3A3" stroke-width="2" stroke-opacity="0.55"></path>
+<ellipse cx="676" cy="145" rx="22" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="2"></ellipse>
+<path d="M654 221 v34 a22 8 0 0 0 44 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="2"></path>
+<path d="M654 238 a22 8 0 0 0 44 0" stroke="#7DB2FF" stroke-width="2" stroke-opacity="0.55"></path>
+<ellipse cx="676" cy="221" rx="22" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="2"></ellipse>
+</svg>
+<div style="display: flex; flex-direction: column; gap: 20px">
+<h1 style="margin: 0; max-width: 560px; font-size: 40px; line-height: 46px; font-weight: 500; letter-spacing: -0.01em; text-wrap: balance">Informix, Db2 e PostgreSQL no mesmo lugar.</h1>
+<div style="display: flex; flex-wrap: wrap; gap: 12px">
+<span style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 8px; border: 1px solid #2A313B; border-radius: 6px; color: #E6EAF0"><span style="display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #F591B6; border-radius: 4px; color: #F591B6; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">IFX</span><span>Informix</span></span>
+<span style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 8px; border: 1px solid #2A313B; border-radius: 6px; color: #E6EAF0"><span style="display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #5ED3A3; border-radius: 4px; color: #5ED3A3; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">DB2</span><span>Db2</span></span>
+<span style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px 0 8px; border: 1px solid #2A313B; border-radius: 6px; color: #E6EAF0"><span style="display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span><span>PostgreSQL</span></span>
+</div>
+</div>
+</section>
+<section style="flex: 1 1 420px; min-width: 0; box-sizing: border-box; padding: 48px 40px; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #14181D; border-left: 1px solid #2A313B">
+<div style="width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h2 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 600">Entrar</h2>
+<p style="margin: 0; color: #B4BCC8">Cada usuário tem o seu próprio cofre de conexões.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="login-usuario" style="font-size: 13px; color: #B4BCC8">Usuário</label>
+<input id="login-usuario" type="text" value="marina.costa" autocomplete="username" style="width: 100%; height: 44px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="login-senha" style="font-size: 13px; color: #B4BCC8">Senha</label>
+<input id="login-senha" type="password" value="demonstracao" autocomplete="current-password" style="width: 100%; height: 44px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+<a href="Workbench.dc.html" style="display: flex; align-items: center; justify-content: center; height: 44px; border-radius: 6px; background: {{accent}}; color: #14181D; font-weight: 600; text-decoration: none">Entrar</a>
+<p style="margin: 0; color: #B4BCC8">Primeiro acesso? <a href="#" style="color: #7DB2FF">Criar usuário</a></p>
+<div style="display: flex; gap: 10px; padding: 12px 14px; border: 1px solid #2A313B; border-radius: 8px; color: #B4BCC8; font-size: 13px; line-height: 20px">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+<span>A sua senha não é armazenada. Ela gera a chave que abre o seu cofre: se você a esquecer, as conexões salvas não podem ser recuperadas.</span>
+</div>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#F2B644' };
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,318 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router";
+import { describe, expect, it, vi } from "vitest";
+
+import type { RowsState, RunnerState } from "../_lib/use-query-runner";
+import type { PaneMode } from "../_lib/result-layout";
+import { ResultActions } from "./result-actions";
+import { collapsedSummary, ResultPanel } from "./result-panel";
+
+// A área de resultado lê as preferências da grade (o tipo no cabeçalho, o zoom); aqui valem as de saída.
+vi.mock("@/app/settings/_lib/use-preferences", async () => {
+  const { defaultPreferences } = await import("@/app/settings/_lib/preferences");
+  return { usePreferences: () => ({ preferences: defaultPreferences, update: () => {} }) };
+});
+
+const noop = () => {};
+const render = (state: RunnerState) => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state, connected: false, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+describe("a área de resultado com o driver do banco não instalado (item G, RN-DRIVER-006)", () => {
+  const driverMissing: RunnerState = { status: "error", source: "driver", title: "Driver não instalado", message: "O driver do IBM Data Server não está instalado.", sqlState: null, errorAt: null };
+
+  it("mostra a frase da API e oferece 'Instalar driver', que leva à tela de Drivers", () => {
+    const markup = render(driverMissing);
+
+    expect(markup).toContain("Driver não instalado");
+    expect(markup).toContain("O driver do IBM Data Server não está instalado.");
+    expect(markup).toMatch(/<a [^>]*href="\/drivers"[^>]*>Instalar driver<\/a>/);
+  });
+
+  it("com o `driverID` que a API deu, o link leva à tela de Drivers apontando a linha do driver", () => {
+    const markup = render({ ...driverMissing, driverID: "ibm-data-server" } as RunnerState);
+
+    expect(markup).toMatch(/<a [^>]*href="\/drivers\?driver=ibm-data-server"[^>]*>Instalar driver<\/a>/);
+  });
+
+  it("o erro da conexão com o banco e o erro de SQL não oferecem o caminho", () => {
+    const connection: RunnerState = { status: "error", source: "connection", title: "Erro do banco", message: "FATAL: senha errada", sqlState: null, errorAt: null };
+    const database: RunnerState = { status: "error", source: "database", title: "Erro do banco", message: "syntax error", sqlState: "42601", errorAt: null };
+
+    expect(render(connection)).not.toContain("Instalar driver");
+    expect(render(database)).not.toContain("Instalar driver");
+  });
+});
+
+const rowsState: RowsState = {
+  status: "rows",
+  id: 1,
+  target: { sql: "select 1", offset: 0 },
+  columns: [{ name: "id", type: "int4", kind: "number" }],
+  rows: [["1"], ["2"]],
+  truncated: new Map(),
+  hasMore: true,
+  totalRows: null,
+  elapsedMs: 42,
+  pages: 1,
+  loadingMore: false,
+  cancelling: false,
+  cursorClosed: false,
+  total: null,
+  counting: false,
+};
+
+describe("collapsedSummary: o que a barra diz com a área recolhida (RN-PAINEL-001)", () => {
+  it("as linhas e o tempo; com o total contado, o total junto", () => {
+    expect(collapsedSummary(rowsState)).toBe("Primeiras 2 linhas · 42 ms");
+    expect(collapsedSummary({ ...rowsState, total: 1000 })).toBe("Primeiras 2 linhas · 42 ms · Total: 1.000 linhas");
+  });
+
+  it("as linhas afetadas, o cancelamento e a frase de 'nada enviado'", () => {
+    expect(collapsedSummary({ status: "affected", rowsAffected: 3, elapsedMs: 5 })).toBe("3 linhas afetadas · 5 ms");
+    expect(collapsedSummary({ status: "cancelled" })).toBe("Comando cancelado.");
+    expect(collapsedSummary({ status: "notice", message: "A seleção tem 2 comandos." })).toBe("A seleção tem 2 comandos.");
+  });
+
+  it("o erro do banco, com o SQLSTATE quando há", () => {
+    const error: RunnerState = { status: "error", source: "database", title: "Erro do banco", message: "syntax error", sqlState: "42601", errorAt: null };
+
+    expect(collapsedSummary(error)).toBe("Erro do banco · SQLSTATE 42601");
+    expect(collapsedSummary({ ...error, sqlState: null })).toBe("Erro do banco");
+  });
+
+  it("o comando em andamento vence o resultado que ainda está lá; sem comando nenhum, o texto de aba vazia", () => {
+    expect(collapsedSummary({ status: "running", cancelling: false, previous: rowsState })).toBe("Executando…");
+    expect(collapsedSummary({ status: "idle" })).toBe("Nenhum comando executado nesta aba.");
+  });
+});
+
+describe("a área de resultado recolhida (RN-PAINEL-001)", () => {
+  const renderPanel = (props: { collapsed?: boolean; mode?: PaneMode }) =>
+    renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(ResultPanel, {
+          state: rowsState,
+          connected: true,
+          onLoadMore: noop,
+          onCount: noop,
+          onRerun: noop,
+          collapsed: props.collapsed,
+          actions: createElement(ResultActions, { mode: props.mode ?? "split", onAction: noop }),
+        }),
+      ),
+    );
+
+  it("dividida, o corpo está à mostra: sem `inert`, e a barra traz o resumo e 'Contar total'", () => {
+    const markup = renderPanel({});
+
+    expect(markup).not.toContain("inert");
+    expect(markup).toContain("Primeiras 2 linhas · 42 ms");
+    expect(markup).toContain("Contar total");
+  });
+
+  it("recolhida, o corpo continua na página mas sem altura e fora do Tab (`inert`); a barra segue com o resumo", () => {
+    const markup = renderPanel({ collapsed: true, mode: "collapsed" });
+
+    expect(markup).toMatch(/<div inert="" class="[^"]*h-0[^"]*overflow-hidden/);
+    expect(markup).toContain("Primeiras 2 linhas · 42 ms");
+    // O botão de contar vive no corpo da barra só com a área à mostra.
+    expect(markup).not.toContain("Contar total");
+    expect(markup).toContain('aria-label="Restaurar a área de resultado"');
+  });
+});
+
+describe("a dica do rodapé com a busca automática (RN-CONFIG-005)", () => {
+  const renderWith = (autoLoadMore: boolean) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: rowsState, connected: true, autoLoadMore, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+  it("ligada, diz que a página seguinte vem ao rolar até o fim; o botão segue lá, para quem quiser pedir", () => {
+    const markup = renderWith(true);
+
+    expect(markup).toContain("As próximas vêm ao rolar até o fim da grade");
+    expect(markup).not.toContain("só são buscados quando você pedir");
+    expect(markup).toContain("Carregar mais 200");
+  });
+
+  it("desligada, é a frase de sempre", () => {
+    const markup = renderWith(false);
+
+    expect(markup).toContain("só são buscados quando você pedir");
+    expect(markup).not.toContain("vêm ao rolar");
+  });
+});
+
+describe("ResultActions: os botões da barra", () => {
+  const labels = (mode: PaneMode) => [...renderToStaticMarkup(createElement(ResultActions, { mode, onAction: noop })).matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
+
+  it("dividida: recolher e maximizar", () => {
+    expect(labels("split")).toEqual(["Recolher a área de resultado", "Maximizar a área de resultado"]);
+  });
+
+  it("recolhida: restaurar e maximizar", () => {
+    expect(labels("collapsed")).toEqual(["Restaurar a área de resultado", "Maximizar a área de resultado"]);
+  });
+
+  it("maximizada: recolher e restaurar", () => {
+    expect(labels("maximized")).toEqual(["Recolher a área de resultado", "Restaurar a área de resultado"]);
+  });
+});
+
+describe("a área de resultado na vista Registros de uma tabela (RN-TABELA-002)", () => {
+  const records = { name: "mes.apontamento", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+  const renderRecords = (state: RunnerState) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state, connected: true, records, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+  it("o rótulo e o título são dos registros da tabela", () => {
+    const markup = renderRecords(rowsState);
+
+    expect(markup).toContain('aria-label="Registros de mes.apontamento"');
+    expect(markup).toMatch(/<h2[^>]*>Registros<\/h2>/);
+    expect(markup).not.toContain("Resultado da consulta");
+  });
+
+  it("com as linhas na tela: 'Atualizar' e, havendo mais, a dica e 'Carregar mais 200'", () => {
+    const markup = renderRecords(rowsState);
+
+    expect(markup).toContain("Atualizar");
+    expect(markup).not.toContain("Cancelar");
+    expect(markup).toContain("Linhas 1 a 2 carregadas.");
+    expect(markup).toContain("Carregar mais 200");
+  });
+
+  it("com todas as linhas na tela, não oferece carregar mais nem a dica", () => {
+    const markup = renderRecords({ ...rowsState, hasMore: false });
+
+    expect(markup).toContain("Atualizar");
+    expect(markup).not.toContain("Carregar mais 200");
+    expect(markup).not.toContain("Linhas 1 a");
+  });
+
+  it("com linhas na tela, 'Exportar CSV' está à mão, e a dica diz quantas linhas saem e que as não carregadas não entram (RN-TABELA-006)", () => {
+    const markup = renderRecords(rowsState);
+    const button = /<button[^>]*>(?:(?!<\/button>)[\s\S])*Exportar CSV<\/button>/.exec(markup)?.[0] ?? "";
+
+    expect(button).not.toBe("");
+    expect(button).not.toMatch(/\sdisabled=""/);
+    expect(button).toContain('title="Exporta as 2 linhas carregadas. As que ainda não foram carregadas não entram no arquivo."');
+    // A mesma dica para leitor de tela: o `title` sozinho nem sempre é lido.
+    const describedBy = /aria-describedby="([^"]+)"/.exec(button)?.[1] ?? "";
+    expect(describedBy).not.toBe("");
+    expect(markup).toContain(`id="${describedBy}"`);
+    expect(markup).toMatch(new RegExp(`id="${describedBy.replaceAll(":", "\\:")}" class="sr-only">Exporta as 2 linhas carregadas`));
+  });
+
+  it("lido tudo, a dica não fala em linhas que faltam", () => {
+    const markup = renderRecords({ ...rowsState, hasMore: false });
+
+    expect(markup).toContain('title="Exporta as 2 linhas."');
+    expect(markup).not.toContain("não foram carregadas");
+  });
+
+  it("sem linhas na tela (nada carregado, erro, comando que não devolve linhas) não há o que exportar: o botão não aparece", () => {
+    for (const state of [{ status: "idle" }, { status: "affected", rowsAffected: 3, elapsedMs: 4 }, { status: "error", source: "database", title: "Erro do banco", message: "x", sqlState: null, errorAt: null }] as RunnerState[]) {
+      expect(renderRecords(state), state.status).not.toContain("Exportar CSV");
+    }
+  });
+
+  it("enquanto algo roda sobre as linhas, a exportação espera (as linhas estão mudando)", () => {
+    const markup = renderRecords({ status: "running", cancelling: false, previous: rowsState });
+    const button = /<button[^>]*>(?:(?!<\/button>)[\s\S])*Exportar CSV<\/button>/.exec(markup)?.[0] ?? "";
+
+    expect(button).toMatch(/\sdisabled=""/);
+  });
+
+  it("a área de resultado de uma consulta não tem 'Exportar CSV': é da vista Registros", () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: rowsState, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+    expect(markup).not.toContain("Exportar CSV");
+  });
+
+  it("enquanto algo roda (comando, página ou contagem), o botão é 'Cancelar', e não 'Atualizar'", () => {
+    for (const state of [{ status: "running", cancelling: false, previous: null }, { ...rowsState, loadingMore: true }, { ...rowsState, counting: true }] as RunnerState[]) {
+      const markup = renderRecords(state);
+
+      expect(markup).toContain("Cancelar");
+      expect(markup).not.toContain("Atualizar");
+    }
+  });
+
+  it("sem resultado ainda, a frase 'Executando…' ocupa a área e deixa o rodapé com 'Cancelar' no fim dela", () => {
+    const markup = renderRecords({ status: "running", cancelling: false, previous: null });
+
+    expect(markup).toMatch(/<p role="status" class="[^"]*flex-1[^"]*">Executando…<\/p>/);
+    expect(markup.indexOf("Executando…")).toBeLessThan(markup.indexOf("Cancelar"));
+  });
+
+  it("'Cancelando…' desabilita o botão até o pedido chegar", () => {
+    const markup = renderRecords({ status: "running", cancelling: true, previous: null });
+
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>[^]*Cancelando…/);
+  });
+
+  it("sem nenhum registro carregado (os resultados foram descartados, por exemplo) diz isso e manda atualizar, sem pedir um comando", () => {
+    const markup = renderRecords({ status: "idle" });
+
+    expect(markup).toContain("Nenhum registro carregado.");
+    expect(markup).toContain("Use Atualizar para carregar os registros.");
+    expect(markup).not.toContain("Ctrl+Enter");
+    expect(markup).not.toContain("Carregando os registros…");
+    expect(markup).toContain("Atualizar");
+  });
+
+  it("enquanto o banco da conexão não chegou, nada foi pedido e 'Carregando os registros…' é a verdade", () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { status: "idle" }, connected: false, records: { ...records, waiting: true }, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+    expect(markup).toContain("Carregando os registros…");
+    expect(markup).not.toContain("Nenhum registro carregado.");
+  });
+
+  it("a conexão que a pessoa desconectou: a área diz que está desconectada, e 'Atualizar' é o clique que conecta e carrega", () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { status: "idle" }, connected: false, records: { ...records, disconnected: true }, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+    expect(markup).toContain("A conexão está desconectada.");
+    expect(markup).toContain("Use Atualizar para conectar e carregar os registros.");
+    expect(markup).not.toContain("Nenhum registro carregado.");
+    expect(markup).not.toContain("Carregando os registros…");
+    expect(markup).toContain("Atualizar");
+  });
+
+  it("sem o banco da conexão a primeira carga ainda não pode começar: 'Carregando…' vale mais que 'desconectada'", () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { status: "idle" }, connected: false, records: { ...records, waiting: true, disconnected: true }, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+    expect(markup).toContain("Carregando os registros…");
+    expect(markup).not.toContain("A conexão está desconectada.");
+  });
+
+  it("desconectar não apaga o que está na tela: com linhas, a grade fica e o aviso de desconexão não aparece", () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: rowsState, connected: false, records: { ...records, disconnected: true }, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+    expect(markup).not.toContain("A conexão está desconectada.");
+    expect(markup).toContain("Linhas 1 a 2 carregadas.");
+  });
+
+  it("o erro do banco aparece na área, e 'Atualizar' segue à mão para tentar de novo", () => {
+    const markup = renderRecords({ status: "error", source: "database", title: "Erro do banco", message: 'permission denied for table "apontamento"', sqlState: "42501", errorAt: null });
+
+    expect(markup).toContain("Erro do banco");
+    expect(markup).toContain("permission denied for table");
+    expect(markup).toContain("42501");
+    expect(markup).toContain("Atualizar");
+  });
+
+  it("o cursor fechado diz para atualizar, não para executar de novo", () => {
+    const markup = renderRecords({ ...rowsState, cursorClosed: true });
+
+    expect(markup).toContain("O cursor foi fechado. Atualize para continuar.");
+    expect(markup).not.toContain("Executar de novo");
+    expect(markup).not.toContain("Carregar mais 200");
+  });
+
+  it("fora da vista Registros (a aba de consulta) nada disso aparece", () => {
+    const markup = renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: rowsState, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop })));
+
+    expect(markup).toContain('aria-label="Resultado da consulta"');
+    expect(markup).not.toContain("Atualizar");
+  });
+});

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <!-- RN-SHELL-001: só o próprio app e a API em 127.0.0.1. Ver "Política de conteúdo" no AGENTS.md. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'" />
+    <title>Prism</title>
+    <link rel="icon" type="image/png" href="/build/icon.png" />
+    <!-- O tema escolhido, aplicado antes da primeira pintura (sem `defer`, de propósito): ver `public/theme-boot.js`. -->
+    <script src="/theme-boot.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

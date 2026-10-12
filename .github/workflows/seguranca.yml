@@ -1,0 +1,108 @@
+# Segurança (RN-ABERTO-003 e 005): o leak-guard, a auditoria das dependências da interface e da API, e o CodeQL.
+#
+# O leak-guard procura nos arquivos e nas mensagens dos commits deste envio o que a RN-ABERTO-003 proíbe. Os termos próprios de
+# quem publica vêm do segredo LEAK_GUARD_EXTRA, que só chega ao passo que o usa. Num repositório PRIVADO, achado vira aviso à
+# vista e não segura os pacotes (o ensaio com o repositório privado anda enquanto a limpeza da Tarefa 19 não acontece); num
+# PÚBLICO, reprova, e nenhum pacote sai. A visibilidade vem do próprio evento do push; sem ela, vale a regra do público.
+#
+# O CodeQL só roda com o repositório PÚBLICO: num repositório privado ele exige o GitHub Code Security, que é pago (documentação
+# de disponibilidade do CodeQL e da varredura de código). É o único job, fora o de lançamento, com uma permissão de escrita:
+# `security-events: write`, que só grava os achados da varredura.
+name: Segurança
+
+on:
+  workflow_call:
+    secrets:
+      LEAK_GUARD_EXTRA:
+        description: Os termos próprios de quem publica (um por linha), que o leak-guard procura. Opcional; sem ele, o aviso.
+        required: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  leak-guard:
+    name: leak-guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório, com o histórico
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Procurar o que não pode estar no repositório
+        env:
+          LEAK_GUARD_EXTRA: ${{ secrets.LEAK_GUARD_EXTRA }}
+          PRISM_PUSH_BEFORE: ${{ github.event.before }}
+          PRISM_VISIBILITY: ${{ github.event.repository.private == true && 'private' || 'public' }}
+        run: bash scripts/ci/leak-guard.sh --push-range "$PRISM_PUSH_BEFORE..$GITHUB_SHA" --visibility "$PRISM_VISIBILITY"
+
+  auditoria-interface:
+    name: Auditoria das dependências da interface
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o Node e o pnpm
+        uses: ./.github/actions/preparar-node
+      - name: Auditar (alta ou crítica reprova)
+        run: bash scripts/ci/audit-deps.sh client
+
+  auditoria-api:
+    name: Auditoria das dependências da API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o .NET
+        uses: ./.github/actions/preparar-dotnet
+      - name: Auditar (alta ou crítica reprova)
+        run: bash scripts/ci/audit-deps.sh api
+
+  codeql:
+    name: CodeQL (${{ matrix.linguagem }})
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        linguagem: [csharp, javascript-typescript]
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o CodeQL
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: ${{ matrix.linguagem }}
+          build-mode: none
+      - name: Analisar
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:${{ matrix.linguagem }}

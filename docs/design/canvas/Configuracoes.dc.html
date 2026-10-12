@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Configurações do usuário</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 640px; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; scrollbar-color: #38414D #14181D; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 22px">
+<header style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 56px; box-sizing: border-box; padding: 8px 16px 8px 24px; background: #14181D; border-bottom: 1px solid #2A313B">
+<h1 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Configurações</h1>
+<span style="display: flex; align-items: center; gap: 8px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"></path></svg><span>marina.costa</span></span>
+<a href="Workbench.dc.html" style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 4l8 8M12 4l-8 8"></path></svg><span>Fechar</span><span style="font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: #B4BCC8">Esc</span></a>
+</header>
+<div style="flex: 1 1 0; min-height: 0; overflow: auto; display: flex; flex-wrap: wrap; align-items: flex-start">
+<nav aria-label="Seções das configurações" style="flex: 1 1 220px; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 20px 12px">
+<a href="#cfg-conta" aria-current="true" style="display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 6px; background: #232A33; color: #E6EAF0; font-weight: 600; text-decoration: none">Conta</a>
+<a href="#cfg-aparencia" style="display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Aparência</a>
+<a href="#cfg-editor" style="display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Editor SQL</a>
+<a href="#cfg-resultados" style="display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Resultados</a>
+<a href="#cfg-transacoes" style="display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Transações</a>
+<a href="#cfg-seguranca" style="display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Segurança</a>
+</nav>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 20px 32px 48px 12px">
+<div style="max-width: 920px; display: flex; flex-direction: column; gap: 20px">
+<section id="cfg-conta" aria-labelledby="cfg-h-conta" style="display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<h2 id="cfg-h-conta" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600">Conta: trocar senha</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-senha-atual" style="font-size: 13px; color: #B4BCC8">Senha atual</label>
+<input id="cfg-senha-atual" type="password" autocomplete="current-password" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-senha-nova" style="font-size: 13px; color: #B4BCC8">Nova senha</label>
+<input id="cfg-senha-nova" type="password" autocomplete="new-password" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-senha-confirma" style="font-size: 13px; color: #B4BCC8">Confirmar a nova senha</label>
+<input id="cfg-senha-confirma" type="password" autocomplete="new-password" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button type="button" style="display: flex; align-items: center; height: 40px; padding: 0 20px; border: 0; border-radius: 6px; background: {{accent}}; color: #14181D; font: inherit; font-weight: 600; cursor: pointer">Trocar senha</button>
+<span style="color: #B4BCC8; font-size: 12px; line-height: 18px">Ao trocar, o Prism recriptografa o seu cofre de conexões com a nova senha.</span>
+</div>
+</section>
+<section id="cfg-aparencia" aria-labelledby="cfg-h-aparencia" style="display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<h2 id="cfg-h-aparencia" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600">Aparência: tema</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px">
+<sc-for list="{{temas}}" as="t" hint-placeholder-count="6">
+<button type="button" aria-pressed="{{t.sel}}" onClick="{{t.pick}}" style="display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid {{t.borda}}; border-radius: 8px; background: #1B2027; color: #E6EAF0; font: inherit; text-align: left; cursor: pointer">
+<span style="display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; overflow: hidden; background: {{t.bg}}; border: 1px solid {{t.linha}}; border-radius: 5px; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; white-space: nowrap"><span style="color: {{t.kw}}">SELECT</span><span style="color: {{t.fg}}">nome</span><span style="color: {{t.str}}">'texto'</span><span style="color: {{t.num}}">42</span></span>
+<span style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 600">{{t.nome}}</span><span style="margin-left: auto; color: #B4BCC8; font-size: 12px">{{t.tipo}}</span></span>
+</button>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; overflow: hidden; background: {{tema.bg}}; color: {{tema.fg}}; border: 1px solid {{tema.linha}}; border-radius: 8px">
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: {{tema.painel}}; border-bottom: 1px solid {{tema.linha}}; font-size: 12px; line-height: 18px"><span>Prévia</span><span style="font-weight: 600">{{tema.nome}}</span></div>
+<div style="max-height: 112px; overflow: auto; scrollbar-color: {{tema.rolagem}} {{tema.bg}}; padding: 10px 12px; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 22px; white-space: nowrap">
+<div><span style="color: {{tema.com}}; font-style: italic">-- Refugo por máquina nas últimas 24 horas</span></div>
+<div><span style="color: {{tema.kw}}">SELECT</span> m.tag, <span style="color: {{tema.kw}}">SUM</span>(a.refugo) <span style="color: {{tema.kw}}">AS</span> refugo</div>
+<div><span style="color: {{tema.kw}}">FROM</span> producao.apontamento a</div>
+<div><span style="color: {{tema.kw}}">JOIN</span> producao.maquina m <span style="color: {{tema.kw}}">ON</span> m.id = a.maquina_id</div>
+<div><span style="color: {{tema.kw}}">WHERE</span> a.registrado_em &gt;= now() - <span style="color: {{tema.kw}}">interval </span><span style="color: {{tema.str}}">'24 hours'</span></div>
+<div><span style="color: {{tema.kw}}">GROUP BY</span> m.tag</div>
+<div><span style="color: {{tema.kw}}">ORDER BY</span> refugo <span style="color: {{tema.kw}}">DESC</span></div>
+<div><span style="color: {{tema.kw}}">LIMIT </span><span style="color: {{tema.num}}">10</span>;</div>
+</div>
+</div>
+<label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" checked="{{c.sistema.v}}" onChange="{{c.sistema.t}}" style="flex: none; width: 18px; height: 18px; margin: 0; accent-color: {{accent}}"><span>Seguir o modo claro ou escuro do sistema</span></label>
+<p style="margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px">O tema vale para toda a interface: editor, grades, painéis e barras de rolagem.</p>
+</section>
+<section id="cfg-editor" aria-labelledby="cfg-h-editor" style="display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<h2 id="cfg-h-editor" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600">Editor SQL</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-fonte" style="font-size: 13px; color: #B4BCC8">Fonte do editor</label>
+<select id="cfg-fonte" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 8px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit"><option>IBM Plex Mono</option><option>Cascadia Mono</option><option>Consolas</option><option>JetBrains Mono</option></select>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-tamanho" style="font-size: 13px; color: #B4BCC8">Tamanho da fonte</label>
+<input id="cfg-tamanho" type="text" inputmode="numeric" value="13" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-tab" style="font-size: 13px; color: #B4BCC8">Tamanho da tabulação</label>
+<input id="cfg-tab" type="text" inputmode="numeric" value="4" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+</div>
+<label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" checked="{{c.auto.v}}" onChange="{{c.auto.t}}" style="flex: none; width: 18px; height: 18px; margin: 0; accent-color: {{accent}}"><span>Autocompletar ao digitar</span></label>
+<label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" checked="{{c.maiusc.v}}" onChange="{{c.maiusc.t}}" style="flex: none; width: 18px; height: 18px; margin: 0; accent-color: {{accent}}"><span>Converter palavras-chave para maiúsculas</span></label>
+</section>
+<section id="cfg-resultados" aria-labelledby="cfg-h-resultados" style="display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<h2 id="cfg-h-resultados" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600">Resultados</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-linhas" style="font-size: 13px; color: #B4BCC8">Linhas por busca</label>
+<input id="cfg-linhas" type="text" inputmode="numeric" value="200" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-nulo" style="font-size: 13px; color: #B4BCC8">Mostrar valores nulos como</label>
+<input id="cfg-nulo" type="text" value="NULL" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace">
+</div>
+</div>
+<label style="display: flex; align-items: center; gap: 10px"><input type="checkbox" checked="{{c.rolar.v}}" onChange="{{c.rolar.t}}" style="flex: none; width: 18px; height: 18px; margin: 0; accent-color: {{accent}}"><span>Buscar mais linhas ao rolar até o fim da grade</span></label>
+</section>
+<section id="cfg-transacoes" aria-labelledby="cfg-h-transacoes" style="display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<h2 id="cfg-h-transacoes" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600">Transações</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-modo" style="font-size: 13px; color: #B4BCC8">Modo padrão das novas abas</label>
+<select id="cfg-modo" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 8px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit"><option>Commit manual</option><option>Auto-commit</option></select>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="cfg-isolamento" style="font-size: 13px; color: #B4BCC8">Nível de isolamento padrão</label>
+<select id="cfg-isolamento" style="width: 100%; height: 40px; box-sizing: border-box; padding: 0 8px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit"><option>Padrão do banco</option><option>Read uncommitted</option><option>Read committed</option><option>Repeatable read</option><option>Serializable</option></select>
+</div>
+</div>
+</section>
+<section id="cfg-seguranca" aria-labelledby="cfg-h-seguranca" style="display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<h2 id="cfg-h-seguranca" style="margin: 0; font-size: 16px; line-height: 24px; font-weight: 600">Segurança</h2>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px">
+<input id="cfg-bloquear" type="checkbox" checked="{{c.bloquear.v}}" onChange="{{c.bloquear.t}}" style="flex: none; width: 18px; height: 18px; margin: 0; accent-color: {{accent}}">
+<label for="cfg-bloquear">Bloquear o Prism após</label>
+<input type="text" inputmode="numeric" value="10" aria-label="Minutos sem uso até bloquear" style="width: 72px; height: 36px; box-sizing: border-box; padding: 0 10px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit">
+<span>minutos sem uso</span>
+</div>
+<p style="margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px">Com o Prism bloqueado, o cofre fecha e só a sua senha o reabre. Exibir a senha de uma conexão e alterar a opção "Somente leitura" pedem a sua senha sempre.</p>
+</section>
+</div>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const accent = this.props.accent ?? '#F2B644';
+const lista = [
+{ id: 'prism-escuro', nome: 'Prism Escuro', tipo: 'escuro', bg: '#0E1114', painel: '#14181D', linha: '#2A313B', fg: '#E6EAF0', kw: '#7DB2FF', str: '#5ED3A3', num: '#F2B644', com: '#8E99A8', rolagem: '#38414D' },
+{ id: 'prism-claro', nome: 'Prism Claro', tipo: 'claro', bg: '#F7F8FA', painel: '#ECEFF3', linha: '#D5DAE1', fg: '#1B2027', kw: '#1D5FD1', str: '#0B7A4B', num: '#8A5200', com: '#5F6875', rolagem: '#B4BCC8' },
+{ id: 'monokai', nome: 'Monokai', tipo: 'escuro', bg: '#272822', painel: '#1E1F1C', linha: '#3E3D32', fg: '#F8F8F2', kw: '#F92672', str: '#E6DB74', num: '#AE81FF', com: '#A6A28C', rolagem: '#5A594E' },
+{ id: 'dracula', nome: 'Dracula', tipo: 'escuro', bg: '#282A36', painel: '#21222C', linha: '#44475A', fg: '#F8F8F2', kw: '#FF79C6', str: '#F1FA8C', num: '#BD93F9', com: '#9AA5CE', rolagem: '#6272A4' },
+{ id: 'nord', nome: 'Nord', tipo: 'escuro', bg: '#2E3440', painel: '#272C36', linha: '#434C5E', fg: '#D8DEE9', kw: '#81A1C1', str: '#A3BE8C', num: '#B48EAD', com: '#9AA6BD', rolagem: '#4C566A' },
+{ id: 'github-claro', nome: 'GitHub Claro', tipo: 'claro', bg: '#FFFFFF', painel: '#F6F8FA', linha: '#D1D9E0', fg: '#1F2328', kw: '#CF222E', str: '#0A3069', num: '#0550AE', com: '#59636E', rolagem: '#AFB8C1' }
+];
+const atual = s.tema || 'prism-escuro';
+const temas = lista.map((t) => Object.assign({}, t, {
+sel: t.id === atual,
+borda: t.id === atual ? accent : '#2A313B',
+pick: () => this.setState({ tema: t.id })
+}));
+const chk = (k, d) => {
+const v = s[k] === undefined ? d : s[k];
+return { v: v, t: () => this.setState({ [k]: !v }) };
+};
+return {
+accent: accent,
+temas: temas,
+tema: lista.find((t) => t.id === atual) || lista[0],
+c: { sistema: chk('sistema', false), auto: chk('auto', true), maiusc: chk('maiusc', true), rolar: chk('rolar', true), bloquear: chk('bloquear', true) }
+};
+}
+}
+</script>
+</body>
+</html>

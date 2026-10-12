@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="Prism.Application/Prism.Application.csproj" />
+    <Project Path="Prism.Core/Prism.Core.csproj" />
+    <Project Path="Prism.Infrastructure/Prism.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/api/">
+    <Project Path="Prism.Api/Prism.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Prism.IntegrationTesting/Prism.IntegrationTesting.csproj" />
+    <Project Path="tests/Prism.TestingCore/Prism.TestingCore.csproj" />
+    <Project Path="tests/Prism.UnitTesting/Prism.UnitTesting.csproj" />
+  </Folder>
+</Solution>

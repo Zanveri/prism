@@ -1,0 +1,11 @@
+# Exceções do leak-guard.sh (RN-ABERTO-003). Uma por linha, no formato:
+#   arquivo|padrão|justificativa
+# "arquivo" é o caminho exato a partir da raiz; "padrão" é um destes: caminho-de-usuario, caminho-de-rede, registro-privado ou
+# ip-privado.
+# A exceção vale para UM padrão em UM arquivo: não existe exceção de pasta, de arquivo inteiro nem de termo extra
+# (LEAK_GUARD_EXTRA). O modo --history ignora este arquivo de propósito. A justificativa é obrigatória: sem ela o script
+# recusa o arquivo.
+# Mudar este arquivo, scripts/ci/ ou .github/ pede a revisão de um mantenedor: o leak-guard verde de uma mudança que mexe neles não
+# prova nada (quem altera o verificador altera o resultado).
+# Ponha aqui só o que é legítimo. O que a verificação achar de verdade (um caminho de máquina num documento, por exemplo) se
+# corrige no arquivo, e nunca entra nesta lista.

@@ -1,0 +1,32 @@
+<Project TreatAsLocalProperty="RuntimeIdentifiers">
+
+	<!--
+		SEC-07: cada projeto grava o packages.lock.json com a versão e o hash de todo
+		pacote, inclusive os transitivos. O restore local atualiza o arquivo quando um
+		PackageReference muda — ele entra no mesmo commit —, e o build da imagem
+		restaura com `locked-mode`: pacote ou hash diferente do versionado derruba o build.
+	-->
+	<PropertyGroup>
+		<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+	</PropertyGroup>
+
+	<!--
+		RN-ABERTO-006: a API é publicada para estes quatro identificadores de runtime, e o
+		lock file de cada projeto traz os quatro alvos. Sem eles declarados aqui, o
+		`dotnet publish -r <id>` acrescentava o alvo ao lock file a cada publicação, e o
+		modo travado o recusava (NU1004).
+
+		O `dotnet restore -r <id>` chega como a propriedade global RuntimeIdentifiers=<id>,
+		que trocaria a lista inteira e deixaria o lock file diferente do projeto: o
+		TreatAsLocalProperty do topo faz valer a lista daqui. O identificador pedido fica
+		guardado antes em PrismRuntimeIdentifier (o `dotnet build` e o `dotnet publish` o
+		mandam em RuntimeIdentifier, no singular), porque é ele que escolhe o pacote do
+		driver da IBM no Prism.Infrastructure.
+	-->
+	<PropertyGroup>
+		<PrismRuntimeIdentifier>$(RuntimeIdentifier)</PrismRuntimeIdentifier>
+		<PrismRuntimeIdentifier Condition="'$(PrismRuntimeIdentifier)' == '' And '$(RuntimeIdentifiers)' != '' And !$(RuntimeIdentifiers.Contains(';'))">$(RuntimeIdentifiers)</PrismRuntimeIdentifier>
+		<RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
+	</PropertyGroup>
+
+</Project>

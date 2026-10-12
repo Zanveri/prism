@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<!-- RN-MARCA-005: página estática. Sem script e sem nada de fora; o que muda de um passo para o outro (texto, posição e barra) é CSS que o processo principal insere (splash.ts). -->
+<!-- RN-MARCA-007 e 008: o logotipo do Prism e o wordmark da Zanveri vêm de assets/, e o splash.ts os põe nos dois marcadores entre chaves duplas ao montar a página: este arquivo não tem cópia de desenho nenhum. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:">
+<title>Prism</title>
+<style>
+/* A fonte do sistema: a IBM Plex só entraria por arquivo ou por data:, e a política não deixa carregar fonte. */
+html, body { margin: 0; height: 100%; background: #0E1114; }
+body { overflow: hidden; cursor: default; user-select: none; color: #E6EAF0; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 22px; }
+.splash { box-sizing: border-box; width: 640px; height: 400px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #2A313B; }
+.splash > svg { flex: none; display: block; width: 638px; height: 249px; }
+.text { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 4px 32px 18px; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.name { font-size: 30px; line-height: 36px; font-weight: 600; letter-spacing: 0.01em; }
+.tagline { color: #B4BCC8; }
+.mono { flex: none; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #8E99A8; }
+.version { font-size: 12px; line-height: 22px; }
+.foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.step { display: flex; align-items: center; gap: 12px; min-height: 18px; font-size: 12px; line-height: 18px; color: #B4BCC8; }
+/* O selo (RN-MARCA-008): discreto, no canto de baixo, com o wordmark numa altura em que "ZANVERI" se lê. O object-view-box recorta só a
+   margem transparente do arquivo (o desenho fica de x 201 a 792 e de y 24 a 226, num quadro de 970 x 250), sem mudar o desenho: 40 px de
+   desenho são o arquivo inteiro a 49,5 px de altura, e "ZANVERI" fica com 11 px. */
+.seal { flex: none; display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 18px; color: #8E99A8; }
+.seal-wordmark { display: block; height: 40px; width: auto; object-view-box: inset(24px 178px 24px 201px); }
+.bar { flex: none; height: 4px; background: #232A33; }
+.bar-fill { width: 0; height: 100%; background: #F2B644; }
+</style>
+</head>
+<body>
+<div class="splash">
+{{prism-logo}}
+<div class="text">
+<div class="head">
+<div class="title">
+<span class="name">Prism</span>
+<span class="tagline">Informix, Db2 e PostgreSQL no mesmo lugar.</span>
+</div>
+<span class="mono version">versão {{version}}</span>
+</div>
+<div class="foot">
+<div class="step">
+<span class="step-label"></span>
+<span class="mono step-position"></span>
+</div>
+<div class="seal">
+<span>powered by</span>
+<img class="seal-wordmark" src="{{zanveri-wordmark}}" alt="Zanveri">
+</div>
+</div>
+</div>
+<div class="bar" role="progressbar" aria-label="Inicialização do Prism" aria-valuemin="0" aria-valuemax="100"><div class="bar-fill"></div></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,1107 @@
+using CSharpFunctionalExtensions;
+using Prism.Infrastructure.Databases.Models;
+using Serilog.Events;
+using System.Data;
+using System.Data.Common;
+using System.Diagnostics;
+using System.Globalization;
+using ILogger = Serilog.ILogger;
+
+namespace Prism.Infrastructure.Databases.Clients;
+
+/// <summary>
+/// A conexão com um banco sobre o ADO.NET (`DbConnection`, `DbCommand`, `DbDataReader`), igual para os três bancos. Tem o único `try` da
+/// integração, no <see cref="Send{T}"/>, e decide como cada comando do usuário é executado (RN-SESSAO-005, RN-SQL-004 e 013):
+///
+/// - o que tem cara de leitura é tentado dentro de uma transação que o banco não deixa gravar, com o leitor aberto entre as páginas;
+/// - o que o banco recusa ali por tentar gravar, e tudo o que não tem cara de leitura, roda fora de transação e é lido até o fim: quando
+///   a resposta sai, a gravação está confirmada, e não há cursor que, ao fechar, a desfaça.
+///
+/// Cada banco entra com o que só ele sabe: como abrir a conexão, as consultas de catálogo, a consulta de verificação, a forma do `COUNT`,
+/// como abrir a transação só de leitura e reconhecer a recusa dela, como ler a mensagem, o SQLSTATE e a posição da exceção do driver e,
+/// quando o driver dele não entrega os valores prontos para o <see cref="CellFormatter"/>, como ler a célula de um resultado.
+///
+/// Não é segura para duas chamadas ao mesmo tempo, com exceção do <see cref="Cancel"/>: quem a usa faz um comando por vez.
+/// </summary>
+internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnection
+{
+    private const string CommitSql = "COMMIT";
+    private const string RollbackSql = "ROLLBACK";
+
+    /// <summary>O SQLSTATE com que o PostgreSQL e o Db2 dizem que interromperam o comando a pedido ("query canceled").</summary>
+    private const string QueryCanceledSqlState = "57014";
+
+    private const string CanceledMessage = "O comando foi cancelado.";
+    private const string UnknownOutcomeAdvice = "O Prism não sabe se o comando foi concluído: confira no banco antes de executá-lo de novo.";
+    private const string UnknownOutcomeMessage = $"O banco não respondeu ao cancelamento a tempo, e a sessão foi encerrada. {UnknownOutcomeAdvice}";
+    private const string CanceledWhileReturningRowsMessage = "O cancelamento chegou enquanto o comando devolvia as linhas. O que ele gravou até ali está confirmado, e pode ser só uma parte do comando: o Prism não sabe se ele foi concluído. Confira no banco antes de executá-lo de novo.";
+    private const string ConnectionClosedMessage = "A conexão com o banco foi encerrada, e o comando não foi enviado. Abra a sessão de novo.";
+    private const string NoOpenCursorMessage = "Não há cursor aberto: execute o comando de novo.";
+    private const string UnknownObjectKindMessage = "O tipo de objeto pedido não existe: use tables, views ou routines.";
+    private const string TransactionControlMessage = "Comandos de controle de transação (BEGIN, COMMIT, ROLLBACK, SAVEPOINT) não são aceitos: toda sessão é auto-commit, e cada comando é confirmado quando termina.";
+    private const string UndoneTransactionMessage = $"O comando deixou uma transação aberta, e o Prism a desfez: nada do que ele gravou dentro dela ficou. {TransactionControlMessage}";
+    private const string WritesAfterTheFirstPageMessage = "O comando começou como leitura e tentou gravar depois da primeira página; nada foi gravado. Execute-o de novo: ele será executado até o fim.";
+    private const string SeveralStatementsMessage = "Cada execução leva um comando só, e o texto enviado tem mais de um; nada foi executado. Envie um de cada vez. Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) é um comando só.";
+    private const string NotCountableMessage = "Só uma leitura pode ser contada, e o comando enviado não é uma leitura só; nada foi executado.";
+
+    private readonly ILogger _logger = logger.ForContext<AdoDatabaseConnection>();
+
+    private DbConnection? _connection;
+
+    /// <summary>O comando do cursor aberto ou o que está rodando. É o que o `Cancel` interrompe, de outra thread.</summary>
+    private volatile DbCommand? _command;
+
+    private DbDataReader? _reader;
+    private IReadOnlyList<QueryColumn> _columns = [];
+
+    /// <summary>RN-SQL-016: as linhas de cada página do cursor aberto, as que o comando pediu. O "carregar mais" lê no mesmo tamanho.</summary>
+    private int _pageSize = QueryPaging.DefaultPageSize;
+
+    /// <summary>O leitor já está sobre uma linha que a página anterior não levou: é a leitura a mais que responde se há outra página.</summary>
+    private bool _rowPending;
+
+    /// <summary>
+    /// Há uma transação aberta no banco, que o descarte do cursor encerra: a só de leitura da tentativa paginada (ou da contagem), ou a
+    /// que um comando do usuário abriu sem a recusa da RN-SQL-003 reconhecer.
+    /// </summary>
+    private bool _inTransaction;
+
+    /// <summary>O comando do cursor aberto, e o comando que o banco recusou por gravar depois da primeira página: executado de novo, vai direto até o fim.</summary>
+    private string? _cursorSql;
+    private string? _writesAfterTheFirstPage;
+
+    /// <summary>O último comando do usuário voltou sem conjunto de resultados e sem contagem de linhas: um comando utilitário, o único que pode ter aberto uma transação.</summary>
+    private bool _utilityCommand;
+
+    /// <summary>Há um comando em andamento nesta conexão. Fora disso o `Cancel` não tem o que interromper (RN-SQL-010).</summary>
+    private volatile bool _running;
+
+    /// <summary>
+    /// O cancelamento pedido pelo Prism durante o comando em andamento. Só decide o resultado no banco cujo driver volta vazio sem
+    /// exceção (<see cref="CancelReturnsEmptyResult"/>); nos demais quem diz que o comando foi cancelado é a exceção do driver, e um
+    /// comando que terminou antes de o cancelamento chegar é sucesso. Vale enquanto o cursor do comando estiver aberto: o "carregar
+    /// mais" não o baixa.
+    /// </summary>
+    private volatile bool _canceled;
+
+    /// <summary>
+    /// No driver que volta vazio sem exceção, o comando executado até o fim já rodou no banco quando o leitor abriu: dali em diante o
+    /// cancelamento não o transforma em comando cancelado (<see cref="CancelReturnsEmptyResult"/>).
+    /// </summary>
+    private bool _executed;
+
+    /// <summary>
+    /// No mesmo driver, o cancelamento foi pedido antes de o comando executado até o fim entregar a última linha. O driver só para
+    /// de entregá-las: a página e o total podem não ser os do comando, e o que ele gravava enquanto as devolvia pode ter ficado pela
+    /// metade, já confirmado. A resposta não é sucesso nem "cancelado": é a de que o Prism não sabe.
+    /// </summary>
+    private bool _canceledWhileReturningRows;
+
+    /// <summary>
+    /// A fonte de cancelamento do comando em andamento, ligada à da requisição. Todo envio ao banco dentro do comando a recebe: um
+    /// cancelamento que chega antes de o comando do usuário ser enviado (enquanto o `BEGIN` da tentativa vai ao banco, por exemplo) faz
+    /// com que ele nem seja enviado.
+    /// </summary>
+    private volatile CancellationTokenSource? _cancellation;
+
+    /// <summary>
+    /// A conexão foi descartada por esta classe. O estado que o driver informa não basta para dizer que ela não serve mais: o da
+    /// IBM continua respondendo "aberta" depois do descarte de uma conexão que ele não conseguiu fechar (a que ficou sem banco, depois
+    /// de um `CLOSE DATABASE` no Informix).
+    ///
+    /// Só sobe depois de o descarte do driver voltar. O descarte pedido com um comando em andamento só volta, no Npgsql, quando o
+    /// comando termina e segue o caminho dele até o fim, e esse caminho pergunta por <see cref="IsOpen"/>: a marca posta antes fazia
+    /// o comando parar no meio, e o descarte nunca voltava.
+    /// </summary>
+    private volatile bool _discarded;
+
+    public string ServerVersion { get; private set; } = string.Empty;
+
+    public bool IsOpen => !_discarded && _connection?.State == ConnectionState.Open;
+
+    /// <summary>A consulta de verificação do banco (RN-CONN-013).</summary>
+    protected abstract string PingSql { get; }
+
+    /// <summary>
+    /// Colunas: nome, se é de sistema e quantas tabelas, visões e rotinas ele tem, contadas como a lista de objetos as lista (RN-CAT-010),
+    /// numa consulta só, agrupada. Já na ordem da árvore, com os de sistema por último (RN-ARVORE-004).
+    /// </summary>
+    protected abstract string SchemasSql { get; }
+
+    /// <summary>
+    /// Parâmetros: esquema e tabela. Colunas: nome, tipo, se aceita nulo, se é da chave primária, a posição, a expressão padrão (ou nulo) e
+    /// quem gera o valor (<see cref="ColumnGeneration"/>, ou nulo), na ordem da tabela (RN-CAT-001).
+    /// </summary>
+    protected abstract string ColumnsSql { get; }
+
+    /// <summary>
+    /// Parâmetros: esquema e tabela. Uma linha por coluna de cada índice, na ordem do índice: nome do índice, se é único, nome da coluna e o
+    /// método ou tipo do índice, ou nulo (RN-CAT-003).
+    /// </summary>
+    protected abstract string IndexesSql { get; }
+
+    /// <summary>
+    /// Parâmetros: esquema e tabela que têm as chaves. Uma linha por par de colunas de cada chave, na ordem da chave, nas colunas de uma
+    /// linha de chave estrangeira: nome da chave, esquema e tabela que a têm, coluna, esquema, tabela e coluna referenciados e as regras ao
+    /// excluir e ao atualizar (<see cref="ForeignKeyRule"/>, ou nulo; RN-CAT-002). Pelo nome da chave.
+    /// </summary>
+    protected abstract string ForeignKeysSql { get; }
+
+    /// <summary>
+    /// RN-CAT-004. Parâmetros: esquema e tabela referenciados. As chaves de qualquer tabela (inclusive a própria) que apontam para ela, nas
+    /// colunas de <see cref="ForeignKeysSql"/>, pelo nome da chave e depois pela tabela que a tem.
+    /// </summary>
+    protected abstract string ReferencedBySql { get; }
+
+    /// <summary>
+    /// RN-CAT-005. Parâmetros: esquema e tabela. Colunas: nome da restrição de conferência e um pedaço da condição, pelo nome e, dentro de
+    /// cada restrição, na ordem dos pedaços (<see cref="JoinChunks"/>). Só as restrições `CHECK` de verdade: nem `NOT NULL`, nem as que o
+    /// banco cria por conta própria para outra coisa.
+    /// </summary>
+    protected abstract string ChecksSql { get; }
+
+    /// <summary>RN-CAT-006. Parâmetros: esquema e visão. Coluna: um pedaço do texto que o banco guarda para a visão, na ordem (<see cref="JoinChunks"/>). Nenhuma linha quando ele não devolve nada.</summary>
+    protected abstract string ViewDefinitionSql { get; }
+
+    /// <summary>
+    /// RN-CAT-008. Parâmetro: esquema. As colunas de todas as tabelas dele (as visões não entram), pela tabela e depois pela posição:
+    /// tabela, coluna, tipo, se aceita nulo e se é da chave primária. Na tabela sem coluna nenhuma, uma linha com a coluna nula.
+    /// </summary>
+    protected abstract string DiagramColumnsSql { get; }
+
+    /// <summary>RN-CAT-008. Parâmetro: esquema. As chaves de todas as tabelas dele, nas colunas de <see cref="ForeignKeysSql"/> e na mesma ordem.</summary>
+    protected abstract string DiagramForeignKeysSql { get; }
+
+    /// <summary>
+    /// RN-CAT-010: as consultas das propriedades do banco conectado, sem parâmetro, rodadas em ordem. Colunas: nome (`encoding`,
+    /// `loggingMode`...) e valor em texto. O valor nulo não vem, e a consulta que o banco recusa a esta conta é deixada de lado.
+    /// </summary>
+    protected abstract IReadOnlyList<string> PropertiesSql { get; }
+
+    /// <summary>
+    /// RN-SQL-013: o comando que abre, no banco, a transação em que a leitura paginada e a contagem rodam e em que ele mesmo recusa
+    /// qualquer gravação. Ela termina com `COMMIT` quando o comando chega ao fim e com `ROLLBACK` quando o cursor fecha antes.
+    ///
+    /// Nulo no banco que não tem transação só de leitura (Db2 e Informix): a leitura paginada fica em auto-commit, sem transação
+    /// nenhuma, e quem diz que o comando é leitura é o texto dele (<see cref="TriesAsRead"/>).
+    /// </summary>
+    protected abstract string? BeginReadOnlySql { get; }
+
+    /// <summary>
+    /// O driver deste banco não lança quando o cancelamento chega durante a leitura das linhas: devolve um resultado vazio, ou só
+    /// para de entregá-las (os da IBM; ele lança quando interrompe a execução). Só então o cancelamento guardado pela conexão decide
+    /// o resultado: sem ele a página cortada passaria por inteira. Uma leitura (a paginada, a de catálogo, a contagem) responde que
+    /// foi cancelada. O comando executado até o fim já rodou no banco quando o leitor abre: sem linhas, é sucesso; com linhas e o
+    /// cancelamento pedido antes da última, a resposta é a de que o Prism não sabe se ele foi concluído (RN-SQL-010).
+    /// </summary>
+    protected virtual bool CancelReturnsEmptyResult => false;
+
+    /// <summary>
+    /// O driver deste banco é síncrono: as chamadas `Async` dele só voltam quando o banco responde, e prenderiam a thread de quem
+    /// chama (a da requisição, ou a de quem pede o cancelamento). As chamadas ao banco passam a rodar em outra thread, com a cultura
+    /// invariável: o driver da IBM formata datas e números com a cultura da thread, e o que sai dele não pode depender do idioma
+    /// de quem roda o Prism (RN-SQL-011).
+    /// </summary>
+    protected virtual bool BlocksTheCallingThread => false;
+
+    /// <summary>
+    /// O que o driver deste banco não aceita nos dados da conexão, dito a quem a cadastrou antes de o driver ser chamado: é dado de
+    /// entrada, e não defeito, e não vai para o log. Nulo quando não há o que recusar.
+    /// </summary>
+    protected virtual string? SettingsRefusal => null;
+
+    /// <summary>Cria a conexão do driver, ainda fechada. Roda dentro do <see cref="Send{T}"/>: montar a string de conexão também pode lançar.</summary>
+    protected abstract DbConnection CreateConnection();
+
+    /// <summary>
+    /// Parâmetro: esquema. Colunas: nome, tipo (`table`, `view`, `procedure` ou `function`), a estimativa de linhas das estatísticas (nula
+    /// quando não há estatística, e em tudo o que não é tabela) e o comentário (ou nulo), pelo nome (RN-CAT-009). Nulo para um tipo de
+    /// objeto que não existe.
+    /// </summary>
+    /// <param name="kind">`tables`, `views` ou `routines`.</param>
+    protected abstract string? ObjectsSql(string kind);
+
+    /// <summary>RN-SQL-006: o `SELECT COUNT(*)` com o comando como subconsulta, na forma que o banco aceita.</summary>
+    protected abstract string CountSql(string sql);
+
+    /// <summary>
+    /// A exceção do driver como recusa: a mensagem do banco como veio (decisão 4 do guia da raiz), com o detalhe e a dica, e o SQLSTATE e
+    /// a posição quando o driver os informa (RN-SQL-009).
+    /// </summary>
+    protected abstract DatabaseFailure ToFailure(EDatabaseFailure kind, Exception exception);
+
+    /// <summary>O banco recusou o comando porque ele grava, ou porque não roda dentro de transação: não é erro de quem escreveu, é o sinal para executá-lo até o fim.</summary>
+    protected abstract bool IsWriteRefusal(DatabaseFailure failure);
+
+    /// <summary>
+    /// RN-SQL-010: a recusa é o banco dizendo que interrompeu o comando, e com isso o desfez? Por padrão, o SQLSTATE 57014, que o
+    /// PostgreSQL e o Db2 usam. O banco que diz isso de outro jeito responde aqui (o Informix, pelo erro nativo da exceção). Só a
+    /// exceção desta recusa decide, e não um estado guardado da conexão: o pedido de cancelamento roda em outra thread e também passa
+    /// pelo <see cref="ToFailure"/>.
+    /// </summary>
+    protected virtual bool IsInterruption(Exception exception, DatabaseFailure failure)
+        => failure.SqlState == QueryCanceledSqlState;
+
+    /// <summary>
+    /// Vale tentar o comando como leitura paginada? Só pela primeira palavra: quem diz se ele grava é o banco, dentro da transação só de
+    /// leitura. O que não começa como leitura nem passa pela tentativa, e roda como um comando qualquer em auto-commit.
+    /// </summary>
+    protected virtual bool MayBeRead(string firstWord)
+        => firstWord is "SELECT" or "WITH" or "VALUES" or "(";
+
+    /// <summary>
+    /// RN-SQL-013: o comando é tentado como leitura paginada, com o cursor aberto entre as páginas? Por padrão, o que começa como
+    /// leitura e não é um `WITH` que grava: quem diz o resto é o banco, na transação só de leitura. O banco que não tem essa
+    /// transação decide tudo aqui, pelo texto, e só deixa paginar o que é uma leitura só.
+    /// </summary>
+    protected virtual bool TriesAsRead(string sql)
+        => MayBeRead(SqlText.LeadingWords(sql).First) && !SqlText.WithModifiesData(sql);
+
+    /// <summary>RN-SQL-003: o comando é controle de transação, na forma em que este banco o escreve? É recusado sem ir ao banco.</summary>
+    protected virtual bool IsTransactionControl(string sql)
+        => SqlText.IsTransactionControl(sql);
+
+    /// <summary>
+    /// RN-SQL-001: o envio tem mais de um comando? Só responde o banco cujo driver os executaria um por um, cada um com a própria
+    /// confirmação (os da IBM): ali o envio é recusado sem ir ao banco. No PostgreSQL quem recusa é o próprio banco.
+    /// </summary>
+    protected virtual bool HasSeveralStatements(string sql)
+        => false;
+
+    /// <summary>
+    /// RN-SQL-006: o comando pode ir ao banco como subconsulta do "contar total"? No banco que tem transação só de leitura, qualquer
+    /// um: ali ele não grava. No que não tem, só o que o texto diz ser uma leitura só.
+    /// </summary>
+    protected virtual bool MayBeCounted(string sql)
+        => true;
+
+    /// <summary>
+    /// RN-SESSAO-005: o comando que acabou de ser executado até o fim pode ter deixado a conexão dentro de uma transação? É a
+    /// pergunta que decide se a sonda (<see cref="ProbeTransactionAsync"/>) roda. Por padrão, só o comando utilitário, que volta sem
+    /// conjunto de resultados e sem contagem de linhas (é assim que um `BEGIN` volta). No banco em que uma rotina pode abrir
+    /// transação e devolver linhas, a resposta é outra.
+    /// </summary>
+    protected virtual bool MayHaveOpenedATransaction(bool returnedRows, int recordsAffected)
+        => !returnedRows && recordsAffected < 0;
+
+    /// <summary>
+    /// RN-SESSAO-005: o comando executado até o fim que FALHA pode deixar a conexão dentro de uma transação? Por padrão não, e a
+    /// sonda não roda depois de uma falha. No Informix pode: a função que abre a transação por dentro, grava, devolve linhas e
+    /// lança deixa a transação aberta, e o comando seguinte cairia dentro dela.
+    /// </summary>
+    protected virtual bool MayLeaveATransactionOpenWhenItFails => false;
+
+    /// <summary>
+    /// RN-LOG-001: a recusa do banco que acabou de passar pelo <see cref="ToFailure"/> é a resposta de rotina de um gancho deste
+    /// banco (<see cref="TryAsync"/>)? A que é não enche o log: sai como depuração, abaixo do nível com que o Prism roda. Nenhuma,
+    /// por padrão. No Informix são as duas que a sonda de transação procura, e num banco sem log uma delas vem a cada comando.
+    /// </summary>
+    protected virtual bool IsRoutineRefusal => false;
+
+    /// <summary>O ajuste que o banco precisa num comando do usuário (executar e contar) antes de ele ser enviado. Nenhum, por padrão.</summary>
+    protected virtual void ConfigureUserCommand(DbCommand command)
+    {
+    }
+
+    /// <summary>`text`, `number`, `datetime`, `boolean` ou `binary` da coluna de um resultado. Por padrão, pelo tipo do C# que o driver entrega.</summary>
+    protected virtual string ColumnKind(DbDataReader reader, int ordinal)
+        => CellFormatter.KindOf(reader.GetFieldType(ordinal));
+
+    /// <summary>
+    /// RN-CAT-005 e 006: o texto inteiro a partir dos pedaços em que o catálogo o guarda, na ordem. Por padrão, um seguido do outro: o
+    /// banco que guarda em pedaços de tamanho fixo diz o que é enchimento.
+    /// </summary>
+    protected virtual string JoinChunks(IReadOnlyList<string> chunks)
+        => string.Concat(chunks);
+
+    /// <summary>O valor de uma célula de um resultado, como o <see cref="CellFormatter"/> o recebe. Por padrão, o que o driver entrega.</summary>
+    protected virtual object ReadCell(DbDataReader reader, int ordinal, string kind)
+        => reader.GetValue(ordinal);
+
+    /// <summary>
+    /// Interrompe, no driver, o comando que já está no banco. Por padrão é o `Cancel` do comando: a implementação padrão do ADO.NET não
+    /// olha a fonte de cancelamento enquanto espera uma linha. O banco cujo driver já interrompe pela fonte não repete o pedido.
+    /// </summary>
+    protected virtual void CancelCommand(DbCommand command)
+        => command.Cancel();
+
+    /// <summary>
+    /// Envia o comando ao banco e devolve o leitor. Por padrão é o do ADO.NET, que interrompe o comando pela fonte de cancelamento. O
+    /// banco cujo driver perde o pedido de cancelamento que chega antes de o comando estar executando cuida disso aqui.
+    /// </summary>
+    protected virtual Task<DbDataReader> ExecuteReaderAsync(DbCommand command, CancellationToken cancellationToken)
+        => command.ExecuteReaderAsync(cancellationToken);
+
+    /// <summary>
+    /// RN-SESSAO-005, a rede de segurança: a conexão ficou dentro de uma transação? A base pergunta depois de um comando do usuário que
+    /// voltou sem conjunto de resultados e sem contagem de linhas (é assim que um `BEGIN` volta), para o caso de uma forma de abrir
+    /// transação que a recusa da RN-SQL-003 não conheça. Por padrão não confere nada; o banco que tem como saber responde, e não lança:
+    /// a chamada ao driver passa pelo <see cref="TryAsync"/>.
+    ///
+    /// Quando a sonda roda, o banco já confirmou o comando. Por isso só responde <see cref="ETransactionProbe.InTransaction"/> o que diz
+    /// isso com certeza; a sonda que falha por outro motivo (a conexão caiu, o banco recusou a ida e volta dela) responde
+    /// <see cref="ETransactionProbe.Failed"/>, e não muda a resposta do comando.
+    /// </summary>
+    protected virtual Task<ETransactionProbe> ProbeTransactionAsync(DbConnection connection)
+        => Task.FromResult(ETransactionProbe.Idle);
+
+    /// <summary>O que o driver mantém além da conexão e precisa ser descartado com ela. Nada, por padrão.</summary>
+    protected virtual ValueTask DisposeDriverAsync()
+        => ValueTask.CompletedTask;
+
+    /// <summary>Abre a conexão e a devolve pronta. Se não abre, descarta o que criou e devolve a recusa do banco (RN-SESSAO-003).</summary>
+    public async Task<Result<IDatabaseConnection, DatabaseFailure>> OpenAsync(CancellationToken cancellationToken)
+    {
+        if (SettingsRefusal is { } refusal)
+            return new DatabaseFailure(EDatabaseFailure.ConnectionFailed, refusal);
+
+        var opened = await Send<IDatabaseConnection>(nameof(OpenAsync), EDatabaseFailure.ConnectionFailed, async () =>
+        {
+            _connection = CreateConnection();
+            await _connection.OpenAsync(cancellationToken);
+            ServerVersion = _connection.ServerVersion;
+
+            return this;
+        });
+
+        if (opened.IsFailure)
+            await DisposeAsync();
+
+        return opened;
+    }
+
+    public async Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
+        => await QueryAsync(nameof(PingAsync), EDatabaseFailure.ConnectionFailed, PingSql, [], reader => reader.GetValue(0), cancellationToken);
+
+    public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
+    {
+        // RN-SQL-003: recusado aqui, sem ir ao banco. Um `BEGIN` deixaria a conexão dentro de uma transação que ninguém fecha.
+        if (IsTransactionControl(sql))
+            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
+
+        // RN-SQL-001: também sem ir ao banco. O driver que executa os comandos de um envio um por um deixaria gravado o que veio antes
+        // de um erro, e um `BEGIN` depois do primeiro comando abriria a transação que a recusa acima existe para evitar.
+        if (HasSeveralStatements(sql))
+            return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
+
+        return await ExecuteWithoutRefusalAsync(sql, pageSize, cancellationToken);
+    }
+
+    /// <summary>
+    /// O comando do usuário depois da recusa da RN-SQL-003. É `internal`, e não privado, por um motivo só: o teste da rede de segurança
+    /// (<see cref="ProbeTransactionAsync"/>) precisa chegar ao banco com um `BEGIN`, como chegaria uma forma de abrir transação que o
+    /// <see cref="SqlText"/> não conhecesse. Nenhum código do produto o chama direto.
+    /// </summary>
+    internal async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteWithoutRefusalAsync(string sql, int pageSize, CancellationToken cancellationToken)
+    {
+        // RN-SQL-013: um `WITH` que grava nem passa pela tentativa. A transação só de leitura deixa passar gravação em tabela temporária,
+        // e ela seria desfeita quando o cursor fechasse antes do fim.
+        if (TriesAsRead(sql) && sql != _writesAfterTheFirstPage)
+        {
+            var read = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token), cancellationToken);
+
+            // Qualquer outro erro da tentativa é o erro do comando, e volta como veio; a transação da tentativa já foi desfeita.
+            if (read.IsSuccess || !IsWriteRefusal(read.Error))
+                return read;
+        }
+
+        var executed = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: false, token), cancellationToken);
+
+        // RN-SESSAO-005: depois de um comando executado até o fim a conexão não está dentro de uma transação. Do que deu certo, só o
+        // comando utilitário pode ter aberto uma; o que veio com contagem de linhas ou com um conjunto de resultados não paga a
+        // conferência.
+        if (executed.IsSuccess && _utilityCommand && await EndStrayTransactionAsync(afterAFailure: false))
+            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage, Executed: true);
+
+        // O comando que falhou, ou que foi cancelado enquanto devolvia as linhas, também rodou no banco. Onde ele pode ter deixado
+        // uma transação aberta, ela é desfeita aqui, com a conexão viva, e o comando seguinte encontra a sessão limpa. A resposta
+        // continua sendo a falha dele, como veio, menos numa: a do cancelamento diz que o que o comando gravou está confirmado, e
+        // o que ele gravou dentro da transação acabou de ser desfeito. Ali a resposta é a do mesmo comando sem o cancelamento, a
+        // recusa, dizendo o que houve. Nas duas recusas daqui o comando rodou, e o cursor anterior já fechou: `Executed` diz isso à tela
+        // (RN-SESSAO-005), e a recusa antes de executar, no começo do `ExecuteAsync`, não o leva.
+        if (executed.IsFailure && MayLeaveATransactionOpenWhenItFails && await EndStrayTransactionAsync(afterAFailure: true) && _canceledWhileReturningRows)
+            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, UndoneTransactionMessage, Executed: true);
+
+        return executed;
+    }
+
+    public async Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
+    {
+        // RN-SQL-007: o cursor acabou, foi fechado por outro comando ou pelo tempo sem leitura.
+        if (_reader is null)
+            return new DatabaseFailure(EDatabaseFailure.NoOpenCursor, NoOpenCursorMessage);
+
+        var sql = _cursorSql;
+        var page = await RunAsync(nameof(FetchNextAsync), EDatabaseFailure.ExecutionFailed, token => ReadPageAsync(Stopwatch.GetTimestamp(), toTheEnd: false, token), cancellationToken, continuesTheCursor: true);
+        if (page.IsSuccess || !IsWriteRefusal(page.Error))
+            return page;
+
+        // Uma função chamada pela leitura só gravou linhas adiante. A tentativa foi desfeita, e a mesma leitura, executada de novo, não
+        // passa mais por ela: roda até o fim e confirma.
+        _writesAfterTheFirstPage = sql;
+
+        return page.Error with { Message = $"{page.Error.Message}\n{WritesAfterTheFirstPageMessage}" };
+    }
+
+    public async Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken)
+    {
+        // Sem transação só de leitura, o que impede a contagem de gravar é o texto: o que não é uma leitura só nem vai ao banco.
+        if (!MayBeCounted(sql))
+            return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, NotCountableMessage);
+
+        var total = await RunAsync(nameof(CountAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            // RN-SQL-006: contar é executar o comando de novo, como subconsulta. Dentro da transação só de leitura ele não grava outra vez.
+            await BeginReadOnlyAsync(token);
+            var reader = await StartAsync(CountSql(sql), [], userCommand: true, token);
+            await reader.ReadAsync(token);
+
+            // O total chega como inteiro de 32 bits nos drivers da IBM, de 64 no PostgreSQL tipado e como texto no formato de texto.
+            var value = Convert.ToInt64(reader.GetValue(0), CultureInfo.InvariantCulture);
+            await FinishCursorAsync(token);
+
+            return value;
+        }, cancellationToken);
+
+        // A posição seria a do comando embrulhado, e não a do que o usuário escreveu.
+        if (total.IsFailure)
+            return total.Error with { Position = null };
+
+        return total;
+    }
+
+    public Task CloseCursorAsync()
+        => DisposeCursorAsync();
+
+    public void Cancel()
+    {
+        // RN-SQL-010: sem comando em andamento não há o que interromper, e um cursor aberto e parado fica como está.
+        if (!_running)
+            return;
+
+        _canceled = true;
+
+        // A fonte vale para o que ainda não foi enviado, e é como o driver que a observa interrompe o que já está no banco; o `Cancel` do
+        // comando é para o driver que não a observa. O `Send` é assíncrono, mas as chamadas aqui são síncronas: quando ele devolve a
+        // tarefa, ela já terminou.
+        var cancellation = _cancellation;
+        var command = _command;
+        _ = Send(nameof(Cancel), EDatabaseFailure.ExecutionFailed, () =>
+        {
+            cancellation?.Cancel();
+
+            if (command is not null)
+                CancelCommand(command);
+
+            return Task.FromResult(true);
+        }, onThisThread: true);
+    }
+
+    public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken)
+        => QueryAsync(nameof(GetSchemasAsync), EDatabaseFailure.ExecutionFailed, SchemasSql, [], reader => new SchemaInfo(Text(reader, 0), Flag(reader, 1), Number(reader, 2), Number(reader, 3), Number(reader, 4)), cancellationToken);
+
+    public async Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken)
+    {
+        // Quem valida o tipo é a rota; aqui ele só não pode virar exceção nem SQL.
+        if (ObjectsSql(kind) is not { } sql)
+            return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, UnknownObjectKindMessage);
+
+        return await QueryAsync(nameof(GetObjectsAsync), EDatabaseFailure.ExecutionFailed, sql, [schema], reader => new DatabaseObjectInfo(Text(reader, 0), Text(reader, 1), reader.IsDBNull(2) ? null : Convert.ToInt64(reader.GetValue(2), CultureInfo.InvariantCulture), NullableText(reader, 3)), cancellationToken);
+    }
+
+    public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)
+        => QueryAsync(nameof(GetColumnsAsync), EDatabaseFailure.ExecutionFailed, ColumnsSql, [schema, table], reader => new ColumnInfo(Text(reader, 0), Text(reader, 1), Flag(reader, 2), Flag(reader, 3), Number(reader, 4), NullableText(reader, 5), NullableText(reader, 6)), cancellationToken);
+
+    public async Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(string schema, string table, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync(nameof(GetIndexesAsync), EDatabaseFailure.ExecutionFailed, IndexesSql, [schema, table], reader => (Name: Text(reader, 0), IsUnique: Flag(reader, 1), Column: Text(reader, 2), Method: NullableText(reader, 3)), cancellationToken);
+        if (rows.IsFailure)
+            return rows.Error;
+
+        // O `GroupBy` mantém a ordem em que as linhas chegaram: os índices pelo nome, e as colunas na ordem do índice.
+        return Result.Success<IReadOnlyList<IndexInfo>, DatabaseFailure>([.. rows.Value.GroupBy(row => row.Name).Select(index => new IndexInfo(index.Key, [.. index.Select(row => row.Column)], index.First().IsUnique, index.First().Method))]);
+    }
+
+    public async Task<Result<IReadOnlyList<ForeignKeyInfo>, DatabaseFailure>> GetForeignKeysAsync(string schema, string table, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync(nameof(GetForeignKeysAsync), EDatabaseFailure.ExecutionFailed, ForeignKeysSql, [schema, table], ReadForeignKeyRow, cancellationToken);
+        if (rows.IsFailure)
+            return rows.Error;
+
+        // As chaves de uma tabela têm nomes diferentes: o nome basta para juntar as colunas de cada uma.
+        return Result.Success<IReadOnlyList<ForeignKeyInfo>, DatabaseFailure>([.. rows.Value.GroupBy(row => row.Name).Select(foreignKey => new ForeignKeyInfo(foreignKey.Key, [.. foreignKey.Select(row => row.Column)], foreignKey.First().ReferencedSchema, foreignKey.First().ReferencedTable, [.. foreignKey.Select(row => row.ReferencedColumn)], foreignKey.First().OnDelete, foreignKey.First().OnUpdate))]);
+    }
+
+    public async Task<Result<IReadOnlyList<ReferencingForeignKeyInfo>, DatabaseFailure>> GetReferencingForeignKeysAsync(string schema, string table, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync(nameof(GetReferencingForeignKeysAsync), EDatabaseFailure.ExecutionFailed, ReferencedBySql, [schema, table], ReadForeignKeyRow, cancellationToken);
+        if (rows.IsFailure)
+            return rows.Error;
+
+        // Duas tabelas diferentes podem ter chaves de mesmo nome apontando para esta: cada chave é o nome dentro da tabela que a tem.
+        return Result.Success<IReadOnlyList<ReferencingForeignKeyInfo>, DatabaseFailure>([.. rows.Value.GroupBy(row => (row.Name, row.ReferencingSchema, row.ReferencingTable)).Select(foreignKey => new ReferencingForeignKeyInfo(foreignKey.Key.Name, foreignKey.Key.ReferencingSchema, foreignKey.Key.ReferencingTable, [.. foreignKey.Select(row => row.Column)], [.. foreignKey.Select(row => row.ReferencedColumn)], foreignKey.First().OnDelete, foreignKey.First().OnUpdate))]);
+    }
+
+    public async Task<Result<IReadOnlyList<CheckConstraintInfo>, DatabaseFailure>> GetChecksAsync(string schema, string table, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync(nameof(GetChecksAsync), EDatabaseFailure.ExecutionFailed, ChecksSql, [schema, table], reader => (Name: Text(reader, 0), Chunk: Text(reader, 1)), cancellationToken);
+        if (rows.IsFailure)
+            return rows.Error;
+
+        return Result.Success<IReadOnlyList<CheckConstraintInfo>, DatabaseFailure>([.. rows.Value.GroupBy(row => row.Name).Select(check => new CheckConstraintInfo(check.Key, JoinChunks([.. check.Select(row => row.Chunk)])))]);
+    }
+
+    public async Task<Result<ViewDefinitionInfo, DatabaseFailure>> GetViewDefinitionAsync(string schema, string view, CancellationToken cancellationToken)
+    {
+        var rows = await QueryAsync(nameof(GetViewDefinitionAsync), EDatabaseFailure.ExecutionFailed, ViewDefinitionSql, [schema, view], reader => NullableText(reader, 0), cancellationToken);
+        if (rows.IsFailure)
+            return rows.Error;
+
+        // RN-CAT-006: o que o banco não devolve é nulo, e não um texto vazio.
+        string[] chunks = [.. rows.Value.OfType<string>()];
+
+        return new ViewDefinitionInfo(chunks.Length == 0 ? null : JoinChunks(chunks));
+    }
+
+    /// <summary>RN-CAT-008: duas consultas de catálogo para o esquema inteiro, e não uma por tabela: a tela desenha o esquema com esta chamada só.</summary>
+    public async Task<Result<SchemaDiagramInfo, DatabaseFailure>> GetDiagramAsync(string schema, CancellationToken cancellationToken)
+    {
+        var columns = await QueryAsync(nameof(GetDiagramAsync), EDatabaseFailure.ExecutionFailed, DiagramColumnsSql, [schema], reader => (Table: Text(reader, 0), Column: reader.IsDBNull(1) ? null : new DiagramColumnInfo(Text(reader, 1), Text(reader, 2), Flag(reader, 3), Flag(reader, 4))), cancellationToken);
+        if (columns.IsFailure)
+            return columns.Error;
+
+        var foreignKeys = await QueryAsync(nameof(GetDiagramAsync), EDatabaseFailure.ExecutionFailed, DiagramForeignKeysSql, [schema], ReadForeignKeyRow, cancellationToken);
+        if (foreignKeys.IsFailure)
+            return foreignKeys.Error;
+
+        return new SchemaDiagramInfo([.. columns.Value.GroupBy(row => row.Table).Select(table => new DiagramTableInfo(table.Key, [.. table.Select(row => row.Column).OfType<DiagramColumnInfo>()]))], [.. foreignKeys.Value.GroupBy(row => (row.Name, row.ReferencingTable)).Select(foreignKey => new DiagramForeignKeyInfo(foreignKey.Key.Name, foreignKey.Key.ReferencingTable, [.. foreignKey.Select(row => row.Column)], foreignKey.First().ReferencedSchema, foreignKey.First().ReferencedTable, [.. foreignKey.Select(row => row.ReferencedColumn)], foreignKey.First().OnDelete, foreignKey.First().OnUpdate))]);
+    }
+
+    /// <summary>
+    /// RN-CAT-010. O que o banco não informa a esta conta não vem na lista: o valor nulo e a consulta que ele recusa (sem permissão numa
+    /// visão de administração, por exemplo) ficam de fora, e a resposta é a lista com o resto. A recusa só é a resposta quando a conexão
+    /// caiu ou a requisição desistiu.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<DatabasePropertyInfo>, DatabaseFailure>> GetPropertiesAsync(CancellationToken cancellationToken)
+    {
+        var properties = new List<DatabasePropertyInfo>();
+
+        foreach (var sql in PropertiesSql)
+        {
+            var rows = await QueryAsync(nameof(GetPropertiesAsync), EDatabaseFailure.ExecutionFailed, sql, [], reader => (Name: Text(reader, 0), Value: NullableText(reader, 1)), cancellationToken);
+            if (rows.IsFailure && (!IsOpen || cancellationToken.IsCancellationRequested))
+                return rows.Error;
+
+            if (rows.IsSuccess)
+                properties.AddRange(rows.Value.Where(row => row.Value is not null).Select(row => new DatabasePropertyInfo(row.Name, row.Value!)));
+        }
+
+        return properties;
+    }
+
+    /// <summary>
+    /// Não falha: o cursor, a conexão e o que mais o driver mantém são descartados cada um na sua chamada, para a falha de um não deixar
+    /// o outro para trás. Chamado com um comando ainda em andamento (quem fecha a sessão desistiu de esperar por ele), não toca no
+    /// leitor, que é do comando: descarta só a conexão, e o driver conclui o descarte quando o comando voltar.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (!_running)
+            await DisposeCursorAsync();
+
+        await Send(nameof(DisposeAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            if (_connection is not null)
+                await _connection.DisposeAsync();
+
+            return true;
+        });
+        _discarded = true;
+
+        await Send(nameof(DisposeAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            await DisposeDriverAsync();
+
+            return true;
+        });
+    }
+
+    private static string Text(DbDataReader reader, int ordinal)
+        => Convert.ToString(reader.GetValue(ordinal), CultureInfo.InvariantCulture) ?? string.Empty;
+
+    /// <summary>O texto do catálogo que pode faltar: nulo continua nulo, e não vira texto vazio.</summary>
+    private static string? NullableText(DbDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal) ? null : Text(reader, ordinal);
+
+    private static int Number(DbDataReader reader, int ordinal)
+        => Convert.ToInt32(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
+
+    /// <summary>Uma linha de <see cref="ForeignKeysSql"/>, de <see cref="ReferencedBySql"/> e de <see cref="DiagramForeignKeysSql"/>: as três têm as mesmas colunas.</summary>
+    private static ForeignKeyRow ReadForeignKeyRow(DbDataReader reader)
+        => new(Text(reader, 0), Text(reader, 1), Text(reader, 2), Text(reader, 3), Text(reader, 4), Text(reader, 5), Text(reader, 6), NullableText(reader, 7), NullableText(reader, 8));
+
+    /// <summary>Booleano do catálogo: `boolean` onde o banco tem, 0 ou 1 onde não tem.</summary>
+    private static bool Flag(DbDataReader reader, int ordinal)
+        => Convert.ToBoolean(reader.GetValue(ordinal), CultureInfo.InvariantCulture);
+
+    private static long ElapsedMs(long started)
+        => (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
+    /// <summary>
+    /// RN-SESSAO-005 e RN-SQL-013. Paginado: dentro da transação só de leitura, com a primeira página lida e o cursor aberto se há mais.
+    /// Completo: fora de transação e lido até o fim, de modo que o banco confirma o comando antes de a resposta sair. Nos dois a página
+    /// tem até `pageSize` linhas (RN-SQL-016).
+    /// </summary>
+    private async Task<QueryOutcome> ExecuteCommandAsync(string sql, int pageSize, bool paged, CancellationToken cancellationToken)
+    {
+        _utilityCommand = false;
+        var started = Stopwatch.GetTimestamp();
+
+        // ponytail: abrir e fechar a transação custa duas idas ao banco a mais por leitura. Se a rede pesar, mandar o `BEGIN` junto com o
+        // comando (`DbBatch`) e fechar a transação depois de devolver a página.
+        if (paged)
+            await BeginReadOnlyAsync(cancellationToken);
+
+        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken);
+        var requested = cancellationToken;
+
+        // RN-SQL-010: no driver que não lança quando o cancelamento chega durante a leitura, o comando executado até o fim já rodou
+        // no banco se o leitor abriu sem exceção (é na execução que esse driver lança). O cancelamento que chega daqui em diante
+        // fecha o cursor pelo `Cancel` do comando e corta as linhas da resposta, mas não desfaz o que o comando gravou.
+        if (!paged && CancelReturnsEmptyResult)
+        {
+            _executed = true;
+            cancellationToken = CancellationToken.None;
+        }
+
+        // RN-SQL-008: comando sem linhas. Fora de INSERT, UPDATE e DELETE o driver informa -1, e a resposta é zero: todo desfecho tem a página ou as linhas afetadas.
+        if (reader.FieldCount == 0)
+        {
+            var recordsAffected = reader.RecordsAffected;
+            _utilityCommand = MayHaveOpenedATransaction(returnedRows: false, recordsAffected);
+            await FinishCursorAsync(cancellationToken);
+
+            return new QueryOutcome(null, Math.Max(recordsAffected, 0), ElapsedMs(started));
+        }
+
+        _columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
+        _cursorSql = sql;
+        _pageSize = pageSize;
+        _utilityCommand = !paged && MayHaveOpenedATransaction(returnedRows: true, reader.RecordsAffected);
+
+        var page = await ReadPageAsync(started, toTheEnd: !paged, cancellationToken);
+
+        // O comando sem linhas não passa por aqui: nele não há leitura para o cancelamento cortar. O que terminou de devolver as
+        // linhas antes de o cancelamento ser pedido também não: a marca é lida aqui, depois da última.
+        _canceledWhileReturningRows = _executed && (_canceled || requested.IsCancellationRequested);
+
+        return new QueryOutcome(page, null, page.ElapsedMs);
+    }
+
+    /// <summary>Uma consulta do próprio Prism lida até o fim, fora de transação: catálogo e verificação. Passa pelo mesmo caminho de leitura dos comandos do usuário.</summary>
+    private Task<Result<IReadOnlyList<T>, DatabaseFailure>> QueryAsync<T>(string operation, EDatabaseFailure kind, string sql, IReadOnlyList<object> parameters, Func<DbDataReader, T> map, CancellationToken cancellationToken)
+        => RunAsync<IReadOnlyList<T>>(operation, kind, async token =>
+        {
+            var reader = await StartAsync(sql, parameters, userCommand: false, token);
+            var items = new List<T>();
+
+            while (await reader.ReadAsync(token))
+                items.Add(map(reader));
+
+            await FinishCursorAsync(token);
+
+            return items;
+        }, cancellationToken);
+
+    /// <summary>
+    /// Um comando em andamento, do começo ao fim: é o intervalo em que o `Cancel` vale. Um comando que falha no meio deixa o leitor num
+    /// estado que não serve mais: o cursor fecha, a transação da tentativa é desfeita, e a conexão fica pronta para o próximo.
+    /// </summary>
+    /// <param name="continuesTheCursor">É o "carregar mais": o único comando que não abandona o cursor anterior antes de começar.</param>
+    private async Task<Result<T, DatabaseFailure>> RunAsync<T>(string operation, EDatabaseFailure kind, Func<CancellationToken, Task<T>> call, CancellationToken cancellationToken, bool continuesTheCursor = false)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        // O cancelamento que chegou com o cursor aberto e parado (depois de a página anterior sair) continua valendo no "carregar
+        // mais": no driver que só para de entregar linhas, esse cursor foi cortado.
+        if (!continuesTheCursor)
+            _canceled = false;
+
+        _executed = false;
+        _canceledWhileReturningRows = false;
+        _cancellation = cancellation;
+        _running = true;
+
+        // Abandonar o cursor anterior é do comando novo (o `Cancel` já vale), mas não entra no tempo que ele mede.
+        if (!continuesTheCursor)
+            await DisposeCursorAsync();
+
+        // Se essa limpeza (ou a de um comando anterior) fechou a conexão, o comando não tem para onde ir: a resposta diz isso, no lugar
+        // do erro do driver para uma conexão descartada.
+        var result = IsOpen ? await Send(operation, kind, () => call(cancellation.Token)) : new DatabaseFailure(kind, ConnectionClosedMessage);
+
+        // RN-SQL-010: um comando que terminou é sucesso, mesmo com um cancelamento a caminho. A exceção é a leitura no driver que
+        // não lança ao ser cancelado e devolve um resultado vazio ou cortado: nela, quem sabe do cancelamento é o Prism. Só o
+        // comando em andamento olha a marca: a sonda de transação e a limpeza, que rodam fora daqui, nunca a leem. Uma leitura não
+        // grava nada: o desfecho é `canceled`.
+        var cancelRequested = _canceled || cancellation.IsCancellationRequested;
+        if (result.IsSuccess && CancelReturnsEmptyResult && !_executed && cancelRequested)
+            result = new DatabaseFailure(kind, CanceledMessage, Outcome: ECancelOutcome.Canceled);
+
+        // O comando executado até o fim que devolvia linhas quando o cancelamento chegou: sem página e sem total, que podem estar
+        // cortados, e sem dizer que foi cancelado, porque o que ele gravou está confirmado.
+        if (result.IsSuccess && _canceledWhileReturningRows)
+            result = new DatabaseFailure(kind, CanceledWhileReturningRowsMessage, Outcome: ECancelOutcome.Partial);
+
+        if (result.IsFailure)
+        {
+            result = WithTheCancelOutcome(result.Error, cancelRequested);
+            await DisposeCursorAsync();
+        }
+
+        _running = false;
+        _cancellation = null;
+
+        return result;
+    }
+
+    /// <summary>
+    /// RN-SQL-010 (Ruling 135): o desfecho do cancelamento que a falha leva à tela. Só existe com pedido de cancelamento para este
+    /// comando: sem ele, a interrupção que o banco diz (o 57014 de um `statement_timeout`) é um erro comum. E a interrupção só prova
+    /// que nada ficou enquanto o comando não tinha rodado no banco: no driver que só lança na execução, o comando executado até o fim
+    /// já rodou quando o leitor abriu (<see cref="_executed"/>), e uma interrupção dali em diante deixa o desfecho em aberto.
+    /// </summary>
+    private DatabaseFailure WithTheCancelOutcome(DatabaseFailure failure, bool cancelRequested)
+        => failure.Outcome switch
+        {
+            null => failure,
+            _ when !cancelRequested => failure with { Outcome = null },
+            ECancelOutcome.Canceled when _executed => failure with { Outcome = ECancelOutcome.Unknown },
+            _ => failure
+        };
+
+    /// <summary>
+    /// Para o gancho de um banco: faz uma chamada ao driver pelo único `try` da integração e diz se ela passou. Aqui a recusa do driver
+    /// é a resposta que o gancho procura, e não um defeito: não vai para o log como conexão que falhou. A recusa do banco vai, como as
+    /// outras; a que é resposta de rotina do gancho (<see cref="IsRoutineRefusal"/>) vai como depuração.
+    /// </summary>
+    /// <param name="onThisThread">A chamada não espera o banco: roda na thread de quem chama mesmo com o driver síncrono, e já terminou quando a tarefa é devolvida.</param>
+    protected async Task<bool> TryAsync(string operation, Func<Task> call, bool onThisThread = false)
+        => (await Send(operation, EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            await call();
+
+            return true;
+        }, refusalIsTheAnswer: true, onThisThread)).IsSuccess;
+
+    /// <summary>
+    /// RN-SESSAO-005, a rede de segurança: se a conexão ficou dentro de uma transação (uma forma de `BEGIN` que a recusa da RN-SQL-003
+    /// não conhece), ela é desfeita aqui, antes de qualquer outro comando; a transação só tem o comando que a abriu. Diz se havia uma.
+    /// O fim é o mesmo da transação da tentativa: `ROLLBACK`, e, se ele não passa com a conexão viva, a conexão é fechada.
+    ///
+    /// O comando que chega aqui já foi confirmado pelo banco, e responder que ele foi recusado faria a pessoa executá-lo de novo e gravar
+    /// duas vezes. Só a transação que a sonda achou com certeza muda a resposta; a sonda que falhou não muda.
+    /// </summary>
+    /// <param name="afterAFailure">O comando falhou ou foi cancelado enquanto devolvia as linhas: a transação que ele deixou é desfeita do mesmo jeito, e quem chama decide a resposta.</param>
+    private async Task<bool> EndStrayTransactionAsync(bool afterAFailure)
+    {
+        if (!IsOpen)
+            return false;
+
+        var probe = await ProbeTransactionAsync(_connection!);
+
+        // Conexão que não está aberta nunca é "há transação", responda a sonda o que responder: o driver recusa uma transação nova
+        // também na conexão que caiu ou foi descartada. Nela não há o que desfazer, e quem a usa vê por `IsOpen` que ela não serve mais.
+        if (probe == ETransactionProbe.Idle || !IsOpen)
+            return false;
+
+        // Há uma transação, ou a sonda falhou com a conexão viva e pode tê-la deixado dentro da transação dela mesma: o fim é um só.
+        _inTransaction = true;
+        await DisposeCursorAsync();
+
+        if (probe == ETransactionProbe.Failed)
+            return false;
+
+        // RN-LOG-001: sem o comando. Depois de um sucesso, é o sinal de que falta uma forma de abrir transação na recusa da RN-SQL-003.
+        if (afterAFailure)
+            _logger.Warning("Um comando que falhou ou foi cancelado deixou uma transação aberta na conexão: ela foi desfeita.");
+        else
+            _logger.Warning("Um comando deixou uma transação aberta na conexão: ela foi desfeita, e o comando foi recusado.");
+
+        return true;
+    }
+
+    /// <summary>
+    /// A marca sobe antes do envio: um `BEGIN` cancelado depois de o banco executá-lo deixaria aberta uma transação que ninguém desfaz, e
+    /// a gravação seguinte cairia dentro dela. Desfazer sem ela aberta não custa nada: no PostgreSQL é só um aviso.
+    /// </summary>
+    private async Task BeginReadOnlyAsync(CancellationToken cancellationToken)
+    {
+        // O banco sem transação só de leitura: a leitura roda em auto-commit, e não há o que confirmar nem desfazer depois.
+        if (BeginReadOnlySql is not { } beginReadOnlySql)
+            return;
+
+        _inTransaction = true;
+        await NonQueryAsync(beginReadOnlySql, cancellationToken);
+    }
+
+    private async Task NonQueryAsync(string sql, CancellationToken cancellationToken)
+    {
+        await using var command = _connection!.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Envia o comando e devolve o leitor, que fica aberto. Quem chama já fechou o cursor anterior: com um leitor aberto o driver do
+    /// PostgreSQL não aceita outro comando na conexão. Os parâmetros são posicionais, e cada banco escreve o marcador dele (`$1`, `?`).
+    /// </summary>
+    /// <param name="userCommand">É comando do usuário: sem tempo limite, porque só para quando ele cancela (RN-SQL-010), e com o ajuste que o banco pede.</param>
+    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken)
+    {
+        var command = _connection!.CreateCommand();
+        command.CommandText = sql;
+
+        // O padrão dos drivers é 30 segundos, e um comando do usuário pode levar horas.
+        if (userCommand)
+        {
+            command.CommandTimeout = 0;
+            ConfigureUserCommand(command);
+        }
+
+        foreach (var value in parameters)
+        {
+            var parameter = command.CreateParameter();
+            parameter.Value = value;
+            command.Parameters.Add(parameter);
+        }
+
+        _command = command;
+        _reader = await ExecuteReaderAsync(command, cancellationToken);
+
+        return _reader;
+    }
+
+    /// <summary>
+    /// RN-SQL-004, 005 e 016: lê do leitor aberto até as linhas por página do cursor (<see cref="_pageSize"/>) e para. Nada conta o total
+    /// nem lê o resto: o que o banco ainda tem para mandar fica no banco e na rede. RN-SQL-013: no comando que grava, o resto é lido só
+    /// para ser contado, porque o banco só confirma o comando depois de entregar a última linha.
+    /// </summary>
+    private async Task<QueryPage> ReadPageAsync(long started, bool toTheEnd, CancellationToken cancellationToken)
+    {
+        var reader = _reader!;
+        var rows = new List<string?[]>(_pageSize);
+        var truncatedCells = new List<int[]>();
+
+        while (rows.Count < _pageSize && (_rowPending || await reader.ReadAsync(cancellationToken)))
+        {
+            _rowPending = false;
+
+            var row = new string?[_columns.Count];
+            for (var column = 0; column < row.Length; column++)
+            {
+                // ponytail: a célula vem inteira para a memória antes do corte; um texto ou binário de centenas de MB custa esse tanto por
+                // linha. Se pesar, ler em pedaços (`GetChars`/`GetBytes` com `SequentialAccess`) só até o limite da RN-SQL-011.
+                row[column] = CellFormatter.Format(ReadCell(reader, column, _columns[column].Kind), out var truncated);
+                if (truncated)
+                    truncatedCells.Add([rows.Count, column]);
+            }
+
+            rows.Add(row);
+        }
+
+        if (toTheEnd)
+        {
+            long totalRows = rows.Count;
+            while (await reader.ReadAsync(cancellationToken))
+                totalRows++;
+
+            await FinishCursorAsync(cancellationToken);
+
+            return new QueryPage(_columns, rows, false, ElapsedMs(started), truncatedCells, totalRows);
+        }
+
+        // Uma leitura a mais diz se há outra página sem contar o total: a linha fica no leitor para a página seguinte.
+        var hasMore = _rowPending = rows.Count == _pageSize && await reader.ReadAsync(cancellationToken);
+
+        // RN-SQL-007: o cursor fecha quando acaba.
+        if (!hasMore)
+            await FinishCursorAsync(cancellationToken);
+
+        return new QueryPage(_columns, rows, hasMore, ElapsedMs(started), truncatedCells);
+    }
+
+    /// <summary>
+    /// O fim de um comando que foi lido até a última linha, e parte dele: quem chama está dentro do `Send` do comando, e o que falhar
+    /// aqui é a falha do comando. O banco só confirma depois de entregar a última linha (é ali que ele confere uma restrição adiada, por
+    /// exemplo), e a recusa dele só aparece quando o resultado é lido até o fim, o que o `NextResultAsync` faz, ou no `COMMIT` da
+    /// transação da tentativa. Responder com as linhas sem passar por aqui seria mostrar o que o banco não gravou.
+    ///
+    /// O `COMMIT` existe pelo que a transação só de leitura deixa passar e precisa ficar: o que a leitura ajusta na sessão ou grava em
+    /// tabela temporária. Quando algo aqui falha, o <see cref="RunAsync"/> desfaz o que sobrou pelo <see cref="DisposeCursorAsync"/>.
+    /// </summary>
+    private async Task FinishCursorAsync(CancellationToken cancellationToken)
+    {
+        // Até não haver mais resultado: o driver que executa os comandos de um envio um por um (os da IBM) só roda o seguinte
+        // quando o leitor avança, e um `CALL` devolve mais de um conjunto. No PostgreSQL a primeira chamada já responde que acabou.
+        while (await _reader!.NextResultAsync(cancellationToken))
+        {
+        }
+
+        await _reader.DisposeAsync();
+        await _command!.DisposeAsync();
+        _reader = null;
+        _command = null;
+        _rowPending = false;
+        _cursorSql = null;
+
+        if (!_inTransaction)
+            return;
+
+        await NonQueryAsync(CommitSql, CancellationToken.None);
+        _inTransaction = false;
+    }
+
+    /// <summary>
+    /// Abandona o cursor: descarta o leitor e o comando e desfaz a transação que estiver aberta (`ROLLBACK`). É o fim de um cursor que
+    /// não foi lido até a última linha (outro comando chegou, a pessoa fechou, o tempo sem leitura passou) e de um comando que falhou.
+    /// Com linhas ainda por vir, cancela o comando antes: o descarte do leitor do PostgreSQL lê e joga fora tudo o que o banco ainda
+    /// mandaria, e numa tabela grande isso é o resultado inteiro atravessando a rede. Não marca `_canceled`: este cancelamento é do Prism.
+    ///
+    /// Não falha, e por isso tem o próprio `Send`. O que o descarte encontra no fim de um resultado que ninguém leu até lá (um erro que
+    /// o banco deixou depois das linhas já lidas) fica com o cursor abandonado: vai para o log, e nunca vira o erro do comando seguinte.
+    /// E o fim da transação não depende de o descarte dar certo: é a saída do bloco, que roda de qualquer jeito.
+    /// </summary>
+    private async Task DisposeCursorAsync()
+    {
+        var reader = _reader;
+        var command = _command;
+        _reader = null;
+        _command = null;
+        _rowPending = false;
+        _cursorSql = null;
+
+        if (reader is null && command is null && !_inTransaction)
+            return;
+
+        await Send(nameof(DisposeCursorAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            await using (new TransactionEnd(this))
+            {
+                if (reader is not null)
+                {
+                    command?.Cancel();
+                    await reader.DisposeAsync();
+                }
+
+                if (command is not null)
+                    await command.DisposeAsync();
+            }
+
+            return true;
+        });
+
+        if (!_inTransaction)
+            return;
+
+        // O `ROLLBACK` não passou, e a conexão continua viva: ela ficaria presa numa transação abortada, e o comando
+        // seguinte rodaria dentro dela. A conexão é fechada (o banco desfaz a transação ao perdê-la), e quem a usa vê por `IsOpen` que
+        // ela não serve mais e tira a sessão do registro.
+        _inTransaction = false;
+        await Send(nameof(DisposeCursorAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            if (_connection is not null)
+                await _connection.DisposeAsync();
+
+            return true;
+        });
+        _discarded = true;
+    }
+
+    /// <summary>
+    /// O único `try` da integração: nenhuma exceção do driver sai daqui, e a falha volta como `Result`. O log recebe a classe do erro e
+    /// o SQLSTATE, nunca a exceção: a mensagem dela é a do banco, que cita o SQL e os dados (RN-LOG-001); ela vai para a tela, dentro da
+    /// recusa. O que não é resposta de banco (um defeito, um valor que o driver não soube ler) leva também a pilha.
+    /// </summary>
+    /// <param name="refusalIsTheAnswer">Quem chama pergunta algo ao driver, e a exceção dele é uma das respostas: não é defeito, e não vai para o log como um.</param>
+    /// <param name="onThisThread">A chamada não espera o banco (é o pedido de cancelamento): roda na thread de quem chama mesmo com o driver síncrono.</param>
+    private async Task<Result<T, DatabaseFailure>> Send<T>(string operation, EDatabaseFailure kind, Func<Task<T>> call, bool refusalIsTheAnswer = false, bool onThisThread = false)
+    {
+        try
+        {
+            if (!BlocksTheCallingThread || onThisThread)
+                return await call();
+
+            // A cultura acompanha a chamada e as continuações dela, e não sai desta tarefa para quem chamou.
+            return await Task.Run(() =>
+            {
+                CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
+                return call();
+            });
+        }
+        catch (Exception exception)
+        {
+            // O driver da IBM entrega embrulhados o cancelamento de uma leitura e o erro que o banco devolve durante ela: por dentro
+            // são o mesmo cancelamento e a mesma recusa, e a resposta e o log são os deles, e não os de um defeito.
+            if (exception is AggregateException { InnerExceptions: [OperationCanceledException or DbException] } wrapped)
+                exception = wrapped.InnerExceptions[0];
+
+            var failure = ToFailure(kind, exception);
+
+            // RN-SQL-010: o banco disse que interrompeu o comando, e o desfez. Quem decide se isso vira o desfecho da resposta é o
+            // `RunAsync`, que sabe se houve pedido de cancelamento (`WithTheCancelOutcome`).
+            if (IsInterruption(exception, failure))
+                failure = failure with { Outcome = ECancelOutcome.Canceled };
+
+            // O cancelamento sem mensagem do banco só tem o texto do .NET, que não vai para a tela. Com a conexão aberta, o comando nem
+            // chegou a ser enviado, ou era uma leitura, que não grava (provado nos dois drivers desta árvore; ver "O desfecho do
+            // cancelamento e o `executed`" no guia do back-end): o Npgsql 10 só lança o cancelamento sem a resposta 57014 do servidor antes de enviar o comando (o
+            // `ThrowIfCancellationRequested` do começo do `ExecuteReader`) ou ao derrubar a conexão; e o da IBM, que é síncrono, só pelas
+            // versões assíncronas do ADO.NET, que conferem o pedido antes de chamar o driver, enquanto o comando executado até o fim é
+            // lido sem o pedido. Com a conexão fechada no meio de um comando, o driver desistiu de esperar a resposta do banco ao
+            // cancelamento e a derrubou: o comando pode ter sido concluído lá, e a resposta não diz que ele foi cancelado.
+            if (exception is OperationCanceledException && failure.SqlState is null)
+                failure = _running && !IsOpen ? failure with { Message = UnknownOutcomeMessage, Outcome = ECancelOutcome.Unknown } : failure with { Message = CanceledMessage, Outcome = ECancelOutcome.Canceled };
+
+            if (exception is DbException or OperationCanceledException)
+                _logger.Write(refusalIsTheAnswer && IsRoutineRefusal ? LogEventLevel.Debug : LogEventLevel.Information, "O banco recusou {Operation} ({ExceptionType}, SQLSTATE {SqlState}).", operation, exception.GetType().Name, failure.SqlState);
+            else if (!refusalIsTheAnswer)
+                _logger.Error("A conexão com o banco falhou em {Operation} ({ExceptionType}).{NewLine}{StackTrace}", operation, exception.GetType().Name, Environment.NewLine, exception.StackTrace);
+
+            return failure;
+        }
+    }
+
+    /// <summary>Um par de colunas de uma chave estrangeira, com a chave, as duas pontas e as regras dela.</summary>
+    private sealed record ForeignKeyRow(string Name, string ReferencingSchema, string ReferencingTable, string Column, string ReferencedSchema, string ReferencedTable, string ReferencedColumn, string? OnDelete, string? OnUpdate);
+
+    /// <summary>RN-SESSAO-005: o que a sonda de transação de um banco respondeu, depois de um comando utilitário que o banco confirmou.</summary>
+    protected enum ETransactionProbe
+    {
+        /// <summary>A conexão está fora de transação.</summary>
+        Idle,
+
+        /// <summary>O driver disse, sem enviar nada ao banco, que há uma transação aberta na conexão. A base só aceita a resposta com a conexão aberta.</summary>
+        InTransaction,
+
+        /// <summary>A sonda falhou por outro motivo. Não diz nada sobre o comando; a conexão, se continua viva, pode ter ficado dentro da transação da própria sonda.</summary>
+        Failed
+    }
+
+    /// <summary>
+    /// Desfaz a transação aberta na saída do bloco, também quando o descarte do leitor lança: sem `try`/`finally`, como o serviço do
+    /// cofre libera o semáforo. `_inTransaction` só é baixado depois de o banco aceitar o `ROLLBACK`.
+    /// </summary>
+    private readonly struct TransactionEnd(AdoDatabaseConnection connection) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            if (!connection._inTransaction)
+                return;
+
+            await connection.NonQueryAsync(RollbackSql, CancellationToken.None);
+            connection._inTransaction = false;
+        }
+    }
+}

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Tabela apontamento</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; scrollbar-color: #38414D #14181D; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box; padding: 6px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<a href="Workbench.dc.html" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 4px; color: #E6EAF0; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.01em"><svg width="64" height="24" viewBox="0 40 700 264" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><defs><filter id="prism-mark-glow-tabeladetalhe" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="14"></feGaussianBlur></filter><linearGradient id="prism-mark-ifx-tabeladetalhe" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-db2-tabeladetalhe" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-pg-tabeladetalhe" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-face-tabeladetalhe" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient></defs><g filter="url(#prism-mark-glow-tabeladetalhe)" opacity="0.6"><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="26"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path></g><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="14"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-mark-ifx-tabeladetalhe)"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-mark-db2-tabeladetalhe)"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-mark-pg-tabeladetalhe)"></path><path d="M300 50 L440 298 H160 Z" fill="#1A2028"></path><path d="M300 50 L160 298 L292 226 Z" fill="url(#prism-mark-face-tabeladetalhe)"></path><path d="M160 298 L292 226 L440 298 Z" fill="#11151A"></path><path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.16"></path><path d="M300 50 L440 298 H160 Z" stroke="#E6EAF0" stroke-width="13"></path><circle cx="220" cy="186" r="15" fill="#FFFFFF"></circle><path d="M656 69 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="10"></path><ellipse cx="676" cy="69" rx="20" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="10"></ellipse><path d="M656 145 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="10"></path><ellipse cx="676" cy="145" rx="20" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="10"></ellipse><path d="M656 221 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="10"></path><ellipse cx="676" cy="221" rx="20" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="10"></ellipse></svg><span>Prism</span></a>
+<button type="button" aria-label="Mostrar navegador" aria-pressed="false" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg></button>
+<a href="Conexoes.dc.html" style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M6 2v3M10 2v3M4 5h8v2.5a4 4 0 0 1-8 0zM8 11.5V14"></path></svg><span>Conexões</span></a>
+<a href="Configuracoes.dc.html" aria-label="Configurações" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h6M12 5h1M3 11h1M7 11h6"></path><circle cx="10.5" cy="5" r="1.5"></circle><circle cx="5.5" cy="11" r="1.5"></circle></svg></a>
+<span style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"></path></svg><span>marina.costa</span></span>
+<a href="Main.dc.html" style="display: flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Sair</a>
+</header>
+<nav aria-label="Abas abertas" style="display: flex; flex-wrap: wrap; align-items: stretch; gap: 2px; padding: 0 8px; background: #0E1114; border-bottom: 1px solid #2A313B">
+<a href="Workbench.dc.html" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 2h5.5L12 4.5V14H4z"></path><path d="M9.5 2v2.5H12"></path></svg><span>consulta-1.sql</span></a>
+<a href="TabelaDetalhe.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; background: #14181D; border-bottom: 2px solid {{accent}}; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="3" width="12" height="10" rx="1"></rect><path d="M2 6.5h12M6 6.5V13"></path></svg><span>apontamento</span><span style="flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: #FF8A7A; color: #14181D; font-size: 11px; line-height: 18px; font-weight: 600">Produção</span></a>
+<a href="DiagramaER.dc.html" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="2.5" width="5" height="4" rx="1"></rect><rect x="9" y="9.5" width="5" height="4" rx="1"></rect><path d="M4.5 6.5v3a2 2 0 0 0 2 2H9"></path></svg><span>Diagrama · producao</span></a>
+</nav>
+<main style="flex: 1; width: 100%; max-width: 1360px; box-sizing: border-box; margin: 0 auto; padding: 24px 32px 40px; display: flex; flex-direction: column; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #B4BCC8; font-size: 12px"><span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span><span>MES Produção / mes / producao</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 style="margin: 0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 24px; line-height: 32px; font-weight: 600">apontamento</h1>
+<span style="display: flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid #38414D; border-radius: 4px; color: #B4BCC8; font-size: 12px">Tabela</span>
+<div style="display: flex; gap: 4px; padding: 3px; background: #14181D; border: 1px solid #2A313B; border-radius: 8px">
+<a href="TabelaDados.dc.html" style="display: flex; align-items: center; height: 30px; padding: 0 14px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Registros</a>
+<a href="TabelaDetalhe.dc.html" aria-current="page" style="display: flex; align-items: center; height: 30px; padding: 0 14px; border-radius: 6px; background: #232A33; color: #E6EAF0; font-weight: 600; text-decoration: none">Estrutura</a>
+</div>
+<a href="DiagramaER.dc.html" style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="2.5" width="5" height="4" rx="1"></rect><rect x="9" y="9.5" width="5" height="4" rx="1"></rect><path d="M4.5 6.5v3a2 2 0 0 0 2 2H9"></path></svg><span>Ver no diagrama</span></a>
+</div>
+<nav aria-label="Seções da tabela" style="display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #2A313B">
+<a href="#colunas" style="display: flex; align-items: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 12px; border-bottom: 2px solid {{accent}}; color: #E6EAF0; font-weight: 600; text-decoration: none"><span>Colunas</span><span style="color: #B4BCC8; font-weight: 400">7</span></a>
+<a href="#fks" style="display: flex; align-items: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 12px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><span>Chaves estrangeiras</span><span>3</span></a>
+<a href="#indices" style="display: flex; align-items: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 12px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><span>Índices</span><span>3</span></a>
+<a href="#ddl" style="display: flex; align-items: center; height: 36px; box-sizing: border-box; padding: 0 12px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none">DDL</a>
+</nav>
+</div>
+<section id="colunas" aria-labelledby="h-colunas" style="background: #14181D; border: 1px solid #2A313B; border-radius: 8px; overflow: hidden">
+<h2 id="h-colunas" style="margin: 0; padding: 12px 16px; font-size: 14px; line-height: 20px; font-weight: 600; border-bottom: 1px solid #2A313B">Colunas</h2>
+<div style="overflow-x: auto">
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; line-height: 20px">
+<thead>
+<tr>
+<th scope="col" style="width: 40px; height: 36px; padding: 0 16px; text-align: right; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B">#</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Nome</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Tipo</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Aceita nulo</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Padrão</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Chave</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8; border-bottom: 1px solid #232A33">1</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">bigint</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">generated always as identity</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 600; color: #F2B644">PK</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8; border-bottom: 1px solid #232A33">2</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">ordem_id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">bigint</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #8E99A8">sem padrão</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 600; color: #7DB2FF">FK</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8; border-bottom: 1px solid #232A33">3</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">maquina_id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">bigint</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #8E99A8">sem padrão</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 600; color: #7DB2FF">FK</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8; border-bottom: 1px solid #232A33">4</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">operador_id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">bigint</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #8E99A8">sem padrão</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 600; color: #7DB2FF">FK</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8; border-bottom: 1px solid #232A33">5</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">quantidade</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">numeric(12,3)</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #8E99A8">sem padrão</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33"></td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8; border-bottom: 1px solid #232A33">6</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">refugo</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">numeric(12,3)</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">0</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33"></td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; text-align: right; color: #8E99A8">7</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">registrado_em</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">timestamptz</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">now()</td>
+<td style="height: 36px; padding: 0 16px"></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(520px, 100%), 1fr)); gap: 24px; align-items: start">
+<section id="fks" aria-labelledby="h-fks" style="min-width: 0; background: #14181D; border: 1px solid #2A313B; border-radius: 8px; overflow: hidden">
+<h2 id="h-fks" style="margin: 0; padding: 12px 16px; font-size: 14px; line-height: 20px; font-weight: 600; border-bottom: 1px solid #2A313B">Chaves estrangeiras</h2>
+<div style="overflow-x: auto">
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; line-height: 20px">
+<thead>
+<tr>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Nome</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Coluna</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Referencia</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Ao excluir</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">fk_apontamento_ordem</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">ordem_id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #7DB2FF">ordem_producao (id)</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">RESTRICT</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">fk_apontamento_maquina</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">maquina_id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #7DB2FF">maquina (id)</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">RESTRICT</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">fk_apontamento_operador</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">operador_id</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #7DB2FF">operador (id)</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">RESTRICT</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="indices" aria-labelledby="h-indices" style="min-width: 0; background: #14181D; border: 1px solid #2A313B; border-radius: 8px; overflow: hidden">
+<h2 id="h-indices" style="margin: 0; padding: 12px 16px; font-size: 14px; line-height: 20px; font-weight: 600; border-bottom: 1px solid #2A313B">Índices</h2>
+<div style="overflow-x: auto">
+<table style="width: 100%; border-collapse: collapse; font-size: 13px; line-height: 20px">
+<thead>
+<tr>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Nome</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Colunas</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Único</th>
+<th scope="col" style="height: 36px; padding: 0 16px; text-align: left; font-size: 12px; font-weight: 500; color: #B4BCC8; background: #1B2027; border-bottom: 1px solid #2A313B; white-space: nowrap">Método</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">pk_apontamento</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">sim</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">btree</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">ix_apontamento_ordem</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">ordem_id</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; border-bottom: 1px solid #232A33; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">btree</td>
+</tr>
+<tr>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-weight: 500">ix_apontamento_maquina_data</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">maquina_id, registrado_em</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; color: #C9D1DC">não</td>
+<td style="height: 36px; padding: 0 16px; white-space: nowrap; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; color: #C9D1DC">btree</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<section id="ddl" aria-labelledby="h-ddl" style="background: #14181D; border: 1px solid #2A313B; border-radius: 8px; overflow: hidden">
+<div style="display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-bottom: 1px solid #2A313B">
+<h2 id="h-ddl" style="margin: 0; font-size: 14px; line-height: 20px; font-weight: 600">DDL</h2>
+<button type="button" style="margin-left: auto; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; font-size: 12px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="5.5" y="5.5" width="8" height="8" rx="1"></rect><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"></path></svg><span>Copiar</span></button>
+</div>
+<div style="overflow-x: auto; padding: 16px; background: #0E1114; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 22px; white-space: nowrap">
+<div><span style="color: #7DB2FF">CREATE TABLE</span> producao.apontamento (</div>
+<div style="padding-left: 4ch">id bigint <span style="color: #7DB2FF">GENERATED ALWAYS AS IDENTITY</span>,</div>
+<div style="padding-left: 4ch">ordem_id bigint <span style="color: #7DB2FF">NOT NULL</span>,</div>
+<div style="padding-left: 4ch">maquina_id bigint <span style="color: #7DB2FF">NOT NULL</span>,</div>
+<div style="padding-left: 4ch">operador_id bigint <span style="color: #7DB2FF">NOT NULL</span>,</div>
+<div style="padding-left: 4ch">quantidade numeric(12,3) <span style="color: #7DB2FF">NOT NULL</span>,</div>
+<div style="padding-left: 4ch">refugo numeric(12,3) <span style="color: #7DB2FF">NOT NULL DEFAULT</span> 0,</div>
+<div style="padding-left: 4ch">registrado_em timestamptz <span style="color: #7DB2FF">NOT NULL DEFAULT </span><span style="color: #F591B6">now</span>(),</div>
+<div style="padding-left: 4ch"><span style="color: #7DB2FF">CONSTRAINT</span> pk_apontamento <span style="color: #7DB2FF">PRIMARY KEY</span> (id),</div>
+<div style="padding-left: 4ch"><span style="color: #7DB2FF">CONSTRAINT</span> fk_apontamento_ordem <span style="color: #7DB2FF">FOREIGN KEY</span> (ordem_id) <span style="color: #7DB2FF">REFERENCES</span> producao.ordem_producao (id),</div>
+<div style="padding-left: 4ch"><span style="color: #7DB2FF">CONSTRAINT</span> fk_apontamento_maquina <span style="color: #7DB2FF">FOREIGN KEY</span> (maquina_id) <span style="color: #7DB2FF">REFERENCES</span> producao.maquina (id),</div>
+<div style="padding-left: 4ch"><span style="color: #7DB2FF">CONSTRAINT</span> fk_apontamento_operador <span style="color: #7DB2FF">FOREIGN KEY</span> (operador_id) <span style="color: #7DB2FF">REFERENCES</span> producao.operador (id)</div>
+<div>);</div>
+<div><span style="color: #7DB2FF">CREATE INDEX</span> ix_apontamento_ordem <span style="color: #7DB2FF">ON</span> producao.apontamento (ordem_id);</div>
+<div><span style="color: #7DB2FF">CREATE INDEX</span> ix_apontamento_maquina_data <span style="color: #7DB2FF">ON</span> producao.apontamento (maquina_id, registrado_em);</div>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#F2B644' };
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<!-- Os tipos de domínio, handlers e repositories são internal por decisão de
+	     arquitetura; os projetos de teste precisam enxergá-los para existir.
+	     Prism.Api entra pelos *Errors internal que a porta de entrada
+	     reaproveita.
+	     DynamicProxyGenAssembly2 é o assembly em que o Moq (Castle DynamicProxy) gera
+	     os mocks em tempo de execução: sem ele, um Mock de interface que trafega tipo
+	     internal daqui falha ao ser criado. Nenhum modificador de acesso muda por causa
+	     disso. -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="Prism.Api" />
+		<InternalsVisibleTo Include="Prism.TestingCore" />
+		<InternalsVisibleTo Include="Prism.UnitTesting" />
+		<InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Prism.Core\Prism.Core.csproj" />
+		<ProjectReference Include="..\Prism.Infrastructure\Prism.Infrastructure.csproj" />
+	</ItemGroup>
+
+</Project>

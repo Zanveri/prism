@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- NUnit, e não xUnit: uma instância por fixture e [Order] é o que permite o
+       pipeline ordenado sobre o mesmo estado (skill de testes, §2 e §7). O
+       Testcontainers.PostgreSql entra já para a Tarefa 9 (drivers dos bancos); não há
+       Keycloak nem WireMock, que o Prism não usa. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="NUnit" Version="4.6.1" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.14.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="NUnit3TestAdapter" Version="6.3.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+  </ItemGroup>
+
+  <!-- As cargas dos bancos de teste vão para a saída: o fixture as lê de lá e as roda no contêiner. -->
+  <ItemGroup>
+    <None Update="Infrastructure\Databases\Seeds\*.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- A Prism.Api entra pelos fixtures de Api/, que sobem a API inteira (ApiHost) e a
+       chamam por HTTP, e pelos de processo, que iniciam a Prism.Api.dll. Nenhum
+       internal fica visível por isso. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Prism.Api\Prism.Api.csproj" />
+    <ProjectReference Include="..\..\Prism.Application\Prism.Application.csproj" />
+    <ProjectReference Include="..\..\Prism.Infrastructure\Prism.Infrastructure.csproj" />
+    <ProjectReference Include="..\Prism.TestingCore\Prism.TestingCore.csproj" />
+  </ItemGroup>
+
+</Project>

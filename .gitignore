@@ -1,0 +1,25 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+
+# Node / Electron
+node_modules/
+dist/
+out/
+release/
+# A API publicada que o electron-builder copia para o pacote (pnpm build:api)
+src/client/resources/api/
+
+# Segredos e ambiente
+.env*
+!.env.example
+
+# Sistema
+Thumbs.db
+.DS_Store
+
+# Saídas dos roteiros de scripts/ci (a pipeline as passa adiante como artefato; nenhuma é versionada)
+/api-bundles/
+/release-notes.md

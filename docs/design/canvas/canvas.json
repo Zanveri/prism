@@ -1,0 +1,43 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-09T10:50:56Z" },
+  "title": "Prism — Cliente de Banco de Dados",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Login", "expand": "fill", "is_interactive": true },
+    "Conexoes.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 1200, "title": "Conexões", "expand": "fill", "is_interactive": true },
+    "RevelarSenha.dc.html": { "x": 3040, "y": 0, "w": 1440, "h": 1200, "title": "Revelar senha de uma conexão", "expand": "fill", "is_interactive": true },
+    "PastaAmbiente.dc.html": { "x": 4560, "y": 0, "w": 1440, "h": 1200, "title": "Ambiente de uma pasta", "expand": "fill", "is_interactive": true },
+    "Workbench.dc.html": { "x": 0, "y": 1320, "w": 1440, "h": 900, "title": "Área de trabalho — navegador, editor SQL e resultado", "expand": "fill", "is_interactive": true },
+    "TabelaDetalhe.dc.html": { "x": 1520, "y": 1320, "w": 1440, "h": 1400, "title": "Tabela — colunas, chaves estrangeiras, índices e DDL", "expand": "fill", "is_interactive": true },
+    "DiagramaER.dc.html": { "x": 3040, "y": 1320, "w": 1440, "h": 800, "title": "Diagrama ER", "is_interactive": true },
+    "TabelaDados.dc.html": { "x": 4560, "y": 1320, "w": 1440, "h": 900, "title": "Tabela — registros (duplo clique na árvore)", "expand": "fill", "is_interactive": true },
+    "TabelaDadosFK.dc.html": { "x": 6080, "y": 1320, "w": 1440, "h": 640, "title": "Registro referenciado — destino do clique em uma FK", "expand": "fill", "is_interactive": true },
+    "ConfirmarComando.dc.html": { "x": 7600, "y": 1320, "w": 1440, "h": 900, "title": "Confirmação antes de comando irreversível", "expand": "fill", "is_interactive": true },
+    "Configuracoes.dc.html": { "x": 9120, "y": 1320, "w": 1440, "h": 1000, "title": "Configurações do usuário — conta, tema e preferências", "expand": "fill", "is_interactive": true },
+    "Splash.dc.html": { "x": 0, "y": 3140, "w": 640, "h": 400, "title": "Splash de inicialização", "is_interactive": false },
+    "IconeApp.dc.html": { "x": 720, "y": 3140, "w": 1120, "h": 640, "title": "Ícone do aplicativo", "is_interactive": false }
+  },
+  "order": [
+    "Main.dc.html",
+    "Conexoes.dc.html",
+    "RevelarSenha.dc.html",
+    "PastaAmbiente.dc.html",
+    "Workbench.dc.html",
+    "TabelaDetalhe.dc.html",
+    "DiagramaER.dc.html",
+    "TabelaDados.dc.html",
+    "TabelaDadosFK.dc.html",
+    "ConfirmarComando.dc.html",
+    "Configuracoes.dc.html",
+    "Splash.dc.html",
+    "IconeApp.dc.html"
+  ],
+  "notes": {
+    "titulo-acesso": { "x": 0, "y": -300, "text": "1 · Acesso e cofre de conexões", "kind": "title1", "maxW": 6000 },
+    "titulo-trabalho": { "x": 0, "y": 1020, "text": "2 · Área de trabalho", "kind": "title1", "maxW": 10560 },
+    "titulo-marca": { "x": 0, "y": 2840, "text": "3 · Marca e inicialização", "kind": "title1", "maxW": 1840 }
+  },
+  "designSystems": []
+}

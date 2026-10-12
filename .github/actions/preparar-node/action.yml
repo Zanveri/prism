@@ -1,0 +1,24 @@
+# O Node na versão fixada e o pnpm do campo `packageManager` de src/client/package.json (RN-GITHUB-002: um passo repetido, uma
+# action composta). A action do GitHub instala o Node; o check-tools.sh confere que ele é a versão fixada e tira o pnpm pelo
+# corepack, que confere o hash SHA-512 do packageManager. O cache do setup-node fica desligado de propósito: um cache compartilhado
+# entre execuções é um caminho para um arquivo plantado chegar ao pacote de uma release. Pede o repositório já clonado.
+name: Preparar o Node e o pnpm
+description: O Node na versão fixada e o pnpm do packageManager de src/client/package.json, conferido pelo hash.
+inputs:
+  node:
+    description: A versão exata do Node (a mesma que a pipeline fixava antes desta migração).
+    default: '22.23.2'
+runs:
+  using: composite
+  steps:
+    - name: Instalar o Node
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: ${{ inputs.node }}
+        package-manager-cache: false
+    - name: Conferir o Node e tirar o pnpm do packageManager
+      shell: bash
+      env:
+        PRISM_NODE_VERSION: ${{ inputs.node }}
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      run: bash scripts/ci/check-tools.sh node "$PRISM_NODE_VERSION"

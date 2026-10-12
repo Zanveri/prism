@@ -1,0 +1,73 @@
+# Configuração do git-cliff (RN-VERSAO-006 e 007): gera as seções novas do CHANGELOG.md e as notas das releases a partir do
+# histórico do git, sem token e sem consultar o GitHub (nada de [remote], então nenhum link para commit, pull request nem
+# comparação entre versões).
+#
+# Como acrescentar a seção de uma versão sem reescrever o resto do arquivo (docs/versionamento.md, passo 3), pela imagem fixada:
+#   bash scripts/ci/git-cliff.sh --unreleased --tag vX.Y.Z --prepend CHANGELOG.md vANTERIOR..HEAD
+# (o intervalo desde a estável anterior: a tag dela fica no commit de merge da main, que não está na história da develop).
+# As notas de um BETA saem daqui também, mas não vão para o CHANGELOG.md: o release-notes.sh roda
+#   git-cliff --unreleased --strip all <tag anterior>..HEAD
+# e as põe na release, seguidas das somas.
+# O `--prepend` tira de CHANGELOG.md o texto do `header` abaixo e o escreve de novo no topo, seguido da seção nova e do que já
+# havia. Por isso o `header` TEM de ser, byte a byte, o começo do CHANGELOG.md (inclusive a linha "## Não lançado" e a linha
+# em branco que vem depois). Mudou um, mude o outro na mesma alteração.
+#
+# Categorias do Keep a Changelog 1.1.0 em português (Adicionado, Alterado, Corrigido, Segurança) e as que os tipos da
+# RN-VERSAO-006 pedem além delas (Documentação, Empacotamento e pipeline, Testes e manutenção). Descontinuado e Removido não
+# têm tipo de commit: quem escreve a seção acrescenta à mão quando houver. O tipo `release` não aparece. Quebra de contrato
+# (`!` depois do tipo) vai para a primeira categoria.
+
+[changelog]
+header = """
+# Changelog
+
+Todas as mudanças relevantes do Prism são registradas aqui. O formato segue o
+[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/), e as versões seguem o
+[Versionamento Semântico 2.0.0](https://semver.org/lang/pt-BR/).
+
+## Não lançado
+
+"""
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+
+{% for commit in commits %}\
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}
+{% endfor %}\
+{% endfor %}\n
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+filter_commits = true
+sort_commits = "oldest"
+# Só as tags de versão estável (vX.Y.Z) contam como release. As de pré-lançamento (vX.Y.Z-beta.N, vX.Y.Z-rc.N) não casam: para
+# o git-cliff elas não existem, e a estável reúne tudo desde a estável anterior sem repetir as seções das betas. (Com
+# ignore_tags o --unreleased pararia na última beta, e a estável perderia os commits anteriores a ela.)
+tag_pattern = '^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+commit_parsers = [
+  { message = "^release", skip = true },
+  { field = "breaking", pattern = "true", group = "<!-- 0 -->Mudanças que quebram o contrato" },
+  { message = "^[a-z]+\\(security\\)", group = "<!-- 4 -->Segurança" },
+  { message = "^feat", group = "<!-- 1 -->Adicionado" },
+  { message = "^(perf|refactor)", group = "<!-- 2 -->Alterado" },
+  { message = "^fix", group = "<!-- 3 -->Corrigido" },
+  { message = "^docs", group = "<!-- 5 -->Documentação" },
+  { message = "^(build|ci)", group = "<!-- 6 -->Empacotamento e pipeline" },
+  { message = "^(test|chore)", group = "<!-- 7 -->Testes e manutenção" },
+]
+
+# `git cliff --bumped-version` sugere o próximo número pelas regras da RN-VERSAO-002: funcionalidade nova sobe o segundo
+# número (também antes da 1.0.0), correção sobe o terceiro, e quebra de contrato sobe o segundo enquanto a versão for 0.x e
+# o primeiro depois. Quem lança decide.
+[bump]
+features_always_bump_minor = true
+breaking_always_bump_major = false

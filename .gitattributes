@@ -1,0 +1,9 @@
+# Scripts de shell com fim de linha LF em qualquer sistema, para rodarem no bash do Windows.
+*.sh text eol=lf
+LICENSE text eol=lf
+NOTICE text eol=lf
+# Os roteiros da pipeline, os workflows e os arquivos que eles leem: LF sempre (rodam no bash dos runners, inclusive no Windows).
+scripts/ci/** text eol=lf
+cliff.toml text eol=lf
+.github/** text eol=lf
+CHANGELOG.md text eol=lf

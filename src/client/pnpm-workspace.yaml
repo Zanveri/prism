@@ -1,0 +1,24 @@
+# Configuração do pnpm para a interface do Prism. É um pacote só; este arquivo existe pelas
+# travas de cadeia de suprimentos, que ficam ligadas.
+
+# Recusa versão publicada há menos de 3 dias (o valor é em minutos). Precisou de uma versão mais
+# nova que isso: use a anterior, não desligue a trava.
+minimumReleaseAge: 4320
+
+# Recusa a versão que perdeu a proveniência ou o publicador confiável que as anteriores tinham.
+trustPolicy: no-downgrade
+
+# Só estes dois podem rodar script de instalação. O esbuild escolhe o binário dele. O Electron 44
+# já não tem script: baixa o binário na primeira execução, conferindo o checksum (para adiantar,
+# `pnpm exec install-electron`). Fica na lista para a versão que voltar a ter um.
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+
+# Falsos positivos do critério acima, os mesmos que o etio registra: a 6.3.1 e a 5.7.2 são a última
+# versão das linhas de manutenção 6.x e 5.x do semver (as duas de 10/07/2023), publicadas depois de
+# a linha 7.x ganhar proveniência. A 6.3.1 vem do @babel/core, dependência do electron-vite; a 5.7.2
+# vem do tiny-async-pool, dependência do builder-util do electron-builder. Versão exata, para a
+# próxima não passar junto.
+trustPolicyExclude:
+  - semver@5.7.2 || 6.3.1

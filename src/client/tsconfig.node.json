@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    // `scripts/*.mjs` entra pelo JSDoc: é o que dá tipo ao `buildIco` para o teste em TypeScript.
+    "allowJs": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["electron", "scripts", "electron.vite.config.ts", "vitest.config.ts"]
+}

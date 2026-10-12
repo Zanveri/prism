@@ -1,0 +1,6 @@
+# A API de desenvolvimento compilada pelo `pnpm dev` (electron/main.ts, --artifacts-path)
+.api-dev/
+# A API publicada pelo `pnpm build:api` (scripts/publish-api.mjs); a cópia dela está no .gitignore da raiz
+.api-publish/
+# Os avisos de licença do .NET que o `pnpm build:api` traz da instalação do dotnet (scripts/licenses.mjs)
+resources/licenses/

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- RN-VERSAO-005: um cofre do formato 1 gravado antes da regra, aberto em VaultFormatOneSampleTests. -->
+    <EmbeddedResource Include="Vault/Samples/vault-format-1.json" LogicalName="vault-format-1.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Prism.Api\Prism.Api.csproj" />
+    <ProjectReference Include="..\..\Prism.Infrastructure\Prism.Infrastructure.csproj" />
+    <ProjectReference Include="..\Prism.TestingCore\Prism.TestingCore.csproj" />
+  </ItemGroup>
+
+</Project>

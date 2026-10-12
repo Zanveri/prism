@@ -1,0 +1,280 @@
+using FluentValidation.TestHelper;
+using Prism.Application.Connections.Features.CreateConnection;
+using Prism.Application.Connections.Features.UpdateConnection;
+using Prism.Infrastructure.Databases.Models;
+using Prism.TestingCore.Fakers.Connections;
+
+namespace Prism.UnitTesting.Connections;
+
+/// <summary>
+/// RN-CONN-010: um campo inválido por vez, sempre `CONNECTION_INVALID`. O nome é medido depois de normalizado
+/// (é o que o domínio grava); a pasta que não existe é 404 da gravação, e não regra daqui.
+/// </summary>
+public sealed class ConnectionValidatorsTests
+{
+    private static readonly CreateConnectionValidator CreateValidator = new();
+    private static readonly UpdateConnectionValidator UpdateValidator = new();
+
+    private static void AssertCreateInvalid(CreateConnectionCommand command, string property)
+    {
+        //Act
+        var result = CreateValidator.TestValidate(command);
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(property).WithErrorCode("CONNECTION_INVALID");
+        Assert.All(result.Errors, error => Assert.Equal(property, error.PropertyName));
+    }
+
+    private static void AssertUpdateInvalid(UpdateConnectionCommand command, string property)
+    {
+        //Act
+        var result = UpdateValidator.TestValidate(command);
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(property).WithErrorCode("CONNECTION_INVALID");
+        Assert.All(result.Errors, error => Assert.Equal(property, error.PropertyName));
+    }
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "OK conexão válida, com e sem pasta e ambiente")]
+    public void CreateConnection_ShouldBeOK()
+    {
+        //Act
+        var plain = CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid());
+        var full = CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(folderID: Guid.CreateVersion7(), environmentName: "Produção", environmentColor: "#a1B2c3"));
+
+        //Assert
+        plain.ShouldNotHaveAnyValidationErrors();
+        full.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "OK nos limites: nome 1 e 80, porta 1 e 65535, ambiente 30, cada banco")]
+    public void CreateConnection_ShouldBeOK_AtTheLimits()
+    {
+        //Act
+        var results = new[]
+        {
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(name: "a")),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(name: new string('a', 80))),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(name: $"   {new string('a', 80)}  ")),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(port: 1)),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(port: 65535)),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(environmentName: new string('a', 30))),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(engine: EDatabaseEngine.PostgreSql)),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(engine: EDatabaseEngine.Db2)),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(engine: EDatabaseEngine.Informix))
+        };
+
+        //Assert
+        Assert.All(results, result => result.ShouldNotHaveAnyValidationErrors());
+    }
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "OK senha só com espaços é uma senha")]
+    public void CreateConnection_ShouldBeOK_PasswordOfSpaces()
+    {
+        //Act
+        var result = CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(password: "   "));
+
+        //Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome vazio")]
+    public void CreateConnection_ShouldBeError_NameEmpty()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(name: string.Empty), "Name");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome só com espaços")]
+    public void CreateConnection_ShouldBeError_NameBlank()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(name: "  \t "), "Name");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome com 81 caracteres")]
+    public void CreateConnection_ShouldBeError_NameTooLong()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(name: new string('a', 81)), "Name");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome nulo no corpo")]
+    public void CreateConnection_ShouldBeError_NameNull()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Name = null! }, "Name");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro host vazio")]
+    public void CreateConnection_ShouldBeError_HostEmpty()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Host = string.Empty }, "Host");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro host só com espaços")]
+    public void CreateConnection_ShouldBeError_HostBlank()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(host: "   "), "Host");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro porta 0")]
+    public void CreateConnection_ShouldBeError_PortZero()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Port = 0 }, "Port");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro porta 65536")]
+    public void CreateConnection_ShouldBeError_PortTooHigh()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(port: 65536), "Port");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro porta negativa")]
+    public void CreateConnection_ShouldBeError_PortNegative()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(port: -1), "Port");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro banco de dados vazio")]
+    public void CreateConnection_ShouldBeError_DatabaseEmpty()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Database = string.Empty }, "Database");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro usuário vazio")]
+    public void CreateConnection_ShouldBeError_UserNameEmpty()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { UserName = string.Empty }, "UserName");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro senha vazia")]
+    public void CreateConnection_ShouldBeError_PasswordEmpty()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Password = string.Empty }, "Password");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro banco 0")]
+    public void CreateConnection_ShouldBeError_EngineZero()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Engine = 0 }, "Engine");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro banco 4")]
+    public void CreateConnection_ShouldBeError_EngineUnknown()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { Engine = (EDatabaseEngine)4 }, "Engine");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome do ambiente com 31 caracteres")]
+    public void CreateConnection_ShouldBeError_EnvironmentNameTooLong()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(environmentName: new string('a', 31)), "EnvironmentName");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente com nome de cor")]
+    public void CreateConnection_ShouldBeError_EnvironmentColorName()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(environmentColor: "red"), "EnvironmentColor");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente com cinco dígitos")]
+    public void CreateConnection_ShouldBeError_EnvironmentColorTooShort()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(environmentColor: "#12345"), "EnvironmentColor");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente com sete dígitos")]
+    public void CreateConnection_ShouldBeError_EnvironmentColorTooLong()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(environmentColor: "#1234567"), "EnvironmentColor");
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente que não é hexadecimal")]
+    public void CreateConnection_ShouldBeError_EnvironmentColorNotHex()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid(environmentColor: "#GGGGGG"), "EnvironmentColor");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "OK conexão válida, sem senha (mantém a gravada) e com senha")]
+    public void UpdateConnection_ShouldBeOK()
+    {
+        //Act
+        var keepingPassword = UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid());
+        var replacingPassword = UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(password: "nova-senha", folderID: Guid.CreateVersion7(), environmentName: "Produção", environmentColor: "#a1B2c3"));
+
+        //Assert
+        keepingPassword.ShouldNotHaveAnyValidationErrors();
+        replacingPassword.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "OK nos limites: nome 1 e 80, porta 1 e 65535, ambiente 30")]
+    public void UpdateConnection_ShouldBeOK_AtTheLimits()
+    {
+        //Act
+        var results = new[]
+        {
+            UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(name: "a")),
+            UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(name: new string('a', 80))),
+            UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(port: 1)),
+            UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(port: 65535)),
+            UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(environmentName: new string('a', 30)))
+        };
+
+        //Assert
+        Assert.All(results, result => result.ShouldNotHaveAnyValidationErrors());
+    }
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome vazio")]
+    public void UpdateConnection_ShouldBeError_NameEmpty()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(name: string.Empty), "Name");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome com 81 caracteres")]
+    public void UpdateConnection_ShouldBeError_NameTooLong()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(name: new string('a', 81)), "Name");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro host vazio")]
+    public void UpdateConnection_ShouldBeError_HostEmpty()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Host = string.Empty }, "Host");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro porta 0")]
+    public void UpdateConnection_ShouldBeError_PortZero()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Port = 0 }, "Port");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro porta 65536")]
+    public void UpdateConnection_ShouldBeError_PortTooHigh()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(port: 65536), "Port");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro banco de dados vazio")]
+    public void UpdateConnection_ShouldBeError_DatabaseEmpty()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Database = string.Empty }, "Database");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro usuário vazio")]
+    public void UpdateConnection_ShouldBeError_UserNameEmpty()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { UserName = string.Empty }, "UserName");
+
+    /// <summary>`null` mantém a senha gravada (RN-CONN-004); o texto vazio não é "omitida", e deixaria a conexão sem senha.</summary>
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro senha enviada vazia")]
+    public void UpdateConnection_ShouldBeError_PasswordEmpty()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(password: string.Empty), "Password");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro banco 0")]
+    public void UpdateConnection_ShouldBeError_EngineZero()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Engine = 0 }, "Engine");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro banco 4")]
+    public void UpdateConnection_ShouldBeError_EngineUnknown()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Engine = (EDatabaseEngine)4 }, "Engine");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro nome do ambiente com 31 caracteres")]
+    public void UpdateConnection_ShouldBeError_EnvironmentNameTooLong()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(environmentName: new string('a', 31)), "EnvironmentName");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente com nome de cor")]
+    public void UpdateConnection_ShouldBeError_EnvironmentColorName()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(environmentColor: "red"), "EnvironmentColor");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente com cinco dígitos")]
+    public void UpdateConnection_ShouldBeError_EnvironmentColorTooShort()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(environmentColor: "#12345"), "EnvironmentColor");
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente que não é hexadecimal")]
+    public void UpdateConnection_ShouldBeError_EnvironmentColorNotHex()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(environmentColor: "#GGGGGG"), "EnvironmentColor");
+}

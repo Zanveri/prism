@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<!-- As integrações são internal (cofre e bancos) e o projeto de testes unitários
+	     precisa enxergá-las. O Prism.TestingCore entra por um caso só: a extensão que
+	     leva o teste de integração da rede de segurança (RN-SESSAO-005) ao caminho interno
+	     da conexão com o banco, sem o projeto de integração enxergar nada interno. -->
+	<ItemGroup>
+		<InternalsVisibleTo Include="Prism.TestingCore" />
+		<InternalsVisibleTo Include="Prism.UnitTesting" />
+	</ItemGroup>
+
+	<!-- Argon2id da RN-COFRE-002: o .NET não traz Argon2. O AES-256-GCM do cofre é o do próprio .NET.
+	     Npgsql é o driver do PostgreSQL (Databases/Clients); os tipos dele não saem dessa pasta. -->
+	<ItemGroup>
+		<PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
+		<PackageReference Include="Npgsql" Version="10.0.3" />
+	</ItemGroup>
+
+	<!-- O driver da IBM (Db2 e Informix) é um pacote por plataforma, todos com o IBM.Data.Db2.dll e a pasta
+	     nativa `clidriver`. A API só COMPILA contra ele: nenhum arquivo do pacote vai para a saída nem para
+	     a publicação (RN-DRIVER-001 e RN-ABERTO-001); quem o baixa é o usuário, pela tela de Drivers, e a
+	     API o carrega da pasta de dados (Drivers/, seção 16 da especificação). Quem escolhe o pacote é o
+	     identificador de runtime pedido (a pipeline publica para Windows a partir de Linux); sem pedido, o
+	     da máquina de quem compila. O pacote de macOS só existe para arm64: em `osx-x64`, e em qualquer
+	     identificador sem pacote, a API compila sem os clients do Db2 e do Informix (PRISM_IBM_DRIVER) e o
+	     PostgreSQL segue funcionando (RN-ABERTO-006). -->
+	<PropertyGroup>
+		<IbmDriverRuntime>$(PrismRuntimeIdentifier)</IbmDriverRuntime>
+		<IbmDriverRuntime Condition="'$(IbmDriverRuntime)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</IbmDriverRuntime>
+		<IbmDriverPackage Condition="'$(IbmDriverRuntime)' == 'win-x64'">Net.IBM.Data.Db2</IbmDriverPackage>
+		<IbmDriverPackage Condition="'$(IbmDriverRuntime)' == 'linux-x64'">Net.IBM.Data.Db2-lnx</IbmDriverPackage>
+		<IbmDriverPackage Condition="'$(IbmDriverRuntime)' == 'osx-arm64'">Net.IBM.Data.Db2-osx</IbmDriverPackage>
+		<DefineConstants Condition="'$(IbmDriverPackage)' != ''">$(DefineConstants);PRISM_IBM_DRIVER</DefineConstants>
+	</PropertyGroup>
+
+	<!-- Os três pacotes ficam sempre referenciados, e só o da plataforma entra, e só na compilação
+	     (`IncludeAssets="compile"`: sem `runtime`, `native` nem os `.targets` do pacote, que são o que copiava
+	     a `clidriver` e o `TestConn` para a saída). `PrivateAssets="all"` impede que o pacote chegue aos
+	     projetos que referenciam este: nenhum outro compila contra um tipo da IBM. Uma referência condicionada
+	     ao identificador mudaria as dependências do projeto a cada plataforma, e um packages.lock.json só não
+	     serviria ao restore travado das quatro. A versão daqui é a mesma do catálogo de drivers
+	     (Drivers/drivers.catalog.json), e um teste falha se as duas divergirem. -->
+	<ItemGroup>
+		<PackageReference Include="Net.IBM.Data.Db2" Version="10.0.0.300" PrivateAssets="all">
+			<IncludeAssets Condition="'$(IbmDriverPackage)' == 'Net.IBM.Data.Db2'">compile</IncludeAssets>
+			<ExcludeAssets Condition="'$(IbmDriverPackage)' != 'Net.IBM.Data.Db2'">all</ExcludeAssets>
+		</PackageReference>
+		<PackageReference Include="Net.IBM.Data.Db2-lnx" Version="10.0.0.300" PrivateAssets="all">
+			<IncludeAssets Condition="'$(IbmDriverPackage)' == 'Net.IBM.Data.Db2-lnx'">compile</IncludeAssets>
+			<ExcludeAssets Condition="'$(IbmDriverPackage)' != 'Net.IBM.Data.Db2-lnx'">all</ExcludeAssets>
+		</PackageReference>
+		<PackageReference Include="Net.IBM.Data.Db2-osx" Version="10.0.0.300" PrivateAssets="all">
+			<IncludeAssets Condition="'$(IbmDriverPackage)' == 'Net.IBM.Data.Db2-osx'">compile</IncludeAssets>
+			<ExcludeAssets Condition="'$(IbmDriverPackage)' != 'Net.IBM.Data.Db2-osx'">all</ExcludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+	<!-- RN-DRIVER-002: o catálogo de drivers é um arquivo versionado dentro da API. Vai embutido no assembly,
+	     e não ao lado dele: quem instala o Prism não o edita. -->
+	<ItemGroup>
+		<EmbeddedResource Include="Drivers\drivers.catalog.json" LogicalName="drivers.catalog.json" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Prism.Core\Prism.Core.csproj" />
+	</ItemGroup>
+
+</Project>

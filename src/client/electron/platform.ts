@@ -1,0 +1,24 @@
+import type { MenuItemConstructorOptions } from "electron";
+
+/**
+ * O arquivo do ícone da janela e do splash (RN-MARCA-001), dentro de `resources` no app empacotado e de `build/` em
+ * desenvolvimento: `.ico` no Windows, PNG no Linux. No macOS o ícone é o do pacote (`.icns`) e a janela não leva um.
+ */
+export function windowIconFile(platform: NodeJS.Platform): string | undefined {
+  if (platform === "win32") return "icon.ico";
+  return platform === "linux" ? "icon.png" : undefined;
+}
+
+/**
+ * O menu do app empacotado. Windows e Linux não têm: o Ctrl+R do menu padrão recarregaria a janela e perderia o texto das
+ * abas de SQL. No macOS a barra de menu é do sistema e um app sem menu não ouve Cmd+Q nem Cmd+C e Cmd+V nos campos, então
+ * fica o mínimo que ele exige: o menu do app e Editar, sem recarregar e sem ferramentas de desenvolvedor.
+ */
+export function applicationMenuTemplate(platform: NodeJS.Platform): MenuItemConstructorOptions[] | null {
+  if (platform !== "darwin") return null;
+
+  return [
+    { role: "appMenu" },
+    { label: "Editar", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
+  ];
+}

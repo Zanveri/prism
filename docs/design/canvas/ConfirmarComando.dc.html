@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Confirmar comando irreversível</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; min-height: 100vh; background: #0E1114; color: #E6EAF0; color-scheme: dark; scrollbar-color: #38414D #14181D; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 22px">
+<div aria-hidden="true"><dc-import name="Workbench" accent="{{accent}}" hint-size="100%,900px"></dc-import></div>
+<div style="position: absolute; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(6, 8, 10, 0.72)">
+<div role="alertdialog" aria-modal="true" aria-labelledby="cc-titulo" aria-describedby="cc-texto" style="width: 100%; max-width: 520px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #1B2027; border: 1px solid #38414D; border-radius: 10px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5)">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 24px; background: #FF8A7A; color: #14181D">
+<span style="font-weight: 600">Ambiente: Produção</span>
+<span>MES Produção / mes / producao</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 16px; padding: 24px">
+<h2 id="cc-titulo" style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600">Executar comando irreversível?</h2>
+<p id="cc-texto" style="margin: 0; color: #B4BCC8">Este DELETE não tem WHERE: ele apaga todas as linhas de <b style="color: #E6EAF0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; font-weight: 500">producao.apontamento</b>.</p>
+<code style="display: block; padding: 10px 12px; overflow-x: auto; background: #0E1114; border: 1px solid #2A313B; border-radius: 6px; color: #E6EAF0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 20px; white-space: nowrap"><span style="color: #7DB2FF">DELETE FROM</span> producao.apontamento;</code>
+<p style="margin: 0; color: #B4BCC8; font-size: 12px; line-height: 18px">Você vê este aviso porque a conexão MES Produção herda da pasta Fábrica a proteção "Confirmar antes de comandos irreversíveis".</p>
+<div style="display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; padding-top: 4px">
+<button type="button" style="display: flex; align-items: center; height: 40px; padding: 0 16px; border: 1px solid #FF8A7A; border-radius: 6px; background: transparent; color: #FF8A7A; font: inherit; font-weight: 600; cursor: pointer">Executar mesmo assim</button>
+<a href="Workbench.dc.html" style="display: flex; align-items: center; height: 40px; padding: 0 20px; border-radius: 6px; background: #E6EAF0; color: #14181D; font-weight: 600; text-decoration: none">Cancelar</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#F2B644' };
+}
+}
+</script>
+</body>
+</html>

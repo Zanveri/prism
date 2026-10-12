@@ -1,0 +1,14 @@
+Prism
+Copyright 2026 Zanveri
+
+Logos dos bancos de dados
+-------------------------
+
+As logos em src/client/src/assets/databases/ são marcas dos seus donos: PostgreSQL Community
+Association of Canada (PostgreSQL), Hipp, Wyrick & Company, Inc. (SQLite), Oracle Corporation
+(MySQL), MariaDB Corporation Ab (MariaDB), DuckDB Foundation (DuckDB) e ClickHouse, Inc.
+(ClickHouse). Elas aparecem no Prism só para identificar o banco com que se conecta.
+As logos não estão sob a Apache-2.0 que cobre o Prism e não indicam apoio, patrocínio nem parceria
+dos donos com o Prism ou com a Zanveri. A origem de cada arquivo, o dono da marca e a regra de uso
+estão em src/client/src/assets/databases/README.md. Um pedido de retirada de um dono é atendido
+trocando a logo pela ficha do app.

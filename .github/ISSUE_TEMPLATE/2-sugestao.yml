@@ -1,0 +1,52 @@
+name: Sugestão
+description: Algo que você gostaria de poder fazer no Prism.
+title: "Sugestão: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Diga em uma frase, no título, o que você gostaria de poder fazer. Antes de enviar, veja no README o que já está previsto
+        para as próximas entregas. Uma sugestão vira trabalho quando os mantenedores a avaliam (CONTRIBUTING.md). Não cole senha,
+        token, string de conexão com senha nem dado real.
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema ou necessidade
+      description: O que você tenta fazer hoje e não consegue, ou faz com muito trabalho?
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: O que você propõe
+      description: Como isso deveria funcionar, do ponto de vista de quem usa o Prism?
+    validations:
+      required: true
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: Alternativas
+      description: O que você faz hoje no lugar, ou o que outro cliente de banco faz?
+  - type: dropdown
+    id: banco
+    attributes:
+      label: Banco
+      multiple: true
+      options:
+        - PostgreSQL
+        - Db2
+        - Informix
+        - Todos
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema operacional
+  - type: checkboxes
+    id: conferido
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Procurei uma issue igual e não achei.
+          required: true
+        - label: Não há senha, token, string de conexão nem dado real neste texto nem nas capturas.
+          required: true

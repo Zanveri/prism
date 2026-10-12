@@ -1,0 +1,100 @@
+# Verificar (RN-ABERTO-005): a interface, a API, os roteiros da própria pipeline, e a versão. É também aqui que a execução decide
+# o que o merge lança (o job `versao`): o plano sai nos outputs deste workflow e chega aos workflows empacotar e lancar.
+name: Verificar
+
+on:
+  workflow_call:
+    outputs:
+      lanca:
+        description: '"true" quando este merge lança uma versão (um beta na develop, a estável na main).'
+        value: ${{ jobs.versao.outputs.lanca }}
+      tag:
+        description: A tag que o job de lançamento espera publicar (vazia quando não lança).
+        value: ${{ jobs.versao.outputs.tag }}
+      versao:
+        description: A versão com que os pacotes desta execução são gerados (a do beta, num lançamento da develop).
+        value: ${{ jobs.versao.outputs.versao }}
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+
+jobs:
+  versao:
+    name: Conferir a versão
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      lanca: ${{ steps.conferir.outputs.lanca }}
+      tag: ${{ steps.conferir.outputs.tag }}
+      versao: ${{ steps.conferir.outputs.versao }}
+    steps:
+      - name: Clonar o repositório, com o histórico e as tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Decidir o que este merge lança
+        id: conferir
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/check-version.sh
+
+  interface:
+    name: Interface
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o Node e o pnpm
+        uses: ./.github/actions/preparar-node
+      - name: Lint, typecheck e testes da interface
+        run: bash scripts/ci/verify-client.sh
+
+  api:
+    name: API
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o .NET
+        uses: ./.github/actions/preparar-dotnet
+      - name: Build sem avisos e testes de unidade da API
+        run: bash scripts/ci/verify-api.sh
+
+  roteiros:
+    name: Roteiros e workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Testes dos roteiros de scripts/ci
+        run: bash scripts/ci/test-scripts.sh
+      - name: As regras dos workflows
+        run: bash scripts/ci/check-workflows.sh
+      - name: actionlint
+        run: bash scripts/ci/actionlint.sh

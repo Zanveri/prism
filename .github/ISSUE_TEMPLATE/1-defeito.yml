@@ -1,0 +1,85 @@
+name: Defeito
+description: Algo no Prism não funciona como deveria.
+title: "Defeito: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Descreva o defeito em uma frase no título. **Se for uma vulnerabilidade, não use este formulário**: relate em privado,
+        pelo relato privado de vulnerabilidade (veja o SECURITY.md). Não cole senha, token, string de conexão com senha nem dado
+        real, nem aqui nem nas capturas de tela.
+  - type: input
+    id: versao
+    attributes:
+      label: Versão do Prism
+      description: Aparece na tela de entrada, ao lado do nome. Se você compilou do código, o commit.
+      placeholder: 0.1.0, 0.2.0-beta.3 ou o commit
+    validations:
+      required: true
+  - type: input
+    id: sistema
+    attributes:
+      label: Sistema operacional e versão
+      placeholder: Windows 11, Ubuntu 24.04, macOS 26…
+    validations:
+      required: true
+  - type: dropdown
+    id: banco
+    attributes:
+      label: Banco
+      options:
+        - PostgreSQL
+        - Db2
+        - Informix
+        - Nenhum (o defeito não depende do banco)
+    validations:
+      required: true
+  - type: input
+    id: servidor
+    attributes:
+      label: Versão do servidor do banco
+  - type: dropdown
+    id: instalacao
+    attributes:
+      label: Como o Prism foi aberto
+      options:
+        - Pacote instalado (instalador, deb, rpm ou dmg)
+        - Pacote sem instalação (zip, AppImage ou tar.gz)
+        - Do código (pnpm dev)
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para reproduzir
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que você esperava
+    validations:
+      required: true
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu
+      description: |
+        Cole a mensagem de erro e, se ajudar, uma captura de tela sem dados reais. O log da API fica na pasta logs/ da pasta de
+        dados (veja o README). O Prism não registra senha, string de conexão nem texto de SQL; ainda assim, revise o log antes de
+        anexar: ele pode ter caminhos da sua máquina e mensagens de erro inesperadas.
+    validations:
+      required: true
+  - type: checkboxes
+    id: conferido
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Procurei uma issue igual e não achei.
+          required: true
+        - label: Não há senha, token, string de conexão nem dado real neste texto nem nas capturas.
+          required: true

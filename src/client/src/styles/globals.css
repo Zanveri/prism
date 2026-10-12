@@ -1,0 +1,276 @@
+@import "tailwindcss" source("..");
+
+/*
+ * Prism — os tokens vêm do canvas (docs/design/canvas/*.dc.html). Cor carrega dado: as três dos
+ * bancos só aparecem para dizer qual banco é, e sucesso, atenção e erro querem dizer a mesma coisa
+ * em qualquer tela.
+ *
+ * Dois temas, Escuro (o de sempre) e Claro (RN-CONFIG-001). Cada ficha de cor é `light-dark(claro, escuro)`:
+ * as duas colunas moram na mesma linha, e quem acrescenta um token escreve as duas. Quem escolhe a
+ * coluna é o `color-scheme` do <html>, que o atributo `data-theme` muda (ver "base", abaixo): sem
+ * atributo é o escuro; `light` é o claro; `system` segue o modo do sistema, sem JavaScript.
+ *
+ * A coluna clara usa os valores que o canvas define para o "Prism Claro" (fundo, painel, linha, texto,
+ * palavra-chave, texto entre aspas, número, comentário e barra de rolagem, que são background, panel,
+ * border, ink, postgres, success/db2, accent, subtle e border-strong). O que o canvas não nomeia
+ * (raised, selected, body, muted, informix, danger, o véu e a sombra) foi derivado, com a conta do
+ * contraste feita em `globals.test.ts`: texto de 4,5:1 sobre cada superfície.
+ */
+@theme {
+  /* Só as cores do Prism existem: `bg-red-500` e as demais da paleta padrão não geram classe. */
+  --color-*: initial;
+
+  /* Superfícies, da mais funda à mais alta (no claro, "mais alta" é a mais branca: o campo e a lista). */
+  --color-background: light-dark(#f7f8fa, #0e1114);
+  --color-panel: light-dark(#eceff3, #14181d);
+  --color-raised: light-dark(#ffffff, #1b2027);
+  --color-selected: light-dark(#e3e8ee, #232a33);
+
+  /* Bordas: a divisória entre painéis e a de controles e do que flutua. */
+  --color-border: light-dark(#d5dae1, #2a313b);
+  --color-border-strong: light-dark(#b4bcc8, #38414d);
+
+  /*
+   * O fundo do texto selecionado no editor: o texto, de qualquer cor de sintaxe, precisa passar de 4,5:1 por cima dele. No escuro era o
+   * #38414d (border-strong), que dava 3,58:1 ao comentário (#8e99a8); o #2a313b dá 4,54.
+   */
+  --color-selection: light-dark(#e3e8ee, #2a313b);
+
+  /* Texto, do principal ao apagado. */
+  --color-ink: light-dark(#1b2027, #e6eaf0);
+  --color-body: light-dark(#323a45, #c9d1dc);
+  --color-muted: light-dark(#47505d, #b4bcc8);
+  --color-subtle: light-dark(#5f6875, #8e99a8);
+
+  /* O acento: a ação principal, o que está selecionado, o foco e o tom de atenção. */
+  --color-accent: light-dark(#8a5200, #f2b644);
+
+  /* Um banco, uma cor. */
+  --color-postgres: light-dark(#1d5fd1, #7db2ff);
+  --color-db2: light-dark(#097244, #5ed3a3);
+  --color-informix: light-dark(#b02a66, #f591b6);
+
+  /*
+   * As cores de sintaxe do editor (RN-CONFIG-003): palavra-chave, texto entre aspas, número e comentário. O canvas as define em cada tema (`kw`,
+   * `str`, `num` e `com`); nos dois do Prism elas são as do banco PostgreSQL, do sucesso, do acento e do texto apagado, e cada um dos outros
+   * quatro temas traz as suas. Valem sobre o fundo do editor, a lista de sugestões e a seleção, e o teste de contraste confere as cinco.
+   */
+  --color-syntax-keyword: light-dark(#1d5fd1, #7db2ff);
+  --color-syntax-string: light-dark(#097244, #5ed3a3);
+  --color-syntax-number: light-dark(#8a5200, #f2b644);
+  --color-syntax-comment: light-dark(#5f6875, #8e99a8);
+
+  /* Erro e o que não tem volta. */
+  --color-danger: light-dark(#b32a1a, #ff8a7a);
+  /* RN-AVISO-001: o sucesso tem o mesmo verde do Db2; o canvas não traz outro. */
+  --color-success: light-dark(#097244, #5ed3a3);
+
+  /* O véu atrás de um diálogo. */
+  --color-scrim: light-dark(rgb(20 24 29 / 0.45), rgb(6 8 10 / 0.72));
+
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+
+  /*
+   * A escala de texto do canvas, nos nomes da escala padrão: 12/18 nas legendas, 13/20 na área
+   * de trabalho, 14/22 em formulários e diálogos (o corpo), 18/24 nos títulos.
+   */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.5rem;
+
+  /* O raio de um diálogo e a sombra de tudo o que flutua (diálogo, lista do Select, aviso). */
+  --radius-xl: 0.625rem;
+  --shadow-2xl: 0 24px 64px light-dark(rgb(20 24 29 / 0.22), rgb(0 0 0 / 0.5));
+
+  /* O aviso sobe do canto de onde aparece; a barra do tempo encolhe até ele sair sozinho. */
+  --animate-toast-in: toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-toast-timer: toast-timer linear forwards;
+
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.98);
+    }
+  }
+
+  @keyframes toast-timer {
+    from {
+      transform: scaleX(1);
+    }
+    to {
+      transform: scaleX(0);
+    }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    scrollbar-color: var(--color-border-strong) var(--color-panel);
+  }
+
+  /* O tema que a pessoa escolheu em Configurações (`theme.ts` põe o atributo; `public/theme-boot.js` o põe antes da primeira pintura). */
+  :root[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  :root[data-theme="system"] {
+    color-scheme: light dark;
+  }
+
+  /*
+   * Os outros quatro temas do canvas (RN-CONFIG-003). Cada bloco diz o esquema de cor do tema, que escolhe a coluna de tudo o que ele não troca
+   * (os três bancos, o acento, o sucesso, o véu e a sombra: as fichas `light-dark()` acima) e o desenho da marca, e troca as que o canvas
+   * define: o fundo, o painel, a linha, o texto, as quatro de sintaxe e a barra de rolagem (`bg`, `painel`, `linha`, `fg`, `kw`, `str`, `num`,
+   * `com` e `rolagem`, que são background, panel, border, ink, syntax-*, subtle e border-strong).
+   *
+   * O resto se deriva delas, e `globals.test.ts` confere o contraste de cada par:
+   *  - `selected` (a linha selecionada) e `selection` (o texto selecionado no editor): o fundo com uma parte do texto misturada, a menor que
+   *    faz a seleção se ver contra o fundo (1,25:1 nos três escuros, 1,17:1 no GitHub Claro; o Prism Claro tem 1,15:1 e o Prism Escuro, 1,4:1);
+   *    `raised` (o campo, a lista que flutua), 60% disso. No claro, `raised` é o próprio fundo;
+   *  - `muted` e `body`: entre o texto apagado (`com`) e o texto, a 40% e a 67%, que é onde o Prism os tem.
+   *
+   * Onde uma cor do canvas não chega a 4,5:1 sobre as superfícies do tema (fundo, painel, elevada, selecionada e seleção), entra a mais próxima
+   * que chega, clareando a cor o mínimo: Monokai (palavra-chave: 3,9:1 sobre o fundo; número) e Nord (palavra-chave, número e comentário; o
+   * vermelho do erro, que é o do Prism). Dracula e GitHub Claro ficam exatamente como o canvas os desenha.
+   */
+  :root[data-theme="monokai"] {
+    color-scheme: dark;
+    --color-background: #272822;
+    --color-panel: #1e1f1c;
+    --color-raised: #30312b;
+    --color-selected: #373832;
+    --color-border: #3e3d32;
+    --color-border-strong: #5a594e;
+    --color-selection: #373832;
+    --color-ink: #f8f8f2;
+    --color-body: #dddcd0;
+    --color-muted: #c7c4b5;
+    --color-subtle: #a6a28c;
+    --color-syntax-keyword: #fb72a3;
+    --color-syntax-string: #e6db74;
+    --color-syntax-number: #b48aff;
+    --color-syntax-comment: #a6a28c;
+  }
+
+  :root[data-theme="dracula"] {
+    color-scheme: dark;
+    --color-background: #282a36;
+    --color-panel: #21222c;
+    --color-raised: #32343f;
+    --color-selected: #393a45;
+    --color-border: #44475a;
+    --color-border-strong: #6272a4;
+    --color-selection: #393a45;
+    --color-ink: #f8f8f2;
+    --color-body: #d9dde6;
+    --color-muted: #c0c6dc;
+    --color-subtle: #9aa5ce;
+    --color-syntax-keyword: #ff79c6;
+    --color-syntax-string: #f1fa8c;
+    --color-syntax-number: #bd93f9;
+    --color-syntax-comment: #9aa5ce;
+  }
+
+  :root[data-theme="nord"] {
+    color-scheme: dark;
+    --color-background: #2e3440;
+    --color-panel: #272c36;
+    --color-raised: #373d49;
+    --color-selected: #3d434f;
+    --color-border: #434c5e;
+    --color-border-strong: #4c566a;
+    --color-selection: #3d434f;
+    --color-ink: #d8dee9;
+    --color-body: #c7cfdd;
+    --color-muted: #b9c2d3;
+    --color-subtle: #a5b0c4;
+    --color-danger: #ff9d8f;
+    --color-syntax-keyword: #98b2cc;
+    --color-syntax-string: #a3be8c;
+    --color-syntax-number: #c5a7bf;
+    --color-syntax-comment: #a5b0c4;
+  }
+
+  :root[data-theme="github-light"] {
+    color-scheme: light;
+    --color-background: #ffffff;
+    --color-panel: #f6f8fa;
+    --color-raised: #ffffff;
+    --color-selected: #ececed;
+    --color-border: #d1d9e0;
+    --color-border-strong: #afb8c1;
+    --color-selection: #ececed;
+    --color-ink: #1f2328;
+    --color-body: #32383f;
+    --color-muted: #424952;
+    --color-subtle: #59636e;
+    --color-syntax-keyword: #cf222e;
+    --color-syntax-string: #0a3069;
+    --color-syntax-number: #0550ae;
+    --color-syntax-comment: #59636e;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+  }
+
+  /* Foco visível por teclado, igual em tudo o que recebe foco. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /*
+   * O palco escuro (RN-MARCA-006): uma região que fica no tema ESCURO do Prism em qualquer tema. É onde a ilustração da marca mora
+   * na tela de login: o raio branco e o prisma de vidro foram desenhados para um fundo escuro, e no tema claro eles sumiriam. Os
+   * valores são os da coluna escura de `@theme` (um teste confere que são os mesmos, token por token). `color-scheme: dark` faz
+   * os `light-dark()` de dentro (a marca) escolherem a coluna escura, e `background-color` e `color` precisam ser escritos de novo
+   * aqui: a cor do texto herda o valor JÁ calculado do <body>, que no tema claro é escuro.
+   */
+  .stage-dark {
+    color-scheme: dark;
+    --color-background: #0e1114;
+    --color-panel: #14181d;
+    --color-raised: #1b2027;
+    --color-selected: #232a33;
+    --color-border: #2a313b;
+    --color-border-strong: #38414d;
+    --color-selection: #2a313b;
+    --color-ink: #e6eaf0;
+    --color-body: #c9d1dc;
+    --color-muted: #b4bcc8;
+    --color-subtle: #8e99a8;
+    --color-accent: #f2b644;
+    --color-postgres: #7db2ff;
+    --color-db2: #5ed3a3;
+    --color-informix: #f591b6;
+    --color-danger: #ff8a7a;
+    --color-success: #5ed3a3;
+    --color-syntax-keyword: #7db2ff;
+    --color-syntax-string: #5ed3a3;
+    --color-syntax-number: #f2b644;
+    --color-syntax-comment: #8e99a8;
+    --color-scrim: rgb(6 8 10 / 0.72);
+    background-color: var(--color-background);
+    color: var(--color-ink);
+  }
+}

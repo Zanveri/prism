@@ -1,0 +1,118 @@
+# Empacotamento do app: `pnpm dist -- <plataforma>` (`win`, `linux` ou `mac`) gera os pacotes da RN-ABERTO-006, e
+# `pnpm dist:dir` só a pasta sem instalador (`--dir`), para conferir. Sem assinatura de código e sem publicação
+# (`--publish never`): nenhum token, certificado ou segredo entra aqui.
+appId: com.zanveri.prism
+productName: Prism
+# O mesmo padrão em todos os alvos: `Prism-<versão>-<sistema>-<arquitetura>.<extensão>`, sem espaço no nome.
+# A versão é a do `package.json`, o único lugar onde ela mora (RN-VERSAO-003).
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+# Só o que o app usa. As dependências são todas devDependencies e o Vite já as empacotou em `out/`,
+# então `node_modules` não entra. Ficam de fora, por não estarem aqui: `.api-dev/`, `.api-publish/`,
+# `resources/` (a API vai por `extraResources`), `src/`, `electron/` e `scripts/`.
+files:
+  - out/**
+  - package.json
+
+# `resources/api` -> `<pacote>/resources/api` (o `main.ts` inicia o executável da API de lá).
+# Da API ficam de fora o que o `dotnet publish` gera e ela não usa: símbolos de depuração (`.pdb`), o `web.config` da
+# hospedagem no IIS e o manifesto de ativos estáticos (a API não serve arquivo nenhum).
+# Avisos de licença em `resources/` de todo pacote (RN-ABERTO-001), copiados como estão (`scripts/licenses.mjs` tem os mesmos
+# caminhos e o `dist` os confere antes de empacotar):
+#   LICENSE e NOTICE do projeto, da raiz do repositório;
+#   `licenses/ibm-plex-*/LICENSE`: as fontes vão dentro do app e a SIL OFL 1.1 pede o texto junto de cada cópia;
+#   `licenses/dotnet/`: `LICENSE.txt` e `ThirdPartyNotices.txt` do .NET, cujo runtime vai junto da API autocontida. O `build:api`
+#   os traz da instalação do `dotnet` para `resources/licenses/dotnet` (fora do git).
+extraResources:
+  - from: resources/api
+    to: api
+    filter:
+      - "**/*"
+      - "!**/*.pdb"
+      - "!web.config"
+      - "!*.staticwebassets.endpoints.json"
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: node_modules/@fontsource/ibm-plex-sans/LICENSE
+    to: licenses/ibm-plex-sans/LICENSE
+  - from: node_modules/@fontsource/ibm-plex-mono/LICENSE
+    to: licenses/ibm-plex-mono/LICENSE
+  - from: resources/licenses/dotnet
+    to: licenses/dotnet
+
+# Não há módulo nativo no app.
+npmRebuild: false
+
+# Windows: instalador e versão portátil (zip). O ícone da janela e do splash é o `.ico` em `resources/` (`main.ts`).
+win:
+  target:
+    - target: nsis
+      arch: x64
+    - target: zip
+      arch: x64
+  icon: build/icon.ico
+  extraResources:
+    - from: build/icon.ico
+      to: icon.ico
+
+# O atualizador do Prism (seção 17 da especificação, `electron/update/`) baixa o instalador inteiro e o confere por soma
+# SHA-256: o `.blockmap`, que serve ao download por diferença do electron-updater, não é usado.
+nsis:
+  differentialPackage: false
+
+# Linux: AppImage (roda na maioria das distribuições sem instalar), `.deb`, `.rpm` e `tar.gz`. O ícone da janela e do
+# splash é o PNG de 512 px em `resources/` (`main.ts`); o do sistema é o conjunto de `build/icons/<N>x<N>.png`.
+linux:
+  target:
+    - target: AppImage
+      arch: x64
+    - target: deb
+      arch: x64
+    - target: rpm
+      arch: x64
+    - target: tar.gz
+      arch: x64
+  icon: build/icons
+  executableName: prism
+  # O Electron usa o `desktopName` do `package.json` (`prism.desktop`) como app_id e WM_CLASS: é o que liga a janela aberta ao
+  # `.desktop` e ao ícone dela na barra de tarefas (RN-MARCA-001). Com `syncDesktopName`, o arquivo `.desktop` do pacote tem esse
+  # mesmo nome e o `StartupWMClass` dele é `prism`. O nome é o do `executableName` mais `.desktop`.
+  syncDesktopName: true
+  category: Development
+  synopsis: Cliente de banco de dados
+  description: Cliente de banco de dados para Informix, Db2 e PostgreSQL.
+  maintainer: Zanveri
+  extraResources:
+    - from: build/icon.png
+      to: icon.png
+
+# O nome do pacote é `prism` (o `name` do `package.json`, `prism-client`, é o do projeto de interface, não o do produto).
+# `depends` substitui a lista padrão do electron-builder, então ela vem inteira, com o que ele esquece e o Chromium pede:
+# `libgbm1` (`mesa-libgbm`) e `libasound2` (`alsa-lib`). Num Ubuntu mínimo, sem eles o app nem abre.
+deb:
+  packageName: prism
+  packageCategory: devel
+  depends: [libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0, libgbm1, libasound2]
+rpm:
+  packageName: prism
+  packageCategory: Development/Tools
+  depends: [gtk3, libnotify, nss, libXScrnSaver, "(libXtst or libXtst6)", xdg-utils, at-spi2-core, "(libuuid or libuuid1)", "(mesa-libgbm or libgbm1)", "(alsa-lib or libasound2)"]
+
+# macOS: `dmg` e `zip`, para Apple Silicon e Intel. Sem `arch` nos alvos de propósito: a arquitetura vem do `--arm64` ou do
+# `--x64` que o `dist.mjs` passa (um por vez, porque há uma API só em `resources/api`); com `arch` aqui o electron-builder
+# gera as duas de uma vez, e uma levaria a API da arquitetura errada. Sem assinatura nem notarização (`identity: null`).
+# NÃO VERIFICADO: nenhum pacote de macOS foi aberto. Um app arm64 sem assinatura pode ser recusado pelo macOS como danificado; a
+# decisão sobre assinatura ad-hoc fica para quando houver um Mac. O ícone é o do pacote.
+mac:
+  target:
+    - dmg
+    - zip
+  icon: build/icon.icns
+  category: public.app-category.developer-tools
+  identity: null

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Prism — Registros da tabela apontamento</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="height: 100vh; min-height: 560px; display: flex; flex-direction: column; background: #0E1114; color: #E6EAF0; color-scheme: dark; scrollbar-color: #38414D #14181D; font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif; font-size: 13px; line-height: 20px">
+<header style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box; padding: 6px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<a href="Workbench.dc.html" style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 4px; color: #E6EAF0; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: 0.01em"><svg width="64" height="24" viewBox="0 40 700 264" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><defs><filter id="prism-mark-glow-tabeladados" filterUnits="userSpaceOnUse" x="0" y="0" width="720" height="360"><feGaussianBlur stdDeviation="14"></feGaussianBlur></filter><linearGradient id="prism-mark-ifx-tabeladados" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#F591B6"></stop><stop offset="1" stop-color="#F591B6" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-db2-tabeladados" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#5ED3A3"></stop><stop offset="1" stop-color="#5ED3A3" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-pg-tabeladados" gradientUnits="userSpaceOnUse" x1="366" y1="0" x2="646" y2="0"><stop offset="0" stop-color="#7DB2FF"></stop><stop offset="1" stop-color="#7DB2FF" stop-opacity="0.55"></stop></linearGradient><linearGradient id="prism-mark-face-tabeladados" gradientUnits="userSpaceOnUse" x1="300" y1="44" x2="200" y2="300"><stop offset="0" stop-color="#3D4856"></stop><stop offset="1" stop-color="#1E242C"></stop></linearGradient></defs><g filter="url(#prism-mark-glow-tabeladados)" opacity="0.6"><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="26"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="#F591B6"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="#5ED3A3"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="#7DB2FF"></path></g><path d="M8 213 L220 186" stroke="#F3F5F8" stroke-width="14"></path><path d="M366.9 163 L646 72.3 L646 104.3 L371.4 171 Z" fill="url(#prism-mark-ifx-tabeladados)"></path><path d="M372 172 L646 146.4 L646 178.4 L376.5 180 Z" fill="url(#prism-mark-db2-tabeladados)"></path><path d="M377.1 181 L646 220.5 L646 252.5 L381.6 189 Z" fill="url(#prism-mark-pg-tabeladados)"></path><path d="M300 50 L440 298 H160 Z" fill="#1A2028"></path><path d="M300 50 L160 298 L292 226 Z" fill="url(#prism-mark-face-tabeladados)"></path><path d="M160 298 L292 226 L440 298 Z" fill="#11151A"></path><path d="M220 186 L369.8 168 L378.8 184 Z" fill="#F3F5F8" fill-opacity="0.16"></path><path d="M300 50 L440 298 H160 Z" stroke="#E6EAF0" stroke-width="13"></path><circle cx="220" cy="186" r="15" fill="#FFFFFF"></circle><path d="M656 69 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#F591B6" stroke-width="10"></path><ellipse cx="676" cy="69" rx="20" ry="8" fill="#1B2027" stroke="#F591B6" stroke-width="10"></ellipse><path d="M656 145 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#5ED3A3" stroke-width="10"></path><ellipse cx="676" cy="145" rx="20" ry="8" fill="#1B2027" stroke="#5ED3A3" stroke-width="10"></ellipse><path d="M656 221 v34 a20 8 0 0 0 40 0 v-34" fill="#14181D" stroke="#7DB2FF" stroke-width="10"></path><ellipse cx="676" cy="221" rx="20" ry="8" fill="#1B2027" stroke="#7DB2FF" stroke-width="10"></ellipse></svg><span>Prism</span></a>
+<button type="button" aria-label="Mostrar navegador" aria-pressed="false" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 6px; background: transparent; color: #B4BCC8; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M6 3v10"></path></svg></button>
+<a href="Conexoes.dc.html" style="margin-left: auto; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M6 2v3M10 2v3M4 5h8v2.5a4 4 0 0 1-8 0zM8 11.5V14"></path></svg><span>Conexões</span></a>
+<a href="Configuracoes.dc.html" aria-label="Configurações" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 6px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h6M12 5h1M3 11h1M7 11h6"></path><circle cx="10.5" cy="5" r="1.5"></circle><circle cx="5.5" cy="11" r="1.5"></circle></svg></a>
+<span style="display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; color: #B4BCC8"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="3.5" y="7" width="9" height="6.5" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"></path></svg><span>marina.costa</span></span>
+<a href="Main.dc.html" style="display: flex; align-items: center; height: 36px; padding: 0 12px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Sair</a>
+</header>
+<nav aria-label="Abas abertas" style="flex: none; display: flex; flex-wrap: wrap; align-items: stretch; gap: 2px; padding: 0 8px; background: #0E1114; border-bottom: 1px solid #2A313B">
+<a href="Workbench.dc.html" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 2h5.5L12 4.5V14H4z"></path><path d="M9.5 2v2.5H12"></path></svg><span>consulta-1.sql</span></a>
+<a href="TabelaDados.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; background: #14181D; border-bottom: 2px solid {{accent}}; color: #E6EAF0; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="3" width="12" height="10" rx="1"></rect><path d="M2 6.5h12M6 6.5V13"></path></svg><span>apontamento</span><span style="flex: none; display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: #FF8A7A; color: #14181D; font-size: 11px; line-height: 18px; font-weight: 600">Produção</span></a>
+<a href="DiagramaER.dc.html" style="display: flex; align-items: center; gap: 8px; height: 40px; box-sizing: border-box; padding: 0 14px; border-bottom: 2px solid transparent; color: #B4BCC8; text-decoration: none"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><rect x="2" y="2.5" width="5" height="4" rx="1"></rect><rect x="9" y="9.5" width="5" height="4" rx="1"></rect><path d="M4.5 6.5v3a2 2 0 0 0 2 2H9"></path></svg><span>Diagrama · producao</span></a>
+</nav>
+<div style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<span style="flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 18px; padding: 0 4px; box-sizing: border-box; border: 1px solid #7DB2FF; border-radius: 4px; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600">PG</span>
+<h1 style="margin: 0; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 15px; line-height: 22px; font-weight: 600">apontamento</h1>
+<span style="color: #B4BCC8; font-size: 12px">MES Produção / mes / producao</span>
+<div style="display: flex; gap: 4px; padding: 3px; background: #0E1114; border: 1px solid #2A313B; border-radius: 8px">
+<a href="TabelaDados.dc.html" aria-current="page" style="display: flex; align-items: center; height: 28px; padding: 0 14px; border-radius: 6px; background: #232A33; color: #E6EAF0; font-weight: 600; text-decoration: none">Registros</a>
+<a href="TabelaDetalhe.dc.html" style="display: flex; align-items: center; height: 28px; padding: 0 14px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Estrutura</a>
+<a href="DiagramaER.dc.html" style="display: flex; align-items: center; height: 28px; padding: 0 14px; border-radius: 6px; color: #B4BCC8; text-decoration: none">Diagrama</a>
+</div>
+</div>
+<div style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; background: #14181D; border-bottom: 1px solid #2A313B">
+<label style="flex: 1 1 320px; min-width: 0; display: flex; align-items: center; gap: 8px; height: 32px; box-sizing: border-box; padding: 0 10px; background: #1B2027; border: 1px solid #2A313B; border-radius: 6px"><span style="flex: none; color: #7DB2FF; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 12px">WHERE</span><input type="text" aria-label="Filtro dos registros" placeholder="refugo &gt; 0 AND maquina_id = 4" style="flex: 1; min-width: 0; height: 28px; padding: 0; border: 0; background: transparent; color: #E6EAF0; font: inherit; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace"></label>
+<button type="button" style="display: flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer">Aplicar filtro</button>
+<button type="button" style="display: flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer">Limpar</button>
+<span style="margin-left: auto; padding: 0 4px; color: #B4BCC8; font-size: 12px">{{resumo}}</span>
+<button type="button" onClick="{{contar}}" style="display: flex; align-items: center; height: 32px; padding: 0 12px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer">Contar total</button>
+</div>
+<div role="table" aria-label="Registros de apontamento" onScroll="{{aoRolar}}" style="flex: 1 1 0; min-height: 0; overflow: auto; background: #0E1114; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; font-size: 13px; line-height: 20px">
+<div role="row" style="position: sticky; top: 0; z-index: 1; display: grid; grid-template-columns: 56px 88px 220px 180px 190px 150px 130px 230px minmax(0, 1fr); min-width: 1260px; background: #1B2027; border-bottom: 1px solid #2A313B">
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; color: #8E99A8; font-weight: 500">#</div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>id</span><span style="color: #F2B644; font-size: 11px">PK</span></div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>ordem_id</span><span style="color: #7DB2FF; font-size: 11px">FK</span><span style="color: #B4BCC8; font-weight: 400; font-size: 11px">ordem_producao</span></div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>maquina_id</span><span style="color: #7DB2FF; font-size: 11px">FK</span><span style="color: #B4BCC8; font-weight: 400; font-size: 11px">maquina</span></div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>operador_id</span><span style="color: #7DB2FF; font-size: 11px">FK</span><span style="color: #B4BCC8; font-weight: 400; font-size: 11px">operador</span></div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>quantidade</span><span style="color: #8E99A8; font-weight: 400; font-size: 11px">numeric</span></div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>refugo</span><span style="color: #8E99A8; font-weight: 400; font-size: 11px">numeric</span></div>
+<div role="columnheader" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-left: 1px solid #2A313B; font-weight: 600; white-space: nowrap"><span>registrado_em</span><span style="color: #8E99A8; font-weight: 400; font-size: 11px">timestamptz</span></div>
+<div aria-hidden="true" style="border-left: 1px solid #2A313B"></div>
+</div>
+<sc-for list="{{linhas}}" as="r" hint-placeholder-count="12">
+<div role="row" style="display: grid; grid-template-columns: 56px 88px 220px 180px 190px 150px 130px 230px minmax(0, 1fr); min-width: 1260px; background: #14181D; border-bottom: 1px solid #232A33">
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; color: #8E99A8">{{r.id}}</div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid #232A33">{{r.id}}</div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid #232A33"><a href="#" style="color: #7DB2FF; text-decoration: underline; text-underline-offset: 3px">{{r.ordem}}</a></div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid #232A33"><a href="{{r.maquinaHref}}" style="color: #7DB2FF; text-decoration: underline; text-underline-offset: 3px">{{r.maquina}}</a></div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid #232A33"><a href="#" style="color: #7DB2FF; text-decoration: underline; text-underline-offset: 3px">{{r.operador}}</a></div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid #232A33">{{r.quantidade}}</div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid #232A33">{{r.refugo}}</div>
+<div role="cell" style="height: 32px; box-sizing: border-box; display: flex; align-items: center; padding: 0 12px; border-left: 1px solid #232A33; white-space: nowrap">{{r.quando}}</div>
+<div aria-hidden="true" style="border-left: 1px solid #232A33"></div>
+</div>
+</sc-for>
+</div>
+<div style="flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 12px; background: #14181D; border-top: 1px solid #2A313B; font-size: 12px; line-height: 18px">
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5V5h-2.5"></path></svg><span>Atualizar</span></button>
+<button type="button" style="display: flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer">Salvar</button>
+<button type="button" style="display: flex; align-items: center; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer">Cancelar</button>
+<button type="button" style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid #38414D; border-radius: 6px; background: transparent; color: #E6EAF0; font: inherit; cursor: pointer"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M8 2.5v8M4.5 7.5L8 11l3.5-3.500M3 13.5h10"></path></svg><span>Exportar CSV</span></button>
+<label style="display: flex; align-items: center; gap: 6px; padding-left: 8px; color: #B4BCC8"><span>Linhas por busca</span><input type="text" inputmode="numeric" value="200" style="width: 56px; height: 28px; box-sizing: border-box; padding: 0 8px; background: #1B2027; border: 1px solid #38414D; border-radius: 6px; color: #E6EAF0; font: inherit; font-family: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace; text-align: right"></label>
+<span style="margin-left: auto; color: #E6EAF0">{{carregadas}}</span>
+<span style="color: #B4BCC8">Role até o fim da grade para buscar as próximas 200.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#F2B644","options":["#F2B644","#7DB2FF","#5ED3A3","#F591B6"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+const s = this.state || {};
+const n = s.n || 200;
+const total = 1000;
+const p2 = (v) => (v < 10 ? '0' + v : '' + v);
+const maquinas = [4, 4, 2, 1, 7, 2, 4, 5, 7, 2];
+const operadores = [17, 17, 21, 17, 9, 21, 12, 9, 9, 21];
+const base = { 1: 250, 2: 180, 4: 240, 5: 310, 7: 600 };
+const linhas = [];
+for (let i = 1; i <= n; i++) {
+const m = maquinas[(i - 1) % 10];
+const min = 362 + (i - 1) * 29 + ((i * 17) % 7);
+linhas.push({
+id: i,
+ordem: 1012 + (Math.floor((i - 1) / 7) % 9),
+maquina: m,
+maquinaHref: m === 4 ? 'TabelaDadosFK.dc.html' : '#',
+operador: operadores[(i - 1) % 10],
+quantidade: (base[m] - ((i * 7) % 11)).toFixed(3),
+refugo: (((i * 37) % 13) * 0.5).toFixed(3),
+quando: '2026-09-' + p2(1 + Math.floor(min / 1440)) + ' ' + p2(Math.floor((min % 1440) / 60)) + ':' + p2(min % 60) + ':' + p2((i * 23) % 60) + '-03'
+});
+}
+return {
+accent: this.props.accent ?? '#F2B644',
+linhas: linhas,
+carregadas: 'Linhas 1 a ' + n + ' carregadas.',
+resumo: s.contado ? total + ' linhas no total · 38 ms' : 'Total não contado · 38 ms',
+contar: () => this.setState({ contado: true }),
+aoRolar: (e) => {
+const el = e.currentTarget;
+if (n < total && el.scrollTop + el.clientHeight >= el.scrollHeight - 48) this.setState({ n: Math.min(n + 200, total) });
+}
+};
+}
+}
+</script>
+</body>
+</html>

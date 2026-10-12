@@ -1,0 +1,39 @@
+# Integrar (RN-ABERTO-005): os testes de integração da API contra o PostgreSQL, o Informix e o Db2 de verdade, em contêiner no
+# Docker do runner Linux. O Db2 só sobe como contêiner privilegiado, que o runner hospedado aceita (PRISM_CI_PRIVILEGED). O driver
+# da IBM dos testes é instalado pelo gerenciador de drivers do próprio Prism, a partir do pacote do cache do NuGet que o restore
+# deixa no runner; no Linux ele precisa da libxml2 (o passo de preparo a instala se faltar).
+name: Integrar
+
+on:
+  workflow_call:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  DOTNET_NOLOGO: '1'
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  api:
+    name: API com PostgreSQL, Informix e Db2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      PRISM_CI_PRIVILEGED: '1'
+    steps:
+      - name: Clonar o repositório
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Preparar o .NET
+        uses: ./.github/actions/preparar-dotnet
+      - name: Preparar o que o driver da IBM pede no Linux
+        run: bash scripts/ci/integration-api.sh --install-deps
+      - name: Testes de integração
+        run: bash scripts/ci/integration-api.sh
