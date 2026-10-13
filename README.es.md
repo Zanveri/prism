@@ -29,8 +29,8 @@ Descarga la versión más reciente desde la **[página de releases](https://gith
 
 | Sistema | Archivo | Para qué |
 | --- | --- | --- |
-| Windows x64 | `Prism-<versión>-win-x64.exe` | el instalador |
-| Windows x64 | `Prism-<versión>-win-x64.zip` | la copia portátil, sin instalación |
+| Windows x64 | `Prism-<versión>-win-x64.exe` | el instalador (recomendado): instala solo para tu usuario, sin pedir administrador, y se actualiza desde dentro de la app |
+| Windows x64 | `Prism-<versión>-win-x64.zip` | la copia portátil, sin instalación; cada actualización es una descarga nueva |
 | Linux x64 | `Prism-<versión>-linux-x86_64.AppImage` | funciona en la mayoría de las distribuciones, sin instalar |
 | Linux x64 | `Prism-<versión>-linux-amd64.deb` | Debian, Ubuntu y derivadas |
 | Linux x64 | `Prism-<versión>-linux-x86_64.rpm` | Fedora, RHEL, openSUSE y derivadas |
