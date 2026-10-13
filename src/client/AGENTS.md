@@ -456,9 +456,19 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **A sessão da árvore é um `POST`**, então a consulta dela (`databaseSessionQuery`, chave `["database-session", id]`) nunca
   é invalidada nem refeita enquanto tem dado: refazer abriria uma segunda sessão e deixaria a primeira órfã na API. Ela tem
   `gcTime: Infinity` (sair da área de trabalho não a descarta) e só "Desconectar" a remove. "Atualizar" invalida por
-  prefixo as consultas `["tree", conexão, …]` (`treePrefix`), nunca a sessão; "Tentar de novo" é um `refetch` do nível que
+  prefixo as consultas `["tree", conexão, …]` (`treePrefixes`), nunca a sessão; "Tentar de novo" é um `refetch` do nível que
   falhou. Os níveis da árvore têm `staleTime` e `gcTime` infinitos e não se refazem ao voltar o foco nem ao montar de novo:
   ficam até o "Atualizar" daquele nó (RN-ARVORE-002).
+- **Os bancos do servidor** (RN-ARVORE-006): o nível da conexão é a lista que `GET .../databases` devolve pela sessão da conexão
+  (`["tree", conexão, "databases"]`, `databaseNodes`), com o banco da conexão primeiro, marcado com o `badge` "padrão" (o mesmo
+  estilo do `PK`). O banco da conexão guarda as chaves de antes (`{ type: "database", connectionId }`, `["tree", conexão, "schemas"]`,
+  `["database-session", conexão]`) e abre junto com a conexão; outro banco leva o nome no caminho (`database`) e, nas chaves de
+  consulta, uma marca `{ database }` logo depois da conexão (`databaseMark`), que nome de esquema (texto) não imita. Abrir outro
+  banco abre a sessão dele (`databaseSessionQuery(conexão, banco)`, o `POST` com `database`), e o que está abaixo dele usa essa
+  sessão; a aba aberta a partir dele guarda o banco (`QueryTab.database`): a sessão da aba, a Estrutura, o Diagrama, a passagem do
+  filtro e o completar do editor são desse banco. `navKey` escreve o caminho sempre na mesma ordem de campos. "Desconectar" fecha
+  as sessões da árvore de todos os bancos (`treeSessionIds`) e as das abas, e remove o prefixo `["database-session", conexão]`;
+  "Atualizar" na conexão traz a lista de novo, e num banco, só o que é dele.
 - **Falha de nível**: linha de erro no nó (a mensagem do banco, `detail`, senão o `title`) com "Tentar de novo", mais o
   aviso central. "Desconectar" recolhe e esquece antes de remover as consultas: com o nó ainda aberto a consulta removida
   seria refeita e abriria outra sessão.
@@ -583,8 +593,8 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   ancestrais abertos, não casa os grupos fixos pelo nome e devolve as linhas, as chaves abertas e o trecho que casou por linha
   (`findMatch`, nas posições do rótulo que a pessoa vê: caminho rápido para ASCII e para acento composto, mapa ponto a ponto para
   acento solto e hangul; o teste de invariante confere os dois). **Olha o que a árvore já carregou, aberto ou não**: `loadedLevels`
-  junta os níveis do navegador com o que o cache guarda (`cachedTree`, em `navigator-search.ts`, lê `["database-session", …]` e
-  `["tree", …]` e devolve o MESMO objeto enquanto nenhuma dessas consultas mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
+  junta os níveis do navegador com o que o cache guarda (`cachedTree`, em `navigator-search.ts`, lê os níveis
+  `["tree", …]`, a começar pela lista dos bancos de cada conexão, e devolve o MESMO objeto enquanto nenhuma dessas consultas mudou), e `levelPathOf` é o inverso de `treeKey` (**mudou `treeKey`, mude `levelPathOf`**: há teste de ida e volta).
   **Nunca chama a API, nunca abre nó e nunca toca em `expanded`**: limpar o campo devolve a árvore como estava.
 - **Na tela filtrada** só tem chevron quem tem algo à vista embaixo; recolher um ancestral ali é estado local daquele texto
   (`searchCollapsed`), não `expanded`; o grupo diz "3 de 120"; o destaque é um `<mark>` de texto (o nome vem do banco). O filtro roda
