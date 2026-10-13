@@ -1920,3 +1920,69 @@ duplicar a conexão" pelo botão direito.
   aparece selecionada no navegador, e nada abre sozinho. Rota:
   `POST api/user/connections/{id}/duplicate` → 201 com a conexão nova, no formato do
   `GET api/user/connections/{id}`; 404 `CONNECTION_NOT_FOUND`. O log registra os IDs, nunca a senha.
+
+## 24. Complemento de 2026-10-13: fontes, troca de banco na aba e abas que voltam
+
+Pedidos: do dono, "permita o usuário utilizar as fontes do sistema na aplicação geral e outra fonte
+para o editor SQL"; e das issues 1 e 2 do repositório público: "ter uma opção de trocar o database
+conectado para executar as queries" e "ter histórico caso o programa feche ou a conexão seja
+fechada, assim, ao reabrir já retorna as queries feitas".
+
+### Fontes
+
+- **RN-CONFIG-008.** Configurações › Aparência ganha "Fonte da interface" e "Fonte do editor SQL".
+  - Cada uma oferece a fonte que o app traz, que é o padrão (IBM Plex Sans na interface, IBM Plex
+    Mono no editor), e as fontes instaladas no sistema, em ordem de nome e com busca pelo nome. A
+    do editor mostra as monoespaçadas primeiro.
+  - A escolha vale na hora, em todas as janelas, e fica nas preferências desta instalação, por
+    usuário (RN-CONFIG-001).
+  - A fonte da interface vale para todo o texto do app fora do código. A do editor vale para o
+    editor SQL e para os campos de SQL que usam o mesmo editor (o filtro dos Registros, o "Ver SQL").
+  - Uma fonte escolhida que não está mais instalada volta à do app, sem erro.
+  - A lista é lida na máquina, sem rede, de preferência sem dependência nova (a API de fontes locais
+    do Chromium ou o processo principal). Se a lista não puder ser lida, o campo aceita o nome
+    digitado.
+
+### Trocar o banco da aba de consulta
+
+- **RN-ARVORE-007.** A barra do editor da aba de consulta mostra o banco em que a aba roda e deixa
+  trocá-lo.
+  - A lista traz os bancos do servidor, a mesma da RN-ARVORE-006. No Db2, só o banco da conexão, e
+    a lista fica desabilitada com o motivo.
+  - Trocar passa a aba para a sessão daquele banco, a mesma que a árvore abre (RN-ARVORE-006), sem
+    executar nada. O texto do editor fica.
+  - Com alterações não salvas na grade (RN-EDIT-007) ou com transação aberta, a troca pergunta
+    antes, como ao executar outro comando.
+  - O script salvo guarda o banco da aba (RN-SCRIPT-001).
+
+### Abas que voltam na próxima entrada
+
+- **RN-ABAS-006.** O Prism grava no cofre do usuário, cifradas como os scripts (RN-SCRIPT-002), as
+  abas abertas de todas as janelas:
+  - de cada aba de consulta: o texto do editor, a conexão, o banco, o script de onde veio (se veio)
+    e se tem mudança não salva;
+  - de cada aba de tabela: a conexão, o banco, o esquema, a tabela e a vista;
+  - a ordem das abas e qual estava ativa.
+
+  Quando grava:
+  - alguns segundos depois de cada mudança, para um fechamento inesperado perder no máximo esses
+    segundos;
+  - ao fechar uma aba;
+  - antes de o cofre fechar (sair, bloqueio por inatividade, fechar o app).
+
+  O que volta:
+  - Na próxima entrada do mesmo usuário, as abas voltam na janela principal, na ordem em que
+    estavam.
+  - Voltam desconectadas: nada conecta nem executa sozinho.
+  - O resultado, o cursor e as alterações não salvas da grade não voltam.
+  - A aba cuja conexão foi excluída volta sem conexão, como um script sem conexão.
+  - O texto de cada aba vai até 1 MB (RN-SCRIPT-004). O que passa disso não é gravado, e a aba volta
+    vazia, com o aviso.
+  - Fechar uma aba a tira do que volta.
+
+| Rota | Sucesso | Erros |
+| --- | --- | --- |
+| `GET api/user/workspace` | 200 `{ tabs, activeIndex }` (lista vazia e `activeIndex` nulo quando nada foi gravado) | |
+| `PUT api/user/workspace` `{ tabs, activeIndex }` | 204 | 422 `WORKSPACE_INVALID` (formato, índice fora da lista), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
+
+O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes.
