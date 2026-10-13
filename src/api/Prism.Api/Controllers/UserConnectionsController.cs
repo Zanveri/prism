@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Prism.Application.Connections.Features.CreateConnection;
 using Prism.Application.Connections.Features.DeleteConnection;
+using Prism.Application.Connections.Features.DuplicateConnection;
 using Prism.Application.Connections.Features.GetConnection;
 using Prism.Application.Connections.Features.GetConnections;
 using Prism.Application.Connections.Features.RevealConnectionPassword;
@@ -61,6 +62,20 @@ public sealed class UserConnectionsController(IMediator mediator) : ControllerBa
             return result.ToIActionResult();
 
         return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-CONN-016: "Duplicar conexão". Sem corpo: a cópia nasce na mesma pasta, com todos os campos e a senha gravada, copiada dentro do cofre, e
+    /// o nome "&lt;nome&gt; (cópia)". 201 com a cópia, no formato do `GET api/user/connections/{id}`, e o `Location` dela; 404 `CONNECTION_NOT_FOUND`.
+    /// </summary>
+    [HttpPost("{id:guid}/duplicate")]
+    public async Task<IActionResult> DuplicateConnection(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new DuplicateConnectionCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Created($"/api/user/connections/{result.Value.ID}", result.Value);
     }
 
     [HttpDelete("{id:guid}")]

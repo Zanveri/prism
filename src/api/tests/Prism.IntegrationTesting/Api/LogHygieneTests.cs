@@ -81,6 +81,8 @@ public sealed class LogHygieneTests
             Assert.That(failure, Does.Not.Contain(MarkedWrongPassword));
             var tested = await api.Client.PostAsJsonAsync("/api/user/connections/test", new { engine = (int)settings.Engine, host = settings.Host, port = settings.Port, database = settings.Database, userName = role, password = MarkedPassword });
             Assert.That(tested.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+            // RN-CONN-016: duplicar copia a senha marcada dentro do cofre, e o log registra só os IDs.
+            Assert.That((await api.Client.PostAsync($"/api/user/connections/{connectionID}/duplicate", null)).StatusCode, Is.EqualTo(HttpStatusCode.Created));
 
             // O desligamento de verdade: o host é descartado e o Serilog grava até o fim antes de o arquivo ser lido.
             Assert.That(await ApiProcess.StopThroughParentAsync(parent, api, ShutdownTimeout), Is.Zero);
@@ -90,6 +92,7 @@ public sealed class LogHygieneTests
             Assert.That(logs.Values.Any(log => log.Contains($"Sessão \"{sessionID}\" aberta", StringComparison.Ordinal)), Is.True, "O log não registra a sessão: o teste não prova nada se o log não está ligado.");
             // A falha ao conectar é registrada (classe e SQLSTATE, sem a mensagem): é a linha que as marcas da conexão errada não podem estar.
             Assert.That(logs.Values.Any(log => log.Contains("A sessão com o banco não abriu", StringComparison.Ordinal)), Is.True, "O log não registra a conexão que não abriu.");
+            Assert.That(logs.Values.Any(log => log.Contains("duplicada; a cópia é a conexão", StringComparison.Ordinal)), Is.True, "O log não registra a conexão duplicada.");
             foreach (var (file, log) in logs)
             {
                 Assert.That(log, Does.Not.Contain(MarkedPassword), $"{file} tem a senha do banco.");

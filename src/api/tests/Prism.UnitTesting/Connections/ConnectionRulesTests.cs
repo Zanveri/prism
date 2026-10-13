@@ -58,4 +58,95 @@ public sealed class ConnectionRulesTests
     [Fact(DisplayName = "Erro outra porta")]
     public void SameServer_ShouldBeFalse_WhenThePortDiffers()
         => Assert.False(ConnectionRules.SameServer("pg.local", 5432, "pg.local", 5433));
+
+    /// <summary>RN-CONN-016: o nome da cópia é "&lt;nome&gt; (cópia)" quando ele está livre na pasta.</summary>
+    [Trait("ConnectionRules", "CopyName")]
+    [Fact(DisplayName = "OK a primeira cópia é o nome com (cópia)")]
+    public void CopyName_ShouldBeTheNameWithCopy_WhenItIsFree()
+        => Assert.Equal("MES Produção (cópia)", ConnectionRules.CopyName("MES Produção", _ => false));
+
+    [Trait("ConnectionRules", "CopyName")]
+    [Fact(DisplayName = "OK com (cópia) tomado, vem (cópia 2), depois (cópia 3)")]
+    public void CopyName_ShouldNumberTheCopy_WhenTheNameIsTaken()
+    {
+        //Arrange
+        var taken = new HashSet<string>(StringComparer.Ordinal) { "MES (cópia)", "MES (cópia 2)" };
+
+        //Assert
+        Assert.Equal("MES (cópia 3)", ConnectionRules.CopyName("MES", taken.Contains));
+        Assert.Equal("MES (cópia 2)", ConnectionRules.CopyName("MES", name => name == "MES (cópia)"));
+    }
+
+    /// <summary>A unicidade não é desta função: ela pergunta a quem chama por cada candidato, na ordem, e para no primeiro livre.</summary>
+    [Trait("ConnectionRules", "CopyName")]
+    [Fact(DisplayName = "OK pergunta os candidatos na ordem e para no primeiro livre")]
+    public void CopyName_ShouldAskTheCandidatesInOrder()
+    {
+        //Arrange
+        var asked = new List<string>();
+
+        //Act
+        var name = ConnectionRules.CopyName("MES", candidate =>
+        {
+            asked.Add(candidate);
+
+            return asked.Count < 3;
+        });
+
+        //Assert
+        Assert.Equal(["MES (cópia)", "MES (cópia 2)", "MES (cópia 3)"], asked);
+        Assert.Equal("MES (cópia 3)", name);
+    }
+
+    /// <summary>RN-CONN-010: o nome tem até 80 caracteres. O original é cortado para o sufixo caber, e o corte não deixa espaço antes dele.</summary>
+    [Trait("ConnectionRules", "CopyName")]
+    [Fact(DisplayName = "OK corta o nome original para caber no limite, sem espaço sobrando antes do sufixo")]
+    public void CopyName_ShouldCutTheOriginalName_ToFitTheLimit()
+    {
+        //Arrange
+        var name = new string('a', 80);
+        var withSpaceAtTheCut = $"{new string('b', 71)} {new string('c', 8)}";
+
+        //Act
+        var first = ConnectionRules.CopyName(name, _ => false);
+        var tenth = ConnectionRules.CopyName(name, candidate => !candidate.EndsWith(" (cópia 10)", StringComparison.Ordinal));
+        var cutAtTheSpace = ConnectionRules.CopyName(withSpaceAtTheCut, _ => false);
+
+        //Assert
+        Assert.Equal($"{new string('a', 72)} (cópia)", first);
+        Assert.Equal(ConnectionRules.NameMaxLength, first.Length);
+        Assert.Equal($"{new string('a', 69)} (cópia 10)", tenth);
+        Assert.Equal(ConnectionRules.NameMaxLength, tenth.Length);
+        Assert.Equal($"{new string('b', 71)} (cópia)", cutAtTheSpace);
+        Assert.True(ConnectionRules.NameIsValid(first));
+        Assert.True(ConnectionRules.NameIsValid(tenth));
+    }
+
+    /// <summary>O corte não parte um caractere em dois: um emoji (dois `char`) ou uma letra com acento combinado na fronteira sai inteiro.</summary>
+    [Trait("ConnectionRules", "CopyName")]
+    [Fact(DisplayName = "OK o corte não parte um caractere de duas unidades nem uma letra com acento combinado")]
+    public void CopyName_ShouldNotSplitATextElement()
+    {
+        //Arrange
+        var emoji = $"{new string('a', 71)}\U0001F680{new string('z', 7)}";
+        var combining = $"{new string('a', 71)}é{new string('z', 7)}";
+
+        //Act
+        var withEmoji = ConnectionRules.CopyName(emoji, _ => false);
+        var withCombining = ConnectionRules.CopyName(combining, _ => false);
+
+        //Assert
+        Assert.Equal($"{new string('a', 71)} (cópia)", withEmoji);
+        Assert.Equal($"{new string('a', 71)} (cópia)", withCombining);
+    }
+
+    [Trait("ConnectionRules", "NameIsValid")]
+    [Fact(DisplayName = "OK o limite do nome é o da RN-CONN-010")]
+    public void NameIsValid_ShouldUseTheNameMaxLength()
+    {
+        //Assert
+        Assert.Equal(80, ConnectionRules.NameMaxLength);
+        Assert.True(ConnectionRules.NameIsValid(new string('a', ConnectionRules.NameMaxLength)));
+        Assert.False(ConnectionRules.NameIsValid(new string('a', ConnectionRules.NameMaxLength + 1)));
+    }
 }

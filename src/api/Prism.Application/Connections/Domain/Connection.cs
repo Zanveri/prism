@@ -70,6 +70,13 @@ internal sealed class Connection
         UpdatedAt = updatedAt;
     }
 
+    /// <summary>
+    /// RN-CONN-016: a cópia desta conexão, com ID novo, o nome dado e as duas datas de agora, e todo o resto igual, a senha inclusive. Quem
+    /// escolhe o nome (`ConnectionRules.CopyName`, livre na pasta) é o repository, dentro da gravação; o nome chega pronto e não é normalizado de novo.
+    /// </summary>
+    public Connection Duplicate(string name, DateTime createdAt)
+        => new(Guid.CreateVersion7(), FolderID, name, Engine, Host, Port, Database, UserName, Password, EnvironmentName, EnvironmentColor, createdAt, createdAt);
+
     /// <summary>O ambiente é opcional: em branco é "sem ambiente", e não um nome vazio.</summary>
     private static string? NormalizeEnvironmentName(string? environmentName)
         => string.IsNullOrWhiteSpace(environmentName) ? null : environmentName.NormalizeName();

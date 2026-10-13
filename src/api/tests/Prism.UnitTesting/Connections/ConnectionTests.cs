@@ -134,4 +134,35 @@ public sealed class ConnectionTests
         Assert.Null(connection.EnvironmentName);
         Assert.Null(connection.EnvironmentColor);
     }
+
+    /// <summary>RN-CONN-016: a cópia leva todos os campos, a senha inclusive, na mesma pasta, com ID novo, o nome dado e as duas datas de agora.</summary>
+    [Trait("Connection", "Duplicate")]
+    [Fact(DisplayName = "OK copia todos os campos e a senha, com ID novo, o nome da cópia e as datas de agora")]
+    public void Duplicate_ShouldCopyEveryField_WithANewIDNameAndDates()
+    {
+        //Arrange
+        var folderID = Guid.CreateVersion7();
+        var source = Connection.Restore(Guid.CreateVersion7(), folderID, "MES", EDatabaseEngine.Informix, "ifx.local", 9089, "mes", "informix", "segredo", "Produção", "#FF0000", CreatedAt, UpdatedAt);
+        var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+
+        //Act
+        var copy = source.Duplicate("MES (cópia)", now);
+
+        //Assert
+        Assert.NotEqual(Guid.Empty, copy.ID);
+        Assert.NotEqual(source.ID, copy.ID);
+        Assert.Equal(folderID, copy.FolderID);
+        Assert.Equal("MES (cópia)", copy.Name);
+        Assert.Equal(EDatabaseEngine.Informix, copy.Engine);
+        Assert.Equal("ifx.local", copy.Host);
+        Assert.Equal(9089, copy.Port);
+        Assert.Equal("mes", copy.Database);
+        Assert.Equal("informix", copy.UserName);
+        Assert.Equal("segredo", copy.Password);
+        Assert.Equal("Produção", copy.EnvironmentName);
+        Assert.Equal("#FF0000", copy.EnvironmentColor);
+        Assert.Equal(now, copy.CreatedAt);
+        Assert.Equal(now, copy.UpdatedAt);
+        Assert.Equal("MES", source.Name);
+    }
 }
