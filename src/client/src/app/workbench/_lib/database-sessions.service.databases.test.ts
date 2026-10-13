@@ -1,7 +1,7 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { databaseSessionKey, getDatabases, openDatabaseSession, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, treeSessionIds } from "./database-sessions.service";
+import { databaseSessionKey, getDatabases, loadServerDatabases, openDatabaseSession, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, treeSessionIds } from "./database-sessions.service";
 import { navKey, parseNavKey } from "./navigator-model";
 
 /** A API trocada: cada pedido responde pelo caminho e pelo método, e o teste lê o que foi pedido. */
@@ -114,5 +114,46 @@ describe("as chaves da árvore com os bancos do servidor", () => {
     expect(calls().filter((call) => call.method === "POST")).toEqual([{ path: "api/user/database-sessions", method: "POST", body: { connectionID: "c1", database: "alfa" } }]);
     expect(calls().at(-1)?.path).toBe("api/user/database-sessions/sessao-alfa/schemas");
     unsubscribe();
+  });
+});
+
+describe("loadServerDatabases: a lista dos bancos que a barra do editor pede ao abrir (RN-ARVORE-007)", () => {
+  it("abre a sessão da árvore da conexão, como expandir a conexão, e guarda a lista na mesma consulta da árvore", async () => {
+    expect(await loadServerDatabases(queryClient, "c1")).toBe("loaded");
+
+    expect(calls()).toEqual([
+      { path: "api/user/database-sessions", method: "POST", body: { connectionID: "c1" } },
+      { path: "api/user/database-sessions/sessao-padrao/databases", method: undefined, body: undefined },
+    ]);
+    expect(queryClient.getQueryData(databaseSessionKey("c1"))).toEqual({ id: "sessao-padrao", database: "mes" });
+    expect(queryClient.getQueryData<{ label: string }[]>(treeKey({ type: "connection", connectionId: "c1" }))?.map((node) => node.label)).toEqual(["mes", "alfa"]);
+  });
+
+  it("com a lista já em cache (a árvore a abriu), não pede nada: ela fica até o 'Atualizar' da conexão (RN-ARVORE-002)", async () => {
+    queryClient.setQueryData(databaseSessionKey("c1"), { id: "s-padrao", database: "mes" });
+    queryClient.setQueryData(treeKey({ type: "connection", connectionId: "c1" }), []);
+
+    expect(await loadServerDatabases(queryClient, "c1")).toBe("loaded");
+    expect(calls()).toEqual([]);
+  });
+
+  it("a conexão que não abre para ali: a lista não é pedida (a falha vai ao aviso central, uma vez)", async () => {
+    api.request.mockImplementation(() => Promise.resolve({ ok: false, error: { code: "DATABASE_CONNECTION_FAILED", title: "Falha", detail: null, errors: null, extensions: {} } }));
+
+    expect(await loadServerDatabases(queryClient, "c1")).toBe("failed");
+    expect(calls()).toEqual([{ path: "api/user/database-sessions", method: "POST", body: { connectionID: "c1" } }]);
+  });
+
+  it("a sessão da árvore que caiu abre outra no lugar dela e pede a lista de novo, como o 'Tentar de novo' da árvore", async () => {
+    queryClient.setQueryData(databaseSessionKey("c1"), { id: "s-morta", database: "mes" });
+    const lost = { ok: false, error: { code: "DATABASE_SESSION_NOT_FOUND", title: "Sessão não encontrada", detail: null, errors: null, extensions: {} } };
+    const answer = api.request.getMockImplementation()!;
+    api.request.mockImplementation((path: string, options?: { method?: string }) => (path.includes("s-morta") ? Promise.resolve(lost) : answer(path, options)));
+
+    expect(await loadServerDatabases(queryClient, "c1")).toBe("reopened");
+
+    expect(calls().filter((call) => call.method === "POST")).toEqual([{ path: "api/user/database-sessions", method: "POST", body: { connectionID: "c1" } }]);
+    expect(calls().at(-1)?.path).toBe("api/user/database-sessions/sessao-padrao/databases");
+    expect(queryClient.getQueryData(databaseSessionKey("c1"))).toEqual({ id: "sessao-padrao", database: "mes" });
   });
 });

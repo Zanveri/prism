@@ -15,7 +15,8 @@ import { workbenchCopy } from "../_lib/workbench.copy";
 const copy = workbenchCopy.status;
 
 /**
- * A barra de status: a conexão da aba ativa com a etiqueta do ambiente (RN-CONN-015), "Auto-commit"
+ * A barra de status: a conexão e o banco da aba ativa (o outro banco do servidor em que ela roda, RN-ARVORE-006 e 007, ou o da conexão) com a etiqueta do
+ * ambiente (RN-CONN-015), "Auto-commit"
  * (RN-SESSAO-005: nesta fatia toda sessão é auto-commit) e o cofre aberto. "Conectada" é a mesma
  * definição do navegador (`isConnected`): a árvore abriu a sessão dela, ou alguma aba tem a sua.
  */
@@ -41,7 +42,7 @@ export function StatusBar() {
         <span className="flex items-center gap-1.5">
           <span aria-hidden className={cn("size-2 flex-none rounded-full", connected ? "bg-success" : "border-[1.5px] border-subtle")} />
           <span>
-            {connected ? copy.connected : copy.disconnected} · {connection.name} · {engineOption(connection.engine).label}
+            {connected ? copy.connected : copy.disconnected} · {copy.place(connection.name, tab.database ?? connection.database)} · {engineOption(connection.engine).label}
           </span>
           <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} />
         </span>

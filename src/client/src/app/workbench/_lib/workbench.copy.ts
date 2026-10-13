@@ -108,6 +108,15 @@ export const workbenchCopy = {
     runShortcut: "Ctrl+Enter",
     cancel: "Cancelar",
     cancelling: "Cancelando…",
+    // RN-ARVORE-007: o banco em que a aba roda, e a lista dos bancos do servidor (a mesma da árvore, RN-ARVORE-006).
+    database: {
+      label: "Banco",
+      defaultName: (name: string) => `${name} (padrão)`,
+      // Antes de a lista de conexões chegar, o banco da conexão ainda não tem nome.
+      connectionDatabase: "banco da conexão",
+      loading: "Carregando os bancos…",
+      locked: "No Db2, a conexão usa um banco só.",
+    },
   },
 
   result: {
@@ -261,6 +270,8 @@ export const workbenchCopy = {
     connected: "Conectado",
     disconnected: "Desconectado",
     noTab: "Nenhuma aba ativa",
+    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
+    place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,
   },

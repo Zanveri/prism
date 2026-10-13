@@ -47,7 +47,7 @@ const copy = workbenchCopy.tabs;
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, switchDatabase } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
@@ -70,11 +70,15 @@ export function WorkbenchTabs() {
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
+  // O mesmo com a troca do banco da aba de consulta (RN-ARVORE-007), que também consulta a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestSwitchDatabase = useRef(switchDatabase);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestSwitchDatabase.current = switchDatabase;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -303,7 +307,7 @@ export function WorkbenchTabs() {
                 {isTableTab(tab) ? (
                   <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
                 )}
               </div>
             );
