@@ -4,12 +4,14 @@ import { versionFromArgv, windowIdFromArgv } from "./app-version";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateProgress, UpdateState } from "./update/update-state";
 import type { PeerEvent, TabMoveRequest, TabRequest, WindowSummary } from "./window-messages";
+import type { WorkspaceReport } from "./workspace-messages";
 
 /**
  * A fronteira de confiança do app (decisão 5 da seção 8 da especificação): o endereço e o token
  * da API, o aviso de que ela saiu, o pedido para reiniciá-la, a versão do app (RN-VERSAO-004) e a
  * pasta de dados em uso (só leitura). É tudo o que a tela recebe do processo principal, mais as
- * atualizações (`updates`), as janelas (`windows`) e o que as outras janelas contam do cofre (`session`).
+ * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`) e as abas que voltam na próxima entrada
+ * (`workspace`).
  */
 export type PrismBridge = {
   getApiConfig(): Promise<{ baseUrl: string; token: string }>;
@@ -25,6 +27,23 @@ export type PrismBridge = {
   updates: PrismUpdates;
   windows: PrismWindows;
   session: PrismSession;
+  workspace: PrismWorkspace;
+};
+
+/**
+ * As abas que voltam na próxima entrada (RN-ABAS-006). Cada janela conta as abas dela ao processo principal, que junta as de todas e as grava pela API, no
+ * cofre do usuário; nenhuma janela fala com outra (RN-ABAS-005). O processo principal confere cada relato com o schema de `workspace-messages.ts`. Nada aqui dá
+ * acesso a arquivo nem a endereço.
+ */
+export type PrismWorkspace = {
+  /** A área de trabalho desta janela montou: ela reabre as abas gravadas? Só a janela principal, uma vez por entrada. */
+  claim(): Promise<boolean>;
+  /** As abas desta janela agora; `urgent`, uma aba fechou e a gravação é na hora. */
+  report(report: WorkspaceReport): Promise<void>;
+  /** A área de trabalho desta janela desmontou (saiu do cofre): as abas dela deixam de contar. */
+  withdraw(): Promise<void>;
+  /** Grava agora o que as janelas contaram, e espera: é o que vem antes de o cofre fechar. */
+  flush(): Promise<void>;
 };
 
 /**
@@ -154,6 +173,12 @@ const bridge: PrismBridge = {
       ipcRenderer.on("prism:windows-close-requested", handler);
       return () => ipcRenderer.removeListener("prism:windows-close-requested", handler);
     },
+  },
+  workspace: {
+    claim: () => ipcRenderer.invoke("prism:workspace-claim"),
+    report: (report) => ipcRenderer.invoke("prism:workspace-report", report),
+    withdraw: () => ipcRenderer.invoke("prism:workspace-withdraw"),
+    flush: () => ipcRenderer.invoke("prism:workspace-flush"),
   },
   session: {
     share: (event) => ipcRenderer.invoke("prism:session-share", event),

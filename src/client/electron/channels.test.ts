@@ -49,4 +49,12 @@ describe("os canais entre a tela e o processo principal", () => {
     expect(handlers.sort()).toEqual(windowChannels);
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
+
+  it("as abas que voltam (RN-ABAS-006): cada pedido confere a origem e passa ao centro da área de trabalho, que confere o relato com o schema", () => {
+    const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:workspace-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?workspaceHub\.[a-zA-Z]+\(/g)].map((match) => match[1]);
+    const workspaceChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:workspace-"));
+
+    expect(workspaceChannels).toEqual(["prism:workspace-claim", "prism:workspace-flush", "prism:workspace-report", "prism:workspace-withdraw"]);
+    expect(handlers.sort()).toEqual(workspaceChannels);
+  });
 });

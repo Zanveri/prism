@@ -31,6 +31,7 @@ export const prismEndpoints = {
   userDatabaseSessionQueriesEditsPreview: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/preview`,
   userScripts: "api/user/scripts",
   userScript: (id: string) => `api/user/scripts/${encodeURIComponent(id)}`,
+  userWorkspace: "api/user/workspace",
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
   userDriverInstall: (id: string) => `api/user/drivers/${encodeURIComponent(id)}/install`,
