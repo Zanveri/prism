@@ -291,5 +291,11 @@ export const workbenchCopy = {
     // RN-AVISO-003 e RN-TABELA-007: o filtro que o clique numa chave estrangeira pediu e que a aba da tabela não chegou a enviar (estava ocupada com outro
     // comando, ou a conexão foi desconectada) até o prazo do pedido acabar. Nada foi aplicado; o caminho é clicar de novo.
     filterNotApplied: (table: string) => `O filtro pedido para ${table} não foi aplicado: a aba dela estava ocupada ou desconectada. Clique no valor de novo.`,
+    // RN-ABAS-006: o que não voltou como estava, na entrada. O texto acima de 1 MB não é gravado, e a aba volta vazia.
+    restoredEmpty: (title: string) => `O texto de ${title} passava de 1 MB e não foi guardado. A aba voltou vazia.`,
+    // RN-ABAS-006: a aba de consulta cuja conexão foi excluída volta sem conexão, como um script sem conexão (RN-SCRIPT-003).
+    restoredWithoutConnection: (count: number) => (count === 1 ? "Uma aba voltou sem conexão: a conexão dela não existe mais." : `${formatCount(count, "aba", "abas")} voltaram sem conexão: a conexão delas não existe mais.`),
+    // RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; a da conexão excluída não volta.
+    restoredTablesDropped: (count: number) => (count === 1 ? "Uma aba de tabela não voltou: a conexão dela não existe mais." : `${formatCount(count, "aba de tabela", "abas de tabela")} não voltaram: a conexão delas não existe mais.`),
   },
 } as const;

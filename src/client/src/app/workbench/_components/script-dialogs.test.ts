@@ -98,6 +98,13 @@ describe("a aba sem conexão (RN-SCRIPT-003)", () => {
     expect(onAssign).toHaveBeenCalledWith("c2");
   });
 
+  it("a aba que voltou na entrada sem a conexão dela, e não é de um script, diz que a conexão da aba não existe mais (RN-ABAS-006)", () => {
+    const tree = NoConnectionBarView({ options, value: "", onChange: noop, onAssign: noop, forScript: false });
+
+    expect(elementsOf(tree).some((element) => element.props.children === copy.noConnection.descriptionTab)).toBe(true);
+    expect(elementsOf(tree).some((element) => element.props.children === copy.noConnection.description)).toBe(false);
+  });
+
   it("sem escolha, o botão fica apagado; sem conexão cadastrada, diz que é preciso criar uma", () => {
     expect(buttonLabeled(NoConnectionBarView({ options, value: "", onChange: noop, onAssign: noop }), copy.noConnection.use)?.props.disabled).toBe(true);
     expect(elementsOf(NoConnectionBarView({ options: [], value: "", onChange: noop, onAssign: noop })).some((element) => element.props.children === copy.noConnection.none)).toBe(true);

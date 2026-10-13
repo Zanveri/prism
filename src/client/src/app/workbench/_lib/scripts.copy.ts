@@ -32,8 +32,8 @@ export const scriptsCopy = {
     copied: "SQL copiado.",
     copyFailed: "Não foi possível copiar o SQL.",
     tooLarge: "O SQL passa de 1 MB e não pode ser salvo como script.",
-    // A aba sem conexão não executa (RN-SCRIPT-003).
-    noConnection: "Escolha uma conexão para executar o script.",
+    // A aba sem conexão não executa (RN-SCRIPT-003): a de um script, ou a que voltou na entrada sem a conexão dela (RN-ABAS-006).
+    noConnection: "Escolha uma conexão para executar o SQL desta aba.",
     connectionMissing: (name: string) => `A conexão do script ${name} não existe mais. Escolha outra para executá-lo.`,
   },
   // A faixa de abas: o nome do script, e o ponto da mudança não salva.
@@ -57,6 +57,8 @@ export const scriptsCopy = {
   noConnection: {
     title: "Esta aba não tem conexão",
     description: "A conexão em que o script foi salvo não existe mais. Escolha outra para executá-lo.",
+    // RN-ABAS-006: a aba de consulta que voltou na entrada sem a conexão dela, que foi excluída.
+    descriptionTab: "A conexão desta aba não existe mais. Escolha outra para executar.",
     label: "Conexão",
     placeholder: "Escolha a conexão",
     use: "Usar esta conexão",

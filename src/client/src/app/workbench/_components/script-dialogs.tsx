@@ -107,16 +107,19 @@ type NoConnectionBarViewProps = {
   value: string;
   onChange: (value: string) => void;
   onAssign: (connectionId: string) => void;
+  /** A aba é de um script (o padrão): a frase fala da conexão em que ele foi salvo. Sem script, é a aba que voltou na entrada sem a conexão dela (RN-ABAS-006). */
+  forScript?: boolean;
 };
 
 /**
  * RN-SCRIPT-003: a aba de um script cuja conexão não existe mais abre sem conexão, e esta faixa, acima do editor, pede uma. O texto já está no editor; nada
- * executa até a escolha, que dá à aba a sessão da conexão escolhida, no banco dela.
+ * executa até a escolha, que dá à aba a sessão da conexão escolhida, no banco dela. A aba de consulta que voltou na entrada sem a conexão dela (RN-ABAS-006)
+ * usa a mesma faixa.
  */
-export function NoConnectionBarView({ options, value, onChange, onAssign }: NoConnectionBarViewProps) {
+export function NoConnectionBarView({ options, value, onChange, onAssign, forScript = true }: NoConnectionBarViewProps) {
   return (
     <div role="region" aria-label={copy.noConnection.title} className="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-raised px-3 py-2 text-sm">
-      <p className="min-w-0 flex-1 text-body">{copy.noConnection.description}</p>
+      <p className="min-w-0 flex-1 text-body">{forScript ? copy.noConnection.description : copy.noConnection.descriptionTab}</p>
       {options.length === 0 ? (
         <p className="text-muted">{copy.noConnection.none}</p>
       ) : (

@@ -47,7 +47,7 @@ const copy = workbenchCopy.tabs;
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
@@ -67,6 +67,11 @@ export function WorkbenchTabs() {
   useEffect(() => {
     for (const tab of tabs) if (tab.sessionId !== null && tab.connectionId !== null) disconnectLog.forget(tab.connectionId);
   }, [tabs, disconnectLog]);
+  // RN-ABAS-006: as abas de tabela que voltaram na entrada voltam desconectadas, e nada conecta sozinho: as vistas delas esperam o clique, como as de uma
+  // conexão que a pessoa desconectou.
+  useEffect(() => {
+    for (const connectionId of restoredTableConnections) disconnectLog.mark(connectionId);
+  }, [restoredTableConnections, disconnectLog]);
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
@@ -136,6 +141,7 @@ export function WorkbenchTabs() {
       // Não gravou (cancelou o nome, a API recusou ou caiu): nada fecha, e a janela fica aberta.
       setScriptQuestion(null);
       setWindowClosing(false);
+      releaseWindowClose();
       return;
     }
     setScriptQuestion(null);
@@ -203,7 +209,10 @@ export function WorkbenchTabs() {
     const saved = await save();
     setUnsaved(null);
     if (saved) proceed(intent, tabId, true);
-    else if (intent.kind === "close") setWindowClosing(false);
+    else if (intent.kind === "close") {
+      setWindowClosing(false);
+      releaseWindowClose();
+    }
   }
 
   // RN-ABAS-003: a aba desta janela foi solta na faixa de outra, e o processo principal pede que ela vá para lá, pelo caminho de sempre.
@@ -218,6 +227,8 @@ export function WorkbenchTabs() {
    * a caminho terminam de fechar, as da árvore desta janela também, e a janela fecha de verdade. Cancelar uma pergunta deixa a janela aberta. Com o
    * cofre bloqueado não há o que perguntar: a API já fechou as sessões, e a janela fecha.
    */
+  // RN-ABAS-006: a janela que fecha segura as abas dela no que volta (`holdForWindowClose`: fechar a última janela é o app saindo, e as abas voltam na
+  // próxima entrada); a pergunta cancelada deixa a janela aberta e solta (`releaseWindowClose`), e o que fechou até ali sai do que volta.
   const [windowClosing, setWindowClosing] = useState(false);
   const finishWindow = useCallback(() => {
     setWindowClosing(false);
@@ -235,10 +246,11 @@ export function WorkbenchTabs() {
         const open = latestTabs.current;
         if (vaultLock.isLocked() || open.length === 0) return finishWindow();
 
+        holdForWindowClose();
         setWindowClosing(true);
         latestHandleClose.current("all", open[0].id);
       }),
-    [finishWindow],
+    [finishWindow, holdForWindowClose],
   );
   useEffect(() => {
     if (windowClosing && tabs.length === 0) finishWindow();
@@ -324,6 +336,7 @@ export function WorkbenchTabs() {
           onCancel={() => {
             setUnsaved(null);
             setWindowClosing(false);
+            releaseWindowClose();
           }}
         />
       )}
@@ -340,6 +353,7 @@ export function WorkbenchTabs() {
           onCancel={() => {
             setScriptQuestion(null);
             setWindowClosing(false);
+            releaseWindowClose();
           }}
         />
       )}
@@ -361,6 +375,7 @@ export function WorkbenchTabs() {
           onCancel={() => {
             setConfirm(null);
             setWindowClosing(false);
+            releaseWindowClose();
           }}
         />
       )}
