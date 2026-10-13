@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Prism: Informix, Db2 y PostgreSQL en un solo lugar</title>
+  <meta name="description" content="Prism es un cliente de bases de datos de escritorio para quien trabaja todos los días con Informix, Db2 y PostgreSQL. Cómo descargarlo, instalarlo y usarlo.">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0e1114" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)">
+  <link rel="canonical" href="https://zanveri.github.io/prism/es/">
+  <link rel="alternate" hreflang="en" href="https://zanveri.github.io/prism/">
+  <link rel="alternate" hreflang="pt-BR" href="https://zanveri.github.io/prism/pt-br/">
+  <link rel="alternate" hreflang="es" href="https://zanveri.github.io/prism/es/">
+  <link rel="alternate" hreflang="x-default" href="https://zanveri.github.io/prism/">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_ES">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:locale:alternate" content="pt_BR">
+  <meta property="og:site_name" content="Prism">
+  <meta property="og:title" content="Prism: Informix, Db2 y PostgreSQL en un solo lugar">
+  <meta property="og:description" content="Cliente de bases de datos de escritorio: conectar, explorar los objetos, ejecutar SQL y ver el resultado.">
+  <meta property="og:url" content="https://zanveri.github.io/prism/es/">
+  <meta property="og:image" content="https://zanveri.github.io/prism/img/editor-resultado.png">
+  <meta property="og:image:alt" content="Prism con el explorador de objetos, un comando SQL y el resultado en una cuadrícula">
+</head>
+<body>
+  <a class="pular" href="#contenido">Saltar al contenido</a>
+
+  <header class="topo">
+    <div class="topo-dentro">
+      <a class="marca" href="#inicio" aria-label="Prism, inicio de la página">
+        <img src="../favicon.svg" alt="" width="32" height="32">
+        <span>Prism</span>
+      </a>
+      <nav class="atalhos" aria-label="Atajos">
+        <a href="#descargar">Descargar</a>
+        <a href="#problemas">Problemas</a>
+        <a href="https://github.com/Zanveri/prism/releases">Releases</a>
+        <a href="https://github.com/Zanveri/prism">GitHub</a>
+      </nav>
+      <nav class="idiomas" aria-label="Idioma">
+        <a href="../" lang="en" hreflang="en">English</a>
+        <a href="../pt-br/" lang="pt-BR" hreflang="pt-BR">Português</a>
+        <a href="./" lang="es" hreflang="es" aria-current="true">Español</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="pagina">
+    <nav class="sumario" aria-label="En esta página">
+      <p class="sumario-titulo">En esta página</p>
+      <ol>
+        <li><a href="#que-es">Qué es Prism</a></li>
+        <li><a href="#descargar">Descargar e instalar</a></li>
+        <li><a href="#primer-uso">Primer uso</a></li>
+        <li><a href="#conexiones">Conexiones</a></li>
+        <li><a href="#explorador">Explorador y búsqueda</a></li>
+        <li><a href="#sql">Editor SQL y resultado</a></li>
+        <li><a href="#registros">Registros de una tabla</a></li>
+        <li><a href="#configuracion">Configuración</a></li>
+        <li><a href="#seguridad">Seguridad y privacidad</a></li>
+        <li><a href="#problemas">Problemas y dónde reportarlos</a></li>
+        <li><a href="#pronto">Próximamente</a></li>
+      </ol>
+    </nav>
+
+    <main id="contenido">
+      <section class="abertura" id="inicio">
+        <picture>
+          <source media="(prefers-color-scheme: light)" srcset="../prism-logo-light.svg">
+          <img class="logotipo" src="../prism-logo.svg" width="720" height="281" alt="Un haz de luz entra en el prisma y sale en tres franjas de color, cada una llegando a una base de datos">
+        </picture>
+        <h1>Informix, Db2 y PostgreSQL en un solo lugar.</h1>
+        <p class="lide">Prism es un cliente de bases de datos de escritorio para quien trabaja todos los días con Informix, Db2 y PostgreSQL. La meta es ser más rápido y más directo que DBeaver en las mismas tareas: abrir, conectar, explorar los objetos, ejecutar SQL y ver el resultado.</p>
+        <div class="botoes">
+          <a class="botao botao-principal" href="#descargar">Descargar</a>
+          <a class="botao" href="https://github.com/Zanveri/prism">Código en GitHub</a>
+        </div>
+        <div class="aviso">
+          <span class="aviso-titulo">Recién empieza</span>
+          <p>Prism está empezando: la versión estable más reciente es la recomendada, y las betas pueden tener defectos. Los paquetes no están firmados: <a href="#sin-firma">mira cómo abrirlos</a>. La interfaz está por ahora en portugués de Brasil, así que esta guía indica los textos como aparecen en pantalla, con la traducción entre paréntesis.</p>
+        </div>
+        <figure>
+          <a href="../img/editor-resultado.png"><img src="../img/editor-resultado.png" width="1280" height="800" alt="Prism con el explorador de objetos de un PostgreSQL a la izquierda, un comando SQL en el editor y, abajo, el resultado en una cuadrícula con las primeras 200 filas y el tiempo del comando"></a>
+          <figcaption>Prism: explorador de objetos, editor SQL y resultado. Los datos de la captura son de ejemplo.</figcaption>
+        </figure>
+      </section>
+
+      <section id="que-es">
+        <h2>Qué es Prism</h2>
+        <p>Es una aplicación de escritorio para Windows, macOS y Linux. Te conectas a la base de datos, exploras los objetos y ejecutas SQL. Cada usuario tiene una bóveda cifrada con sus carpetas y sus conexiones.</p>
+        <p>Por dentro, la aplicación (Electron) inicia una API local que solo escucha en <code>127.0.0.1</code>. La pantalla habla con ella, y ella habla con la base de datos.</p>
+
+        <div class="tabela">
+          <table>
+            <thead>
+              <tr><th scope="col">Base de datos</th><th scope="col">Driver</th><th scope="col">Estado</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">PostgreSQL</th><td>Viene dentro del paquete.</td><td>Funciona.</td></tr>
+              <tr><th scope="row">Db2</th><td>De IBM. Lo descargas en <strong>Configurações › Drivers</strong> (Configuración › Drivers).</td><td>Funciona con Db2 12.1.</td></tr>
+              <tr><th scope="row">Informix</th><td>El mismo driver de IBM.</td><td>Funciona con Informix 14.10, por el puerto DRDA.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>La cuadrícula de bases de datos también muestra SQLite, MySQL, MariaDB, SQL Server, Oracle, Firebird, DuckDB y ClickHouse como “Em breve” (próximamente). Prism todavía no se conecta a ellas.</p>
+
+        <h3>Lo que se puede hacer hoy</h3>
+        <ul>
+          <li>Guardar conexiones en carpetas, cada una con un entorno (nombre y color).</li>
+          <li>Explorar esquemas, tablas, vistas, rutinas, columnas, índices y claves foráneas, con búsqueda.</li>
+          <li>Ejecutar SQL y ver el resultado en una cuadrícula: cargar más, contar el total, cancelar.</li>
+          <li>Abrir una tabla y ver los registros (con filtro y orden), la estructura y el diagrama.</li>
+          <li>Elegir entre seis temas, claros y oscuros.</li>
+          <li>Descargar los drivers de Db2 y de Informix cuando los necesites.</li>
+          <li>Recibir actualizaciones desde las releases de GitHub, con un canal beta opcional.</li>
+        </ul>
+      </section>
+
+      <section id="descargar">
+        <h2>Descargar e instalar</h2>
+        <p class="botoes"><a class="botao botao-principal botao-grande" href="https://github.com/Zanveri/prism/releases">Descargar desde la página de releases</a></p>
+        <p><strong>Estable o beta.</strong> La versión estable más reciente aparece marcada como <strong>Latest</strong>: es la recomendada. Las betas salen con cada merge en <code>develop</code>, aparecen marcadas como <strong>Pre-release</strong> y pueden tener defectos.</p>
+        <p>En la página, abre la versión más nueva (la de arriba) y, en <strong>Assets</strong>, elige el archivo de tu sistema. En los nombres, <code>&lt;versión&gt;</code> es la de la release, como <code>0.1.0</code> o <code>0.1.1-beta.1</code>.</p>
+
+        <div class="tabela">
+          <table>
+            <thead>
+              <tr><th scope="col">Sistema</th><th scope="col">Archivo</th><th scope="col">Para qué</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Windows x64</td><td><code>Prism-&lt;versión&gt;-win-x64.exe</code></td><td>El instalador.</td></tr>
+              <tr><td>Windows x64</td><td><code>Prism-&lt;versión&gt;-win-x64.zip</code></td><td>La copia portátil, sin instalación.</td></tr>
+              <tr><td>Linux x64</td><td><code>Prism-&lt;versión&gt;-linux-x86_64.AppImage</code></td><td>Funciona en la mayoría de las distribuciones, sin instalar.</td></tr>
+              <tr><td>Linux x64</td><td><code>Prism-&lt;versión&gt;-linux-amd64.deb</code></td><td>Debian, Ubuntu y derivadas.</td></tr>
+              <tr><td>Linux x64</td><td><code>Prism-&lt;versión&gt;-linux-x86_64.rpm</code></td><td>Fedora, RHEL, openSUSE y derivadas.</td></tr>
+              <tr><td>Linux x64</td><td><code>Prism-&lt;versión&gt;-linux-x64.tar.gz</code></td><td>La carpeta de la aplicación, para descomprimir.</td></tr>
+              <tr><td>macOS, Apple Silicon</td><td><code>Prism-&lt;versión&gt;-mac-arm64.dmg</code> y <code>….zip</code></td><td>Los Mac con procesador M.</td></tr>
+              <tr><td>macOS, Intel</td><td><code>Prism-&lt;versión&gt;-mac-x64.dmg</code> y <code>….zip</code></td><td>Los Mac con procesador Intel.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Instalar</h3>
+        <ul>
+          <li><strong>Windows:</strong> abre el <code>.exe</code>. O descomprime el <code>.zip</code> y abre Prism desde dentro de la carpeta, sin instalar.</li>
+          <li><strong>macOS:</strong> abre el <code>.dmg</code> y arrastra Prism a la carpeta Aplicaciones.</li>
+          <li><strong>Linux, AppImage:</strong> <code>chmod +x</code> al archivo y ábrelo.</li>
+          <li><strong>Linux, deb:</strong> <code>sudo apt install ./Prism-&lt;versión&gt;-linux-amd64.deb</code></li>
+          <li><strong>Linux, rpm:</strong> <code>sudo dnf install ./Prism-&lt;versión&gt;-linux-x86_64.rpm</code></li>
+          <li><strong>Linux, tar.gz:</strong> descomprime y abre <code>prism</code>, dentro de la carpeta.</li>
+        </ul>
+        <p>En la primera apertura el sistema avisa que el paquete no está firmado. <a href="#sin-firma">Mira abajo</a> cómo continuar.</p>
+
+        <h3 id="verificar-suma">Verificar la suma</h3>
+        <p>Cada versión trae el archivo <code>SHA256SUMS</code>, con la suma SHA-256 de todos los paquetes, y las mismas sumas al final de las notas de la versión. Calcula el SHA-256 del archivo descargado y compáralo con su línea en <code>SHA256SUMS</code> <strong>y</strong> en el bloque “Somas SHA-256” (sumas SHA-256) de las notas. Si no coincide, borra el archivo y descárgalo de nuevo.</p>
+        <div class="tabela">
+          <table>
+            <thead>
+              <tr><th scope="col">Sistema</th><th scope="col">Comando</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Linux</td><td><code>sha256sum &lt;archivo&gt;</code></td></tr>
+              <tr><td>macOS</td><td><code>shasum -a 256 &lt;archivo&gt;</code></td></tr>
+              <tr><td>Windows (PowerShell)</td><td><code>Get-FileHash -Algorithm SHA256 &lt;archivo&gt;</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="sin-firma">Ningún paquete está firmado</h3>
+        <p>Firmar los paquetes queda para después. Hasta entonces, Windows y macOS avisan en la primera apertura. El aviso es esperado: verifica la suma y continúa.</p>
+        <ul>
+          <li><strong>Windows:</strong> SmartScreen muestra “Windows protegió su PC”. Haz clic en <strong>Más información</strong> y luego en <strong>Ejecutar de todas formas</strong>.</li>
+          <li><strong>macOS:</strong> Gatekeeper bloquea las aplicaciones sin firma. Con Prism en la carpeta Aplicaciones, haz clic derecho sobre él, elige <strong>Abrir</strong> y confirma en <strong>Abrir</strong>. En macOS 15 (Sequoia) o más nuevo eso no basta: intenta abrirlo una vez, ve a <strong>Ajustes del Sistema › Privacidad y seguridad</strong> y haz clic en <strong>Abrir de todos modos</strong>.</li>
+          <li><strong>macOS, desde la Terminal:</strong> sirve en cualquier versión.
+            <pre><code>xattr -dr com.apple.quarantine /Applications/Prism.app</code></pre>
+          </li>
+          <li><strong>Linux:</strong> nada depende de una firma. El AppImage y el tar.gz abren sin ella, y el deb y el rpm se instalan con el gestor de paquetes.</li>
+        </ul>
+        <p>¿Algo no funcionó? <a href="https://github.com/Zanveri/prism/issues">Abre una issue</a>: ahí lo ajustamos.</p>
+      </section>
+
+      <section id="primer-uso">
+        <h2>Primer uso</h2>
+        <p>La primera vez que abres Prism todavía no hay usuario. Crea el tuyo:</p>
+        <ol class="passos">
+          <li>En la pantalla de entrada, haz clic en <strong>Criar usuário</strong> (Crear usuario), debajo de “Primeiro acesso?” (¿Primer acceso?).</li>
+          <li>Elige el usuario: de 3 a 32 caracteres, con letras, números, punto, guion y guion bajo. Prism lo guarda en minúsculas.</li>
+          <li>Elige la contraseña, de 8 a 128 caracteres, y confírmala.</li>
+          <li>Haz clic en <strong>Criar usuário</strong> y entra.</li>
+        </ol>
+        <figure>
+          <a href="../img/criar-usuario.png"><img src="../img/criar-usuario.png" width="1280" height="800" loading="lazy" alt="Pantalla de creación de usuario de Prism: usuario, contraseña y confirmación, con el aviso de que la contraseña genera la clave de la bóveda"></a>
+          <figcaption>Crear usuario. El aviso en la esquina es lo más importante de la pantalla.</figcaption>
+        </figure>
+        <div class="aviso aviso-perigo">
+          <span class="aviso-titulo">La contraseña genera la clave de la bóveda y no tiene recuperación</span>
+          <p>Tu contraseña no se almacena. Genera la clave que abre tu bóveda. Si la olvidas, las conexiones guardadas no se pueden recuperar. Guarda la contraseña en un lugar seguro.</p>
+        </div>
+        <p>Cada usuario tiene su propia bóveda: puede haber varios usuarios en la misma máquina, y cada uno solo abre la suya. <strong>Sair</strong> (Salir), en la barra superior, cierra la bóveda. Para cambiar la contraseña, usa Configurações › Conta (Configuración › Cuenta).</p>
+      </section>
+
+      <section id="conexiones">
+        <h2>Conexiones</h2>
+        <h3>Crear una conexión</h3>
+        <ol class="passos">
+          <li>Haz clic en <strong>Nova conexão</strong> (Nueva conexión), en la barra del explorador.</li>
+          <li>Elige la base de datos en la cuadrícula y haz clic en <strong>Avançar</strong> (Siguiente).</li>
+          <li>Completa el nombre, la carpeta, el host, el puerto, la base de datos, el usuario y la contraseña de la base de datos. El puerto ya viene sugerido: 5432 en PostgreSQL, 50000 en Db2 y 9089 en Informix.</li>
+          <li>Haz clic en <strong>Testar conexão</strong> (Probar conexión). El aviso dice “Conexão testada com sucesso.” (Conexión probada con éxito.) o “Não foi possível conectar.” (No fue posible conectar.), y el mensaje de la base de datos queda debajo de los botones.</li>
+          <li>Haz clic en <strong>Salvar</strong> (Guardar).</li>
+        </ol>
+        <div class="lado-a-lado duas">
+          <figure>
+            <a href="../img/conexao-bancos.png"><img src="../img/conexao-bancos.png" width="808" height="642" loading="lazy" alt="Diálogo Nueva conexión con la cuadrícula de bases de datos: PostgreSQL con el driver incluido, Db2 e Informix con el driver no instalado, y las demás marcadas como próximamente"></a>
+            <figcaption>El diálogo empieza por la cuadrícula de bases de datos y muestra el estado del driver de cada una.</figcaption>
+          </figure>
+          <figure>
+            <a href="../img/conexao-dados.png"><img src="../img/conexao-dados.png" width="808" height="944" loading="lazy" alt="Diálogo Nueva conexión en el paso de los datos de acceso, con nombre, carpeta, host, puerto, base de datos, usuario, contraseña y el entorno Desarrollo en verde"></a>
+            <figcaption>Los datos de acceso y el entorno. Los datos de la captura son de ejemplo.</figcaption>
+          </figure>
+        </div>
+        <p>Informix se atiende por el protocolo DRDA. Usa el puerto DRDA del servidor, y no el del protocolo nativo.</p>
+
+        <h3>Carpetas, entornos y contraseñas</h3>
+        <ul>
+          <li><strong>Carpetas.</strong> “Nova pasta” (Nueva carpeta) crea una carpeta; el menú de la carpeta crea subcarpetas, renombra, mueve y elimina. Solo se puede eliminar una carpeta vacía, sin subcarpetas y sin conexiones. El menú de la conexión tiene <strong>Mover</strong>.</li>
+          <li><strong>Entorno.</strong> El nombre y el color (rojo, ámbar, verde, azul, violeta, gris u otro) identifican la conexión en el árbol y en sus pestañas. Deja el nombre en blanco si la conexión no es de ningún entorno.</li>
+          <li><strong>Contraseña de la base de datos.</strong> Se guarda cifrada en la bóveda, con tu contraseña de Prism. Al editar una conexión, deja el campo vacío para conservar la contraseña. Para ver la contraseña guardada, Prism te pide tu contraseña de nuevo, y al quinto error seguido la bóveda se cierra.</li>
+          <li><strong>Editar y eliminar.</strong> Desde el menú de la conexión. Eliminar quita la conexión de la bóveda, con la contraseña guardada, y cierra sus sesiones y sus pestañas de consulta. El SQL que estaba en las pestañas se pierde.</li>
+          <li><strong>Conectar.</strong> Haz doble clic en la conexión, o usa <strong>Conectar</strong> en la barra del explorador. <strong>Desconectar</strong> termina sus sesiones.</li>
+        </ul>
+
+        <h3 id="drivers">Db2 e Informix: el driver de IBM</h3>
+        <p>Prism incluye solo el driver de PostgreSQL. El driver de IBM, que atiende Db2 e Informix, lo descargas cuando lo necesites, aceptando la licencia del fabricante.</p>
+        <ol class="passos">
+          <li>Abre Configurações › Drivers (Configuración › Drivers) y haz clic en <strong>Baixar</strong> (Descargar), en la fila de <strong>IBM Data Server</strong>.</li>
+          <li>Lee la licencia. Prism no abre enlaces: copia la dirección del texto oficial y léelo en el navegador.</li>
+          <li>Marca “Li e aceito a licença do fabricante” (Leí y acepto la licencia del fabricante) y haz clic en <strong>Baixar e instalar</strong> (Descargar e instalar).</li>
+          <li>Prism descarga el driver de nuget.org, verifica el hash y lo guarda en tu máquina.</li>
+          <li>Después Prism propone reiniciar el servicio: “Reiniciar agora” (Reiniciar ahora) o “Depois” (Después). El reinicio te pide la contraseña de nuevo y cierra las pestañas de SQL abiertas. Hasta entonces, la barra superior muestra “Reinício pendente” (Reinicio pendiente).</li>
+        </ol>
+        <figure>
+          <a href="../img/configuracoes-drivers.png"><img src="../img/configuracoes-drivers.png" width="1170" height="424" loading="lazy" alt="Configuración, sección Drivers: el PostgreSQL incluido y el IBM Data Server disponible para descargar, con el botón Descargar"></a>
+          <figcaption>Configurações › Drivers. En Linux, Prism avisa que el driver necesita la biblioteca <code>libxml2</code> del sistema.</figcaption>
+        </figure>
+        <p>Se puede guardar una conexión de Db2 o de Informix antes de instalar el driver. Solo probar y conectar piden el driver. “Remover” (Quitar) quita el driver de la máquina, y el servicio se reinicia igual. IBM no publica el driver para Mac con procesador Intel: ahí la cuadrícula dice “Sem driver para esta plataforma” (Sin driver para esta plataforma).</p>
+      </section>
+
+      <section id="explorador">
+        <h2>Explorador y búsqueda</h2>
+        <div class="lado-a-lado proporcao">
+          <figure class="figura-estreita">
+            <a href="../img/navegador-busca.png"><img src="../img/navegador-busca.png" width="322" height="380" loading="lazy" alt="El explorador con la búsqueda “cliente”: la tabla clientes y la columna cliente_id aparecen con el fragmento resaltado, y el conteo de resultados junto a cada grupo"></a>
+            <figcaption>La búsqueda “cliente”, con la ruta hasta cada resultado.</figcaption>
+          </figure>
+          <div>
+            <p>El explorador, a la izquierda, muestra tus carpetas y conexiones. Al conectar, el árbol baja así:</p>
+            <p><strong>conexión › base de datos › esquema › Tabelas, Visões y Rotinas (Tablas, Vistas y Rutinas) › columnas, índices y claves foráneas.</strong></p>
+            <ul>
+              <li>Las columnas de la clave primaria llevan <strong>PK</strong>. Los esquemas del sistema vienen marcados como “sistema”.</li>
+              <li>En Informix, el “esquema” es el dueño del objeto.</li>
+              <li>El doble clic en una tabla o en una vista abre su pestaña.</li>
+              <li>El botón derecho abre el menú: Conectar, Desconectar, Nova consulta, Atualizar, Editar conexão, Abrir registros, Ver estrutura, Ver diagrama, Gerar SELECT, Copiar nome y Copiar nome qualificado (Conectar, Desconectar, Nueva consulta, Actualizar, Editar conexión, Abrir registros, Ver estructura, Ver diagrama, Generar SELECT, Copiar nombre y Copiar nombre calificado).</li>
+            </ul>
+          </div>
+        </div>
+        <h3>Búsqueda</h3>
+        <p>El campo “Filtrar objetos” filtra lo que ya está cargado en el árbol. Abre una conexión o un esquema para buscar dentro de él. El resultado muestra la ruta hasta cada hallazgo, con el fragmento resaltado y el conteo.</p>
+        <h3>Atajos</h3>
+        <div class="tabela">
+          <table>
+            <thead>
+              <tr><th scope="col">Atajo</th><th scope="col">Qué hace</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>B</kbd></td><td>Oculta y muestra el explorador.</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>E</kbd></td><td>Muestra el explorador y lleva el cursor a la búsqueda.</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>,</kbd></td><td>Abre la Configuración.</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>W</kbd></td><td>Cierra la pestaña activa.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>En macOS, usa <kbd>Cmd</kbd> en lugar de <kbd>Ctrl</kbd>.</p>
+      </section>
+
+      <section id="sql">
+        <h2>Editor SQL y resultado</h2>
+        <p>Para escribir SQL, elige <strong>Nova consulta</strong> (Nueva consulta) en el menú de una conexión. Cada consulta es una pestaña, ligada a la conexión (<code>consulta-1.sql</code>, <code>consulta-2.sql</code> y así sucesivamente). El texto de las pestañas no se guarda en ninguna parte: al cerrar la pestaña o la aplicación, se pierde.</p>
+
+        <h3>Ejecutar</h3>
+        <ul>
+          <li><kbd>Ctrl</kbd> + <kbd>Enter</kbd> (o el botón <strong>Executar</strong>, Ejecutar) envía el texto seleccionado. Sin selección, envía el comando donde está el cursor.</li>
+          <li>Una ejecución lleva un solo comando. Los comandos se separan por <code>;</code> fuera de texto entre comillas, de comentarios y de <code>$tag$ … $tag$</code> de PostgreSQL. Si la selección tiene más de uno, Prism avisa y no envía.</li>
+          <li>El comando va a la base de datos tal cual, sin ser reescrito, y siempre en <strong>auto-commit</strong> (la barra de abajo muestra “Auto-commit”). Los comandos de control de transacción, como <code>BEGIN</code>, <code>COMMIT</code> y <code>ROLLBACK</code>, se rechazan.</li>
+          <li><strong>Cancelar</strong> interrumpe un comando lento. La pantalla dice “Comando cancelado.” cuando está segura de que no terminó.</li>
+        </ul>
+
+        <h3>El resultado</h3>
+        <ul>
+          <li>Un comando que devuelve filas muestra las <strong>primeras 200</strong> y el tiempo: “Primeiras 200 linhas · 17 ms” (Primeras 200 filas · 17 ms).</li>
+          <li><strong>Carregar mais 200</strong> (Cargar 200 más) trae las siguientes, del mismo cursor, sin ejecutar de nuevo.</li>
+          <li><strong>Contar total</strong> solo cuenta cuando lo pides (“Total: 232 linhas”).</li>
+          <li>Si prefieres, activa “Buscar mais linhas ao rolar até o fim da grade” (Buscar más filas al desplazarse hasta el final de la cuadrícula) en Configurações › Resultados (Configuración › Resultados). El total sigue siendo solo a pedido.</li>
+          <li>Un comando sin filas muestra “N linhas afetadas” (N filas afectadas) y el tiempo.</li>
+          <li>El cursor se cierra tras 5 minutos sin lectura. Prism avisa, y <strong>Executar de novo</strong> (Ejecutar de nuevo) continúa.</li>
+        </ul>
+
+        <h3>Celdas, columnas y zoom</h3>
+        <ul>
+          <li>El valor nulo aparece como <code>NULL</code> (en Configurações › Resultados se puede cambiar el texto).</li>
+          <li>El texto de más de 10.000 caracteres y los valores binarios llegan cortados. La celda se marca como “Valor cortado” (Valor cortado), y un aviso dice que algunos valores fueron cortados.</li>
+          <li>El encabezado de cada columna muestra su tipo. Arrastra el divisor para cambiar el ancho, y haz doble clic en él para ajustarlo al contenido.</li>
+          <li>El zoom de la cuadrícula va del 50% al 200%, con los botones de menos y de más o con <kbd>Ctrl</kbd> + la rueda del mouse sobre la cuadrícula.</li>
+          <li>El área de resultado se puede contraer, maximizar o redimensionar.</li>
+        </ul>
+
+        <h3>Errores</h3>
+        <p>El error de la base de datos llega a la pantalla tal como vino: el mensaje original, el <code>SQLSTATE</code> y, en PostgreSQL, el punto del error subrayado en el editor.</p>
+        <figure>
+          <a href="../img/erro-do-banco.png"><img src="../img/erro-do-banco.png" width="960" height="360" loading="lazy" alt="Un comando con el nombre de tabla equivocado: el editor subraya vendas.pedido y el resultado muestra Erro do banco (Error de la base de datos), el mensaje relation vendas.pedido does not exist y el SQLSTATE 42P01"></a>
+          <figcaption>El mensaje es el de la base de datos, en inglés y sin retoques.</figcaption>
+        </figure>
+        <p>Prism no exporta el resultado de una consulta. La exportación a CSV está en los <a href="#registros">Registros</a> de una tabla.</p>
+      </section>
+
+      <section id="registros">
+        <h2>Registros de una tabla</h2>
+        <p>Haz doble clic en una tabla (o usa “Abrir registros”, en el menú). La pestaña de la tabla tiene tres vistas: <strong>Registros</strong>, <strong>Estrutura</strong> (Estructura) y <strong>Diagrama</strong>. La franja de arriba muestra la base de datos, el esquema y el entorno de la conexión.</p>
+
+        <h3>Registros</h3>
+        <ul>
+          <li><strong>Filtro y orden.</strong> El campo acepta lo que viene después del nombre de la tabla: una condición, un orden (<code>ORDER BY</code>) o ambos. La línea “Comando” muestra el SQL que se ejecutó.</li>
+          <li><strong>Orden por el encabezado.</strong> Un clic ordena por esa columna, el segundo invierte y el tercero quita el orden. Prism escribe el <code>ORDER BY</code> en el campo.</li>
+          <li><strong>Claves foráneas.</strong> El valor de una clave foránea es un enlace: abre la tabla referenciada, ya filtrada por ese valor.</li>
+          <li><strong>Más.</strong> “Atualizar” (Actualizar) lee de nuevo, “Contar total” cuenta, y “Exportar CSV” guarda las filas cargadas. Las que aún no se han cargado no entran en el archivo, y los valores cortados salen cortados.</li>
+        </ul>
+        <figure>
+          <a href="../img/tabela-registros.png"><img src="../img/tabela-registros.png" width="1280" height="800" loading="lazy" alt="La pestaña de la tabla pedidos en la vista Registros, con el filtro status igual a entregue y total mayor que 800, ordenada por total de forma descendente; los valores de cliente_id son enlaces"></a>
+          <figcaption>Registros con filtro y orden. Los números subrayados en <code>cliente_id</code> abren el cliente.</figcaption>
+        </figure>
+
+        <h3>Estructura</h3>
+        <p>Cuatro secciones: <strong>Colunas</strong> (Columnas: nombre, tipo, si acepta nulo y la clave, <strong>PK</strong> o <strong>FK</strong>), <strong>Chaves estrangeiras</strong> (Claves foráneas), <strong>Índices</strong> y <strong>DDL</strong>. El DDL es aproximado: Prism lo arma a partir del catálogo, y no trae valores por defecto, restricciones de verificación ni opciones de almacenamiento. Hay un botón para copiarlo. Una vista no tiene DDL.</p>
+
+        <h3>Diagrama</h3>
+        <p>La tabla y las que ella referencia, con la flecha saliendo de la clave foránea. Se puede acercar, alejar y ajustar a la pantalla, y un doble clic en una tabla del diagrama la abre. Solo aparecen las tablas que esta referencia: las que apuntan a ella todavía no entran.</p>
+        <figure>
+          <a href="../img/tabela-diagrama.png"><img src="../img/tabela-diagrama.png" width="1280" height="398" loading="lazy" alt="El diagrama de la tabla itens_pedido: ella en el centro, con flechas hacia las tablas produtos y pedidos, y las columnas de cada una, con las claves primaria y foránea marcadas"></a>
+          <figcaption>El diagrama de <code>itens_pedido</code>: dos claves foráneas, dos tablas referenciadas.</figcaption>
+        </figure>
+      </section>
+
+      <section id="configuracion">
+        <h2>Configuración</h2>
+        <p>Ábrela con el botón <strong>Configurações</strong> (Configuración), en la barra superior, o con <kbd>Ctrl</kbd> + <kbd>,</kbd>. <kbd>Esc</kbd> la cierra. Las secciones:</p>
+        <ul>
+          <li><strong>Conta</strong> (Cuenta). Cambiar la contraseña. Prism vuelve a cifrar tu bóveda con la contraseña nueva.</li>
+          <li><strong>Aparência</strong> (Apariencia). El tema. Prism trae seis: Prism Escuro (Oscuro), Prism Claro, Monokai, Dracula, Nord y GitHub Claro. El tema vale para toda la interfaz, y se puede seguir el modo claro u oscuro del sistema.</li>
+          <li><strong>Editor SQL.</strong> La fuente, el tamaño de la fuente, el tamaño del tabulador, “Autocompletar ao digitar” (Autocompletar al escribir) y “Converter palavras-chave para maiúsculas” (Convertir palabras clave a mayúsculas). El autocompletado usa las palabras clave de la base de datos y los nombres que el árbol ya cargó, y nunca consulta la base de datos.</li>
+          <li><strong>Resultados.</strong> El texto del valor nulo (de 1 a 12 caracteres) y “Buscar mais linhas ao rolar até o fim da grade”.</li>
+          <li><strong>Segurança</strong> (Seguridad). “Bloquear o Prism após” (Bloquear Prism tras) un número de minutos sin uso. Viene activado, en 10 minutos, y acepta de 1 a 240. Bloqueado, la bóveda se cierra, y solo tu contraseña la reabre.</li>
+          <li><strong>Atualizações</strong> (Actualizaciones). Abajo.</li>
+          <li><strong>Drivers.</strong> Mira <a href="#drivers">Db2 e Informix</a>.</li>
+          <li><strong>Sobre</strong> (Acerca de). La versión y la carpeta de datos, donde quedan las bóvedas y el log de la API.</li>
+          <li><strong>Transações</strong> (Transacciones). Marcada “em breve” (próximamente): <a href="#pronto">mira abajo</a>.</li>
+        </ul>
+        <figure>
+          <a href="../img/configuracoes-temas.png"><img src="../img/configuracoes-temas.png" width="1170" height="544" loading="lazy" alt="Configuración, sección Apariencia: seis tarjetas de tema (Prism Escuro, Prism Claro, Monokai, Dracula, Nord y GitHub Claro), la vista previa del tema elegido y la opción de seguir el modo del sistema"></a>
+          <figcaption>Los seis temas, con la vista previa del elegido.</figcaption>
+        </figure>
+        <figure>
+          <a href="../img/tema-claro.png"><img src="../img/tema-claro.png" width="1280" height="800" loading="lazy" alt="Prism en el tema Prism Claro, con la misma consulta y el mismo resultado, sobre fondo claro"></a>
+          <figcaption>El mismo resultado en Prism Claro.</figcaption>
+        </figure>
+
+        <h3 id="actualizaciones">Actualizaciones y el canal beta</h3>
+        <ul>
+          <li>Al abrir, y como máximo una vez al día, Prism consulta la lista de releases del proyecto en GitHub, sin credenciales. Si hay una versión más nueva, muestra las notas y pregunta.</li>
+          <li><strong>Solo descarga si tú lo ordenas</strong> (“Atualizar agora”, Actualizar ahora). Se puede posponer, saltar una versión y desactivar la verificación al abrir. “Verificar atualizações” (Verificar actualizaciones) consulta en el momento.</li>
+          <li>La consulta no envía ningún identificador tuyo ni de la máquina.</li>
+          <li>Antes de usar el archivo, Prism lo verifica contra dos sumas SHA-256: la de las notas de la release y la de <code>SHA256SUMS</code>. Si una falta o no coincide, borra el archivo y rechaza la actualización.</li>
+          <li>En Windows, “Atualizar agora” ejecuta el instalador verificado, que reabre Prism. En Linux y macOS, Prism deja el paquete verificado en la carpeta de descargas y dice qué hacer.</li>
+          <li><strong>Canal beta.</strong> Con “Receber versões beta” (Recibir versiones beta) desactivado, que es lo predeterminado, Prism solo ofrece las versiones estables. Activado, ofrece también las betas, y el diálogo avisa que la versión es beta y puede tener defectos.</li>
+        </ul>
+        <figure>
+          <a href="../img/configuracoes-atualizacoes.png"><img src="../img/configuracoes-atualizacoes.png" width="1170" height="428" loading="lazy" alt="Configuración, sección Actualizaciones: verificar al abrir (activado), Recibir versiones beta (desactivado), la última verificación, la versión omitida y el botón Verificar actualizaciones"></a>
+          <figcaption>Configurações › Atualizações, con el canal beta desactivado.</figcaption>
+        </figure>
+        <p>Un Prism compilado en tu propia máquina, o generado sin la dirección del proyecto, no busca actualizaciones.</p>
+      </section>
+
+      <section id="seguridad">
+        <h2>Seguridad y privacidad</h2>
+        <ul>
+          <li><strong>Bóveda cifrada.</strong> Las carpetas y las conexiones (nombres, hosts, usuarios y contraseñas de las bases de datos) quedan en un archivo cifrado por usuario. De tu contraseña sale, con Argon2id, la clave que protege una clave aleatoria de la bóveda, y el contenido se cifra con AES-256-GCM. La contraseña de Prism no se guarda en ninguna parte.</li>
+          <li><strong>Cuándo se cierra la bóveda.</strong> En “Sair” (Salir), al cerrar la aplicación, al entrar con otro usuario, al quinto error seguido al revelar una contraseña y en el bloqueo por inactividad.</li>
+          <li><strong>API solo en <code>127.0.0.1</code>.</strong> La API local escucha en un puerto elegido por el sistema cada vez que se abre la aplicación y exige un token generado en cada apertura. Sin el token, la respuesta es 401. Acepta un único origen de página, y el proceso termina junto con la aplicación.</li>
+          <li><strong>La ventana.</strong> Funciona con aislamiento de contexto y sandbox, sin acceso directo a Node. La interfaz solo puede conectarse a la API local, y las fuentes y las imágenes van dentro de la aplicación.</li>
+          <li><strong>Log.</strong> Prism no registra contraseñas, cadenas de conexión ni texto de SQL. Aun así, revisa el log antes de adjuntarlo a una issue: puede tener rutas de tu máquina y mensajes de error inesperados.</li>
+          <li><strong>Software libre.</strong> Prism es GPLv3: se puede usar, estudiar, modificar y redistribuir, siempre que quien lo distribuya entregue el código bajo la misma licencia. El código está <a href="https://github.com/Zanveri/prism">en GitHub</a>.</li>
+        </ul>
+        <h3>Lo que la aplicación consulta en la red</h3>
+        <ul>
+          <li>Las bases de datos a las que te conectas, con los datos que informaste.</li>
+          <li>Las <strong>releases de GitHub</strong>, para buscar una versión nueva: al abrir, como máximo una vez al día.</li>
+          <li>El paquete de la actualización y el driver de <strong>nuget.org</strong>, solo cuando ordenas descargar.</li>
+        </ul>
+        <p>Fuera de eso, Prism no habla con la red: no hay telemetría ni cuenta. Esta página tampoco usa script, cookie ni rastreo.</p>
+        <p>Lo que Prism no protege: quien tiene acceso a la sesión del usuario en el sistema operativo, con la aplicación abierta y desbloqueada, queda fuera de la protección de la bóveda.</p>
+      </section>
+
+      <section id="problemas">
+        <h2>Problemas y dónde reportarlos</h2>
+        <div class="tabela">
+          <table>
+            <thead>
+              <tr><th scope="col">Qué pasa</th><th scope="col">Qué hacer</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Olvidé la contraseña de Prism.</td><td>No hay recuperación. La bóveda no se abre. Crea otro usuario y registra las conexiones de nuevo.</td></tr>
+              <tr><td>Windows o macOS bloquea la apertura.</td><td>El paquete no está firmado. Mira <a href="#sin-firma">cómo abrirlo</a>.</td></tr>
+              <tr><td>“Driver não instalado” (Driver no instalado) en Db2 o Informix.</td><td>Descarga el driver en Configurações › Drivers. Mira <a href="#drivers">Db2 e Informix</a>.</td></tr>
+              <tr><td>En Linux, el driver de IBM no abre.</td><td>Necesita la biblioteca <code>libxml2</code> (archivo <code>libxml2.so.2</code>). Instálala con el gestor de paquetes.</td></tr>
+              <tr><td>Informix no se conecta.</td><td>Usa el puerto DRDA del servidor (Prism sugiere el 9089), y no el del protocolo nativo.</td></tr>
+              <tr><td>“Não foi possível conectar.” (No fue posible conectar.)</td><td>El mensaje de la base de datos está debajo de los botones del diálogo. Verifica host, puerto, base de datos, usuario y contraseña.</td></tr>
+              <tr><td>El resultado se detiene en 200 filas.</td><td>Es lo acordado: usa “Carregar mais 200”, o activa “Buscar mais linhas ao rolar” en Configurações › Resultados.</td></tr>
+              <tr><td>“O cursor foi fechado.” (El cursor fue cerrado.)</td><td>Pasaron 5 minutos sin leer el resultado. Haz clic en “Executar de novo”.</td></tr>
+              <tr><td>El texto de una pestaña de SQL desapareció.</td><td>El texto de las pestañas no se guarda. Copia a un archivo lo que no puedas perder.</td></tr>
+              <tr><td>Prism me pidió la contraseña sin que yo saliera.</td><td>Fue el bloqueo por inactividad (10 minutos, por defecto). Cámbialo en Configurações › Segurança.</td></tr>
+              <tr><td>No aparece ninguna actualización.</td><td>Haz clic en “Verificar atualizações”. Para recibir betas, activa “Receber versões beta” en Configurações › Atualizações.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Dónde reportar</h3>
+        <ul>
+          <li><strong>Defecto o sugerencia:</strong> abre una <a href="https://github.com/Zanveri/prism/issues">issue</a>, con el formulario de defecto o de sugerencia. Puedes escribirla en inglés, portugués o español. Indica la versión de Prism (aparece en la pantalla de entrada), el sistema operativo y la base de datos. Nunca adjuntes contraseñas, cadenas de conexión ni datos de clientes.</li>
+          <li><strong>Vulnerabilidad:</strong> <strong>no uses una issue</strong>, que es pública. En la página del repositorio, abre la pestaña <strong>Security</strong> y haz clic en <strong>Report a vulnerability</strong>. El paso a paso está en <a href="https://github.com/Zanveri/prism/blob/develop/SECURITY.es.md">SECURITY.es.md</a>.</li>
+          <li><strong>Contribuir:</strong> lee <a href="https://github.com/Zanveri/prism/blob/develop/CONTRIBUTING.es.md">CONTRIBUTING.es.md</a>.</li>
+        </ul>
+      </section>
+
+      <section id="pronto">
+        <h2>Próximamente</h2>
+        <p>Esto todavía <strong>no existe</strong>. Está en el plan, sin fecha.</p>
+        <ul>
+          <li>Transacción manual y nivel de aislamiento (hoy todo se ejecuta en auto-commit).</li>
+          <li>Edición de celdas.</li>
+          <li>Copiar y exportar desde la selección en la cuadrícula.</li>
+          <li>Pestañas de esquema y de base de datos.</li>
+          <li>Modo de solo lectura y confirmación antes de un comando irreversible.</li>
+          <li>Barra propia de la ventana y zoom de todo el programa.</li>
+          <li>Firma de los paquetes.</li>
+        </ul>
+      </section>
+
+      <footer class="rodape">
+        <p>Prism es un producto de Zanveri. Software libre, licencia <a href="https://github.com/Zanveri/prism/blob/develop/LICENSE">GNU GPL v3</a>.</p>
+        <p><a href="https://github.com/Zanveri/prism">Código</a> · <a href="https://github.com/Zanveri/prism/releases">Releases</a> · <a href="https://github.com/Zanveri/prism/issues">Issues</a> · <a href="https://github.com/Zanveri/prism/blob/develop/CHANGELOG.md">Changelog</a></p>
+        <p>Esta página es estática: sin script, sin cookie, sin rastreo y sin nada cargado desde fuera.</p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -121,9 +121,10 @@ a:hover {
 
 .topo-dentro {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.25rem 1rem;
   max-width: 76rem;
   margin: 0 auto;
   padding: 0.6rem 1rem;
@@ -159,6 +160,23 @@ a:hover {
 .topo nav a:hover {
   color: var(--tinta);
   text-decoration: underline;
+}
+
+.topo .atalhos {
+  margin-left: auto;
+}
+
+/* o seletor de idioma: o idioma da página fica em destaque */
+.topo .idiomas {
+  gap: 0.25rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.topo .idiomas a[aria-current] {
+  color: var(--tinta);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
 }
 
 /* ---- botões ---- */
@@ -558,8 +576,8 @@ figcaption {
 }
 
 @media (max-width: 30rem) {
-  .topo nav a:nth-child(2),
-  .topo nav a:nth-child(3) {
+  .topo .atalhos a:nth-child(2),
+  .topo .atalhos a:nth-child(3) {
     display: none;
   }
 }
