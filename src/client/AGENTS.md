@@ -13,7 +13,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, platform.ts, splash.ts, startup.ts   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
@@ -73,9 +73,20 @@ depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, ca
   `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
-  `getDataFolder` e `updates` (ver "Atualizações"). Os canais da API são `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da
-  pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`. O processo principal só responde ao quadro que veio da
-  origem do app (`assertFromApp`).
+  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"). Os canais da API são
+  `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
+  os das janelas, `prism:windows-*` e `prism:session-*`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+- **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
+  um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
+  lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
+  centro das janelas (`window-hub.ts`, sem Electron, com teste: `createWindow` é dele), quando uma aba sai para uma janela nova. `window.open`
+  continua negado. Os avisos que valem para todas (`prism:api-exit`, `prism:update-*`) vão a todas (`liveWindows`); o `second-instance` traz a
+  primeira à frente; o "Reiniciar" de uma janela recarrega as outras (`webContents.reload()`, que o `will-navigate` não vê), porque a API nova
+  tem outro token e o "Reiniciar" de cada uma derrubaria a que a primeira subiu. **Fechar uma janela** passa pelo `close` dela: com a área de
+  trabalho montada (`hub.isReady`, que a tela liga e desliga, e que a navegação de página inteira e a queda do processo da tela desligam), o
+  fechamento é cancelado e a tela recebe `prism:windows-close-requested`; quando as abas fecharam, ela pede `prism:windows-close` e o `close`
+  passa (`closeApproved`). Sem área de trabalho (o login) e com o app saindo (`quitting`, agora do módulo) fecha direto; a última fechada
+  encerra o app pelo `window-all-closed`, como antes.
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -404,6 +415,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   consultas do catálogo (`columnsQuery`, `indexesQuery`, `foreignKeysQuery` e `treeQuery`) têm o parâmetro `enabled` por isso. O foco que
   estava no "Conectar", que sai de cena, vai ao painel da aba, e quem decide é o estado (`disconnected` voltou a falso), e não um aviso do
   botão: quem reconecta pelo nó da conexão no navegador tem o foco onde o pôs.
+- **As abas mudam de lugar e de janela**: ver "Abas que se movem e outras janelas", logo abaixo desta seção.
 - **A faixa de abas** (`_components/tab-strip.tsx`; `_lib/tab-strip.ts` tem tudo o que ela decide sem tocar a página, em funções puras e
   testadas): uma linha só, que rola na horizontal. `overflowOf` acende os botões das pontas (uma faixa sem largura, a área de trabalho
   escondida, não tem o que rolar), `revealOffset` traz a aba ativa à vista com folga, `wheelScroll` faz a roda vertical rolar, `stripKeyTarget`
@@ -544,6 +556,65 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   segue tem de abri-la de novo; (4) para a API "congelada" do lado da tela, troque `window.fetch` por um que só rejeita quando o `signal` do
   pedido cancela (o prazo é do cliente, e é ele que se confere); (5) para uma aba OCUPADA de verdade, segure um `LOCK TABLE … IN ACCESS
   EXCLUSIVE MODE` com um `pg_sleep` na mesma transação, numa sessão do `psql` que termina sozinha, e clique em "Atualizar" naquela tabela.
+
+## Abas que se movem e outras janelas (RN-ABAS-001 a 005)
+
+Seção 23 da especificação. **Só o processo principal cria janela e passa aba de uma para outra**; a tela pede pela ponte (`window.prism.windows`) e
+nenhuma janela fala com outra. Tudo o que passa tem o schema de `electron/window-messages.ts`, conferido **nos dois lados**: o centro das janelas
+(`window-hub.ts`) confere o que a tela manda antes de repassar, e a tela confere o que chega (`lib/api/bridge.ts`: `listOtherWindows`, `sendTabAway`,
+`onTabArrived`, `onTabWanted`, `onPeerEvent`; a aba em si ainda por `readTransfer`). As enumerações desse schema repetem as da tela (ele não importa
+nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolve os tipos da tela, e uma que divergir não compila.
+
+- **A ordem** (`_lib/tab-order.ts`, puro e testado): `moveTab(tabs, id, insertAt)` com a posição de ANTES de a aba sair do lugar (a marca de
+  soltar), `shiftTab` (Ctrl+Shift+PageUp e PageDown na aba ativa, sem dar a volta, `tabMoveShortcut`, tratado em `WorkbenchTabs` como o Ctrl+W),
+  `dropIndex` (pela metade de cada aba) e `isOutsideWindow`. O provedor tem `reorderTab` e `shiftTab`. A ordem não é gravada.
+- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`), com o tipo `application/x-prism-tab` e o dado `{ windowId, tabId }`
+  (`writeTabDrag`/`readTabDrag`, conferido: qualquer programa pode soltar algo na faixa). A faixa aceita só esse tipo, mostra a marca de soltar
+  (`data-drop` `before`/`after`, uma sombra interna da cor de destaque) e, solta, ou muda de lugar (veio desta janela) ou pede a aba à janela de
+  origem (`prism:windows-request-tab`; o centro manda `prism:windows-give-tab` a ela, e ela a leva pelo caminho de sempre, na posição pedida).
+  A janela sem abas não tem faixa: o lugar vazio dela recebe a aba solta. O fim do arrasto (`dragend`) com `dropEffect` `none` e o ponto fora da
+  janela leva a aba a uma janela nova ali. **Entre janelas o Chromium às vezes diz `none` mesmo quando a outra aceitou**: por isso o centro
+  recusa a janela nova quando o ponto está em cima de outra janela do Prism (`overWindow`, sem aviso), e quem leva a aba é o pedido da faixa de
+  lá. Solta fora da faixa de outra janela, a aba fica onde estava.
+- **O menu da aba** ganhou o grupo `moveMenu`: "Mover para nova janela" e "Mover para a janela…" (apagado sem outra janela; abre, no mesmo
+  ponto, a lista das outras, pedida ao centro ao abrir o menu, com o número e o resumo que cada uma dá de si, `prism:windows-describe`). Fora do
+  Electron o grupo não aparece.
+- **O que passa** (`_lib/tab-transfer.ts`, puro e testado): `serializeTab` monta a aba com o texto e a seleção do editor DESTE instante
+  (`liveEditors`, `_lib/live-editors.ts`: cada editor se registra pelo id da aba; o `tab.sql` chega com 400 ms de atraso), a sessão do executor
+  (`sessionOf`, e não a cópia da aba), o resultado parado (o mapa das células cortadas vira pares) e o que a tela lembrava
+  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). Com comando em
+  andamento (executar, carregar mais, contar) não passa: a tela avisa `moveBusy`. `readTransfer` confere e devolve a aba, a seleção (cortada no
+  fim do texto), o estado e a memória.
+- **A janela de origem** só tira a aba depois do `ok` do centro, por `detachTab`: o executor sai de cena (`retire`) e a sessão **não** fecha (é a
+  mesma API, e a sessão agora é da outra janela). A aba dos Registros com alterações não salvas pergunta antes, com o `UnsavedEditsDialog` e os
+  textos de `records.copy.ts`: "Descartar" leva a aba sem elas (ficam na memória desta janela, que a aba deixa), "Salvar" grava e leva a aba sem
+  as linhas de antes (o salvar não relê, e as linhas na tela seriam as velhas): a janela que recebe lê os registros na mesma sessão.
+- **A janela que recebe** (`adoptTab`, no provedor): a memória vai antes (os painéis a leem ao montar), a seleção vai ao slot `selection` da
+  memória (o editor nasce com ela, `initialSelection`, e a rola à vista), e o executor nasce com o estado e a sessão (`createQueryRunner({ initial })`:
+  a chave da grade continua do resultado que veio, e "Carregar mais" continua no cursor da sessão). Nada é executado. O número da próxima
+  consulta não repete o da aba que chegou. O provedor diz ao centro quando está pronto (`setReady`, ao montar e ao desmontar): o centro guarda a
+  aba até lá (a janela nova ainda está abrindo o cofre), e a que fecha antes de recebê-la a devolve à de origem.
+- **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele; cancelar uma
+  pergunta deixa a janela aberta; quando a última aba fechou, `releaseWindow` espera os fechamentos de sessão a caminho e fecha as sessões da
+  árvore DESTA janela, e só então a janela fecha. Com o cofre bloqueado fecha direto (a API já fechou as sessões).
+- **O cofre é um só** (RN-ABAS-004). O que uma janela conta às outras (`prism:session-share`, `peerEventSchema`: `activity`, `lock`, `unlock`,
+  `signOut`, `signIn`, só o tipo) o centro repassa a todas as outras, também às que estão no login, e cada uma decide com `peerAction`
+  (`app/_lib/peer-session.ts`, puro e testado). A atividade vai no máximo uma vez por segundo (`shouldShareActivity`), e a cada conferência
+  enquanto há comando em andamento (`useIdleLock`, opção `peers`): a contagem de cada janela recomeça com a atividade de qualquer uma, e o
+  comando parado numa segura as outras. A janela que bloqueia conta; as outras bloqueiam **sem pedir o fechamento do cofre** (um pedido
+  repetido depois do desbloqueio fecharia o cofre recém-aberto: `closedByAnotherWindow`, em `vault-lock.tsx`). Desbloquear numa conta, e as
+  outras soltam a barreira. "Sair" (barra superior e tela de bloqueio) conta, e as outras vão ao login e limpam o cache (`PeerSession`, em
+  `app/_components/peer-session.tsx`, montado no `app.tsx` acima das rotas, com o roteador por propriedade). O login (e o criar usuário) conta:
+  a janela no login entra; a que está num cofre confere se é o mesmo usuário (`getSession`) e sai se não for. As preferências mudam em todas
+  pelo evento `storage` (`preferencesStore.refresh`).
+- **Como conferir sob o Xvfb** (o app de verdade, sem gerenciador de janelas): o `xdotool` (instalado por `apt-get`) faz o arrasto com
+  `mousedown`, vários `mousemove` com pausa e `mouseup`, e põe as janelas lado a lado (`windowsize`/`windowmove`; a largura mínima é 1024, e
+  numa tela de 1920 elas se sobrepõem um pouco). Um movimento rápido demais às vezes não chega à outra janela: espace os `mousemove` (0,1 a 0,15 s).
+  Fechar "pelo X" é mandar `WM_DELETE_WINDOW` à janela (um `ClientMessage` por `libX11` com `ctypes`): o `xdotool windowclose` desta versão
+  destrói a janela sem passar pelo `close`, e o `window.close()` da página também não passa por ele. O `location.reload()` da página é cancelado
+  pelo `will-navigate`; o `Page.reload` do protocolo de depuração passa. A janela nova é outro alvo em `/json/list`: ache-o por
+  `window.prism.windows.id`. Para provar que nada foi executado de novo, conte as linhas `ExecuteAsync` do log da API (`<dados>/logs/`); o
+  "Carregar mais" aparece como `FetchNextAsync` na MESMA sessão.
 
 ## Navegador: clique, menu e busca (`src/app/workbench`)
 
@@ -795,6 +866,8 @@ fechar não apaga as abas.
 - **Como se chega**: o item "Configurações" da barra superior (o ícone dos controles deslizantes e o texto, como os outros itens;
   a dica diz que Ctrl+, também abre) e Ctrl+, (Cmd+, no macOS) de qualquer tela de dentro do cofre (`SettingsShortcut`; `isOpenSettingsShortcut`: quem já
   tratou a tecla fica com ela). Esc e "Fechar · Esc" voltam à área de trabalho; a lista aberta de um campo trata o Esc primeiro.
+- **Em todas as janelas** (RN-ABAS-004): o `storage` que chega quando outra janela grava tira a chave dela do que a loja guardava
+  (`preferencesStore.refresh`), e quem lê lê de novo; a janela que grava já tem o valor novo.
 - **Preferências** (`_lib/preferences.ts`, `use-preferences.ts`) são do dispositivo **e** do usuário do cofre: `localStorage`, chave
   `prism:preferences:<usuário em minúsculas>`, esquema Zod com **leitura tolerante campo a campo** (JSON inválido, objeto estranho
   ou valor fora do esquema volta ao padrão do campo, sem lançar). Se o `localStorage` falta, recusa o acesso ou lança ao gravar, elas
@@ -899,6 +972,8 @@ inicial; "Sair" encerra de verdade.
   `vault-lock.tsx` (liga as peças; é montado pelo `WorkbenchProvider`, ao lado das telas, e não acima dele: bloquear não o desmonta),
   `idle-warning.tsx` (o aviso), `lock-screen.tsx` (a tela) e `remount-on-lock.tsx`. E `workbench/_lib/workbench-lock.ts` (o que sai do
   cache e das abas). **A ordem dos passos e as falhas ficam em `lock-vault.ts` e no teste dele; este guia não as repete.**
+- **Com mais de uma janela** a contagem é de todas e o bloqueio também (RN-ABAS-004): `peers` do `useIdleLock`, `peerAction` e
+  `closedByAnotherWindow`, descritos em "Abas que se movem e outras janelas".
 - **A barreira.** Bloqueado, `apiRequest` espera o desbloqueio (não falha e não avisa); só passa o pedido com `whileLocked` (`signIn` e
   `signOut`). Um 401 `VAULT_LOCKED` que chega com o app bloqueado não leva ao login (um pedido que já estava a caminho apagaria as abas), e a
   falha de consulta não vira aviso. `vaultLock.reset()` no desmonte do `VaultGuard` solta o que ficou preso: sem isso o login seguinte
