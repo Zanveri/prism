@@ -1,10 +1,13 @@
-import { memo, useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useReducer, useRef, useState, type KeyboardEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/result-layout";
+import { saveShortcut } from "../_lib/saved-scripts";
 import { recall, remember } from "../_lib/tab-memory";
 import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
 import type { QueryTab } from "../_lib/workbench-model";
@@ -12,6 +15,7 @@ import { EditorToolbar } from "./editor-toolbar";
 import { ResultActions } from "./result-actions";
 import { ResultPanel } from "./result-panel";
 import { ResultSplitter } from "./result-splitter";
+import { NoConnectionBarView } from "./script-dialogs";
 import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
 
 type QueryTabPanelProps = {
@@ -21,7 +25,22 @@ type QueryTabPanelProps = {
   engine: Engine | undefined;
   active: boolean;
   onSqlChange: (tabId: string, patch: { sql: string }) => void;
+  /** RN-SCRIPT-001: o texto mudou, sem atraso (o ponto da aba de um script acende na hora). Estável, como as outras: o painel é memorizado. */
+  onEdited: (tabId: string) => void;
+  /** RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S com o foco em qualquer lugar da aba (o editor, a barra, o resultado). */
+  onSave: (tabId: string, mode: "save" | "saveAs") => void;
+  /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu. */
+  onAssignConnection: (tabId: string, connectionId: string) => void;
 };
+
+/** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
+function NoConnectionBar({ tabId, onAssign }: { tabId: string; onAssign: (tabId: string, connectionId: string) => void }) {
+  const connections = useQuery(connectionsQuery);
+  const [value, setValue] = useState("");
+  const options = (connections.data ?? []).map((connection) => ({ value: connection.id, label: connection.name }));
+
+  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={(connectionId) => onAssign(tabId, connectionId)} />;
+}
 
 /**
  * O que uma aba de consulta mostra: a barra, o editor de SQL e a área de resultado. As abas ficam
@@ -33,7 +52,7 @@ type QueryTabPanelProps = {
  * seguem montados, e ficam sem altura em vez de saírem da página. A divisão fica guardada fora do
  * componente (`tab-memory.ts`, pelo id da aba): o que desmonta e volta, e o bloqueio por inatividade, que troca o executor, a devolvem.
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
@@ -68,8 +87,23 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     [runner],
   );
 
+  // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const mode = event.defaultPrevented ? null : saveShortcut(event);
+    if (mode === null) return;
+    event.preventDefault();
+    onSave(tab.id, mode);
+  }
+
+  // A edição desfaz a posição do erro (o executor) e acende o ponto da aba de um script (o provedor).
+  const handleEdited = useCallback(() => {
+    runner.textEdited();
+    onEdited(tab.id);
+  }, [runner, onEdited, tab.id]);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col text-sm">
+    <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
+      {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} onAssign={onAssignConnection} /> : null}
       <EditorToolbar busy={busy} cancelling={cancelling} runnable={runnable} onRun={() => editor.current?.run()} onCancel={handleCancel} />
 
       <div ref={area} className="flex min-h-0 flex-1 flex-col">
@@ -88,7 +122,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             onRun={handleRun}
             onChange={(sql) => onSqlChange(tab.id, { sql })}
             onRunnableChange={setRunnable}
-            onEdited={runner.textEdited}
+            onEdited={handleEdited}
           />
         </div>
 

@@ -13,18 +13,21 @@ import { liveEditors } from "../_lib/live-editors";
 import { recallForTransfer } from "../_lib/tab-memory";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
 import { closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseScope } from "../_lib/tab-strip";
+import { scriptsToAsk } from "../_lib/saved-scripts";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
 import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
-import type { TableView } from "../_lib/workbench-model";
+import { isTableTab, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
+import { UnsavedScriptsDialog } from "./script-dialogs";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 import { TableTabPanel } from "./table-tab/table-tab";
 import { UnsavedEditsDialog } from "./table-tab/unsaved-edits-dialog";
+import { useScriptSaving, type SaveMode } from "./use-script-saving";
 
 const copy = workbenchCopy.tabs;
 
@@ -44,11 +47,15 @@ const copy = workbenchCopy.tabs;
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
   const queryClient = useQueryClient();
+
+  // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
+  const { save: saveScript, dialog: saveDialog } = useScriptSaving();
+  const requestSave = useCallback((tabId: string, mode: SaveMode) => void saveScript(tabId, mode), [saveScript]);
 
   // Uma aba só está À VISTA se for a ativa e a área de trabalho for a tela mostrada (RN-SEG-001): a escondida não fala com o banco.
   const onScreen = useWorkbenchOnScreen();
@@ -58,7 +65,7 @@ export function WorkbenchTabs() {
   const disconnected = useSyncExternalStore(disconnectLog.subscribe, disconnectLog.getSnapshot);
   // Uma aba com sessão é uma conexão conectada de novo: o "Atualizar" dos registros abre a sessão da aba, sem passar pela da árvore.
   useEffect(() => {
-    for (const tab of tabs) if (tab.sessionId !== null) disconnectLog.forget(tab.connectionId);
+    for (const tab of tabs) if (tab.sessionId !== null && tab.connectionId !== null) disconnectLog.forget(tab.connectionId);
   }, [tabs, disconnectLog]);
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
@@ -106,6 +113,35 @@ export function WorkbenchTabs() {
     [tabs, closeNow],
   );
 
+  // RN-SCRIPT-001: depois dos Registros e antes da pergunta do SQL, a dos scripts com mudança não salva entre as abas que fecham.
+  const [scriptQuestion, setScriptQuestion] = useState<{ scope: CloseScope; tabId: string; dirty: { id: string; name: string }[]; saving: boolean } | null>(null);
+  const askAboutScripts = useCallback(
+    (scope: CloseScope, tabId: string) => {
+      const dirty = scriptsToAsk(tabsToClose(scope, tabs, tabId), tabs).map((tab) => ({ id: tab.id, name: tab.script?.name ?? tab.title }));
+      if (dirty.length === 0) askAboutSql(scope, tabId);
+      else setScriptQuestion({ scope, tabId, dirty, saving: false });
+    },
+    [tabs, askAboutSql],
+  );
+  // Depois de salvar (que espera a API e, num script que sumiu, o diálogo do nome) a pergunta do SQL usa a lista de abas daquele instante.
+  const latestAskAboutSql = useRef(askAboutSql);
+  useEffect(() => {
+    latestAskAboutSql.current = askAboutSql;
+  });
+
+  async function saveScriptsAndClose(question: { scope: CloseScope; tabId: string; dirty: { id: string }[] }) {
+    setScriptQuestion((current) => (current === null ? null : { ...current, saving: true }));
+    for (const { id } of question.dirty) {
+      if (await saveScript(id, "save")) continue;
+      // Não gravou (cancelou o nome, a API recusou ou caiu): nada fecha, e a janela fica aberta.
+      setScriptQuestion(null);
+      setWindowClosing(false);
+      return;
+    }
+    setScriptQuestion(null);
+    latestAskAboutSql.current(question.scope, question.tabId);
+  }
+
   // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar. Levar a aba
   // para outra janela pergunta o mesmo (as alterações não salvas não mudam de janela): Salvar e levar, ou Descartar e levar.
   type Intent = { kind: "close"; scope: CloseScope } | { kind: "move"; target: TabMoveTarget };
@@ -113,10 +149,10 @@ export function WorkbenchTabs() {
   const handleClose = useCallback(
     (scope: CloseScope, tabId: string) => {
       const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
-      if (question === null) askAboutSql(scope, tabId);
+      if (question === null) askAboutScripts(scope, tabId);
       else setUnsaved({ intent: { kind: "close", scope }, tabId, ...question, saving: false });
     },
-    [tabs, askAboutSql],
+    [tabs, askAboutScripts, setUnsaved],
   );
 
   /**
@@ -155,7 +191,7 @@ export function WorkbenchTabs() {
   // Depois da pergunta: fecha (com a pergunta do SQL, se for o caso) ou leva a aba. Levar depois de "Descartar" é levá-la sem as alterações: elas
   // ficam na memória desta janela, que a aba deixa, e não vão.
   function proceed(intent: Intent, tabId: string, saved = false) {
-    if (intent.kind === "close") askAboutSql(intent.scope, tabId);
+    if (intent.kind === "close") askAboutScripts(intent.scope, tabId);
     else void sendTab(tabId, intent.target, saved);
   }
 
@@ -228,7 +264,7 @@ export function WorkbenchTabs() {
     tellWindows((windows) => windows.requestTab({ fromWindowId, tabId, index }));
   }
 
-  const connectionOf = (connectionId: string) => connections.data?.find((connection) => connection.id === connectionId);
+  const connectionOf = (connectionId: string | null) => (connectionId === null ? undefined : connections.data?.find((connection) => connection.id === connectionId));
 
   const question = confirm === null ? null : closeConfirmationText(confirm.total, confirm.withSql);
 
@@ -263,10 +299,10 @@ export function WorkbenchTabs() {
 
             return (
               <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
-                {tab.table ? (
+                {isTableTab(tab) ? (
                   <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} />
                 )}
               </div>
             );
@@ -290,6 +326,24 @@ export function WorkbenchTabs() {
           }}
         />
       )}
+
+      {scriptQuestion === null ? null : (
+        <UnsavedScriptsDialog
+          names={scriptQuestion.dirty.map((script) => script.name)}
+          saving={scriptQuestion.saving}
+          onSave={() => void saveScriptsAndClose(scriptQuestion)}
+          onDiscard={() => {
+            setScriptQuestion(null);
+            askAboutSql(scriptQuestion.scope, scriptQuestion.tabId);
+          }}
+          onCancel={() => {
+            setScriptQuestion(null);
+            setWindowClosing(false);
+          }}
+        />
+      )}
+
+      {saveDialog}
 
       {/* Fora do `section`: o teclado do diálogo não passa pelo Ctrl+W da faixa. */}
       {confirm === null || question === null ? null : (

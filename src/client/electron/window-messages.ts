@@ -72,12 +72,15 @@ export const tabTransferSchema = z.object({
   tab: z.object({
     id: z.uuid(),
     title: z.string().min(1).max(10_000),
-    connectionId: id,
+    /** Nula na aba de um script cuja conexão não existe mais (RN-SCRIPT-003). */
+    connectionId: id.nullable(),
     database: z.string().min(1).max(10_000).optional(),
     /** A sessão da aba na API: é a mesma API, então ela continua aberta e passa a ser da janela que recebe. */
     sessionId: id.nullable(),
     sql: z.string().max(maxSqlLength),
     table: z.object({ schema: name, name, view: z.enum(["data", "structure", "diagram"]) }).optional(),
+    /** RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo; a mudança não salva, a janela que recebe a refaz pelo texto. */
+    script: z.object({ id: z.uuid(), name: z.string().min(1).max(200), savedSql: z.string().max(maxSqlLength) }).optional(),
   }),
   /** A seleção do editor (o cursor é a seleção vazia), em posições do texto. */
   editor: z.object({ anchor: count, head: count }).nullable(),

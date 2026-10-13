@@ -28,6 +28,8 @@ export const prismEndpoints = {
   userDatabaseSessionQueriesEditTarget: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edit-target`,
   userDatabaseSessionQueriesEdits: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits`,
   userDatabaseSessionQueriesEditsPreview: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/preview`,
+  userScripts: "api/user/scripts",
+  userScript: (id: string) => `api/user/scripts/${encodeURIComponent(id)}`,
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
   userDriverInstall: (id: string) => `api/user/drivers/${encodeURIComponent(id)}/install`,

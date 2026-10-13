@@ -9,7 +9,8 @@ import type { TabMoveTarget, WindowEntry } from "../../../../electron/window-mes
 
 import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { dropIndex, isOutsideWindow, readTabDrag, tabDragType, writeTabDrag } from "../_lib/tab-order";
-import { closeShortcutLabel, moveMenu, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, wheelScroll, type CloseScope } from "../_lib/tab-strip";
+import { scriptsCopy } from "../_lib/scripts.copy";
+import { closeShortcutLabel, moveMenu, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabTitleOf, wheelScroll, type CloseScope } from "../_lib/tab-strip";
 import type { QueryTab } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -25,7 +26,7 @@ type StripMenu = { kind: "tab" | "windows"; tabId: string; point: Point; initial
 type TabStripProps = {
   tabs: QueryTab[];
   activeTabId: string | null;
-  connectionOf: (connectionId: string) => Connection | undefined;
+  connectionOf: (connectionId: string | null) => Connection | undefined;
   onSelect: (tabId: string) => void;
   /** Fecha o que o fechamento pede a partir da aba dada (`tabsToClose`). */
   onClose: (scope: CloseScope, tabId: string) => void;
@@ -254,6 +255,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, onSelect, onClose, w
         {tabs.map((tab, index) => {
           const selected = tab.id === activeTabId;
           const connection = connectionOf(tab.connectionId);
+          const label = tabTitleOf(tab);
 
           return (
             <div
@@ -287,13 +289,20 @@ export function TabStrip({ tabs, activeTabId, connectionOf, onSelect, onClose, w
                 aria-selected={selected}
                 aria-controls={panelElementId(tab.id)}
                 tabIndex={selected ? 0 : -1}
-                title={tab.title}
+                title={label.label}
                 onClick={() => onSelect(tab.id)}
                 onKeyDown={(event) => handleKeyDown(event, tab, index)}
                 className="flex h-10 cursor-pointer items-center gap-2 pr-1 pl-3.5"
               >
                 {tab.table ? <TableIcon /> : <DocumentIcon />}
                 <span className="max-w-[240px] truncate">{tab.title}</span>
+                {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
+                {label.unsaved ? (
+                  <>
+                    <span aria-hidden data-unsaved className="size-2 flex-none rounded-full bg-accent" />
+                    <span className="sr-only">{scriptsCopy.tab.unsaved}</span>
+                  </>
+                ) : null}
                 {connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} /> : null}
               </button>
               <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="mr-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-subtle transition-colors hover:bg-selected hover:text-ink">

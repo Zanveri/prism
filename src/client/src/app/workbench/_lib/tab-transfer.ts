@@ -1,4 +1,5 @@
 import { tabTransferSchema, type TabTransfer } from "../../../../electron/window-messages";
+import { isScriptDirty } from "./saved-scripts";
 import type { SelectionMemory, TransferMemory } from "./tab-memory";
 import type { RunnerState } from "./use-query-runner";
 import type { QueryTab } from "./workbench-model";
@@ -56,10 +57,19 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
   const result = resultOf(state);
   if (result === undefined) return null;
 
-  const { table, database } = tab;
+  const { table, database, script } = tab;
   return {
     version: 1,
-    tab: { id: tab.id, title: tab.title, connectionId: tab.connectionId, ...(database === undefined ? {} : { database }), sessionId, sql: editor?.sql ?? tab.sql, ...(table === undefined ? {} : { table }) },
+    tab: {
+      id: tab.id,
+      title: tab.title,
+      connectionId: tab.connectionId,
+      ...(database === undefined ? {} : { database }),
+      sessionId,
+      sql: editor?.sql ?? tab.sql,
+      ...(table === undefined ? {} : { table }),
+      ...(script === undefined ? {} : { script: { id: script.id, name: script.name, savedSql: script.savedSql } }),
+    },
     editor: editor === null ? null : { anchor: editor.anchor, head: editor.head },
     result,
     memory,
@@ -82,7 +92,17 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
   const { tab, editor, result, memory } = parsed.data;
   const clamp = (position: number) => Math.min(position, tab.sql.length);
   // O tipo da aba é o da tela: o TypeScript confere que o schema do processo principal não divergiu dele.
-  const adopted: QueryTab = { id: tab.id, title: tab.title, connectionId: tab.connectionId, ...(tab.database === undefined ? {} : { database: tab.database }), sessionId: tab.sessionId, sql: tab.sql, ...(tab.table === undefined ? {} : { table: tab.table }) };
+  const adopted: QueryTab = {
+    id: tab.id,
+    title: tab.title,
+    connectionId: tab.connectionId,
+    ...(tab.database === undefined ? {} : { database: tab.database }),
+    sessionId: tab.sessionId,
+    sql: tab.sql,
+    ...(tab.table === undefined ? {} : { table: tab.table }),
+    // RN-SCRIPT-001: o ponto da faixa é o texto que chegou contra o que foi salvo.
+    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql) } }),
+  };
   const restored: TransferMemory = memory;
 
   return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored };

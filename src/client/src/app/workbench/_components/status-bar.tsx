@@ -7,6 +7,7 @@ import { EnvironmentPill, LockOpenIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { databaseSessionQuery } from "../_lib/database-sessions.service";
+import { scriptsCopy } from "../_lib/scripts.copy";
 import { isConnected } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
 import { workbenchCopy } from "../_lib/workbench.copy";
@@ -32,7 +33,9 @@ export function StatusBar() {
 
   return (
     <footer aria-label={copy.label} className="flex min-h-7 flex-wrap items-center gap-x-5 gap-y-1 border-t border-border bg-panel px-3 py-1 text-xs text-muted">
-      {tab === null || connection === undefined ? (
+      {tab?.connectionId === null ? (
+        <span>{scriptsCopy.noConnection.status}</span>
+      ) : tab === null || connection === undefined ? (
         <span>{copy.noTab}</span>
       ) : (
         <span className="flex items-center gap-1.5">

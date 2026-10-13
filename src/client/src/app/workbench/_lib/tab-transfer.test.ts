@@ -103,6 +103,22 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(readTransfer(null)).toBeNull();
   });
 
+  it("a aba de um script leva o id, o nome e o texto salvo; o ponto da mudança não salva é refeito pelo texto do editor (RN-SCRIPT-001)", () => {
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", dirty: false };
+    const edited = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script }, editor: { sql: "select 2", anchor: 0, head: 0 } })));
+    const same = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script: { ...script, dirty: true } }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+
+    expect(edited?.tab.script).toEqual({ ...script, dirty: true });
+    expect(edited?.tab.title).toBe("Fechamento");
+    expect(same?.tab.script).toEqual(script);
+  });
+
+  it("a aba sem conexão (o script cuja conexão sumiu, RN-SCRIPT-003) passa sem conexão", () => {
+    const adopted = roundTrip(serializeTab(snapshot({ tab: { ...tab, connectionId: null, sessionId: null } })));
+
+    expect(adopted?.tab.connectionId).toBeNull();
+  });
+
   it("a seleção que passa do fim do texto (o texto mudou) fica no fim dele", () => {
     const adopted = roundTrip(serializeTab(snapshot({ editor: { sql: "select 1", anchor: 2, head: 400 } })));
     expect(adopted?.selection).toEqual({ anchor: 2, head: 8 });

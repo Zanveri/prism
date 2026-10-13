@@ -7,7 +7,7 @@ import { inDatabase } from "../../_lib/navigator-model";
 import type { TableRef } from "../../_lib/table-diagram";
 import { tableViews, viewOf } from "../../_lib/table-view";
 import type { QueryRunner } from "../../_lib/use-query-runner";
-import type { QueryTab, TableTarget, TableView } from "../../_lib/workbench-model";
+import type { TableTab, TableTarget, TableView } from "../../_lib/workbench-model";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { DiagramView } from "./diagram-view";
 import { DisconnectedView } from "./disconnected-view";
@@ -18,7 +18,7 @@ import { tableViewPanelId, tableViewTabId, TableViewTabs } from "./table-view-ta
 const copy = workbenchCopy.tableTab;
 
 type TableTabPanelProps = {
-  tab: QueryTab;
+  tab: TableTab;
   /** A tabela da aba (RN-TABELA-001): o `table` dela, que quem monta o painel já conferiu que existe. */
   table: TableTarget;
   /** O que a aba executa e mostra; os registros vêm dele, como numa consulta. */

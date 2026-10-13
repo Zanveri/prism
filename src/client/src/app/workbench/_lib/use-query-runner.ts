@@ -10,6 +10,7 @@ import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/
 
 import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
+import { scriptsCopy } from "./scripts.copy";
 import { sqlErrorDetails, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
 import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
@@ -197,7 +198,8 @@ export type QueryRunner = {
 };
 
 type QueryRunnerOptions = {
-  connectionId: string;
+  /** Nulo na aba de um script cuja conexão não existe mais (RN-SCRIPT-003): ela não executa nada até a pessoa escolher uma, e quem escolhe troca o executor. */
+  connectionId: string | null;
   /** RN-ARVORE-006: outro banco do servidor da conexão, de onde a aba foi aberta; sem ele, o banco da conexão. */
   database?: string;
   queryClient: QueryClient;
@@ -343,12 +345,12 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * conhece a sessão (ela caiu), abre outra e repete uma vez (seção 7). `null` quando não há o que
    * mostrar: a aba foi solta, ou o comando foi cancelado antes de ser enviado.
    */
-  async function execute(sql: string, started: number): Promise<ApiResult<QueryResult> | null> {
+  async function execute(connection: string, sql: string, started: number): Promise<ApiResult<QueryResult> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
       if (id === null) {
-        const opened = await call(() => openDatabaseSession(connectionId, database));
+        const opened = await call(() => openDatabaseSession(connection, database));
         if (started !== epoch) {
           // A aba foi solta enquanto a sessão abria: ninguém mais a usaria nem a fecharia.
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);
@@ -476,12 +478,19 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         return;
       }
 
+      // RN-SCRIPT-003: sem conexão não há sessão a abrir. A aba pede uma conexão; nada foi enviado.
+      if (connectionId === null) {
+        if (previous === null) set({ status: "notice", message: scriptsCopy.toasts.noConnection });
+        toast.warning(scriptsCopy.toasts.noConnection);
+        return;
+      }
+
       const started = epoch;
       cancelRequested = false;
       editedSinceRun = false;
       set({ status: "running", cancelling: false, previous });
 
-      const result = await execute(target.sql, started);
+      const result = await execute(connectionId, target.sql, started);
       if (result === null) return;
       // O que está na tela agora, e não o de quando o comando começou: uma edição no meio já tirou a posição de um erro.
       if (!result.ok) return set(failed(result.error, target, state.status === "running" ? state.previous : null));

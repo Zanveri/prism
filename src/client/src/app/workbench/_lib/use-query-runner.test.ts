@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/query-client";
 
 import { queryOutcomeCopy } from "./query-outcome.copy";
+import { scriptsCopy } from "./scripts.copy";
 import { countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { createQueryRunner, isBusyState, type RunnerState } from "./use-query-runner";
 import { workbenchCopy } from "./workbench.copy";
@@ -106,6 +107,20 @@ async function withResult() {
 
 beforeEach(() => vi.stubGlobal("window", { prism: bridge }));
 afterEach(() => vi.unstubAllGlobals());
+
+describe("a aba sem conexão (RN-SCRIPT-003)", () => {
+  it("não abre sessão nem chama a API: avisa, e sem resultado na tela a área diz por quê", async () => {
+    const api = fakeApi();
+    const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+    const runner = createQueryRunner({ connectionId: null, queryClient: createQueryClient(toast), toast, onSession: vi.fn() });
+
+    await runner.run({ sql: "select 1", offset: 0 });
+
+    expect(api.calls).toEqual([]);
+    expect(toast.warning).toHaveBeenCalledWith(scriptsCopy.toasts.noConnection);
+    expect(runner.getState()).toEqual({ status: "notice", message: scriptsCopy.toasts.noConnection });
+  });
+});
 
 describe("executar", () => {
   it("a aba aberta a partir de outro banco do servidor abre a sessão dele e executa nela (RN-ARVORE-006)", async () => {

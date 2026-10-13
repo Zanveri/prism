@@ -94,6 +94,8 @@ const tabSlot = new Compartment();
 /** Autocompletar (RN-CONFIG-004) e converter palavras-chave para maiúsculas: cada um liga e desliga sozinho. Desligado, o compartimento fica vazio: sem lista, sem as teclas dela. */
 const completionSlot = new Compartment();
 const caseSlot = new Compartment();
+/** A gramática do banco (as cores e o que o `lang-sql` lê): troca quando a aba passa a ter outro banco, como a aba sem conexão que recebe uma (RN-SCRIPT-003). */
+const languageSlot = new Compartment();
 
 /** A largura da tabulação: a de um caractere de tabulação e o que a tecla Tab insere (em espaços). */
 const tabSettings = (tabSize: number) => [EditorState.tabSize.of(tabSize), indentUnit.of(" ".repeat(tabSize))];
@@ -172,10 +174,13 @@ type SqlEditorProps = {
   tabId?: string;
   /** RN-ABAS-002: a seleção com que a aba chegou de outra janela. Lida uma vez, ao criar o editor. */
   initialSelection?: { anchor: number; head: number } | null;
-  /** O banco da conexão escolhe o dialeto das cores e as regras de separar os comandos. Lido uma vez, ao criar o editor. */
+  /**
+   * O banco da conexão escolhe o dialeto das cores e as regras de separar os comandos. Segue a propriedade com o editor montado: a lista de conexões que chega
+   * depois do editor, e a aba sem conexão que recebe uma (RN-SCRIPT-003), mudam o banco sem recriar o editor (o texto e o desfazer ficam).
+   */
   engine: Engine | undefined;
-  /** A conexão da aba deste editor: de onde vêm os nomes da árvore que o autocompletar sugere. Lida na hora do pedido de sugestão. */
-  connectionId: string;
+  /** A conexão da aba deste editor: de onde vêm os nomes da árvore que o autocompletar sugere. Lida na hora do pedido de sugestão. Nula na aba sem conexão (RN-SCRIPT-003): nada a sugerir. */
+  connectionId: string | null;
   /** RN-ARVORE-006: o outro banco do servidor da aba; o completar usa os nomes dele. */
   database?: string;
   autoFocus: boolean;
@@ -212,6 +217,8 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   // criação; depois, os efeitos de baixo as reconfiguram ao vivo quando mudam (Configurações abre por cima, com o editor montado).
   const [initial] = useState(() => ({ sql: initialSql, tabId, selection: initialSelection, engine, autoFocus, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
   const applied = useRef(`${fontFamily}|${fontSize}|${tabSize}|${dark}`);
+  // O banco de agora, lido pelas funções do editor na hora em que rodam (executar, separar o comando, sugerir).
+  const engineNow = useRef(engine);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
 
   const emitRun = useEffectEvent((target: RunTarget) => onRun(target));
@@ -219,8 +226,8 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const emitRunnable = useEffectEvent((runnable: boolean) => onRunnableChange(runnable));
   const emitEdited = useEffectEvent(() => onEdited());
   // Os níveis da árvore são lidos na hora do pedido, da conexão desta aba (sem busca nenhuma: só o cache).
-  const readLevels = useEffectEvent(() => cachedLevels(queryClient, connectionId, database));
-  const completionFor = useEffectEvent(() => sqlCompletion({ dialect: dialectOf(initial.engine), engine: initial.engine, levels: () => readLevels() }));
+  const readLevels = useEffectEvent(() => (connectionId === null ? [] : cachedLevels(queryClient, connectionId, database)));
+  const completionFor = useEffectEvent(() => sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels() }));
 
   useEffect(() => {
     if (host.current === null) return;
@@ -236,7 +243,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     }
 
     function run(state: EditorState) {
-      emitRun(runTarget(state, initial.engine));
+      emitRun(runTarget(state, engineNow.current));
       return true;
     }
 
@@ -254,7 +261,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           history(),
           bracketMatching(),
           indentOnInput(),
-          sql({ dialect: dialectOf(initial.engine) }),
+          languageSlot.of(sql({ dialect: dialectOf(initial.engine) })),
           syntaxHighlighting(highlight),
           themeSlot.of(editorTheme(initial.editor, initial.dark)),
           tabSlot.of(tabSettings(initial.editor.tabSize)),
@@ -274,7 +281,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
             }
 
             if (!update.docChanged && !update.selectionSet) return;
-            const next = isRunnable(update.state, initial.engine);
+            const next = isRunnable(update.state, engineNow.current);
             if (next !== runnable) emitRunnable((runnable = next));
           }),
         ],
@@ -282,7 +289,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     });
 
     view.current = editor;
-    emitRunnable((runnable = isRunnable(editor.state, initial.engine)));
+    emitRunnable((runnable = isRunnable(editor.state, engineNow.current)));
     if (initial.selection !== null) editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: "center" }) });
     if (initial.autoFocus) editor.focus();
     const unregister = initial.tabId === undefined ? () => {} : liveEditors.register(initial.tabId, () => ({ sql: editor.state.doc.toString(), anchor: editor.state.selection.main.anchor, head: editor.state.selection.main.head }));
@@ -313,8 +320,18 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     if (editor === null || key === appliedToggles.current) return;
 
     appliedToggles.current = key;
-    editor.dispatch({ effects: [completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(initial.engine) : [])] });
-  }, [autocomplete, uppercaseKeywords, initial.engine]);
+    editor.dispatch({ effects: [completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engineNow.current) : [])] });
+  }, [autocomplete, uppercaseKeywords]);
+
+  // O banco mudou com o editor montado: a gramática, as maiúsculas e o completar passam a ser os dele, e "há o que executar?" é refeito pelas regras dele.
+  useEffect(() => {
+    const editor = view.current;
+    if (editor === null || engine === engineNow.current) return;
+
+    engineNow.current = engine;
+    editor.dispatch({ effects: [languageSlot.reconfigure(sql({ dialect: dialectOf(engine) })), completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engine) : [])] });
+    emitRunnable(isRunnable(editor.state, engine));
+  }, [engine, autocomplete, uppercaseKeywords]);
 
   useEffect(() => {
     const editor = view.current;
@@ -330,12 +347,12 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
         const editor = view.current;
         if (editor === null) return;
 
-        onRun(runTarget(editor.state, initial.engine));
+        onRun(runTarget(editor.state, engineNow.current));
         editor.focus();
       },
       focus: () => view.current?.focus(),
     }),
-    [onRun, initial],
+    [onRun],
   );
 
   return <div ref={host} className="h-full" />;

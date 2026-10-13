@@ -1,3 +1,4 @@
+import { scriptsCopy } from "./scripts.copy";
 import { workbenchCopy } from "./workbench.copy";
 
 const copy = workbenchCopy.tabs;
@@ -138,12 +139,12 @@ export function nextToClose(queue: readonly string[], open: ReadonlySet<string>)
  * Os rótulos da lista de todas as abas, na ordem das abas. O mesmo título em conexões diferentes (a tabela `producao.pedido` de dois bancos) mostra a
  * conexão de cada uma, `título (conexão)`, e só nelas; sem o nome da conexão (a lista de conexões ainda não chegou), o título fica como é.
  */
-export function tabListLabels(tabs: readonly { title: string; connectionId: string }[], connectionName: (connectionId: string) => string | undefined): string[] {
+export function tabListLabels(tabs: readonly { title: string; connectionId: string | null }[], connectionName: (connectionId: string) => string | undefined): string[] {
   const count = new Map<string, number>();
   for (const tab of tabs) count.set(tab.title, (count.get(tab.title) ?? 0) + 1);
 
   return tabs.map((tab) => {
-    const name = (count.get(tab.title) ?? 0) > 1 ? connectionName(tab.connectionId) : undefined;
+    const name = (count.get(tab.title) ?? 0) > 1 && tab.connectionId !== null ? connectionName(tab.connectionId) : undefined;
     return name === undefined ? tab.title : `${tab.title} (${name})`;
   });
 }
@@ -153,11 +154,12 @@ export function tabListLabels(tabs: readonly { title: string; connectionId: stri
  * não é guardado em lugar nenhum. `null` (sem pergunta) para o fechamento de uma aba só, que segue como sempre, e quando nenhuma das que fecham tem SQL
  * digitado (consulta vazia, só espaço, ou aba de tabela). O SQL da aba que FICA não conta.
  */
-export function closeConfirmation(scope: CloseScope, tabs: readonly { id: string; sql: string; table?: unknown }[], targetId: string): { total: number; withSql: number } | null {
+export function closeConfirmation(scope: CloseScope, tabs: readonly { id: string; sql: string; table?: unknown; script?: unknown }[], targetId: string): { total: number; withSql: number } | null {
   if (scope === "one") return null;
 
   const closing = new Set(tabsToClose(scope, tabs, targetId));
-  const withSql = tabs.filter((tab) => closing.has(tab.id) && tab.table === undefined && tab.sql.trim() !== "").length;
+  // A aba de um script não perde o texto: ele está salvo, e a mudança desde a gravação já teve a pergunta dela (RN-SCRIPT-001).
+  const withSql = tabs.filter((tab) => closing.has(tab.id) && tab.table === undefined && tab.script === undefined && tab.sql.trim() !== "").length;
   return withSql === 0 ? null : { total: closing.size, withSql };
 }
 
@@ -178,4 +180,13 @@ export function moveMenu(otherWindows: number, available: boolean): MoveMenuItem
     { action: "newWindow", label: copy.moveToNewWindow, disabled: false },
     { action: "toWindow", label: copy.moveToWindow, disabled: otherWindows === 0 },
   ];
+}
+
+/**
+ * O que a aba diz de si na faixa (RN-SCRIPT-001): o título (o nome do script, na aba de um script), e, com mudança não salva, o ponto e o nome acessível que
+ * diz isso (o ponto é só desenho).
+ */
+export function tabTitleOf(tab: { title: string; script?: { dirty: boolean } }): { title: string; label: string; unsaved: boolean } {
+  const unsaved = tab.script?.dirty === true;
+  return { title: tab.title, label: unsaved ? scriptsCopy.tab.titleUnsaved(tab.title) : tab.title, unsaved };
 }
