@@ -119,7 +119,7 @@ repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote �
 | `empacotar.yml` | `api` | API das quatro plataformas | `ubuntu-24.04` | — | `contents: read` |
 | `empacotar.yml` | `windows` | Pacote de Windows | `windows-2025` | `api` | `contents: read` |
 | `empacotar.yml` | `linux` | Pacote de Linux | `ubuntu-24.04`, no contêiner `electronuserland/builder` | `api` | `contents: read` |
-| `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-26` | `api` | `contents: read` |
+| `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-15` | `api` | `contents: read` |
 | `lancar.yml` | `publicar` | Publicar a release | `ubuntu-24.04` | — | `contents: write` |
 | `paginas.yml` | `montar` | Montar o site | `ubuntu-24.04` | — | `contents: read`, `pages: read` |
 | `paginas.yml` | `publicar` | Publicar no GitHub Pages | `ubuntu-24.04` | `montar` | `pages: write`, `id-token: write` |
@@ -213,7 +213,7 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   ([upload-artifact, "Permission Loss"](https://github.com/actions/upload-artifact#permission-loss)).
 - **`windows`**, **`linux`** e **`macos`** (`package-desktop.sh`): cada um busca a API da sua plataforma, grava a mesma versão do plano
   e roda `pnpm dist -- <plataforma>` de `src/client`. Windows no `windows-2025` (instalador `nsis` e zip); Linux no contêiner
-  `electronuserland/builder:24-05.26`, fixado por digest (AppImage, deb, rpm e tar.gz); macOS no `macos-26`, Apple Silicon, uma
+  `electronuserland/builder:24-05.26`, fixado por digest (AppImage, deb, rpm e tar.gz); macOS no `macos-15`, Apple Silicon, uma
   arquitetura por job (dmg e zip de `arm64`, e de `x64` pelo `--x64` do electron-builder), porque o dmg só se gera no macOS. O script
   confere no fim que todos os arquivos de `scripts/ci/packages.txt` saíram.
 - **A origem das atualizações** (RN-ATUALIZA-001 e RN-GITHUB-005). O passo de empacotar recebe `PRISM_UPDATE_API`
@@ -398,7 +398,7 @@ runner próprio ligado ao repositório (RN-ABERTO-007). Os rótulos existem hoje
 | --- | --- |
 | `ubuntu-24.04` | o Ubuntu LTS que é o `ubuntu-latest` de hoje; das imagens de Linux x64 em uso geral (22.04, 24.04 e 26.04), é a que tem a frente mais longa sem ser a mais nova. Tem Docker, `gh`, `jq`, Ruby e o Bash 5 |
 | `windows-2025` | o Windows Server mais novo (o `windows-latest` de hoje); o `windows-2022` é o próximo a sair |
-| `macos-26` | o macOS Apple Silicon mais novo (o `macos-latest` de hoje). O `macos-14` já está marcado como **deprecated** no README das imagens, e o `macos-15` é o próximo da fila |
+| `macos-15` | o macOS Apple Silicon anterior ao `macos-26` (o `macos-latest` de hoje), também em uso geral. Trocado em 2026-10-13: por quatro execuções seguidas o GitHub não achou máquina `macos-26` ("The job was not acquired by Runner of type hosted"), e sem o pacote de macOS a release não sai. Volta para o `macos-26` quando o `macos-15` entrar em descontinuação |
 
 A política das imagens: no máximo duas em uso geral e uma em teste por sistema, e a mais velha entra em descontinuação quando a nova
 sai do teste, com um anúncio e uma data ([actions/runner-images](https://github.com/actions/runner-images), "Image Deprecation

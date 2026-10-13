@@ -176,7 +176,7 @@ jobs:
   macos:
     name: Pacote de macOS (${{ matrix.arquitetura }})
     needs: api
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 45
     permissions:
       contents: read
