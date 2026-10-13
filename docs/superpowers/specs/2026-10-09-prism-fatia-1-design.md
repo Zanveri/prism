@@ -1986,3 +1986,27 @@ fechada, assim, ao reabrir já retorna as queries feitas".
 | `PUT api/user/workspace` `{ tabs, activeIndex }` | 204 | 422 `WORKSPACE_INVALID` (formato, índice fora da lista), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
 
 O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes.
+
+## 25. Complemento de 2026-10-13, versão 0.3.0: o instalador do Windows como o do DBeaver
+
+Pedido do dono: "o DBeaver, quando eu baixava, executava um .exe e pedia permissão de admin do
+Windows; quando eu negava, ele continuava e instalava normalmente". Entra na 0.3.0, depois da 0.2.0
+estável.
+
+- **RN-INSTALA-001.** Ao abrir, o instalador do Windows (`Prism-<versão>-win-x64.exe`) pede a
+  permissão de administrador, pelo pedido do próprio Windows.
+  - Com a permissão, instala para todos os usuários da máquina, na pasta de programas do sistema.
+  - Sem ela (o pedido negado, ou uma conta sem administrador), segue sem erro e instala só para o
+    usuário, na pasta de programas do perfil, como hoje.
+  - Nos dois modos, cada usuário guarda os próprios dados (os cofres) no perfil dele
+    (`%APPDATA%\Zanveri\Prism`), e o app é o mesmo.
+- **RN-INSTALA-002.** Nunca ficam duas instalações. O instalador reconhece a que já existe e a
+  atualiza no mesmo modo, sem pedir a permissão quando ela é só do usuário. Quem quiser trocar de
+  modo desinstala antes.
+- **RN-INSTALA-003.** A atualização de dentro do app (RN-ATUALIZA-006) continua: o Prism confere o
+  instalador, se encerra, o instalador atualiza e o Prism abre de novo.
+  - Na instalação só do usuário, nada muda: sem pergunta e sem janela.
+  - Na instalação para todos, o Windows pede a permissão de administrador a cada atualização. Se ela
+    for negada, nada é instalado, o Prism abre de novo na versão que estava e avisa.
+- **RN-INSTALA-004.** O instalador silencioso aceita escolher o modo pela linha de comando, para
+  quem instala em várias máquinas: `/S /allusers` ou `/S /currentuser`.
