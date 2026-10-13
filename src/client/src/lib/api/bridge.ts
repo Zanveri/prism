@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { PrismBridge } from "../../../electron/preload";
+import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowEntry } from "../../../electron/window-messages";
 
 declare global {
   interface Window {
@@ -61,8 +62,120 @@ export function getBridge(): PrismBridge {
         setReceiveBeta: async () => noPreferences,
         skipVersion: async () => noPreferences,
       },
+      // Fora do Electron há uma janela só, e nenhuma outra para onde levar uma aba ou a quem contar do cofre.
+      windows: {
+        id: null,
+        list: async () => [],
+        moveTab: async () => ({ ok: false, reason: "noWindow" }),
+        requestTab: async () => false,
+        setReady: async () => {},
+        describe: async () => {},
+        close: async () => {},
+        onTab: () => () => {},
+        onGiveTab: () => () => {},
+        onCloseRequested: () => () => {},
+      },
+      session: { share: async () => {}, onPeer: () => () => {} },
     };
   }
 
   throw new Error("A ponte com o processo principal do Prism não está disponível.");
+}
+
+/**
+ * As janelas (RN-ABAS-002 a 005), do lado da tela. A ponte é a fronteira de confiança: cada resposta e cada aviso do processo principal é conferido
+ * aqui, com o schema que ele também usa (`electron/window-messages.ts`), e o que não confere é ignorado (uma lista vazia, um pedido que não saiu).
+ * Uma ponte sem as janelas (a tela num teste, ou uma ponte antiga) também não derruba nada.
+ */
+
+/** O número desta janela, ou `null` fora do Electron. */
+export function currentWindowId(): number | null {
+  try {
+    return getBridge().windows.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** As outras janelas abertas, para "Mover para a janela…". */
+export async function listOtherWindows(): Promise<WindowEntry[]> {
+  try {
+    const parsed = windowListSchema.safeParse(await getBridge().windows.list());
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Leva a aba: só com `ok` ela saiu (e a janela a tira da faixa, sem fechar a sessão). */
+export async function sendTabAway(request: TabMoveRequest): Promise<TabMoveReply> {
+  try {
+    const parsed = tabMoveReplySchema.safeParse(await getBridge().windows.moveTab(request));
+    return parsed.success ? parsed.data : { ok: false, reason: "invalid" };
+  } catch {
+    return { ok: false, reason: "noWindow" };
+  }
+}
+
+/** Liga um ouvinte da ponte que pode não existir: sem ele, nada chega, e soltar não faz nada. */
+function listen(subscribe: () => () => void): () => void {
+  try {
+    return subscribe();
+  } catch {
+    return () => {};
+  }
+}
+
+/** Uma aba chegou de outra janela (o conteúdo dela ainda passa por `readTransfer`). */
+export function onTabArrived(listener: (delivery: TabDelivery) => void): () => void {
+  return listen(() =>
+    getBridge().windows.onTab((raw) => {
+      const parsed = tabDeliverySchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data);
+    }),
+  );
+}
+
+/** Outra janela recebeu, na faixa dela, uma aba desta: o processo principal pede que esta a mande. */
+export function onTabWanted(listener: (give: TabGive) => void): () => void {
+  return listen(() =>
+    getBridge().windows.onGiveTab((raw) => {
+      const parsed = tabGiveSchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data);
+    }),
+  );
+}
+
+export function onWindowCloseRequested(listener: () => void): () => void {
+  return listen(() => getBridge().windows.onCloseRequested(listener));
+}
+
+/** Pedidos sem resposta que a tela espere (pronta, resumo, pedir a aba, fechar): a falha só não faz nada. */
+export function tellWindows(call: (windows: PrismBridge["windows"]) => Promise<unknown>): void {
+  try {
+    void call(getBridge().windows).catch(() => undefined);
+  } catch {
+    // Sem a ponte das janelas: não há a quem contar.
+  }
+}
+
+/** Conta às outras janelas o que aconteceu com o cofre aqui (RN-ABAS-004). */
+export function sharePeerEvent(kind: PeerEvent["kind"]): void {
+  try {
+    void getBridge()
+      .session.share({ kind })
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há outras janelas.
+  }
+}
+
+/** O que outra janela contou do cofre. */
+export function onPeerEvent(listener: (kind: PeerEvent["kind"]) => void): () => void {
+  return listen(() =>
+    getBridge().session.onPeer((raw) => {
+      const parsed = peerEventSchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data.kind);
+    }),
+  );
 }

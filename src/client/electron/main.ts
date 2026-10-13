@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, net, protocol, session, shell, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 
 import { apiExecutable } from "../scripts/api-layout.mjs";
 import { apiExitMessage, closeVaultAndStop, startApi, type ApiProcess } from "./api-process";
-import { versionArgument } from "./app-version";
+import { versionArgument, windowArgument } from "./app-version";
 import { userDataDir } from "./data-dir";
 import { applicationMenuTemplate, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
@@ -15,6 +15,7 @@ import { startUp } from "./startup";
 import { createHttpGet } from "./update/net-transport";
 import { resolveOrigin, updatesBlocked } from "./update/origin";
 import { createUpdater, type Updater } from "./update/updater";
+import { createWindowHub, newWindowBounds, type HubWindow, type Rect } from "./window-hub";
 
 // A pasta de dados tem de ser fixada antes de qualquer leitura de `userData`, do `requestSingleInstanceLock` (que
 // a usa) e do `whenReady`: `%APPDATA%\Zanveri\Prism` empacotado e `%APPDATA%\Zanveri\Prism-dev` em desenvolvimento (`data-dir.ts`).
@@ -42,7 +43,32 @@ protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard: t
 const iconFile = windowIconFile(process.platform);
 const iconPath = iconFile === undefined ? undefined : app.isPackaged ? join(process.resourcesPath, iconFile) : join(__dirname, "../../build", iconFile);
 
-let mainWindow: BrowserWindow | null = null;
+/**
+ * As janelas do app (RN-ABAS-002 a 005), pelo número que o app dá a cada uma (o splash não é uma delas). A primeira é a da abertura; as outras nascem
+ * quando uma aba sai para uma janela nova, e só aqui (`hub`). Todas falam com a mesma API, com o mesmo token, e abrem o mesmo cofre.
+ */
+const appWindows = new Map<number, BrowserWindow>();
+let lastWindowId = 0;
+
+/** As janelas que a pessoa fechou e cuja tela já fechou as abas (ou não tinha o que perguntar): o `close` delas passa. */
+const closeApproved = new Set<number>();
+
+/** As janelas ainda vivas, para os avisos que vão a todas (a API saiu, o estado da atualização). */
+function liveWindows(): BrowserWindow[] {
+  return [...appWindows.values()].filter((window) => !window.isDestroyed());
+}
+
+/** A janela de quem fez o pedido. */
+function windowIdOf(sender: WebContents): number {
+  for (const [id, window] of appWindows) if (!window.isDestroyed() && window.webContents === sender) return id;
+  throw new Error("Pedido de uma janela desconhecida.");
+}
+
+/**
+ * Toda saída passa por `before-quit` (ver o fim do arquivo); depois da primeira tentativa, fechar uma janela não pergunta mais nada: o app
+ * está saindo.
+ */
+let quitting: "no" | "closing" | "ready" = "no";
 
 /** A API em uso. Trocar ou zerar esta referência antes de parar é o que distingue "parei" de "caiu". */
 let api: Promise<ApiProcess> | null = null;
@@ -74,7 +100,7 @@ function launchApi() {
         // endereço de uma API que já não existe.
         api = Promise.reject(new Error(`O processo da API foi encerrado (código ${code}).`));
         api.catch(() => undefined);
-        if (mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.webContents.send("prism:api-exit");
+        for (const window of liveWindows()) window.webContents.send("prism:api-exit");
       });
     },
     (error: Error) => console.log(`[prism] API não iniciou: ${error.message}`),
@@ -119,6 +145,9 @@ ipcMain.handle("prism:api-restart", async (event) => {
   assertFromApp(event);
   await stopApi();
   launchApi();
+  // A API nova tem outro token e o cofre fechado: as outras janelas, que mostram "Reiniciar" com a mesma falha, recarregam e pedem o endereço de
+  // novo. Sem isso, o "Reiniciar" de cada uma derrubaria a API que a primeira acabou de subir.
+  for (const window of liveWindows()) if (window.webContents !== event.sender) window.webContents.reload();
   return describeApi();
 });
 
@@ -184,11 +213,11 @@ function startUpdater() {
     quit: () => app.quit(),
     reveal: (path) => shell.showItemInFolder(path),
     onState(state) {
-      if (mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.webContents.send("prism:update-changed", state);
+      for (const window of liveWindows()) window.webContents.send("prism:update-changed", state);
     },
     // O avanço do download vai num canal só dele, com três números: o estado inteiro (com as notas) não é reenviado.
     onProgress(progress) {
-      if (mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.webContents.send("prism:update-progress", progress);
+      for (const window of liveWindows()) window.webContents.send("prism:update-progress", progress);
     },
   });
 
@@ -212,7 +241,7 @@ ipcMain.handle("prism:update-install", async (event, version: unknown) => {
   const result = await updates(event).install(version);
   // A instalação para a API antes de rodar o instalador. Se ela não foi adiante (o instalador não iniciou), o app continua
   // aberto sem API: a tela é avisada, mostra o erro com "Reiniciar", e o diálogo da atualização diz o que falhou.
-  if (result.status === "failed" && api === null && mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.webContents.send("prism:api-exit");
+  if (result.status === "failed" && api === null) for (const window of liveWindows()) window.webContents.send("prism:api-exit");
   return result;
 });
 ipcMain.handle("prism:update-preferences", (event) => updates(event).preferences());
@@ -234,13 +263,27 @@ function serveRenderer() {
 }
 
 /**
- * Cria a janela principal escondida: quem decide quando ela aparece é `startUp`, depois de a tela
- * estar pronta para ser vista (RN-MARCA-003).
+ * O centro das janelas (`window-hub.ts`): leva as abas de uma janela para outra e repassa o que uma conta às outras sobre o cofre. A janela nova
+ * (a área de trabalho inteira, RN-ABAS-002) nasce aqui, onde a aba foi solta, e aparece quando a tela dela está pronta.
  */
-function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
+const hub = createWindowHub({
+  createWindow({ at, source }) {
+    const display = at !== null ? screen.getDisplayNearestPoint(at) : source !== null ? screen.getDisplayMatching(source) : screen.getPrimaryDisplay();
+    const created = createAppWindow(newWindowBounds({ at, source, workArea: display.workArea }));
+    void created.whenReadyToShow().then(() => created.show());
+    return created.hubWindow;
+  },
+  log: (message) => console.log(`[prism] janelas: ${message}`),
+});
+
+/**
+ * Cria uma janela do app escondida: quem decide quando ela aparece é quem a pediu (a primeira, `startUp`, depois de a tela estar pronta para ser
+ * vista, RN-MARCA-003; as outras, assim que estão prontas). Sem `bounds`, o tamanho de sempre, no centro da tela.
+ */
+function createAppWindow(bounds?: Rect) {
+  const id = ++lastWindowId;
+  const window = new BrowserWindow({
+    ...(bounds ?? { width: 1440, height: 900 }),
     minWidth: 1024,
     minHeight: 700,
     title: "Prism",
@@ -248,23 +291,41 @@ function createMainWindow() {
     show: false,
     backgroundColor: "#0E1114",
     // RN-SHELL-001.
-    // A versão (RN-VERSAO-004) vai como argumento: o preload a lê em `process.argv` (`app-version.ts`).
-    webPreferences: { preload: join(__dirname, "../preload/preload.js"), contextIsolation: true, sandbox: true, nodeIntegration: false, additionalArguments: [versionArgument(app.getVersion())] },
+    // A versão (RN-VERSAO-004) e o número da janela (RN-ABAS-003) vão como argumentos: o preload os lê em `process.argv` (`app-version.ts`).
+    webPreferences: { preload: join(__dirname, "../preload/preload.js"), contextIsolation: true, sandbox: true, nodeIntegration: false, additionalArguments: [versionArgument(app.getVersion()), windowArgument(id)] },
   });
+  appWindows.set(id, window);
 
   // RN-SHELL-001: a janela não sai do app nem abre outra. As rotas são em hash, que não navega.
   // Em desenvolvimento passa uma única navegação, a recarga da própria página: é como o Vite
   // mostra uma mudança no código, e cancelada ela deixaria a tela parada na versão anterior.
-  mainWindow.webContents.on("will-navigate", (event, url) => {
+  window.webContents.on("will-navigate", (event, url) => {
     if (devServerUrl === undefined || url.split("#")[0] !== new URL(devServerUrl).href) event.preventDefault();
   });
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  // A página que recarrega (ou cujo processo caiu) desmonta a área de trabalho sem avisar: ela deixa de estar pronta para receber abas, e fechar a
+  // janela deixa de perguntar até ela montar de novo.
+  window.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) hub.setReady(id, false);
+  });
+  window.webContents.on("render-process-gone", () => hub.setReady(id, false));
+
+  // RN-ABAS-004: fechar a janela fecha as abas dela, com as perguntas de fechar cada uma. Quem pergunta é a tela; quando as abas fecharam, ela pede
+  // `prism:windows-close` e o fechamento passa. Sem área de trabalho montada (o login, a tela recarregando) e com o app saindo, fecha direto.
+  window.on("close", (event) => {
+    if (quitting !== "no" || closeApproved.has(id) || !hub.isReady(id)) return;
+
+    event.preventDefault();
+    window.webContents.send("prism:windows-close-requested");
   });
 
-  const window = mainWindow;
+  window.on("closed", () => {
+    appWindows.delete(id);
+    closeApproved.delete(id);
+    hub.remove(id);
+  });
+
   // Mostrar a janela quando a página falha ao carregar também: com ela escondida, o app ficaria
   // aberto sem nada na tela, e o splash, que só fecha depois, não sairia.
   const ready = new Promise<void>((resolve) => {
@@ -274,9 +335,23 @@ function createMainWindow() {
   });
 
   void window.loadURL(devServerUrl ?? `${appOrigin}/index.html`);
-  console.log("[prism] janela criada");
+  console.log(`[prism] janela ${id} criada`);
+
+  const hubWindow: HubWindow = {
+    id,
+    send(channel, payload) {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+    },
+    bounds: () => window.getBounds(),
+    focus() {
+      if (window.isDestroyed()) return;
+      if (window.isMinimized()) window.restore();
+      window.focus();
+    },
+  };
 
   return {
+    hubWindow,
     whenReadyToShow: () => ready,
     show() {
       if (!window.isDestroyed()) window.show();
@@ -284,13 +359,54 @@ function createMainWindow() {
   };
 }
 
+/** A janela da abertura: a primeira do centro das janelas. */
+function createMainWindow() {
+  const created = createAppWindow();
+  hub.add(created.hubWindow);
+  return created;
+}
+
+/** O que a tela pede sobre as janelas (RN-ABAS-002 a 005): cada pedido confere a origem, e o centro confere o conteúdo com o schema. */
+ipcMain.handle("prism:windows-list", (event) => {
+  assertFromApp(event);
+  return hub.list(windowIdOf(event.sender));
+});
+ipcMain.handle("prism:windows-move-tab", (event, request: unknown) => {
+  assertFromApp(event);
+  return hub.moveTab(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:windows-request-tab", (event, request: unknown) => {
+  assertFromApp(event);
+  return hub.requestTab(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:windows-ready", (event, ready: unknown) => {
+  assertFromApp(event);
+  hub.setReady(windowIdOf(event.sender), ready);
+});
+ipcMain.handle("prism:windows-describe", (event, summary: unknown) => {
+  assertFromApp(event);
+  hub.describe(windowIdOf(event.sender), summary);
+});
+ipcMain.handle("prism:windows-close", (event) => {
+  assertFromApp(event);
+  const id = windowIdOf(event.sender);
+  closeApproved.add(id);
+  appWindows.get(id)?.close();
+});
+// RN-ABAS-004: o bloqueio, o desbloqueio, o "Sair", o login e a atividade de uma janela valem para as outras. Aqui só se repassa.
+ipcMain.handle("prism:session-share", (event, peerEvent: unknown) => {
+  assertFromApp(event);
+  hub.share(windowIdOf(event.sender), peerEvent);
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    if (mainWindow === null) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+    const [window] = liveWindows();
+    if (window === undefined) return;
+    if (window.isMinimized()) window.restore();
+    window.focus();
   });
 
   // Sem o menu padrão do Electron no app empacotado: o Ctrl+R dele recarrega a janela, e o texto
@@ -307,7 +423,6 @@ if (!app.requestSingleInstanceLock()) {
   // Toda saída passa por aqui, a da última janela fechada e a do menu: a primeira tentativa é
   // segurada até o cofre fechar e a API parar (RN-COFRE-008), e a segunda sai de verdade. Se o
   // Electron morrer sem passar por aqui, a API encerra sozinha por `PRISM_PARENT_PID` (RN-API-004).
-  let quitting: "no" | "closing" | "ready" = "no";
   app.on("before-quit", (event) => {
     if (quitting === "ready") return;
 
