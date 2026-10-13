@@ -160,8 +160,9 @@ export function WorkbenchTabs() {
    * Só quando o processo principal a levou ela sai daqui, sem fechar a sessão (que agora é da outra janela). Com comando em andamento não vai: a
    * resposta chegaria aqui, à aba que já saiu.
    *
-   * `saved`: a aba dos Registros acabou de salvar as alterações para poder ir (RN-EDIT-007). As linhas na tela são as de antes de salvar, e o Salvar
-   * lê os registros de novo (RN-EDIT-005): a aba vai sem elas, e a janela que a recebe lê os registros na mesma sessão, já com o que foi gravado.
+   * `saved`: a aba acabou de salvar as alterações para poder ir (RN-EDIT-007). Nos Registros, as linhas na tela são as de antes de salvar, e o Salvar
+   * lê os registros de novo (RN-EDIT-005): a aba vai sem elas, e a janela que a recebe lê os registros na mesma sessão, já com o que foi gravado. A aba
+   * de consulta já está com a grade salva (RN-EDIT-009), e vai com ela, sem executar nada.
    */
   async function sendTab(tabId: string, target: TabMoveTarget, saved = false) {
     const tab = tabs.find((candidate) => candidate.id === tabId);
@@ -169,7 +170,7 @@ export function WorkbenchTabs() {
 
     const runner = runnerOf(tabId);
     const current = runner.getState();
-    const state = saved && !isBusyState(current) ? { status: "idle" as const } : current;
+    const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
     const transfer = isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
     if (transfer === null) {
       toast.warning(copy.moveBusy);

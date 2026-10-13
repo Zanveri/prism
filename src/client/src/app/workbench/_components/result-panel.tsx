@@ -206,6 +206,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 columns={rows.columns}
                 rows={rows.rows}
                 truncated={rows.truncated}
+                generated={rows.generated}
                 nullText={nullText}
                 onReachEnd={autoLoad ? onLoadMore : undefined}
                 sort={records?.sort}

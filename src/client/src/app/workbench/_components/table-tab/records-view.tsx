@@ -17,7 +17,7 @@ import { foreignKeysQuery } from "../../_lib/table-structure.service";
 import { clearRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
 import { useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
-import { useRecordEdits } from "../../_lib/use-record-edits";
+import { useRecordEdits, type SavedEdits } from "../../_lib/use-record-edits";
 import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
@@ -112,7 +112,10 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // RN-EDIT-001 a 012: a edição das células. As ações que executam de novo (atualizar, filtrar, ordenar, limpar) perguntam antes com
   // alterações não salvas (`guard`, RN-EDIT-007); depois de um Salvar que gravou tudo, os registros são lidos de novo, sem perguntar.
   const reload = useCallback(() => run(filter), [run, filter]);
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reload });
+  const reloadAfterSave = useCallback(({ reread }: SavedEdits) => {
+    if (reread) reload();
+  }, [reload]);
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
 

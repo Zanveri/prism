@@ -10,7 +10,7 @@ import type { DatabaseSession } from "./database-sessions.schema";
 import { databaseSessionKey } from "./database-sessions.service";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
-import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SaveFailure } from "./record-edits";
+import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
 import { editErrorDetails, type EditPreview, type EditTarget } from "./record-edits.schema";
 import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
 import { recordsCopy } from "./records.copy";
@@ -30,14 +30,23 @@ export type OpenCellMenu = { groups: CellMenuItem[][]; point: { x: number; y: nu
 
 export type UnsavedQuestion = { count: number; saving: boolean; onSave: () => void; onDiscard: () => void; onCancel: () => void };
 
+/** Um Salvar que gravou tudo: o resultado em que gravou, a grade como fica sem executar de novo (RN-EDIT-009) e se quem salvou quer ler de novo. */
+export type SavedEdits = { resultId: string; result: SavedResult; reread: boolean };
+
 type Params = {
   tabId: string;
   runner: QueryRunner;
   state: RunnerState;
-  connectionId: string;
+  /** A conexão da aba: a sessão da árvore dela serve ao catálogo da edição (RN-EDIT-010). Nula na aba de um script sem conexão, que não tem resultado. */
+  connectionId: string | null;
   database?: string;
-  /** Depois de um Salvar que gravou tudo: os registros são lidos de novo (o comando em vigor, executado outra vez). */
-  onSaved: () => void;
+  /** De que grade é a edição, para as frases da faixa: os Registros de uma tabela, ou o resultado de um comando da aba de consulta. */
+  subject?: "table" | "result";
+  /**
+   * Depois de um Salvar que gravou tudo. Os Registros leem de novo (o comando em vigor, executado outra vez), salvo quando quem salvou vai executar
+   * outra coisa logo em seguida (`reread` falso); a aba de consulta fica com a grade salva, sem executar (RN-EDIT-009).
+   */
+  onSaved: (saved: SavedEdits) => void;
 };
 
 const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notice: null };
@@ -53,19 +62,21 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>) {
 }
 
 /**
- * A edição dos Registros (seção 22, RN-EDIT-001 a 012), entre a grade e a API. As decisões são funções puras com teste (`record-edits.ts`,
+ * A edição das células (seção 22, RN-EDIT-001 a 012), entre a grade e a API: a mesma nos Registros de uma tabela e no resultado de um comando
+ * da aba de consulta (RN-EDIT-001). As decisões são funções puras com teste (`record-edits.ts`,
  * `cell-editing.ts`, `cell-menu.ts`, `grid-editing.ts`); aqui estão o estado (as pendências, o alvo, a célula ativa, o campo aberto, a
  * faixa, o menu, o "Ver SQL" e a pergunta) e as chamadas.
  *
  * - As pendências são do resultado da página (`resultId`): outra execução começa sem nenhuma, e quem executa de novo com pendências
  *   pergunta antes (`guard`, RN-EDIT-007). Ficam na memória da aba (`tab-memory.ts`): ir à Estrutura e voltar não as perde.
  * - O catálogo é consultado na primeira tentativa de editar (RN-EDIT-010), pela sessão da árvore da mesma conexão quando ela existe.
- * - O Salvar grava pela sessão da aba, numa transação própria (a aba de uma tabela é sempre Auto-commit, RN-TX-001); se gravou tudo, os
- *   registros são lidos de novo. A recusa fica na faixa, com a mensagem do banco como veio e a linha destacada; no banco sem log, o que já
- *   foi gravado sai das pendências (RN-EDIT-012).
+ * - O Salvar grava pela sessão da aba, numa transação própria (a aba de uma tabela é sempre Auto-commit, e a de consulta ainda não tem o
+ *   Commit manual na tela, RN-TX-001); se gravou tudo, quem usa decide (`onSaved`): os Registros leem de novo, e a aba de consulta fica com a
+ *   grade salva. A recusa fica na faixa, com a mensagem do banco como veio e a linha destacada; no banco sem log, o que já foi gravado sai das
+ *   pendências (RN-EDIT-012). Sem o alvo (as pendências lembradas com a aba voltam sem ele), o Salvar e o "Ver SQL" o perguntam antes.
  * - As alterações não salvas vão ao registro da aba (`unsaved-edits.ts`), de onde quem fecha abas pergunta.
  */
-export function useRecordEdits({ tabId, runner, state, connectionId, database, onSaved }: Params) {
+export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved }: Params) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -132,9 +143,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, o
     if (current !== null) return current;
     if (asking.current?.resultId === id) return asking.current.promise;
 
-    const catalogSessionId = queryClient.getQueryData<DatabaseSession>(databaseSessionKey(connectionId, database))?.id ?? null;
+    const catalogSessionId = connectionId === null ? null : (queryClient.getQueryData<DatabaseSession>(databaseSessionKey(connectionId, database))?.id ?? null);
     const promise = (async () => {
-      say(copy.loadingTarget);
+      say(subject === "result" ? copy.loadingResultTarget : copy.loadingTarget);
       const result = await throughMutationCache(queryClient, () => editTargetOrRefuse(sessionId, id, catalogSessionId)).catch(() => null);
       say(null);
       if (result === null) return null;
@@ -149,7 +160,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, o
         latest.current = { ...latest.current, readOnlyReason: why };
         return null;
       }
-      setBanner({ resultId: id, failure: { headline: copy.checkFailed, detail: result.error.detail ?? result.error.title, origin: null, column: null, applied: 0, written: false }, failedRow: null, notice: null });
+      setBanner({ resultId: id, failure: { headline: subject === "result" ? copy.checkResultFailed : copy.checkFailed, detail: result.error.detail ?? result.error.title, origin: null, column: null, applied: 0, written: false }, failedRow: null, notice: null });
       return null;
     })();
     asking.current = { resultId: id, promise };
@@ -158,13 +169,13 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, o
     });
 
     return promise;
-  }, [runner, queryClient, connectionId, database, say]);
+  }, [runner, queryClient, connectionId, database, subject, say]);
 
   /** A linha da grade: uma lida (com o corte e a exclusão) ou uma nova. */
   const rowOf = useCallback((row: number): RowContext => {
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
-    return row < read ? { kind: "read", truncated: current?.truncated.get(row), deleted: pending.deleted.includes(row) } : { kind: "new" };
+    return row < read ? { kind: "read", truncated: current?.truncated.get(row), deleted: pending.deleted.includes(row), generated: current?.generated?.get(row) } : { kind: "new" };
   }, []);
 
   const accessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target): EditAccess => {
@@ -272,49 +283,60 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, o
     setBanner(noBanner);
   }, [setEditor, putEdits]);
 
-  /** RN-EDIT-005 e 012: o Salvar. Devolve se gravou tudo; com `reload`, os registros são lidos de novo. */
-  const save = useCallback(async (reload = true): Promise<boolean> => {
-    const { shown: current, resultId: id, edits: pending, target: known, saving: writing } = latest.current;
+  /** RN-EDIT-005 e 012: o Salvar. Devolve se gravou tudo; `reread` vai a `onSaved` (os Registros leem de novo). */
+  const save = useCallback(async (reread = true): Promise<boolean> => {
+    const { shown: current, resultId: id, edits: pending, saving: writing } = latest.current;
     const sessionId = runner.sessionOf();
     if (pendingCount(pending) === 0) return true;
-    if (writing || current === null || id === null || known === null || sessionId === null) return false;
+    if (writing || current === null || id === null || sessionId === null) return false;
 
-    const plan = changesOf(pending, current.rows, known);
     setSaving(true);
     latest.current = { ...latest.current, saving: true };
-    const result = await throughMutationCache(queryClient, () => saveEditsOrRefuse(sessionId, id, plan.changes)).catch(() => null);
-    setSaving(false);
-    latest.current = { ...latest.current, saving: false };
-    if (result === null) return false;
+    try {
+      const known = latest.current.target ?? (await ensureTarget());
+      if (known === null || latest.current.resultId !== id) return false;
 
-    if (result.ok) {
-      toast.success(copy.saved(result.data.applied));
-      putEdits(noEdits);
-      setBanner(noBanner);
-      if (reload) onSaved();
-      return true;
+      const plan = changesOf(pending, current.rows, known);
+      const result = await throughMutationCache(queryClient, () => saveEditsOrRefuse(sessionId, id, plan.changes)).catch(() => null);
+      if (result === null) return false;
+
+      if (result.ok) {
+        toast.success(copy.saved(result.data.applied));
+        putEdits(noEdits);
+        setBanner(noBanner);
+        const saved = savedResultOf(current, pending, current.columns.length);
+        // Na grade que fica (a aba de consulta), as excluídas saíram: a célula ativa não aponta para depois da última linha.
+        setActiveState((held) => (held === null || held.resultId !== id || held.cell.row < saved.rows.length ? held : { resultId: id, cell: { row: Math.max(saved.rows.length - 1, 0), column: held.cell.column } }));
+        onSaved({ resultId: id, result: saved, reread });
+        return true;
+      }
+
+      const failure = failureOf(result.error, plan, known.oneAtATime);
+      const done = failure.applied + (failure.written ? 1 : 0);
+      const left = done > 0 ? withoutApplied(pending, plan.origins, done) : pending;
+      if (left !== pending) putEdits(left);
+      setBanner({ resultId: id, failure, failedRow: failure.origin === null || failure.written ? null : gridRowOf(failure.origin, left, current.rows.length), notice: null });
+      return false;
+    } finally {
+      setSaving(false);
+      latest.current = { ...latest.current, saving: false };
     }
-
-    const failure = failureOf(result.error, plan, known.oneAtATime);
-    const done = failure.applied + (failure.written ? 1 : 0);
-    const left = done > 0 ? withoutApplied(pending, plan.origins, done) : pending;
-    if (left !== pending) putEdits(left);
-    setBanner({ resultId: id, failure, failedRow: failure.origin === null || failure.written ? null : gridRowOf(failure.origin, left, current.rows.length), notice: null });
-    return false;
-  }, [runner, queryClient, toast, putEdits, onSaved]);
+  }, [runner, queryClient, toast, putEdits, ensureTarget, onSaved]);
 
   /** RN-EDIT-008: "Ver SQL", pela API, sem executar nada. */
   const viewSql = useCallback(async () => {
-    const { shown: current, resultId: id, edits: pending, target: known } = latest.current;
+    const { shown: current, resultId: id, edits: pending } = latest.current;
     const sessionId = runner.sessionOf();
-    if (current === null || id === null || known === null || sessionId === null) return;
+    if (current === null || id === null || sessionId === null) return;
+    const known = latest.current.target ?? (await ensureTarget());
+    if (known === null || latest.current.resultId !== id) return;
 
     const plan = changesOf(pending, current.rows, known);
     const result = await throughMutationCache(queryClient, () => previewEditsOrRefuse(sessionId, id, plan.changes)).catch(() => null);
     if (result === null) return;
     if (result.ok) setPreview(result.data);
     else setBanner({ resultId: id, failure: failureOf(result.error, plan, known.oneAtATime), failedRow: null, notice: null });
-  }, [runner, queryClient]);
+  }, [runner, queryClient, ensureTarget]);
 
   /** O menu da célula: o alvo é perguntado antes, para cada item dizer se vale e por quê. */
   const openMenu = useCallback(async (cell: GridCell, point: { x: number; y: number }, keyboard: boolean) => {
@@ -393,6 +415,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, o
       ? undefined
       : {
           rows,
+          pending: count,
           marks,
           active,
           editor,

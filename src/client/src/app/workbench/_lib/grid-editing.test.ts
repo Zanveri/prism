@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { gridRowOf, gridRowsOf, rowMarksOf } from "./grid-editing";
+import { gridRowOf, gridRowsOf, rowMarksOf, savesEdits } from "./grid-editing";
 import { addRow, deleteRow, editCell, editNewCell, noEdits } from "./record-edits";
 
 const rows = [
@@ -36,5 +36,21 @@ describe("o que a grade desenha das pendências (RN-EDIT-004)", () => {
     expect(gridRowOf({ kind: "row", row: 1 }, second.edits, rows.length)).toBe(1);
     expect(gridRowOf({ kind: "new", id: second.id }, second.edits, rows.length)).toBe(3);
     expect(gridRowOf({ kind: "new", id: 99 }, second.edits, rows.length)).toBeNull();
+  });
+});
+
+describe("Ctrl+S com o foco na grade (RN-EDIT-004)", () => {
+  const key = (over: Partial<{ key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }> = {}) => ({ key: "s", ctrlKey: true, metaKey: false, shiftKey: false, ...over });
+
+  it("com alterações não salvas, Ctrl+S (ou Cmd+S) salva as alterações", () => {
+    expect(savesEdits(key(), 2)).toBe(true);
+    expect(savesEdits(key({ key: "S" }), 1)).toBe(true);
+    expect(savesEdits(key({ ctrlKey: false, metaKey: true }), 1)).toBe(true);
+  });
+
+  it("sem nada pendente, ou com Shift, a tecla segue para quem a trata (na aba de consulta, salvar o script, RN-SCRIPT-001)", () => {
+    expect(savesEdits(key(), 0)).toBe(false);
+    expect(savesEdits(key({ shiftKey: true }), 1)).toBe(false);
+    expect(savesEdits(key({ ctrlKey: false }), 1)).toBe(false);
   });
 });

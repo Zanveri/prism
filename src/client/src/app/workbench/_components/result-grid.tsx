@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { moveCell, type GridCell } from "../_lib/grid-cursor";
-import type { GridEditing, RowMark } from "../_lib/grid-editing";
+import { savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
@@ -36,6 +36,8 @@ type GridRowProps = {
   virtualColumns: VirtualItem[];
   /** As colunas desta linha cujo valor chegou cortado (RN-SQL-011). */
   truncated: ReadonlySet<number> | undefined;
+  /** RN-EDIT-009: as colunas desta linha que o banco preencheu num Salvar da aba de consulta, cujo valor a tela não sabe. */
+  generated?: ReadonlySet<number>;
   /** O texto que representa o valor nulo (RN-CONFIG-005). */
   nullText: string;
   /** As colunas que são chave estrangeira, e para onde levam (RN-TABELA-007). Só a vista Registros passa. */
@@ -62,7 +64,7 @@ type GridRowProps = {
  * valores entram como texto dos filhos do React, nunca como HTML (RN-SHELL-002). A altura da linha
  * e a largura do número dela são as variáveis do zoom (`--grid-row` e `--grid-gutter`, na caixa da grade).
  */
-export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf }: GridRowProps) {
+export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf }: GridRowProps) {
   const role = cellIdOf === undefined ? "cell" : "gridcell";
   const deleted = mark?.deleted === true;
 
@@ -113,6 +115,15 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
 
         // A coluna da linha nova que ninguém preencheu fica vazia: o banco põe o padrão da tabela.
         if (mark?.kind === "new") return <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} className={cn(cellClass, marked)} style={style} />;
+
+        // RN-EDIT-009: o banco preencheu a coluna da linha nova salva, e o valor só vem executando de novo.
+        if (generated?.has(item.index) === true) {
+          return (
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={editCopy.generated} className={cn(`${cellClass} text-subtle italic`, marked)} style={style}>
+              {editCopy.generated}
+            </div>
+          );
+        }
 
         if (value === null) {
           return (
@@ -237,6 +248,8 @@ type ResultGridProps = {
   columns: QueryColumn[];
   rows: QueryRow[];
   truncated: ReadonlyMap<number, ReadonlySet<number>>;
+  /** RN-EDIT-009: as colunas de cada linha nova salva na aba de consulta que o banco preencheu. */
+  generated?: ReadonlyMap<number, ReadonlySet<number>>;
   /** O texto do valor nulo (`results.nullText`, RN-CONFIG-005). */
   nullText?: string;
   /**
@@ -268,7 +281,7 @@ type ResultGridProps = {
   zoom?: GridZoom;
   /** Ctrl+roda do mouse sobre a grade pede outro zoom. Identidade estável: a grade é memorizada. */
   onZoom?: (zoom: GridZoom) => void;
-  /** RN-EDIT-001 a 004: a edição dos Registros. Com ela a grade é editável (`grid`), com as linhas novas depois das lidas. */
+  /** RN-EDIT-001 a 004: a edição das células (Registros e aba de consulta). Com ela a grade é editável (`grid`), com as linhas novas depois das lidas. */
   editing?: GridEditing;
 };
 
@@ -282,7 +295,7 @@ const hasBox = (element: HTMLElement) => element.clientHeight > 0 || element.cli
  * contadas uma vez, da primeira página, e "carregar mais" só aumenta a altura rolável. As escolhidas
  * pela pessoa (`widths`) passam por cima delas.
  */
-export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, nullText = copy.null, onReachEnd, sort, onSort, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom, editing }: ResultGridProps) {
+export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, generated, nullText = copy.null, onReachEnd, sort, onSort, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom, editing }: ResultGridProps) {
   const scroll = useRef<HTMLDivElement>(null);
   // As linhas que a grade desenha: com a edição, as lidas e, depois delas, as novas.
   const rows = editing?.rows ?? read;
@@ -427,7 +440,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (editing === undefined || editing.editor !== null || event.target !== event.currentTarget) return;
 
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    if (savesEdits(event, editing.pending)) {
       event.preventDefault();
       editing.onSave();
       return;
@@ -530,6 +543,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
             columns={columns}
             virtualColumns={virtualColumns}
             truncated={truncated.get(item.index)}
+            generated={generated?.get(item.index)}
             nullText={nullText}
             links={links}
             onFollow={onFollow}

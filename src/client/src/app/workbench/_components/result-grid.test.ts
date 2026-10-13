@@ -4,6 +4,7 @@ import type { VirtualItem } from "@tanstack/react-virtual";
 import { describe, expect, it } from "vitest";
 
 import type { QueryColumn } from "../_lib/query.schema";
+import { recordsCopy } from "../_lib/records.copy";
 import { GridHeaderCell, GridRow, ResultGrid } from "./result-grid";
 
 const columns: QueryColumn[] = [
@@ -330,5 +331,17 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
 
     expect(markup).not.toContain("gridcell");
     expect(markup).not.toContain("data-col");
+  });
+});
+
+describe("a linha nova salva na aba de consulta, com o que o banco preencheu (RN-EDIT-009)", () => {
+  it("a coluna que o banco preencheu diz 'gerado pelo banco — execute de novo para ver', com a cor do nulo, e não 'NULL'", () => {
+    const markup = renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row: [null, "nova"], columns, virtualColumns, truncated: undefined, generated: new Set([0]), nullText: "NULL" }));
+    const generated = markup.match(/<div[^>]*aria-colindex="2"[^>]*>.*?<\/div>/s)?.[0] ?? "";
+
+    expect(generated).toContain(recordsCopy.edit.generated);
+    expect(generated).toContain("text-subtle");
+    expect(generated).not.toContain(">NULL<");
+    expect(markup).toContain(">nova<");
   });
 });

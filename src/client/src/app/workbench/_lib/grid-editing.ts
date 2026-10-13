@@ -12,12 +12,14 @@ export type RowMark = { kind: "read" | "new"; deleted: boolean; pending: Readonl
 export type CellEditorState = GridCell & { draft: string };
 
 /**
- * A edição que a vista Registros entrega à grade (RN-EDIT-001). A grade só desenha e avisa: quem decide o que cada célula permite e o
- * que cada ação faz é a vista (`use-record-edits.ts`), com as funções puras de `record-edits.ts`, `cell-editing.ts` e `cell-menu.ts`.
+ * A edição que a vista Registros e a aba de consulta entregam à grade (RN-EDIT-001). A grade só desenha e avisa: quem decide o que cada célula
+ * permite e o que cada ação faz é `use-record-edits.ts`, com as funções puras de `record-edits.ts`, `cell-editing.ts` e `cell-menu.ts`.
  */
 export type GridEditing = {
   /** As linhas da grade: as lidas e, depois delas, as novas. */
   rows: readonly QueryRow[];
+  /** As alterações não salvas: sem nenhuma, o Ctrl+S da grade segue para quem o trata (`savesEdits`). */
+  pending: number;
   /** As marcas das linhas com pendência, pela posição na grade. */
   marks: ReadonlyMap<number, RowMark>;
   active: GridCell | null;
@@ -38,6 +40,14 @@ export type GridEditing = {
   /** Alt+Insert com o foco na grade. */
   onNewRow: () => void;
 };
+
+/**
+ * RN-EDIT-004: Ctrl+S (Cmd+S) com o foco na grade salva as alterações, quando há alguma. Sem nenhuma, ou com Shift, a tecla segue para quem a trata:
+ * na aba de consulta, salvar o script e "Salvar como" (RN-SCRIPT-001).
+ */
+export function savesEdits(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, pending: number): boolean {
+  return pending > 0 && (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "s";
+}
 
 /** As linhas que a grade desenha: as lidas e, depois, as novas, com o que foi preenchido (o resto vazio, para o padrão da tabela). */
 export function gridRowsOf(rows: readonly QueryRow[], edits: PendingEdits, columns: number): QueryRow[] {
