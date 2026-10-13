@@ -27,6 +27,10 @@ export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; sta
 
 type TransferredResult = NonNullable<TabTransfer["result"]>;
 
+/** As células marcadas de cada linha (cortadas, preenchidas pelo banco) como pares, e de volta. */
+const pairsOf = (marks: ReadonlyMap<number, ReadonlySet<number>>): [number, number[]][] => [...marks].map(([row, cells]) => [row, [...cells]]);
+const marksOf = (pairs: [number, number[]][]): Map<number, Set<number>> => new Map(pairs.map(([row, columns]) => [row, new Set(columns)]));
+
 /** O resultado como vai: o estado parado, e as células cortadas como pares (o que passa pelo processo principal é dado puro). */
 function resultOf(state: RunnerState): TransferredResult | null | undefined {
   switch (state.status) {
@@ -36,12 +40,14 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return undefined;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
-      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly } = state;
+      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated } = state;
       return {
         ...{ status, id, target, columns, rows, hasMore, totalRows, elapsedMs, pages, cursorClosed, total },
         ...(resultId === undefined ? {} : { resultId }),
         ...(readOnly === undefined ? {} : { readOnly }),
-        truncated: [...truncated].map(([row, cells]) => [row, [...cells]]),
+        truncated: pairsOf(truncated),
+        // RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou.
+        ...(generated === undefined || generated.size === 0 ? {} : { generated: pairsOf(generated) }),
       };
     }
     default:
@@ -80,8 +86,8 @@ function stateOf(result: TabTransfer["result"]): RunnerState {
   if (result === null) return { status: "idle" };
   if (result.status !== "rows") return result;
 
-  const { truncated, ...rest } = result;
-  return { ...rest, truncated: new Map(truncated.map(([row, columns]) => [row, new Set(columns)])), loadingMore: false, cancelling: false, counting: false };
+  const { truncated, generated, ...rest } = result;
+  return { ...rest, truncated: marksOf(truncated), ...(generated === undefined ? {} : { generated: marksOf(generated) }), loadingMore: false, cancelling: false, counting: false };
 }
 
 /** Confere o que chegou e devolve a aba, ou `null` se não é uma aba (outra versão, um campo fora do formato): a janela não a abre. */

@@ -6,8 +6,11 @@ const copy = recordsCopy.edit;
 /** Se a ação vale, ou por que não vale, já na frase que a tela mostra ("Somente leitura: …"). */
 export type EditAccess = { editable: true } | { editable: false; reason: string };
 
-/** A linha da célula: uma lida do banco (com as colunas cortadas e a marca de exclusão) ou uma linha nova da grade. */
-export type RowContext = { kind: "read"; truncated: ReadonlySet<number> | undefined; deleted: boolean } | { kind: "new" };
+/**
+ * A linha da célula: uma lida do banco (com as colunas cortadas, a marca de exclusão e, na linha nova de um Salvar da aba de consulta, as
+ * colunas que o banco preencheu, RN-EDIT-009) ou uma linha nova da grade.
+ */
+export type RowContext = { kind: "read"; truncated: ReadonlySet<number> | undefined; deleted: boolean; generated?: ReadonlySet<number> } | { kind: "new" };
 
 export type CellContext = {
   /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando já se sabe (pela página ou pelo `edit-target`). */
@@ -23,9 +26,15 @@ export type CellContext = {
 const allowed: EditAccess = { editable: true };
 const denied = (reason: string): EditAccess => ({ editable: false, reason: copy.readOnly(reason) });
 
-/** A chave da linha lida tem uma coluna cortada (RN-SQL-011): não há como achar a linha pelo valor que a grade leu. */
-function keyTruncated(target: EditTarget, row: RowContext): boolean {
-  return row.kind === "read" && target.tables[0].key.some((column) => row.truncated?.has(column) === true);
+/**
+ * A chave da linha lida não tem o valor que o banco guarda: uma coluna dela chegou cortada (RN-SQL-011), ou foi o banco que a preencheu numa
+ * linha nova salva (RN-EDIT-009). Não há como achar a linha pelo valor que a grade tem. O motivo, ou nulo com a chave inteira.
+ */
+function keyUnknown(target: EditTarget, row: RowContext): string | null {
+  if (row.kind !== "read") return null;
+  const key = target.tables[0].key;
+  if (key.some((column) => row.truncated?.has(column) === true)) return copy.reasons.keyTruncated;
+  return key.some((column) => row.generated?.has(column) === true) ? copy.reasons.keyGenerated : null;
 }
 
 /** O que vale para a linha inteira, antes da coluna: o resultado, a aba ocupada e a tabela. */
@@ -40,7 +49,7 @@ function tableAccess(readOnly: string | null, target: EditTarget | null, busy: b
 
 /**
  * RN-EDIT-002: a célula se edita quando o resultado e a tabela se editam, a coluna se edita, a linha não está marcada para exclusão e,
- * na linha lida, nem a célula nem a chave chegaram cortadas. Sem o alvo (ainda não perguntado) a resposta é "pode", e quem decide de
+ * na linha lida, nem a célula nem a chave chegaram cortadas ou foram preenchidas pelo banco num Salvar (RN-EDIT-009). Sem o alvo (ainda não perguntado) a resposta é "pode", e quem decide de
  * verdade é a primeira tentativa, que pergunta.
  */
 export function cellAccess({ readOnly, target, busy, column, row }: CellContext): EditAccess {
@@ -53,7 +62,9 @@ export function cellAccess({ readOnly, target, busy, column, row }: CellContext)
   if (row.kind === "new") return allowed;
   if (row.deleted) return denied(copy.reasons.deleted);
   if (row.truncated?.has(column) === true) return denied(copy.reasons.truncated);
-  if (keyTruncated(target!, row)) return denied(copy.reasons.keyTruncated);
+  const key = keyUnknown(target!, row);
+  if (key !== null) return denied(key);
+  if (row.generated?.has(column) === true) return denied(copy.reasons.generated);
 
   return allowed;
 }
@@ -72,5 +83,6 @@ export function deleteRowAccess(row: RowContext, readOnly: string | null, target
   const access = newRowAccess(readOnly, target, busy);
   if (!access.editable || target === null) return access;
 
-  return keyTruncated(target, row) ? denied(copy.reasons.keyTruncated) : allowed;
+  const key = keyUnknown(target, row);
+  return key === null ? allowed : denied(key);
 }

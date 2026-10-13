@@ -130,6 +130,60 @@ export function withoutApplied(edits: PendingEdits, origins: readonly ChangeOrig
   return next;
 }
 
+/** As células de cada linha da grade, pela posição da linha: as cortadas (RN-SQL-011) e as que o banco preencheu (RN-EDIT-009). */
+export type CellMarks = ReadonlyMap<number, ReadonlySet<number>>;
+
+/** A grade de um resultado depois de um Salvar que gravou tudo, sem executar de novo (RN-EDIT-009). */
+export type SavedResult = {
+  rows: QueryRow[];
+  truncated: CellMarks;
+  /** As colunas de cada linha nova salva que a pessoa não preencheu: o banco pôs o padrão da tabela (ou gerou o valor), e a tela não o sabe. */
+  generated: CellMarks;
+};
+
+/** As marcas das linhas que ficam, pela posição nova delas (as excluídas saem e as de depois sobem). */
+function shifted(marks: CellMarks | undefined, positionOf: (row: number) => number | null): Map<number, ReadonlySet<number>> {
+  const next = new Map<number, ReadonlySet<number>>();
+  for (const [row, columns] of marks ?? []) {
+    const position = positionOf(row);
+    if (position !== null) next.set(position, columns);
+  }
+  return next;
+}
+
+/**
+ * RN-EDIT-009: a grade depois de um Salvar que gravou tudo, na aba de consulta, que não executa de novo. As linhas lidas ficam, com os valores
+ * salvos (a que não mudou é o mesmo objeto); as excluídas saem; as novas entram no fim com o que foi digitado, e as colunas que ninguém preencheu
+ * ficam marcadas como preenchidas pelo banco ("gerado pelo banco — execute de novo para ver"). As marcas de corte acompanham a linha.
+ */
+export function savedResultOf(result: { rows: readonly QueryRow[]; truncated: CellMarks; generated?: CellMarks }, edits: PendingEdits, columns: number): SavedResult {
+  const { rows, truncated } = result;
+  if (pendingCount(edits) === 0) return { rows: rows as QueryRow[], truncated, generated: result.generated ?? new Map() };
+
+  const deleted = new Set(edits.deleted);
+  const positions: (number | null)[] = [];
+  const kept: QueryRow[] = [];
+  rows.forEach((row, index) => {
+    if (deleted.has(index)) return void positions.push(null);
+    positions.push(kept.length);
+    const cells = edits.cells.filter((cell) => cell.row === index);
+    if (cells.length === 0) return void kept.push(row);
+    const next = [...row];
+    for (const cell of cells) next[cell.column] = cell.value;
+    kept.push(next);
+  });
+
+  const positionOf = (row: number) => positions[row] ?? null;
+  const generated = shifted(result.generated, positionOf);
+  for (const row of edits.added) {
+    const filled = Array.from({ length: columns }, (_, column) => column in row.values);
+    generated.set(kept.length, new Set(filled.flatMap((done, column) => (done ? [] : [column]))));
+    kept.push(filled.map((done, column) => (done ? (row.values[column] ?? null) : null)));
+  }
+
+  return { rows: kept, truncated: truncated.size === 0 ? truncated : shifted(truncated, positionOf), generated: new Map([...generated].filter(([, cells]) => cells.size > 0)) };
+}
+
 /** O que a faixa mostra depois de um Salvar recusado: a frase de cima, a mensagem (a do banco, como veio), a alteração e a coluna que falharam. */
 export type SaveFailure = {
   headline: string;

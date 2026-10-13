@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ApiError } from "@/lib/api/prism-api";
 
-import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, undoCell, undoDelete, undoNewCell, withoutApplied, type PendingEdits } from "./record-edits";
+import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type PendingEdits } from "./record-edits";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
 
@@ -135,5 +135,44 @@ describe("a falha do Salvar na faixa (RN-EDIT-005 e 012)", () => {
 
   it("a recusa que não é de uma alteração (o resultado mudou, a sessão ocupada) fica com o texto da API, sem linha", () => {
     expect(failureOf(apiError("RESULT_CHANGED", {}, "O resultado mudou."), plan, false)).toEqual({ headline: "Título de RESULT_CHANGED", detail: "O resultado mudou.", origin: null, column: null, applied: 0, written: false });
+  });
+});
+
+describe("a grade depois de um Salvar que gravou tudo, sem executar de novo (RN-EDIT-009)", () => {
+  const result = { rows, truncated: new Map<number, ReadonlySet<number>>() };
+
+  it("as linhas lidas ficam com os valores salvos, as excluídas saem, e a linha nova entra no fim com o que foi digitado; o resto dela, o banco preencheu", () => {
+    let edits = editCell(noEdits, 2, 1, "paga", "fechada");
+    edits = deleteRow(edits, 0);
+    const added = addRow(edits);
+    edits = editNewCell(editNewCell(added.edits, added.id, 0, "4"), added.id, 1, null);
+
+    const saved = savedResultOf(result, edits, 3);
+
+    expect(saved.rows).toEqual([
+      ["2", "aberta", "20"],
+      ["3", "paga", "30"],
+      ["4", null, null],
+    ]);
+    // Só a coluna que ninguém preencheu é do banco: o NULL digitado é um valor, e a tela o sabe.
+    expect(saved.generated).toEqual(new Map([[2, new Set([2])]]));
+  });
+
+  it("as linhas que não mudaram são os mesmos objetos (a linha memorizada da grade não redesenha); sem nada pendente, a grade fica como estava", () => {
+    const saved = savedResultOf(result, editCell(noEdits, 1, 1, "paga", "aberta"), 3);
+
+    expect(saved.rows[0]).toBe(rows[0]);
+    expect(saved.rows[2]).toBe(rows[2]);
+    expect(saved.rows[1]).toEqual(["2", "paga", "20"]);
+    expect(savedResultOf(result, noEdits, 3)).toEqual({ rows, truncated: result.truncated, generated: new Map() });
+  });
+
+  it("as marcas de corte e as do banco acompanham a linha quando uma de antes dela sai", () => {
+    const marked = { rows, truncated: new Map([[2, new Set([2])]]), generated: new Map([[1, new Set([2])]]) };
+
+    const saved = savedResultOf(marked, deleteRow(noEdits, 0), 3);
+
+    expect(saved.truncated).toEqual(new Map([[1, new Set([2])]]));
+    expect(saved.generated).toEqual(new Map([[0, new Set([2])]]));
   });
 });

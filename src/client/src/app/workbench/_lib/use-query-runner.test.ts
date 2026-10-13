@@ -1776,3 +1776,52 @@ describe("o resultado da página e a sessão da aba, para a edição dos Registr
     expect(runner.getState()).toMatchObject({ status: "rows", resultId: "r1", readOnly: null, rows: [["1", "a"], ["2", "b"]] });
   });
 });
+
+describe("o resultado depois de um Salvar da edição na aba de consulta (RN-EDIT-009)", () => {
+  /** A aba com o resultado `r1` na tela; `hasMore` diz se o cursor ficou aberto. */
+  async function withEditable(hasMore: boolean) {
+    const context = setup();
+    context.api.on(`POST ${sessions}`, session("s1"));
+    context.api.on(`POST ${sessions}/s1/queries`, page([["1", "a"], ["2", "b"]], { hasMore, resultID: "r1", editable: { known: false, reason: null } }));
+    await context.runner.run({ sql: "select * from t", offset: 0 });
+    const before = context.runner.getState();
+    if (before.status !== "rows") throw new Error("esperava linhas");
+    return { ...context, before };
+  }
+
+  const saved = { rows: [["1", "x"], ["3", null]], truncated: new Map<number, ReadonlySet<number>>(), generated: new Map([[1, new Set([1])]]) };
+
+  it("as linhas salvas tomam o lugar das lidas sem executar nada, a grade é a mesma, e o cursor que estava aberto fechou: a área oferece executar de novo", async () => {
+    const { api, runner, before } = await withEditable(true);
+    const sent = api.calls.length;
+
+    runner.keepSaved("r1", saved);
+
+    expect(runner.getState()).toMatchObject({ status: "rows", id: before.id, resultId: "r1", rows: saved.rows, generated: saved.generated, hasMore: true, cursorClosed: true });
+    expect(api.calls).toHaveLength(sent);
+  });
+
+  it("com todas as linhas já na tela não havia cursor aberto: nada muda além das linhas", async () => {
+    const { runner } = await withEditable(false);
+
+    runner.keepSaved("r1", saved);
+
+    expect(runner.getState()).toMatchObject({ status: "rows", rows: saved.rows, hasMore: false, cursorClosed: false });
+  });
+
+  it("outro resultado na tela (outro comando executou enquanto salvava), ou um comando em andamento: as linhas salvas não entram", async () => {
+    const { api, runner, before } = await withEditable(true);
+
+    runner.keepSaved("r0", saved);
+    expect(runner.getState()).toBe(before);
+
+    const reply = deferred<Response>();
+    api.on(`POST ${sessions}/s1/queries`, reply.promise);
+    const running = runner.run({ sql: "select 2", offset: 0 });
+    runner.keepSaved("r1", saved);
+    expect(runner.getState()).toMatchObject({ status: "running", previous: before });
+
+    reply.resolve(page([["9", "z"]], { resultID: "r2" }));
+    await running;
+  });
+});

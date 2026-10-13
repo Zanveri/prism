@@ -126,3 +126,23 @@ describe("o menu de contexto da célula", () => {
     expect(items.find((item) => item.id === "newRow")?.shortcut).toBe("Alt+Insert");
   });
 });
+
+describe("a linha nova depois do Salvar, com o que o banco preencheu (RN-EDIT-009)", () => {
+  it("a célula que o banco preencheu não se edita, com o motivo: o valor dela a tela não sabe", () => {
+    expect(cellAccess(read(1, { generated: new Set([1]) }))).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.generated) });
+    expect(cellAccess(read(1, { generated: new Set([3]) }))).toEqual({ editable: true });
+  });
+
+  it("com a chave preenchida pelo banco, a linha não se acha: nenhuma célula dela se edita, e ela não se exclui", () => {
+    const row = { kind: "read" as const, truncated: undefined, deleted: false, generated: new Set([0]) };
+
+    expect(cellAccess(read(1, { generated: new Set([0]) }))).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.keyGenerated) });
+    expect(deleteRowAccess(row, null, target, false)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.keyGenerated) });
+  });
+});
+
+describe("os rótulos do menu da célula são os da especificação (RN-EDIT-001)", () => {
+  it("Editar célula, Definir como nulo, Linha nova, Excluir linha e Desfazer alteração", () => {
+    expect([menu.edit, menu.setNull, menu.newRow, menu.deleteRow, menu.undo]).toEqual(["Editar célula", "Definir como nulo", "Linha nova", "Excluir linha", "Desfazer alteração"]);
+  });
+});

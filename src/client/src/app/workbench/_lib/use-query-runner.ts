@@ -91,6 +91,8 @@ export type RowsState = {
   resultId?: string | null;
   /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando a página já o trouxe. */
   readOnly?: string | null;
+  /** RN-EDIT-009: as colunas de cada linha nova salva na aba de consulta que o banco preencheu, e cujo valor a tela não sabe. */
+  generated?: ReadonlyMap<number, ReadonlySet<number>>;
 };
 
 export type AffectedState = { status: "affected"; rowsAffected: number; elapsedMs: number };
@@ -180,8 +182,14 @@ export type QueryRunner = {
    * na tela, e o erro do comando que ainda roda chega sem posição.
    */
   textEdited: () => void;
-  /** A sessão da aba na API, ou nula antes da primeira execução e depois de solta: a edição dos Registros grava nela (seção 22). */
+  /** A sessão da aba na API, ou nula antes da primeira execução e depois de solta: a edição das células grava nela (seção 22). */
   sessionOf: () => string | null;
+  /**
+   * RN-EDIT-009: um Salvar da edição gravou tudo no resultado `resultId`, e a grade fica com o que foi salvo, sem executar de novo (a aba de
+   * consulta). Salvar é um comando na sessão: o cursor que estava aberto fechou, e "carregar mais" dá lugar a "executar de novo". Com outro
+   * resultado na tela, ou um comando em andamento, nada muda.
+   */
+  keepSaved: (resultId: string, saved: { rows: QueryRow[]; truncated: ReadonlyMap<number, ReadonlySet<number>>; generated: ReadonlyMap<number, ReadonlySet<number>> }) => void;
   /**
    * Solta a aba da sessão dela (fechar a aba, desconectar, conexão excluída) e devolve o que há
    * para encerrar na API. O que estava a caminho chega e não muda mais nada.
@@ -657,6 +665,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       else if (state.status === "running" && state.previous?.status === "error" && state.previous.errorAt !== null) set({ ...state, previous: { ...state.previous, errorAt: null } });
     },
     sessionOf: () => sessionId,
+    keepSaved: (savedIn, { rows, truncated, generated }) => {
+      if (state.status !== "rows" || state.resultId !== savedIn || isBusy()) return;
+      set({ ...state, rows, truncated, generated, cursorClosed: state.cursorClosed || state.hasMore });
+    },
     release,
     retire,
   };

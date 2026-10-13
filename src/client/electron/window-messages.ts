@@ -41,6 +41,8 @@ const resultSchema = z.discriminatedUnion("status", [
     total: count.nullable(),
     resultId: id.nullable().optional(),
     readOnly: name.nullable().optional(),
+    /** RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou, como `truncated`. */
+    generated: z.array(z.tuple([count, z.array(count)])).optional(),
   }),
   z.object({ status: z.literal("affected"), rowsAffected: z.number().int(), elapsedMs: z.number().min(0) }),
   z.object({ status: z.literal("cancelled") }),

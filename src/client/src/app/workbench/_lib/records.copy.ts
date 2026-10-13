@@ -25,7 +25,7 @@ export const recordsCopy = {
     zoomResetHint: "Voltar a 100%. Ctrl+roda do mouse sobre a grade também muda o zoom.",
   },
 
-  // Seção 22 (RN-EDIT-001 a 012): a edição de células nos Registros de uma tabela.
+  // Seção 22 (RN-EDIT-001 a 012): a edição de células nos Registros de uma tabela e no resultado da aba de consulta.
   edit: {
     pending: (count: number) => (count === 1 ? "1 alteração não salva" : `${count.toLocaleString("pt-BR")} alterações não salvas`),
     viewSql: "Ver SQL",
@@ -45,6 +45,9 @@ export const recordsCopy = {
     readOnly: (reason: string) => `Somente leitura: ${reason}.`,
     loadingTarget: "Conferindo o que se edita nesta tabela…",
     checkFailed: "Não foi possível saber o que se edita nesta tabela.",
+    // A mesma conferência, no resultado de um comando da aba de consulta.
+    loadingResultTarget: "Conferindo o que se edita neste resultado…",
+    checkResultFailed: "Não foi possível saber o que se edita neste resultado.",
     // O campo de edição dentro da célula, como no canvas.
     editorLabel: (column: string, row: string) => `${column}, ${row}`,
     confirmEdit: "Confirmar edição (Enter)",
@@ -71,10 +74,11 @@ export const recordsCopy = {
       label: "Ações da célula",
       copyValue: "Copiar valor",
       paste: "Colar",
-      edit: "Editar",
-      setNull: "Definir como NULL",
-      undo: "Desfazer esta alteração",
-      newRow: "Nova linha",
+      // Os rótulos da RN-EDIT-001.
+      edit: "Editar célula",
+      setNull: "Definir como nulo",
+      undo: "Desfazer alteração",
+      newRow: "Linha nova",
       deleteRow: "Excluir linha",
       notNullable: "a coluna não aceita NULL",
       pasteFailed: "Não foi possível ler a área de transferência.",
@@ -88,7 +92,12 @@ export const recordsCopy = {
       deleted: "a linha está marcada para exclusão",
       noRowOperations: "este resultado não aceita linha nova nem exclusão",
       busy: "há um comando em andamento na aba",
+      // RN-EDIT-009: a linha nova salva na aba de consulta, que não executa de novo.
+      generated: "o valor foi gerado pelo banco; execute de novo para vê-lo",
+      keyGenerated: "a chave desta linha foi gerada pelo banco; execute de novo para editá-la",
     },
+    // RN-EDIT-009: a coluna da linha nova salva que a pessoa não preencheu, na aba de consulta.
+    generated: "gerado pelo banco — execute de novo para ver",
   },
 
   // Configurações › Resultados: o que vale para as grades. Aqui, e não em `settings.copy.ts`, porque esta leva é dividida por arquivo.

@@ -124,3 +124,18 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(adopted?.selection).toEqual({ anchor: 2, head: 8 });
   });
 });
+
+describe("a aba de consulta que salvou a edição vai com a grade salva (RN-EDIT-009)", () => {
+  it("as células que o banco preencheu numa linha nova salva vão marcadas, e voltam como mapa de conjuntos", () => {
+    const saved: RowsState = { ...rows, cursorClosed: true, generated: new Map([[1, new Set([0])]]) };
+
+    const state = roundTrip(serializeTab(snapshot({ state: saved })))?.state as RowsState;
+
+    expect(state.generated?.get(1)?.has(0)).toBe(true);
+    expect(state.cursorClosed).toBe(true);
+  });
+
+  it("o resultado sem marca nenhuma volta sem o campo, como ia antes", () => {
+    expect(roundTrip(serializeTab(snapshot()))?.state).not.toHaveProperty("generated");
+  });
+});
