@@ -231,6 +231,16 @@ export function DocumentIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** Duas folhas, uma sobre a outra: "Duplicar conexão" (RN-CONN-016). */
+export function DuplicateIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 5.5h7.5V14H5.5z" />
+      <path d="M3 10.5V2h7.5" />
+    </Icon>
+  );
+}
+
 export function CloseIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

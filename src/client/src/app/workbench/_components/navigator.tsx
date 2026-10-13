@@ -1,18 +1,20 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { DeleteConnectionDialog } from "@/app/connections/_components/delete-connection-dialog";
 import { MoveConnectionDialog } from "@/app/connections/_components/move-connection-dialog";
+import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
+import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
-import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
-import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
-import { ApiRequestError } from "@/lib/api/prism-api";
+import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
+import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
 import { connectionReveal } from "../_lib/connection-intent";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
-import { backgroundMenu, ignoresContextMenu, menuFor, type MenuAction } from "../_lib/navigator-menu";
+import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
@@ -62,6 +64,8 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   newQuery: <DocumentIcon />,
   refresh: <RefreshIcon />,
   editConnection: <PencilIcon />,
+  renameConnection: <PencilIcon />,
+  duplicateConnection: <DuplicateIcon />,
   moveConnection: <FolderMoveIcon />,
   deleteConnection: <TrashIcon />,
   newConnection: <PlusIcon />,
@@ -78,8 +82,11 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
 /** A ação do menu sobre uma pasta que existe e o modo do diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). */
 const folderActionTypes = { renameFolder: "rename", moveFolder: "move", deleteFolder: "delete" } as const;
 
-/** A ação de conexão que o menu pediu (RN-NAV-003): mover de pasta ou excluir, cada uma com o diálogo dela. */
-type ConnectionAction = { type: "move" | "delete"; connection: Connection };
+/** A ação de conexão que o menu pediu (RN-NAV-003 e 009): renomear, mover de pasta ou excluir, cada uma com o diálogo dela. */
+type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connection };
+
+/** O diálogo de cada ação de conexão do menu que tem diálogo. */
+const connectionActionTypes = { renameConnection: "rename", moveConnection: "move", deleteConnection: "delete" } as const;
 
 type NavigatorProps = {
   /** "Nova conexão" (RN-NAV-002 e 003): na pasta dada, ou na raiz (`null`). */
@@ -113,7 +120,8 @@ function folderIdOf(node: NavNode): string | null {
  * abre a sessão dele quando o nó dele abre, e o que está abaixo dele usa essa sessão (RN-ARVORE-006).
  *
  * Tudo o que a tela de Conexões fazia mora aqui (RN-NAV-003): criar, renomear, mover e excluir pasta; criar, editar, mover e excluir
- * conexão, pela barra de ações e pelo menu de contexto. O formulário de conexão é uma página à parte (RN-NAV-004), e a conexão que ele
+ * conexão, pela barra de ações e pelo menu de contexto. O F2 renomeia a pasta e a conexão (RN-NAV-009), e o menu da conexão também a duplica
+ * (RN-CONN-016): a cópia aparece escolhida, pelo mesmo `connectionReveal` do formulário. O formulário de conexão é uma página à parte (RN-NAV-004), e a conexão que ele
  * acabou de salvar aparece aqui à vista e escolhida (`connectionReveal`); `onRevealed` avisa quem mostra o navegador, para ele aparecer se
  * estava escondido. O formulário é um diálogo sobre a área de trabalho (RN-NAV-004), e quem o abre é a página: o navegador só pede
  * (`onNewConnection`, na pasta onde a conexão nasce; `onEditConnection`).
@@ -237,6 +245,21 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
   /** A pasta fica aberta: o que acaba de ser criado dentro dela tem de aparecer (como a tela de Conexões fazia). */
   const expandFolder = (folderId: string) => setCollapsedFolders((current) => new Set([...current].filter((key) => key !== navKey({ type: "folder", id: folderId }))));
+
+  /**
+   * "Duplicar conexão" (RN-CONN-016): a cópia nasce na mesma pasta, desconectada, e aparece escolhida, com as pastas acima dela abertas e o foco nela
+   * (`connectionReveal`, depois de a lista já trazê-la); nada abre sozinho. A recusa (a conexão sumiu, o cofre fechou) vai ao aviso central, e a lista
+   * se atualiza, porque o motivo pode ser ela estar velha.
+   */
+  const duplicate = useMutation({
+    mutationFn: async (connectionId: string) => unwrap(await duplicateConnection(connectionId)),
+    onSuccess: async (copy) => {
+      toast.success(connectionsCopy.toasts.connectionDuplicated);
+      await invalidateLists(queryClient);
+      connectionReveal.request(copy.id);
+    },
+    onError: () => void invalidateLists(queryClient),
+  });
 
   /** A sessão caiu e a API já não a conhece: abre outra para aquele banco da conexão, no lugar de repetir com o id morto (RN-AVISO-003). */
   async function reopen(connectionId: string, database: string | undefined) {
@@ -365,12 +388,16 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       case "editConnection":
         if (connectionId !== null) onEditConnection(connectionId);
         return;
+      case "renameConnection":
       case "moveConnection":
       case "deleteConnection": {
         const connection = connectionId === null ? undefined : connectionById.get(connectionId);
-        if (connection !== undefined) setConnectionAction({ type: action.type === "moveConnection" ? "move" : "delete", connection });
+        if (connection !== undefined) setConnectionAction({ type: connectionActionTypes[action.type], connection });
         return;
       }
+      case "duplicateConnection":
+        if (connectionId !== null && !duplicate.isPending) duplicate.mutate(connectionId);
+        return;
       case "openTable":
         if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, view: action.view, ...inDatabase(target.database) });
         return;
@@ -542,6 +569,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
             const connectionId = ownerConnectionId(node);
             if (connectionId !== null) disconnect(connectionId);
           }}
+          onKeyAction={runMenuAction}
           onContextMenu={openMenu}
         />
       </>
@@ -565,6 +593,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         />
       )}
       {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
+      {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog
@@ -590,6 +619,8 @@ type NavigatorListProps = {
   onNewQuery: (node: NavNode) => void;
   onOpenTable: (node: NavNode) => void;
   onDisconnect: (node: NavNode) => void;
+  /** A ação do menu que uma tecla na linha pede (`keyActionFor`: o F2 do Renomear, RN-NAV-009), executada como se viesse do menu. */
+  onKeyAction: (node: NavNode, action: MenuAction) => void;
   /** O menu de contexto da linha, aberto pelo mouse (`menu`) ou pelo teclado (`first`, com o foco já no primeiro item). Devolve se o menu vai abrir. */
   onContextMenu: (node: NavNode | null, point: { x: number; y: number }, initialFocus: "first" | "menu") => boolean;
   /** Só na árvore filtrada: onde o termo casou em cada linha, para o destaque. */
@@ -608,10 +639,10 @@ type NavigatorListProps = {
 /**
  * A lista virtualizada (RN-ARVORE: milhares de tabelas): só as linhas à vista existem no DOM. Fica
  * num componente à parte para a rolagem, que re-renderiza quem usa o virtualizador, não refaça a
- * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha; só uma linha
+ * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, open, connectionById, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -700,6 +731,12 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
       event.preventDefault();
       if (node.hasChildren && open.has(node.key)) onToggle(node);
       else focusRow(parentRowIndex(rows, index));
+    } else {
+      // O F2 na pasta e na conexão abre o "Renomear" dela (RN-NAV-009), o mesmo item que o menu mostra com o atalho.
+      const action = keyActionFor(node, event);
+      if (action === null) return;
+      event.preventDefault();
+      onKeyAction(node, action);
     }
   }
 

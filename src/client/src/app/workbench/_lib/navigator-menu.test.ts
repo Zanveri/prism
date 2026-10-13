@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
 
-import { backgroundMenu, ignoresContextMenu, menuFor, type MenuItem, type MenuState } from "./navigator-menu";
+import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuItem, type MenuState } from "./navigator-menu";
 import { selectAllSql } from "./table-sql";
 import { columnNodes, databaseNodes, flattenVisible, foreignKeyNodes, indexNodes, navKey, objectNodes, schemaNodes, tableGroupNodes, treeNodes, type NavNode, type TableLevelPath } from "./navigator-model";
 
@@ -31,11 +31,12 @@ const flat = (groups: MenuItem[][]) => groups.flat();
 const byId = (groups: MenuItem[][], id: string) => flat(groups).find((item) => item.id === id);
 
 describe("menuFor: conexão (RN-MENU-001)", () => {
-  it("desconectada: Conectar, Nova consulta, Atualizar (desabilitado, não há o que atualizar), Editar conexão, Mover, Excluir e Copiar nome", () => {
+  it("desconectada: Conectar, Nova consulta, Atualizar (desabilitado, não há o que atualizar), Editar conexão, Renomear, Duplicar conexão, Mover, Excluir e Copiar nome", () => {
     const groups = menuFor(connectionNode, state("disconnected"));
 
     // Mover e Excluir vieram da tela de Conexões (RN-NAV-003): lá, mover era trocar a pasta no formulário, e excluir era o botão dele.
-    expect(ids(groups)).toEqual([["connect", "newQuery"], ["refresh", "editConnection"], ["moveConnection", "deleteConnection"], ["copyName"]]);
+    // Renomear e Duplicar conexão são da RN-NAV-009 e da RN-CONN-016.
+    expect(ids(groups)).toEqual([["connect", "newQuery"], ["refresh", "editConnection"], ["renameConnection", "duplicateConnection", "moveConnection", "deleteConnection"], ["copyName"]]);
     expect(flat(groups).filter((item) => item.disabled).map((item) => item.id)).toEqual(["refresh"]);
   });
 
@@ -62,7 +63,17 @@ describe("menuFor: conexão (RN-MENU-001)", () => {
   it("as ações dizem o que a tela deve fazer, e Copiar nome leva o nome da conexão", () => {
     const groups = menuFor(connectionNode, state("connected"));
 
-    expect(flat(groups).map((item) => item.action)).toEqual([{ type: "disconnect" }, { type: "newQuery" }, { type: "refresh" }, { type: "editConnection" }, { type: "moveConnection" }, { type: "deleteConnection" }, { type: "copy", text: "MES Produção" }]);
+    expect(flat(groups).map((item) => item.action)).toEqual([
+      { type: "disconnect" },
+      { type: "newQuery" },
+      { type: "refresh" },
+      { type: "editConnection" },
+      { type: "renameConnection" },
+      { type: "duplicateConnection" },
+      { type: "moveConnection" },
+      { type: "deleteConnection" },
+      { type: "copy", text: "MES Produção" },
+    ]);
   });
 
   it("Mover e Excluir valem em qualquer estado: excluir uma conexão conectada encerra as sessões dela (RN-CONN-014)", () => {
@@ -71,6 +82,16 @@ describe("menuFor: conexão (RN-MENU-001)", () => {
       expect(byId(menuFor(connectionNode, state(status, true)), "deleteConnection")?.disabled).toBeFalsy();
     }
     expect([byId(menuFor(connectionNode, idle), "moveConnection")?.label, byId(menuFor(connectionNode, idle), "deleteConnection")?.label]).toEqual(["Mover", "Excluir"]);
+  });
+
+  it("Renomear (F2, RN-NAV-009) e Duplicar conexão (RN-CONN-016) valem em qualquer estado: a cópia nasce desconectada, e renomear não mexe na sessão", () => {
+    for (const status of ["disconnected", "connecting", "connected", "failed"] as const) {
+      expect(byId(menuFor(connectionNode, state(status, true)), "renameConnection")?.disabled).toBeFalsy();
+      expect(byId(menuFor(connectionNode, state(status, true)), "duplicateConnection")?.disabled).toBeFalsy();
+    }
+    expect(byId(menuFor(connectionNode, idle), "renameConnection")).toMatchObject({ label: "Renomear", shortcut: "F2" });
+    expect(byId(menuFor(connectionNode, idle), "duplicateConnection")).toMatchObject({ label: "Duplicar conexão" });
+    expect(byId(menuFor(connectionNode, idle), "duplicateConnection")?.shortcut).toBeUndefined();
   });
 });
 
@@ -111,11 +132,13 @@ describe("menuFor: tabela e visão (RN-MENU-001 e RN-TABELA-001)", () => {
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
   });
 
-  it("só Abrir registros mostra atalho, e é o Enter que a árvore já trata (nenhum atalho de mentira)", () => {
-    const withShortcut = flat(menuFor(table, idle)).filter((item) => item.shortcut !== undefined);
+  it("só mostram atalho as teclas que a árvore já trata (nenhum atalho de mentira): o Enter de Abrir registros e o F2 de Renomear", () => {
+    const shortcuts = (node: NavNode) => flat(menuFor(node, idle)).filter((item) => item.shortcut !== undefined).map((item) => [item.id, item.shortcut]);
 
-    expect(withShortcut.map((item) => [item.id, item.shortcut])).toEqual([["openRecords", "Enter"]]);
-    for (const node of [connectionNode, schemaNode, folderNode, column]) expect(flat(menuFor(node, idle)).some((item) => item.shortcut !== undefined)).toBe(false);
+    expect(shortcuts(table)).toEqual([["openRecords", "Enter"]]);
+    expect(shortcuts(connectionNode)).toEqual([["renameConnection", "F2"]]);
+    expect(shortcuts(folderNode)).toEqual([["renameFolder", "F2"]]);
+    for (const node of [schemaNode, databaseNode, column]) expect(shortcuts(node)).toEqual([]);
   });
 
   it("o nome qualificado leva o esquema da visão, que sai do pai e não do rótulo", () => {
@@ -185,6 +208,8 @@ describe("menuFor: o resto da árvore", () => {
     expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "moveFolder", "deleteFolder", "copy"]);
     expect([byId(groups, "newConnection")?.label, byId(groups, "newFolder")?.label]).toEqual(["Nova conexão", "Nova pasta"]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
+    // RN-NAV-009: o "Renomear" da pasta passa a mostrar o atalho F2.
+    expect(byId(groups, "renameFolder")).toMatchObject({ label: "Renomear", shortcut: "F2" });
   });
 
   it("as linhas Carregando… e de erro não têm menu", () => {
@@ -208,6 +233,38 @@ describe("menuFor: o resto da árvore", () => {
 
       expect(groups.every((items) => items.length > 0)).toBe(true);
       expect(new Set(all).size).toBe(all.length);
+    }
+  });
+});
+
+describe("keyActionFor: as teclas da linha que são ações do menu (RN-NAV-009)", () => {
+  const f2 = { key: "F2", shiftKey: false, ctrlKey: false, altKey: false, metaKey: false };
+
+  it("F2 na pasta é o Renomear da pasta, e na conexão o Renomear da conexão", () => {
+    expect(keyActionFor(folderNode, f2)).toEqual({ type: "renameFolder" });
+    expect(keyActionFor(connectionNode, f2)).toEqual({ type: "renameConnection" });
+  });
+
+  it("nas outras linhas o F2 não faz nada: banco, esquema, grupo, tabela, visão, rotina, coluna, índice e chave estrangeira não se renomeiam", () => {
+    for (const node of [databaseNode, schemaNode, group, table, view, routine, column, index, foreignKey]) expect(keyActionFor(node, f2)).toBeNull();
+  });
+
+  it("com Shift, Ctrl, Alt ou Cmd não é o F2 do Renomear", () => {
+    for (const modifier of ["shiftKey", "ctrlKey", "altKey", "metaKey"] as const) {
+      expect(keyActionFor(folderNode, { ...f2, [modifier]: true })).toBeNull();
+      expect(keyActionFor(connectionNode, { ...f2, [modifier]: true })).toBeNull();
+    }
+  });
+
+  it("outras teclas não são ação do menu por aqui (Enter, setas e o menu têm o tratamento delas na árvore)", () => {
+    for (const key of ["Enter", "F1", "F3", "Delete", "ArrowLeft", "ContextMenu"]) expect(keyActionFor(connectionNode, { ...f2, key })).toBeNull();
+  });
+
+  it("a tecla faz o mesmo que o item do menu que a mostra como atalho", () => {
+    for (const node of [folderNode, connectionNode]) {
+      const shortcut = flat(menuFor(node, idle)).find((item) => item.shortcut === "F2");
+
+      expect(keyActionFor(node, f2)).toEqual(shortcut?.action);
     }
   });
 });

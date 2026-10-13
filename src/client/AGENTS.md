@@ -697,6 +697,15 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   pelo mesmo `quoteIdentifier` do `table-sql.ts` (**a regra única das aspas**: duas aspas duplas sempre, nos três bancos, com a aspa de
   dentro dobrada); "Editar conexão" usa `editConnectionTo` (ver "Conexões"); a pasta reaproveita o `FolderDialog` e o
   `DeleteFolderDialog` da tela de Conexões (`folder-action-dialogs.tsx` só escolhe qual).
+- **F2, Renomear e Duplicar conexão** (RN-NAV-009 e RN-CONN-016). O F2 sem modificador na linha da pasta ou da conexão é `keyActionFor`
+  (`_lib/navigator-menu.ts`, pura), que devolve a MESMA `MenuAction` do item "Renomear" do menu (que mostra o atalho F2), e a árvore a
+  executa pelo `runMenuAction`, como se viesse do menu; nas outras linhas, e com Shift, Ctrl, Alt ou Cmd, não faz nada. A pasta abre o
+  `FolderDialog` de renomear de sempre. A conexão abre o `RenameConnectionDialog` (`connections/_components`), só com o nome: grava pelo
+  mesmo `PATCH` do formulário com a conexão como está e o nome novo (`renamedConnectionInput`, em `_lib/rename-connection.ts`, sobre o
+  `movedConnectionInput`: senha nula, que a API mantém), e o nome repetido (`CONNECTION_ALREADY_EXISTS`) e o 422 do nome ficam no campo
+  (`renameRefusalFields`); o 422 de outro campo vai ao aviso pelo título. "Duplicar conexão" chama `POST api/user/connections/{id}/duplicate`
+  (`duplicateConnection`, sem corpo: a senha é copiada dentro do cofre), atualiza as listas e pede ao `connectionReveal` a cópia, que aparece
+  escolhida e com o foco, desconectada; a recusa vai ao aviso central.
 - **`ContextMenu`** (`components/ui/context-menu.tsx`) é genérico. Portal `position: fixed` em `document.body`; `role="menu"` com
   `menuitem` e `separator`; o item desabilitado é `aria-disabled` e continua na ordem das setas; as setas dão a volta, Home e End,
   Enter e Espaço (o clique do botão), Esc e Tab fecham, e clique fora, rolar e trocar o foco da janela também. `placeMenu` (abre com

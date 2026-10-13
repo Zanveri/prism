@@ -2,7 +2,7 @@ import { formatCount } from "@/lib/utils/format";
 
 /**
  * Os textos das pastas e das conexões, num lugar só (RN-AVISO-002, RN-AVISO-003, RN-CONN-002): os diálogos de pasta, o diálogo de conexão
- * (RN-NAV-004 e 005), o de mover conexão e o de revelar a senha. A tela de Conexões deixou de existir (RN-NAV-001); o que o navegador diz
+ * (RN-NAV-004 e 005), o de mover e o de renomear conexão e o de revelar a senha. A tela de Conexões deixou de existir (RN-NAV-001); o que o navegador diz
  * está em `workbench.copy.ts` e `navigator.copy.ts`.
  */
 export const connectionsCopy = {
@@ -111,6 +111,16 @@ export const connectionsCopy = {
     submitting: "Movendo…",
   },
 
+  // RN-NAV-009: renomear uma conexão pelo navegador (F2 ou o menu), num diálogo só com o nome.
+  rename: {
+    title: "Renomear conexão",
+    name: "Nome da conexão",
+    nameTaken: "Já existe uma conexão com este nome nesta pasta.",
+    cancel: "Cancelar",
+    submit: "Renomear",
+    submitting: "Renomeando…",
+  },
+
   reveal: {
     title: "Confirme a sua senha",
     description: { before: "Para exibir a senha de ", between: " em ", after: ", digite a sua senha do Prism." },
@@ -126,6 +136,9 @@ export const connectionsCopy = {
     connectionUpdated: "Conexão alterada.",
     connectionDeleted: "Conexão excluída.",
     connectionMoved: "Conexão movida.",
+    connectionRenamed: "Conexão renomeada.",
+    // RN-CONN-016: a cópia aparece escolhida no navegador.
+    connectionDuplicated: "Conexão duplicada.",
     // RN-AVISO-002 e RN-AVISO-004. A falha leva a frase da tela, não o `title` da API: a mensagem do banco fica abaixo dos botões.
     connectionTested: "Conexão testada com sucesso.",
     connectionTestFailed: "Não foi possível conectar.",

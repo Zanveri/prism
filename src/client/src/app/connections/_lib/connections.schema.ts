@@ -82,6 +82,9 @@ export const createConnectionSchema = connectionFields.extend({ password: z.stri
 /** Na edição a senha vazia vira `null`, e a API mantém a gravada (RN-CONN-004). */
 export const editConnectionSchema = connectionFields.extend({ password: z.string().transform(emptyToNull) });
 
+/** RN-NAV-009: o diálogo de renomear conexão, só com o nome, na regra do formulário. */
+export const renameConnectionSchema = connectionFields.pick({ name: true });
+
 /** O que a API recebe para criar ou alterar uma conexão; `password` nulo só na alteração. */
 export type ConnectionInput = z.output<typeof editConnectionSchema>;
 

@@ -18,6 +18,8 @@ export type MenuAction =
   | { type: "newQuery" }
   | { type: "refresh" }
   | { type: "editConnection" }
+  | { type: "renameConnection" }
+  | { type: "duplicateConnection" }
   | { type: "moveConnection" }
   | { type: "deleteConnection" }
   | { type: "newConnection" }
@@ -35,6 +37,23 @@ export type MenuItem = { id: string; label: string; action: MenuAction; shortcut
 export type MenuState = { status: "connected" | "connecting" | "disconnected" | "failed"; busy: boolean };
 
 const item = (id: string, label: string, action: MenuAction, extra: Partial<Pick<MenuItem, "shortcut" | "disabled">> = {}): MenuItem => ({ id, label, action, ...extra });
+
+/** RN-NAV-009: a tecla do "Renomear", na pasta e na conexão. O menu a mostra, e a árvore a trata pelo `keyActionFor`. */
+const renameShortcut = "F2";
+
+/** A tecla, como o `KeyboardEvent` a entrega: só o que decide se ela é um atalho. */
+export type KeyPress = { key: string; shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean };
+
+/**
+ * A ação do menu que uma tecla na linha faz (RN-NAV-009): o F2, sem modificador, é o "Renomear" da pasta e o da conexão, os mesmos itens que o
+ * menu mostra com o atalho. As outras linhas não se renomeiam, e as outras teclas da árvore (setas, Enter, o menu) são tratadas por ela: `null`.
+ */
+export function keyActionFor(node: NavNode, press: KeyPress): MenuAction | null {
+  if (press.key !== renameShortcut || press.shiftKey || press.ctrlKey || press.altKey || press.metaKey) return null;
+  if (node.kind === "folder") return { type: "renameFolder" };
+  if (node.kind === "connection") return { type: "renameConnection" };
+  return null;
+}
 
 /**
  * O menu do botão direito no espaço vazio do navegador (RN-NAV-003, pedido do dono): "Nova conexão" e "Nova pasta", que criam na raiz, sempre
@@ -63,7 +82,8 @@ export function ignoresContextMenu(open: MenuOpening | null, requested: MenuOpen
  * O menu de contexto de uma linha do navegador (RN-MENU-001), em grupos (entre dois grupos vai um separador). A ação que não se aplica
  * no estado atual vem desabilitada e não some: "Atualizar" numa conexão sem sessão não tem o que atualizar. Atalho só onde a árvore
  * já trata a tecla: o Enter abre a aba da tabela, na vista em que ela estiver (uma aba por tabela), e "Abrir registros" faz o mesmo
- * quando a aba ainda não existe; com ela aberta noutra vista, o item é que leva aos registros.
+ * quando a aba ainda não existe; com ela aberta noutra vista, o item é que leva aos registros. O F2 renomeia a pasta e a conexão
+ * (RN-NAV-009), pelo `keyActionFor`, que é quem a árvore consulta.
  *
  * Além do que a especificação lista, o banco e os grupos (Tabelas, Colunas…) têm "Atualizar", que a linha já oferece ao passar o
  * mouse: um botão direito que não faz nada em metade da árvore parece defeito. As linhas Carregando… e de erro não têm menu.
@@ -83,11 +103,17 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
         : item("connect", copy.connect, { type: "connect" }, { disabled: state.status === "connecting" });
 
       // Mover e Excluir eram da tela de Conexões (RN-NAV-003): lá, mover era trocar a pasta no formulário, e excluir, o botão dele. Valem em qualquer
-      // estado: excluir uma conexão conectada encerra as sessões dela (RN-CONN-014).
+      // estado: excluir uma conexão conectada encerra as sessões dela (RN-CONN-014). Renomear (RN-NAV-009) e Duplicar (RN-CONN-016) também: renomear não
+      // mexe na sessão, e a cópia nasce desconectada.
       return [
         [connectOrDisconnect, newQuery],
         [refresh(!connected), item("editConnection", copy.editConnection, { type: "editConnection" })],
-        [item("moveConnection", moved.moveConnection, { type: "moveConnection" }), item("deleteConnection", moved.deleteConnection, { type: "deleteConnection" })],
+        [
+          item("renameConnection", moved.renameConnection, { type: "renameConnection" }, { shortcut: renameShortcut }),
+          item("duplicateConnection", moved.duplicateConnection, { type: "duplicateConnection" }),
+          item("moveConnection", moved.moveConnection, { type: "moveConnection" }),
+          item("deleteConnection", moved.deleteConnection, { type: "deleteConnection" }),
+        ],
         [copyName],
       ];
     }
@@ -125,7 +151,7 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
     case "folder":
       return [
         [item("newConnection", moved.newConnection, { type: "newConnection" }), item("newFolder", moved.newFolder, { type: "newFolder" })],
-        [item("renameFolder", copy.renameFolder, { type: "renameFolder" }), item("moveFolder", copy.moveFolder, { type: "moveFolder" }), item("deleteFolder", copy.deleteFolder, { type: "deleteFolder" })],
+        [item("renameFolder", copy.renameFolder, { type: "renameFolder" }, { shortcut: renameShortcut }), item("moveFolder", copy.moveFolder, { type: "moveFolder" }), item("deleteFolder", copy.deleteFolder, { type: "deleteFolder" })],
         [copyName],
       ];
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { runConnectionTest } from "./connections.service";
+import { duplicateConnection, runConnectionTest } from "./connections.service";
 import type { ConnectionInput } from "./connections.schema";
 
 const base = "http://127.0.0.1:51234";
@@ -30,5 +30,26 @@ describe("runConnectionTest: as recusas que o formulário mostra no lugar", () =
     vi.stubGlobal("fetch", async () => new Response(null, { status: 204 }));
 
     expect(await runConnectionTest(input)).toEqual({ ok: true, data: undefined });
+  });
+});
+
+describe("duplicateConnection: \"Duplicar conexão\" (RN-CONN-016)", () => {
+  const copy = { id: "0199e0a2-0000-7000-8000-000000000002", folderID: "0199e0a2-0000-7000-8000-0000000000f1", name: "MES (cópia)", engine: 2, host: "srv", port: 50000, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: "2026-10-13T12:00:00Z", updatedAt: "2026-10-13T12:00:00Z" };
+
+  it("é um POST na rota da conexão, sem corpo (a senha é copiada dentro do cofre e não passa pela tela), e devolve a cópia", async () => {
+    const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => new Response(JSON.stringify(copy), { status: 201 }));
+    vi.stubGlobal("fetch", fetch);
+
+    expect(await duplicateConnection("c 1")).toEqual({ ok: true, data: copy });
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe(`${base}/api/user/connections/c%201/duplicate`);
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
+
+  it("a conexão que não existe mais volta como recusa (CONNECTION_NOT_FOUND)", async () => {
+    answer(404, "CONNECTION_NOT_FOUND");
+
+    expect(await duplicateConnection("c1")).toMatchObject({ ok: false, error: { status: 404, code: "CONNECTION_NOT_FOUND" } });
   });
 });

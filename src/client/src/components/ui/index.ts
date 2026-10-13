@@ -15,6 +15,7 @@ export {
   DiagramIcon,
   DocumentIcon,
   DownloadIcon,
+  DuplicateIcon,
   EyeIcon,
   EyeOffIcon,
   FolderIcon,

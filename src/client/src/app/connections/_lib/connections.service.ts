@@ -62,6 +62,14 @@ export async function runConnectionTest(input: ConnectionInput, id?: string): Pr
   return allowRefusal(await testConnection(input, id), "CONNECTION_INVALID", "DATABASE_CONNECTION_FAILED", driverNotInstalledCode);
 }
 
+/**
+ * "Duplicar conexão" (RN-CONN-016): a cópia, na mesma pasta e com o nome "<nome> (cópia)", no formato do detalhe. Sem corpo: a senha é copiada
+ * dentro do cofre e não passa pela tela.
+ */
+export function duplicateConnection(id: string): Promise<ApiResult<Connection>> {
+  return apiRequest(prismEndpoints.userConnectionDuplicate(id), { method: "POST", schema: connectionSchema });
+}
+
 export function deleteConnection(id: string): Promise<ApiResult<void>> {
   return apiRequest(prismEndpoints.userConnection(id), { method: "DELETE" });
 }

@@ -51,5 +51,8 @@ export const navigatorCopy = {
     newFolder: "Nova pasta",
     moveConnection: "Mover",
     deleteConnection: "Excluir",
+    // RN-NAV-009 e RN-CONN-016.
+    renameConnection: "Renomear",
+    duplicateConnection: "Duplicar conexão",
   },
 } as const;
