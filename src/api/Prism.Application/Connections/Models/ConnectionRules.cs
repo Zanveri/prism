@@ -5,7 +5,7 @@ namespace Prism.Application.Connections.Models;
 
 /// <summary>
 /// As regras de formato dos campos de uma conexão (RN-CONN-010) que o validator de criar e o de alterar repetem. Medem
-/// o valor depois de normalizado, que é o que o domínio grava.
+/// o valor depois de normalizado, que é o que o domínio grava. As do ambiente são as mesmas da pasta e moram no `EnvironmentRules`.
 /// </summary>
 internal static class ConnectionRules
 {
@@ -53,20 +53,5 @@ internal static class ConnectionRules
         var cut = StringInfo.ParseCombiningCharacters(name).Where(start => start <= length).Max();
 
         return name[..cut].TrimEnd();
-    }
-
-    /// <summary>Opcional: em branco é "sem ambiente".</summary>
-    public static bool EnvironmentNameIsValid(string? environmentName)
-        => environmentName.NormalizeName().Length <= 30;
-
-    /// <summary>Opcional: em branco é "sem cor". Quando vem, é `#RRGGBB`.</summary>
-    public static bool EnvironmentColorIsValid(string? environmentColor)
-    {
-        if (string.IsNullOrWhiteSpace(environmentColor))
-            return true;
-
-        var color = environmentColor.Trim();
-
-        return color.Length == 7 && color[0] == '#' && color.Skip(1).All(char.IsAsciiHexDigit);
     }
 }

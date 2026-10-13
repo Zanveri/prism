@@ -340,6 +340,71 @@ public sealed class FoldersTests
         Assert.That(body.GetProperty("errors").GetProperty("Name").GetArrayLength(), Is.GreaterThan(0));
     }
 
+    /// <summary>
+    /// RN-PASTA-005: o ambiente da pasta, com a normalização do ambiente da conexão, vai na resposta da criação e na lista, e o `PATCH` o troca e o tira
+    /// (o corpo grava a pasta por inteiro: sem os dois campos, a pasta fica sem ambiente). A pasta sem ambiente responde os dois campos nulos.
+    /// </summary>
+    [Test]
+    public async Task Environment_IsCreatedListedChangedAndRemoved()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+
+        var created = await host.Client.PostAsJsonAsync(FoldersPath, new { name = "Produção", parentID = (Guid?)null, environmentName = "  Produção   Sul ", environmentColor = " #FF8A7A " });
+        var createdBody = await ReadJsonAsync(created);
+        var plain = await CreateFolderAsync(host, "Geral");
+        var listed = await ListFoldersAsync(host);
+
+        Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That(createdBody.GetProperty("environmentName").GetString(), Is.EqualTo("Produção Sul"));
+        Assert.That(createdBody.GetProperty("environmentColor").GetString(), Is.EqualTo("#FF8A7A"));
+        Assert.That(plain.GetProperty("environmentName").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(plain.GetProperty("environmentColor").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        var listedProduction = listed.Single(folder => IdOf(folder) == IdOf(createdBody));
+        Assert.That(listedProduction.GetProperty("environmentName").GetString(), Is.EqualTo("Produção Sul"));
+        Assert.That(listedProduction.GetProperty("environmentColor").GetString(), Is.EqualTo("#FF8A7A"));
+
+        var changed = await host.Client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, FoldersPath) { Content = JsonContent.Create(new { id = IdOf(createdBody), name = "Produção", parentID = (Guid?)null, environmentName = "QAS", environmentColor = "#F2B644" }) });
+        var changedBody = await ReadJsonAsync(changed);
+
+        Assert.That(changed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(changedBody.GetProperty("environmentName").GetString(), Is.EqualTo("QAS"));
+        Assert.That(changedBody.GetProperty("environmentColor").GetString(), Is.EqualTo("#F2B644"));
+
+        var removed = await UpdateFolderAsync(host, IdOf(createdBody), "Produção", null);
+        var removedBody = await ReadJsonAsync(removed);
+
+        Assert.That(removed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(removedBody.GetProperty("environmentName").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(removedBody.GetProperty("environmentColor").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        var relisted = (await ListFoldersAsync(host)).Single(folder => IdOf(folder) == IdOf(createdBody));
+        Assert.That(relisted.GetProperty("environmentName").ValueKind, Is.EqualTo(JsonValueKind.Null));
+    }
+
+    /// <summary>RN-PASTA-005: as recusas do ambiente da conexão, em `FOLDER_NAME_INVALID` e no campo de cada uma, na criação e na alteração; nada é gravado.</summary>
+    [Test]
+    public async Task Environment_Invalid_Returns422FolderNameInvalidInTheField()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+        var folder = await CreateFolderAsync(host, "Produção");
+
+        var longName = await host.Client.PostAsJsonAsync(FoldersPath, new { name = "QAS", environmentName = new string('a', 31) });
+        var badColor = await host.Client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, FoldersPath) { Content = JsonContent.Create(new { id = IdOf(folder), name = "Produção", environmentName = "Produção", environmentColor = "vermelho" }) });
+
+        var longNameBody = await ReadJsonAsync(longName);
+        var badColorBody = await ReadJsonAsync(badColor);
+        Assert.That(longName.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+        Assert.That(longNameBody.GetProperty("type").GetString(), Is.EqualTo("FOLDER_NAME_INVALID"));
+        Assert.That(longNameBody.GetProperty("errorCodes").GetProperty("EnvironmentName")[0].GetString(), Is.EqualTo("FOLDER_NAME_INVALID"));
+        Assert.That(badColor.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+        Assert.That(badColorBody.GetProperty("type").GetString(), Is.EqualTo("FOLDER_NAME_INVALID"));
+        Assert.That(badColorBody.GetProperty("errorCodes").GetProperty("EnvironmentColor")[0].GetString(), Is.EqualTo("FOLDER_NAME_INVALID"));
+        var listed = await ListFoldersAsync(host);
+        Assert.That(listed, Has.Count.EqualTo(1));
+        Assert.That(listed[0].GetProperty("environmentName").ValueKind, Is.EqualTo(JsonValueKind.Null));
+    }
+
     [Test]
     public async Task Delete_Empty_Returns204()
     {
@@ -423,7 +488,7 @@ public sealed class FoldersTests
         var folders = await ListFoldersAsync(host);
 
         Assert.That(folders.Select(item => item.GetProperty("name").GetString()), Is.EqualTo(new[] { "Alfa", "beta", "Delta", "Gama" }));
-        Assert.That(folders[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "parentID", "name", "createdAt", "updatedAt" }));
+        Assert.That(folders[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "parentID", "name", "environmentName", "environmentColor", "createdAt", "updatedAt" }));
     }
 
     /// <summary>O que foi salvo está no arquivo cifrado, e não na memória da API: fechar o cofre e entrar de novo devolve as pastas.</summary>
