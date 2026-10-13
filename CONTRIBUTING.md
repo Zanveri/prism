@@ -151,8 +151,8 @@ lançamento está em [docs/versionamento.md](docs/versionamento.md).
 
 ## Licença das contribuições
 
-O Prism é distribuído sob a [Apache-2.0](LICENSE). Ao enviar uma contribuição, você a oferece sob essa mesma licença, nos termos da
-cláusula 5 dela (envio de contribuições). Não há CLA nem nada a assinar.
+O Prism é distribuído sob a [GNU GPL versão 3](LICENSE) (`GPL-3.0-only`), com a permissão adicional da seção 7 para o driver da
+IBM descrita no [NOTICE](NOTICE). Ao enviar uma contribuição, você a oferece sob essa mesma licença e com essa mesma permissão.
 
 ## O que não entra no repositório
 
@@ -165,5 +165,5 @@ cláusula 5 dela (envio de contribuições). Não há CLA nem nada a assinar.
   e o `leak-guard` a confere.
 - **Arquivos gerados:** `bin/`, `obj/`, `node_modules/`, `out/`, `release/`, a API publicada em `src/client/resources/api/` e as
   saídas dos roteiros da pipeline (`api-bundles/`, `release-notes.md`).
-- **Dependências com licença incompatível** com a Apache-2.0, ou com termos de redistribuição que o projeto não conferiu. O driver da
+- **Dependências com licença incompatível** com a GPLv3, ou com termos de redistribuição que o projeto não conferiu. O driver da
   IBM, por exemplo, é proprietário e só pode ser referenciado, nunca copiado para o repositório.

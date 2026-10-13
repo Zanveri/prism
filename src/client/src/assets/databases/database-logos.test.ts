@@ -98,9 +98,9 @@ describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)
     }
   });
 
-  it("o README diz de quem são as marcas, que não estão sob a Apache-2.0, que não indicam apoio nem parceria, e como se atende um pedido de retirada", () => {
+  it("o README diz de quem são as marcas, que não estão sob a GPLv3, que não indicam apoio nem parceria, e como se atende um pedido de retirada", () => {
     expect(readme).toContain("As marcas e as logos são dos seus donos");
-    expect(readme).toContain("não estão sob a Apache-2.0");
+    expect(readme).toContain("não estão sob a GPLv3");
     expect(readme).toContain("não indicam apoio, patrocínio nem parceria");
     expect(readme).toMatch(/pedido de retirada/);
     expect(readme).toContain("Ruling 136");
@@ -111,7 +111,7 @@ describe("as logos dos bancos da grade de nova conexão (RN-NAV-005, Ruling 136)
 
     expect(notice).toMatch(/Logos dos bancos de dados/);
     expect(notice).toContain("src/client/src/assets/databases/README.md");
-    expect(notice).toMatch(/não estão sob a Apache-2\.0/);
+    expect(notice).toMatch(/não estão sob a GPLv3/);
     expect(notice).toMatch(/não indicam apoio, patrocínio nem parceria/);
   });
 });

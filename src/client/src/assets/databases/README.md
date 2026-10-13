@@ -7,7 +7,7 @@ sem permissão escrita dos fabricantes e assume o risco (**Ruling 136**, 2026-10
 ## Aviso
 
 **As marcas e as logos são dos seus donos** (a tabela abaixo diz quem é o dono de cada uma). Elas aparecem no Prism só
-para identificar o banco com que se conecta, **não estão sob a Apache-2.0** que cobre o código do Prism e
+para identificar o banco com que se conecta, **não estão sob a GPLv3** que cobre o código do Prism e
 **não indicam apoio, patrocínio nem parceria** do dono da marca com o Prism ou com a Zanveri.
 
 Um **pedido de retirada** de um fabricante é atendido: apaga-se o arquivo da logo desta pasta e a linha dela em

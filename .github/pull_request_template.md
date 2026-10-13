@@ -27,4 +27,4 @@ A issue que este pull request resolve (issue primeiro: CONTRIBUTING.md): #
 - [ ] Mudou um `PackageReference`: rodei `dotnet restore src/api/Prism.slnx --force-evaluate` e os `packages.lock.json` estão no commit.
 - [ ] A documentação acompanha, quando a mudança altera um comando, uma pasta ou uma regra.
 - [ ] Não há segredo, dado de cliente, caminho de máquina, nome de usuário do sistema nem dado de infraestrutura nos arquivos, nas capturas nem nas mensagens de commit.
-- [ ] Entendo que a contribuição entra sob a Apache-2.0.
+- [ ] Entendo que a contribuição entra sob a GPL-3.0-only, com a permissão adicional do NOTICE.

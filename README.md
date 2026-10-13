@@ -12,9 +12,9 @@
 > **Prism** is a desktop database client for people who work every day with Informix, Db2 and PostgreSQL.
 > Its goal is to be faster and more direct than DBeaver at the same tasks: open, connect, browse objects, run SQL and see the result.
 > It is an Electron app that starts a local ASP.NET Core API on `127.0.0.1`. Each user has an encrypted vault (Argon2id key derivation, AES-256-GCM) with their folders and connections.
-> Status: beta. The first public version, [v0.1.0-beta.1](https://github.com/Zanveri/prism/releases/tag/v0.1.0-beta.1), is out. PostgreSQL, Db2 and Informix work; the Db2 and Informix drivers are not bundled: Prism downloads them on demand, under IBM's license. Packages are not code-signed.
+> Status: early, with stable releases and betas on the [releases page](https://github.com/Zanveri/prism/releases). PostgreSQL, Db2 and Informix work; the Db2 and Informix drivers are not bundled: Prism downloads them on demand, under IBM's license. Packages are not code-signed.
 > Releases (Windows, Linux and macOS packages) are published on the GitHub releases page of the project, with a `SHA256SUMS` file; every merge into `develop` publishes a beta, and the app offers betas only when "Receive beta versions" is on.
-> The documentation is in Brazilian Portuguese: <https://zanveri.github.io/prism/>. License: Apache-2.0.
+> The documentation is in Brazilian Portuguese: <https://zanveri.github.io/prism/>. License: GPL-3.0-only.
 
 ## O que é e para quem
 
@@ -254,7 +254,10 @@ app empacotado sem tocar nos dados de ninguém). O log do processo principal tra
 
 ## Licença
 
-Apache-2.0. O texto está em [LICENSE](LICENSE) e o aviso de copyright em [NOTICE](NOTICE).
+GNU GPL versão 3 (`GPL-3.0-only`). Qualquer pessoa ou empresa pode usar, estudar, modificar e redistribuir o Prism, inclusive
+comercialmente, desde que quem distribuir uma cópia, modificada ou não, entregue também o código-fonte completo sob a mesma licença e
+mantenha os avisos. O texto está em [LICENSE](LICENSE); o aviso de copyright e a permissão adicional da seção 7 para o driver da
+IBM estão em [NOTICE](NOTICE). As marcas e as logos (a do Prism, a da Zanveri e as dos bancos) não estão sob a GPL.
 
 ## Como contribuir
 

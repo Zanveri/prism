@@ -5,7 +5,7 @@
   "description": "Prism: casca Electron e interface",
   "productName": "Prism",
   "author": "Zanveri",
-  "license": "Apache-2.0",
+  "license": "GPL-3.0-only",
   "desktopName": "prism.desktop",
   "main": "out/main/main.js",
   "scripts": {

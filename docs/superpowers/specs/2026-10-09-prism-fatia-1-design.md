@@ -615,7 +615,9 @@ atualização automática, assinatura de código, roteiro de aceite completo em 
 Pedido do dono em 2026-10-09: o Prism será publicado como projeto de código aberto, sem expor
 a infraestrutura da Zanveri, com pacotes para todas as plataformas gerados na pipeline.
 
-- **RN-ABERTO-001.** Licença Apache-2.0: `LICENSE` e `NOTICE` na raiz e em todo pacote, com os
+- **RN-ABERTO-001.** Licença GNU GPL versão 3 (`GPL-3.0-only`, decisão do dono em 2026-10-13, no lugar
+  da Apache-2.0), com a permissão adicional da seção 7 para combinar o Prism com o driver da IBM:
+  `LICENSE` e `NOTICE` na raiz e em todo pacote, com os
   textos de licença das fontes e do .NET que vão embutidos. Nenhum driver proprietário vai no
   pacote: o da IBM é baixado pelo usuário, que aceita a licença do fabricante (seção 16).
 - **RN-ABERTO-002.** Quem clona o repositório compila e testa só com fontes públicas (nuget.org
@@ -1184,7 +1186,7 @@ Navegação:
   tema, ela fica sobre uma ficha de contraste: clara nos temas escuros, escura nos claros, Ruling 140). A Zanveri decidiu usá-las mesmo sem permissão escrita
   dos fabricantes e assume o risco (Ruling 136): cada arquivo tem a origem anotada junto dele, o
   `README.md` da pasta das logos e o `NOTICE` dizem que as marcas são dos seus donos, não estão
-  sob a Apache-2.0 e não indicam apoio nem parceria, e um pedido de retirada de um fabricante é
+  sob a GPLv3 e não indicam apoio nem parceria, e um pedido de retirada de um fabricante é
   atendido (a logo dá lugar à ficha colorida de hoje, PG, DB2, IFX).
 - **RN-NAV-006.** A lista de drivers, com tudo o que a tela de Drivers tinha (instalar,
   cancelar, remover, estado, reinício), fica em Configurações › Drivers. O 422

@@ -1,6 +1,18 @@
 Prism
 Copyright 2026 Zanveri
 
+O Prism é software livre: você pode redistribuí-lo e modificá-lo nos termos da GNU General Public
+License, versão 3 (GPL-3.0-only), publicada pela Free Software Foundation. O texto está em LICENSE.
+Ele é distribuído na esperança de ser útil, mas SEM NENHUMA GARANTIA, nem a implícita de
+COMERCIABILIDADE ou de ADEQUAÇÃO A UM FIM ESPECÍFICO. Veja a licença para os detalhes.
+
+Additional permission under GNU GPL version 3 section 7
+
+If you modify this Program, or any covered work, by linking or combining it with the IBM Data
+Server Driver for .NET (IBM.Data.Db2, or a modified version of that library), containing parts
+covered by the terms of IBM's license, the licensors of this Program grant you additional
+permission to convey the resulting work.
+
 Logos dos bancos de dados
 -------------------------
 
@@ -8,7 +20,7 @@ As logos em src/client/src/assets/databases/ são marcas dos seus donos: Postgre
 Association of Canada (PostgreSQL), Hipp, Wyrick & Company, Inc. (SQLite), Oracle Corporation
 (MySQL), MariaDB Corporation Ab (MariaDB), DuckDB Foundation (DuckDB) e ClickHouse, Inc.
 (ClickHouse). Elas aparecem no Prism só para identificar o banco com que se conecta.
-As logos não estão sob a Apache-2.0 que cobre o Prism e não indicam apoio, patrocínio nem parceria
+As logos não estão sob a GPLv3 que cobre o Prism e não indicam apoio, patrocínio nem parceria
 dos donos com o Prism ou com a Zanveri. A origem de cada arquivo, o dono da marca e a regra de uso
 estão em src/client/src/assets/databases/README.md. Um pedido de retirada de um dono é atendido
 trocando a logo pela ficha do app.
