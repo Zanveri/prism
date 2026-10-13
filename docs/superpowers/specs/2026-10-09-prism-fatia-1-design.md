@@ -1902,3 +1902,21 @@ Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`
   catálogo daquele banco conhece: com o esquema (`esquema.tabela`) ou sem ele (o esquema padrão da
   sessão), com ou sem aspas, nas regras de nome de cada banco. Fora de texto entre aspas simples e de
   comentário. Soltar o Ctrl ou tirar o ponteiro do nome desfaz o destaque.
+
+### Renomear e duplicar no navegador
+
+Pedido do dono em 2026-10-13: "F2 para renomear pastas e conexões, além da possibilidade de
+duplicar a conexão" pelo botão direito.
+
+- **RN-NAV-009.** No navegador, F2 na linha de uma pasta ou de uma conexão abre o "Renomear"
+  dela. A pasta usa o diálogo de "Renomear" que já existe. A conexão ganha um diálogo só com o
+  nome, que grava pelo `PATCH api/user/connections` sem mudar mais nada, senha incluída. As
+  recusas são as de sempre (nome repetido, nome inválido), no próprio diálogo. O menu de contexto
+  da conexão ganha "Renomear" (F2), e o "Renomear" da pasta passa a mostrar o atalho F2.
+- **RN-CONN-016.** "Duplicar conexão" no menu de contexto da conexão cria, na mesma pasta, uma
+  cópia com todos os campos e a senha salva. A senha é copiada dentro do cofre e não passa pela
+  tela. O nome da cópia é "<nome> (cópia)"; se esse já existir, "(cópia 2)", "(cópia 3)" e assim
+  por diante, cortando o nome original para caber no limite do nome. A cópia nasce desconectada e
+  aparece selecionada no navegador, e nada abre sozinho. Rota:
+  `POST api/user/connections/{id}/duplicate` → 201 com a conexão nova, no formato do
+  `GET api/user/connections/{id}`; 404 `CONNECTION_NOT_FOUND`. O log registra os IDs, nunca a senha.
