@@ -10,7 +10,8 @@ import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/
 import { saveShortcut } from "../_lib/saved-scripts";
 import { recall, remember } from "../_lib/tab-memory";
 import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
-import type { QueryTab } from "../_lib/workbench-model";
+import { inDatabase } from "../_lib/navigator-model";
+import type { QueryTab, TableView } from "../_lib/workbench-model";
 import { EditorToolbar } from "./editor-toolbar";
 import { ResultActions } from "./result-actions";
 import { ResultPanel } from "./result-panel";
@@ -31,6 +32,8 @@ type QueryTabPanelProps = {
   onSave: (tabId: string, mode: "save" | "saveAs") => void;
   /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu. */
   onAssignConnection: (tabId: string, connectionId: string) => void;
+  /** RN-LINK-001: o Ctrl+clique no nome de uma tabela abre a aba dela nos Registros, na conexão e no banco desta aba. Estável. */
+  onOpenTable: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
 };
 
 /** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
@@ -52,7 +55,7 @@ function NoConnectionBar({ tabId, onAssign }: { tabId: string; onAssign: (tabId:
  * seguem montados, e ficam sem altura em vez de saírem da página. A divisão fica guardada fora do
  * componente (`tab-memory.ts`, pelo id da aba): o que desmonta e volta, e o bloqueio por inatividade, que troca o executor, a devolvem.
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection, onOpenTable }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
@@ -101,6 +104,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     onEdited(tab.id);
   }, [runner, onEdited, tab.id]);
 
+  const connectionId = tab.connectionId;
+  const openTable = connectionId === null ? undefined : (table: { schema: string; name: string }) => onOpenTable(connectionId, { ...table, view: "data", ...inDatabase(tab.database) });
+
   return (
     <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
       {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} onAssign={onAssignConnection} /> : null}
@@ -123,6 +129,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             onChange={(sql) => onSqlChange(tab.id, { sql })}
             onRunnableChange={setRunnable}
             onEdited={handleEdited}
+            onOpenTable={openTable}
           />
         </div>
 

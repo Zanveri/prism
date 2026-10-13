@@ -35,6 +35,11 @@ const reservedWords: ReadonlySet<string> = new Set([
   ..."authorization binary collation concurrently current_schema freeze isnull notnull overlaps similar tablesample verbose".split(" "),
 ]);
 
+/** A palavra que o servidor não lê como nome sem aspas (`select`, `user`, `order`): a lista é a de `reservedWords`. */
+export function isReservedWord(word: string): boolean {
+  return reservedWords.has(word.toLowerCase());
+}
+
 /**
  * O nome como vai ao SQL (RN-TABELA-002): cru só quando o banco o lê como está escrito, e por `quoteIdentifier`, a função que o resto do app já usa, em todo outro
  * caso. O PostgreSQL e o Informix dobram o nome sem aspas para minúsculas, então vai cru o nome simples em minúsculas; o Db2 dobra para MAIÚSCULAS, então vai cru o

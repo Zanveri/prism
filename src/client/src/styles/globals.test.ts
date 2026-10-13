@@ -47,6 +47,7 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
       "syntax-string": "#5ed3a3",
       "syntax-number": "#f2b644",
       "syntax-comment": "#8e99a8",
+      link: "#7db2ff",
     });
     expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort());
   });
@@ -163,9 +164,15 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   // com o motivo conferido logo abaixo: a cor que o tema herdaria do esquema dele não passa em alguma superfície dele.
   const fromCanvas = ["background", "panel", "raised", "selected", "selection", "border", "border-strong", "ink", "body", "muted", "subtle", ...syntaxText];
   const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [] };
+  // RN-LINK-001: o azul de link de cada tema (o canvas não o desenha): o do Prism nos dois do Prism, o da paleta do tema nos outros quatro.
+  const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7" } as const;
 
-  it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas e as da lista de trocadas, nem uma a mais", (id) => {
-    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, ...swapped[id]].sort());
+  it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
+    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...swapped[id]].sort());
+  });
+
+  it.each(extraThemes)("o azul de link do tema %s é o da paleta dele (o do GitHub Claro, escurecido o mínimo para passar na linha selecionada)", (id) => {
+    expect(themeBlock(id).overrides.link).toBe(ownLink[id]);
   });
 
   it.each(extraThemes.flatMap((id) => swapped[id].map((token) => [id, token] as const)))("o tema %s troca a ficha %s porque a herdada do esquema não passa em alguma superfície dele, e a trocada passa em todas", (id, token) => {
@@ -204,6 +211,11 @@ describe.each(themes)("contraste do tema $name (WCAG AA: 4,5:1 para texto, sem e
   // Selecionar para executar é a interação central do editor: o que está selecionado tem de continuar legível.
   it.each(syntaxText.flatMap((text) => ([...surfaces, "selection"] as const).map((surface) => [text, surface] as const)))("sintaxe %s sobre %s", (text, surface) => {
     expect(contrast(palette[text], palette[surface])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // RN-LINK-001: o nome da tabela com o Ctrl apertado, no editor (sobre o fundo, a linha do cursor e a seleção) e onde mais um link aparecer.
+  it.each(([...surfaces, "selection"] as const).map((surface) => [surface] as const))("o azul de link sobre %s", (surface) => {
+    expect(contrast(palette.link, palette[surface])).toBeGreaterThanOrEqual(4.5);
   });
 
   it.each(Object.entries(editorOnSelection))("no editor, %s por cima da seleção", (_what, token) => {

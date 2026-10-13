@@ -7,12 +7,16 @@ import { Decoration, drawSelection, EditorView, highlightActiveLine, highlightAc
 import { tags } from "@lezer/highlight";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { editorFont, type EditorPreferences } from "@/app/settings/_lib/editor-style";
 import { resolveScheme, subscribeSystemScheme, systemPrefersLight } from "@/app/settings/_lib/theme";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 
+import type { CachedLevel } from "../_lib/navigator-search";
 import { cachedLevels, sqlCompletion } from "../_lib/sql-completion";
+import { tableLinks } from "../_lib/table-link-extension";
+import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type TableLink } from "../_lib/table-links";
 import { liveEditors } from "../_lib/live-editors";
 import { keywordCase } from "../_lib/sql-keyword-case";
 import { hasStatement, statementAt } from "../_lib/sql-statements";
@@ -55,6 +59,9 @@ const editorTheme = (preferences: EditorPreferences, dark: boolean) => {
       ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
       ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { backgroundColor: "var(--color-selection)" },
       ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": { backgroundColor: "transparent", outline: "1px solid var(--color-subtle)" },
+      // RN-LINK-001: o nome de uma tabela com o Ctrl apertado. A cor de link do tema também por cima da cor de sintaxe do que estiver dentro (o nome entre aspas).
+      ".cm-table-link": { color: "var(--color-link)", textDecoration: "underline", textUnderlineOffset: "3px", cursor: "pointer" },
+      ".cm-table-link *": { color: "var(--color-link)", cursor: "pointer" },
       ".cm-sql-error": { textDecoration: "underline wavy var(--color-danger)", textDecorationSkipInk: "none", textUnderlineOffset: "3px" },
 
       // A lista de sugestões (RN-CONFIG-004) é o que flutua, como a lista do Select: fundo elevado, borda forte, sombra. Os seletores
@@ -195,14 +202,22 @@ type SqlEditorProps = {
    * deixa de valer, esteja a marca na tela ou o comando ainda rodando.
    */
   onEdited: () => void;
+  /** RN-LINK-001: o Ctrl+clique no nome de uma tabela ou visão que o catálogo do banco da aba conhece. Sem ele (a aba sem conexão), nada vira link. */
+  onOpenTable?: (table: { schema: string; name: string }) => void;
 };
+
+/** O macOS usa o ⌘ onde os outros usam o Ctrl (RN-LINK-001). */
+const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+
+/** Os níveis da árvore são os mesmos objetos enquanto nenhuma consulta deles mudou: o catálogo dos links só é refeito quando algum muda. */
+const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.length === b.length && a.every((level, index) => level.key === b[index].key && level.nodes === b[index].nodes);
 
 /**
  * O editor de SQL (CodeMirror 6). O texto não é estado do React: mora no editor, que avisa quem o
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited, onOpenTable }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
@@ -227,6 +242,16 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const emitEdited = useEffectEvent(() => onEdited());
   // Os níveis da árvore são lidos na hora do pedido, da conexão desta aba (sem busca nenhuma: só o cache).
   const readLevels = useEffectEvent(() => (connectionId === null ? [] : cachedLevels(queryClient, connectionId, database)));
+  // RN-LINK-001: o catálogo é o do autocompletar (o cache da árvore do banco da aba, sem consulta nova), e o esquema padrão sai do usuário da conexão.
+  const catalogCache = useRef<{ levels: CachedLevel[]; catalog: LinkCatalog } | null>(null);
+  const findLink = useEffectEvent((sql: string, offset: number, tokens: Parameters<typeof tableLinkAt>[5]): TableLink | null => {
+    if (connectionId === null || onOpenTable === undefined) return null;
+    const levels = readLevels();
+    if (catalogCache.current === null || !sameLevels(catalogCache.current.levels, levels)) catalogCache.current = { levels, catalog: linkCatalog(levels) };
+    const userName = queryClient.getQueryData<{ id: string; userName: string }[]>(connectionsQuery.queryKey)?.find((connection) => connection.id === connectionId)?.userName;
+    return tableLinkAt(sql, offset, engineNow.current, catalogCache.current.catalog, defaultSchemasOf(engineNow.current, userName), tokens);
+  });
+  const openLink = useEffectEvent((link: TableLink) => onOpenTable?.({ schema: link.schema, name: link.name }));
   const completionFor = useEffectEvent(() => sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels() }));
 
   useEffect(() => {
@@ -267,6 +292,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           tabSlot.of(tabSettings(initial.editor.tabSize)),
           caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine) : []),
           errorMark,
+          tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
           // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco.
           Prec.highest(keymap.of([{ key: "Mod-Enter", run: (target) => run(target.state) }])),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
