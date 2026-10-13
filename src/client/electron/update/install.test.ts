@@ -11,6 +11,10 @@ describe("o instalador do Windows (RN-ATUALIZA-006)", () => {
     expect(installerArguments).toEqual(["--updated", "/S", "--force-run"]);
   });
 
+  it("nenhum escolhe o modo: o instalador atualiza a instalação que existe, no modo dela (RN-INSTALA-002); um /currentuser recusaria a de todos", () => {
+    for (const mode of ["/allusers", "/currentuser"]) expect(installerArguments).not.toContain(mode);
+  });
+
   function fakeSpawn() {
     const child = Object.assign(new EventEmitter(), { unref: vi.fn() });
     const spawn = vi.fn<SpawnInstaller>(() => child);

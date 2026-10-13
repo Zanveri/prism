@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { UpdateOffer, UpdateState } from "../../../electron/update/update-state";
 import { withProgress } from "./update-store";
 
-const offer: UpdateOffer = { checkId: 7, current: "0.1.0", format: "nsis", omitted: 0, releases: [{ version: "0.3.0", prerelease: false, date: "2026-10-10", notes: "- Coisa nova.", sums: [] }] };
+const offer: UpdateOffer = { checkId: 7, current: "0.1.0", format: "nsis", forAllUsers: false, omitted: 0, releases: [{ version: "0.3.0", prerelease: false, date: "2026-10-10", notes: "- Coisa nova.", sums: [] }] };
 const downloading: UpdateState = { status: "downloading", receivedBytes: 0, totalBytes: null, ...offer };
 
 describe("withProgress: o avanço do download entra no estado sem trocar as notas", () => {

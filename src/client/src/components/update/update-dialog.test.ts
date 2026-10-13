@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buttonLabeled, elementsOf } from "@/lib/testing/react-tree";
 
 import type { UpdateOffer, UpdateState } from "../../../electron/update/update-state";
-import { focusIsElsewhere, installsRightAway, UpdateDialogView, type UpdateDialogViewProps } from "./update-dialog";
+import { focusIsElsewhere, installsRightAway, noticeToast, UpdateDialogView, type UpdateDialogViewProps } from "./update-dialog";
 
 // O `Dialog` de verdade desenha num portal em `document.body`, que o renderizador de servidor não tem: aqui ele só
 // devolve o que receberia, para o teste ler o conteúdo. (O `useToast` não é chamado pela vista.)
@@ -20,6 +20,7 @@ const offer: UpdateOffer = {
   checkId: 1,
   current: "0.1.0",
   format: "nsis",
+  forAllUsers: false,
   omitted: 0,
   releases: [
     { version: "0.3.0", prerelease: false, date: "2026-10-10", notes: "### Adicionado\n\n- Árvore de objetos do **Db2**.", sums: [{ file: "Prism-0.3.0-win-x64.exe", sha256: sum }] },
@@ -79,7 +80,17 @@ describe("o diálogo de versão nova (RN-ATUALIZA-003)", () => {
 
   it("antes de baixar, diz o que 'Atualizar agora' vai fazer nesta instalação", () => {
     expect(markup).toContain("o Prism fecha, instala a versão nova e abre de novo");
+    expect(markup).not.toContain("administrador");
     expect(render({ status: "available", ...offer, format: "deb" })).toContain("deixa-o na sua pasta de downloads");
+  });
+
+  it("instalado para todos os usuários: avisa que o Windows vai pedir a permissão de administrador, e o que acontece sem ela (RN-INSTALA-003)", () => {
+    const forAll = render({ status: "available", ...offer, forAllUsers: true });
+
+    expect(forAll).toContain("o Windows pede a permissão de administrador");
+    expect(forAll).toContain("Sem ela, nada muda");
+    expect(render({ status: "installing", ...offer, forAllUsers: true })).toContain("o Windows pede a permissão de administrador");
+    expect(render({ status: "installing", ...offer })).not.toContain("administrador");
   });
 
   it("sem pacote para este sistema, 'Atualizar agora' fica desligado e a tela diz por quê", () => {
@@ -289,5 +300,25 @@ describe("o foco que está em outro diálogo, ou num aviso, não é deste diálo
   it("com este diálogo já fora da tela (sem painel), o foco em outro diálogo continua sendo de lá", () => {
     expect(focusIsElsewhere(element("outro diálogo"), null)).toBe(true);
     expect(focusIsElsewhere(element("a tela de trás"), null)).toBe(false);
+  });
+});
+
+describe("o aviso da atualização que não foi instalada (RN-INSTALA-003)", () => {
+  it("instalado para todos: diz a versão que não entrou, a de agora, e que a permissão de administrador faltou", () => {
+    const { title, description } = noticeToast({ version: "0.3.1", current: "0.3.0", forAllUsers: true });
+
+    expect(title).toBe("A versão 0.3.1 não foi instalada.");
+    expect(description).toContain("O Prism continua na versão 0.3.0.");
+    expect(description).toContain("permissão de administrador");
+    expect(description).toContain("Verificar atualizações");
+  });
+
+  it("só do usuário: diz que o instalador terminou sem atualizar, sem falar de administrador", () => {
+    const { title, description } = noticeToast({ version: "0.3.1", current: "0.3.0", forAllUsers: false });
+
+    expect(title).toBe("A versão 0.3.1 não foi instalada.");
+    expect(description).toContain("O Prism continua na versão 0.3.0.");
+    expect(description).not.toContain("administrador");
+    expect(description).toContain("Verificar atualizações");
   });
 });

@@ -46,6 +46,8 @@ export const updateCopy = {
     // O que "Atualizar agora" faz, dito antes de baixar (RN-ATUALIZA-006).
     next: {
       nsis: "Depois de baixar e conferir, o Prism fecha, instala a versão nova e abre de novo. O texto das abas de SQL abertas não é salvo.",
+      // RN-INSTALA-003: a instalação para todos os usuários pede a permissão de administrador a cada atualização.
+      nsisForAll: "O Prism está instalado para todos os usuários: depois de baixar e conferir, ele fecha e o Windows pede a permissão de administrador. Com ela, a versão nova é instalada e o Prism abre de novo. Sem ela, nada muda, e ele abre na versão de agora. O texto das abas de SQL abertas não é salvo.",
       manual: "O Prism baixa e confere o pacote e, quando você mandar, deixa-o na sua pasta de downloads e a mostra. A instalação é feita por você.",
       unavailable: "Não há pacote desta versão para o sistema e a arquitetura deste computador.",
     },
@@ -61,10 +63,18 @@ export const updateCopy = {
 
     installing: "Instalando a versão nova.",
     installingDetail: "O Prism vai fechar e abrir de novo sozinho. Não é preciso fazer nada.",
+    installingDetailForAll: "O Prism vai fechar, e o Windows pede a permissão de administrador. Com ela, a versão nova é instalada e o Prism abre de novo.",
 
     failed: "A atualização não foi concluída.",
 
     delivered: (fileName: string) => `O pacote conferido está na sua pasta de downloads: ${fileName}`,
+  },
+
+  // A atualização do Windows que não foi instalada (RN-INSTALA-003): o aviso ao abrir de novo na versão de antes.
+  notice: {
+    title: (version: string) => `A versão ${version} não foi instalada.`,
+    forAll: (current: string) => `O Prism continua na versão ${current}. Ele está instalado para todos os usuários, e a atualização pede a permissão de administrador do Windows. Para tentar de novo, use “Verificar atualizações”.`,
+    forMe: (current: string) => `O Prism continua na versão ${current}. O instalador terminou sem atualizá-lo. Para tentar de novo, use “Verificar atualizações”.`,
   },
 
   // O canal beta (RN-ATUALIZA-010): a opção em Configurações › Atualizações e o que o diálogo diz de uma versão beta.

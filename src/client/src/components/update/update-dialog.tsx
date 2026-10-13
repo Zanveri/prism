@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Button, Dialog, FormMessage, RefreshIcon, StatusBadge, useToast } from "@/components/ui";
 import { getBridge } from "@/lib/api/bridge";
 
-import type { UpdateState } from "../../../electron/update/update-state";
+import type { UpdateNotice, UpdateState } from "../../../electron/update/update-state";
 import { ReleaseNotes } from "./release-notes";
 import { adoptUpdateState, dismissUpdate, useUpdateSnapshot } from "./update-store";
 import { updateCopy } from "./update.copy";
@@ -32,6 +32,11 @@ export function installsRightAway(state: UpdateState): boolean {
   return state.status === "ready" && state.format === "nsis";
 }
 
+/** O aviso, ao abrir, da atualização do Windows que não foi instalada (RN-INSTALA-003): a versão que não entrou e a de agora. */
+export function noticeToast({ version, current, forAllUsers }: UpdateNotice): { title: string; description: string } {
+  return { title: updateCopy.notice.title(version), description: forAllUsers ? updateCopy.notice.forAll(current) : updateCopy.notice.forMe(current) };
+}
+
 export type UpdateDialogViewProps = {
   state: OfferState;
   /** A caixa "Não verificar ao abrir" (RN-ATUALIZA-003 e 007). */
@@ -55,7 +60,7 @@ export type UpdateDialogViewProps = {
  * marca (RN-ATUALIZA-010).
  */
 export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLater, onSkip, onCancel, onInstall, onNoStartupCheckChange }: UpdateDialogViewProps) {
-  const { status, current, format, releases } = state;
+  const { status, current, format, forAllUsers, releases } = state;
   const [latest] = releases;
   const downloading = status === "downloading";
   const installing = status === "installing";
@@ -127,7 +132,7 @@ export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLate
           </p>
           {offering ? (
             <p data-update-next className="text-sm text-ink">
-              {format === null ? copy.next.unavailable : manual ? copy.next.manual : copy.next.nsis}
+              {format === null ? copy.next.unavailable : manual ? copy.next.manual : forAllUsers ? copy.next.nsisForAll : copy.next.nsis}
             </p>
           ) : null}
         </div>
@@ -168,7 +173,7 @@ export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLate
         {installing ? (
           <FormMessage tone="success">
             <p className="font-semibold">{copy.installing}</p>
-            <p className="mt-1">{copy.installingDetail}</p>
+            <p className="mt-1">{forAllUsers ? copy.installingDetailForAll : copy.installingDetail}</p>
           </FormMessage>
         ) : null}
 
@@ -254,6 +259,26 @@ export function UpdateDialog() {
   const [busy, setBusy] = useState(false);
   const [noStartupCheck, setNoStartupCheck] = useState(false);
   const open = state.status !== "none" && state.checkId !== dismissed;
+
+  // A atualização que não foi instalada (RN-INSTALA-003): o processo principal guarda o aviso, e a primeira janela que pergunta
+  // o leva, uma vez. O aviso entra na fila mesmo se o efeito já foi desfeito (o `StrictMode` monta duas vezes, e a segunda
+  // pergunta volta vazia): quem o mostra é o `ToastProvider`, que continua montado. Sem a ponte (a tela fora do Electron), não há aviso.
+  useEffect(() => {
+    let updates;
+    try {
+      ({ updates } = getBridge());
+    } catch {
+      return;
+    }
+    updates.takeNotice().then(
+      (notice) => {
+        if (notice === null) return;
+        const { title, description } = noticeToast(notice);
+        toast.warning(title, description);
+      },
+      () => undefined,
+    );
+  }, [toast]);
 
   // A caixa mostra a preferência gravada, lida cada vez que o diálogo abre.
   useEffect(() => {
