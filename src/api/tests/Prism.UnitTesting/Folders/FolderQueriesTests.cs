@@ -17,7 +17,7 @@ public sealed class FolderQueriesTests
 
     private FolderQueries CreateQueries(IReadOnlyList<VaultFolderRecord> folders, IReadOnlyList<VaultConnectionRecord>? connections = null)
     {
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", folders, connections ?? [], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", folders, connections ?? [], [], VaultWorkspaceRecord.Empty)));
 
         return new FolderQueries(_vault.Object);
     }
