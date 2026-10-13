@@ -1,3 +1,5 @@
+using Prism.Infrastructure.Databases.Models;
+
 namespace Prism.Application.DatabaseSessions.Models.Dtos;
 
 /// <summary>
@@ -16,4 +18,10 @@ public sealed record QueryResultDto
     public IReadOnlyList<int[]>? TruncatedCells { get; init; }
     public long? RowsAffected { get; init; }
     public long? TotalRows { get; init; }
+
+    /// <summary>RN-EDIT-002: o resultado a que a página pertence (muda a cada execução da sessão); nulo nas linhas afetadas.</summary>
+    public Guid? ResultID { get; init; }
+
+    /// <summary>RN-EDIT-002: `{ known: false }` enquanto só o catálogo sabe, ou `{ known: true, reason }` quando o resultado inteiro já se sabe só leitura.</summary>
+    public ResultEditability? Editable { get; init; }
 }

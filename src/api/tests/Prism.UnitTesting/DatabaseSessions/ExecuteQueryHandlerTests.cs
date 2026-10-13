@@ -22,7 +22,8 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        var page = new QueryPage([new QueryColumn("numero", "integer", "number"), new QueryColumn("observacao", "text", "text")], [["1001", "Pedido 1"], ["1007", null]], false, 12, [[1, 1]], 1000);
+        var resultID = Guid.CreateVersion7();
+        var page = new QueryPage([new QueryColumn("numero", "integer", "number", new ColumnOrigin(16384, 1)), new QueryColumn("observacao", "text", "text")], [["1001", "Pedido 1"], ["1007", null]], false, 12, [[1, 1]], 1000, resultID, ResultEditability.ReadOnly("o comando gravou e devolveu linhas"));
         _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 15)));
         var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
 
@@ -38,6 +39,10 @@ public sealed class ExecuteQueryHandlerTests
         Assert.Equal(page.TruncatedCells, result.Value.TruncatedCells);
         Assert.Null(result.Value.RowsAffected);
         Assert.Equal(1000, result.Value.TotalRows);
+
+        // RN-EDIT-002: o resultado e o que se sabe da edição dele vão com a página; a origem das colunas fica na API.
+        Assert.Equal(resultID, result.Value.ResultID);
+        Assert.Equal(ResultEditability.ReadOnly("o comando gravou e devolveu linhas"), result.Value.Editable);
         _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
         _databaseSessionService.VerifyNoOtherCalls();
     }

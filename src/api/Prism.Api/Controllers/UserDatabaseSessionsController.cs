@@ -1,12 +1,14 @@
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Prism.Application.DatabaseSessions.Features.ApplyEdits;
 using Prism.Application.DatabaseSessions.Features.CancelQuery;
 using Prism.Application.DatabaseSessions.Features.CloseDatabaseSession;
 using Prism.Application.DatabaseSessions.Features.CountQuery;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
 using Prism.Application.DatabaseSessions.Features.GetDatabases;
+using Prism.Application.DatabaseSessions.Features.GetEditTarget;
 using Prism.Application.DatabaseSessions.Features.GetDatabaseProperties;
 using Prism.Application.DatabaseSessions.Features.GetSchemaDiagram;
 using Prism.Application.DatabaseSessions.Features.GetSchemaObjects;
@@ -18,6 +20,7 @@ using Prism.Application.DatabaseSessions.Features.GetTableIndexes;
 using Prism.Application.DatabaseSessions.Features.GetTableReferencedBy;
 using Prism.Application.DatabaseSessions.Features.GetViewDefinition;
 using Prism.Application.DatabaseSessions.Features.OpenDatabaseSession;
+using Prism.Application.DatabaseSessions.Features.PreviewEdits;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
 
@@ -196,6 +199,39 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     public async Task<IActionResult> CountQuery(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new CountQueryCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-002, 003 e 010: o corpo leva `resultID` e, se a tela tiver, `catalogSessionID` (a sessão da árvore da mesma conexão).</summary>
+    [HttpPost("{id:guid}/queries/edit-target")]
+    public async Task<IActionResult> GetEditTarget(Guid id, [FromBody] GetEditTargetCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-005 e 012: o "Salvar". O corpo leva `resultID` e `changes`; a resposta é `{ applied }`.</summary>
+    [HttpPost("{id:guid}/queries/edits")]
+    public async Task<IActionResult> ApplyEdits(Guid id, [FromBody] ApplyEditsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-008: o "Ver SQL" das mesmas alterações, sem executar nada.</summary>
+    [HttpPost("{id:guid}/queries/edits/preview")]
+    public async Task<IActionResult> PreviewEdits(Guid id, [FromBody] PreviewEditsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
         if (result.IsFailure)
             return result.ToIActionResult();
 
