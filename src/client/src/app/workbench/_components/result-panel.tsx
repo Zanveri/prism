@@ -79,10 +79,6 @@ type RecordsMode = {
   waiting: boolean;
   /** A pessoa desconectou a conexão e nada foi carregado: a área diz que está desconectada, e "Atualizar" conecta e carrega. */
   disconnected: boolean;
-  /** RN-EDIT-001 a 004: a edição das células, entregue à grade. */
-  editing?: GridEditing;
-  /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
-  banner?: ReactNode;
 };
 
 type ResultPanelProps = {
@@ -112,6 +108,10 @@ type ResultPanelProps = {
    * lembradas por ele (`tab-memory.ts`) e voltam com a vista. A área da aba de consulta não desmonta com a aba aberta, e as guarda só no próprio estado.
    */
   tabId?: string;
+  /** RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros e na aba de consulta). */
+  editing?: GridEditing;
+  /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
+  banner?: ReactNode;
 };
 
 /**
@@ -119,7 +119,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner }: ResultPanelProps) {
   const running = state.status === "running";
   // O que está na tela: o estado ou, enquanto um comando novo roda, o resultado que já estava lá
   // (linhas, linhas afetadas ou um erro de SQL). Só a API aceitar o comando novo o substitui;
@@ -198,7 +198,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           </p>
         ) : rows !== null ? (
           <>
-            {records?.banner ?? null}
+            {banner ?? null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
             <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
               <ResultGrid
@@ -218,7 +218,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
                 onZoom={zoomTo}
-                editing={records?.editing}
+                editing={editing}
               />
             </div>
 

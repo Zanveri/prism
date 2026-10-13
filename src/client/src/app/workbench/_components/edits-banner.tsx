@@ -1,7 +1,7 @@
 import { Button, LockIcon } from "@/components/ui";
 
-import type { SaveFailure } from "../../_lib/record-edits";
-import { recordsCopy } from "../../_lib/records.copy";
+import type { SaveFailure } from "../_lib/record-edits";
+import { recordsCopy } from "../_lib/records.copy";
 
 const copy = recordsCopy.edit;
 

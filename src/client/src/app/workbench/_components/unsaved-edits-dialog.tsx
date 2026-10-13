@@ -1,6 +1,6 @@
 import { Button, Dialog } from "@/components/ui";
 
-import { recordsCopy } from "../../_lib/records.copy";
+import { recordsCopy } from "../_lib/records.copy";
 
 const copy = recordsCopy.edit;
 

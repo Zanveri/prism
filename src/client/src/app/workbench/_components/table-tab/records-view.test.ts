@@ -55,10 +55,10 @@ import { ResultPanel } from "../result-panel";
 import { editCell, noEdits } from "../../_lib/record-edits";
 import { recordsCopy } from "../../_lib/records.copy";
 import { remember } from "../../_lib/tab-memory";
-import { EditsBanner } from "./edits-banner";
+import { EditsBanner } from "../edits-banner";
 import { RecordsFilter } from "./records-filter";
 import { RecordsView } from "./records-view";
-import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
+import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
 
 /** PostgreSQL, como a API numera os bancos. */
 const pg: Engine = 1;
@@ -704,10 +704,10 @@ describe("RecordsView: a edição das células (seção 22)", () => {
   const withPending = () => remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
 
   it("com linhas na tela, a grade recebe a edição e a faixa, com o motivo de só leitura que a página trouxe", () => {
-    const { records } = mount(fakeRunner(rowsState({ resultId: "r1", readOnly: "DISTINCT" }))).show();
-    const banner = records.banner as { type: unknown; props: ComponentProps<typeof EditsBanner> };
+    const { panel } = mount(fakeRunner(rowsState({ resultId: "r1", readOnly: "DISTINCT" }))).show();
+    const banner = panel.banner as { type: unknown; props: ComponentProps<typeof EditsBanner> };
 
-    expect(records.editing?.rows).toEqual([["10", "4"]]);
+    expect(panel.editing?.rows).toEqual([["10", "4"]]);
     expect(banner.type).toBe(EditsBanner);
     expect(banner.props).toMatchObject({ pending: 0, readOnly: recordsCopy.edit.readOnly("DISTINCT"), failure: null });
   });
@@ -719,9 +719,9 @@ describe("RecordsView: a edição das células (seção 22)", () => {
     rt.unmount();
     const other = mount(fakeRunner(rowsState({ resultId: "r2" }))).show();
 
-    expect((same.records.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
-    expect(same.records.editing?.marks.get(0)?.pending.get(1)).toBe("5");
-    expect((other.records.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(0);
+    expect((same.panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
+    expect(same.panel.editing?.marks.get(0)?.pending.get(1)).toBe("5");
+    expect((other.panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(0);
   });
 
   it("com alterações não salvas, Atualizar pergunta antes e não executa; Descartar executa (RN-EDIT-007)", () => {
@@ -750,7 +750,7 @@ describe("RecordsView: a edição das células (seção 22)", () => {
 
     expect(runner.run).not.toHaveBeenCalled();
     expect(after.question).toBeUndefined();
-    expect((after.records.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
+    expect((after.panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
   });
 
   it("o filtro que chega de outra aba espera a resposta; Cancelar o deixa para lá, sem levá-lo ao campo", () => {

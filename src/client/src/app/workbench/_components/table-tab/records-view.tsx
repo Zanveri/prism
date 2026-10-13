@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { ContextMenu, useToast, type Engine } from "@/components/ui";
+import { useToast, type Engine } from "@/components/ui";
 
 import { csvExportOf } from "../../_lib/csv";
 import { filterHandoff } from "../../_lib/filter-handoff";
@@ -17,13 +17,12 @@ import { foreignKeysQuery } from "../../_lib/table-structure.service";
 import { clearRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
 import { useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
-import { recordsCopy } from "../../_lib/records.copy";
+import { useRecordEdits } from "../../_lib/use-record-edits";
+import { EditsBanner } from "../edits-banner";
+import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
-import { EditSqlDialog } from "./edit-sql-dialog";
-import { EditsBanner } from "./edits-banner";
+import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
 import { RecordsFilter } from "./records-filter";
-import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
-import { useRecordEdits } from "./use-record-edits";
 
 type RecordsViewProps = {
   /** O id da aba: o filtro e a ordem ficam lembrados por ele (`tab-memory.ts`), e sobrevivem a trocar de vista e ao bloqueio, que troca o executor. */
@@ -240,28 +239,17 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
           // Sem resultado e sem desconexão, a primeira carga está para começar (o banco chegando, a aba sendo aberta): "Carregando…".
           waiting: notice.waiting,
           disconnected: notice.disconnected,
-          editing: edits.editing,
-          banner: <EditsBanner {...edits.banner} />,
         }}
+        editing={edits.editing}
+        banner={<EditsBanner {...edits.banner} />}
         nullText={preferences.results.nullText}
         autoLoadMore={preferences.results.autoLoadMore}
         onLoadMore={loadMore}
         onCount={() => void runner.countTotal()}
         onRerun={refresh}
       />
-      {edits.menu === null ? null : (
-        <ContextMenu
-          label={recordsCopy.edit.menu.label}
-          point={edits.menu.point}
-          initialFocus={edits.menu.keyboard ? "first" : "menu"}
-          groups={edits.menu.groups.map((group) => group.map((item) => ({ id: item.id, label: item.label, shortcut: item.shortcut, disabled: item.disabled, hint: item.hint, onSelect: () => edits.menu?.onChoose(item.id) })))}
-          onClose={edits.closeMenu}
-        />
-      )}
-      {edits.preview === null ? null : <EditSqlDialog preview={edits.preview} onClose={edits.closePreview} />}
-      {edits.question !== null ? (
-        <UnsavedEditsDialog canSave {...edits.question} />
-      ) : handoffWaits ? (
+      {resultEditDialogs(edits)}
+      {edits.question === null && handoffWaits ? (
         <UnsavedEditsDialog
           count={edits.pending}
           canSave

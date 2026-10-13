@@ -4,19 +4,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 
-import { cellAccess, deleteRowAccess, newRowAccess, type EditAccess, type RowContext } from "../../_lib/cell-editing";
-import { cellMenu, type CellMenuAction, type CellMenuItem } from "../../_lib/cell-menu";
-import type { DatabaseSession } from "../../_lib/database-sessions.schema";
-import { databaseSessionKey } from "../../_lib/database-sessions.service";
-import { nextEditable, type GridCell } from "../../_lib/grid-cursor";
-import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "../../_lib/grid-editing";
-import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SaveFailure } from "../../_lib/record-edits";
-import { editErrorDetails, type EditPreview, type EditTarget } from "../../_lib/record-edits.schema";
-import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "../../_lib/record-edits.service";
-import { recordsCopy } from "../../_lib/records.copy";
-import { recall, remember } from "../../_lib/tab-memory";
-import { unsavedEdits } from "../../_lib/unsaved-edits";
-import { isBusyState, type QueryRunner, type RowsState, type RunnerState } from "../../_lib/use-query-runner";
+import { cellAccess, deleteRowAccess, newRowAccess, type EditAccess, type RowContext } from "./cell-editing";
+import { cellMenu, type CellMenuAction, type CellMenuItem } from "./cell-menu";
+import type { DatabaseSession } from "./database-sessions.schema";
+import { databaseSessionKey } from "./database-sessions.service";
+import { nextEditable, type GridCell } from "./grid-cursor";
+import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
+import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SaveFailure } from "./record-edits";
+import { editErrorDetails, type EditPreview, type EditTarget } from "./record-edits.schema";
+import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
+import { recordsCopy } from "./records.copy";
+import { recall, remember } from "./tab-memory";
+import { unsavedEdits } from "./unsaved-edits";
+import { isBusyState, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
 
 const copy = recordsCopy.edit;
 
@@ -454,3 +454,6 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, o
     saveOnly: () => void save(false),
   };
 }
+
+/** O que a edição devolve a quem a usa: a vista Registros e a aba de consulta. */
+export type RecordEdits = ReturnType<typeof useRecordEdits>;

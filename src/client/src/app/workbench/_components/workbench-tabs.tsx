@@ -26,7 +26,7 @@ import { QueryTabPanel } from "./query-tab";
 import { UnsavedScriptsDialog } from "./script-dialogs";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 import { TableTabPanel } from "./table-tab/table-tab";
-import { UnsavedEditsDialog } from "./table-tab/unsaved-edits-dialog";
+import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 import { useScriptSaving, type SaveMode } from "./use-script-saving";
 
 const copy = workbenchCopy.tabs;

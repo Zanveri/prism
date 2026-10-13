@@ -1,7 +1,7 @@
 import { Button, Dialog, useToast } from "@/components/ui";
 
-import type { EditPreview } from "../../_lib/record-edits.schema";
-import { recordsCopy } from "../../_lib/records.copy";
+import type { EditPreview } from "../_lib/record-edits.schema";
+import { recordsCopy } from "../_lib/records.copy";
 
 const copy = recordsCopy.edit;
 
