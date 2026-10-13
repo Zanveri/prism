@@ -113,6 +113,16 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(same?.tab.script).toEqual(script);
   });
 
+  it("a aba que trocou de banco leva o banco novo, e o script leva o banco em que foi salvo: o ponto continua aceso do outro lado (RN-ARVORE-007)", () => {
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedDatabase: "mes2", dirty: true };
+    const moved = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", database: "vendas", sessionId: null, script }, sessionId: null, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+    const back = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", database: "mes2", script }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+
+    expect(moved?.tab.database).toBe("vendas");
+    expect(moved?.tab.script).toEqual(script);
+    expect(back?.tab.script).toEqual({ ...script, dirty: false });
+  });
+
   it("a aba sem conexão (o script cuja conexão sumiu, RN-SCRIPT-003) passa sem conexão", () => {
     const adopted = roundTrip(serializeTab(snapshot({ tab: { ...tab, connectionId: null, sessionId: null } })));
 
