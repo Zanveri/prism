@@ -4,7 +4,7 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
 
 import type { DatabaseObject } from "./database-sessions.schema";
-import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
 import { workbenchCopy } from "./workbench.copy";
 
 const connectionPath: NavPath = { type: "connection", connectionId: "c1" };
@@ -136,6 +136,22 @@ describe("flattenVisible", () => {
     }
     // Linear: o dobro de tabelas não custa mais que o dobro de perguntas (uma passada quadrática custaria o quádruplo).
     expect(large.asked + large.fetched).toBeLessThanOrEqual(2 * (small.asked + small.fetched));
+  });
+});
+
+describe("parentRowIndex", () => {
+  const row = (key: string, depth: number): NavNode => ({ key, kind: "folder", label: key, depth, hasChildren: true });
+  const rows = [row("a", 0), row("a1", 1), row("a1x", 2), row("a2", 1), row("b", 0)];
+
+  it("a seta para a esquerda num filho sobe para o pai mais próximo, de qualquer profundidade", () => {
+    expect(parentRowIndex(rows, 1)).toBe(0);
+    expect(parentRowIndex(rows, 2)).toBe(1);
+    expect(parentRowIndex(rows, 3)).toBe(0);
+  });
+
+  it("na raiz não há pai", () => {
+    expect(parentRowIndex(rows, 0)).toBeNull();
+    expect(parentRowIndex(rows, 4)).toBeNull();
   });
 });
 

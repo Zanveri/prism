@@ -186,6 +186,14 @@ export function clickEffect(node: NavNode, click: { detail: number; onChevron: b
 }
 
 /** Recebe foco (e entra na ordem do Tab): tudo menos "Carregando…". A linha de erro, sim: é onde fica o "Tentar de novo". */
+/** A linha do pai de uma linha da árvore: a mais próxima acima com profundidade menor; na raiz, nenhuma. É para onde a seta para a esquerda leva num nó fechado ou numa folha (o padrão das árvores da WAI-ARIA). */
+export function parentRowIndex(rows: readonly NavNode[], index: number): number | null {
+  const depth = rows[index]?.depth;
+  if (depth === undefined) return null;
+  for (let target = index - 1; target >= 0; target -= 1) if (rows[target].depth < depth) return target;
+  return null;
+}
+
 export const isFocusable = (node: NavNode | undefined): node is NavNode => node !== undefined && node.kind !== "loading";
 
 /**
