@@ -465,27 +465,32 @@ public abstract class IbmClientContractTests : DatabaseClientContractTests
         // em milissegundos. Sem observador, só a espera, em frações do tempo do comando inteiro.
         (int Seen, long Wait)[] moments = UncommittedReadIsolation is null
             ? [.. Enumerable.Range(0, 20).Select(step => (0, (long)(whole.Value.ElapsedMs * step * 0.06)))]
-            : [(0, 0), (1, 0), (1, 0), (rows, 0), (rows, returning / 4), (rows, returning / 2), (rows, returning * 3 / 4), (rows, returning * 5 / 4), (rows, returning * 3)];
+            : [(0, 0), (1, 0), (1, 0), (rows, 0), .. Enumerable.Range(1, 12).Select(step => (rows, returning * step / 8)), (rows, returning * 3)];
 
-        foreach (var (seen, wait) in moments)
+        // A fase em que o comando devolve as linhas é curta e muda com a máquina: as tentativas se repetem, até três rodadas,
+        // enquanto algum dos desfechos não tiver aparecido.
+        for (var round = 0; round < 3 && (unknown == 0 || (UncommittedReadIsolation is not null && (succeeded == 0 || interrupted == 0))); round++)
         {
-            // A tentativa só vale com a tabela zerada: o preparo que o banco recusa reprova o teste.
-            prepared.Add((await connection.ExecuteAsync($"UPDATE {table} SET versao = 0", CancellationToken.None)).IsSuccess);
-            var moment = $"{(seen == 0 ? "ao enviar" : seen < rows ? "com a gravação pela metade" : "com a gravação à vista")}, mais {wait} ms";
-            var running = connection.ExecuteAsync(command, CancellationToken.None);
-            await SeeWrittenAsync(running, seen);
-            await Task.Delay((int)wait);
-            connection.Cancel();
-            var outcome = await running;
-            var written = await ReadFromAnotherConnectionAsync($"SELECT COUNT(*) FROM {table} WHERE versao = 1");
-            var isUnknown = outcome.IsFailure && outcome.Error.Message.StartsWith("O cancelamento chegou enquanto o comando devolvia as linhas", StringComparison.Ordinal);
-            unknown += isUnknown ? 1 : 0;
-            succeeded += outcome.IsSuccess ? 1 : 0;
-            interrupted += outcome.IsFailure && !isUnknown ? 1 : 0;
-            await TestContext.Out.WriteLineAsync($"cancelado {moment}: {(outcome.IsSuccess ? $"sucesso, total {outcome.Value.Page!.TotalRows}" : outcome.Error.Message.Split('\n')[0])}; {written} gravadas");
+            foreach (var (seen, wait) in moments)
+            {
+                // A tentativa só vale com a tabela zerada: o preparo que o banco recusa reprova o teste.
+                prepared.Add((await connection.ExecuteAsync($"UPDATE {table} SET versao = 0", CancellationToken.None)).IsSuccess);
+                var moment = $"{(seen == 0 ? "ao enviar" : seen < rows ? "com a gravação pela metade" : "com a gravação à vista")}, mais {wait} ms";
+                var running = connection.ExecuteAsync(command, CancellationToken.None);
+                await SeeWrittenAsync(running, seen);
+                await Task.Delay((int)wait);
+                connection.Cancel();
+                var outcome = await running;
+                var written = await ReadFromAnotherConnectionAsync($"SELECT COUNT(*) FROM {table} WHERE versao = 1");
+                var isUnknown = outcome.IsFailure && outcome.Error.Message.StartsWith("O cancelamento chegou enquanto o comando devolvia as linhas", StringComparison.Ordinal);
+                unknown += isUnknown ? 1 : 0;
+                succeeded += outcome.IsSuccess ? 1 : 0;
+                interrupted += outcome.IsFailure && !isUnknown ? 1 : 0;
+                await TestContext.Out.WriteLineAsync($"cancelado {moment}: {(outcome.IsSuccess ? $"sucesso, total {outcome.Value.Page!.TotalRows}" : outcome.Error.Message.Split('\n')[0])}; {written} gravadas");
 
-            if (outcome.IsSuccess ? written != rows || outcome.Value.Page!.TotalRows != rows : !isUnknown && written != 0)
-                crossed.Add($"{moment}: {(outcome.IsSuccess ? $"sucesso com total {outcome.Value.Page!.TotalRows}" : "cancelado")} e {written} gravadas");
+                if (outcome.IsSuccess ? written != rows || outcome.Value.Page!.TotalRows != rows : !isUnknown && written != 0)
+                    crossed.Add($"{moment}: {(outcome.IsSuccess ? $"sucesso com total {outcome.Value.Page!.TotalRows}" : "cancelado")} e {written} gravadas");
+            }
         }
 
         var afterwards = await connection.ExecuteAsync($"UPDATE {table} SET versao = 2 WHERE numero = 1001", CancellationToken.None);
