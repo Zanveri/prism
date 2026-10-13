@@ -95,8 +95,10 @@ public static class Db2Singleton
         if (reader.ExitCode != 0)
             throw new InvalidOperationException($"A conta comum do Db2 de teste não foi criada: {reader.Stdout}{reader.Stderr}");
 
-        // O direito de conectar vai explícito: na imagem da pipeline (12.1) o PUBLIC não o tem, e a conta nem entraria (SQL1060N).
-        var connect = await container.ExecAsync(["su", "-", UserName, "-c", $"db2 connect to {Database} > /dev/null && db2 grant connect on database to user {ReaderName}"]);
+        // O direito de conectar vai explícito: na imagem da pipeline (12.1) o PUBLIC não o tem, e a conta nem entraria (SQL1060N). Os dois
+        // comandos do `db2` precisam do mesmo processo pai, que é o que liga o segundo à conexão do primeiro: como último comando da linha, o
+        // `grant` seria executado no lugar do próprio shell (o bash da imagem 11.5.8 faz isso), e responderia SQL1024N, sem conexão.
+        var connect = await container.ExecAsync(["su", "-", UserName, "-c", $"db2 connect to {Database} > /dev/null && db2 grant connect on database to user {ReaderName}; status=$?; db2 terminate > /dev/null; exit $status"]);
         if (connect.ExitCode >= 4)
             throw new InvalidOperationException($"A conta comum do Db2 de teste não recebeu o CONNECT: {connect.Stdout}{connect.Stderr}");
 
