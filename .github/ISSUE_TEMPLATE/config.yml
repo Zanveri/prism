@@ -1,8 +1,9 @@
-# O seletor de modelos de issue (vale quando este arquivo está no ramo padrão, a develop). Issue sem modelo fica desligada, e a
-# vulnerabilidade tem caminho próprio: o relato privado do GitHub, nunca uma issue (SECURITY.md). O endereço é o público do projeto
-# (RN-ABERTO-003 permite citá-lo nos documentos e na configuração; o código não o escreve).
+# The issue template chooser (it applies when this file is on the default branch, develop). An issue without a template is turned
+# off, and a vulnerability has its own path: GitHub's private report, never an issue (SECURITY.md). The address is the project's
+# public one (RN-ABERTO-003 allows citing it in documents and configuration; the code does not write it).
+# The text of the forms is in English; issues may be written in English, Portuguese or Spanish.
 blank_issues_enabled: false
 contact_links:
-  - name: Vulnerabilidade de segurança
+  - name: Security vulnerability
     url: https://github.com/Zanveri/prism/security/advisories/new
-    about: Relate em privado, pelo relato privado de vulnerabilidade do GitHub. Nunca por issue, comentário ou pull request (veja o SECURITY.md).
+    about: Report it privately, through GitHub's private vulnerability reporting. Never by issue, comment or pull request (see SECURITY.md).

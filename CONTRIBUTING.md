@@ -1,197 +1,201 @@
-# Como contribuir com o Prism
+# How to contribute to Prism
 
-Obrigado por querer ajudar. Este guia diz como o trabalho entra no projeto, como preparar o ambiente, onde estão as convenções, o
-que um pull request precisa trazer, o que quem revisa roda na própria máquina e como escrever as mensagens de commit.
+**English** · [Português (BR)](CONTRIBUTING.pt-BR.md) · [Español](CONTRIBUTING.es.md)
 
-A participação segue o [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). **Vulnerabilidade não vai em issue, comentário nem pull request**:
-veja o [SECURITY.md](SECURITY.md).
+Thank you for wanting to help. This guide explains how work enters the project, how to set up the environment, where the
+conventions are, what a pull request must bring, what reviewers run on their own machine and how to write commit messages.
 
-## Fluxo
+Participation follows the [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). **A vulnerability does not go in an issue, a comment or a pull
+request**: see [SECURITY.md](SECURITY.md).
 
-O fluxo é o da RN-GITHUB-003, decidido pelo dono do projeto:
+## Flow
 
-1. **Issue primeiro.** Todo trabalho começa numa issue: um defeito ou uma sugestão, cada um com o seu formulário. Os mantenedores
-   avaliam se ela vira trabalho e dizem quando. Assim ninguém gasta tempo numa direção que o projeto não vai seguir.
-2. **Ramos só pelos mantenedores**, com um prefixo do tipo da mudança: `feat/`, `fix/`, `chore/`, `docs/`, `ci/`, `refactor/` e
-   `test/` (por exemplo, `fix/separador-de-comandos`). Um ramo nasce da `develop`: `git switch -c fix/assunto origin/develop`.
-3. **Pull request para a `develop`**, que é o ramo padrão do repositório. O modelo do pull request traz a lista de conferência, e ele
-   cita a issue que resolve.
-4. **Quem é de fora contribui por fork**: faça um fork do repositório, crie o ramo no seu fork, com o mesmo prefixo, e abra o pull
-   request do seu fork para a `develop` daqui.
-5. **De `develop` para `main`, só o pull request de lançamento** (`release: vX.Y.Z`), aberto pelos mantenedores
-   ([docs/versionamento.md](docs/versionamento.md)).
-6. Responda à revisão com novos commits no mesmo ramo.
+The flow is the one in RN-GITHUB-003, decided by the project owner:
 
-**Nenhum pull request roda a pipeline** (RN-ABERTO-005): ela só roda depois do merge, na `develop` e na `main`. Quem revisa roda as
-verificações na própria máquina, com os comandos de [O que quem revisa roda](#o-que-quem-revisa-roda), e a pipeline confirma depois do
-merge. Cada merge na `develop` publica um beta: um merge é uma entrega, e por isso o pull request precisa chegar verificado.
+1. **Issue first.** All work starts in an issue: a defect or a suggestion, each with its own form. The maintainers assess whether
+   it becomes work and say when. You can write it in English, Portuguese or Spanish. That way nobody spends time in a direction
+   the project will not follow.
+2. **Branches only by the maintainers**, with a prefix for the type of change: `feat/`, `fix/`, `chore/`, `docs/`, `ci/`,
+   `refactor/` and `test/` (for example, `fix/command-separator`). A branch starts from `develop`:
+   `git switch -c fix/subject origin/develop`.
+3. **Pull request to `develop`**, which is the repository's default branch. The pull request template carries the checklist, and
+   it cites the issue it resolves.
+4. **Outside contributors work through a fork**: fork the repository, create the branch in your fork, with the same prefix, and
+   open the pull request from your fork to `develop` here.
+5. **From `develop` to `main`, only the release pull request** (`release: vX.Y.Z`), opened by the maintainers
+   ([docs/versionamento.md](docs/versionamento.md), in Portuguese).
+6. Answer the review with new commits on the same branch.
 
-## Preparar o ambiente
+**No pull request runs the pipeline** (RN-ABERTO-005): it only runs after the merge, on `develop` and `main`. Reviewers run the
+checks on their own machine, with the commands in [What reviewers run](#what-reviewers-run), and the pipeline confirms after the
+merge. Every merge into `develop` publishes a beta: a merge is a delivery, which is why the pull request must arrive verified.
 
-Os pré-requisitos e os comandos de desenvolvimento estão no [README](README.md#pré-requisitos): .NET SDK 10, Node.js 22, pnpm 10
-(a versão exata está no campo `packageManager` de `src/client/package.json`) e, para os testes de integração da API, Docker. Em
-resumo:
+## Set up the environment
+
+The prerequisites and the development commands are in the [README](README.md#development): .NET SDK 10, Node.js 22, pnpm 10
+(the exact version is in the `packageManager` field of `src/client/package.json`) and, for the API integration tests, Docker. In
+short:
 
 ```bash
 pnpm --dir src/client install --frozen-lockfile
 pnpm --dir src/client dev
 ```
 
-Os cofres do app em desenvolvimento ficam em `Zanveri/Prism-dev`, na pasta de dados de aplicativo do sistema, e nunca se misturam
-com os do app empacotado (veja [Onde ficam os dados](README.md#onde-ficam-os-dados)).
+The development app's vaults live in `Zanveri/Prism-dev`, in the system's application data folder, and never mix with those of
+the packaged app (see [Where the data lives](#where-the-data-lives)).
 
-## Testar e empacotar na sua máquina
+## Test and package on your machine
 
-### Testes
+### Tests
 
 ```bash
-dotnet build src/api/Prism.slnx          # zero avisos
-dotnet test src/api/Prism.slnx           # unitários e de integração (Docker ligado)
+dotnet build src/api/Prism.slnx          # zero warnings
+dotnet test src/api/Prism.slnx           # unit and integration (Docker running)
 pnpm --dir src/client lint
 pnpm --dir src/client typecheck
 pnpm --dir src/client test
 ```
 
-### Empacotar
+### Package
 
-O pacote de uma plataforma leva a API publicada para a mesma plataforma, e há uma só API em `src/client/resources/api`: publique
-a API e depois gere o pacote.
+A platform's package carries the API published for the same platform, and there is only one API in `src/client/resources/api`:
+publish the API and then build the package.
 
 ```bash
-pnpm --dir src/client build:api -- win-x64      # ou linux-x64, osx-arm64, osx-x64; sem argumento, o da máquina
-pnpm --dir src/client dist -- win               # win, linux ou mac (mac aceita arm64 ou x64 depois: dist -- mac arm64)
-pnpm --dir src/client dist:dir                  # só a pasta do app, sem instalador: src/client/release/win-unpacked/Prism.exe
+pnpm --dir src/client build:api -- win-x64      # or linux-x64, osx-arm64, osx-x64; with no argument, the machine's own
+pnpm --dir src/client dist -- win               # win, linux or mac (mac accepts arm64 or x64 after it: dist -- mac arm64)
+pnpm --dir src/client dist:dir                  # just the app folder, no installer: src/client/release/win-unpacked/Prism.exe
 ```
 
-Os pacotes saem em `src/client/release/`, como `Prism-<versão>-<sistema>-<arquitetura>.<extensão>`. Cada um leva a API em
-`resources/api` e não precisa de .NET nem de Node na máquina; não há assinatura de código. O `dist` falha se a API da
-plataforma não foi publicada antes. No macOS, uma arquitetura por vez: `build:api -- osx-arm64` e `dist -- mac arm64`, depois
-`osx-x64` e `mac x64`. O deb e o rpm exigem a URL do projeto (`PRISM_HOMEPAGE`, que na pipeline é a página do repositório do
-workflow); o resto está em [docs/ci.md](docs/ci.md).
+Packages come out in `src/client/release/`, as `Prism-<version>-<system>-<architecture>.<extension>`. Each one carries the API
+in `resources/api` and needs neither .NET nor Node on the machine; there is no code signing. `dist` fails if the platform's API
+was not published first. On macOS, one architecture at a time: `build:api -- osx-arm64` and `dist -- mac arm64`, then
+`osx-x64` and `mac x64`. The deb and the rpm require the project URL (`PRISM_HOMEPAGE`, which in the pipeline is the workflow's
+repository page); the rest is in [docs/ci.md](docs/ci.md) (in Portuguese).
 
-O `build:api` mexe nos `packages.lock.json` da API: acrescenta o alvo vazio `net10.0/<identificador>` (por exemplo,
-`net10.0/win-x64`). Provisório: depois de publicar, olhe `git diff -- "src/api/*/packages.lock.json"` e desfaça
-(`git checkout -- "src/api/*/packages.lock.json"`) só se a única diferença for esse alvo.
+`build:api` touches the API's `packages.lock.json` files: it adds the empty target `net10.0/<identifier>` (for example,
+`net10.0/win-x64`). Provisional: after publishing, look at `git diff -- "src/api/*/packages.lock.json"` and undo it
+(`git checkout -- "src/api/*/packages.lock.json"`) only if the sole difference is that target.
 
-### Onde ficam os dados
+### Where the data lives
 
-Os cofres e o log da API ficam na pasta de dados do app:
+The vaults and the API log live in the app's data folder:
 
-- Windows, app empacotado: `%APPDATA%\Zanveri\Prism`
-- Linux e macOS, app empacotado: a subpasta `Zanveri/Prism` da pasta de dados de aplicativo do sistema
-- em desenvolvimento (`pnpm dev`): `Zanveri/Prism-dev` no mesmo lugar, para o app de desenvolvimento nunca abrir os
-  cofres de verdade
+- Windows, packaged app: `%APPDATA%\Zanveri\Prism`
+- Linux and macOS, packaged app: the `Zanveri/Prism` subfolder of the system's application data folder
+- in development (`pnpm dev`): `Zanveri/Prism-dev` in the same place, so the development app never opens the real vaults
 
-Dentro dela: `vaults/`, com um arquivo cifrado por usuário (`<usuário>.vault.json`), `logs/` e os arquivos de perfil do
-Chromium que o Electron grava ali.
+Inside it: `vaults/`, with one encrypted file per user (`<user>.vault.json`), `logs/` and the Chromium profile files that
+Electron writes there.
 
-`--user-data-dir=<pasta>` na linha de comando troca a pasta nos dois casos (use uma pasta de teste para conferir o
-app empacotado sem tocar nos dados de ninguém). O log do processo principal traz a linha
-`[prism] pasta de dados: ...`.
+`--user-data-dir=<folder>` on the command line changes the folder in both cases (use a test folder to try the packaged app
+without touching anyone's data). The main process log carries the line `[prism] pasta de dados: ...` (data folder).
 
-### Estrutura do repositório
+### Repository structure
 
-| Caminho | O que é |
+| Path | What it is |
 | --- | --- |
-| `src/client/` | A interface: Electron, React e Vite. Orientação em [src/client/AGENTS.md](src/client/AGENTS.md). |
-| `src/api/` | A API em C# (.NET 10) e os testes. Orientação em [src/api/AGENTS.md](src/api/AGENTS.md). |
-| `docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md` | Especificação da primeira entrega: regras `RN-*`, rotas, códigos de erro e critérios de aceite. |
-| `docs/design/canvas/` | Canvas de design aprovado: a medida de cores, espaçamentos e textos. |
-| `site/` | O site de documentação (HTML e CSS estáticos, em português), publicado no GitHub Pages pela pipeline em <https://zanveri.github.io/prism/>. |
-| `docs/versionamento.md` | Como o Prism é versionado e como se lança uma versão (o pull request de lançamento da `develop` para a `main`). |
-| `docs/ci.md` | A pipeline: o que cada workflow e cada job faz, o que cada merge publica, como rodar na máquina, os runners, a lista de conferência do repositório no GitHub e o ensaio com o repositório privado. |
-| `.github/workflows/`, `.github/actions/`, `scripts/ci/` | A pipeline (GitHub Actions: o workflow de entrada, os reutilizáveis e as actions compostas) e os roteiros que ela chama, um por passo, com os testes deles. |
-| `cliff.toml` | A configuração do `git-cliff`, que gera o changelog e as notas das releases. |
-| `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` | Os formulários de issue (defeito e sugestão) e o modelo de pull request. |
-| [AGENTS.md](AGENTS.md) | Orientação para quem programa, na raiz. |
+| `src/client/` | The interface: Electron, React and Vite. Guidance in [src/client/AGENTS.md](src/client/AGENTS.md). |
+| `src/api/` | The C# API (.NET 10) and the tests. Guidance in [src/api/AGENTS.md](src/api/AGENTS.md). |
+| `docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md` | Specification of the first delivery: `RN-*` rules, routes, error codes and acceptance criteria. |
+| `docs/design/canvas/` | The approved design canvas: the measure of colors, spacing and texts. |
+| `site/` | The documentation site (static HTML and CSS, in English, Portuguese and Spanish), published on GitHub Pages by the pipeline at <https://zanveri.github.io/prism/>. |
+| `docs/versionamento.md` | How Prism is versioned and how a version is released (the release pull request from `develop` to `main`). |
+| `docs/ci.md` | The pipeline: what each workflow and job does, what each merge publishes, how to run it locally, the runners, the repository's GitHub checklist and the rehearsal with the private repository. |
+| `.github/workflows/`, `.github/actions/`, `scripts/ci/` | The pipeline (GitHub Actions: the entry workflow, the reusable ones and the composite actions) and the scripts it calls, one per step, with their tests. |
+| `cliff.toml` | The `git-cliff` configuration, which generates the changelog and the release notes. |
+| `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` | The issue forms (defect and suggestion) and the pull request template. |
+| [AGENTS.md](AGENTS.md) | Guidance for whoever writes code, at the root. |
 
-## Onde estão as convenções
+## Where the conventions are
 
-- [AGENTS.md](AGENTS.md), na raiz: o que vale para o projeto inteiro.
-- [src/api/AGENTS.md](src/api/AGENTS.md): a API em C#.
-- [src/client/AGENTS.md](src/client/AGENTS.md): a interface.
-- [Especificação](docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md): a fonte dos requisitos. As regras têm código
-  (`RN-COFRE-003`, por exemplo) e, quando o código implementa uma, o comentário cita a regra. Não mude o comportamento de uma regra
-  por conta própria: abra uma issue.
-- [Canvas de design](docs/design/canvas/): a medida de cores, espaçamentos e textos da interface.
-- [docs/ci.md](docs/ci.md): a pipeline, para quem mexe em `.github/` ou em `scripts/ci/`.
+- [AGENTS.md](AGENTS.md), at the root: what applies to the whole project.
+- [src/api/AGENTS.md](src/api/AGENTS.md): the C# API.
+- [src/client/AGENTS.md](src/client/AGENTS.md): the interface.
+- [Specification](docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md): the source of requirements. The rules have codes
+  (`RN-COFRE-003`, for example) and, when the code implements one, the comment cites the rule. Do not change the behavior of a
+  rule on your own: open an issue.
+- [Design canvas](docs/design/canvas/): the measure of the interface's colors, spacing and texts.
+- [docs/ci.md](docs/ci.md): the pipeline, for whoever touches `.github/` or `scripts/ci/`.
 
-Idioma: os nomes no código (tipos, funções, arquivos) são em inglês; os textos de tela, as mensagens de erro e os comentários são em
-português.
+Language: names in the code (types, functions, files) are in English; screen texts, error messages and comments are in
+Portuguese.
 
-## O que um pull request precisa trazer
+## What a pull request must bring
 
-- **Testes** para o comportamento que muda: unitários e, quando houver HTTP ou banco no caminho, de integração.
-- **Build da API sem avisos**, a suíte da API e a da interface passando, e os roteiros da pipeline, se você mexeu neles (os comandos
-  estão logo abaixo).
-- **Pacotes travados:** se você mudou um `PackageReference`, rode `dotnet restore src/api/Prism.slnx --force-evaluate` e inclua os
-  `packages.lock.json` no mesmo commit. Na interface, o `pnpm-lock.yaml` entra junto com a mudança no `package.json`.
-- **Documentação** atualizada quando a mudança altera um comando, uma pasta ou uma regra.
-- **Título do pull request** no formato dos commits (veja abaixo).
+- **Tests** for the behavior that changes: unit tests and, when HTTP or a database is on the path, integration tests.
+- **API build with no warnings**, the API and interface suites passing, and the pipeline scripts, if you touched them (the
+  commands are right below).
+- **Locked packages:** if you changed a `PackageReference`, run `dotnet restore src/api/Prism.slnx --force-evaluate` and include
+  the `packages.lock.json` files in the same commit. In the interface, `pnpm-lock.yaml` goes in together with the change to
+  `package.json`.
+- **Documentation** updated when the change alters a command, a folder or a rule. The public texts (README, CONTRIBUTING,
+  SECURITY, CODE_OF_CONDUCT and the site) exist in English, Portuguese and Spanish: change all three.
+- **Pull request title** in the commit format (see below).
 
-## O que quem revisa roda
+## What reviewers run
 
-A pipeline não roda no pull request; quem revisa roda isto na própria máquina, no ramo do pull request (`gh pr checkout <número>`, ou
-`git fetch origin pull/<número>/head:pr-<número>` e `git switch pr-<número>`). **Leia o código antes de rodá-lo**: é código de outra
-pessoa rodando na sua máquina.
+The pipeline does not run on the pull request; reviewers run this on their own machine, on the pull request's branch
+(`gh pr checkout <number>`, or `git fetch origin pull/<number>/head:pr-<number>` and `git switch pr-<number>`). **Read the code
+before running it**: it is someone else's code running on your machine.
 
 ```bash
-# A interface
+# The interface
 pnpm --dir src/client install --frozen-lockfile
 pnpm --dir src/client lint
 pnpm --dir src/client typecheck
 pnpm --dir src/client test
 
-# A API (os testes de integração precisam do Docker ligado)
-dotnet build src/api/Prism.slnx            # zero avisos
+# The API (integration tests need Docker running)
+dotnet build src/api/Prism.slnx            # zero warnings
 dotnet test src/api/Prism.slnx
 
-# Os roteiros e os workflows, quando o pull request mexe em scripts/ci/ ou em .github/
+# The scripts and the workflows, when the pull request touches scripts/ci/ or .github/
 bash scripts/ci/test-scripts.sh
 bash scripts/ci/check-workflows.sh
-bash scripts/ci/actionlint.sh              # baixa o actionlint fixado (Linux x64)
+bash scripts/ci/actionlint.sh              # downloads the pinned actionlint (Linux x64)
 
-# O que não pode entrar no repositório (RN-ABERTO-003); com os termos da empresa, num arquivo fora do repositório
+# What must not enter the repository (RN-ABERTO-003); with the company's terms, in a file outside the repository
 bash scripts/ci/leak-guard.sh
-LEAK_GUARD_EXTRA=/caminho/dos/termos bash scripts/ci/leak-guard.sh --messages origin/develop..HEAD
+LEAK_GUARD_EXTRA=/path/to/terms bash scripts/ci/leak-guard.sh --messages origin/develop..HEAD
 
-# As dependências (alta ou crítica reprova)
+# The dependencies (high or critical fails)
 bash scripts/ci/audit-deps.sh client
 bash scripts/ci/audit-deps.sh api
 
-# O que o merge vai lançar: develop (o beta) ou, no pull request de lançamento, main (a estável)
+# What the merge will release: develop (the beta) or, in the release pull request, main (the stable)
 bash scripts/ci/check-version.sh develop
 ```
 
-O que a pipeline faz depois do merge, e o que cada comando acima confere, está em [docs/ci.md](docs/ci.md).
+What the pipeline does after the merge, and what each command above checks, is in [docs/ci.md](docs/ci.md).
 
-## Mensagens de commit
+## Commit messages
 
-O Prism segue o [Conventional Commits 1.0.0](https://www.conventionalcommits.org/pt-br/v1.0.0/). A mensagem é em português:
+Prism follows [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/). The message is in Portuguese:
 
 ```
-tipo(escopo): descrição curta
+type(scope): short description
 ```
 
-O escopo é opcional e, hoje, costuma ser `api` ou `client`. Os tipos aceitos:
+The scope is optional and, today, is usually `api` or `client`. The accepted types:
 
-| Tipo | Quando usar |
+| Type | When to use |
 | --- | --- |
-| `feat` | funcionalidade nova |
-| `fix` | correção de defeito |
-| `perf` | ganho de desempenho |
-| `refactor` | mudança de código que não altera o comportamento |
-| `docs` | só documentação |
-| `build` | empacotamento, dependências e scripts de build |
-| `ci` | a pipeline |
-| `test` | só testes |
-| `chore` | o que não cabe nos outros |
+| `feat` | new feature |
+| `fix` | defect fix |
+| `perf` | performance gain |
+| `refactor` | code change that does not alter behavior |
+| `docs` | documentation only |
+| `build` | packaging, dependencies and build scripts |
+| `ci` | the pipeline |
+| `test` | tests only |
+| `chore` | what does not fit the others |
 
-Um `!` depois do tipo (ou do escopo) marca uma mudança que quebra o contrato que o número da versão protege: o formato do cofre e a
-estrutura da pasta de dados, os arquivos de configuração e de exportação, os atalhos e comandos documentados. Veja
+A `!` after the type (or the scope) marks a change that breaks the contract the version number protects: the vault format and
+the data folder structure, the configuration and export files, the documented shortcuts and commands. See
 [docs/versionamento.md](docs/versionamento.md).
 
-Exemplos, no estilo do histórico deste repositório:
+Examples, in the style of this repository's history:
 
 ```
 feat(client): editor SQL com resultado paginado
@@ -199,36 +203,39 @@ fix(client): "executar de novo" repete o comando do resultado que está na tela
 build: empacotamento do app com o electron-builder
 ```
 
-O **título do pull request** segue o mesmo formato. Se o pull request for mesclado com squash, é o título que entra no histórico. As
-notas de cada beta e o `CHANGELOG.md` saem do histórico, por isso a convenção importa: uma mensagem fora do formato não aparece nelas.
+The **pull request title** follows the same format. If the pull request is merged with squash, the title is what enters the
+history. The notes of each beta and the `CHANGELOG.md` come from the history, which is why the convention matters: a message
+outside the format does not show up in them.
 
-O tipo `release` não está na tabela acima: ele é reservado ao pull request de lançamento (`release: vX.Y.Z`), aberto pelos
-[mantenedores](#mantenedores), e não aparece no changelog. **Mesclar na `main` o pull request de lançamento é lançar a versão**: a
-pipeline publica os pacotes e a release, e a publicação cria a tag `vX.Y.Z`. Ninguém cria tag de versão à mão, e um pull request
-comum não muda o campo `version` de `src/client/package.json` (quem o muda é o pull request que sobe a versão depois de uma estável).
+The `release` type is not in the table above: it is reserved for the release pull request (`release: vX.Y.Z`), opened by the
+[maintainers](#maintainers), and does not appear in the changelog. **Merging the release pull request into `main` is releasing the
+version**: the pipeline publishes the packages and the release, and the publication creates the `vX.Y.Z` tag. Nobody creates a
+version tag by hand, and an ordinary pull request does not change the `version` field of `src/client/package.json` (the one that
+changes it is the pull request that bumps the version after a stable one).
 
-## Mantenedores
+## Maintainers
 
-Neste projeto, **mantenedores** são as pessoas com o papel **Maintain** ou **Admin** no repositório do GitHub. São elas que criam
-ramos, revisam e mesclam pull requests, lançam versões, tratam os relatos de segurança e aplicam o
-[código de conduta](CODE_OF_CONDUCT.md). Os relatos de vulnerabilidade seguem o [SECURITY.md](SECURITY.md); o passo a passo de um
-lançamento está em [docs/versionamento.md](docs/versionamento.md).
+In this project, **maintainers** are the people with the **Maintain** or **Admin** role on the GitHub repository. They are the
+ones who create branches, review and merge pull requests, release versions, handle security reports and enforce the
+[code of conduct](CODE_OF_CONDUCT.md). Vulnerability reports follow [SECURITY.md](SECURITY.md); the step by step of a release is
+in [docs/versionamento.md](docs/versionamento.md).
 
-## Licença das contribuições
+## License of contributions
 
-O Prism é distribuído sob a [GNU GPL versão 3](LICENSE) (`GPL-3.0-only`), com a permissão adicional da seção 7 para o driver da
-IBM descrita no [NOTICE](NOTICE). Ao enviar uma contribuição, você a oferece sob essa mesma licença e com essa mesma permissão.
+Prism is distributed under the [GNU GPL version 3](LICENSE) (`GPL-3.0-only`), with the section 7 additional permission for the
+IBM driver described in [NOTICE](NOTICE). By submitting a contribution, you offer it under that same license and with that same
+permission.
 
-## O que não entra no repositório
+## What does not enter the repository
 
-- **Segredos:** senha, token, chave de API, chave privada, string de conexão com senha, arquivo de cofre de verdade. Para testar,
-  gere valores de teste.
-- **Dados de cliente:** dump de banco, resultado de consulta, captura de tela ou log com dado real. Use dados inventados.
-- **Dados da sua máquina ou da sua rede:** caminho de perfil de usuário, nome de usuário do sistema, nome de runner, host ou IP de
-  rede interna, endereço ou identificador de um servidor de código ou de pacotes interno, nome de projeto interno de uma empresa. Vale
-  também para mensagens de commit. É a regra RN-ABERTO-003 da [especificação](docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md),
-  e o `leak-guard` a confere.
-- **Arquivos gerados:** `bin/`, `obj/`, `node_modules/`, `out/`, `release/`, a API publicada em `src/client/resources/api/` e as
-  saídas dos roteiros da pipeline (`api-bundles/`, `release-notes.md`).
-- **Dependências com licença incompatível** com a GPLv3, ou com termos de redistribuição que o projeto não conferiu. O driver da
-  IBM, por exemplo, é proprietário e só pode ser referenciado, nunca copiado para o repositório.
+- **Secrets:** password, token, API key, private key, connection string with a password, real vault file. To test, generate test
+  values.
+- **Customer data:** database dump, query result, screenshot or log with real data. Use made-up data.
+- **Data from your machine or your network:** user profile path, operating system user name, runner name, host or IP of an
+  internal network, address or identifier of an internal code or package server, name of a company's internal project. This also
+  applies to commit messages. It is rule RN-ABERTO-003 of the
+  [specification](docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md), and `leak-guard` checks it.
+- **Generated files:** `bin/`, `obj/`, `node_modules/`, `out/`, `release/`, the API published in `src/client/resources/api/` and
+  the outputs of the pipeline scripts (`api-bundles/`, `release-notes.md`).
+- **Dependencies with a license incompatible** with the GPLv3, or with redistribution terms the project has not checked. The IBM
+  driver, for example, is proprietary and can only be referenced, never copied into the repository.

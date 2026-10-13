@@ -1,57 +1,59 @@
-name: Defeito
-description: Algo no Prism não funciona como deveria.
-title: "Defeito: "
+name: Defect
+description: Something in Prism does not work as it should.
+title: "Defect: "
 body:
   - type: markdown
     attributes:
       value: |
-        Descreva o defeito em uma frase no título. **Se for uma vulnerabilidade, não use este formulário**: relate em privado,
-        pelo relato privado de vulnerabilidade (veja o SECURITY.md). Não cole senha, token, string de conexão com senha nem dado
-        real, nem aqui nem nas capturas de tela.
+        You can write this issue in English, Portuguese or Spanish.
+
+        Describe the defect in one sentence in the title. **If it is a vulnerability, do not use this form**: report it privately,
+        through private vulnerability reporting (see SECURITY.md). Do not paste passwords, tokens, connection strings with
+        passwords or real data, neither here nor in screenshots.
   - type: input
     id: versao
     attributes:
-      label: Versão do Prism
-      description: Aparece na tela de entrada, ao lado do nome. Se você compilou do código, o commit.
-      placeholder: 0.1.0, 0.2.0-beta.3 ou o commit
+      label: Prism version
+      description: It shows on the sign-in screen, next to the name. If you built from source, the commit.
+      placeholder: 0.1.0, 0.2.0-beta.3 or the commit
     validations:
       required: true
   - type: input
     id: sistema
     attributes:
-      label: Sistema operacional e versão
+      label: Operating system and version
       placeholder: Windows 11, Ubuntu 24.04, macOS 26…
     validations:
       required: true
   - type: dropdown
     id: banco
     attributes:
-      label: Banco
+      label: Database
       options:
         - PostgreSQL
         - Db2
         - Informix
-        - Nenhum (o defeito não depende do banco)
+        - None (the defect does not depend on the database)
     validations:
       required: true
   - type: input
     id: servidor
     attributes:
-      label: Versão do servidor do banco
+      label: Database server version
   - type: dropdown
     id: instalacao
     attributes:
-      label: Como o Prism foi aberto
+      label: How Prism was opened
       options:
-        - Pacote instalado (instalador, deb, rpm ou dmg)
-        - Pacote sem instalação (zip, AppImage ou tar.gz)
-        - Do código (pnpm dev)
+        - Installed package (installer, deb, rpm or dmg)
+        - Package without installation (zip, AppImage or tar.gz)
+        - From source (pnpm dev)
     validations:
       required: true
   - type: textarea
     id: passos
     attributes:
-      label: Passos para reproduzir
+      label: Steps to reproduce
       value: |
         1.
         2.
@@ -61,25 +63,25 @@ body:
   - type: textarea
     id: esperado
     attributes:
-      label: O que você esperava
+      label: What you expected
     validations:
       required: true
   - type: textarea
     id: aconteceu
     attributes:
-      label: O que aconteceu
+      label: What happened
       description: |
-        Cole a mensagem de erro e, se ajudar, uma captura de tela sem dados reais. O log da API fica na pasta logs/ da pasta de
-        dados (veja o README). O Prism não registra senha, string de conexão nem texto de SQL; ainda assim, revise o log antes de
-        anexar: ele pode ter caminhos da sua máquina e mensagens de erro inesperadas.
+        Paste the error message and, if it helps, a screenshot with no real data. The API log is in the logs/ folder of the data
+        folder (see CONTRIBUTING.md). Prism does not log passwords, connection strings or SQL text; even so, review the log
+        before attaching it: it may contain paths from your machine and unexpected error messages.
     validations:
       required: true
   - type: checkboxes
     id: conferido
     attributes:
-      label: Antes de enviar
+      label: Before submitting
       options:
-        - label: Procurei uma issue igual e não achei.
+        - label: I searched for an identical issue and did not find one.
           required: true
-        - label: Não há senha, token, string de conexão nem dado real neste texto nem nas capturas.
+        - label: There is no password, token, connection string or real data in this text or in the screenshots.
           required: true

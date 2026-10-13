@@ -1,49 +1,53 @@
-# Política de segurança
+# Security policy
 
-## Versões cobertas
+**English** · [Português (BR)](SECURITY.pt-BR.md) · [Español](SECURITY.es.md)
 
-O Prism está em desenvolvimento. Enquanto a versão for `0.x`, a intenção é que as correções de segurança saiam na versão seguinte;
-não há versões antigas mantidas em paralelo, e os betas (as versões `X.Y.Z-beta.N`) são substituídos pela estável seguinte. Antes da
-primeira versão publicada (a 0.1.0), vale o ramo `develop`.
+## Covered versions
 
-## Como relatar uma vulnerabilidade
+Prism is under development. While the version is `0.x`, the intent is that security fixes ship in the next version; no old
+versions are maintained in parallel, and betas (the `X.Y.Z-beta.N` versions) are replaced by the next stable one. Before the first
+published version (0.1.0), the `develop` branch is the one covered.
 
-**Não abra issue, nem comentário, nem pull request com a descrição da falha**: tudo isso é público.
+## How to report a vulnerability
 
-Relate em privado, pelo **relato privado de vulnerabilidade** do GitHub: na página do repositório, abra a aba **Security** e clique
-em **Report a vulnerability**. O formulário pede um resumo, os detalhes, uma prova do conceito e o impacto. O relato só é visto por
-você e pelos [mantenedores](CONTRIBUTING.md#mantenedores), e o GitHub avisa os mantenedores quando ele chega
-([documentação](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately)). O próprio GitHub
-põe quem relatou como colaborador do aviso de segurança que nasce do relato, e é nele que a conversa continua.
+**Do not open an issue, a comment or a pull request describing the flaw**: all of those are public.
 
-O botão só existe com o repositório **público** e com o relato privado ligado nas configurações. Se ele não aparecer, não relate
-por outro meio público: abra uma issue **sem nenhum detalhe da falha**, só pedindo um contato para um relato de segurança, e um
-mantenedor responde.
+Report it privately, through GitHub's **private vulnerability reporting**: on the repository page, open the **Security** tab and
+click **Report a vulnerability**. The form asks for a summary, the details, a proof of concept and the impact. The report is
+visible only to you and to the [maintainers](CONTRIBUTING.md#maintainers), and GitHub notifies the maintainers when it arrives
+([documentation](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately)). GitHub itself
+adds the reporter as a collaborator on the security advisory that comes out of the report, and that is where the conversation
+continues.
 
-## O que incluir
+The button only exists when the repository is **public** and private reporting is turned on in the settings. If it does not
+appear, do not report through another public channel: open an issue **with no detail of the flaw**, only asking for a contact for
+a security report, and a maintainer will answer.
 
-- A versão do Prism (ela aparece na tela de entrada, ao lado do nome; ou o commit, se você compilou do código), o sistema
-  operacional e o banco envolvido.
-- O que é a falha e o que ela permite fazer: por exemplo, ler o conteúdo de um cofre sem a senha, usar a API local sem o token,
-  executar código a partir de um dado vindo do banco, ou fazer o atualizador instalar um pacote que não é o da release.
-- Os passos para reproduzir, o mais curtos que você conseguir.
-- O que você esperava e o que aconteceu.
+## What to include
 
-Use dados de teste. Nunca anexe um cofre de verdade, uma senha, um token, uma string de conexão nem dados de cliente. Se o relato
-precisar de um arquivo de cofre, crie um com um usuário de teste.
+- The Prism version (it shows on the sign-in screen, next to the name; or the commit, if you built from source), the operating
+  system and the database involved.
+- What the flaw is and what it lets someone do: for example, read the contents of a vault without the password, use the local API
+  without the token, run code from data coming from the database, or make the updater install a package that is not the one from
+  the release.
+- The steps to reproduce, as short as you can make them.
+- What you expected and what happened.
 
-## O que esperar
+Use test data. Never attach a real vault, a password, a token, a connection string or customer data. If the report needs a vault
+file, create one with a test user.
 
-- A intenção é responder no próprio relato: confirmar o recebimento, dizer se o problema foi reproduzido e, havendo correção, em que
-  versão ela sai. Não há prazo definido.
-- Pedimos que o relato não seja divulgado antes de a correção ser publicada.
-- O nome de quem relatou só entra nas notas da versão que traz a correção se a pessoa quiser.
+## What to expect
 
-## O que está no escopo
+- The intent is to answer in the report itself: acknowledge receipt, say whether the problem was reproduced and, if there is a
+  fix, in which version it ships. There is no set deadline.
+- We ask that the report not be disclosed before the fix is published.
+- The reporter's name only goes into the notes of the version that carries the fix if the person wants it to.
 
-O que o Prism se propõe a proteger: o cofre cifrado de cada usuário, a senha das conexões, a API local (que só escuta em
-`127.0.0.1` e exige um token de lançamento), a janela do app, o que vai para o log e a atualização (o pacote baixado é conferido
-contra duas somas SHA-256 antes de qualquer uso; veja o [README](README.md#atualizações)).
+## What is in scope
 
-Fora do escopo: quem já tem acesso à sessão do usuário no sistema operacional, com o app aberto e destravado, e falhas dos bancos de
-dados a que o Prism se conecta. Um defeito comum, sem efeito sobre a segurança, vai numa issue pública normal.
+What Prism sets out to protect: each user's encrypted vault, the connection passwords, the local API (which only listens on
+`127.0.0.1` and requires a launch token), the app window, what goes into the log and the update (the downloaded package is checked
+against two SHA-256 checksums before any use; see the [documentation](https://zanveri.github.io/prism/#updates)).
+
+Out of scope: anyone who already has access to the user's session on the operating system, with the app open and unlocked, and
+flaws in the databases Prism connects to. An ordinary defect with no effect on security goes in a normal public issue.

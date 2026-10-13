@@ -1,52 +1,54 @@
-name: Sugestão
-description: Algo que você gostaria de poder fazer no Prism.
-title: "Sugestão: "
+name: Suggestion
+description: Something you would like to be able to do in Prism.
+title: "Suggestion: "
 body:
   - type: markdown
     attributes:
       value: |
-        Diga em uma frase, no título, o que você gostaria de poder fazer. Antes de enviar, veja no README o que já está previsto
-        para as próximas entregas. Uma sugestão vira trabalho quando os mantenedores a avaliam (CONTRIBUTING.md). Não cole senha,
-        token, string de conexão com senha nem dado real.
+        You can write this issue in English, Portuguese or Spanish.
+
+        Say in one sentence, in the title, what you would like to be able to do. Before submitting, check the "Coming soon" section of
+        the documentation site (https://zanveri.github.io/prism/) to see what is already planned. A suggestion becomes work when the
+        maintainers assess it (CONTRIBUTING.md). Do not paste passwords, tokens, connection strings with passwords or real data.
   - type: textarea
     id: problema
     attributes:
-      label: Problema ou necessidade
-      description: O que você tenta fazer hoje e não consegue, ou faz com muito trabalho?
+      label: Problem or need
+      description: What are you trying to do today that you cannot, or that takes a lot of effort?
     validations:
       required: true
   - type: textarea
     id: proposta
     attributes:
-      label: O que você propõe
-      description: Como isso deveria funcionar, do ponto de vista de quem usa o Prism?
+      label: What you propose
+      description: How should it work, from the point of view of whoever uses Prism?
     validations:
       required: true
   - type: textarea
     id: alternativas
     attributes:
-      label: Alternativas
-      description: O que você faz hoje no lugar, ou o que outro cliente de banco faz?
+      label: Alternatives
+      description: What do you do today instead, or what does another database client do?
   - type: dropdown
     id: banco
     attributes:
-      label: Banco
+      label: Database
       multiple: true
       options:
         - PostgreSQL
         - Db2
         - Informix
-        - Todos
+        - All
   - type: input
     id: sistema
     attributes:
-      label: Sistema operacional
+      label: Operating system
   - type: checkboxes
     id: conferido
     attributes:
-      label: Antes de enviar
+      label: Before submitting
       options:
-        - label: Procurei uma issue igual e não achei.
+        - label: I searched for an identical issue and did not find one.
           required: true
-        - label: Não há senha, token, string de conexão nem dado real neste texto nem nas capturas.
+        - label: There is no password, token, connection string or real data in this text or in the screenshots.
           required: true
