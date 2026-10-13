@@ -365,5 +365,14 @@ public sealed class DatabaseSessionServiceTests
 
         public Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken)
             => Task.FromResult(Result.Success<IReadOnlyList<DatabaseInfo>, DatabaseFailure>([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)]));
+
+        public Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeEditTableAsync(EditTableName table, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTableName table, bool oneAtATime, Func<EditCatalogTable?, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
     }
 }

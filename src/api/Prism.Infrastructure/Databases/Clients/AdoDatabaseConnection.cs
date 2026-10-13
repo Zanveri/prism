@@ -43,6 +43,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private const string WritesAfterTheFirstPageMessage = "O comando começou como leitura e tentou gravar depois da primeira página; nada foi gravado. Execute-o de novo: ele será executado até o fim.";
     private const string SeveralStatementsMessage = "Cada execução leva um comando só, e o texto enviado tem mais de um; nada foi executado. Envie um de cada vez. Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) é um comando só.";
     private const string NotCountableMessage = "Só uma leitura pode ser contada, e o comando enviado não é uma leitura só; nada foi executado.";
+    private const string NoRowMessage = "A linha não existe mais, ou a chave dela mudou: o comando não alterou nenhuma linha.";
 
     private readonly ILogger _logger = logger.ForContext<AdoDatabaseConnection>();
 
@@ -114,6 +115,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// o comando parar no meio, e o descarte nunca voltava.
     /// </summary>
     private volatile bool _discarded;
+
+    /// <summary>
+    /// RN-EDIT-005: a transação do "Salvar", do próprio driver (no Db2 é ela que tira a conexão do auto-commit). Enquanto existe, todo
+    /// comando entra nela, e o cursor abandonado (<see cref="DisposeCursorAsync"/>) a desfaz. Não usa `_inTransaction`, que é a da
+    /// leitura paginada: o fim de uma consulta de catálogo dentro do "Salvar" não confirma nada.
+    /// </summary>
+    private DbTransaction? _editTransaction;
 
     public string ServerVersion { get; private set; } = string.Empty;
 
@@ -218,6 +226,40 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>Cria a conexão do driver, ainda fechada. Roda dentro do <see cref="Send{T}"/>: montar a string de conexão também pode lançar.</summary>
     protected abstract DbConnection CreateConnection();
+
+    /// <summary>
+    /// RN-EDIT-003 e 010: a consulta que acha a tabela do `FROM` no catálogo, com os parâmetros dela, e devolve uma linha com o esquema e o
+    /// nome como o banco os guarda, o tipo (`table`, `view`, `materializedView`, `foreign` ou `other`), o identificador da tabela quando a
+    /// resposta de um comando o usa (PostgreSQL; nulo nos outros) e, como 0 ou 1, se o banco não tem log de transação (RN-EDIT-012).
+    /// Nenhuma linha quando ela não existe como tabela nem como visão.
+    /// </summary>
+    protected abstract (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table);
+
+    /// <summary>
+    /// RN-EDIT-002: as chaves da tabela que servem à edição (a primária, as restrições únicas e os índices únicos sem condição e só de
+    /// colunas), uma coluna por linha: o nome da chave, se ela é a primária (0 ou 1) e a coluna, a primária primeiro e as colunas na ordem
+    /// da chave. Os parâmetros são o esquema e a tabela, como em <see cref="ColumnsSql"/>.
+    /// </summary>
+    protected abstract string EditKeysSql { get; }
+
+    /// <summary>RN-EDIT-010: o comando que dá à conexão à parte do catálogo um prazo de espera de trava, em vez de esperar para sempre.</summary>
+    protected abstract string LockTimeoutSql { get; }
+
+    /// <summary>
+    /// RN-EDIT-003: de que tabela e coluna vem cada coluna do resultado, quando o banco diz isso na própria resposta, sem consulta a
+    /// mais. Nulo, por padrão: no Db2 e no Informix quem diz é a leitura do comando.
+    /// </summary>
+    protected virtual IReadOnlyList<ColumnOrigin?>? ColumnOrigins(DbDataReader reader)
+        => null;
+
+    /// <summary>RN-EDIT-006: o valor de um comando do "Salvar" no parâmetro. Por padrão, o valor convertido, com o tipo quando ele vem.</summary>
+    protected virtual void BindEditParameter(DbParameter parameter, EditParameter value)
+    {
+        if (value.Type is { } type)
+            parameter.DbType = type;
+
+        parameter.Value = value.Value ?? DBNull.Value;
+    }
 
     /// <summary>
     /// Parâmetro: esquema. Colunas: nome, tipo (`table`, `view`, `procedure` ou `function`), a estimativa de linhas das estatísticas (nula
@@ -516,7 +558,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     }
 
     public Task<Result<IReadOnlyList<ColumnInfo>, DatabaseFailure>> GetColumnsAsync(string schema, string table, CancellationToken cancellationToken)
-        => QueryAsync(nameof(GetColumnsAsync), EDatabaseFailure.ExecutionFailed, ColumnsSql, [schema, table], reader => new ColumnInfo(Text(reader, 0), Text(reader, 1), Flag(reader, 2), Flag(reader, 3), Number(reader, 4), NullableText(reader, 5), NullableText(reader, 6)), cancellationToken);
+        => QueryAsync(nameof(GetColumnsAsync), EDatabaseFailure.ExecutionFailed, ColumnsSql, [schema, table], ReadColumn, cancellationToken);
 
     public async Task<Result<IReadOnlyList<IndexInfo>, DatabaseFailure>> GetIndexesAsync(string schema, string table, CancellationToken cancellationToken)
     {
@@ -609,6 +651,72 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         => (await QueryAsync(nameof(GetDatabasesAsync), EDatabaseFailure.ExecutionFailed, DatabasesSql, [], reader => new DatabaseInfo(Text(reader, 0), Flag(reader, 1)), cancellationToken)).Map(CurrentFirst);
 
     /// <summary>RN-ARVORE-006: o banco da sessão sobe para o começo; os outros ficam na ordem de nome em que o banco os devolveu.</summary>
+    public Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeEditTableAsync(EditTableName table, CancellationToken cancellationToken)
+        => RunAsync(nameof(DescribeEditTableAsync), EDatabaseFailure.ExecutionFailed, token => DescribeCoreAsync(table, token), cancellationToken);
+
+    public async Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
+        => await RunAsync(nameof(LimitLockWaitAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            await NonQueryAsync(LockTimeoutSql, token);
+
+            return true;
+        }, cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-005 e 012. Com transação, ela é do driver e abre antes da consulta ao catálogo, que roda dentro dela; cada comando tem de
+    /// afetar exatamente uma linha, e a recusa (do banco, da contagem de linhas ou do plano) desfaz tudo pelo mesmo fim do cursor
+    /// abandonado. A transação sai do campo antes do `COMMIT`: se ele falha, o banco já a encerrou (no PostgreSQL, a recusa de uma
+    /// restrição adiada desfaz a transação), e o `ROLLBACK` do fim não tem o que desfazer. No banco sem log cada comando é confirmado
+    /// sozinho, e a recusa diz quantos já estavam gravados (`Applied`).
+    /// </summary>
+    public async Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTableName table, bool oneAtATime, Func<EditCatalogTable?, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
+    {
+        int? failing = null;
+        var applied = 0;
+
+        var result = await RunAsync(nameof(ApplyEditsAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            if (!oneAtATime)
+                _editTransaction = await _connection!.BeginTransactionAsync(token);
+
+            var planned = plan(await DescribeCoreAsync(table, token));
+            if (planned.IsFailure)
+                return Result.Failure<int, DatabaseFailure>(planned.Error);
+
+            foreach (var edit in planned.Value)
+            {
+                failing = edit.Change;
+                var affected = await RunEditAsync(edit, token);
+                if (affected != 1)
+                    return new DatabaseFailure(EDatabaseFailure.EditRowMismatch, affected == 0 ? NoRowMessage : $"O comando alteraria {affected} linhas, e não uma só.", Change: edit.Change, RowsAffected: affected);
+
+                applied++;
+            }
+
+            failing = null;
+            if (_editTransaction is { } transaction)
+            {
+                _editTransaction = null;
+                await transaction.CommitAsync(token);
+                await transaction.DisposeAsync();
+            }
+
+            return Result.Success<int, DatabaseFailure>(applied);
+        }, cancellationToken);
+
+        int? written = oneAtATime ? applied : null;
+        if (result.IsFailure)
+            return result.Error with { Change = failing, Applied = written };
+
+        if (result.Value.IsSuccess)
+            return result.Value.Value;
+
+        // A recusa do plano ou da contagem de linhas não é exceção: a transação é desfeita aqui, pelo mesmo fim do cursor abandonado.
+        await DisposeCursorAsync();
+
+        return result.Value.Error with { Applied = written };
+    }
+
     internal static IReadOnlyList<DatabaseInfo> CurrentFirst(IReadOnlyList<DatabaseInfo> databases)
         => [.. databases.Where(database => database.IsCurrent), .. databases.Where(database => !database.IsCurrent)];
 
@@ -638,6 +746,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return true;
         });
     }
+
+    private static ColumnInfo ReadColumn(DbDataReader reader)
+        => new(Text(reader, 0), Text(reader, 1), Flag(reader, 2), Flag(reader, 3), Number(reader, 4), NullableText(reader, 5), NullableText(reader, 6));
 
     private static string Text(DbDataReader reader, int ordinal)
         => Convert.ToString(reader.GetValue(ordinal), CultureInfo.InvariantCulture) ?? string.Empty;
@@ -697,7 +808,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return new QueryOutcome(null, Math.Max(recordsAffected, 0), ElapsedMs(started));
         }
 
-        _columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
+        var origins = ColumnOrigins(reader);
+        _columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal), origins?[ordinal]))];
         _cursorSql = sql;
         _pageSize = pageSize;
         _utilityCommand = !paged && MayHaveOpenedATransaction(returnedRows: true, reader.RecordsAffected);
@@ -713,18 +825,60 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>Uma consulta do próprio Prism lida até o fim, fora de transação: catálogo e verificação. Passa pelo mesmo caminho de leitura dos comandos do usuário.</summary>
     private Task<Result<IReadOnlyList<T>, DatabaseFailure>> QueryAsync<T>(string operation, EDatabaseFailure kind, string sql, IReadOnlyList<object> parameters, Func<DbDataReader, T> map, CancellationToken cancellationToken)
-        => RunAsync<IReadOnlyList<T>>(operation, kind, async token =>
+        => RunAsync(operation, kind, token => ReadAllAsync(sql, parameters, map, token), cancellationToken);
+
+    /// <summary>Uma consulta do próprio Prism lida até o fim, dentro de um comando em andamento (o `RunAsync` de quem chama).</summary>
+    private async Task<IReadOnlyList<T>> ReadAllAsync<T>(string sql, IReadOnlyList<object> parameters, Func<DbDataReader, T> map, CancellationToken cancellationToken)
+    {
+        var reader = await StartAsync(sql, parameters, userCommand: false, cancellationToken);
+        var items = new List<T>();
+
+        while (await reader.ReadAsync(cancellationToken))
+            items.Add(map(reader));
+
+        await FinishCursorAsync(cancellationToken);
+
+        return items;
+    }
+
+    /// <summary>RN-EDIT-002 e 010: a tabela, as colunas e as chaves, dentro do comando em andamento (e, no "Salvar", da transação dele).</summary>
+    private async Task<EditCatalogTable?> DescribeCoreAsync(EditTableName table, CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = EditRelationQuery(table);
+        var relations = await ReadAllAsync(sql, parameters, reader => (Schema: Text(reader, 0).TrimEnd(), Name: Text(reader, 1).TrimEnd(), Kind: Text(reader, 2).Trim(), ID: reader.IsDBNull(3) ? (long?)null : Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture), OneAtATime: Flag(reader, 4)), cancellationToken);
+        if (relations.Count == 0)
+            return null;
+
+        var relation = relations[0];
+        var columns = await ReadAllAsync(ColumnsSql, [relation.Schema, relation.Name], ReadColumn, cancellationToken);
+        var keys = await ReadAllAsync(EditKeysSql, [relation.Schema, relation.Name], reader => (Name: Text(reader, 0), Primary: Flag(reader, 1), Column: Text(reader, 2)), cancellationToken);
+
+        return new EditCatalogTable(relation.Schema, relation.Name, relation.Kind, relation.ID, relation.OneAtATime, columns, [.. keys.GroupBy(key => key.Name).Select(key => new EditKey(key.Key, key.First().Primary, [.. key.Select(row => row.Column)]))]);
+    }
+
+    /// <summary>Um comando do "Salvar", com os valores em parâmetros, dentro da transação dele quando há uma. Devolve as linhas afetadas.</summary>
+    private async Task<int> RunEditAsync(EditCommand edit, CancellationToken cancellationToken)
+    {
+        var command = _connection!.CreateCommand();
+        command.CommandText = edit.Sql;
+        command.CommandTimeout = 0;
+        command.Transaction = _editTransaction;
+
+        foreach (var value in edit.Parameters)
         {
-            var reader = await StartAsync(sql, parameters, userCommand: false, token);
-            var items = new List<T>();
+            var parameter = command.CreateParameter();
+            BindEditParameter(parameter, value);
+            command.Parameters.Add(parameter);
+        }
 
-            while (await reader.ReadAsync(token))
-                items.Add(map(reader));
+        // O `Cancel` o alcança por aqui; se ele lança, quem o descarta é o fim do cursor abandonado.
+        _command = command;
+        var affected = await command.ExecuteNonQueryAsync(cancellationToken);
+        _command = null;
+        await command.DisposeAsync();
 
-            await FinishCursorAsync(token);
-
-            return items;
-        }, cancellationToken);
+        return affected;
+    }
 
     /// <summary>
     /// Um comando em andamento, do começo ao fim: é o intervalo em que o `Cancel` vale. Um comando que falha no meio deixa o leitor num
@@ -862,6 +1016,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     {
         await using var command = _connection!.CreateCommand();
         command.CommandText = sql;
+        command.Transaction = _editTransaction;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -874,6 +1029,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
+        command.Transaction = _editTransaction;
 
         // O padrão dos drivers é 30 segundos, e um comando do usuário pode levar horas.
         if (userCommand)
@@ -994,7 +1150,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         _rowPending = false;
         _cursorSql = null;
 
-        if (reader is null && command is null && !_inTransaction)
+        if (reader is null && command is null && !_inTransaction && _editTransaction is null)
             return;
 
         await Send(nameof(DisposeCursorAsync), EDatabaseFailure.ExecutionFailed, async () =>
@@ -1014,13 +1170,14 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return true;
         });
 
-        if (!_inTransaction)
+        if (!_inTransaction && _editTransaction is null)
             return;
 
         // O `ROLLBACK` não passou, e a conexão continua viva: ela ficaria presa numa transação abortada, e o comando
         // seguinte rodaria dentro dela. A conexão é fechada (o banco desfaz a transação ao perdê-la), e quem a usa vê por `IsOpen` que
         // ela não serve mais e tira a sessão do registro.
         _inTransaction = false;
+        _editTransaction = null;
         await Send(nameof(DisposeCursorAsync), EDatabaseFailure.ExecutionFailed, async () =>
         {
             if (_connection is not null)
@@ -1110,6 +1267,16 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     {
         public async ValueTask DisposeAsync()
         {
+            // A do "Salvar" é do driver, e se desfaz por ele.
+            if (connection._editTransaction is { } transaction)
+            {
+                await transaction.RollbackAsync();
+                await transaction.DisposeAsync();
+                connection._editTransaction = null;
+
+                return;
+            }
+
             if (!connection._inTransaction)
                 return;
 

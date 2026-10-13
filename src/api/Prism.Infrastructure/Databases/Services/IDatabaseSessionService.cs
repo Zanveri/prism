@@ -78,4 +78,21 @@ public interface IDatabaseSessionService
 
     /// <summary>RN-SQL-010: interrompe o comando e a contagem em andamento na sessão. Não afeta um cursor aberto e parado.</summary>
     UnitResult<DatabaseFailure> Cancel(Guid sessionID);
+
+    /// <summary>
+    /// RN-EDIT-002, 003 e 010: o que se edita no resultado `resultID` da sessão, pelo catálogo, uma vez por resultado. A consulta vai na
+    /// sessão `catalogSessionID` (a da árvore da mesma conexão e do mesmo banco), esperando a vez nela, ou numa conexão à parte, com
+    /// prazo de espera de trava; nunca na sessão do resultado, cujo cursor continua aberto. Outro resultado na sessão: `ResultChanged`;
+    /// o resultado inteiro só leitura: `ResultNotEditable`, com o motivo.
+    /// </summary>
+    Task<Result<EditTarget, DatabaseFailure>> GetEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, CancellationToken cancellationToken);
+
+    /// <summary>RN-EDIT-008: os comandos que o "Salvar" executaria, com os valores como literais, sem executar nada.</summary>
+    Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-005, 011 e 012: o "Salvar", na sessão do resultado, sem esperar a vez (`SessionBusy`). Confere o catálogo dentro da
+    /// transação: se a tabela mudou desde o `edit-target`, `ResultChanged`, e nada é executado. Devolve quantas alterações gravou.
+    /// </summary>
+    Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 }

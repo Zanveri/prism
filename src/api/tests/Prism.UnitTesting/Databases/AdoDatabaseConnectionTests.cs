@@ -1841,6 +1841,13 @@ public sealed class AdoDatabaseConnectionTests
 
         protected override string DatabasesSql => "DATABASES";
 
+        protected override string EditKeysSql => "EDIT KEYS";
+
+        protected override string LockTimeoutSql => "LOCK TIMEOUT";
+
+        protected override (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table)
+            => ("EDIT RELATION", [table.Name]);
+
         protected override string? BeginReadOnlySql => "BEGIN READ ONLY";
 
         protected override DbConnection CreateConnection()

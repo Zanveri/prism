@@ -141,13 +141,31 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
             if (outcome.IsSuccess && outcome.Value.Page is { } page)
+            {
                 session.LastRowQuery = new RowQuery(sql, page.TotalRows);
+
+                // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
+                // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura.
+                var result = new ResultState(page.TotalRows is null ? EditableSql.Read(sql, DialectOf(session)) : ResultSource.ReadOnly(EditableSql.WroteRows), page.Columns);
+                session.CurrentResult = result;
+
+                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability } };
+            }
+
+            // O comando que rodou deixa a sessão sem resultado editável; a recusa pelo texto, antes de executar, deixa o anterior como estava.
+            if (outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed)
+                session.CurrentResult = null;
 
             return outcome;
         }, cancellationToken);
 
     public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken)
-        => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, session => session.Connection.FetchNextAsync(cancellationToken), cancellationToken);
+        => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, async session =>
+        {
+            var page = await session.Connection.FetchNextAsync(cancellationToken);
+
+            return page.IsSuccess && session.CurrentResult is { } result ? page.Value with { ResultID = result.ID, Editable = result.Editability } : page;
+        }, cancellationToken);
 
     public async Task<Result<long, DatabaseFailure>> CountAsync(Guid sessionID, CancellationToken cancellationToken)
     {
@@ -193,6 +211,73 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return UnitResult.Success<DatabaseFailure>();
     }
 
+    public async Task<Result<EditTarget, DatabaseFailure>> GetEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, CancellationToken cancellationToken)
+    {
+        if (!_sessions.TryGetValue(sessionID, out var session))
+            return SessionNotFound();
+
+        if (session.CurrentResult is not { } result || result.ID != resultID)
+            return ResultChanged();
+
+        return await TargetOfAsync(session, result, catalogSessionID, cancellationToken);
+    }
+
+    public async Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
+    {
+        if (!_sessions.TryGetValue(sessionID, out var session))
+            return SessionNotFound();
+
+        if (session.CurrentResult is not { } result || result.ID != resultID)
+            return ResultChanged();
+
+        var target = await TargetOfAsync(session, result, catalogSessionID: null, cancellationToken);
+
+        return target.IsFailure ? target.Error : EditPlanner.Preview(DialectOf(session), target.Value, result.Columns, changes);
+    }
+
+    /// <summary>
+    /// RN-EDIT-005: o alvo de antes é o que o `edit-target` respondeu (sem ele, o catálogo é consultado aqui, na própria sessão, cujo
+    /// cursor o "Salvar" fecha de qualquer jeito). As pendências são conferidas contra ele antes de ir ao banco; dentro da transação, o
+    /// catálogo é consultado de novo, e um alvo diferente (a tabela mudou, ou o esquema atual da sessão leva a outra) não executa nada.
+    /// </summary>
+    public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(ApplyEditsAsync), waitsForTurn: false, async session =>
+        {
+            if (session.CurrentResult is not { } result || result.ID != resultID)
+                return ResultChanged();
+
+            var dialect = DialectOf(session);
+            if (result.Source.Table is not { } table)
+                return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null).Error;
+
+            var expected = result.Target;
+            if (expected is null)
+            {
+                var described = await session.Connection.DescribeEditTableAsync(table, cancellationToken);
+                if (described.IsFailure)
+                    return described.Error;
+
+                var resolved = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, described.Value);
+                if (resolved.IsFailure)
+                    return resolved.Error;
+
+                expected = result.Target = resolved.Value;
+            }
+
+            var planned = EditPlanner.Plan(dialect, expected, result.Columns, changes);
+            if (planned.IsFailure)
+                return planned.Error;
+
+            return await session.Connection.ApplyEditsAsync(table, expected.OneAtATime, catalog =>
+            {
+                var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog);
+                if (now.IsFailure || !EditTargetResolver.Same(expected, now.Value))
+                    return Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(TableChanged(expected, now));
+
+                return EditPlanner.Plan(dialect, now.Value, result.Columns, changes);
+            }, cancellationToken);
+        }, cancellationToken);
+
     /// <summary>RN-SESSAO-004: a API encerrando fecha as sessões. O contêiner descarta o serviço no desligamento, antes do cofre, de quem ele depende.</summary>
     public async ValueTask DisposeAsync()
     {
@@ -202,6 +287,77 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
     private static DatabaseFailure SessionNotFound()
         => new(EDatabaseFailure.SessionNotFound, "A sessão com o banco não existe ou já foi fechada.");
+
+    private static DatabaseFailure ResultChanged()
+        => new(EDatabaseFailure.ResultChanged, "O resultado mudou: a sessão executou outro comando depois dele. Execute o comando de novo para editar.");
+
+    /// <summary>RN-EDIT-005: o catálogo de dentro da transação não é o da consulta. Nada foi executado.</summary>
+    private static DatabaseFailure TableChanged(EditTarget expected, Result<EditTarget, DatabaseFailure> now)
+    {
+        var before = expected.Tables[0];
+        if (now.IsSuccess && now.Value.Tables[0] is var table && (table.Schema != before.Schema || table.Name != before.Name))
+            return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"O comando agora lê outra tabela ({table.Schema}.{table.Name}, e não {before.Schema}.{before.Name}): o esquema atual da sessão mudou desde a consulta. Nada foi gravado; execute o comando de novo.");
+
+        return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"A tabela {before.Name} mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.");
+    }
+
+    private static ESqlDialect DialectOf(Session session)
+        => session.Info.Engine switch
+        {
+            EDatabaseEngine.Db2 => ESqlDialect.Db2,
+            EDatabaseEngine.Informix => ESqlDialect.Informix,
+            _ => ESqlDialect.PostgreSql
+        };
+
+    /// <summary>
+    /// RN-EDIT-010: o alvo da edição de um resultado, consultado uma vez e guardado com ele. O resultado inteiro só leitura responde
+    /// sem ir ao banco.
+    /// </summary>
+    private async Task<Result<EditTarget, DatabaseFailure>> TargetOfAsync(Session session, ResultState result, Guid? catalogSessionID, CancellationToken cancellationToken)
+    {
+        if (result.Target is { } known)
+            return known;
+
+        var dialect = DialectOf(session);
+        if (result.Source.Table is not { } table)
+            return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null);
+
+        var started = _timeProvider.GetTimestamp();
+        var catalog = await DescribeElsewhereAsync(session, table, catalogSessionID, cancellationToken);
+        var target = catalog.IsFailure ? catalog.Error : EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog.Value);
+        Log(session, nameof(GetEditTargetAsync), started, target);
+
+        if (target.IsSuccess)
+            result.Target = target.Value;
+
+        return target;
+    }
+
+    /// <summary>
+    /// RN-EDIT-010: o catálogo da edição nunca vai na sessão do resultado, que pode ter o cursor aberto. Vai na sessão da árvore (a da
+    /// mesma conexão, do mesmo banco e do mesmo cofre), esperando a vez como qualquer consulta de catálogo; sem ela, numa conexão à
+    /// parte, com as credenciais da sessão e prazo de espera de trava, que o "cancelar" e o fechamento da sessão interrompem como a
+    /// contagem.
+    /// </summary>
+    private async Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeElsewhereAsync(Session session, EditTableName table, Guid? catalogSessionID, CancellationToken cancellationToken)
+    {
+        if (catalogSessionID is { } catalogID && catalogID != session.Info.ID && _sessions.TryGetValue(catalogID, out var tree) && tree.Info.ConnectionID == session.Info.ConnectionID && tree.Info.Database == session.Info.Database && tree.VaultGeneration == session.VaultGeneration)
+        {
+            var described = await RunAsync(catalogID, nameof(DescribeElsewhereAsync), waitsForTurn: true, other => other.Connection.DescribeEditTableAsync(table, cancellationToken), cancellationToken);
+            if (described.IsSuccess || described.Error.Kind != EDatabaseFailure.SessionNotFound)
+                return described;
+        }
+
+        using var describing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.CountCancellation.Token);
+        var opened = await ConnectAsync(session.Settings, describing.Token);
+        if (opened.IsFailure)
+            return opened.Error;
+
+        await using var connection = opened.Value;
+        var limited = await connection.LimitLockWaitAsync(describing.Token);
+
+        return limited.IsFailure ? limited.Error : await connection.DescribeEditTableAsync(table, describing.Token);
+    }
 
     /// <summary>RN-SQL-007: só há cursor aberto quando a página diz que há mais linhas; qualquer outro desfecho de um comando o fechou.</summary>
     private static bool HasOpenCursor(object? value)
@@ -409,6 +565,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// </summary>
     private sealed class Session(DatabaseSessionInfo info, ConnectionSettings settings, IDatabaseConnection connection, long vaultGeneration)
     {
+        /// <summary>RN-EDIT-002: o resultado do último comando que devolveu linhas, enquanto nenhum outro rodou. Lido pelo `edit-target` sem a vez da sessão.</summary>
+        public volatile ResultState? CurrentResult;
+
         /// <summary>O último comando que devolveu linhas (RN-SQL-006). Lido pela contagem sem a vez da sessão.</summary>
         public volatile RowQuery? LastRowQuery;
 
@@ -445,6 +604,29 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         {
             Closed = true;
             _ = Volatile.Read(ref CountCancellation).CancelAsync();
+        }
+    }
+
+    /// <summary>
+    /// RN-EDIT-002: um resultado da sessão, com o identificador que a página leva (muda a cada execução), o que o texto do comando diz da
+    /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele.
+    /// </summary>
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns)
+    {
+        private volatile EditTarget? _target;
+
+        public Guid ID { get; } = Guid.CreateVersion7();
+
+        public ResultSource Source => source;
+
+        public IReadOnlyList<QueryColumn> Columns => columns;
+
+        public ResultEditability Editability { get; } = source.Reason is { } reason ? ResultEditability.ReadOnly(reason) : ResultEditability.Unknown;
+
+        public EditTarget? Target
+        {
+            get => _target;
+            set => _target = value;
         }
     }
 

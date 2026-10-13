@@ -1,4 +1,5 @@
 using Npgsql;
+using NpgsqlTypes;
 using Prism.Infrastructure.Databases.Models;
 using System.Data.Common;
 using ILogger = Serilog.ILogger;
@@ -252,6 +253,63 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     protected override void ConfigureUserCommand(DbCommand command)
         => ((NpgsqlCommand)command).AllResultTypesAreUnknown = true;
+
+    /// <summary>
+    /// RN-EDIT-003: o banco diz, na descrição das linhas, de que tabela (`TableOID`) e de que coluna dela (o número, `attnum`) vem cada
+    /// coluna do resultado, e zero na calculada. Sem `CommandBehavior.KeyInfo` o driver lê isso da própria resposta, sem consultar o
+    /// catálogo (com ele, abriria outra conexão para buscar o resto).
+    /// </summary>
+    protected override IReadOnlyList<ColumnOrigin?> ColumnOrigins(DbDataReader reader)
+        => [.. ((NpgsqlDataReader)reader).GetColumnSchema().Select(column => column.TableOID == 0 ? null : new ColumnOrigin(column.TableOID, column.ColumnAttributeNumber ?? 0))];
+
+    /// <summary>
+    /// RN-EDIT-006: quem converte é o banco. O texto vai num parâmetro sem tipo, e o servidor o lê pelo tipo da coluna, como leria um
+    /// literal escrito na sessão (com o formato de data e o fuso dela).
+    /// </summary>
+    protected override void BindEditParameter(DbParameter parameter, EditParameter value)
+    {
+        ((NpgsqlParameter)parameter).NpgsqlDbType = NpgsqlDbType.Unknown;
+        parameter.Value = value.Value ?? DBNull.Value;
+    }
+
+    /// <summary>
+    /// RN-EDIT-003: a tabela pelo nome entre aspas, como o banco o resolve (`to_regclass`, que usa o caminho de busca quando não há
+    /// esquema). A tabela comum e a particionada se editam; a visão, a materializada e a estrangeira, não.
+    /// </summary>
+    protected override (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table)
+        => (@"SELECT pg_namespace.nspname,
+                     pg_class.relname,
+                     CASE WHEN pg_class.relkind IN ('r', 'p') THEN 'table'
+                          WHEN pg_class.relkind = 'v' THEN 'view'
+                          WHEN pg_class.relkind = 'm' THEN 'materializedView'
+                          WHEN pg_class.relkind = 'f' THEN 'foreign'
+                          ELSE 'other'
+                      END,
+                     pg_class.oid::bigint,
+                     FALSE
+                FROM pg_catalog.pg_class
+                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+               WHERE pg_class.oid = pg_catalog.to_regclass($1)", [table.Written]);
+
+    /// <summary>RN-EDIT-002: os índices únicos válidos, sem condição (`indpred`) e sem expressão (`indexprs`); a chave primária e as restrições únicas são índices assim.</summary>
+    protected override string EditKeysSql => @"SELECT index_class.relname,
+                                                     pg_index.indisprimary,
+                                                     pg_attribute.attname
+                                                FROM pg_catalog.pg_index
+                                                JOIN pg_catalog.pg_class AS table_class ON table_class.oid = pg_index.indrelid
+                                                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = table_class.relnamespace
+                                                JOIN pg_catalog.pg_class AS index_class ON index_class.oid = pg_index.indexrelid
+                                               CROSS JOIN LATERAL generate_series(1, pg_index.indnkeyatts) AS key_position (ordinal)
+                                                JOIN pg_catalog.pg_attribute ON pg_attribute.attrelid = table_class.oid AND pg_attribute.attnum = pg_index.indkey[key_position.ordinal - 1]
+                                               WHERE pg_namespace.nspname = $1
+                                                 AND table_class.relname = $2
+                                                 AND pg_index.indisunique
+                                                 AND pg_index.indisvalid
+                                                 AND pg_index.indpred IS NULL
+                                                 AND pg_index.indexprs IS NULL
+                                               ORDER BY pg_index.indisprimary DESC, index_class.relname, key_position.ordinal";
+
+    protected override string LockTimeoutSql => "SET lock_timeout = '5s'";
 
     /// <summary>O nome vem com o modificador (`numeric(12,2)`, `timestamp(3) without time zone`), que sai antes da consulta à tabela.</summary>
     protected override string ColumnKind(DbDataReader reader, int ordinal)
