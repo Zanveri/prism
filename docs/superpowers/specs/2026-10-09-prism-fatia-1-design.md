@@ -1975,10 +1975,17 @@ fechada, assim, ao reabrir já retorna as queries feitas".
     estavam.
   - Voltam desconectadas: nada conecta nem executa sozinho.
   - O resultado, o cursor e as alterações não salvas da grade não voltam.
-  - A aba cuja conexão foi excluída volta sem conexão, como um script sem conexão.
+  - A aba de consulta cuja conexão foi excluída volta sem conexão, como um script sem conexão. A aba
+    de tabela cuja conexão foi excluída não volta, e a entrada avisa.
   - O texto de cada aba vai até 1 MB (RN-SCRIPT-004). O que passa disso não é gravado, e a aba volta
     vazia, com o aviso.
   - Fechar uma aba a tira do que volta.
+
+- **RN-ABAS-007.** Fechar o app (a última janela) pergunta só pelo que não volta: as alterações
+  não salvas da grade (RN-EDIT-007). O texto das abas de consulta e os scripts com mudança não
+  salva voltam na próxima entrada (RN-ABAS-006), então não há pergunta por eles. Fechar uma aba,
+  várias abas ou uma janela que não é a última pergunta como antes, porque o que fecha não volta,
+  e a pergunta diz isso.
 
 | Rota | Sucesso | Erros |
 | --- | --- | --- |
