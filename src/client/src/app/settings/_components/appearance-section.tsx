@@ -1,15 +1,19 @@
 import { useSyncExternalStore } from "react";
 
+import { Field, FieldLabel } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { fontStack } from "../_lib/fonts";
 import { appliedTheme, subscribeSystemScheme, systemPrefersLight } from "../_lib/theme";
 import { settingsCopy } from "../_lib/settings.copy";
 import { themeOptions, themePreviews, type ThemeOption } from "../_lib/themes";
 import { usePreferences } from "../_lib/use-preferences";
+import { FontPicker } from "./font-picker";
 import { SettingsCard } from "./settings-card";
-import { SqlSample, themeSample } from "./sql-sample";
+import { appliedPalette, fontSample, SqlSample, themeSample } from "./sql-sample";
 
 const copy = settingsCopy.appearance;
+const fontCopy = copy.fonts;
 
 /**
  * O cartão de um tema: uma faixa com as cores dele e o nome. As cores são as da prévia do tema, e não as do que está aplicado. A faixa é
@@ -41,9 +45,12 @@ function ThemeCard({ option, selected, onPick }: { option: ThemeOption; selected
 }
 
 /**
- * Aparência: tema (RN-CONFIG-001 e RN-CONFIG-003). Um dos seis temas do canvas, ou o do sistema: a escolha vai para as preferências do
+ * Aparência: tema (RN-CONFIG-001 e RN-CONFIG-003) e fontes (RN-CONFIG-008). Um dos seis temas do canvas, ou o do sistema: a escolha vai para as preferências do
  * usuário, e quem aplica o tema na tela é o `ThemeSync`, na hora. Com "seguir o sistema" ligado o cartão marcado é o do Prism no modo que
  * o sistema está usando agora (Escuro ou Claro); escolher um cartão desliga o "seguir", e desligá-lo fica no tema que a tela já mostrava.
+ *
+ * As fontes: a da interface e a do editor SQL, cada uma a do app ou uma instalada (`FontPicker`). Quem as aplica é o `FontSync`, na hora; a
+ * interface inteira é a prévia da primeira, e uma linha de SQL, a da segunda.
  */
 export function AppearanceSection({ anchor }: { anchor: string }) {
   const { preferences, update } = usePreferences();
@@ -74,6 +81,24 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
         <span>{copy.followSystem}</span>
       </label>
       <p className="text-xs text-muted">{copy.note}</p>
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
+        <Field>
+          <FieldLabel htmlFor="cfg-fonte-interface">{fontCopy.ui}</FieldLabel>
+          <FontPicker id="cfg-fonte-interface" label={fontCopy.ui} role="ui" value={preferences.ui.fontFamily} onChange={(fontFamily) => update({ ui: { fontFamily } })} hintId="cfg-fonte-interface-dica" />
+          <p id="cfg-fonte-interface-dica" className="text-xs text-muted">
+            {fontCopy.uiHint}
+          </p>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="cfg-fonte-editor">{fontCopy.editor}</FieldLabel>
+          <FontPicker id="cfg-fonte-editor" label={fontCopy.editor} role="editor" value={preferences.editor.fontFamily} onChange={(fontFamily) => update({ editor: { fontFamily } })} hintId="cfg-fonte-editor-dica" />
+          <p id="cfg-fonte-editor-dica" className="text-xs text-muted">
+            {fontCopy.editorHint}
+          </p>
+          <SqlSample lines={fontSample} palette={appliedPalette} font={{ fontFamily: fontStack("editor", preferences.editor.fontFamily) }} className="rounded-md border border-border" />
+        </Field>
+      </div>
     </SettingsCard>
   );
 }

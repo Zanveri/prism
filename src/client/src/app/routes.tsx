@@ -5,6 +5,7 @@ import { VaultGuard } from "@/app/_components/vault-guard";
 import { WorkbenchSlot } from "@/app/_components/workbench-slot";
 import { LegacyConnectionsRedirect } from "@/app/connections/page";
 import { DriversRedirect } from "@/app/drivers/page";
+import { FontSync } from "@/app/settings/_components/font-sync";
 import { SettingsShortcut } from "@/app/settings/_components/settings-shortcut";
 import { ThemeSync } from "@/app/settings/_components/theme-sync";
 import { SettingsPage } from "@/app/settings/page";
@@ -26,7 +27,7 @@ import { pathsConfig } from "@/config/paths.config";
  * - o guard só desenha o que está abaixo dele com o cofre aberto, então sair, ou o cofre fechar por
  *   qualquer motivo, desmonta tudo: nada passa para o usuário seguinte.
  *
- * O tema do usuário (RN-CONFIG-001) é aplicado também aqui dentro, por `ThemeSync`: só com o cofre aberto há usuário. As
+ * O tema e as fontes do usuário (RN-CONFIG-001 e 008) são aplicados também aqui dentro, por `ThemeSync` e `FontSync`: só com o cofre aberto há usuário. As
  * Configurações são mais uma tela sob o provedor, então abrir e fechar a tela (ou Ctrl+, de qualquer uma, `SettingsShortcut`)
  * não apaga as abas.
  *
@@ -44,6 +45,7 @@ export const routes: RouteObject[] = [
         element: (
           <WorkbenchProvider>
             <ThemeSync />
+            <FontSync />
             <SettingsShortcut />
             <WorkbenchSlot>
               <WorkbenchPage />
