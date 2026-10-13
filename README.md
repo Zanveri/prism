@@ -1,76 +1,80 @@
 # Prism
 
+**English** · [Português (BR)](README.pt-BR.md) · [Español](README.es.md)
+
 [![Pipeline](https://github.com/Zanveri/prism/actions/workflows/pipeline.yml/badge.svg?branch=develop)](https://github.com/Zanveri/prism/actions/workflows/pipeline.yml?query=branch%3Adevelop)
-[![Versão](https://img.shields.io/github/v/release/Zanveri/prism?sort=semver&display_name=tag&label=vers%C3%A3o)](https://github.com/Zanveri/prism/releases)
+[![Version](https://img.shields.io/github/v/release/Zanveri/prism?sort=semver&display_name=tag&label=version)](https://github.com/Zanveri/prism/releases)
 [![Downloads](https://img.shields.io/github/downloads/Zanveri/prism/total?label=downloads)](https://github.com/Zanveri/prism/releases)
-[![Licença](https://img.shields.io/github/license/Zanveri/prism?label=licen%C3%A7a)](LICENSE)
-[![Plataformas](https://img.shields.io/badge/plataformas-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#baixar)
-[![Documentação](https://img.shields.io/badge/documenta%C3%A7%C3%A3o-zanveri.github.io%2Fprism-blue)](https://zanveri.github.io/prism/)
+[![License](https://img.shields.io/github/license/Zanveri/prism?label=license)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#download)
+[![Documentation](https://img.shields.io/badge/documentation-zanveri.github.io%2Fprism-blue)](https://zanveri.github.io/prism/)
 
-**[Baixar](https://github.com/Zanveri/prism/releases/latest)** · [Documentação](https://zanveri.github.io/prism/) · [Relatar um problema](https://github.com/Zanveri/prism/issues)
+**[Download](https://github.com/Zanveri/prism/releases/latest)** · [Documentation](https://zanveri.github.io/prism/) · [Report a problem](https://github.com/Zanveri/prism/issues)
 
-O **Prism** é um cliente de banco de dados para desktop, uma alternativa ao DBeaver e ao DataGrip para quem trabalha todo dia
-com **PostgreSQL**, **Db2** e **Informix**: conectar, navegar pelos objetos, rodar SQL e ver o resultado, rápido e sem rodeio.
-Roda no Windows, no macOS e no Linux, e guarda as pastas e as conexões de cada usuário num cofre cifrado.
+**Prism** is a desktop database client, an alternative to DBeaver and DataGrip for people who work every day with
+**PostgreSQL**, **Db2** and **Informix**: connect, browse the objects, run SQL and see the result, fast and without detours.
+It runs on Windows, macOS and Linux, and keeps each user's folders and connections in an encrypted vault.
 
-O Prism nasceu da nossa frustração com as versões recentes do DBeaver: queríamos de volta uma ferramenta leve e direta para o
-trabalho de todo dia.
+Prism was born out of our frustration with recent versions of DBeaver: we wanted a lightweight, direct tool for everyday work
+again.
 
-> **Prism** is a desktop database client, an alternative to DBeaver and DataGrip, for PostgreSQL, Db2 and Informix.
-> The documentation is in Brazilian Portuguese: <https://zanveri.github.io/prism/>.
+The app's interface is currently in Brazilian Portuguese.
 
-![O editor SQL do Prism com o resultado de uma consulta](site/img/editor-resultado.png)
+![Prism's SQL editor with the result of a query](site/img/editor-resultado.png)
 
-## Baixar
+## Download
 
-Baixe a versão mais nova na **[página de releases](https://github.com/Zanveri/prism/releases/latest)** e, em **Assets**, escolha o
-arquivo do seu sistema:
+Get the newest version from the **[releases page](https://github.com/Zanveri/prism/releases/latest)** and, under **Assets**, pick
+the file for your system:
 
-| Sistema | Arquivo | Para quê |
+| System | File | What it is |
 | --- | --- | --- |
-| Windows x64 | `Prism-<versão>-win-x64.exe` | o instalador |
-| Windows x64 | `Prism-<versão>-win-x64.zip` | a cópia portátil, sem instalação |
-| Linux x64 | `Prism-<versão>-linux-x86_64.AppImage` | roda na maioria das distribuições, sem instalar |
-| Linux x64 | `Prism-<versão>-linux-amd64.deb` | Debian, Ubuntu e derivadas |
-| Linux x64 | `Prism-<versão>-linux-x86_64.rpm` | Fedora, RHEL, openSUSE e derivadas |
-| Linux x64 | `Prism-<versão>-linux-x64.tar.gz` | a pasta do app, para descompactar |
-| macOS Apple Silicon | `Prism-<versão>-mac-arm64.dmg` e `….zip` | os Macs com processador M |
-| macOS Intel | `Prism-<versão>-mac-x64.dmg` e `….zip` | os Macs com processador Intel |
+| Windows x64 | `Prism-<version>-win-x64.exe` | the installer |
+| Windows x64 | `Prism-<version>-win-x64.zip` | the portable copy, no installation |
+| Linux x64 | `Prism-<version>-linux-x86_64.AppImage` | runs on most distributions, no installation |
+| Linux x64 | `Prism-<version>-linux-amd64.deb` | Debian, Ubuntu and derivatives |
+| Linux x64 | `Prism-<version>-linux-x86_64.rpm` | Fedora, RHEL, openSUSE and derivatives |
+| Linux x64 | `Prism-<version>-linux-x64.tar.gz` | the app folder, to extract |
+| macOS Apple Silicon | `Prism-<version>-mac-arm64.dmg` and `….zip` | Macs with an M processor |
+| macOS Intel | `Prism-<version>-mac-x64.dmg` and `….zip` | Macs with an Intel processor |
 
-O driver do PostgreSQL vai junto. O do Db2 e do Informix é o da IBM: o Prism o baixa para você em **Configurações › Drivers**
-(a IBM não o publica para Mac com processador Intel). Para conferir o pacote, compare o SHA-256 dele com a linha do arquivo
-`SHA256SUMS` da release.
+The PostgreSQL driver ships with the app. The Db2 and Informix driver is IBM's: Prism downloads it for you in **Configurações ›
+Drivers** (Settings › Drivers); IBM does not publish it for Macs with an Intel processor. To verify a package, compare its
+SHA-256 with its line in the release's `SHA256SUMS` file.
 
-Os pacotes ainda não são assinados, e o sistema avisa na primeira abertura:
+The packages are not signed yet, and the system warns you on first launch:
 
-- **Windows:** em "O Windows protegeu o computador", clique em **Mais informações** e em **Executar assim mesmo**.
-- **macOS:** clique no app com o botão direito e escolha **Abrir**; no macOS 15 ou mais novo, libere em **Ajustes do Sistema ›
-  Privacidade e Segurança › Abrir Mesmo Assim**, ou rode `xattr -dr com.apple.quarantine /Applications/Prism.app`.
+- **Windows:** under "Windows protected your PC", click **More info** and then **Run anyway**.
+- **macOS:** right-click the app and choose **Open**; on macOS 15 or newer, allow it in **System Settings › Privacy & Security ›
+  Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Prism.app`.
 
-## Documentação
+## Documentation
 
-Instalação, primeiro uso, conexões, editor SQL, registros de uma tabela, configurações e atualizações:
-**<https://zanveri.github.io/prism/>**.
+Installation, first use, connections, the SQL editor, the records of a table, settings and updates:
+**<https://zanveri.github.io/prism/>** (also in [Portuguese](https://zanveri.github.io/prism/pt-br/) and
+[Spanish](https://zanveri.github.io/prism/es/)).
 
-## Problemas e sugestões
+## Problems and suggestions
 
-Algo não funcionou ou faltou alguma coisa? [Abra uma issue](https://github.com/Zanveri/prism/issues): é por lá que a gente
-ajusta. Falha de segurança vai pelo relato privado descrito no [SECURITY.md](SECURITY.md).
+Did something not work, or is something missing? [Open an issue](https://github.com/Zanveri/prism/issues), in English,
+Portuguese or Spanish: that is where we fix it. Security flaws go through the private report described in
+[SECURITY.md](SECURITY.md).
 
-## Desenvolvimento
+## Development
 
-Precisa do .NET SDK 10, do Node.js 22 com pnpm 10 e, para os testes de integração, do Docker.
+You need the .NET SDK 10, Node.js 22 with pnpm 10 and, for the integration tests, Docker.
 
 ```bash
 pnpm --dir src/client install --frozen-lockfile
 pnpm --dir src/client dev
 ```
 
-Testes, empacotamento e o fluxo de contribuição estão no [CONTRIBUTING.md](CONTRIBUTING.md); a pipeline e os lançamentos, em
-[docs/ci.md](docs/ci.md) e [docs/versionamento.md](docs/versionamento.md).
+Tests, packaging and the contribution flow are in [CONTRIBUTING.md](CONTRIBUTING.md); the pipeline and the releases are in
+[docs/ci.md](docs/ci.md) and [docs/versionamento.md](docs/versionamento.md) (in Portuguese).
 
-## Licença
+## License
 
-GNU GPL versão 3 (`GPL-3.0-only`): qualquer pessoa ou empresa pode usar, estudar, modificar e redistribuir o Prism, desde que quem
-distribuir uma cópia entregue também o código-fonte completo sob a mesma licença. O texto está em [LICENSE](LICENSE); o aviso de
-copyright e a permissão adicional para o driver da IBM, em [NOTICE](NOTICE). As marcas e as logos não estão sob a GPL.
+GNU GPL version 3 (`GPL-3.0-only`): anyone, person or company, may use, study, modify and redistribute Prism, as long as whoever
+distributes a copy also provides the complete source code under the same license. The text is in [LICENSE](LICENSE); the
+copyright notice and the additional permission for the IBM driver are in [NOTICE](NOTICE). Trademarks and logos are not under the
+GPL.
