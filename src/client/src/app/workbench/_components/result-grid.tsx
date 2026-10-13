@@ -371,6 +371,15 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     lineHeight: `calc(var(--text-sm--line-height) * ${metrics.factor})`,
   } as CSSProperties;
 
+  // A célula ativa fica à vista quando muda: a linha nova entra depois das lidas, e o "Nova linha" a ativa lá no fim.
+  const activeRow = editing?.active?.row ?? null;
+  const activeColumn = editing?.active?.column ?? null;
+  useEffect(() => {
+    if (activeRow === null || activeColumn === null) return;
+    rowVirtualizer.scrollToIndex(activeRow);
+    columnVirtualizer.scrollToIndex(activeColumn);
+  }, [activeRow, activeColumn, rowVirtualizer, columnVirtualizer]);
+
   // Fechar o campo de edição devolve o foco à grade, para as setas e o F2 seguirem dali; não o rouba de quem o levou para outro lugar.
   const editorOpen = editing?.editor != null;
   const wasOpen = useRef(editorOpen);
@@ -433,8 +442,6 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     if (moved !== null) {
       event.preventDefault();
       editing.onActivate(moved);
-      rowVirtualizer.scrollToIndex(moved.row);
-      columnVirtualizer.scrollToIndex(moved.column);
       return;
     }
 
