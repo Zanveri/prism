@@ -1221,7 +1221,8 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   seleção atravessa a rolagem e o "carregar mais", e é esquecida numa nova execução.
 - **RN-GRADE-002.** Copiar. Ctrl+C copia a seleção como texto: células separadas por tabulação
   e linhas por quebra de linha (o que uma planilha cola); uma célula só é copiada como o valor
-  puro. Nulo vai vazio. Se alguma célula copiada estava cortada (RN-SQL-011), a tela avisa.
+  puro. Nulo vai vazio. A célula que chegou cortada (RN-SQL-011) é copiada com o valor completo
+  (RN-SQL-017); a tela avisa só quando algum valor não pôde vir inteiro.
 - **RN-GRADE-003.** Copiar avançado (Ctrl+Shift+C, como no DBeaver): um diálogo escolhe o que
   copiar (a seleção, as linhas inteiras da seleção ou todas as carregadas) e como: texto
   delimitado (delimitador, cabeçalho, número da linha, aspas, como escrever o nulo), JSON,
@@ -1986,3 +1987,26 @@ fechada, assim, ao reabrir já retorna as queries feitas".
 | `PUT api/user/workspace` `{ tabs, activeIndex }` | 204 | 422 `WORKSPACE_INVALID` (formato, índice fora da lista), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
 
 O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes.
+
+### Valor completo das células cortadas
+
+Defeito relatado pelo dono em 2026-10-13: copiar uma célula `CLOB` do Informix (um JSON longo) com
+Ctrl+C ou "Copiar valor" levou o texto cortado. Num cliente de banco a cópia tem de ser o valor
+inteiro.
+
+- **RN-SQL-017.** A grade continua mostrando o valor cortado (RN-SQL-011). Copiar (Ctrl+C,
+  "Copiar valor", copiar avançado) e exportar levam o valor completo, como veio do banco.
+  - A API guarda, em memória e só no processo dela, o valor completo de cada célula que cortou,
+    nas páginas que já entregou do resultado atual. Nunca grava em disco, nunca no log.
+  - Ela guarda até 256 MB por sessão. Passando disso, as células seguintes ficam sem valor
+    completo, e a página diz quais.
+  - Larga tudo quando a aba executa outro comando, quando o resultado é descartado e quando a
+    sessão fecha.
+  - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram.
+  - O texto vai inteiro. O binário vai como a grade o escreve (hexadecimal), inteiro.
+
+| Rota | Sucesso | Erros |
+| --- | --- | --- |
+| `POST api/user/database-sessions/{id}/results/{resultID}/cells` `{ cells: [{ row, column }] }` (até 10.000 células por pedido) | 200 `{ values: [{ row, column, value }] }`, na ordem pedida; `value` nulo quando a célula não tem valor completo | 404 `DATABASE_SESSION_NOT_FOUND`, `RESULT_NOT_FOUND` (outro comando já rodou); 422 `CELLS_INVALID` (lista vazia, acima do limite, linha ou coluna fora do resultado) |
+
+O log dessa rota registra só a contagem de células, nunca o valor.
