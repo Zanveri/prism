@@ -13,7 +13,7 @@ import { ApiRequestError } from "@/lib/api/prism-api";
 import { connectionReveal } from "../_lib/connection-intent";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, menuFor, type MenuAction } from "../_lib/navigator-menu";
-import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
@@ -667,6 +667,17 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
     scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`)?.focus();
   }
 
+  /** Põe o foco na linha pedida, rolando até ela antes quando ela está fora das desenhadas. */
+  function focusRow(target: number | null) {
+    if (target === null) return;
+    const focus = () => scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`)?.focus();
+    if (scrollRef.current?.querySelector(`[data-index="${target}"]`)) focus();
+    else {
+      virtualizer.scrollToIndex(target, { align: "auto" });
+      requestAnimationFrame(focus);
+    }
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLElement>, node: NavNode, index: number) {
     if (event.key === "ArrowDown") move(event, index, 1);
     else if (event.key === "ArrowUp") move(event, index, -1);
@@ -684,9 +695,11 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
       event.preventDefault();
       if (!open.has(node.key)) onToggle(node);
       else move(event, index, 1);
-    } else if (event.key === "ArrowLeft" && node.hasChildren && open.has(node.key)) {
+    } else if (event.key === "ArrowLeft") {
+      // Num nó aberto, fecha; num nó fechado ou numa folha, leva ao pai (o padrão das árvores), e a próxima seta fecha ele.
       event.preventDefault();
-      onToggle(node);
+      if (node.hasChildren && open.has(node.key)) onToggle(node);
+      else focusRow(parentRowIndex(rows, index));
     }
   }
 
