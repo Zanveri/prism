@@ -514,8 +514,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   coluna caberem inteiros).
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
   na barra do editor, "Explicar plano", "Formatar", a conexão da aba e a transação (a barra tem só Executar e Cancelar,
-  seção 9 da especificação); na área de resultado, "Mensagens", "Plano de execução" e a edição de célula (o "Exportar CSV" só existe
-  nos Registros de uma tabela, RN-TABELA-006).
+  seção 9 da especificação); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
+  nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
   ponte responder; a tela é levada ao `#/workbench` depois de trocar `window.fetch` por um que responde `api/…` com dados
@@ -763,7 +763,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   a sessão com identificadores delimitados, e sem aspas um nome com maiúsculas seria dobrado para minúsculas pelo servidor). É a regra
   única: o `SELECT` da aba, o "Gerar SELECT" e o "Copiar nome qualificado" escrevem o nome por ela, e o texto gerado tem
   `statementCount` 1. A vista usa o `ResultPanel` no modo `records` (título, rótulo, rodapé com "Atualizar" ou
-  "Cancelar", e o cursor fechado que pede "Atualizar", e não "Executar de novo"): sem editor de SQL; a grade edita as células (ver "Edição dos Registros", abaixo).
+  "Cancelar", e o cursor fechado que pede "Atualizar", e não "Executar de novo"): sem editor de SQL; a grade edita as células (ver "Edição das células", abaixo).
 - **Filtro e ordem** (RN-TABELA-005). O campo `WHERE` (`records-filter.tsx`) recebe a condição **como o usuário a escreve**, só sem o espaço
   das pontas: não se lê, não se escapa e não se põe entre parênteses (RN-SQL-003). `recordsSql(engine, esquema, nome, { where, sort })` monta
   o comando com cada parte numa linha própria (uma condição que termina em `--` não engole o `ORDER BY`), e a recusa de mais de um comando é
@@ -876,37 +876,50 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   colunas por vizinha, em paralelo, pelas mesmas da Estrutura. As tabelas que apontam PARA a tabela não entram: a API não as devolve. A
   área pode nascer escondida (a área de trabalho por baixo de outra tela): sem tamanho nada se mede, e quando ela aparece
   (`ResizeObserver`) o diagrama se ajusta ou volta à rolagem lembrada.
-- **Edição dos Registros** (seção 22, RN-EDIT-001 a 012; nesta rodada só na aba de uma tabela). As decisões são funções puras com teste:
+- **Edição das células** (seção 22, RN-EDIT-001 a 012): a mesma nos Registros de uma tabela e na grade do resultado de um comando da aba de
+  consulta (o mesmo campo, faixa, menu e atalhos; a diferença da aba de consulta está em "Na aba de consulta", abaixo). As decisões são funções puras com teste:
   `record-edits.ts` (as pendências, `PendingEdits`: células de linha lida, exclusões e linhas novas, cada lista na ordem em que foi feita; uma
   alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
   `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
   `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
-  célula: Copiar valor, Colar, Editar, Definir como NULL, Desfazer esta alteração; Nova linha e Excluir linha; o que não se aplica vem desabilitado,
+  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Linha nova e Excluir linha, os rótulos da RN-EDIT-001; o que não se aplica vem desabilitado,
   com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, Tab) e `grid-editing.ts` (as linhas e as
   marcas que a grade desenha). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
   central pelo cache de mutações) e os esquemas, `record-edits.schema.ts`. A página traz `resultID` e o motivo de só leitura (`QueryPage.resultId` e
   `readOnly`, que o executor guarda nas linhas), e o executor dá a sessão da aba (`sessionOf`).
-  - **Quem liga tudo é `use-record-edits.ts`** (na vista Registros): o estado (as pendências, que ficam na memória da aba, espaço `edits`, pelo
+  - **Quem liga tudo é `_lib/use-record-edits.ts`** (na vista Registros e na aba de consulta): o estado (as pendências, que ficam na memória da aba, espaço `edits`, pelo
     resultado; o alvo do catálogo, perguntado na primeira tentativa de editar, pela sessão da árvore da mesma conexão quando ela existe; a célula
     ativa e o campo aberto, do resultado; a faixa, o menu, o "Ver SQL" e a pergunta). A grade (`ResultGrid` com `editing`) passa a `role="grid"`,
     com `gridcell`, `aria-activedescendant` e a posição em `data-row`/`data-col`, que o clique, o duplo clique e o botão direito leem por
     delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: setas, Home e End (com Ctrl,
-    da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva,
+    da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
+    as alterações quando há alguma (`savesEdits`; sem nenhuma, ou com Shift, a tecla segue para o script da aba de consulta, RN-SCRIPT-001),
     Alt+Insert cria a linha. A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
     com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho.
-  - **A faixa** (`edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
+  - **A faixa** (`_components/edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
     erro do último Salvar (`role="alert"`), que fica até o próximo; e o motivo de só leitura, à vista. Salvar que gravou tudo avisa "N alterações
-    salvas." e lê os registros de novo.
-  - **A pergunta antes de perder as pendências** (`unsaved-edits-dialog.tsx`, com Salvar, Descartar e Cancelar; o foco em Cancelar): "Atualizar",
+    salvas." e chama `onSaved`: os Registros leem de novo. Sem o alvo (as pendências lembradas voltam sem ele), o Salvar e o "Ver SQL" o perguntam
+    antes. O menu, o "Ver SQL" (`edit-sql-dialog.tsx`) e a pergunta são os elementos de `resultEditDialogs` (`result-edit-dialogs.tsx`), iguais nas duas grades.
+  - **A pergunta antes de perder as pendências** (`_components/unsaved-edits-dialog.tsx`, com Salvar, Descartar e Cancelar; o foco em Cancelar): "Atualizar",
     aplicar o filtro, limpar e ordenar passam por `guard`; o filtro que chega por chave estrangeira espera (`handoffToTake` com `unsaved`), e
     Cancelar o tira da passagem; fechar abas pergunta pelo registro `unsaved-edits.ts` (`unsavedQuestion`: uma aba oferece Salvar; várias, ou a aba
     com a vista Registros desmontada, só Descartar e Cancelar), antes da pergunta do SQL digitado. O provedor esquece o registro das abas que
     fecham, como a memória da aba.
   - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; colar vira pendência
     da célula, como a edição.
+  - **Na aba de consulta** (`query-tab.tsx`, `subject: "result"`, que muda só as frases da conferência do catálogo): executar outro comando (o botão
+    e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
+    só avisa). O Salvar que gravou tudo NÃO executa de novo (RN-EDIT-009): `savedResultOf` (`record-edits.ts`) monta a grade que fica (os valores
+    salvos, as excluídas fora, a linha nova no fim com o que foi digitado) e `runner.keepSaved` a põe no executor, com `cursorClosed` quando havia
+    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"). As colunas da linha nova que a
+    pessoa não preencheu ficam em `RowsState.generated` ("gerado pelo banco — execute de novo para ver", em itálico e `text-subtle`): a célula não
+    se edita e, com a chave entre elas, a linha também não (`cellAccess`, `deleteRowAccess`). `generated` viaja com a aba para outra janela
+    (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
+    trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. A
+    aba de consulta ainda não tem o Commit manual na tela (RN-TX-001): o Salvar é sempre uma transação própria.
 - **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
@@ -921,7 +934,9 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
 - **Conferir com banco de verdade, sem janela**: `pnpm build`; `scripts/run-hidden.ps1 -Exe node_modules\electron\dist\electron.exe
   -ExtraArgs <pasta do client> -UserDataDir <descartável> -Desktop prism-<nome>`; o cofre sobrevive a `Page.reload` em
   desenvolvimento, e o login por `Input.insertText` funciona; o `waitFor` do seu roteiro não deve devolver o elemento
-  (`returnByValue` falha com "Object reference chain is too long").
+  (`returnByValue` falha com "Object reference chain is too long"). No Linux, sob Xvfb: `xvfb-run -a pnpm dev --remoteDebuggingPort <porta>
+  --noSandbox -- --user-data-dir=<descartável>` (o `--` leva o argumento ao Electron, e a pasta de dados fica fora da sua); a conexão de teste
+  pode ser criada pela própria página, com `window.prism.getApiConfig()` e um `POST api/user/connections`, e um `location.reload()` a mostra no navegador.
 
 ## Configurações (`src/app/settings`)
 
