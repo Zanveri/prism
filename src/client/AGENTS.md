@@ -627,7 +627,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   a sessão com identificadores delimitados, e sem aspas um nome com maiúsculas seria dobrado para minúsculas pelo servidor). É a regra
   única: o `SELECT` da aba, o "Gerar SELECT" e o "Copiar nome qualificado" escrevem o nome por ela, e o texto gerado tem
   `statementCount` 1. A vista usa o `ResultPanel` no modo `records` (título, rótulo, rodapé com "Atualizar" ou
-  "Cancelar", e o cursor fechado que pede "Atualizar", e não "Executar de novo"): só leitura, sem editor.
+  "Cancelar", e o cursor fechado que pede "Atualizar", e não "Executar de novo"): sem editor de SQL; a grade edita as células (ver "Edição dos Registros", abaixo).
 - **Filtro e ordem** (RN-TABELA-005). O campo `WHERE` (`records-filter.tsx`) recebe a condição **como o usuário a escreve**, só sem o espaço
   das pontas: não se lê, não se escapa e não se põe entre parênteses (RN-SQL-003). `recordsSql(engine, esquema, nome, { where, sort })` monta
   o comando com cada parte numa linha própria (uma condição que termina em `--` não engole o `ORDER BY`), e a recusa de mais de um comando é
@@ -740,6 +740,37 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   colunas por vizinha, em paralelo, pelas mesmas da Estrutura. As tabelas que apontam PARA a tabela não entram: a API não as devolve. A
   área pode nascer escondida (a área de trabalho por baixo de outra tela): sem tamanho nada se mede, e quando ela aparece
   (`ResizeObserver`) o diagrama se ajusta ou volta à rolagem lembrada.
+- **Edição dos Registros** (seção 22, RN-EDIT-001 a 012; nesta rodada só na aba de uma tabela). As decisões são funções puras com teste:
+  `record-edits.ts` (as pendências, `PendingEdits`: células de linha lida, exclusões e linhas novas, cada lista na ordem em que foi feita; uma
+  alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
+  `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
+  `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
+  célula: Copiar valor, Colar, Editar, Definir como NULL, Desfazer esta alteração; Nova linha e Excluir linha; o que não se aplica vem desabilitado,
+  com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, Tab) e `grid-editing.ts` (as linhas e as
+  marcas que a grade desenha). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
+  central pelo cache de mutações) e os esquemas, `record-edits.schema.ts`. A página traz `resultID` e o motivo de só leitura (`QueryPage.resultId` e
+  `readOnly`, que o executor guarda nas linhas), e o executor dá a sessão da aba (`sessionOf`).
+  - **Quem liga tudo é `use-record-edits.ts`** (na vista Registros): o estado (as pendências, que ficam na memória da aba, espaço `edits`, pelo
+    resultado; o alvo do catálogo, perguntado na primeira tentativa de editar, pela sessão da árvore da mesma conexão quando ela existe; a célula
+    ativa e o campo aberto, do resultado; a faixa, o menu, o "Ver SQL" e a pergunta). A grade (`ResultGrid` com `editing`) passa a `role="grid"`,
+    com `gridcell`, `aria-activedescendant` e a posição em `data-row`/`data-col`, que o clique, o duplo clique e o botão direito leem por
+    delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: setas, Home e End (com Ctrl,
+    da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva,
+    Alt+Insert cria a linha. A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
+    no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
+    desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
+  - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
+    com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho.
+  - **A faixa** (`edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
+    erro do último Salvar (`role="alert"`), que fica até o próximo; e o motivo de só leitura, à vista. Salvar que gravou tudo avisa "N alterações
+    salvas." e lê os registros de novo.
+  - **A pergunta antes de perder as pendências** (`unsaved-edits-dialog.tsx`, com Salvar, Descartar e Cancelar; o foco em Cancelar): "Atualizar",
+    aplicar o filtro, limpar e ordenar passam por `guard`; o filtro que chega por chave estrangeira espera (`handoffToTake` com `unsaved`), e
+    Cancelar o tira da passagem; fechar abas pergunta pelo registro `unsaved-edits.ts` (`unsavedQuestion`: uma aba oferece Salvar; várias, ou a aba
+    com a vista Registros desmontada, só Descartar e Cancelar), antes da pergunta do SQL digitado. O provedor esquece o registro das abas que
+    fecham, como a memória da aba.
+  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; colar vira pendência
+    da célula, como a edição.
 - **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
