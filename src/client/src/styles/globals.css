@@ -74,8 +74,14 @@
   /* O véu atrás de um diálogo. */
   --color-scrim: light-dark(rgb(20 24 29 / 0.45), rgb(6 8 10 / 0.72));
 
-  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  /*
+   * As fontes (RN-CONFIG-008). A da interface (`--font-sans`) e a do editor SQL (`--font-editor`) são as que o usuário escolhe em Configurações ›
+   * Aparência: o `FontSync` põe a escolhida no <html>, entre aspas, com a do app atrás (`fonts.ts`). A reserva da interface é uma variável à
+   * parte, porque a escolha troca a `--font-sans`; a do editor é a mono do app, que a grade e o resto do código usam e que não muda.
+   */
+  --font-sans: var(--font-app-sans);
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --font-editor: var(--font-mono);
 
   /*
    * A escala de texto do canvas, nos nomes da escala padrão: 12/18 nas legendas, 13/20 na área
@@ -226,6 +232,11 @@
     --color-syntax-comment: #59636e;
     /* O azul de link do GitHub (#0969da), escurecido o mínimo: sobre a linha selecionada ele dava 4,4:1. */
     --color-link: #0967d7;
+  }
+
+  /* A pilha da interface que vem com o app: a reserva da escolhida (RN-CONFIG-008). Fora do `@theme`, para não virar classe. */
+  :root {
+    --font-app-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   }
 
   html,

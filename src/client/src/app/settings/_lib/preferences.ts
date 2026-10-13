@@ -1,11 +1,13 @@
 import { z } from "zod";
 
+import { appFonts, fontNameSchema } from "./fonts";
+
 /**
  * As preferências desta instalação (RN-CONFIG-001): o que muda só o jeito de a tela se mostrar e de se comportar. Ficam no
  * `localStorage` da janela, fora do cofre, numa chave por usuário do cofre. Nada de segredo nem de dado de conexão passa por
  * aqui; quem apagar o `localStorage` perde só o gosto, e a tela volta ao padrão.
  *
- * Quem só lê usa `usePreferences()` e o nome do campo como está aqui, em grupos: `preferences.theme`,
+ * Quem só lê usa `usePreferences()` e o nome do campo como está aqui, em grupos: `preferences.theme`, `preferences.ui.fontFamily`,
  * `preferences.editor.fontSize`, `preferences.results.nullText`, `preferences.security.lockAfterMinutes`.
  */
 
@@ -14,9 +16,6 @@ import { z } from "zod";
  * "system" não é um tema, e sim "seguir o sistema": o CSS decide, pelo `prefers-color-scheme`, entre o Prism Escuro e o Prism Claro.
  */
 export const themeModes = ["dark", "light", "system", "monokai", "dracula", "nord", "github-light"] as const;
-
-/** As fontes da lista do canvas. Só a IBM Plex Mono vai dentro do app: as outras valem se estiverem instaladas. */
-export const editorFonts = ["IBM Plex Mono", "Cascadia Mono", "Consolas", "JetBrains Mono"] as const;
 
 /**
  * Os passos do zoom da grade do resultado (RN-GRADE-010), em porcentagem: 100% é o tamanho de antes do zoom existir. Uma preferência só, a mesma para as
@@ -46,8 +45,13 @@ const nullText = z
 
 const fields = {
   theme: z.enum(themeModes),
+  /** RN-CONFIG-008: a fonte da interface, todo o texto fora do código. A do app ou uma instalada, pelo nome (`fonts.ts`). */
+  ui: {
+    fontFamily: fontNameSchema,
+  },
   editor: {
-    fontFamily: z.enum(editorFonts),
+    /** RN-CONFIG-008: a fonte do editor SQL. Qualquer nome que pode virar CSS: a escolha da lista fixa de antes (Consolas…) continua valendo. */
+    fontFamily: fontNameSchema,
     fontSize: z.int().min(preferenceLimits.fontSize.min).max(preferenceLimits.fontSize.max),
     tabSize: z.int().min(preferenceLimits.tabSize.min).max(preferenceLimits.tabSize.max),
     /** RN-CONFIG-004: autocompletar ao digitar. */
@@ -74,6 +78,7 @@ const fields = {
 
 const strict = z.object({
   theme: fields.theme,
+  ui: z.object(fields.ui),
   editor: z.object(fields.editor),
   results: z.object(fields.results),
   security: z.object(fields.security),
@@ -81,7 +86,6 @@ const strict = z.object({
 
 export type Preferences = z.infer<typeof strict>;
 export type ThemeMode = Preferences["theme"];
-export type EditorFont = Preferences["editor"]["fontFamily"];
 export type GridZoom = Preferences["results"]["gridZoom"];
 
 /** Uma mudança: os grupos entram pela metade (`{ results: { autoLoadMore: true } }` não toca em `results.nullText`). */
@@ -94,13 +98,14 @@ function freeze<T extends object>(value: T): T {
 
 /**
  * O padrão: o do canvas (`Configuracoes.dc.html`) onde ele diz, e o combinado com as outras frentes onde o canvas não diz
- * (maiúsculas desligadas, bloqueio ligado em 10 minutos, "buscar mais ao rolar" desligado, o tipo no cabeçalho ligado, como a grade
+ * (as fontes que o app traz: RN-CONFIG-008; maiúsculas desligadas, bloqueio ligado em 10 minutos, "buscar mais ao rolar" desligado, o tipo no cabeçalho ligado, como a grade
  * sempre o mostrou: RN-CONFIG-006, e o zoom da grade em 100%: RN-GRADE-010). Congelado: é o mesmo objeto para
  * todo mundo que ainda não escolheu nada. A ordem dos campos é a de `fields`.
  */
 export const defaultPreferences: Preferences = freeze({
   theme: "dark",
-  editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false },
+  ui: { fontFamily: appFonts.ui },
+  editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false },
   results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
   security: { lockEnabled: true, lockAfterMinutes: 10 },
 } as const satisfies Preferences);
@@ -155,6 +160,7 @@ export function parsePreferences(raw: string | null): Preferences {
 
   return {
     theme: theme.success ? theme.data : defaultPreferences.theme,
+    ui: readGroup(fields.ui, defaultPreferences.ui, source.ui),
     editor: readGroup(fields.editor, defaultPreferences.editor, source.editor),
     results: readGroup(fields.results, defaultPreferences.results, source.results),
     security: readGroup(fields.security, defaultPreferences.security, source.security),

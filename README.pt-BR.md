@@ -27,8 +27,8 @@ arquivo do seu sistema:
 
 | Sistema | Arquivo | Para quê |
 | --- | --- | --- |
-| Windows x64 | `Prism-<versão>-win-x64.exe` | o instalador |
-| Windows x64 | `Prism-<versão>-win-x64.zip` | a cópia portátil, sem instalação |
+| Windows x64 | `Prism-<versão>-win-x64.exe` | o instalador (recomendado): instala só para o seu usuário, sem pedir administrador, e se atualiza de dentro do app |
+| Windows x64 | `Prism-<versão>-win-x64.zip` | a cópia portátil, sem instalação; cada atualização é um download novo |
 | Linux x64 | `Prism-<versão>-linux-x86_64.AppImage` | roda na maioria das distribuições, sem instalar |
 | Linux x64 | `Prism-<versão>-linux-amd64.deb` | Debian, Ubuntu e derivadas |
 | Linux x64 | `Prism-<versão>-linux-x86_64.rpm` | Fedora, RHEL, openSUSE e derivadas |

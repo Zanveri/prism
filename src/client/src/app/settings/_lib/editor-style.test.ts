@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { editorFont, fontStack, lineHeightFor } from "./editor-style";
+import { editorFont, lineHeightFor } from "./editor-style";
 import { defaultPreferences } from "./preferences";
 
 describe("a fonte do editor (Configurações → Editor SQL)", () => {
@@ -8,10 +8,9 @@ describe("a fonte do editor (Configurações → Editor SQL)", () => {
     expect(editorFont(defaultPreferences.editor)).toEqual({ fontFamily: "var(--font-mono)", fontSize: "13px", lineHeight: "22px", tabSize: 4 });
   });
 
-  it("a fonte escolhida vem primeiro, e a do app fica atrás: sem a fonte instalada o editor continua legível", () => {
-    expect(fontStack("IBM Plex Mono")).toBe("var(--font-mono)");
-    expect(fontStack("Cascadia Mono")).toBe('"Cascadia Mono", var(--font-mono)');
-    expect(fontStack("JetBrains Mono")).toBe('"JetBrains Mono", var(--font-mono)');
+  it("a fonte escolhida vem primeiro, e a do app fica atrás: sem a fonte instalada o editor continua legível (a pilha é a de `fonts.ts`)", () => {
+    expect(editorFont({ ...defaultPreferences.editor, fontFamily: "JetBrains Mono" }).fontFamily).toBe('"JetBrains Mono", var(--font-mono)');
+    expect(editorFont({ ...defaultPreferences.editor, fontFamily: 'Mono"; x' }).fontFamily).toBe("var(--font-mono)");
   });
 
   it("a altura da linha acompanha o tamanho da fonte, na proporção do canvas (22 px para 13 px)", () => {

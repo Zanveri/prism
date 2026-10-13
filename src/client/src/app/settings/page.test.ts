@@ -232,11 +232,11 @@ describe("Editor SQL", () => {
   /** O valor de cada campo de texto, pelo id. */
   const valueOf = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0].match(/value="([^"]*)"/)?.[1];
 
-  it("tem a fonte, o tamanho da fonte e o tamanho da tabulação, com o padrão do canvas", () => {
+  it("tem o tamanho da fonte e o da tabulação, com o padrão do canvas; a fonte fica em Aparência (RN-CONFIG-008)", () => {
     const html = editor(render().markup);
 
-    expect(html).toContain("Fonte do editor");
-    expect(html).toMatch(/<button id="cfg-fonte"[^>]*role="combobox"[^>]*>.*?IBM Plex Mono/);
+    expect(html).not.toContain('role="combobox"');
+    expect(html).toContain("A fonte do editor fica em Aparência");
     expect(valueOf(html, "cfg-tamanho")).toBe("13");
     expect(valueOf(html, "cfg-tab")).toBe("4");
     expect(html).toMatch(/<input[^>]*id="cfg-tamanho"[^>]*inputMode="numeric"/i);
@@ -245,7 +245,7 @@ describe("Editor SQL", () => {
   it("mostra o que o usuário escolheu, e a prévia desenha o texto desse jeito", () => {
     const html = editor(render({ editor: { fontFamily: "Consolas", fontSize: 18, tabSize: 2 } }).markup);
 
-    expect(html).toMatch(/id="cfg-fonte"[^>]*>.*Consolas/);
+    expect(html).toContain("font-family:&quot;Consolas&quot;, var(--font-mono)");
     expect(valueOf(html, "cfg-tamanho")).toBe("18");
     expect(valueOf(html, "cfg-tab")).toBe("2");
     expect(html).toContain("font-size:18px");
@@ -253,9 +253,6 @@ describe("Editor SQL", () => {
     expect(html).toContain("tab-size:2");
   });
 
-  it("diz que só a IBM Plex Mono vai no app", () => {
-    expect(editor(render().markup)).toContain("Só a IBM Plex Mono vai dentro do Prism");
-  });
 
   describe("autocompletar e maiúsculas (RN-CONFIG-004)", () => {
     const box = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "";
@@ -480,5 +477,43 @@ describe("Aparência: tema", () => {
     const appearance = sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
 
     expect(appearance).toContain('style="background:#2E3440;color:#D8DEE9;border-color:#434C5E"');
+  });
+});
+
+describe("Aparência: fontes (RN-CONFIG-008)", () => {
+  const appearance = (markup: string) => sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
+  const input = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "";
+
+  it("tem a fonte da interface e a do editor SQL, cada uma com o rótulo dela, e a fonte do app como padrão", () => {
+    const html = appearance(render().markup);
+
+    expect(html).toMatch(/<label[^>]*for="cfg-fonte-interface"[^>]*>Fonte da interface<\/label>/);
+    expect(html).toMatch(/<label[^>]*for="cfg-fonte-editor"[^>]*>Fonte do editor SQL<\/label>/);
+    for (const [id, value] of [["cfg-fonte-interface", "IBM Plex Sans"], ["cfg-fonte-editor", "IBM Plex Mono"]]) {
+      const field = input(html, id);
+      expect(field).toContain('role="combobox"');
+      expect(field).toContain('aria-autocomplete="list"');
+      expect(field).toContain('aria-expanded="false"');
+      expect(field).toContain(`value="${value}"`);
+    }
+  });
+
+  it("mostra o que o usuário escolheu, e a prévia do editor desenha nessa fonte, com a do app atrás", () => {
+    const html = appearance(render({ ui: { fontFamily: "Inter" }, editor: { fontFamily: "JetBrains Mono" } }).markup);
+
+    expect(input(html, "cfg-fonte-interface")).toContain('value="Inter"');
+    expect(input(html, "cfg-fonte-editor")).toContain('value="JetBrains Mono"');
+    expect(html).toContain("font-family:&quot;JetBrains Mono&quot;, var(--font-mono)");
+  });
+
+  it("diz onde cada uma vale: a da interface fora do código, a do editor nos campos de SQL, e a grade não muda", () => {
+    const html = appearance(render().markup);
+
+    expect(html).toContain("Vale para todo o texto do Prism fora do código.");
+    expect(html).toContain("Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”. A grade continua na fonte mono do Prism.");
+  });
+
+  it("o título da seção já não é só o tema", () => {
+    expect(appearance(render().markup)).toMatch(/<h2 id="cfg-aparencia-title"[^>]*>Aparência<\/h2>/);
   });
 });

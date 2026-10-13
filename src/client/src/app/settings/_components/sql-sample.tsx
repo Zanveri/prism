@@ -9,6 +9,17 @@ export type SampleLine = readonly (readonly [SampleKind, string])[];
 /** As cores com que o exemplo se desenha: as de um tema (a prévia do tema) ou as variáveis do CSS (o tema que está aplicado). */
 export type SamplePalette = { bg: string; fg: string; kw: string; str: string; num: string; com: string; rolagem: string };
 
+/** As cores do editor, que são as do tema aplicado: o mesmo que o CodeMirror usa (`sql-editor.tsx`). */
+export const appliedPalette: SamplePalette = {
+  bg: "var(--color-background)",
+  fg: "var(--color-ink)",
+  kw: "var(--color-syntax-keyword)",
+  str: "var(--color-syntax-string)",
+  num: "var(--color-syntax-number)",
+  com: "var(--color-syntax-comment)",
+  rolagem: "var(--color-border-strong)",
+};
+
 /** O mesmo código da prévia do canvas (`Configuracoes.dc.html`). */
 export const themeSample: readonly SampleLine[] = [
   [["com", "-- Refugo por máquina nas últimas 24 horas"]],
@@ -20,6 +31,9 @@ export const themeSample: readonly SampleLine[] = [
   [["kw", "ORDER BY"], ["fg", " refugo "], ["kw", "DESC"]],
   [["kw", "LIMIT "], ["num", "10"], ["fg", ";"]],
 ];
+
+/** Uma linha só, para a prévia da fonte do editor em Aparência (RN-CONFIG-008): letras estreitas e largas, aspas e número. */
+export const fontSample: readonly SampleLine[] = [[["kw", "SELECT"], ["fg", " id, nome, 'Ilha' "], ["kw", "AS"], ["fg", " mm, 1.0 "], ["kw", "FROM"], ["fg", " clientes;"]]];
 
 /** Um exemplo curto, com uma linha recuada por uma tabulação de verdade: é nela que a largura da tabulação aparece. */
 export const editorSample: readonly SampleLine[] = [

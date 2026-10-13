@@ -13,14 +13,14 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
 src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos), workspace-sync.ts ("grave as abas agora", antes de o cofre fechar)
 src/lib/utils/   cn.ts, format.ts, form.ts (a submissão e a fiação de aria dos formulários), route-params.ts (a tela gasta o parâmetro da rota que leu), zod-jitless.ts
 src/lib/testing/ react-tree.ts (`elementsOf`: o que um componente sem estado monta, para testar sem DOM) e react-hooks.ts (`createHookRuntime`: os ganchos do React simulados, para o componente COM estado); só para testes
-src/styles/      globals.css (tokens em @theme como light-dark(claro, escuro) e um bloco :root[data-theme] por tema: são seis)
+src/styles/      globals.css (tokens em @theme como light-dark(claro, escuro) e um bloco :root[data-theme] por tema: são seis; as fontes `--font-sans`, `--font-mono` e `--font-editor`)
 public/          theme-boot.js (aplica o último tema antes da primeira pintura; o electron-vite o copia para out/renderer)
 scripts/         ico.mjs, icns.mjs e make-icons.mjs (`pnpm icons`), api-layout.mjs (o que o app espera da API publicada), publish-api.mjs (`pnpm build:api`), check-api.mjs, dist.mjs (`pnpm dist`), run-hidden.ps1
 build/           icon.svg, icon-small.svg e os arquivos gerados icon.ico, icon.icns, icon.png e icons/ (os PNG de Linux)
@@ -88,6 +88,14 @@ depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, ca
   fechamento é cancelado e a tela recebe `prism:windows-close-requested`; quando as abas fecharam, ela pede `prism:windows-close` e o `close`
   passa (`closeApproved`). Sem área de trabalho (o login) e com o app saindo (`quitting`, agora do módulo) fecha direto; a última fechada
   encerra o app pelo `window-all-closed`, como antes.
+- **As permissões do Chromium** (RN-SHELL-001 e RN-CONFIG-008; `permissions.ts`, sem Electron, com teste): sem tratador, o Electron concede
+  tudo a qualquer página. O `whenReady` liga os dois da sessão das janelas (`session.defaultSession`), o do pedido
+  (`setPermissionRequestHandler`, pelo `details.requestingUrl`) e o da consulta (`setPermissionCheckHandler`, pela origem), com a mesma regra
+  (`permissionAllowed`): só `clipboard-sanitized-write` e `clipboard-read` (copiar e colar) e `local-fonts` (a lista das fontes, em
+  Configurações › Aparência), e só para a origem da tela (`rendererOrigin`: `app://prism`, ou o servidor do Vite em desenvolvimento). O resto é
+  negado, mesmo para o app. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
+  ou falha calada. Conferido no Electron sob Xvfb: `local-fonts` sai `granted` sem gesto da pessoa (quem responde é o tratador da consulta, e a API não precisa pedir), copiar e
+  colar funcionam, e `geolocation` e `notifications` saem `denied`.
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -122,7 +130,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   recusa. O JSX é compilado pelo próprio Vite; cada mudança recarrega a página.
 - O Zod roda sem compilar schemas (`src/lib/utils/zod-jitless.ts`, primeiro import de `main.tsx`),
   ou cada `z.object` deixa uma violação da política no console.
-- Uma origem nova (script, fonte, imagem de fora) não entra: o app não carrega nada de fora.
+- Uma origem nova (script, fonte, imagem de fora) não entra: o app não carrega nada de fora. As fontes do sistema (RN-CONFIG-008) não são
+  origem: a `font-family` as acha pelo nome no computador, sem baixar nada, e o `font-src 'self'` não as vê.
 - O script que aplica o tema antes da primeira pintura é um **arquivo** (`public/theme-boot.js`, clássico, no `<head>`, sem
   `defer`): a política recusa script em linha, e um módulo deixaria a página pintar antes dele (ver "Configurações").
 - `will-navigate` é cancelado; em desenvolvimento passa só a recarga da própria página. Abrir
@@ -1008,7 +1017,8 @@ fechar não apaga as abas.
   `prism:preferences:<usuário em minúsculas>`, esquema Zod com **leitura tolerante campo a campo** (JSON inválido, objeto estranho
   ou valor fora do esquema volta ao padrão do campo, sem lançar). Se o `localStorage` falta, recusa o acesso ou lança ao gravar, elas
   vivem na memória da sessão e a tela segue. `usePreferences()` devolve `{ preferences, update, signedIn }`
-  (`useSyncExternalStore`); quem só lê usa o nome do campo, em grupos (`preferences.editor.fontSize`): `theme`, `editor` (fonte,
+  (`useSyncExternalStore`); quem só lê usa o nome do campo, em grupos (`preferences.editor.fontSize`): `theme`, `ui` (`fontFamily`, a fonte da
+  interface), `editor` (fonte,
   tamanho, tabulação, `autocomplete` e `uppercaseKeywords`), `results` (`nullText` e `autoLoadMore`) e `security` (`lockEnabled` e `lockAfterMinutes`); `update` aceita um grupo pela metade, e o
   formato antigo (três campos soltos do editor) é migrado (`upgradeLegacy`). **Nunca guarde segredo nem
   dado de conexão ali**: quem apagar o `localStorage` perde só o gosto. As de atualização (verificar ao abrir, versão pulada) são
@@ -1039,7 +1049,35 @@ fechar não apaga as abas.
   (`tabSize` e `indentUnit`), `completionSlot` (o autocompletar) e `caseSlot` (as maiúsculas); as duas caixas têm um efeito à parte, para
   ligar uma não refazer o tema. O editor de outra aba nasce com as de agora (`initial`). **Extensão nova que depende de preferência ganha o
   próprio compartimento e a própria entrada de `initial`**, ou só vale para o editor criado depois. O padrão da tabulação é 4 (o do canvas; o
-  editor usava 2). Só a IBM Plex Mono vai dentro do app: as outras fontes da lista valem se estiverem instaladas, e a pilha cai na IBM Plex Mono.
+  editor usava 2). A fonte do editor é a de Configurações › Aparência (ver "Fontes"): o `themeSlot` a recebe pelas preferências, e não pela
+  variável `--font-editor`, porque reconfigurar o compartimento é o que faz o CodeMirror medir o texto de novo.
+- **Fontes** (RN-CONFIG-008; `_lib/fonts.ts`, `_lib/system-fonts.ts`, `_components/font-picker.tsx` e `font-sync.tsx`): Aparência tem "Fonte da
+  interface" (`ui.fontFamily`, padrão IBM Plex Sans) e "Fonte do editor SQL" (`editor.fontFamily`, padrão IBM Plex Mono; o campo saiu da seção
+  Editor SQL, que diz onde ele está, e a escolha da lista fixa de antes continua valendo). **O nome vira CSS**: o esquema (`fontNameSchema`) e a
+  pilha (`fontStack`) só aceitam de 1 a 100 caracteres, sem espaço nas pontas, sem aspas, ponto e vírgula, chaves, barra invertida nem `\p{C}`
+  (controle, formatação, direção de texto), e o nome vai **sempre entre aspas** com a fonte do app atrás: `"Inter", var(--font-app-sans)` e
+  `"JetBrains Mono", var(--font-mono)`. A fonte que não está instalada cai na do app, sem erro (conferido: o Chromium desenhou a IBM Plex Mono
+  com `Consolas` escolhida), e o campo diz que ela não está instalada; a preferência fica, e a fonte volta se for reinstalada. **Quem aplica** é o
+  `FontSync` (montado ao lado do `ThemeSync`): põe as pilhas nas variáveis do <html>, `--font-sans` (o corpo e `font-sans`) e `--font-editor`
+  (`font-editor`); a fonte do app tira a variável. A reserva da interface é `--font-app-sans` (num `:root` fora do `@theme`, para não virar
+  classe), porque a escolha troca a `--font-sans`. Ao sair do cofre o `FontSync` desmonta e a janela volta às fontes do app: **diferente do
+  tema, nada das fontes é lembrado no dispositivo**, e o login sempre abre na IBM Plex Sans. Em todas as janelas pelo `storage`, como o resto
+  das preferências (conferido com uma aba levada a outra janela: a fonte do editor dela mudou com a escolha feita na primeira). **Onde vale**: a
+  da interface, em todo o texto fora do código; a do editor, no CodeMirror e no SQL que a tela mostra fora dele (`font-editor`): o campo do
+  filtro dos Registros e o comando executado embaixo dele, o "Ver SQL" e o DDL aproximado. A grade, a árvore, as etiquetas e o resto do que é
+  `font-mono` não mudam. **A lista** é a da API de fontes locais do Chromium (`window.queryLocalFonts`, liberada em `permissions.ts`), lida na
+  primeira vez que um dos campos recebe o foco (`systemFontsQuery`, a mesma para os dois, `gcTime: 0`: volta a ser lida a cada visita às
+  Configurações): uma entrada por família, em ordem de nome (`Intl.Collator` pt-BR, sem caixa, numérica), sem o nome que não pode virar CSS.
+  Sem a API, com a permissão negada, com erro ou com a lista vazia ela é `null`, e o campo aceita o nome digitado (Enter), se ele serve (senão,
+  diz o que tirar). **Monoespaçada** (`monospaceProbe`): num canvas, dez "i" medem o mesmo que dez "M" (1% de folga), com a pilha
+  `32px "<família>", sans-serif`; a reserva é proporcional, então a família que o canvas não acha, ou que não desenha letras latinas, não passa por
+  monoespaçada, e antes de cada medida a fonte volta à reserva (uma pilha recusada não mede a anterior). No editor a lista vem com a do app,
+  depois "Monoespaçadas" e "Outras fontes"; na interface, a do app e todas as outras. Conferido sob Xvfb: 26 famílias em 2 ms, e
+  DejaVu Sans Mono, FreeMono, IPAGothic, Liberation Mono, Unifont e WenQuanYi Zen Hei Mono como monoespaçadas (IPAPGothic, a proporcional da
+  mesma família, ficou nas outras). **O campo** é um combobox editável (`FontPicker`): fechado, mostra a escolhida; digitar filtra pelo pedaço
+  do nome (sem caixa nem acento) e, com a lista lida, marca a primeira que combina; setas, Enter, Esc (o primeiro fecha a lista, o segundo
+  desfaz o digitado, o terceiro chega às Configurações) e sair do campo desfaz. A lista é um portal como a do `Select`; o clique nela não tira o
+  foco do campo (`mousedown` cancelado).
 - **Autocompletar** (RN-CONFIG-004; `_lib/sql-completion.ts`; a única dependência nova foi o `@codemirror/autocomplete`, em 6.20.3 exato, a
   versão que a trava já resolvia): as palavras-chave do dialeto da aba e os **nomes que a árvore já carregou** daquela conexão (esquemas,
   tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: o que a árvore
@@ -1507,7 +1545,9 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   que o controle, o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
   ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
-- As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600.
+- As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
+  (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
+  não muda (grade, árvore, etiquetas). Texto novo que é SQL usa `font-editor`; dado do banco, `font-mono`.
 
 ## Dependências
 
@@ -1530,6 +1570,9 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - O `.deb` e o `.rpm` só saem com `PRISM_HOMEPAGE` (a URL pública do projeto, que ainda não está definida e não vai para o
   repositório): até a pipeline preenchê-la, o `dist -- linux` gera o AppImage e o `tar.gz` e termina com 0. O mantenedor é
   `Zanveri`, sem e-mail, e o electron-builder o aceita assim.
+- **Fontes do sistema (RN-CONFIG-008)**: a lista e a medida foram vistas só no Linux, sob Xvfb, em desenvolvimento (`http://localhost`); no app
+  empacotado (`app://prism`), no Windows e no macOS ainda não. O caminho "não deu para ler a lista" (o campo que aceita o nome digitado) só foi
+  visto nos testes: no Electron a permissão é dada.
 - Pacote de macOS: não provado por inteiro: o `dmg` só se gera no macOS, e nenhum pacote foi aberto no macOS. Num contêiner Linux o electron-builder aceita a
   configuração e gera o `zip`, e recusa o `dmg` (`sips process failed ENOENT`: o `dmg` só se gera no macOS). O `.icns` existe e
   traz a ilustração inteira, mas o app nunca foi aberto no macOS.
