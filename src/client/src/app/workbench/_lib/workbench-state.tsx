@@ -5,13 +5,17 @@ import { VaultLock } from "@/app/_components/vault-lock";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
+import { onTabArrived, tellWindows } from "@/lib/api/bridge";
 import { allowRefusal } from "@/lib/api/prism-api";
 
+import type { DatabaseSession } from "./database-sessions.schema";
 import { closeDatabaseSession, databaseSessionKey, treeSessionIds } from "./database-sessions.service";
 import { filterHandoff } from "./filter-handoff";
 import { inDatabase, parseNavKey } from "./navigator-model";
 import { cancelQuery } from "./query.service";
-import { forgetExcept } from "./tab-memory";
+import { forgetExcept, rememberTransferred } from "./tab-memory";
+import { moveTab, shiftTab } from "./tab-order";
+import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, type QueryRunner } from "./use-query-runner";
 import { createLockHandles } from "./workbench-lock";
@@ -31,6 +35,20 @@ type WorkbenchState = {
   /** Fecha a aba e a sessão dela (RN-SESSAO-004). */
   closeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
+  /** RN-ABAS-001: põe a aba na posição da faixa onde a marca de soltar estava (a posição de antes de ela sair do lugar). */
+  reorderTab: (tabId: string, insertAt: number) => void;
+  /** RN-ABAS-001: Ctrl+Shift+PageUp e PageDown, uma posição, sem dar a volta. */
+  shiftTab: (tabId: string, delta: -1 | 1) => void;
+  /**
+   * RN-ABAS-002 e 003: a aba foi para outra janela. Sai desta SEM fechar a sessão (a API é a mesma, e a sessão agora é da outra janela) e sem
+   * cancelar nada: só a aba parada muda de janela.
+   */
+  detachTab: (tabId: string) => void;
+  /**
+   * RN-ABAS-004: a janela vai fechar e as abas dela já fecharam: espera os fechamentos de sessão que estão a caminho e fecha as sessões da árvore
+   * desta janela (as das outras janelas são delas). Nenhuma sessão fica aberta na API sem janela.
+   */
+  releaseWindow: () => Promise<void>;
   /** O editor grava aqui o texto da aba, com atraso (não a cada tecla); a sessão, quem grava é o que a aba executa. */
   updateTab: (tabId: string, patch: Partial<Pick<QueryTab, "sessionId" | "sql">>) => void;
   /** O que a aba executa e mostra: a sessão dela, o comando em andamento e o resultado (`use-query-runner.ts`). */
@@ -93,6 +111,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // Um mapa só, criado uma vez e nunca trocado: `useState` com inicializador, e não `useRef`, porque o lint do React não deixa passar o
   // conteúdo de uma ref a `createLockHandles` durante a renderização, e o mapa tem de ir inteiro (a identidade importa, ver lá).
   const [runners] = useState(() => new Map<string, QueryRunner>());
+  // Os fechamentos de sessão a caminho (as abas fechadas): a janela que fecha espera por eles antes de sumir (`releaseWindow`).
+  const [closing] = useState(() => new Set<Promise<unknown>>());
 
   // A mesma consulta de Conexões e do navegador (mesma chave, mesmo cache): aqui só se olha o que sumiu dela.
   const connections = useQuery(connectionsQuery);
@@ -172,7 +192,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   // A sessão é de quem executa; a aba só guarda uma cópia dela, para a tela dizer que a conexão está conectada.
   const createRunner = useCallback(
-    (tab: Pick<QueryTab, "id" | "connectionId" | "database">) => createQueryRunner({ connectionId: tab.connectionId, database: tab.database, queryClient, toast, onSession: (sessionId) => updateTab(tab.id, { sessionId }) }),
+    (tab: Pick<QueryTab, "id" | "connectionId" | "database">, initial?: Parameters<typeof createQueryRunner>[0]["initial"]) =>
+      createQueryRunner({ connectionId: tab.connectionId, database: tab.database, queryClient, toast, onSession: (sessionId) => updateTab(tab.id, { sessionId }), initial }),
     [queryClient, toast, updateTab],
   );
 
@@ -219,6 +240,71 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [runners],
   );
 
+  /**
+   * RN-ABAS-002 e 003: chegou uma aba de outra janela (o processo principal a entrega quando esta área de trabalho está montada). Ela nasce como
+   * estava lá: o que a tela dela lembrava vai antes para a memória (os painéis a leem ao montar), e o executor nasce com o resultado e a sessão.
+   * Nada é executado. Uma aba que já está aqui (o mesmo id) não entra duas vezes.
+   */
+  const adoptTab = useCallback(
+    (raw: unknown, index?: number) => {
+      const adopted = readTransfer(raw);
+      if (adopted === null) return;
+
+      const { tab, selection, state, memory } = adopted;
+      if (runners.has(tab.id)) return;
+
+      rememberTransferred(tab.id, selection === null ? memory : { ...memory, selection });
+      runners.set(tab.id, createRunner(tab, { state, sessionId: tab.sessionId }));
+      setTabs((current) => {
+        const at = index === undefined ? current.length : Math.min(index, current.length);
+        return [...current.slice(0, at), tab, ...current.slice(at)];
+      });
+      setActiveTabId(tab.id);
+      // O nome da próxima consulta desta janela não repete o da aba que chegou.
+      const numbered = /^consulta-(\d+)\.sql$/.exec(tab.title);
+      if (numbered !== null) nextNumber.current = Math.max(nextNumber.current, Number(numbered[1]) + 1);
+    },
+    [createRunner, runners],
+  );
+
+  // RN-ABAS-005: esta área de trabalho está montada (o cofre aberto) e pronta para receber abas; ao desmontar (sair do cofre), deixa de estar, e o
+  // processo principal guarda o que chegar até ela voltar.
+  useEffect(() => {
+    const stop = onTabArrived((delivery) => adoptTab(delivery.transfer, delivery.index));
+    tellWindows((windows) => windows.setReady(true));
+    return () => {
+      stop();
+      tellWindows((windows) => windows.setReady(false));
+    };
+  }, [adoptTab]);
+
+  // O resumo desta janela, para "Mover para a janela…" das outras dizer qual é qual (RN-ABAS-003).
+  const activeTitle = tabs.find((tab) => tab.id === activeTabId)?.title ?? null;
+  useEffect(() => tellWindows((windows) => windows.describe({ activeTitle, tabCount: tabs.length })), [activeTitle, tabs.length]);
+
+  const reorderTab = useCallback((tabId: string, insertAt: number) => setTabs((current) => moveTab(current, tabId, insertAt) ?? current), []);
+  const shiftTabBy = useCallback((tabId: string, delta: -1 | 1) => setTabs((current) => shiftTab(current, tabId, delta) ?? current), []);
+
+  const detachTab = useCallback(
+    (tabId: string) => {
+      const remaining = tabs.filter((tab) => tab.id !== tabId);
+      if (remaining.length === tabs.length) return;
+
+      setTabs(remaining);
+      setActiveTabId(nextActiveTab(tabs, activeTabId, remaining));
+      // Só o executor sai de cena: a sessão, com o cursor aberto, é da janela que recebeu a aba.
+      runners.get(tabId)?.retire();
+      runners.delete(tabId);
+    },
+    [tabs, activeTabId, runners],
+  );
+
+  const releaseWindow = useCallback(async () => {
+    await Promise.allSettled([...closing]);
+    const treeSessions = queryClient.getQueriesData<DatabaseSession>({ queryKey: ["database-session"] }).flatMap(([, session]) => (session === undefined ? [] : [session.id]));
+    await Promise.allSettled(treeSessions.map((sessionId) => throughMutationCache(queryClient, () => endSession({ sessionId, busy: false }))));
+  }, [closing, queryClient]);
+
   const closeTab = useCallback(
     (tabId: string) => {
       const index = tabs.findIndex((tab) => tab.id === tabId);
@@ -231,9 +317,13 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       // Fechar a aba cancela o que estiver rodando e fecha a sessão dela (RN-SESSAO-004). Como as
       // chamadas da aba, passa pelo cache de mutações sem ficar nele; a falha já foi ao aviso central.
       const released = runners.get(tabId)?.retire();
-      if (released) void throughMutationCache(queryClient, () => endSession(released)).catch(() => undefined);
+      if (released) {
+        const ending = throughMutationCache(queryClient, () => endSession(released)).catch(() => undefined);
+        closing.add(ending);
+        void ending.finally(() => closing.delete(ending));
+      }
     },
-    [tabs, activeTabId, queryClient, runners],
+    [tabs, activeTabId, queryClient, runners, closing],
   );
 
   const setNodeOpen = useCallback((key: string, open: boolean) => setExpanded((current) => (current.has(key) === open ? current : new Set(open ? [...current, key] : [...current].filter((other) => other !== key)))), []);
@@ -242,8 +332,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, openQueryTab, openTableTab, setTableView, closeTab, setActiveTab: setActiveTabId, updateTab, runnerOf, expanded, setNodeOpen, disconnect, disconnecting }),
-    [tabs, activeTabId, openQueryTab, openTableTab, setTableView, closeTab, updateTab, runnerOf, expanded, setNodeOpen, disconnect, disconnecting],
+    () => ({ tabs, activeTabId, openQueryTab, openTableTab, setTableView, closeTab, setActiveTab: setActiveTabId, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, runnerOf, expanded, setNodeOpen, disconnect, disconnecting }),
+    [tabs, activeTabId, openQueryTab, openTableTab, setTableView, closeTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, runnerOf, expanded, setNodeOpen, disconnect, disconnecting],
   );
 
   return (

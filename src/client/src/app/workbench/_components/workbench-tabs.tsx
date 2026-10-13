@@ -2,12 +2,21 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Ke
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
-import { ConfirmDialog } from "@/components/ui";
+import { ConfirmDialog, useToast } from "@/components/ui";
+import { currentWindowId, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
+import { vaultLock } from "@/lib/api/vault-lock";
+
+import type { TabMoveTarget } from "../../../../electron/window-messages";
 
 import { createDisconnectLog } from "../_lib/connection-intent";
+import { liveEditors } from "../_lib/live-editors";
+import { recallForTransfer } from "../_lib/tab-memory";
+import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
 import { closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseScope } from "../_lib/tab-strip";
+import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
 import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
+import { isBusyState } from "../_lib/use-query-runner";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
 import type { TableView } from "../_lib/workbench-model";
@@ -29,9 +38,15 @@ const copy = workbenchCopy.tabs;
  * Ctrl+W fecha a aba ativa quando o foco está aqui (a faixa, o editor, a vista da tabela). O app empacotado não tem menu no Windows e no
  * Linux, então nada mais responde a esse atalho; no macOS o menu do app não tem "Fechar janela". Os diálogos e o menu de contexto ficam
  * fora desta árvore de teclado (o menu para a propagação), e a tela de bloqueio é um diálogo por cima de tudo: nenhum fecha aba por engano.
+ *
+ * As abas mudam de lugar (RN-ABAS-001: arrastando, ou Ctrl+Shift+PageUp e PageDown na ativa) e passam para outra janela (RN-ABAS-002 e 003: pelo menu
+ * da aba, arrastando-a para fora da janela ou até a faixa de outra). A aba com comando em andamento não muda de janela, e a dos Registros com
+ * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow } = useWorkbench();
+  const toast = useToast();
+  const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
   const queryClient = useQueryClient();
 
@@ -91,31 +106,126 @@ export function WorkbenchTabs() {
     [tabs, closeNow],
   );
 
-  // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar.
-  const [unsaved, setUnsaved] = useState<{ scope: CloseScope; tabId: string; count: number; canSave: boolean; saving: boolean } | null>(null);
+  // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar. Levar a aba
+  // para outra janela pergunta o mesmo (as alterações não salvas não mudam de janela): Salvar e levar, ou Descartar e levar.
+  type Intent = { kind: "close"; scope: CloseScope } | { kind: "move"; target: TabMoveTarget };
+  const [unsaved, setUnsaved] = useState<{ intent: Intent; tabId: string; count: number; canSave: boolean; saving: boolean } | null>(null);
   const handleClose = useCallback(
     (scope: CloseScope, tabId: string) => {
       const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
       if (question === null) askAboutSql(scope, tabId);
-      else setUnsaved({ scope, tabId, ...question, saving: false });
+      else setUnsaved({ intent: { kind: "close", scope }, tabId, ...question, saving: false });
     },
     [tabs, askAboutSql],
   );
 
-  async function saveAndClose(scope: CloseScope, tabId: string) {
+  /**
+   * Manda a aba para outra janela (RN-ABAS-002 e 003): o texto e a seleção do editor DESTE instante, o resultado, a sessão e o que a tela lembrava.
+   * Só quando o processo principal a levou ela sai daqui, sem fechar a sessão (que agora é da outra janela). Com comando em andamento não vai: a
+   * resposta chegaria aqui, à aba que já saiu.
+   *
+   * `saved`: a aba dos Registros acabou de salvar as alterações para poder ir (RN-EDIT-007). As linhas na tela são as de antes de salvar, e o Salvar
+   * lê os registros de novo (RN-EDIT-005): a aba vai sem elas, e a janela que a recebe lê os registros na mesma sessão, já com o que foi gravado.
+   */
+  async function sendTab(tabId: string, target: TabMoveTarget, saved = false) {
+    const tab = tabs.find((candidate) => candidate.id === tabId);
+    if (tab === undefined) return;
+
+    const runner = runnerOf(tabId);
+    const current = runner.getState();
+    const state = saved && !isBusyState(current) ? { status: "idle" as const } : current;
+    const transfer = isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
+    if (transfer === null) {
+      toast.warning(copy.moveBusy);
+      return;
+    }
+
+    const reply = await sendTabAway({ target, transfer });
+    if (reply.ok) detachTab(tabId);
+    // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
+    else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
+  }
+
+  function handleMove(tabId: string, target: TabMoveTarget) {
+    const count = unsavedEdits.countOf(tabId);
+    if (count === 0) void sendTab(tabId, target);
+    else setUnsaved({ intent: { kind: "move", target }, tabId, count, canSave: unsavedEdits.saveOf(tabId) !== null, saving: false });
+  }
+
+  // Depois da pergunta: fecha (com a pergunta do SQL, se for o caso) ou leva a aba. Levar depois de "Descartar" é levá-la sem as alterações: elas
+  // ficam na memória desta janela, que a aba deixa, e não vão.
+  function proceed(intent: Intent, tabId: string, saved = false) {
+    if (intent.kind === "close") askAboutSql(intent.scope, tabId);
+    else void sendTab(tabId, intent.target, saved);
+  }
+
+  async function saveAndProceed(intent: Intent, tabId: string) {
     const save = unsavedEdits.saveOf(tabId);
     if (save === null) return;
     setUnsaved((current) => (current === null ? null : { ...current, saving: true }));
     const saved = await save();
     setUnsaved(null);
-    if (saved) askAboutSql(scope, tabId);
+    if (saved) proceed(intent, tabId, true);
+    else if (intent.kind === "close") setWindowClosing(false);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.defaultPrevented || activeTabId === null || !isCloseShortcut(event)) return;
+  // RN-ABAS-003: a aba desta janela foi solta na faixa de outra, e o processo principal pede que ela vá para lá, pelo caminho de sempre.
+  const latestMove = useRef(handleMove);
+  useEffect(() => {
+    latestMove.current = handleMove;
+  });
+  useEffect(() => onTabWanted(({ tabId, target }) => latestMove.current(tabId, target)), []);
 
+  /**
+   * RN-ABAS-004: a pessoa fechou a janela. As abas fecham pelo caminho de "Fechar todas", com as perguntas dele; quando a última fechou, as sessões
+   * a caminho terminam de fechar, as da árvore desta janela também, e a janela fecha de verdade. Cancelar uma pergunta deixa a janela aberta. Com o
+   * cofre bloqueado não há o que perguntar: a API já fechou as sessões, e a janela fecha.
+   */
+  const [windowClosing, setWindowClosing] = useState(false);
+  const finishWindow = useCallback(() => {
+    setWindowClosing(false);
+    void releaseWindow().finally(() => tellWindows((windows) => windows.close()));
+  }, [releaseWindow]);
+  const latestTabs = useRef(tabs);
+  const latestHandleClose = useRef(handleClose);
+  useEffect(() => {
+    latestTabs.current = tabs;
+    latestHandleClose.current = handleClose;
+  });
+  useEffect(
+    () =>
+      onWindowCloseRequested(() => {
+        const open = latestTabs.current;
+        if (vaultLock.isLocked() || open.length === 0) return finishWindow();
+
+        setWindowClosing(true);
+        latestHandleClose.current("all", open[0].id);
+      }),
+    [finishWindow],
+  );
+  useEffect(() => {
+    if (windowClosing && tabs.length === 0) finishWindow();
+  }, [windowClosing, tabs, finishWindow]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.defaultPrevented || activeTabId === null) return;
+
+    // RN-ABAS-001: Ctrl+Shift+PageUp e PageDown levam a aba ativa uma posição para o lado; o foco fica onde estava.
+    const delta = tabMoveShortcut(event);
+    if (delta !== null) {
+      event.preventDefault();
+      shiftTab(activeTabId, delta);
+      return;
+    }
+
+    if (!isCloseShortcut(event)) return;
     event.preventDefault();
     handleClose("one", activeTabId);
+  }
+
+  // RN-ABAS-003: a janela sem abas também recebe a aba arrastada de outra janela, no lugar da faixa.
+  function receive(fromWindowId: number, tabId: string, index: number) {
+    tellWindows((windows) => windows.requestTab({ fromWindowId, tabId, index }));
   }
 
   const connectionOf = (connectionId: string) => connections.data?.find((connection) => connection.id === connectionId);
@@ -125,10 +235,25 @@ export function WorkbenchTabs() {
   return (
     <>
       <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {tabs.length === 0 ? null : <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} onSelect={setActiveTab} onClose={handleClose} />}
+        {tabs.length === 0 ? null : (
+          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
+        )}
 
         {tabs.length === 0 ? (
-          <div className="flex flex-1 flex-col justify-center gap-1.5 px-10">
+          <div
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes(tabDragType)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              if (!event.dataTransfer.types.includes(tabDragType)) return;
+              event.preventDefault();
+              const drag = readTabDrag(event.dataTransfer.getData(tabDragType));
+              if (drag !== null && drag.windowId !== null && drag.windowId !== windowId) receive(drag.windowId, drag.tabId, 0);
+            }}
+            className="flex flex-1 flex-col justify-center gap-1.5 px-10"
+          >
             <h2 className="text-lg font-semibold">{copy.emptyTitle}</h2>
             <p className="max-w-[420px] text-muted">{copy.emptyHint}</p>
           </div>
@@ -154,12 +279,15 @@ export function WorkbenchTabs() {
           count={unsaved.count}
           canSave={unsaved.canSave}
           saving={unsaved.saving}
-          onSave={() => void saveAndClose(unsaved.scope, unsaved.tabId)}
+          onSave={() => void saveAndProceed(unsaved.intent, unsaved.tabId)}
           onDiscard={() => {
             setUnsaved(null);
-            askAboutSql(unsaved.scope, unsaved.tabId);
+            proceed(unsaved.intent, unsaved.tabId);
           }}
-          onCancel={() => setUnsaved(null)}
+          onCancel={() => {
+            setUnsaved(null);
+            setWindowClosing(false);
+          }}
         />
       )}
 
@@ -175,7 +303,10 @@ export function WorkbenchTabs() {
             setConfirm(null);
             closeNow(confirm.scope, confirm.tabId);
           }}
-          onCancel={() => setConfirm(null)}
+          onCancel={() => {
+            setConfirm(null);
+            setWindowClosing(false);
+          }}
         />
       )}
     </>

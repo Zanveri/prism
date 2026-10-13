@@ -10,7 +10,7 @@ const noop = () => {};
 const query = (id: string, title: string): QueryTab => ({ id, title, connectionId: "c-1", sessionId: null, sql: "" });
 const table = (id: string, schema: string, name: string): QueryTab => ({ id, title: `${schema}.${name}`, connectionId: "c-1", sessionId: null, sql: "", table: { schema, name, view: "data" } });
 
-const render = (tabs: QueryTab[], activeTabId: string | null) => renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, connectionOf: () => undefined, onSelect: noop, onClose: noop }));
+const render = (tabs: QueryTab[], activeTabId: string | null) => renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, connectionOf: () => undefined, onSelect: noop, onClose: noop, windowId: 1, onReorder: noop, onMove: noop, onReceive: noop }));
 
 const twelve = Array.from({ length: 12 }, (_, index) => (index % 2 === 0 ? query(`q${index}`, `consulta-${index + 1}.sql`) : table(`t${index}`, "producao", `tabela_${index}`)));
 
@@ -24,6 +24,15 @@ describe("a faixa de abas (D2)", () => {
     expect(markup.match(/aria-selected="true"/g)).toHaveLength(1);
     expect(markup).toMatch(new RegExp(`id="${tabElementId("t1")}"[^>]*aria-selected="true"[^>]*aria-controls="${panelElementId("t1")}"[^>]*tabindex="0"`));
     expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(11);
+  });
+
+  it("cada aba se arrasta (RN-ABAS-001 a 003) e diz, na faixa, qual aba é; sem nada sendo arrastado não há marca de soltar", () => {
+    const markup = render(twelve, "q0");
+    const frames = [...markup.matchAll(/<div[^>]*data-tab-id="([^"]+)"[^>]*>/g)];
+
+    expect(frames.map((match) => match[1])).toEqual(twelve.map((tab) => tab.id));
+    expect(frames.every((match) => /draggable="true"/.test(match[0]))).toBe(true);
+    expect(markup).not.toMatch(/data-drop=/);
   });
 
   it("fica numa linha só: rola na horizontal, sem quebrar, e cada aba mantém o tamanho dela", () => {

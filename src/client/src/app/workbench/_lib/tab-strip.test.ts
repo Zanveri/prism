@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { closeConfirmation, closeConfirmationText, closeShortcutLabel, isCloseShortcut, mergeCloseQueue, nextToClose, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabsToClose, wheelScroll } from "./tab-strip";
+import { closeConfirmation, closeConfirmationText, closeShortcutLabel, isCloseShortcut, mergeCloseQueue, moveMenu, nextToClose, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabsToClose, wheelScroll } from "./tab-strip";
 
 const tabs = ["a", "b", "c", "d", "e"].map((id) => ({ id }));
 
@@ -269,5 +269,19 @@ describe("closeConfirmation: uma pergunta só, e só quando fechar perde SQL dig
   it("o texto da pergunta diz quantas abas fecham e quantas consultas com SQL digitado perdem o texto", () => {
     expect(closeConfirmationText(5, 2)).toEqual({ title: "Fechar 5 abas?", description: "Entre elas, 2 consultas com SQL digitado: o texto não é guardado em lugar nenhum.", confirm: "Fechar" });
     expect(closeConfirmationText(1, 1)).toEqual({ title: "Fechar 1 aba?", description: "Entre elas, 1 consulta com SQL digitado: o texto não é guardado em lugar nenhum.", confirm: "Fechar" });
+  });
+});
+
+describe("moveMenu: levar a aba para outra janela (RN-ABAS-002 e 003)", () => {
+  it("'Mover para nova janela' sempre; 'Mover para a janela…' apagado sem outra janela aberta", () => {
+    expect(moveMenu(0, true)).toEqual([
+      { action: "newWindow", label: "Mover para nova janela", disabled: false },
+      { action: "toWindow", label: "Mover para a janela…", disabled: true },
+    ]);
+    expect(moveMenu(2, true)[1].disabled).toBe(false);
+  });
+
+  it("fora do Electron não há para onde levar: o grupo não aparece", () => {
+    expect(moveMenu(3, false)).toEqual([]);
   });
 });

@@ -91,6 +91,14 @@ export const workbenchCopy = {
       description: (withSql: number) => `Entre elas, ${formatCount(withSql, "consulta com SQL digitado", "consultas com SQL digitado")}: o texto não é guardado em lugar nenhum.`,
       confirm: "Fechar",
     },
+    // RN-ABAS-001 a 003: a aba muda de lugar arrastando ou pelo teclado, e passa para outra janela pelo menu ou arrastando.
+    moveToNewWindow: "Mover para nova janela",
+    moveToWindow: "Mover para a janela…",
+    windowsLabel: "Mover para a janela",
+    windowName: (number: number, activeTitle: string | null, tabCount: number) =>
+      activeTitle === null ? `Janela ${number} — sem abas` : tabCount > 1 ? `Janela ${number} — ${activeTitle} e mais ${formatCount(tabCount - 1, "aba", "abas")}` : `Janela ${number} — ${activeTitle}`,
+    moveBusy: "Espere o comando terminar, ou cancele-o, antes de levar a aba para outra janela.",
+    moveFailed: "Não foi possível levar a aba para outra janela.",
   },
 
   editor: {

@@ -165,3 +165,17 @@ export function closeConfirmation(scope: CloseScope, tabs: readonly { id: string
 export function closeConfirmationText(total: number, withSql: number): { title: string; description: string; confirm: string } {
   return { title: copy.confirmClose.title(total), description: copy.confirmClose.description(withSql), confirm: copy.confirmClose.confirm };
 }
+
+export type MoveMenuItem = { action: "newWindow" | "toWindow"; label: string; disabled: boolean };
+
+/**
+ * O grupo de mover a aba para outra janela no menu dela (RN-ABAS-002 e 003): "Mover para nova janela" e "Mover para a janela…", que lista as outras e
+ * fica apagado quando não há outra. Fora do Electron não há outra janela possível, e o grupo não aparece.
+ */
+export function moveMenu(otherWindows: number, available: boolean): MoveMenuItem[] {
+  if (!available) return [];
+  return [
+    { action: "newWindow", label: copy.moveToNewWindow, disabled: false },
+    { action: "toWindow", label: copy.moveToWindow, disabled: otherWindows === 0 },
+  ];
+}
