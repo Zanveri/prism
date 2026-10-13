@@ -2010,3 +2010,32 @@ inteiro.
 | `POST api/user/database-sessions/{id}/results/{resultID}/cells` `{ cells: [{ row, column }] }` (até 10.000 células por pedido) | 200 `{ values: [{ row, column, value }] }`, na ordem pedida; `value` nulo quando a célula não tem valor completo | 404 `DATABASE_SESSION_NOT_FOUND`, `RESULT_NOT_FOUND` (outro comando já rodou); 422 `CELLS_INVALID` (lista vazia, acima do limite, linha ou coluna fora do resultado) |
 
 O log dessa rota registra só a contagem de células, nunca o valor.
+
+### Ambiente da pasta e o seletor de cor
+
+Pedidos do dono em 2026-10-13: "as pastas terem seus ambientes também, por exemplo uma pasta só de
+production, outra só de QAS, outra de develop"; e o seletor de "Outra cor" abria ao clicar em
+qualquer ponto da linha dele, e deve virar uma bolinha ao lado das outras, com o ícone de
+conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções herdadas continuam
+lá.
+
+- **RN-PASTA-005.** A pasta pode ter um ambiente, com nome e cor, nas mesmas regras do ambiente da
+  conexão (RN-CONN-001: nome opcional de até 30 caracteres, cor `#RRGGBB`).
+  - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
+    a mesma do formulário da conexão.
+  - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
+  - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
+    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
+    status). O ambiente próprio da conexão sempre ganha.
+  - Mover a conexão ou a pasta muda o que ela herda. O formulário da conexão sem ambiente próprio
+    diz qual ela herda e de qual pasta.
+  - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
+    `environmentName` e `environmentColor`, opcionais, com as recusas do ambiente da conexão em
+    `FOLDER_NAME_INVALID` ou num código próprio, como a conexão já faz.
+- **RN-CONN-017.** O seletor de cor do ambiente (da conexão e da pasta) é uma fileira de bolinhas.
+  - A última bolinha é "Outra cor", com o ícone de conta-gotas. Só ela abre o seletor de cor do
+    sistema; clicar em outro ponto da fileira ou da seção não abre nada.
+  - Com uma cor escolhida por ela, a bolinha fica com essa cor, a marca de escolhida das outras e o
+    conta-gotas ainda à vista, em contraste. O código `#RRGGBB` aparece na dica e no nome acessível.
+  - A linha "Outra cor #RRGGBB" de baixo sai.
+  - Pelo teclado: cada bolinha é um botão, e Enter ou Espaço na última abre o seletor.
