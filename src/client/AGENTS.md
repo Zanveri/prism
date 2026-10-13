@@ -246,6 +246,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `COMMIT` e afins, RN-SQL-003) tem o mesmo aviso, com a frase da API (`title` e `detail`) na área de resultado, ou,
   havendo linhas na tela (que ficam), a frase da API vai no próprio aviso. Depois de "Cancelar", o comando que terminou por
   causa disso é "Comando cancelado." (ver "Uma coisa por vez"), e **não** gera o aviso de falha.
+- **Avisos dos scripts** (`scripts.copy.ts`): gravar por cima um script com o SQL grande demais vira o aviso de erro com a frase da tela, porque não há
+  diálogo aberto para mostrá-lo (a tela confere o tamanho antes de enviar, e o `SCRIPT_TOO_LARGE` da API só chega se as duas contas divergirem); salvar, renomear
+  e excluir dão o aviso de sucesso, e abrir um script cuja conexão sumiu dá o de atenção.
 - **Avisos da tela de Drivers** (`drivers.copy.ts`): (1) o remover que a API recusa com `DRIVER_IN_USE` passa por `allowRefusal` e
   vira o aviso de erro com a frase da tela ("Feche as conexões desse banco antes de remover o driver.", pedida pelo dono), no lugar do
   `title` da API; (2) o aviso de que o download falhou (com a causa, `error.detail`) **não** é de chamada que falhou: é a lista que
@@ -303,7 +306,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   aqui dentro mede 0x0**: quem observa tamanho tem de tratar o zero como "sem medida" (ver "Lista virtual que MEDE as linhas", abaixo). **O provedor não pode subir para fora do guard**:
   ele consulta `api/user/connections`, e montado com o cofre fechado cada abertura do app receberia 401 `VAULT_LOCKED`
   antes do login e mostraria o aviso "Cofre fechado" (`routes.test.ts` confere a posição). Guarda `tabs` (`QueryTab`, em `workbench-model.ts`: `id`, `title`,
-  `connectionId`, `sessionId`, `sql` e, na aba de uma tabela, `table`: esquema, nome e a vista), `activeTabId`, os nós abertos
+  `connectionId` (nulo só na aba de um script cuja conexão sumiu, ver "Scripts salvos"), `sessionId`, `sql`, na aba de uma tabela `table` (esquema, nome e a
+  vista; `isTableTab` estreita o tipo para `TableTab`, que sempre tem a conexão) e, na aba de um script, `script`), `activeTabId`, os nós abertos
   (`expanded`, sem as pastas, que são só do navegador e começam abertas) e "Desconectar". `openQueryTab(connectionId, sql?)` abre
   uma consulta (com `sql`, o editor já nasce com esse texto e nada é executado); `openTableTab(connectionId, { schema, name, view? })`
   abre a aba de uma tabela, uma por tabela (de novo, volta à que existe), e `setTableView` troca a vista (ver "Aba de uma tabela e
@@ -582,7 +586,8 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 - **O que passa** (`_lib/tab-transfer.ts`, puro e testado): `serializeTab` monta a aba com o texto e a seleção do editor DESTE instante
   (`liveEditors`, `_lib/live-editors.ts`: cada editor se registra pelo id da aba; o `tab.sql` chega com 400 ms de atraso), a sessão do executor
   (`sessionOf`, e não a cópia da aba), o resultado parado (o mapa das células cortadas vira pares) e o que a tela lembrava
-  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). Com comando em
+  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). A aba de um script leva o
+  id, o nome e o SQL salvo (o ponto é refeito na janela que recebe, pelo texto que chegou), e a aba sem conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
   andamento (executar, carregar mais, contar) não passa: a tela avisa `moveBusy`. `readTransfer` confere e devolve a aba, a seleção (cortada no
   fim do texto), o estado e a memória.
 - **A janela de origem** só tira a aba depois do `ok` do centro, por `detachTab`: o executor sai de cena (`retire`) e a sessão **não** fecha (é a
@@ -615,6 +620,57 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   pelo `will-navigate`; o `Page.reload` do protocolo de depuração passa. A janela nova é outro alvo em `/json/list`: ache-o por
   `window.prism.windows.id`. Para provar que nada foi executado de novo, conte as linhas `ExecuteAsync` do log da API (`<dados>/logs/`); o
   "Carregar mais" aparece como `FetchNextAsync` na MESMA sessão.
+
+## Scripts salvos (RN-SCRIPT-001 a 004)
+
+Seção 23 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
+(`scriptsQuery`, sem o SQL: o schema recusa a lista que o traga) e lê o SQL só para abrir e para copiar, pela rota do item, pelo cache de mutações (não fica
+guardado). As regras que a tela confere antes de enviar (`saved-scripts.ts`, puro e testado) são as da API: o nome normalizado como a API o grava, de 1 a 200
+caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL de até 1 MB em bytes de UTF-8. Os textos estão em `scripts.copy.ts`.
+
+- **Ctrl+S e Ctrl+Shift+S** (`saveShortcut`, tratado no painel da aba de consulta, com o foco em qualquer lugar dela; o Cmd do macOS vale o Ctrl) passam pelo
+  `useScriptSaving` (`_components/use-script-saving.tsx`, usado pelo `WorkbenchTabs`). O texto é o do editor DESTE instante (`liveEditors`). A aba que já é um
+  script grava por cima (`PATCH` com o SQL e o lugar da aba: a conexão e o banco); a que não é, e o "Salvar como", pedem o nome (`ScriptNameDialog`), com a
+  sugestão: o primeiro "Script N" livre, ou, no "Salvar como" de um script, o nome dele com "(2)", "(3)"… (`copyName`). Gravar por cima de um script que outra
+  janela excluiu (404) pede o nome, como na primeira vez. O "Salvar como" faz da aba o script novo. As recusas do nome e do tamanho ficam no campo
+  (`refusalProblem`); o resto vai ao aviso central. As chamadas têm o prazo das ações da pessoa.
+- **A aba de um script** tem o nome dele como título e, com mudança não salva, um ponto na faixa (desenho; o leitor de tela ouve "alterações não salvas", e o
+  `title` diz o mesmo: `tabTitleOf`). Só a aba de um script tem o ponto e a pergunta: a consulta que nunca foi salva fecha como antes. O ponto acende na
+  primeira tecla (`markScriptEdited`, pelo `onEdited` do editor, sem atraso; as teclas seguintes devolvem a mesma lista de abas e não redesenham nada) e é
+  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga.
+- **Fechar** (uma aba, as outras, todas, a janela): primeiro a pergunta dos Registros, depois a dos scripts com mudança não salva entre as que fecham
+  (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
+  script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
+  aberta. Mover a aba para outra janela não pergunta: o texto vai com ela.
+- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a lista é `ScriptsListView`, sem estado, testada sem DOM), abaixo da árvore e recolhível: em ordem de
+  nome, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem, F2 renomeia, Delete exclui (com a confirmação), Shift+F10 e a tecla de menu abrem o
+  menu (Abrir; Renomear e Copiar SQL; Excluir). Renomear muda o título das abas do script; excluir deixa as abas com o texto, como consultas sem script.
+- **Abrir** (`openScriptTab`): uma aba por script (abrir de novo volta para ela), na conexão e no banco em que foi salvo (`scriptPlace`). Se a conexão não existe
+  mais, a aba abre **sem conexão** (`connectionId` nulo), com aviso: o texto já está no editor, a faixa acima dele (`NoConnectionBarView`) pede uma conexão, e
+  "Usar esta conexão" (`assignConnection`) dá à aba um executor novo, na conexão escolhida e no banco dela. Sem conexão o executor não abre sessão nem chama a
+  API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
+  mantém o lugar antigo (o `PATCH` sem `connectionID`). **O editor segue o banco da aba com ele montado** (a gramática, o separador de comandos, as maiúsculas e o
+  completar, por compartimentos): a aba que recebe uma conexão de outro banco não recria o editor, e o texto e o desfazer ficam.
+
+## Links de tabela no editor (RN-LINK-001)
+
+Com Ctrl (⌘ no macOS) apertado, o nome de uma tabela ou visão sob o ponteiro fica no azul de link do tema, sublinhado e com o cursor de mão; Ctrl+clique abre a
+aba da tabela nos Registros (`openTableTab` com a vista `data`), na conexão e no banco da aba do editor. Soltar o Ctrl, tirar o ponteiro do nome ou a janela
+perder o foco desfaz o destaque.
+
+- **Quem decide é puro e testado** (`_lib/table-links.ts`): `tableLinkAt` lê os pedaços do texto pelo leitor do projeto (`sqlTokens`, o mesmo de
+  `sql-statements.ts`), então texto entre aspas simples, `$tag$ … $tag$` e comentário (inclusive o de chaves do Informix) não são nome. O nome é `tabela` ou
+  `esquema.tabela`, as partes coladas pelo ponto, com ou sem aspas em cada uma; com três partes ou mais não é link (`banco.esquema.tabela`, `apelido.coluna` de
+  outro jeito). Sem aspas o nome é dobrado como o banco o lê (só o ASCII: minúsculas no PostgreSQL e no Informix, maiúsculas no Db2), e a palavra reservada sem
+  aspas não é nome (`isReservedWord`, a lista do completar); entre aspas vale como está, com a aspa dobrada de dentro. Sem esquema vale o padrão da sessão
+  (`defaultSchemasOf`): no PostgreSQL o do usuário da conexão e depois o `public`; no Db2 o do usuário, em maiúsculas; no Informix qualquer dono.
+- **O catálogo é o do autocompletar** (`linkCatalog` sobre `cachedLevels`: as tabelas e visões que a árvore já carregou do banco da aba), sem consulta nova: o que
+  a árvore ainda não abriu não vira link. O editor o refaz só quando algum nível muda (`sameLevels`).
+- **A extensão** (`_lib/table-link-extension.ts`) lê o modificador das teclas da JANELA (o editor pode não ter o foco) e de cada movimento do ponteiro, guarda
+  o texto e os pedaços por versão do texto (um movimento não copia nem relê um script de 1 MB), acha o caractere sob o ponteiro (`posAtCoords` e o lado dele) e
+  tem precedência no `mousedown`: o Ctrl+clique de um link não chega ao CodeMirror, que acrescentaria um cursor. A aba sem conexão não tem link.
+- **A cor** é a ficha `link` (`globals.css`), com o contraste conferido em todos os temas sobre as superfícies e a seleção (`globals.test.ts`). O GitHub Claro
+  usa o azul dele (#0969da) escurecido o mínimo (#0967d7), porque sobre a linha selecionada ele dava 4,4:1.
 
 ## Navegador: clique, menu e busca (`src/app/workbench`)
 
@@ -1355,8 +1411,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 - Os tokens estão em `src/styles/globals.css` e vêm do canvas (`docs/design/canvas/`). A paleta
   padrão do Tailwind está desligada: só existem as cores do Prism (`background`, `panel`, `raised`,
   `selected`, `border`, `border-strong`, `ink`, `body`, `muted`, `subtle`, `accent`, `postgres`,
-  `db2`, `informix`, `danger`, `success`, `scrim`, mais `selection` e as quatro de sintaxe, `syntax-keyword`, `-string`, `-number` e
-  `-comment`). **Cada uma é `light-dark(claro, escuro)`** (seis temas: ver "Configurações"), então
+  `db2`, `informix`, `danger`, `success`, `scrim`, mais `selection`, as quatro de sintaxe, `syntax-keyword`, `-string`, `-number` e
+  `-comment`, e `link`, o azul de link de cada tema: RN-LINK-001; o canvas não o desenha, e os quatro temas além dos do Prism trazem o da paleta deles). **Cada uma é `light-dark(claro, escuro)`** (seis temas: ver "Configurações"), então
   nenhuma cor fixa (`#rrggbb`, `text-white`, `fill` nomeado) entra em componente: só os tokens. As exceções são a ilustração da
   marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, as prévias do tema e os `.svg` do splash.
 - A escala de texto reaproveita os nomes padrão com os tamanhos do canvas: `text-xs` 12/18,
