@@ -46,7 +46,7 @@ export function EditSqlDialog({ preview, onClose }: { preview: EditPreview; onCl
         </>
       }
     >
-      <pre className="max-h-80 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-xs break-words whitespace-pre-wrap text-ink">{previewText(preview)}</pre>
+      <pre className="max-h-80 overflow-auto rounded-md border border-border bg-background p-3 font-editor text-xs break-words whitespace-pre-wrap text-ink">{previewText(preview)}</pre>
       {unwritten.length === 0 ? null : (
         <div className="mt-3 text-sm text-muted">
           <p>{copy.sqlUnwritten}</p>

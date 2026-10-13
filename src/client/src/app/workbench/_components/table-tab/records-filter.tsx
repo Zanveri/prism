@@ -55,7 +55,7 @@ export function RecordsFilter({ draft, onDraft, applied, problem, busy, command,
             placeholder={field.placeholder}
             spellCheck={false}
             autoComplete="off"
-            className="h-7 min-w-0 flex-1 bg-transparent font-mono text-ink outline-none placeholder:text-subtle"
+            className="h-7 min-w-0 flex-1 bg-transparent font-editor text-ink outline-none placeholder:text-subtle"
           />
         </label>
         {/* A dica do campo para leitor de tela (a de quem vê é o `title` e o exemplo do campo vazio). */}
@@ -80,7 +80,7 @@ export function RecordsFilter({ draft, onDraft, applied, problem, busy, command,
         <div className="flex min-w-0 items-baseline gap-2 text-xs">
           <span className="flex-none text-subtle">{text.command}</span>
           {/* Uma parte por linha, como o comando é enviado: juntado por espaço, um filtro com `-- nota` faria o resto parecer comentado. */}
-          <code title={command} className="max-h-20 min-w-0 flex-1 overflow-auto font-mono break-words whitespace-pre-wrap text-muted select-text">
+          <code title={command} className="max-h-20 min-w-0 flex-1 overflow-auto font-editor break-words whitespace-pre-wrap text-muted select-text">
             {command}
           </code>
         </div>

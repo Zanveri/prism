@@ -18,6 +18,14 @@ describe("o filtro dos registros (RN-TABELA-005 e 010)", () => {
     expect(markup).toMatch(/<input[^>]*spellCheck="false"/);
   });
 
+  it("o campo e o comando executado usam a fonte do editor SQL (RN-CONFIG-008), e não a mono da grade", () => {
+    const markup = render({ draft: "refugo > 0", command: 'SELECT *\nFROM "producao"."apontamento"' });
+
+    expect(markup).toMatch(/<input[^>]*class="[^"]*\bfont-editor\b/);
+    expect(markup).toMatch(/<code[^>]*class="[^"]*\bfont-editor\b/);
+    expect(markup).not.toContain("font-mono");
+  });
+
   it("não há um rótulo WHERE fixo, que seria falso com só a ordem no campo; o exemplo do campo vazio e a dica dizem que a ordem cabe ali", () => {
     for (const draft of ["", "refugo > 0", 'ORDER BY "id" ASC']) expect(render({ draft }), draft).not.toContain(">WHERE<");
 

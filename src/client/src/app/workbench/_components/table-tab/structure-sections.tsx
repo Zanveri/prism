@@ -109,7 +109,7 @@ function DdlBody({ ddl }: { ddl: DdlState }) {
         <>
           {ddl.maybeView ? <p className="px-4 pt-2 text-xs text-accent">{text.ddl.maybeView}</p> : null}
           {/* `tabIndex`: o bloco é texto para ler e copiar, e o teclado e o leitor de tela precisam alcançá-lo. */}
-          <pre tabIndex={0} aria-label={text.ddl.label} aria-describedby={warningId} className="px-4 py-3 font-mono text-[13px] leading-5 whitespace-pre-wrap wrap-anywhere text-body">
+          <pre tabIndex={0} aria-label={text.ddl.label} aria-describedby={warningId} className="px-4 py-3 font-editor text-[13px] leading-5 whitespace-pre-wrap wrap-anywhere text-body">
             {ddl.text}
           </pre>
         </>
