@@ -37,13 +37,19 @@ describe("a pergunta antes de fechar abas com alterações não salvas (RN-EDIT-
   it("fechar uma aba com pendências pergunta com Salvar, Descartar e Cancelar", () => {
     unsavedEdits.set("t1", { count: 2, save: async () => true });
 
-    expect(unsavedQuestion(["t1"], unsavedEdits.countOf)).toEqual({ count: 2, canSave: true });
+    expect(unsavedQuestion(["t1"], unsavedEdits.countOf, unsavedEdits.saveOf)).toEqual({ count: 2, canSave: true });
+  });
+
+  it("com a vista Registros desmontada (a aba mostra a Estrutura), a aba não tem como salvar: só Descartar e Cancelar", () => {
+    unsavedEdits.set("t1", { count: 2, save: null });
+
+    expect(unsavedQuestion(["t1"], unsavedEdits.countOf, unsavedEdits.saveOf)).toEqual({ count: 2, canSave: false });
   });
 
   it("fechar várias pergunta uma vez, com a soma, e só Descartar e Cancelar", () => {
     unsavedEdits.set("t1", { count: 2, save: async () => true });
     unsavedEdits.set("t3", { count: 1, save: async () => true });
 
-    expect(unsavedQuestion(["t1", "t2", "t3"], unsavedEdits.countOf)).toEqual({ count: 3, canSave: false });
+    expect(unsavedQuestion(["t1", "t2", "t3"], unsavedEdits.countOf, unsavedEdits.saveOf)).toEqual({ count: 3, canSave: false });
   });
 });

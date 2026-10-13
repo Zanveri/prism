@@ -78,6 +78,8 @@ export const recordsCopy = {
       deleteRow: "Excluir linha",
       notNullable: "a coluna não aceita NULL",
       pasteFailed: "Não foi possível ler a área de transferência.",
+      copied: "Copiado.",
+      notCopied: "Não foi possível copiar.",
     },
     // Por que uma célula ou uma linha não se edita (além dos motivos que a API manda).
     reasons: {

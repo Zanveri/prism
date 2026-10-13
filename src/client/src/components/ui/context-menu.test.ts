@@ -90,6 +90,13 @@ describe("ContextMenuItems (o que o menu desenha e o que um clique em cada item 
     expect(markup).not.toContain("disabled=\"\"");
   });
 
+  it("o motivo do item desabilitado fica à vista, embaixo do rótulo, e entra no nome que o leitor de tela ouve", () => {
+    const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: [[item("a", "Editar", { disabled: true, hint: "Somente leitura: o valor chegou cortado." }), item("b", "Copiar valor")]], onChoose: () => {} }));
+
+    expect(markup).toMatch(/aria-disabled="true"[^>]*>(?:(?!<\/button>).)*Editar(?:(?!<\/button>).)*Somente leitura: o valor chegou cortado\./s);
+    expect(markup.match(/Somente leitura/g)).toHaveLength(1);
+  });
+
   it("clicar no item desabilitado não executa nada: o menu continua aberto", () => {
     const onChoose = vi.fn();
     const [disabled] = buttons([[item("a", "Atualizar", { disabled: true })]], onChoose);

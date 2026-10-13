@@ -12,6 +12,7 @@ import { filterHandoff } from "./filter-handoff";
 import { inDatabase, parseNavKey } from "./navigator-model";
 import { cancelQuery } from "./query.service";
 import { forgetExcept } from "./tab-memory";
+import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, type QueryRunner } from "./use-query-runner";
 import { createLockHandles } from "./workbench-lock";
 import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type TableView } from "./workbench-model";
@@ -124,6 +125,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // velho. O bloqueio por inatividade não tira aba nenhuma, então não apaga nada: o filtro sobrevive a ele (RN-SEG-001).
   useEffect(() => {
     forgetExcept(new Set(tabs.map((tab) => tab.id)));
+    unsavedEdits.forgetExcept(new Set(tabs.map((tab) => tab.id)));
     filterHandoff.forgetExcept(tabs.flatMap((tab) => (tab.table ? [{ connectionId: tab.connectionId, table: { ...inDatabase(tab.database), ...tab.table } }] : [])));
   }, [tabs]);
 
@@ -137,6 +139,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     return () => {
       for (const runner of runners.values()) runner.retire();
       forgetExcept(new Set());
+      unsavedEdits.forgetExcept(new Set());
       filterHandoff.forgetExcept([]);
     };
   }, [runners]);

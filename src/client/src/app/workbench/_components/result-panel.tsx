@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import type { GridZoom } from "@/app/settings/_lib/preferences";
 
 import type { ColumnLink } from "../_lib/foreign-key-links";
+import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { recall, remember } from "../_lib/tab-memory";
@@ -78,6 +79,10 @@ type RecordsMode = {
   waiting: boolean;
   /** A pessoa desconectou a conexão e nada foi carregado: a área diz que está desconectada, e "Atualizar" conecta e carrega. */
   disconnected: boolean;
+  /** RN-EDIT-001 a 004: a edição das células, entregue à grade. */
+  editing?: GridEditing;
+  /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
+  banner?: ReactNode;
 };
 
 type ResultPanelProps = {
@@ -193,6 +198,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           </p>
         ) : rows !== null ? (
           <>
+            {records?.banner ?? null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
             <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
               <ResultGrid
@@ -212,6 +218,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
                 onZoom={zoomTo}
+                editing={records?.editing}
               />
             </div>
 

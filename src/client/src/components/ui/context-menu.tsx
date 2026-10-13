@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useEffectEvent, useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { cn } from "@/lib/utils/cn";
+
 export type ContextMenuItem = {
   id: string;
   label: string;
@@ -10,6 +12,8 @@ export type ContextMenuItem = {
   shortcut?: string;
   /** A ação não se aplica agora: fica apagada, é anunciada como desabilitada, recebe foco pelas setas e não executa. */
   disabled?: boolean;
+  /** Por que a ação não se aplica, embaixo do rótulo (a célula só leitura, com o motivo). Faz parte do texto do item, que o leitor de tela lê. */
+  hint?: string;
   onSelect: () => void;
 };
 
@@ -78,10 +82,17 @@ export function ContextMenuItems({ groups, onChoose }: { groups: ContextMenuItem
             aria-disabled={item.disabled === true ? true : undefined}
             onClick={() => item.disabled !== true && onChoose(item)}
             onPointerMove={(event) => event.currentTarget.focus({ preventScroll: true })}
-            className="flex h-7 w-full cursor-default items-center gap-2.5 rounded-sm px-2 text-left text-sm text-body outline-none focus:bg-selected focus:text-ink focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-inset aria-disabled:opacity-50"
+            className={cn("flex w-full cursor-default items-center gap-2.5 rounded-sm px-2 text-left text-sm text-body outline-none focus:bg-selected focus:text-ink focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-inset aria-disabled:opacity-50", item.hint === undefined ? "h-7" : "min-h-7 py-1")}
           >
             {hasIcons ? <span className="flex size-4 flex-none items-center justify-center text-muted">{item.icon}</span> : null}
-            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {item.hint === undefined ? (
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            ) : (
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate">{item.label}</span>
+                <span className="max-w-72 text-xs whitespace-normal text-muted">{item.hint}</span>
+              </span>
+            )}
             {item.shortcut === undefined ? null : <span className="ml-6 flex-none font-mono text-[11px] text-subtle">{item.shortcut}</span>}
           </button>
         ))}

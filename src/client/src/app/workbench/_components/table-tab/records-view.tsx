@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { useToast, type Engine } from "@/components/ui";
+import { ContextMenu, useToast, type Engine } from "@/components/ui";
 
 import { csvExportOf } from "../../_lib/csv";
 import { filterHandoff } from "../../_lib/filter-handoff";
@@ -17,8 +17,13 @@ import { foreignKeysQuery } from "../../_lib/table-structure.service";
 import { clearRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
 import { useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
+import { recordsCopy } from "../../_lib/records.copy";
 import { ResultPanel } from "../result-panel";
+import { EditSqlDialog } from "./edit-sql-dialog";
+import { EditsBanner } from "./edits-banner";
 import { RecordsFilter } from "./records-filter";
+import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
+import { useRecordEdits } from "./use-record-edits";
 
 type RecordsViewProps = {
   /** O id da aba: o filtro e a ordem ficam lembrados por ele (`tab-memory.ts`), e sobrevivem a trocar de vista e ao bloqueio, que troca o executor. */
@@ -105,7 +110,12 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
     [runner, engine, schema, name, execute],
   );
 
-  const refresh = useCallback(() => run(filter), [run, filter]);
+  // RN-EDIT-001 a 012: a edição das células. As ações que executam de novo (atualizar, filtrar, ordenar, limpar) perguntam antes com
+  // alterações não salvas (`guard`, RN-EDIT-007); depois de um Salvar que gravou tudo, os registros são lidos de novo, sem perguntar.
+  const reload = useCallback(() => run(filter), [run, filter]);
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reload });
+  const { guard } = edits;
+  const refresh = useCallback(() => guard(reload), [guard, reload]);
 
   /** "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. */
   const exportCsv = useCallback(() => {
@@ -163,7 +173,9 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // aba nova (abaixo) executa com ele.
   const requested = useSyncExternalStore(filterHandoff.subscribe, () => filterHandoff.peek(connectionId, { ...inDatabase(database), schema, name }));
   const [applied, setApplied] = useState<number | null>(null);
-  takeHandoff(requested, applied, { visible, disconnected, state, filter, engine }, { setApplied, setDraft, setProblem, setFilter });
+  takeHandoff(requested, applied, { visible, disconnected, state, filter, engine, unsaved: edits.pending > 0 }, { setApplied, setDraft, setProblem, setFilter });
+  // RN-EDIT-007: o filtro que chegou por uma chave estrangeira espera a resposta da pergunta; Cancelar o deixa para lá.
+  const handoffWaits = requested !== null && requested.id !== applied && visible && !disconnected && edits.pending > 0;
 
   useEffect(() => {
     // `idle` é "nunca executou"; `running` (o segundo efeito do StrictMode, uma abertura em curso) não repete.
@@ -179,18 +191,20 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
 
   /** "Aplicar filtro": o texto do campo, inteiro. O aviso de antes sai, e `runRecords` o põe de volta se o texto tem mais de um comando. */
   function apply() {
-    setProblem(null);
-    run(draft);
+    guard(() => {
+      setProblem(null);
+      run(draft);
+    });
   }
 
   /** O clique no cabeçalho escreve, troca ou tira o `ORDER BY` no texto do campo e o envia (`sortRecords`, RN-TABELA-010). */
   function sortBy(column: string) {
-    if (engine !== undefined && gridColumns !== null) sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute });
+    if (engine !== undefined && gridColumns !== null) guard(() => sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
 
   /** "Limpar" tira a condição e a ordem de uma vez (`clearRecords`, RN-TABELA-010). */
   function clear() {
-    clearRecords({ engine, schema, name }, filter, runner.getState(), { setDraft, setProblem, setFilter, execute });
+    guard(() => clearRecords({ engine, schema, name }, filter, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
 
   return (
@@ -226,6 +240,8 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
           // Sem resultado e sem desconexão, a primeira carga está para começar (o banco chegando, a aba sendo aberta): "Carregando…".
           waiting: notice.waiting,
           disconnected: notice.disconnected,
+          editing: edits.editing,
+          banner: <EditsBanner {...edits.banner} />,
         }}
         nullText={preferences.results.nullText}
         autoLoadMore={preferences.results.autoLoadMore}
@@ -233,6 +249,29 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         onCount={() => void runner.countTotal()}
         onRerun={refresh}
       />
+      {edits.menu === null ? null : (
+        <ContextMenu
+          label={recordsCopy.edit.menu.label}
+          point={edits.menu.point}
+          initialFocus={edits.menu.keyboard ? "first" : "menu"}
+          groups={edits.menu.groups.map((group) => group.map((item) => ({ id: item.id, label: item.label, shortcut: item.shortcut, disabled: item.disabled, hint: item.hint, onSelect: () => edits.menu?.onChoose(item.id) })))}
+          onClose={edits.closeMenu}
+        />
+      )}
+      {edits.preview === null ? null : <EditSqlDialog preview={edits.preview} onClose={edits.closePreview} />}
+      {edits.question !== null ? (
+        <UnsavedEditsDialog canSave {...edits.question} />
+      ) : handoffWaits ? (
+        <UnsavedEditsDialog
+          count={edits.pending}
+          canSave
+          saving={edits.banner.saving}
+          // Salvo ou descartado, a pendência zera, e o pedido é levado ao campo na renderização seguinte (`takeHandoff`).
+          onSave={edits.saveOnly}
+          onDiscard={edits.discard}
+          onCancel={() => filterHandoff.clear(connectionId, { ...inDatabase(database), schema, name }, requested.id)}
+        />
+      ) : null}
     </div>
   );
 }

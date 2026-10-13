@@ -52,8 +52,13 @@ import { canClear } from "../../_lib/table-view";
 import { isBusyState } from "../../_lib/use-query-runner";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { ResultPanel } from "../result-panel";
+import { editCell, noEdits } from "../../_lib/record-edits";
+import { recordsCopy } from "../../_lib/records.copy";
+import { remember } from "../../_lib/tab-memory";
+import { EditsBanner } from "./edits-banner";
 import { RecordsFilter } from "./records-filter";
 import { RecordsView } from "./records-view";
+import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 
 /** PostgreSQL, como a API numera os bancos. */
 const pg: Engine = 1;
@@ -125,8 +130,9 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
     const found = elementsOf(rt.render(() => RecordsView(props)));
     const filter = found.find((element) => element.type === RecordsFilter)!.props as unknown as ComponentProps<typeof RecordsFilter>;
     const panel = found.find((element) => element.type === ResultPanel)!.props as unknown as ComponentProps<typeof ResultPanel>;
+    const question = found.find((element) => element.type === UnsavedEditsDialog)?.props as unknown as ComponentProps<typeof UnsavedEditsDialog> | undefined;
 
-    return { filter, panel, records: panel.records! };
+    return { filter, panel, records: panel.records!, question };
   }
 
   return { show, onOpenTable };
@@ -690,5 +696,76 @@ describe("RecordsView entrega à área de resultado o id da aba (RN-GRADE-009)",
     expect(mount(fakeRunner(rowsState())).show().panel.tabId).toBe("t1");
     rt.unmount();
     expect(mount(fakeRunner(rowsState()), { tabId: "t2" }).show().panel.tabId).toBe("t2");
+  });
+});
+
+describe("RecordsView: a edição das células (seção 22)", () => {
+  /** Uma alteração pendente na célula da coluna 1 da primeira linha, do resultado `r1`. */
+  const withPending = () => remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
+
+  it("com linhas na tela, a grade recebe a edição e a faixa, com o motivo de só leitura que a página trouxe", () => {
+    const { records } = mount(fakeRunner(rowsState({ resultId: "r1", readOnly: "DISTINCT" }))).show();
+    const banner = records.banner as { type: unknown; props: ComponentProps<typeof EditsBanner> };
+
+    expect(records.editing?.rows).toEqual([["10", "4"]]);
+    expect(banner.type).toBe(EditsBanner);
+    expect(banner.props).toMatchObject({ pending: 0, readOnly: recordsCopy.edit.readOnly("DISTINCT"), failure: null });
+  });
+
+  it("as pendências lembradas com a aba voltam para o mesmo resultado (trocar de vista não as perde), e outro resultado começa sem nenhuma", () => {
+    withPending();
+
+    const same = mount(fakeRunner(rowsState({ resultId: "r1" }))).show();
+    rt.unmount();
+    const other = mount(fakeRunner(rowsState({ resultId: "r2" }))).show();
+
+    expect((same.records.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
+    expect(same.records.editing?.marks.get(0)?.pending.get(1)).toBe("5");
+    expect((other.records.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(0);
+  });
+
+  it("com alterações não salvas, Atualizar pergunta antes e não executa; Descartar executa (RN-EDIT-007)", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+
+    view.show().records.onRefresh();
+    const { question } = view.show();
+
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(question).toMatchObject({ count: 1, canSave: true });
+
+    question!.onDiscard();
+    expect(runner.sent).toEqual([sent(noFilter)]);
+  });
+
+  it("Cancelar na pergunta não executa nada e mantém as pendências", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+
+    view.show().filter.onApply();
+    view.show().question!.onCancel();
+    const after = view.show();
+
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(after.question).toBeUndefined();
+    expect((after.records.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
+  });
+
+  it("o filtro que chega de outra aba espera a resposta; Cancelar o deixa para lá, sem levá-lo ao campo", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+    filterHandoff.request("c1", pedidos, '"id" = 7');
+
+    const waiting = view.show();
+    expect(waiting.question).toMatchObject({ count: 1 });
+    expect(waiting.filter.applied).toBe("");
+
+    waiting.question!.onCancel();
+    expect(filterHandoff.peek("c1", pedidos)).toBeNull();
+    expect(view.show().filter.applied).toBe("");
+    expect(runner.run).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui";
 import { createDisconnectLog } from "../_lib/connection-intent";
 import { closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseScope } from "../_lib/tab-strip";
 import type { TableRef } from "../_lib/table-diagram";
+import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
 import type { TableView } from "../_lib/workbench-model";
@@ -14,6 +15,7 @@ import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 import { TableTabPanel } from "./table-tab/table-tab";
+import { UnsavedEditsDialog } from "./table-tab/unsaved-edits-dialog";
 
 const copy = workbenchCopy.tabs;
 
@@ -80,7 +82,7 @@ export function WorkbenchTabs() {
 
   // Fechar várias abas pergunta UMA vez quando alguma das que fecham é consulta com SQL digitado (o texto não é guardado); fechar uma só, não.
   const [confirm, setConfirm] = useState<{ scope: CloseScope; tabId: string; total: number; withSql: number } | null>(null);
-  const handleClose = useCallback(
+  const askAboutSql = useCallback(
     (scope: CloseScope, tabId: string) => {
       const question = closeConfirmation(scope, tabs, tabId);
       if (question === null) closeNow(scope, tabId);
@@ -88,6 +90,26 @@ export function WorkbenchTabs() {
     },
     [tabs, closeNow],
   );
+
+  // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar.
+  const [unsaved, setUnsaved] = useState<{ scope: CloseScope; tabId: string; count: number; canSave: boolean; saving: boolean } | null>(null);
+  const handleClose = useCallback(
+    (scope: CloseScope, tabId: string) => {
+      const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
+      if (question === null) askAboutSql(scope, tabId);
+      else setUnsaved({ scope, tabId, ...question, saving: false });
+    },
+    [tabs, askAboutSql],
+  );
+
+  async function saveAndClose(scope: CloseScope, tabId: string) {
+    const save = unsavedEdits.saveOf(tabId);
+    if (save === null) return;
+    setUnsaved((current) => (current === null ? null : { ...current, saving: true }));
+    const saved = await save();
+    setUnsaved(null);
+    if (saved) askAboutSql(scope, tabId);
+  }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.defaultPrevented || activeTabId === null || !isCloseShortcut(event)) return;
@@ -126,6 +148,20 @@ export function WorkbenchTabs() {
           })
         )}
       </section>
+
+      {unsaved === null ? null : (
+        <UnsavedEditsDialog
+          count={unsaved.count}
+          canSave={unsaved.canSave}
+          saving={unsaved.saving}
+          onSave={() => void saveAndClose(unsaved.scope, unsaved.tabId)}
+          onDiscard={() => {
+            setUnsaved(null);
+            askAboutSql(unsaved.scope, unsaved.tabId);
+          }}
+          onCancel={() => setUnsaved(null)}
+        />
+      )}
 
       {/* Fora do `section`: o teclado do diálogo não passa pelo Ctrl+W da faixa. */}
       {confirm === null || question === null ? null : (

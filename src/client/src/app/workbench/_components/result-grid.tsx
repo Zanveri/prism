@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type UIEvent } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type UIEvent } from "react";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 
 import type { GridZoom } from "@/app/settings/_lib/preferences";
@@ -6,6 +6,9 @@ import { ChevronIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
+import { moveCell, type GridCell } from "../_lib/grid-cursor";
+import type { GridEditing, RowMark } from "../_lib/grid-editing";
+import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
 import { nearEnd } from "../_lib/result-paging";
@@ -13,9 +16,11 @@ import { observeRenderedOffset } from "../_lib/row-measure";
 import type { ColumnLink } from "../_lib/foreign-key-links";
 import { fitsFilter, type RecordsSort } from "../_lib/table-sql";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CellEditor } from "./cell-editor";
 import { ColumnResizer } from "./column-resizer";
 
 const copy = workbenchCopy.result;
+const editCopy = recordsCopy.edit;
 
 /** Sem largura escolhida: todas as colunas com a de saída. */
 const noWidths: Readonly<Record<number, number>> = Object.freeze({});
@@ -41,6 +46,14 @@ type GridRowProps = {
   linkable?: (value: string) => boolean;
   /** O zoom como fator (RN-GRADE-010): só para saber se o valor cabe na coluna. A altura e os espaços vêm das variáveis da caixa da grade. */
   scale?: number;
+  /** RN-EDIT-004: as pendências desta linha (células alteradas, exclusão, linha nova, a que falhou). Só a edição dos Registros passa. */
+  mark?: RowMark;
+  /** A coluna da célula ativa, quando ela é desta linha. */
+  activeColumn?: number | null;
+  /** O campo de edição aberto numa célula desta linha. */
+  editor?: { column: number; element: ReactNode } | null;
+  /** O id de cada célula, para `aria-activedescendant`: com ele a grade é editável (`gridcell`, a célula ativa marcada). Identidade estável. */
+  cellIdOf?: (row: number, column: number) => string;
 };
 
 /**
@@ -49,20 +62,61 @@ type GridRowProps = {
  * valores entram como texto dos filhos do React, nunca como HTML (RN-SHELL-002). A altura da linha
  * e a largura do número dela são as variáveis do zoom (`--grid-row` e `--grid-gutter`, na caixa da grade).
  */
-export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, nullText, links, onFollow, linkable = fitsFilter, scale = 1 }: GridRowProps) {
+export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf }: GridRowProps) {
+  const role = cellIdOf === undefined ? "cell" : "gridcell";
+  const deleted = mark?.deleted === true;
+
   return (
-    <div role="row" aria-rowindex={index + 2} className="group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row) hover:bg-raised" style={{ transform: `translateY(${start}px)` }}>
-      <div role="rowheader" className="sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised">
-        {index + 1}
+    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row) hover:bg-raised", mark?.failed && "bg-danger/15")} style={{ transform: `translateY(${start}px)` }}>
+      <div
+        role="rowheader"
+        title={mark?.kind === "new" ? editCopy.newRowMark : deleted ? editCopy.deletedMark : undefined}
+        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised", deleted && "line-through", mark?.failed && "font-semibold text-danger")}
+      >
+        {mark?.kind === "new" ? (
+          <>
+            <span aria-hidden className="font-semibold text-accent">
+              +
+            </span>
+            <span className="sr-only">{editCopy.newRowMark}</span>
+          </>
+        ) : (
+          index + 1
+        )}
       </div>
       {virtualColumns.map((item) => {
         const value = row[item.index];
         const style = { left: item.start, width: item.size };
         const align = columns[item.index].kind === "number" ? " text-right" : "";
+        // Só na grade editável: o id que a célula ativa anuncia, a posição que o clique lê e as marcas da pendência, da exclusão e da célula ativa.
+        const cell = cellIdOf === undefined ? {} : { id: cellIdOf(index, item.index), "data-row": index, "data-col": item.index, "aria-selected": activeColumn === item.index };
+        const marked = cn(activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", deleted && "text-subtle line-through");
+
+        if (editor?.column === item.index) {
+          return (
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} className="absolute top-0 z-30 h-full" style={{ left: item.start, width: Math.max(item.size, 220 * scale) }}>
+              {editor.element}
+            </div>
+          );
+        }
+
+        // RN-EDIT-004: a célula alterada mostra o valor lido riscado ao lado do novo, como no canvas; na linha nova, só o que foi preenchido.
+        if (mark?.pending.has(item.index) === true) {
+          const next = mark.pending.get(item.index) ?? null;
+          return (
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={mark.kind === "read" ? editCopy.pendingTitle(value ?? nullText) : undefined} className={cn(cellClass, align, "bg-accent/20", marked)} style={style}>
+              {mark.kind === "read" ? <span className="mr-2 text-[length:calc(11px*var(--grid-zoom))] text-muted line-through">{value ?? nullText}</span> : null}
+              {next === null ? <span className="text-subtle">{nullText}</span> : next}
+            </div>
+          );
+        }
+
+        // A coluna da linha nova que ninguém preencheu fica vazia: o banco põe o padrão da tabela.
+        if (mark?.kind === "new") return <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} className={cn(cellClass, marked)} style={style} />;
 
         if (value === null) {
           return (
-            <div key={item.index} role="cell" aria-colindex={item.index + 2} className={`${cellClass}${align} text-subtle`} style={style}>
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} className={cn(`${cellClass}${align} text-subtle`, marked)} style={style}>
               {nullText}
             </div>
           );
@@ -70,7 +124,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
 
         if (truncated?.has(item.index)) {
           return (
-            <div key={item.index} role="cell" aria-colindex={item.index + 2} title={copy.truncated} className={`${cellClass} flex`} style={style}>
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={copy.truncated} className={cn(`${cellClass} flex`, marked)} style={style}>
               {/* Sem as reticências do corte visual: a marca do valor cortado é a do fim, em cor de atenção. */}
               <span className={`min-w-0 flex-1 overflow-hidden${align}`}>{value}</span>
               <span className="flex-none font-semibold text-accent">…</span>
@@ -82,7 +136,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         const link = links?.get(item.index);
         if (link !== undefined && onFollow !== undefined && linkable(value)) {
           return (
-            <div key={item.index} role="cell" aria-colindex={item.index + 2} className={`${cellClass}${align}`} style={style}>
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} className={cn(`${cellClass}${align}`, marked)} style={style}>
               <button
                 type="button"
                 onClick={() => onFollow(item.index, value)}
@@ -99,7 +153,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         // O valor que não cabe na coluna aparece inteiro na dica. A coluna e o texto estão no zoom, e a conta também.
         const fits = value.length * charWidth * scale <= item.size - cellPadding * scale;
         return (
-          <div key={item.index} role="cell" aria-colindex={item.index + 2} title={fits ? undefined : value} className={`${cellClass}${align}`} style={style}>
+          <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={fits ? undefined : value} className={cn(`${cellClass}${align}`, marked)} style={style}>
             {value}
           </div>
         );
@@ -127,6 +181,8 @@ type GridHeaderCellProps = {
   showType?: boolean;
   /** O zoom como fator (RN-GRADE-010): o arrasto da divisa anda na escala dele. */
   scale?: number;
+  /** RN-EDIT-002: por que a coluna não se edita, na dica do cabeçalho, quando o catálogo já respondeu. */
+  hint?: string | null;
 };
 
 /**
@@ -136,7 +192,7 @@ type GridHeaderCellProps = {
  * que termina um arrasto não ordena. O nome do cabeçalho para o leitor de tela é o da coluna e o tipo
  * (`aria-label`), e não o que se juntaria da divisa que mora dentro dele.
  */
-export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1 }: GridHeaderCellProps) {
+export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null }: GridHeaderCellProps) {
   // A largura de saída da coluna é contada sem a seta da ordem (`baseWidths`, em `grid-columns.ts`). Quando a seta aparece, quem cede os 18 px dela é o TIPO, e só ele: o nome não
   // encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com um peso, por maior que fosse o do tipo,
   // o nome ainda perdia centésimos de pixel, e com 1/64 de pixel a menos o Chromium já desenha a reticência (`cliente_id` virava `cliente_…`; antes disso o `id`
@@ -157,7 +213,7 @@ export function GridHeaderCell({ column, item, sort, onSort, width = item.size, 
 
   if (onSort === undefined) {
     return (
-      <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} title={`${column.name} · ${column.type}`} className={`absolute top-0 flex h-full gap-1.5 border-r border-border px-3 whitespace-nowrap${align}`} style={position}>
+      <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} title={hint === null ? `${column.name} · ${column.type}` : `${column.name} · ${column.type}\n${hint}`} className={`absolute top-0 flex h-full gap-1.5 border-r border-border px-3 whitespace-nowrap${align}`} style={position}>
         {label}
         {resizer}
       </div>
@@ -168,7 +224,7 @@ export function GridHeaderCell({ column, item, sort, onSort, width = item.size, 
 
   return (
     <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"} className="absolute top-0 h-full border-r border-border whitespace-nowrap" style={position}>
-      <button type="button" onClick={() => onSort(column)} title={copy.sortTitle(column.name, direction)} className={`flex h-full w-full cursor-pointer items-center gap-1.5 px-3 text-left transition-colors hover:bg-selected${align}`}>
+      <button type="button" onClick={() => onSort(column)} title={hint === null ? copy.sortTitle(column.name, direction) : `${copy.sortTitle(column.name, direction)}\n${hint}`} className={`flex h-full w-full cursor-pointer items-center gap-1.5 px-3 text-left transition-colors hover:bg-selected${align}`}>
         {label}
         {direction === null ? null : <ChevronIcon className={cn("size-3 text-accent", direction === "asc" && "rotate-180")} />}
       </button>
@@ -212,6 +268,8 @@ type ResultGridProps = {
   zoom?: GridZoom;
   /** Ctrl+roda do mouse sobre a grade pede outro zoom. Identidade estável: a grade é memorizada. */
   onZoom?: (zoom: GridZoom) => void;
+  /** RN-EDIT-001 a 004: a edição dos Registros. Com ela a grade é editável (`grid`), com as linhas novas depois das lidas. */
+  editing?: GridEditing;
 };
 
 /** A caixa que rola tem caixa? Escondida por `display: none` (a aba inativa, a área de trabalho por baixo de outra tela), o que se lê dela não é posição. */
@@ -224,10 +282,14 @@ const hasBox = (element: HTMLElement) => element.clientHeight > 0 || element.cli
  * contadas uma vez, da primeira página, e "carregar mais" só aumenta a altura rolável. As escolhidas
  * pela pessoa (`widths`) passam por cima delas.
  */
-export const ResultGrid = memo(function ResultGrid({ columns, rows, truncated, nullText = copy.null, onReachEnd, sort, onSort, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom }: ResultGridProps) {
+export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, nullText = copy.null, onReachEnd, sort, onSort, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom, editing }: ResultGridProps) {
   const scroll = useRef<HTMLDivElement>(null);
+  // As linhas que a grade desenha: com a edição, as lidas e, depois delas, as novas.
+  const rows = editing?.rows ?? read;
+  const gridId = useId();
+  const cellIdOf = useCallback((row: number, column: number) => `${gridId}-${row}-${column}`, [gridId]);
   // A primeira página é a que conta para a largura de saída: carregar mais não muda o que está na tela.
-  const [firstPage] = useState(rows);
+  const [firstPage] = useState(read);
   const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes), [columns, firstPage, nullText, showTypes]);
   const widths = useMemo(() => base.map((width, index) => chosen[index] ?? width), [base, chosen]);
   // O zoom (RN-GRADE-010) muda juntos o texto, a altura das linhas, o número da linha, as larguras (as escolhidas também, na mesma proporção) e os espaços.
@@ -309,6 +371,102 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows, truncated, n
     lineHeight: `calc(var(--text-sm--line-height) * ${metrics.factor})`,
   } as CSSProperties;
 
+  // Fechar o campo de edição devolve o foco à grade, para as setas e o F2 seguirem dali; não o rouba de quem o levou para outro lugar.
+  const editorOpen = editing?.editor != null;
+  const wasOpen = useRef(editorOpen);
+  useEffect(() => {
+    const element = scroll.current;
+    if (wasOpen.current && !editorOpen && element !== null && (document.activeElement === document.body || element.contains(document.activeElement))) element.focus({ preventScroll: true });
+    wasOpen.current = editorOpen;
+  }, [editorOpen]);
+
+  /** A célula do evento, pela posição que ela leva (`data-row`, `data-col`), ou nula fora de uma. */
+  function cellOf(target: EventTarget): GridCell | null {
+    const element = target instanceof Element ? target.closest<HTMLElement>("[data-col]") : null;
+    if (element === null || scroll.current?.contains(element) !== true) return null;
+    return { row: Number(element.dataset.row), column: Number(element.dataset.col) };
+  }
+
+  const editingAt = (cell: GridCell) => editing?.editor?.row === cell.row && editing.editor.column === cell.column;
+
+  function handleMouseDown(event: MouseEvent<HTMLDivElement>) {
+    const cell = editing === undefined || event.button !== 0 ? null : cellOf(event.target);
+    if (cell !== null && !editingAt(cell)) editing!.onActivate(cell);
+  }
+
+  function handleDoubleClick(event: MouseEvent<HTMLDivElement>) {
+    const cell = editing === undefined ? null : cellOf(event.target);
+    if (cell !== null && !editingAt(cell)) editing!.onEdit(cell);
+  }
+
+  function handleContextMenu(event: MouseEvent<HTMLDivElement>) {
+    if (editing === undefined) return;
+    // O menu do sistema nunca abre sobre a grade editável; o da célula, só sobre uma célula (a tecla de menu solta cai na grade, e é ignorada).
+    event.preventDefault();
+    const cell = cellOf(event.target);
+    if (cell === null || editingAt(cell)) return;
+    editing.onActivate(cell);
+    editing.onMenu(cell, { x: event.clientX, y: event.clientY }, false);
+  }
+
+  /** O pé da célula, onde o menu aberto pelo teclado aparece; sem ela na página, o canto da grade. */
+  function pointOf(cell: GridCell): { x: number; y: number } {
+    const rect = (document.getElementById(cellIdOf(cell.row, cell.column)) ?? scroll.current)?.getBoundingClientRect();
+    return rect === undefined ? { x: 0, y: 0 } : { x: rect.left, y: rect.bottom };
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (editing === undefined || editing.editor !== null || event.target !== event.currentTarget) return;
+
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      editing.onSave();
+      return;
+    }
+    if (event.altKey && event.key === "Insert") {
+      event.preventDefault();
+      editing.onNewRow();
+      return;
+    }
+
+    const moved = moveCell(editing.active, event.key, { rows: rows.length, columns: columns.length }, event.ctrlKey || event.metaKey);
+    if (moved !== null) {
+      event.preventDefault();
+      editing.onActivate(moved);
+      rowVirtualizer.scrollToIndex(moved.row);
+      columnVirtualizer.scrollToIndex(moved.column);
+      return;
+    }
+
+    const active = editing.active;
+    if (active === null) return;
+    if (event.key === "F2" || event.key === "Enter") {
+      event.preventDefault();
+      editing.onEdit(active);
+    } else if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
+      event.preventDefault();
+      editing.onMenu(active, pointOf(active), true);
+    } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      // Começar a digitar abre o campo com o que foi digitado, no lugar do valor.
+      event.preventDefault();
+      editing.onEdit(active, event.key);
+    }
+  }
+
+  const editor = editing?.editor ?? null;
+  const editorElement =
+    editor === null ? null : (
+      <CellEditor
+        label={editCopy.editorLabel(columns[editor.column]?.name ?? "", editor.row < read.length ? editCopy.rowLabel(editor.row + 1) : editCopy.newRowMark)}
+        draft={editor.draft}
+        number={columns[editor.column]?.kind === "number"}
+        onDraft={editing!.onDraft}
+        onCommit={editing!.onCommit}
+        onCancel={editing!.onCancel}
+      />
+    );
+  const activeId = editing?.active == null ? undefined : cellIdOf(editing.active.row, editing.active.column);
+
   // Uma página que não chega a encher a janela não tem o que rolar: a seguinte vem sem a pessoa pedir.
   useEffect(() => {
     const element = scroll.current;
@@ -316,7 +474,22 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows, truncated, n
   }, [rows.length, onReachEnd]);
 
   return (
-    <div ref={scroll} role="table" aria-label={copy.grid} aria-rowcount={rows.length + 1} aria-colcount={columns.length + 1} tabIndex={0} onScroll={handleScroll} className="min-h-0 flex-1 overflow-auto font-mono text-sm -outline-offset-2" style={zoomStyle}>
+    <div
+      ref={scroll}
+      role={editing === undefined ? "table" : "grid"}
+      aria-label={copy.grid}
+      aria-rowcount={rows.length + 1}
+      aria-colcount={columns.length + 1}
+      aria-activedescendant={activeId}
+      tabIndex={0}
+      onScroll={handleScroll}
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContextMenu}
+      onKeyDown={handleKeyDown}
+      className="min-h-0 flex-1 overflow-auto font-mono text-sm -outline-offset-2"
+      style={zoomStyle}
+    >
       <div className="relative min-w-full" style={{ height: rowVirtualizer.getTotalSize(), width: columnVirtualizer.getTotalSize() }}>
         <div role="row" aria-rowindex={1} className="sticky top-0 z-20 h-(--grid-row) w-full border-b border-border bg-raised leading-(--grid-row) font-semibold">
           <div role="columnheader" className="sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-border bg-raised px-2 text-right font-medium text-subtle">
@@ -333,6 +506,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows, truncated, n
               last={item.index === columns.length - 1}
               showType={showTypes}
               scale={metrics.factor}
+              hint={editing?.columnHints?.[item.index] ?? null}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
               // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009).
               onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes }))}
@@ -341,7 +515,24 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows, truncated, n
         </div>
 
         {rowVirtualizer.getVirtualItems().map((item) => (
-          <GridRow key={item.index} index={item.index} start={item.start} row={rows[item.index]} columns={columns} virtualColumns={virtualColumns} truncated={truncated.get(item.index)} nullText={nullText} links={links} onFollow={onFollow} linkable={linkable} scale={metrics.factor} />
+          <GridRow
+            key={item.index}
+            index={item.index}
+            start={item.start}
+            row={rows[item.index]}
+            columns={columns}
+            virtualColumns={virtualColumns}
+            truncated={truncated.get(item.index)}
+            nullText={nullText}
+            links={links}
+            onFollow={onFollow}
+            linkable={linkable}
+            scale={metrics.factor}
+            mark={editing?.marks.get(item.index)}
+            activeColumn={editing?.active?.row === item.index ? editing.active.column : null}
+            editor={editor?.row === item.index ? { column: editor.column, element: editorElement } : null}
+            cellIdOf={editing === undefined ? undefined : cellIdOf}
+          />
         ))}
       </div>
     </div>

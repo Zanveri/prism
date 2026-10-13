@@ -283,3 +283,52 @@ describe("o zoom da grade (RN-GRADE-010)", () => {
     expect(at(1)).toContain('title="0123456789"');
   });
 });
+
+describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
+  const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
+  const renderEditable = (extra: Partial<Parameters<typeof GridRow>[0]>, row: (string | null)[] = ["1", "aberta"]) =>
+    renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row, columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, ...extra }));
+  const cell = (markup: string, column: number) => markup.match(new RegExp(`<div[^>]*id="g-0-${column}"[^>]*>.*?</div>`, "s"))?.[0] ?? "";
+
+  it("com a edição, as células são `gridcell`, com o id e a posição que o clique e o teclado leem, e a ativa é marcada", () => {
+    const markup = renderEditable({ activeColumn: 1 });
+
+    expect(markup.match(/role="gridcell"/g)).toHaveLength(2);
+    expect(cell(markup, 1)).toMatch(/data-row="0"[^>]*data-col="1"[^>]*aria-selected="true"/);
+    expect(cell(markup, 0)).toContain('aria-selected="false"');
+    expect(cell(markup, 1)).toContain("outline-accent");
+  });
+
+  it("a célula alterada mostra o valor lido riscado ao lado do novo, como no canvas; o NULL novo tem a cor do nulo", () => {
+    const changed = cell(renderEditable({ mark: { kind: "read", deleted: false, pending: new Map([[1, "paga"]]), failed: false } }), 1);
+    const toNull = cell(renderEditable({ mark: { kind: "read", deleted: false, pending: new Map([[1, null]]), failed: false } }), 1);
+
+    expect(changed).toMatch(/line-through">aberta<\/span>paga/);
+    expect(changed).toContain("bg-accent/20");
+    expect(toNull).toMatch(/line-through">aberta<\/span><span class="text-subtle">NULL<\/span>/);
+  });
+
+  it("a linha nova é marcada no número da linha, e a coluna que ninguém preencheu fica vazia, para o padrão da tabela", () => {
+    const markup = renderEditable({ mark: { kind: "new", deleted: false, pending: new Map([[1, "nova"]]), failed: false } }, [null, "nova"]);
+
+    expect(markup).toMatch(/role="rowheader"[^>]*title="Linha nova"/);
+    expect(cell(markup, 0)).not.toContain("NULL");
+    expect(cell(markup, 1)).toContain(">nova<");
+    expect(cell(markup, 1)).not.toContain("line-through");
+  });
+
+  it("a linha marcada para exclusão fica riscada, e a que falhou no Salvar, destacada", () => {
+    const deleted = renderEditable({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false } });
+    const failed = renderEditable({ mark: { kind: "read", deleted: false, pending: new Map(), failed: true } });
+
+    expect(cell(deleted, 1)).toContain("line-through");
+    expect(failed).toMatch(/role="row"[^>]*bg-danger\/15/);
+  });
+
+  it("sem a edição, a linha continua só leitura: `cell`, sem id nem posição", () => {
+    const markup = render(["1", "aberta"]);
+
+    expect(markup).not.toContain("gridcell");
+    expect(markup).not.toContain("data-col");
+  });
+});

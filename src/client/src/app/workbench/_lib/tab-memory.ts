@@ -1,4 +1,5 @@
 import type { ColumnSizing } from "./grid-columns";
+import type { PendingEdits } from "./record-edits";
 import type { PaneLayout } from "./result-layout";
 import type { StructureSection } from "./structure-sections";
 import type { RecordsQuery } from "./table-sql";
@@ -13,7 +14,10 @@ export type RecordsMemory = { draft: string; query: RecordsQuery };
  * A vista Estrutura de uma aba lembra a seção que a pessoa escolheu na lista lateral (RN-TABELA-009); a grade dos Registros, as larguras que a pessoa deu às
  * colunas (RN-GRADE-009).
  */
-type Slots = { layout: PaneLayout; diagram: DiagramMemory; records: RecordsMemory; structure: StructureSection; grid: ColumnSizing };
+/** RN-EDIT-004: as pendências dos Registros e o resultado a que elas pertencem; trocar de vista e voltar não as perde. */
+export type EditsMemory = { resultId: string; edits: PendingEdits };
+
+type Slots = { layout: PaneLayout; diagram: DiagramMemory; records: RecordsMemory; structure: StructureSection; grid: ColumnSizing; edits: EditsMemory };
 
 /**
  * O que a tela de cada aba lembra quando a vista que o guarda deixa de existir e volta: o tamanho da divisão e o recolhido ou maximizado da
