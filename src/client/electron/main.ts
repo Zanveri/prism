@@ -8,6 +8,7 @@ import { apiExecutable } from "../scripts/api-layout.mjs";
 import { apiExitMessage, closeVaultAndStop, startApi, type ApiProcess } from "./api-process";
 import { versionArgument, windowArgument } from "./app-version";
 import { userDataDir } from "./data-dir";
+import { permissionAllowed } from "./permissions";
 import { applicationMenuTemplate, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
 import { createSplash } from "./splash";
@@ -442,6 +443,9 @@ if (!app.requestSingleInstanceLock()) {
     // O caminho não é segredo; quem confere onde o app guarda os cofres lê esta linha.
     console.log(`[prism] pasta de dados: ${app.getPath("userData")}`);
     if (devServerUrl === undefined) serveRenderer();
+    // RN-SHELL-001 e RN-CONFIG-008: a tela só tem as permissões que usa (copiar, colar, ler as fontes do sistema), e só na origem dela.
+    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, rendererOrigin)));
+    session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, rendererOrigin));
     // O atualizador nunca impede o app de abrir: se ele não nascer, só não há atualização nesta abertura.
     try {
       startUpdater();
