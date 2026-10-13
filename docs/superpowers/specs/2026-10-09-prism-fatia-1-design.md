@@ -1893,3 +1893,12 @@ Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`
 | `POST api/user/scripts` `{ name, sql, connectionID?, database? }` | 201 | 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
 | `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database? }` | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
 | `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
+
+### Ir do editor para a tabela
+
+- **RN-LINK-001.** No editor SQL, com Ctrl apertado (⌘ no macOS), o nome de uma tabela ou visão sob o
+  ponteiro fica azul e sublinhado, com o cursor de mão, e Ctrl+clique nele abre a aba da tabela nos
+  Registros (RN-TABELA-001), na conexão e no banco da aba do editor. Vira link só o nome que o
+  catálogo daquele banco conhece: com o esquema (`esquema.tabela`) ou sem ele (o esquema padrão da
+  sessão), com ou sem aspas, nas regras de nome de cada banco. Fora de texto entre aspas simples e de
+  comentário. Soltar o Ctrl ou tirar o ponteiro do nome desfaz o destaque.
