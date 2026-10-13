@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { closeConfirmation, closeConfirmationText, closeShortcutLabel, isCloseShortcut, mergeCloseQueue, moveMenu, nextToClose, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabsToClose, tabTitleOf, wheelScroll } from "./tab-strip";
+import { closeAsks, closeConfirmation, closeConfirmationText, closeShortcutLabel, isCloseShortcut, mergeCloseQueue, moveMenu, nextToClose, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabsToClose, tabTitleOf, wheelScroll } from "./tab-strip";
 
 const tabs = ["a", "b", "c", "d", "e"].map((id) => ({ id }));
 
@@ -274,9 +274,19 @@ describe("closeConfirmation: uma pergunta só, e só quando fechar perde SQL dig
     expect(closeConfirmation("all", [query("a", "select 1")], "x")).toBeNull();
   });
 
-  it("o texto da pergunta diz quantas abas fecham e quantas consultas com SQL digitado perdem o texto", () => {
-    expect(closeConfirmationText(5, 2)).toEqual({ title: "Fechar 5 abas?", description: "Entre elas, 2 consultas com SQL digitado: o texto não é guardado em lugar nenhum.", confirm: "Fechar" });
-    expect(closeConfirmationText(1, 1)).toEqual({ title: "Fechar 1 aba?", description: "Entre elas, 1 consulta com SQL digitado: o texto não é guardado em lugar nenhum.", confirm: "Fechar" });
+  it("o texto da pergunta diz quantas abas fecham, quantas consultas com SQL digitado há entre elas, e que o que fecha não volta na próxima entrada (RN-ABAS-007)", () => {
+    expect(closeConfirmationText(5, 2)).toEqual({ title: "Fechar 5 abas?", description: "Entre elas, 2 consultas com SQL digitado: o que fecha não volta na próxima entrada.", confirm: "Fechar" });
+    expect(closeConfirmationText(1, 1)).toEqual({ title: "Fechar 1 aba?", description: "Entre elas, 1 consulta com SQL digitado: o que fecha não volta na próxima entrada.", confirm: "Fechar" });
+  });
+});
+
+describe("closeAsks: o que o fechamento pergunta depois das alterações não salvas da grade (RN-ABAS-007)", () => {
+  it("fechar o app (a última janela) não pergunta pelos scripts com mudança não salva nem pelo SQL digitado: eles voltam na próxima entrada", () => {
+    expect(closeAsks({ closesTheApp: true })).toEqual({ scripts: false, sql: false });
+  });
+
+  it("fechar abas, ou uma janela que não é a última, pergunta como antes: o que fecha não volta", () => {
+    expect(closeAsks({ closesTheApp: false })).toEqual({ scripts: true, sql: true });
   });
 });
 

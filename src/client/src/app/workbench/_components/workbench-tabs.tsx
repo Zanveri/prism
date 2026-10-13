@@ -12,7 +12,7 @@ import { createDisconnectLog } from "../_lib/connection-intent";
 import { liveEditors } from "../_lib/live-editors";
 import { recallForTransfer } from "../_lib/tab-memory";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
-import { closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseScope } from "../_lib/tab-strip";
+import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
@@ -30,6 +30,9 @@ import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 import { useScriptSaving, type SaveMode } from "./use-script-saving";
 
 const copy = workbenchCopy.tabs;
+
+/** Fechar abas, ou uma janela que não é a última, pergunta tudo (RN-ABAS-007). */
+const askEverything = closeAsks({ closesTheApp: false });
 
 /**
  * A faixa de abas e o painel de cada uma. Cada aba é uma consulta (`QueryTab`) de uma conexão, com
@@ -107,10 +110,12 @@ export function WorkbenchTabs() {
     [tabs, closeTab, setActiveTab],
   );
 
-  // Fechar várias abas pergunta UMA vez quando alguma das que fecham é consulta com SQL digitado (o texto não é guardado); fechar uma só, não.
+  // Fechar várias abas pergunta UMA vez quando alguma das que fecham é consulta com SQL digitado (o texto não volta na próxima entrada); fechar uma só, não.
+  // Fechar o app não pergunta (RN-ABAS-007: as abas voltam).
   const [confirm, setConfirm] = useState<{ scope: CloseScope; tabId: string; total: number; withSql: number } | null>(null);
   const askAboutSql = useCallback(
-    (scope: CloseScope, tabId: string) => {
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
+      if (!asks.sql) return closeNow(scope, tabId);
       const question = closeConfirmation(scope, tabs, tabId);
       if (question === null) closeNow(scope, tabId);
       else setConfirm({ scope, tabId, ...question });
@@ -118,10 +123,12 @@ export function WorkbenchTabs() {
     [tabs, closeNow],
   );
 
-  // RN-SCRIPT-001: depois dos Registros e antes da pergunta do SQL, a dos scripts com mudança não salva entre as abas que fecham.
+  // RN-SCRIPT-001: depois dos Registros e antes da pergunta do SQL, a dos scripts com mudança não salva entre as abas que fecham. Fechar o app não pergunta
+  // (RN-ABAS-007: o script volta com a marca de mudança não salva).
   const [scriptQuestion, setScriptQuestion] = useState<{ scope: CloseScope; tabId: string; dirty: { id: string; name: string }[]; saving: boolean } | null>(null);
   const askAboutScripts = useCallback(
-    (scope: CloseScope, tabId: string) => {
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
+      if (!asks.scripts) return askAboutSql(scope, tabId, asks);
       const dirty = scriptsToAsk(tabsToClose(scope, tabs, tabId), tabs).map((tab) => ({ id: tab.id, name: tab.script?.name ?? tab.title }));
       if (dirty.length === 0) askAboutSql(scope, tabId);
       else setScriptQuestion({ scope, tabId, dirty, saving: false });
@@ -150,13 +157,14 @@ export function WorkbenchTabs() {
 
   // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar. Levar a aba
   // para outra janela pergunta o mesmo (as alterações não salvas não mudam de janela): Salvar e levar, ou Descartar e levar.
-  type Intent = { kind: "close"; scope: CloseScope } | { kind: "move"; target: TabMoveTarget };
+  // Elas não voltam na próxima entrada, e perguntam também ao fechar o app (RN-ABAS-007); `asks` diz o que vem depois.
+  type Intent = { kind: "close"; scope: CloseScope; asks: CloseAsks } | { kind: "move"; target: TabMoveTarget };
   const [unsaved, setUnsaved] = useState<{ intent: Intent; tabId: string; count: number; canSave: boolean; saving: boolean } | null>(null);
   const handleClose = useCallback(
-    (scope: CloseScope, tabId: string) => {
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
       const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
-      if (question === null) askAboutScripts(scope, tabId);
-      else setUnsaved({ intent: { kind: "close", scope }, tabId, ...question, saving: false });
+      if (question === null) askAboutScripts(scope, tabId, asks);
+      else setUnsaved({ intent: { kind: "close", scope, asks }, tabId, ...question, saving: false });
     },
     [tabs, askAboutScripts, setUnsaved],
   );
@@ -198,7 +206,7 @@ export function WorkbenchTabs() {
   // Depois da pergunta: fecha (com a pergunta do SQL, se for o caso) ou leva a aba. Levar depois de "Descartar" é levá-la sem as alterações: elas
   // ficam na memória desta janela, que a aba deixa, e não vão.
   function proceed(intent: Intent, tabId: string, saved = false) {
-    if (intent.kind === "close") askAboutScripts(intent.scope, tabId);
+    if (intent.kind === "close") askAboutScripts(intent.scope, tabId, intent.asks);
     else void sendTab(tabId, intent.target, saved);
   }
 
@@ -242,13 +250,14 @@ export function WorkbenchTabs() {
   });
   useEffect(
     () =>
-      onWindowCloseRequested(() => {
+      onWindowCloseRequested(({ last }) => {
         const open = latestTabs.current;
         if (vaultLock.isLocked() || open.length === 0) return finishWindow();
 
         holdForWindowClose();
         setWindowClosing(true);
-        latestHandleClose.current("all", open[0].id);
+        // RN-ABAS-007: a última janela fecha o app, e só pergunta pelo que não volta na próxima entrada (as alterações não salvas da grade).
+        latestHandleClose.current("all", open[0].id, closeAsks({ closesTheApp: last }));
       }),
     [finishWindow, holdForWindowClose],
   );

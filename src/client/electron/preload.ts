@@ -70,8 +70,11 @@ export type PrismWindows = {
   onTab(listener: (delivery: unknown) => void): () => void;
   /** O processo principal pede que esta janela mande uma aba para outra (`tabGiveSchema`): ela foi solta na faixa de lá. */
   onGiveTab(listener: (request: unknown) => void): () => void;
-  /** A pessoa fechou a janela: a tela fecha as abas, com as perguntas de sempre, e então chama `close`. */
-  onCloseRequested(listener: () => void): () => void;
+  /**
+   * A pessoa fechou a janela: a tela fecha as abas, com as perguntas de sempre, e então chama `close`. O aviso diz se ela é a última (`windowCloseRequestSchema`):
+   * fechar o app só pergunta pelo que não volta na próxima entrada (RN-ABAS-007).
+   */
+  onCloseRequested(listener: (request: unknown) => void): () => void;
 };
 
 /** O cofre é um só para todas as janelas (RN-ABAS-004): o que uma janela conta às outras, e o que as outras contaram (`peerEventSchema`). */
@@ -169,7 +172,7 @@ const bridge: PrismBridge = {
       return () => ipcRenderer.removeListener("prism:windows-give-tab", handler);
     },
     onCloseRequested(listener) {
-      const handler = () => listener();
+      const handler = (_event: unknown, request: unknown) => listener(request);
       ipcRenderer.on("prism:windows-close-requested", handler);
       return () => ipcRenderer.removeListener("prism:windows-close-requested", handler);
     },

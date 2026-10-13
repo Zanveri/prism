@@ -72,6 +72,7 @@ const saved: SavedWorkspace = {
     { kind: "table", connectionID: c1, database: null, schema: "loja", table: "pedidos", view: "data" },
     { kind: "query", connectionID: gone, database: null, sql: "SELECT 'órfã'", scriptID: null, dirty: false, sqlTooLarge: false },
     { kind: "query", connectionID: c1, database: null, sql: "", scriptID: null, dirty: false, sqlTooLarge: true },
+    { kind: "table", connectionID: gone, database: null, schema: "loja", table: "clientes", view: "structure" },
   ],
   activeIndex: 1,
 };
@@ -108,6 +109,8 @@ describe("WorkbenchProvider: as abas que voltam na próxima entrada (RN-ABAS-006
     expect(rt.created.map((options) => options.connectionId)).toEqual([c1, c1, null, c1]);
     expect(rt.toast.warning).toHaveBeenCalledWith(workbenchCopy.toasts.restoredEmpty("consulta-2.sql"));
     expect(rt.toast.warning).toHaveBeenCalledWith(workbenchCopy.toasts.restoredWithoutConnection(1));
+    // A aba de tabela da conexão excluída não volta, e a entrada avisa (RN-ABAS-006).
+    expect(rt.toast.warning).toHaveBeenCalledWith(workbenchCopy.toasts.restoredTablesDropped(1));
     // O texto salvo do script só é lido para a aba que tinha mudança não salva.
     expect(rt.api.script).toHaveBeenCalledExactlyOnceWith(s1);
   });

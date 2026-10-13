@@ -361,7 +361,8 @@ function createAppWindow(bounds?: Rect) {
     if (quitting !== "no" || closeApproved.has(id) || !hub.isReady(id)) return;
 
     event.preventDefault();
-    window.webContents.send("prism:windows-close-requested");
+    // RN-ABAS-007: a última janela fecha o app, e as abas dela voltam na próxima entrada: a tela só pergunta pelo que não volta.
+    window.webContents.send("prism:windows-close-requested", { last: hub.isLast(id) });
   });
 
   window.on("closed", () => {

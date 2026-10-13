@@ -150,8 +150,19 @@ export function tabListLabels(tabs: readonly { title: string; connectionId: stri
 }
 
 /**
+ * RN-ABAS-007: o que o fechamento pergunta depois das alterações não salvas da grade, que perguntam sempre (não voltam na próxima entrada). Fechar o app (a
+ * última janela) não pergunta pelos scripts com mudança não salva nem pelo SQL digitado: as abas voltam na próxima entrada (RN-ABAS-006), com o texto e a
+ * marca. Fechar abas, ou uma janela que não é a última, pergunta como antes: o que fecha não volta.
+ */
+export type CloseAsks = { scripts: boolean; sql: boolean };
+
+export function closeAsks({ closesTheApp }: { closesTheApp: boolean }): CloseAsks {
+  return closesTheApp ? { scripts: false, sql: false } : { scripts: true, sql: true };
+}
+
+/**
  * A pergunta de "Fechar todas", "Fechar as outras" e "Fechar as da direita": quantas abas fecham e quantas delas são consultas com SQL digitado, cujo texto
- * não é guardado em lugar nenhum. `null` (sem pergunta) para o fechamento de uma aba só, que segue como sempre, e quando nenhuma das que fecham tem SQL
+ * não volta na próxima entrada (fechar uma aba a tira do que volta, RN-ABAS-006). `null` (sem pergunta) para o fechamento de uma aba só, que segue como sempre, e quando nenhuma das que fecham tem SQL
  * digitado (consulta vazia, só espaço, ou aba de tabela). O SQL da aba que FICA não conta.
  */
 export function closeConfirmation(scope: CloseScope, tabs: readonly { id: string; sql: string; table?: unknown; script?: unknown }[], targetId: string): { total: number; withSql: number } | null {

@@ -85,10 +85,11 @@ export const workbenchCopy = {
     closeAll: "Fechar todas",
     closeShortcut: "Ctrl+W",
     closeShortcutMac: "Cmd+W",
-    // "Fechar todas", "Fechar as outras" e "Fechar as da direita" perguntam UMA vez quando alguma aba que fecha é consulta com SQL digitado (o texto não é guardado).
+    // "Fechar todas", "Fechar as outras" e "Fechar as da direita" perguntam UMA vez quando alguma aba que fecha é consulta com SQL digitado: o que fecha não volta
+    // na próxima entrada (RN-ABAS-006 e 007).
     confirmClose: {
       title: (total: number) => `Fechar ${formatCount(total, "aba", "abas")}?`,
-      description: (withSql: number) => `Entre elas, ${formatCount(withSql, "consulta com SQL digitado", "consultas com SQL digitado")}: o texto não é guardado em lugar nenhum.`,
+      description: (withSql: number) => `Entre elas, ${formatCount(withSql, "consulta com SQL digitado", "consultas com SQL digitado")}: o que fecha não volta na próxima entrada.`,
       confirm: "Fechar",
     },
     // RN-ABAS-001 a 003: a aba muda de lugar arrastando ou pelo teclado, e passa para outra janela pelo menu ou arrastando.

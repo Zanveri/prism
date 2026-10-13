@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { PrismBridge, PrismWorkspace } from "../../../electron/preload";
-import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowEntry } from "../../../electron/window-messages";
+import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowCloseRequestSchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowCloseRequest, type WindowEntry } from "../../../electron/window-messages";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "../../../electron/workspace-hub";
 import type { SavedWorkspace } from "../../../electron/workspace-messages";
 
@@ -176,8 +176,14 @@ export function onTabWanted(listener: (give: TabGive) => void): () => void {
   );
 }
 
-export function onWindowCloseRequested(listener: () => void): () => void {
-  return listen(() => getBridge().windows.onCloseRequested(listener));
+/** A pessoa fechou a janela. O aviso que não diz direito se ela é a última vale "não é": o fechamento pergunta tudo, como antes (RN-ABAS-007). */
+export function onWindowCloseRequested(listener: (request: WindowCloseRequest) => void): () => void {
+  return listen(() =>
+    getBridge().windows.onCloseRequested((raw) => {
+      const parsed = windowCloseRequestSchema.safeParse(raw);
+      listener(parsed.success ? parsed.data : { last: false });
+    }),
+  );
 }
 
 /** Pedidos sem resposta que a tela espere (pronta, resumo, pedir a aba, fechar): a falha só não faz nada. */

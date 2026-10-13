@@ -610,7 +610,7 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   a chave da grade continua do resultado que veio, e "Carregar mais" continua no cursor da sessão). Nada é executado. O número da próxima
   consulta não repete o da aba que chegou. O provedor diz ao centro quando está pronto (`setReady`, ao montar e ao desmontar): o centro guarda a
   aba até lá (a janela nova ainda está abrindo o cofre), e a que fecha antes de recebê-la a devolve à de origem.
-- **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele; cancelar uma
+- **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele (na última janela, só a da grade, RN-ABAS-007); cancelar uma
   pergunta deixa a janela aberta; quando a última aba fechou, `releaseWindow` espera os fechamentos de sessão a caminho e fecha as sessões da
   árvore DESTA janela, e só então a janela fecha. Com o cofre bloqueado fecha direto (a API já fechou as sessões).
 - **O cofre é um só** (RN-ABAS-004). O que uma janela conta às outras (`prism:session-share`, `peerEventSchema`: `activity`, `lock`, `unlock`,
@@ -645,7 +645,8 @@ suas abas ao processo principal, que junta as de todas e grava.
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
   só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), a de um script excluído como consulta comum, a de consulta
   cuja conexão foi excluída sem conexão (`NoConnectionBarView` com `forScript` falso: "A conexão desta aba não existe mais"; aviso `restoredWithoutConnection`),
-  e a de tabela cuja conexão foi excluída **não volta** (a aba de uma tabela sempre tem a conexão dela; aviso `restoredTablesDropped`). A ativa que não voltou
+  e a de tabela cuja conexão foi excluída **não volta**, e a entrada avisa (a regra, RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; aviso
+  `restoredTablesDropped`). A ativa que não voltou
   passa à vizinha. O schema é um só, `electron/workspace-messages.ts`, com os nomes da API (`connectionID`, `scriptID`), conferido no processo principal (o
   relato de cada janela) e na tela (a resposta do `GET`, `workspace.service.ts`: a aba que não confere fica de fora, sem derrubar as outras).
 - **Nada conecta nem executa sozinho.** As abas voltam sem sessão; as conexões das abas de tabela que voltaram são marcadas como desconectadas
@@ -670,7 +671,7 @@ suas abas ao processo principal, que junta as de todas e grava.
   no máximo 5 s, e nunca lança): o "Sair" da barra superior grava antes do `signOut`; o bloqueio por inatividade grava entre o descarte e o fechamento do cofre
   (`saveWorkspace` de `lock-vault.ts`, uma vez, e a falha não impede o fechamento; a janela que só acompanha o bloqueio de outra não grava); fechar o app grava no
   `before-quit`, canal `prism:workspace-flush`. O "Sair" da tela de bloqueio não grava: o cofre já fechou, e o bloqueio gravou antes.
-- **A janela que fecha** (RN-ABAS-004 com a RN-ABAS-006): fechar a janela fecha as abas dela com as perguntas de sempre, mas fechar a ÚLTIMA é o app saindo, e as
+- **A janela que fecha** (RN-ABAS-004 com a RN-ABAS-006 e 007): fechar a janela fecha as abas dela com as perguntas de sempre, mas fechar a ÚLTIMA é o app saindo, e as
   abas voltam na próxima entrada. Por isso, ao começar a fechar, a janela segura as abas dela (`holdForWindowClose` → `source.hold`, `withHeld`: as que fecham
   ficam como estavam por último, na ordem e com a ativa de então); se a pessoa cancela uma pergunta, solta (`releaseWindowClose`) e o que fechou até ali sai do
   que volta. O processo principal decide no `closed`: a última janela (ou qualquer uma com o app saindo) deixa as abas para a gravação do `before-quit`; as
@@ -682,9 +683,13 @@ suas abas ao processo principal, que junta as de todas e grava.
   janelas"), responda as perguntas, abra de novo com a mesma `--user-data-dir` e entre: as abas voltam. Para a conexão excluída: saia, entre, exclua e saia pela
   API (com a área de trabalho desmontada nada é podado), e entre pelo formulário. O log da API (`<dados>/logs/`) tem "Área de trabalho gravada com N abas." e
   nunca o SQL.
+- **Fechar o app só pergunta pelo que não volta** (RN-ABAS-007). O aviso `prism:windows-close-requested` leva `{ last }` (`windowCloseRequestSchema`; o centro
+  das janelas diz, `hub.isLast`), e a tela o confere (`onWindowCloseRequested`: o aviso que não confere vale "não é a última", e pergunta tudo). A última janela
+  fecha as abas com `closeAsks({ closesTheApp: true })`: só a pergunta das alterações não salvas da grade (RN-EDIT-007), que não voltam; o SQL digitado e os
+  scripts com mudança não salva voltam, e não perguntam. Fechar uma aba, várias ou uma janela que não é a última pergunta como antes, e o texto da pergunta do
+  SQL diz que o que fecha não volta na próxima entrada (`confirmClose.description`).
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
-  voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada. E a pergunta de "Fechar todas" ao fechar a janela diz que o SQL digitado
-  "não é guardado em lugar nenhum", o que deixou de valer para a última janela (as abas voltam na próxima entrada).
+  voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
 
 ## Scripts salvos (RN-SCRIPT-001 a 004)
 
