@@ -71,6 +71,8 @@ export type HandoffContext = {
   busy: boolean;
   /** A pessoa desconectou a conexão e ainda não a reconectou: nada é enviado sem o clique em "Atualizar" (RN-SESSAO-004). */
   disconnected: boolean;
+  /** RN-EDIT-007: a aba tem alterações não salvas; o pedido espera a resposta da pergunta (Salvar, Descartar ou Cancelar). */
+  unsaved?: boolean;
 };
 
 /**
@@ -81,8 +83,8 @@ export type HandoffContext = {
  * o campo e o comando à vista ficam como estavam. O pedido que espera fica na passagem e é levado quando a aba se livra do que roda, ou quando a pessoa reconecta
  * (a passagem o apaga sozinha se isso demorar mais que o prazo dela).
  */
-export function handoffToTake(request: FilterRequest | null, taken: number | null, { visible, busy, disconnected }: HandoffContext): FilterRequest | null {
-  return request !== null && request.id !== taken && visible && !busy && !disconnected ? request : null;
+export function handoffToTake(request: FilterRequest | null, taken: number | null, { visible, busy, disconnected, unsaved = false }: HandoffContext): FilterRequest | null {
+  return request !== null && request.id !== taken && visible && !busy && !disconnected && !unsaved ? request : null;
 }
 
 /**
@@ -180,8 +182,8 @@ export type TakeHandoffDeps = {
  * mantendo a ordem de fora (`orderOf`), no campo (sem aviso de erro) e no filtro em vigor. Chamado na renderização (o campo e o comando já saem com ele). Recebe
  * o ESTADO do executor, e não um "ocupado" já calculado: é daqui que sai se a aba está ocupada. Sem o banco da conexão o texto é lido como PostgreSQL.
  */
-export function takeHandoff(request: FilterRequest | null, taken: number | null, { visible, disconnected, state, filter, engine }: { visible: boolean; disconnected: boolean; state: RunnerState; filter: string; engine: Engine | undefined }, deps: TakeHandoffDeps): void {
-  const taking = handoffToTake(request, taken, { visible, busy: isBusy(state), disconnected });
+export function takeHandoff(request: FilterRequest | null, taken: number | null, { visible, disconnected, state, filter, engine, unsaved = false }: { visible: boolean; disconnected: boolean; state: RunnerState; filter: string; engine: Engine | undefined; unsaved?: boolean }, deps: TakeHandoffDeps): void {
+  const taking = handoffToTake(request, taken, { visible, busy: isBusy(state), disconnected, unsaved });
   if (taking === null) return;
 
   const text = [taking.where, orderOf(filter, engine)].filter((part) => part !== "").join(" ");

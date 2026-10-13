@@ -16,7 +16,19 @@ export type QueryRow = (string | null)[];
  * `totalRows` só vem preenchido quando o comando gravou e devolveu linhas (RN-SQL-013): ele foi
  * executado até o fim, esse é o total que devolveu, e não há cursor aberto para ler o resto.
  */
-export type QueryPage = { kind: "rows"; columns: QueryColumn[]; rows: QueryRow[]; hasMore: boolean; elapsedMs: number; truncatedCells: [number, number][]; totalRows: number | null };
+export type QueryPage = {
+  kind: "rows";
+  columns: QueryColumn[];
+  rows: QueryRow[];
+  hasMore: boolean;
+  elapsedMs: number;
+  truncatedCells: [number, number][];
+  totalRows: number | null;
+  /** RN-EDIT-002: o resultado a que a página pertence (muda a cada execução); é por ele que a edição pergunta e grava. Nulo sem ele. */
+  resultId?: string | null;
+  /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando a API já o sabe sem consultar o banco ("união de consultas"). */
+  readOnly?: string | null;
+};
 
 /** O que um comando que não devolve linhas responde (RN-SQL-008). */
 export type QueryAffected = { kind: "affected"; rowsAffected: number; elapsedMs: number };
@@ -39,6 +51,9 @@ const responseSchema = z.object({
   truncatedCells: z.array(z.tuple([z.number().int(), z.number().int()])).nullish(),
   rowsAffected: z.number().int().nullish(),
   totalRows: z.number().int().nullish(),
+  // A edição (seção 22): fora do formato não recusa a página, que o banco já entregou; só não há o que editar.
+  resultID: z.string().nullish().catch(null),
+  editable: z.object({ known: z.boolean(), reason: z.string().nullish() }).nullish().catch(null),
 });
 
 export const queryResultSchema = responseSchema.transform((response, context): QueryResult => {
@@ -52,7 +67,8 @@ export const queryResultSchema = responseSchema.transform((response, context): Q
   if (rows == null) return refuse("A resposta tem colunas e não tem linhas.");
   if (rows.some((row) => row.length !== columns.length)) return refuse("Há linha com tamanho diferente do número de colunas.");
 
-  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null };
+  const readOnly = response.editable?.known === true ? (response.editable.reason ?? null) : null;
+  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly };
 });
 
 /** "Carregar mais" só devolve página de linhas. */

@@ -133,6 +133,11 @@ describe("handoffToTake: o filtro que outra aba pediu (RN-TABELA-007) vai ao cam
     expect(handoffToTake(request, 3, free)).toBeNull();
   });
 
+  it("com alterações não salvas na aba o pedido espera a resposta da pergunta (RN-EDIT-007)", () => {
+    expect(handoffToTake(request, null, { ...free, unsaved: true })).toBeNull();
+    expect(handoffToTake(request, null, { ...free, unsaved: false })).toBe(request);
+  });
+
   it("com a vista escondida o pedido espera ser aberta, também ao desbloquear (RN-SEG-001)", () => {
     expect(handoffToTake(request, null, { ...free, visible: false })).toBeNull();
     expect(handoffToTake(request, null, free)).toBe(request);

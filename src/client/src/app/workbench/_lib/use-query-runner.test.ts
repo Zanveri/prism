@@ -1712,3 +1712,29 @@ describe("retire: o executor aposentado que recusa avisa no registro, para a reg
     warn.mockRestore();
   });
 });
+
+describe("o resultado da página e a sessão da aba, para a edição dos Registros (seção 22)", () => {
+  it("as linhas levam o resultado e o motivo de só leitura que a página trouxe, e a sessão da aba fica legível", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { resultID: "r1", editable: { known: true, reason: "DISTINCT" } }));
+
+    expect(runner.sessionOf()).toBeNull();
+    await runner.run({ sql: "select distinct 1", offset: 0 });
+
+    expect(runner.getState()).toMatchObject({ status: "rows", resultId: "r1", readOnly: "DISTINCT" });
+    expect(runner.sessionOf()).toBe("s1");
+  });
+
+  it("carregar mais é o mesmo resultado: o resultado das linhas não muda", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { resultID: "r1", editable: { known: false, reason: null } }));
+    api.on(`POST ${sessions}/s1/queries/next`, page([["2", "b"]], { hasMore: false, resultID: "r1", editable: { known: false, reason: null } }));
+
+    await runner.run({ sql: "select 1", offset: 0 });
+    await runner.loadMore();
+
+    expect(runner.getState()).toMatchObject({ status: "rows", resultId: "r1", readOnly: null, rows: [["1", "a"], ["2", "b"]] });
+  });
+});

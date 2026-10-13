@@ -25,6 +25,70 @@ export const recordsCopy = {
     zoomResetHint: "Voltar a 100%. Ctrl+roda do mouse sobre a grade também muda o zoom.",
   },
 
+  // Seção 22 (RN-EDIT-001 a 012): a edição de células nos Registros de uma tabela.
+  edit: {
+    pending: (count: number) => (count === 1 ? "1 alteração não salva" : `${count.toLocaleString("pt-BR")} alterações não salvas`),
+    viewSql: "Ver SQL",
+    discard: "Descartar",
+    save: "Salvar",
+    saving: "Salvando…",
+    saveHint: "Grava as alterações no banco, numa transação só (Ctrl+S com o foco na grade).",
+    oneAtATime: "Este banco não tem log de transação: cada alteração é gravada sozinha, na hora. Se uma falhar, as anteriores já estão gravadas.",
+    saved: (count: number) => (count === 1 ? "1 alteração salva." : `${count.toLocaleString("pt-BR")} alterações salvas.`),
+    partlySaved: (applied: number, row: string, left: number) => `${applied === 1 ? "1 alteração gravada" : `${applied.toLocaleString("pt-BR")} alterações gravadas`}; a ${row} falhou; ${left === 1 ? "1 continua pendente" : `${left.toLocaleString("pt-BR")} continuam pendentes`}.`,
+    failedAt: (row: string) => `O Salvar falhou na ${row}, e nada foi gravado.`,
+    rowLabel: (row: number) => `linha ${row.toLocaleString("pt-BR")}`,
+    newRowLabel: (position: number) => `linha nova ${position.toLocaleString("pt-BR")}`,
+    noRow: "A linha não existe mais, ou a chave dela mudou: o comando não alterou nenhuma linha.",
+    manyRows: (count: number) => `O comando alteraria ${count.toLocaleString("pt-BR")} linhas, e não uma só.`,
+    manyRowsWritten: (count: number) => `O comando alterou ${count.toLocaleString("pt-BR")} linhas, e já está gravado: não há como desfazê-lo.`,
+    readOnly: (reason: string) => `Somente leitura: ${reason}.`,
+    loadingTarget: "Conferindo o que se edita nesta tabela…",
+    checkFailed: "Não foi possível saber o que se edita nesta tabela.",
+    // O campo de edição dentro da célula, como no canvas.
+    editorLabel: (column: string, row: string) => `${column}, ${row}`,
+    confirmEdit: "Confirmar edição (Enter)",
+    cancelEdit: "Cancelar edição (Esc)",
+    newRowMark: "Linha nova",
+    deletedMark: "Marcada para exclusão",
+    pendingTitle: (original: string) => `Valor lido: ${original}`,
+    // "Ver SQL" (RN-EDIT-008).
+    sqlTitle: "SQL das alterações",
+    sqlDescription: "Os comandos que o Salvar vai executar, na ordem. Na execução os valores vão como parâmetros, e não dentro do texto.",
+    sqlOneAtATime: "Neste banco cada comando é gravado sozinho, quando termina.",
+    sqlUnwritten: "Os valores marcados com ? não têm literal (têm caractere de controle); eles vão nesta ordem:",
+    copySql: "Copiar",
+    copied: "SQL copiado.",
+    notCopied: "Não foi possível copiar.",
+    close: "Fechar",
+    // A pergunta antes de perder as pendências (RN-EDIT-007).
+    unsavedTitle: (count: number) => (count === 1 ? "Há 1 alteração não salva" : `Há ${count.toLocaleString("pt-BR")} alterações não salvas`),
+    unsavedDescription: "Salve antes, ou descarte o que não foi salvo. Cancelar volta sem mudar nada.",
+    unsavedSeveral: "As alterações não salvas das abas que fecham serão descartadas.",
+    cancel: "Cancelar",
+    // O menu de contexto da célula.
+    menu: {
+      label: "Ações da célula",
+      copyValue: "Copiar valor",
+      paste: "Colar",
+      edit: "Editar",
+      setNull: "Definir como NULL",
+      undo: "Desfazer esta alteração",
+      newRow: "Nova linha",
+      deleteRow: "Excluir linha",
+      notNullable: "a coluna não aceita NULL",
+      pasteFailed: "Não foi possível ler a área de transferência.",
+    },
+    // Por que uma célula ou uma linha não se edita (além dos motivos que a API manda).
+    reasons: {
+      truncated: "o valor chegou cortado",
+      keyTruncated: "a chave desta linha chegou cortada",
+      deleted: "a linha está marcada para exclusão",
+      noRowOperations: "este resultado não aceita linha nova nem exclusão",
+      busy: "há um comando em andamento na aba",
+    },
+  },
+
   // Configurações › Resultados: o que vale para as grades. Aqui, e não em `settings.copy.ts`, porque esta leva é dividida por arquivo.
   settings: {
     // RN-CONFIG-006.

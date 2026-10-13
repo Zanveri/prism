@@ -86,6 +86,10 @@ export type RowsState = {
   /** Só existe depois de "Contar total" (RN-SQL-006). */
   total: number | null;
   counting: boolean;
+  /** RN-EDIT-002: o resultado da API a que estas linhas pertencem; é por ele que a edição dos Registros pergunta e grava. */
+  resultId?: string | null;
+  /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando a página já o trouxe. */
+  readOnly?: string | null;
 };
 
 export type AffectedState = { status: "affected"; rowsAffected: number; elapsedMs: number };
@@ -175,6 +179,8 @@ export type QueryRunner = {
    * na tela, e o erro do comando que ainda roda chega sem posição.
    */
   textEdited: () => void;
+  /** A sessão da aba na API, ou nula antes da primeira execução e depois de solta: a edição dos Registros grava nela (seção 22). */
+  sessionOf: () => string | null;
   /**
    * Solta a aba da sessão dela (fechar a aba, desconectar, conexão excluída) e devolve o que há
    * para encerrar na API. O que estava a caminho chega e não muda mais nada.
@@ -498,6 +504,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         cursorClosed: false,
         total: null,
         counting: false,
+        resultId: data.resultId ?? null,
+        readOnly: data.readOnly ?? null,
       });
       // RN-SQL-013 e RN-AVISO-002: o comando gravou e está confirmado; as linhas são o que ele devolveu.
       if (data.totalRows !== null) toast.success(copy.commandCompleted(data.totalRows));
@@ -632,6 +640,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       // O erro que está na tela enquanto outro comando roda também perde a posição: ela não pode voltar, velha, se ele for restaurado.
       else if (state.status === "running" && state.previous?.status === "error" && state.previous.errorAt !== null) set({ ...state, previous: { ...state.previous, errorAt: null } });
     },
+    sessionOf: () => sessionId,
     release,
     retire,
   };
