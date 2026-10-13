@@ -7,4 +7,6 @@ namespace Prism.Infrastructure.Databases.Models;
 /// RN-SQL-013: só vem num comando que grava e devolve linhas. Ele foi executado até o fim, a página traz as primeiras linhas e este é o
 /// total que o comando devolveu; não há cursor nem "carregar mais". Nas leituras paginadas é nulo: o total nunca é contado sem pedido.
 /// </param>
-public sealed record QueryPage(IReadOnlyList<QueryColumn> Columns, IReadOnlyList<string?[]> Rows, bool HasMore, long ElapsedMs, IReadOnlyList<int[]> TruncatedCells, long? TotalRows = null);
+/// <param name="ResultID">RN-EDIT-002: o resultado a que a página pertence; muda a cada execução da sessão. Quem o põe é o registro de sessões.</param>
+/// <param name="Editable">RN-EDIT-002: o que se sabe da edição dele sem consultar o banco. Quem o põe é o registro de sessões.</param>
+public sealed record QueryPage(IReadOnlyList<QueryColumn> Columns, IReadOnlyList<string?[]> Rows, bool HasMore, long ElapsedMs, IReadOnlyList<int[]> TruncatedCells, long? TotalRows = null, Guid? ResultID = null, ResultEditability? Editable = null);

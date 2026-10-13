@@ -312,7 +312,7 @@ internal static class SqlText
     /// Letra, dígito e `_` do ASCII, e todo caractere a partir de U+0080: é como o PostgreSQL lê um identificador e a marca de um
     /// `$marca$` (para ele, todo byte acima de 127 é letra). `é$a$` é um nome, e `$é$ ... $é$` é um texto.
     /// </summary>
-    private static bool IsWordCharacter(char character)
+    internal static bool IsWordCharacter(char character)
         => char.IsAsciiLetterOrDigit(character) || character == '_' || character >= '\u0080';
 
     /// <summary>
@@ -331,7 +331,7 @@ internal static class SqlText
     }
 
     /// <summary>Pula um texto entre aspas simples ou um identificador entre aspas duplas, a partir da aspa que abre. A aspa dobrada é a própria aspa; sem fecho, vai até o fim.</summary>
-    private static int SkipQuoted(string sql, int position, bool backslashEscapes)
+    internal static int SkipQuoted(string sql, int position, bool backslashEscapes)
     {
         var quote = sql[position];
 
@@ -353,7 +353,7 @@ internal static class SqlText
     /// um identificador, inclusive os de fora do ASCII (`$é$`). Um `$1` é parâmetro, e não texto, e um `$` logo depois de um caractere
     /// de palavra faz parte do identificador (`k$a$b`, `é$a$`): nos dois casos só o `$` é pulado.
     /// </summary>
-    private static int SkipDollarQuoted(string sql, int position)
+    internal static int SkipDollarQuoted(string sql, int position)
     {
         var tagEnd = position + 1;
         while (tagEnd < sql.Length && IsWordCharacter(sql[tagEnd]))
@@ -394,7 +394,7 @@ internal static class SqlText
     /// A leitura do driver da IBM, que no Db2 difere da do banco num ponto: ele encerra o comentário de bloco no primeiro `*/`,
     /// mesmo com outro dentro. É ele quem divide o envio nos `;`.
     /// </param>
-    private static int SkipComment(string sql, int position, ESqlDialect dialect, bool asTheDriver = false)
+    internal static int SkipComment(string sql, int position, ESqlDialect dialect, bool asTheDriver = false)
     {
         if (StartsAt(sql, position, "--"))
             return (dialect == ESqlDialect.PostgreSql ? sql.IndexOfAny(['\r', '\n'], position) : sql.IndexOf('\n', position)) is var lineEnd and >= 0 ? lineEnd + 1 : sql.Length;
