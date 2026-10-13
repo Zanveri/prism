@@ -1837,3 +1837,59 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **Pontos de salvamento com botão**, "commit inteligente" (passar sozinho ao manual quando um comando grava), confirmação em
   duas fases e transação que atravessa um script de vários comandos (a execução de script ainda é da entrega 2).
 - **Proteções** da entrega 3 (somente leitura com senha, confirmar comando irreversível), que vão restringir a edição.
+
+## 23. Complemento de 2026-10-13: abas que se movem, janelas e scripts salvos
+
+Pedidos do dono em 2026-10-13: "poder mexer as tabs de lugar e até criar uma nova guia, como no
+Chrome, pra caso eu queira utilizar em outra tela, assim como o DBeaver", e "salvar essas
+consultas SQL, criptografadas, para que apenas o usuário consiga ver o que é aquele script".
+Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
+
+### Abas e janelas
+
+- **RN-ABAS-001.** As abas mudam de lugar arrastando-as ao longo da barra de abas; pelo teclado,
+  Ctrl+Shift+PageUp e Ctrl+Shift+PageDown movem a aba ativa uma posição. A ordem vale enquanto a
+  janela está aberta.
+- **RN-ABAS-002.** Uma aba vai para uma janela nova arrastando-a para fora da janela (a janela nova
+  abre onde ela foi solta) ou por "Mover para nova janela" no menu da aba. A janela nova é a área
+  de trabalho inteira, com navegador e barra de abas próprios, e recebe a aba como ela estava: o
+  texto do editor, o resultado na tela, o cursor aberto e a sessão com o banco, sem executar nada
+  de novo.
+- **RN-ABAS-003.** Uma aba passa de uma janela para outra arrastando-a até a barra de abas da outra,
+  ou por "Mover para a janela…" no menu da aba, que lista as outras janelas abertas. A janela que
+  fica sem abas continua aberta.
+- **RN-ABAS-004.** Todas as janelas usam a mesma API, o mesmo cofre e as mesmas preferências: o
+  bloqueio por inatividade e o "Sair" valem para todas, e o login libera todas. Fechar uma janela
+  fecha as abas dela, com as mesmas perguntas de fechar cada aba; fechar a última encerra o app,
+  como hoje.
+- **RN-ABAS-005.** Só o processo principal cria janelas e passa abas entre elas; a tela pede pelo
+  preload, por canais com o conteúdo validado (RN-SHELL-001), e nenhuma janela fala com outra
+  diretamente.
+
+### Scripts salvos
+
+- **RN-SCRIPT-001.** Ctrl+S numa aba de consulta salva o SQL dela como script: na primeira vez pede
+  o nome (sugerido "Script 1", "Script 2"…); depois grava por cima. "Salvar como" (Ctrl+Shift+S)
+  grava com outro nome. A aba mostra o nome do script, e um ponto enquanto há mudança não salva;
+  fechá-la assim pergunta se salva.
+- **RN-SCRIPT-002.** Os scripts são do usuário e moram no cofre dele, cifrados como o resto do cofre
+  (RN-COFRE): só quem tem a senha do usuário os lê, nada vai em texto aberto para o disco, e o log
+  nunca leva o texto do SQL. Acrescentar os scripts ao cofre sobe o número do formato dele; um
+  cofre antigo é migrado ao abrir (RN-VERSAO-005).
+- **RN-SCRIPT-003.** O navegador tem a seção "Scripts", com os scripts do usuário em ordem de nome:
+  abrir (duplo clique ou Enter), renomear, excluir (com confirmação) e "Copiar SQL". O script
+  lembra a conexão e o banco da aba em que foi salvo; aberto, vira uma aba de consulta já nessa
+  conexão e nesse banco. Se a conexão não existe mais, a aba abre sem conexão e pede para
+  escolher uma.
+- **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
+  (sem diferenciar maiúsculas); SQL de até 1 MB.
+
+Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE` como as demais):
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, updatedAt }`, sem o SQL | |
+| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
+| `POST api/user/scripts` `{ name, sql, connectionID?, database? }` | 201 | 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database? }` | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
