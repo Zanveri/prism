@@ -78,6 +78,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           <SqlEditor
             ref={editor}
             initialSql={tab.sql}
+            tabId={tab.id}
+            initialSelection={recall(tab.id, "selection") ?? null}
             engine={engine}
             connectionId={tab.connectionId}
             database={tab.database}

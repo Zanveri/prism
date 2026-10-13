@@ -204,6 +204,11 @@ type QueryRunnerOptions = {
   toast: ReturnType<typeof useToast>;
   /** A sessão da aba mudou: aberta na primeira execução, trocada quando cai, nula quando a API já não a tem. */
   onSession: (sessionId: string | null) => void;
+  /**
+   * RN-ABAS-002: a aba chegou de outra janela, com o resultado que estava na tela (parado: a aba ocupada não muda de janela) e a sessão que já tinha,
+   * com o cursor aberto nela. Nada é executado: "Carregar mais" continua de onde parou.
+   */
+  initial?: { state: RunnerState; sessionId: string | null };
 };
 
 function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells: [number, number][], rowOffset: number): ReadonlyMap<number, ReadonlySet<number>> {
@@ -230,11 +235,11 @@ function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells:
  * de transação recusado antes de executar, API fora do ar, resposta inválida) deixa o resultado e o
  * cursor dele como estavam, e avisa.
  */
-export function createQueryRunner({ connectionId, database, queryClient, toast, onSession }: QueryRunnerOptions): QueryRunner {
-  let state: RunnerState = { status: "idle" };
+export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial }: QueryRunnerOptions): QueryRunner {
+  let state: RunnerState = initial?.state ?? { status: "idle" };
   const listeners = new Set<() => void>();
 
-  let sessionId: string | null = null;
+  let sessionId: string | null = initial?.sessionId ?? null;
   /** Cresce quando a aba é solta: a resposta que chegar depois não acha mais quem a esperava. */
   let epoch = 0;
   /** `retire()` foi chamado: o executor saiu de cena e não executa mais nada. */
@@ -253,13 +258,15 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     refusedWhenRetired.add(operation);
     console.warn(`[prism] o executor de uma aba que já saiu de cena (bloqueio, aba fechada ou conexão removida) recusou "${operation}": o painel segurou o executor velho, e nada foi enviado ao banco.`);
   }
-  let resultId = 0;
+  // A chave da grade continua a contar do resultado que veio com a aba.
+  let resultId = state.status === "rows" ? state.id : 0;
   /**
    * O usuário pediu o cancelamento do que está em andamento: o comando que ainda não foi enviado não sai, e não se pede duas vezes. O
    * desfecho do comando não é decidido por isto, e sim pelo `outcome` da API (RN-SQL-010, Ruling 135).
    */
   let cancelRequested = false;
-  let truncationWarned = false;
+  // O aviso das células cortadas já saiu na janela de onde a aba veio.
+  let truncationWarned = state.status === "rows" && state.truncated.size > 0;
   /** O texto mudou depois de o comando ser enviado: a posição que o banco apontar já não é a do texto na tela. */
   let editedSinceRun = false;
   /** Os erros inesperados que o aviso central já mostrou: a rede de segurança não avisa de novo. */

@@ -391,6 +391,29 @@ describe("\"executar de novo\" executa o comando do resultado que está na tela,
     expect(api.calls.at(-1)).toEqual({ method: "POST", path: `${sessions}/s1/queries`, body: { sql: "select * from t" } });
   });
 
+  it("a aba que chegou de outra janela (RN-ABAS-002) mostra o resultado que trouxe, sem executar, e \"Carregar mais\" continua no cursor da sessão dela", async () => {
+    const { result } = await withResult();
+    const api = fakeApi();
+    const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+    const onSession = vi.fn<(sessionId: string | null) => void>();
+    const runner = createQueryRunner({ connectionId: "c1", queryClient: createQueryClient(toast), toast, onSession, initial: { state: result, sessionId: "s1" } });
+
+    expect(runner.getState()).toBe(result);
+    expect(runner.sessionOf()).toBe("s1");
+    expect(api.calls).toEqual([]);
+
+    api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
+    await runner.loadMore();
+    expect(api.routes()).toEqual([`POST ${sessions}/s1/queries/next`]);
+    expect(runner.getState()).toMatchObject({ status: "rows", id: result.id, rows: [["1", "a"], ["2", "b"], ["3", "c"]] });
+
+    // O comando seguinte é outro resultado (outra chave de grade), na mesma sessão: nenhuma sessão nova é aberta.
+    api.on(`POST ${sessions}/s1/queries`, page([["9", "z"]]));
+    await runner.run({ sql: "select 9", offset: 0 });
+    expect(runner.getState()).toMatchObject({ status: "rows", id: result.id + 1 });
+    expect(onSession).not.toHaveBeenCalled();
+  });
+
   it("o comando recusado nunca é o que \"executar de novo\" envia, mesmo com o cursor fechado depois", async () => {
     const { api, runner } = await withResult();
     api.on(`POST ${sessions}/s1/queries`, problem(409, "SESSION_BUSY"));

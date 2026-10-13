@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState, useSy
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { PostgreSQL, sql, StandardSQL } from "@codemirror/lang-sql";
 import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
-import { Compartment, EditorState, Prec, StateEffect, StateField, type Text } from "@codemirror/state";
+import { Compartment, EditorSelection, EditorState, Prec, StateEffect, StateField, type Text } from "@codemirror/state";
 import { Decoration, drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,7 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 
 import { cachedLevels, sqlCompletion } from "../_lib/sql-completion";
+import { liveEditors } from "../_lib/live-editors";
 import { keywordCase } from "../_lib/sql-keyword-case";
 import { hasStatement, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
@@ -167,6 +168,10 @@ type SqlEditorProps = {
   ref: Ref<SqlEditorHandle>;
   /** O texto com que o editor nasce. Dali em diante o texto vive no editor: mudar esta propriedade não o altera. */
   initialSql: string;
+  /** RN-ABAS-002: a aba deste editor, para quem a manda a outra janela ler o texto e a seleção deste instante (`liveEditors`). */
+  tabId?: string;
+  /** RN-ABAS-002: a seleção com que a aba chegou de outra janela. Lida uma vez, ao criar o editor. */
+  initialSelection?: { anchor: number; head: number } | null;
   /** O banco da conexão escolhe o dialeto das cores e as regras de separar os comandos. Lido uma vez, ao criar o editor. */
   engine: Engine | undefined;
   /** A conexão da aba deste editor: de onde vêm os nomes da árvore que o autocompletar sugere. Lida na hora do pedido de sugestão. */
@@ -192,7 +197,7 @@ type SqlEditorProps = {
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
@@ -205,7 +210,7 @@ export function SqlEditor({ ref, initialSql, engine, connectionId, database, aut
   const queryClient = useQueryClient();
   // O que só vale ao criar o editor: a mesma referência em todas as renderizações. As preferências do editor entram aqui para a
   // criação; depois, os efeitos de baixo as reconfiguram ao vivo quando mudam (Configurações abre por cima, com o editor montado).
-  const [initial] = useState(() => ({ sql: initialSql, engine, autoFocus, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
+  const [initial] = useState(() => ({ sql: initialSql, tabId, selection: initialSelection, engine, autoFocus, editor: { fontFamily, fontSize, tabSize }, dark, autocomplete, uppercaseKeywords }));
   const applied = useRef(`${fontFamily}|${fontSize}|${tabSize}|${dark}`);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
 
@@ -235,10 +240,12 @@ export function SqlEditor({ ref, initialSql, engine, connectionId, database, aut
       return true;
     }
 
+    const clamp = (position: number) => Math.min(position, initial.sql.length);
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
         doc: initial.sql,
+        ...(initial.selection === null ? {} : { selection: EditorSelection.single(clamp(initial.selection.anchor), clamp(initial.selection.head)) }),
         extensions: [
           lineNumbers(),
           highlightActiveLineGutter(),
@@ -276,9 +283,12 @@ export function SqlEditor({ ref, initialSql, engine, connectionId, database, aut
 
     view.current = editor;
     emitRunnable((runnable = isRunnable(editor.state, initial.engine)));
+    if (initial.selection !== null) editor.dispatch({ effects: EditorView.scrollIntoView(editor.state.selection.main.head, { y: "center" }) });
     if (initial.autoFocus) editor.focus();
+    const unregister = initial.tabId === undefined ? () => {} : liveEditors.register(initial.tabId, () => ({ sql: editor.state.doc.toString(), anchor: editor.state.selection.main.anchor, head: editor.state.selection.main.head }));
 
     return () => {
+      unregister();
       // Sair da área de trabalho desmonta o editor: o texto vai antes para quem o guarda.
       flush();
       editor.destroy();
