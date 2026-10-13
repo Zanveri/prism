@@ -19,6 +19,10 @@ type SelectProps = {
   invalid?: boolean;
   /** Rótulo acessível quando o controle não tem um `<label htmlFor>`. */
   "aria-label"?: string;
+  /** O texto que explica o controle (o motivo de ele estar desabilitado, por exemplo). */
+  "aria-describedby"?: string;
+  /** A lista abriu: quem só busca as opções quando a pessoa as quer (a lista dos bancos da aba) as pede aqui. Elas podem chegar com a lista aberta. */
+  onOpen?: () => void;
   className?: string;
 };
 
@@ -44,7 +48,7 @@ function normalizeSearch(value: string) {
  * `position: fixed` em `document.body`, para o `overflow-hidden` de um painel não a recortar.
  * Teclado como o de um `<select>`: setas, Home, End, Enter, espaço, Esc e a inicial da opção.
  */
-export function Select({ id, name, value, onChange, options, placeholder, disabled = false, invalid = false, "aria-label": ariaLabel, className }: SelectProps) {
+export function Select({ id, name, value, onChange, options, placeholder, disabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, className }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
@@ -61,6 +65,14 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   const items: SelectOption[] = placeholder === undefined ? options : [{ value: "", label: placeholder }, ...options];
   const selectedIndex = items.findIndex((item) => item.value === value);
   const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined;
+
+  // As opções que chegam com a lista aberta mudam a posição da escolhida: o destaque que estava nela vai junto, e o Enter não escolhe outra por engano.
+  // Ajuste durante a renderização, como o React recomenda para o estado que segue uma propriedade.
+  const [shownSelected, setShownSelected] = useState(selectedIndex);
+  if (shownSelected !== selectedIndex) {
+    setShownSelected(selectedIndex);
+    if (open && activeIndex === shownSelected) setActiveIndex(selectedIndex);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -117,6 +129,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   function openAt(index: number) {
     setActiveIndex(index);
     setOpen(true);
+    onOpen?.();
   }
 
   function choose(index: number) {
@@ -203,6 +216,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         role="combobox"
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
