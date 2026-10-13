@@ -60,6 +60,9 @@ public interface IDatabaseSessionService
     /// <summary>RN-CAT-010.</summary>
     Task<Result<IReadOnlyList<DatabasePropertyInfo>, DatabaseFailure>> GetPropertiesAsync(Guid sessionID, CancellationToken cancellationToken);
 
+    /// <summary>RN-ARVORE-006: os bancos do servidor da sessão, com o dela primeiro. Espera a vez, como as outras consultas de catálogo.</summary>
+    Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(Guid sessionID, CancellationToken cancellationToken);
+
     /// <summary>Executar e carregar mais não esperam: com outro comando rodando na sessão, `SessionBusy` (RN-SESSAO-002).</summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" do cursor que o comando abrir.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken);

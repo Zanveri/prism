@@ -73,4 +73,7 @@ public interface IDatabaseConnection : IAsyncDisposable
 
     /// <summary>RN-CAT-010: o que o servidor informa do banco conectado a esta conta.</summary>
     Task<Result<IReadOnlyList<DatabasePropertyInfo>, DatabaseFailure>> GetPropertiesAsync(CancellationToken cancellationToken);
+
+    /// <summary>RN-ARVORE-006: os bancos do servidor a que a conta pode se conectar, por nome, com o da sessão primeiro.</summary>
+    Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken);
 }

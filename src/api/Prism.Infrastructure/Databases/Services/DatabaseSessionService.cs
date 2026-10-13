@@ -131,6 +131,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<IReadOnlyList<DatabasePropertyInfo>, DatabaseFailure>> GetPropertiesAsync(Guid sessionID, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(GetPropertiesAsync), waitsForTurn: true, session => session.Connection.GetPropertiesAsync(cancellationToken), cancellationToken);
 
+    public Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(Guid sessionID, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(GetDatabasesAsync), waitsForTurn: true, session => session.Connection.GetDatabasesAsync(cancellationToken), cancellationToken);
+
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {

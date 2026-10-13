@@ -54,6 +54,30 @@ public sealed class OpenDatabaseSessionHandlerTests
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
+    /// <summary>RN-ARVORE-006: outro banco do mesmo servidor abre com as credenciais da conexão e o nome dele no lugar do banco dela.</summary>
+    [Trait("OpenDatabaseSessionHandler", "OpenDatabaseSessionCommand")]
+    [Fact(DisplayName = "OK abre a sessão de outro banco do servidor com as credenciais da conexão")]
+    public async Task Handle_ShouldBeOK_OtherDatabase()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var record = VaultFakers.CreateConnection(password: "senha-do-banco", engine: EDatabaseEngine.Informix);
+        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, "sysmaster", record.UserName, record.Password);
+        var info = new DatabaseSessionInfo(Guid.CreateVersion7(), record.ID, EDatabaseEngine.Informix, "sysmaster", "IDS/UNIX64 14.10");
+        _vaultService.SetupGet(v => v.Generation).Returns(Generation);
+        _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
+        _databaseSessionService.Setup(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken)).ReturnsAsync(Result.Success<DatabaseSessionInfo, DatabaseFailure>(info));
+
+        //Act
+        var result = await CreateHandler().Handle(new OpenDatabaseSessionCommand { ConnectionID = record.ID, Database = "sysmaster" }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("sysmaster", result.Value.Database);
+        _databaseSessionService.Verify(s => s.OpenAsync(record.ID, settings, Generation, cancellationToken), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
     [Trait("OpenDatabaseSessionHandler", "OpenDatabaseSessionCommand")]
     [Fact(DisplayName = "Erro cofre fechado")]
     public async Task Handle_ShouldBeError_ConnectionQueries_GetRecordByID_Locked()

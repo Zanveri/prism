@@ -179,6 +179,12 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     protected abstract IReadOnlyList<string> PropertiesSql { get; }
 
     /// <summary>
+    /// RN-ARVORE-006: os bancos do servidor a que a conta pode se conectar, sem parâmetro. Colunas: nome, sem os espaços do fim, e se é o
+    /// banco da sessão (booleano ou 0/1), em ordem de nome.
+    /// </summary>
+    protected abstract string DatabasesSql { get; }
+
+    /// <summary>
     /// RN-SQL-013: o comando que abre, no banco, a transação em que a leitura paginada e a contagem rodam e em que ele mesmo recusa
     /// qualquer gravação. Ela termina com `COMMIT` quando o comando chega ao fim e com `ROLLBACK` quando o cursor fecha antes.
     ///
@@ -598,6 +604,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         return properties;
     }
+
+    public async Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken)
+        => (await QueryAsync(nameof(GetDatabasesAsync), EDatabaseFailure.ExecutionFailed, DatabasesSql, [], reader => new DatabaseInfo(Text(reader, 0), Flag(reader, 1)), cancellationToken)).Map(CurrentFirst);
+
+    /// <summary>RN-ARVORE-006: o banco da sessão sobe para o começo; os outros ficam na ordem de nome em que o banco os devolveu.</summary>
+    internal static IReadOnlyList<DatabaseInfo> CurrentFirst(IReadOnlyList<DatabaseInfo> databases)
+        => [.. databases.Where(database => database.IsCurrent), .. databases.Where(database => !database.IsCurrent)];
 
     /// <summary>
     /// Não falha: o cursor, a conexão e o que mais o driver mantém são descartados cada um na sua chamada, para a falha de um não deixar

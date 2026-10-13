@@ -346,6 +346,66 @@ public sealed class DatabaseSessionsTests
         Assert.That(properties.Select(property => property.EnumerateObject().Select(field => field.Name)), Is.All.EqualTo(new[] { "name", "value" }));
     }
 
+    /// <summary>
+    /// RN-ARVORE-006: a lista dos bancos do servidor, no contrato `{ name, isCurrent }`, com o da sessão primeiro; e outro banco da
+    /// lista abre com as credenciais da conexão e o nome dele no lugar do banco dela.
+    /// </summary>
+    [Test]
+    public async Task Databases_ListTheServerOnes_AndAnotherOneOpensWithTheConnectionCredentials()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+        var sessionID = await host.Client.OpenSessionAsync(connectionID);
+
+        var databases = await GetListAsync(host, Url(sessionID, "/databases"));
+        var openedResponse = await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = "postgres" });
+        var opened = await ReadJsonAsync(openedResponse);
+        await TestContext.Out.WriteLineAsync($"databases -> {JsonSerializer.Serialize(databases)}\nPOST database-sessions (database postgres) -> {(int)openedResponse.StatusCode} {opened}");
+        Assert.That(openedResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created), opened.ToString());
+        var otherID = opened.GetProperty("id").GetGuid();
+        var fromOther = await GetListAsync(host, Url(otherID, "/databases"));
+        var current = await host.Client.ExecuteAsync(otherID, "SELECT current_database()");
+
+        Assert.That(databases.Select(database => database.EnumerateObject().Select(property => property.Name)), Is.All.EqualTo(new[] { "name", "isCurrent" }));
+        Assert.That((databases[0].GetProperty("name").GetString(), databases[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((_settings.Database, true)));
+        Assert.That(databases.Skip(1).Select(database => database.GetProperty("isCurrent").GetBoolean()), Is.All.False);
+        Assert.That(databases.Select(database => database.GetProperty("name").GetString()), Does.Contain("postgres").And.Not.Contain("template0").And.Not.Contain("template1"));
+        Assert.That(opened.GetProperty("database").GetString(), Is.EqualTo("postgres"));
+        Assert.That(opened.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
+        Assert.That((fromOther[0].GetProperty("name").GetString(), fromOther[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo(("postgres", true)));
+        Assert.That(current.GetProperty("rows")[0][0].GetString(), Is.EqualTo("postgres"));
+    }
+
+    /// <summary>Seção 6: o nome de outro banco vazio, com mais de 128 caracteres ou com caractere de controle é recusado antes de conectar.</summary>
+    [Test]
+    public async Task Open_DatabaseNameInvalid_Returns422DatabaseNameInvalid()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+
+        foreach (var database in new[] { string.Empty, "   ", new string('a', 129), "prism\u0001", "pri\nsm" })
+        {
+            var body = await AssertProblemAsync(await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database }), HttpStatusCode.UnprocessableEntity, "DATABASE_NAME_INVALID");
+            Assert.That(body.GetProperty("errors").EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "Database" }), body.ToString());
+        }
+    }
+
+    /// <summary>RN-SESSAO-003: um banco que não existe no servidor responde 422 com a mensagem do banco.</summary>
+    [Test]
+    public async Task Open_DatabaseThatDoesNotExist_Returns422DatabaseConnectionFailed()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+        var missing = $"nao_existe_{Guid.NewGuid():N}"[..24];
+
+        var body = await AssertProblemAsync(await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = missing }), HttpStatusCode.UnprocessableEntity, "DATABASE_CONNECTION_FAILED");
+
+        Assert.That(body.GetProperty("detail").GetString(), Does.Contain(missing));
+    }
+
     [Test]
     public async Task Catalog_UnknownSession_Returns404DatabaseSessionNotFound()
     {
@@ -353,7 +413,7 @@ public sealed class DatabaseSessionsTests
         await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
         var unknown = Guid.CreateVersion7();
 
-        foreach (var path in new[] { Url(unknown, "/schemas"), Url(unknown, "/schemas/loja/objects?kind=tables"), TableUrl(unknown, "loja", "pedido", "columns"), TableUrl(unknown, "loja", "pedido", "indexes"), TableUrl(unknown, "loja", "pedido", "foreign-keys"), TableUrl(unknown, "loja", "cliente", "referenced-by"), TableUrl(unknown, "loja", "pedido", "checks"), Url(unknown, "/schemas/loja/views/pedido_resumo/definition"), Url(unknown, "/schemas/loja/diagram"), Url(unknown, "/properties") })
+        foreach (var path in new[] { Url(unknown, "/schemas"), Url(unknown, "/schemas/loja/objects?kind=tables"), TableUrl(unknown, "loja", "pedido", "columns"), TableUrl(unknown, "loja", "pedido", "indexes"), TableUrl(unknown, "loja", "pedido", "foreign-keys"), TableUrl(unknown, "loja", "cliente", "referenced-by"), TableUrl(unknown, "loja", "pedido", "checks"), Url(unknown, "/schemas/loja/views/pedido_resumo/definition"), Url(unknown, "/schemas/loja/diagram"), Url(unknown, "/properties"), Url(unknown, "/databases") })
             await AssertProblemAsync(await host.Client.GetAsync(path), HttpStatusCode.NotFound, "DATABASE_SESSION_NOT_FOUND");
     }
 

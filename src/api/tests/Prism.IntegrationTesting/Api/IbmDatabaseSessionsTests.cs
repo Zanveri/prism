@@ -41,7 +41,7 @@ public abstract class IbmDatabaseSessionsTests
     /// A API parte com a pasta de drivers em que o gerenciador instalou o driver da IBM (<see cref="IbmDriverSingleton"/>): sem ele,
     /// abrir sessão nestes bancos responderia 422 `DRIVER_NOT_INSTALLED` (RN-DRIVER-006).
     /// </summary>
-    private static async Task<ApiHost> StartHostAsync()
+    protected static async Task<ApiHost> StartHostAsync()
     {
         var drivers = await IbmDriverSingleton.GetDirectoryAsync();
 
@@ -77,6 +77,8 @@ public abstract class IbmDatabaseSessionsTests
         var opened = await StepAsync("POST database-sessions", await client.OpenSessionRawAsync(connectionID), HttpStatusCode.Created);
         var session = $"{PrismCalls.SessionsPath}/{opened.GetProperty("id").GetGuid()}";
 
+        // RN-ARVORE-006: os bancos do servidor, com o da sessão primeiro.
+        var databases = await StepAsync("GET databases", await client.GetAsync($"{session}/databases"), HttpStatusCode.OK);
         var schemas = await StepAsync("GET schemas", await client.GetAsync($"{session}/schemas"), HttpStatusCode.OK);
         var tables = await StepAsync("GET objects?kind=tables", await client.GetAsync($"{session}/schemas/{schema}/objects?kind=tables"), HttpStatusCode.OK);
         var views = await StepAsync("GET objects?kind=views", await client.GetAsync($"{session}/schemas/{schema}/objects?kind=views"), HttpStatusCode.OK);
@@ -121,6 +123,9 @@ public abstract class IbmDatabaseSessionsTests
         Assert.That(opened.GetProperty("engine").GetInt32(), Is.EqualTo((int)_settings.Engine));
         Assert.That(opened.GetProperty("database").GetString(), Is.EqualTo(_settings.Database));
         Assert.That(opened.GetProperty("serverVersion").GetString(), Is.Not.Empty);
+        Assert.That(databases[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "name", "isCurrent" }));
+        Assert.That((databases[0].GetProperty("name").GetString(), databases[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((Name(_settings.Database), true)));
+        Assert.That(databases.EnumerateArray().Skip(1).Select(item => item.GetProperty("isCurrent").GetBoolean()), Is.All.False);
         Assert.That(Names(schemas), Has.Member(Name("loja")));
         var loja = schemas.EnumerateArray().Single(item => item.GetProperty("name").GetString() == Name("loja"));
         Assert.That((loja.GetProperty("tables").GetInt32(), loja.GetProperty("views").GetInt32(), loja.GetProperty("routines").GetInt32()), Is.EqualTo((3, 1, 1)));
@@ -209,4 +214,37 @@ public sealed class InformixDatabaseSessionsTests : IbmDatabaseSessionsTests
 
     protected override Task<ConnectionSettings> StartDatabaseAsync()
         => InformixSingleton.GetSettingsAsync();
+
+    /// <summary>
+    /// RN-ARVORE-006: a lista traz os bancos do servidor (`sysmaster:sysdatabases`), e outro deles abre com as credenciais da conexão e o
+    /// nome dele no lugar do banco dela: a sessão nova responde pelo banco sem log da carga, e a lista dela o põe primeiro.
+    /// </summary>
+    [Test]
+    public async Task Open_AnotherDatabaseOfTheServer_Returns201AndServesThatDatabase()
+    {
+        var settings = await InformixSingleton.GetSettingsAsync();
+        await using var host = await StartHostAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(settings);
+        var main = (await (await host.Client.OpenSessionRawAsync(connectionID)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var listed = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{main}/databases")).Content.ReadFromJsonAsync<JsonElement>();
+        var openedResponse = await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = InformixSingleton.UnloggedDatabase });
+        var opened = await openedResponse.Content.ReadFromJsonAsync<JsonElement>();
+        await TestContext.Out.WriteLineAsync($"GET databases -> {listed}\nPOST database-sessions (database {InformixSingleton.UnloggedDatabase}) -> {(int)openedResponse.StatusCode} {opened}");
+        Assert.That(openedResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created), opened.ToString());
+        var other = opened.GetProperty("id").GetGuid();
+        var fromOther = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/databases")).Content.ReadFromJsonAsync<JsonElement>();
+        var properties = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/properties")).Content.ReadFromJsonAsync<JsonElement>();
+
+        var names = listed.EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToList();
+        Assert.That(names[0], Is.EqualTo(settings.Database));
+        Assert.That(names, Is.SupersetOf(new[] { InformixSingleton.UnloggedDatabase, InformixSingleton.Utf8Database, "sysmaster" }));
+        Assert.That(names.Skip(1), Is.Ordered.Using((IComparer<string?>)StringComparer.Ordinal));
+        Assert.That(names, Is.All.Not.EndWith(" "));
+        Assert.That(opened.GetProperty("database").GetString(), Is.EqualTo(InformixSingleton.UnloggedDatabase));
+        Assert.That((fromOther[0].GetProperty("name").GetString(), fromOther[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((InformixSingleton.UnloggedDatabase, true)));
+        Assert.That(fromOther.EnumerateArray().Count(item => item.GetProperty("isCurrent").GetBoolean()), Is.EqualTo(1));
+        Assert.That(properties[0].GetProperty("value").GetString(), Is.EqualTo("noLogging"));
+    }
 }

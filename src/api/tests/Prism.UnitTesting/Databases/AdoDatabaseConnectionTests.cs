@@ -1839,6 +1839,8 @@ public sealed class AdoDatabaseConnectionTests
 
         protected override IReadOnlyList<string> PropertiesSql => ["PROPERTIES A", "PROPERTIES B", "PROPERTIES C"];
 
+        protected override string DatabasesSql => "DATABASES";
+
         protected override string? BeginReadOnlySql => "BEGIN READ ONLY";
 
         protected override DbConnection CreateConnection()

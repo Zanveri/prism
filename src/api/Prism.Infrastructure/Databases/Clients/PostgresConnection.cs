@@ -189,6 +189,17 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                                   ORDER BY property.position"];
 
 
+    /// <summary>
+    /// RN-ARVORE-006: os de `pg_database` que aceitam conexão, sem os de modelo e só os em que a conta tem `CONNECT` (superusuário tem
+    /// em todos). O `name` ordena byte a byte, pela colação `C` do tipo.
+    /// </summary>
+    protected override string DatabasesSql => @"SELECT pg_database.datname, pg_database.datname = pg_catalog.current_database()
+                                                  FROM pg_catalog.pg_database
+                                                 WHERE pg_database.datallowconn
+                                                   AND NOT pg_database.datistemplate
+                                                   AND pg_catalog.has_database_privilege(pg_database.oid, 'CONNECT')
+                                                 ORDER BY pg_database.datname";
+
     protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
 
     /// <summary>`TABLE`, `SHOW` e `EXPLAIN` também devolvem linhas sem gravar; um `EXPLAIN ANALYZE` de um comando que grava é recusado na tentativa, como o próprio comando.</summary>

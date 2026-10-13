@@ -91,6 +91,31 @@ public sealed class DatabaseSessionServiceTests
         Assert.False(afterClosing);
     }
 
+    /// <summary>RN-ARVORE-006 e RN-SESSAO-002: a lista dos bancos é consulta de catálogo e espera a vez, sem `SessionBusy`, como os esquemas.</summary>
+    [Trait("DatabaseSessionService", "GetDatabasesAsync")]
+    [Fact(DisplayName = "OK a lista dos bancos espera a vez da sessão e depois responde o que a conexão listou")]
+    public async Task GetDatabasesAsync_ShouldWaitForTheTurn()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        var idle = await service.GetDatabasesAsync(session.ID, CancellationToken.None);
+        using var gaveUp = new CancellationTokenSource();
+        _ = service.ExecuteAsync(session.ID, "SELECT 1", CancellationToken.None);
+
+        //Act
+        var waiting = service.GetDatabasesAsync(session.ID, gaveUp.Token);
+        var completedWhileBusy = waiting.IsCompleted;
+        await gaveUp.CancelAsync();
+        var afterGivingUp = await waiting;
+
+        //Assert
+        Assert.True(idle.IsSuccess);
+        Assert.Equal([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)], idle.Value);
+        Assert.False(completedWhileBusy);
+        Assert.Equal(EDatabaseFailure.ExecutionFailed, afterGivingUp.Error.Kind);
+    }
+
     /// <summary>RN-SQL-010: sem comando em andamento na sessão não há o que interromper, e o cancelamento nem chega à conexão.</summary>
     [Trait("DatabaseSessionService", "Cancel")]
     [Fact(DisplayName = "OK cancelar só chega à conexão quando há comando em andamento")]
@@ -337,5 +362,8 @@ public sealed class DatabaseSessionServiceTests
 
         public Task<Result<IReadOnlyList<DatabasePropertyInfo>, DatabaseFailure>> GetPropertiesAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
+
+        public Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken)
+            => Task.FromResult(Result.Success<IReadOnlyList<DatabaseInfo>, DatabaseFailure>([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)]));
     }
 }

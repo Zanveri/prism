@@ -159,6 +159,14 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     protected override string DiagramForeignKeysSql => ForeignKeyColumnsSql("child_table.owner = ?");
 
     /// <summary>
+    /// RN-ARVORE-006: os bancos do servidor, de `sysmaster:sysdatabases`. O nome é `CHAR` e vem completado com espaços (`TRIM`); o da
+    /// sessão é o de `DBINFO('dbname')`, que a comparação de `CHAR` acha sem os espaços.
+    /// </summary>
+    protected override string DatabasesSql => @"SELECT TRIM(name) AS database_name, CASE WHEN name = DBINFO('dbname') THEN 1 ELSE 0 END AS is_current
+                                                  FROM sysmaster:sysdatabases
+                                                 ORDER BY 1";
+
+    /// <summary>
     /// RN-CAT-010: o que o `sysmaster` diz do banco conectado (`DBINFO('dbname')`), que toda conta pode ler. O modo de log decide se há
     /// transação: sem log (`noLogging`), com log (`unbufferedLogging`), com log em buffer (`bufferedLogging`) ou ANSI (`ansi`). O `TRIM`
     /// de fora tira o espaço com que o Informix completa o texto mais curto da união.

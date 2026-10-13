@@ -137,6 +137,12 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
     protected override string DiagramForeignKeysSql => ForeignKeyColumnsSql("SYSCAT.REFERENCES.TABSCHEMA = ?");
 
     /// <summary>
+    /// RN-ARVORE-006: o Db2 conecta num banco só por vez e não tem SQL que liste os outros bancos da instância, então a lista é o banco
+    /// da sessão, com o nome que o servidor dá a ele (`CURRENT SERVER`, em maiúsculas).
+    /// </summary>
+    protected override string DatabasesSql => "SELECT CURRENT SERVER, 1 FROM SYSIBM.SYSDUMMY1";
+
+    /// <summary>
     /// RN-CAT-010: a configuração do banco (`SYSIBMADM.DBCFG`), na partição em que a sessão está. Onde a conta não pode ler a visão de
     /// administração, a consulta é recusada e as propriedades não vêm.
     /// </summary>

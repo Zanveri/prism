@@ -6,6 +6,7 @@ using Prism.Application.DatabaseSessions.Features.CloseDatabaseSession;
 using Prism.Application.DatabaseSessions.Features.CountQuery;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
+using Prism.Application.DatabaseSessions.Features.GetDatabases;
 using Prism.Application.DatabaseSessions.Features.GetDatabaseProperties;
 using Prism.Application.DatabaseSessions.Features.GetSchemaDiagram;
 using Prism.Application.DatabaseSessions.Features.GetSchemaObjects;
@@ -32,7 +33,7 @@ namespace Prism.Api.Controllers;
 [Route("api/user/database-sessions")]
 public sealed class UserDatabaseSessionsController(IMediator mediator) : ControllerBase, IActionFilter
 {
-    /// <summary>O corpo leva `connectionID`. O `Location` aponta para a sessão, que se fecha por essa rota.</summary>
+    /// <summary>O corpo leva `connectionID` e, para outro banco do mesmo servidor, `database` (RN-ARVORE-006). O `Location` aponta para a sessão, que se fecha por essa rota.</summary>
     [HttpPost]
     public async Task<IActionResult> OpenDatabaseSession([FromBody] OpenDatabaseSessionCommand command, CancellationToken cancellationToken)
     {
@@ -51,6 +52,17 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
             return result.ToIActionResult();
 
         return NoContent();
+    }
+
+    /// <summary>RN-ARVORE-006: os bancos do servidor da sessão, com o dela primeiro.</summary>
+    [HttpGet("{id:guid}/databases")]
+    public async Task<IActionResult> GetDatabases(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetDatabasesCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
     }
 
     [HttpGet("{id:guid}/schemas")]
