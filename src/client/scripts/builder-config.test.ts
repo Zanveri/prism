@@ -30,3 +30,29 @@ describe("avisos de licença no pacote (RN-ABERTO-001)", () => {
     expect(valuesOf("to")).toEqual(expect.arrayContaining(["LICENSE", "NOTICE", "licenses/ibm-plex-sans/LICENSE", "licenses/ibm-plex-mono/LICENSE", "licenses/dotnet"]));
   });
 });
+
+describe("o instalador do Windows (seção 25, RN-INSTALA-001 a 004)", () => {
+  const nsis = builder.slice(builder.indexOf("\nnsis:\n"), builder.indexOf("\n\n", builder.indexOf("\nnsis:\n") + 1));
+
+  it("é o assistido, sem perMachine: o manifesto não exige administrador, e o app o abre com spawn para atualizar", () => {
+    expect(nsis).toMatch(/^ {2}oneClick: false$/m);
+    expect(nsis).not.toMatch(/perMachine|allowElevation: false|selectPerMachineByDefault/);
+  });
+
+  it("quem pede a permissão e decide o modo é o include do projeto, que existe", () => {
+    expect(nsis).toMatch(/^ {2}include: build\/installer\.nsh$/m);
+    const include = read("build/installer.nsh");
+    expect(include).toMatch(/^!macro customInit$/m);
+    expect(include).toMatch(/^!macro customInstallMode$/m);
+    expect(include).toContain("!insertmacro UAC_RunElevated");
+  });
+
+  it("o include só existe na compilação do instalador: no desinstalador, nenhuma macro nem variável dele (o electron-builder compila com -WX)", () => {
+    const include = read("build/installer.nsh");
+    const body = include.split("\n").filter((line) => line.trim() !== "" && !line.trimStart().startsWith("#"));
+
+    expect(body[0]).toBe("!ifndef BUILD_UNINSTALLER");
+    expect(body.at(-1)).toBe("!endif");
+    expect(include).not.toMatch(/^\s*Function\b/m);
+  });
+});
