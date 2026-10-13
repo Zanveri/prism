@@ -24,7 +24,7 @@ public sealed class ConnectionRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord>? folders = null, IReadOnlyList<VaultConnectionRecord>? connections = null)
-        => new("marina.costa", folders ?? [], connections ?? []);
+        => new("marina.costa", folders ?? [], connections ?? [], []);
 
     private static VaultConnectionRecord ToRecord(Connection connection)
         => new(connection.ID, connection.FolderID, connection.Name, connection.Engine, connection.Host, connection.Port, connection.Database, connection.UserName, connection.Password, connection.EnvironmentName, connection.EnvironmentColor, connection.CreatedAt, connection.UpdatedAt);

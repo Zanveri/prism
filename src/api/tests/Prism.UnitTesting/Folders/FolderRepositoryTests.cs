@@ -23,7 +23,7 @@ public sealed class FolderRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord> folders, IReadOnlyList<VaultConnectionRecord>? connections = null)
-        => new("marina.costa", folders, connections ?? []);
+        => new("marina.costa", folders, connections ?? [], []);
 
     private static VaultFolderRecord ToRecord(Folder folder)
         => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt);

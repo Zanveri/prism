@@ -73,7 +73,7 @@ public sealed partial class VaultFileClientTests : IDisposable
         using var json = JsonDocument.Parse(File.ReadAllText(VaultPath));
         var root = json.RootElement;
         var kdf = root.GetProperty("kdf");
-        Assert.Equal(1, root.GetProperty("version").GetInt32());
+        Assert.Equal(VaultCrypto.Version, root.GetProperty("version").GetInt32());
         Assert.Equal("argon2id", kdf.GetProperty("algorithm").GetString());
         Assert.Equal(file.Kdf.MemoryKiB, kdf.GetProperty("memoryKiB").GetInt32());
         Assert.Equal(file.Kdf.Iterations, kdf.GetProperty("iterations").GetInt32());
@@ -166,6 +166,45 @@ public sealed partial class VaultFileClientTests : IDisposable
         Assert.True(written.IsFailure);
         Assert.Equal(EVaultFileError.Corrupt, written.Error);
         Assert.Empty(Directory.GetFiles(_directory, "*", SearchOption.AllDirectories));
+    }
+
+    /// <summary>RN-VERSAO-005: a gravação é sempre no formato atual. O formato anterior só se lê, para ser migrado ao abrir; um arquivo dele não volta ao disco.</summary>
+    [Trait("VaultFileClient", "Write")]
+    [Fact(DisplayName = "Erro arquivo de formato anterior não é gravado")]
+    public void Write_FileOfAnOlderFormat_WritesNothing()
+    {
+        //Arrange
+        var file = VaultFakers.CreateFile();
+        var client = CreateClient();
+
+        //Act
+        var written = client.Write(_userName, file with { Version = VaultCrypto.Version - 1 });
+
+        //Assert
+        Assert.True(written.IsFailure);
+        Assert.Equal(EVaultFileError.Corrupt, written.Error);
+        Assert.Empty(Directory.GetFiles(_directory, "*", SearchOption.AllDirectories));
+    }
+
+    /// <summary>RN-VERSAO-005: o cofre de formato anterior se lê (quem o migra é o serviço, ao abrir), e o arquivo fica como estava.</summary>
+    [Trait("VaultFileClient", "Read")]
+    [Fact(DisplayName = "OK arquivo de formato anterior se lê, sem ser tocado")]
+    public void Read_FileOfAnOlderFormat_ReturnsItAndTouchesNothing()
+    {
+        //Arrange
+        var file = VaultFakers.CreateFile();
+        var client = CreateClient();
+        client.Write(_userName, file);
+        Rewrite(node => node["version"] = VaultCrypto.Version - 1);
+        var bytes = File.ReadAllBytes(VaultPath);
+
+        //Act
+        var read = client.Read(_userName);
+
+        //Assert
+        Assert.True(read.IsSuccess);
+        Assert.Equal(VaultCrypto.Version - 1, read.Value.Value.Version);
+        Assert.Equal(bytes, File.ReadAllBytes(VaultPath));
     }
 
     [Trait("VaultFileClient", "Write")]
@@ -485,7 +524,7 @@ public sealed partial class VaultFileClientTests : IDisposable
         client.Write(_userName, VaultFakers.CreateFile());
         client.Write(_userName, VaultFakers.CreateFile());
         File.Delete(VaultPath);
-        File.WriteAllText(VaultPath + ".bak", """{ "version": 2, "outraForma": true }""");
+        File.WriteAllText(VaultPath + ".bak", $$"""{ "version": {{VaultCrypto.Version + 1}}, "outraForma": true }""");
         var backupBytes = File.ReadAllBytes(VaultPath + ".bak");
 
         //Act
@@ -507,7 +546,7 @@ public sealed partial class VaultFileClientTests : IDisposable
         var client = CreateClient();
         client.Write(_userName, VaultFakers.CreateFile());
         client.Write(_userName, VaultFakers.CreateFile());
-        Rewrite(node => node["version"] = 2);
+        Rewrite(node => node["version"] = VaultCrypto.Version + 1);
         var mainBytes = File.ReadAllBytes(VaultPath);
         var backupBytes = File.ReadAllBytes(VaultPath + ".bak");
 
@@ -529,7 +568,7 @@ public sealed partial class VaultFileClientTests : IDisposable
         var sink = new CollectingSink();
         var client = CreateClient(new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger());
         client.Write(_userName, VaultFakers.CreateFile());
-        Rewrite(node => node["version"] = 3);
+        Rewrite(node => node["version"] = VaultCrypto.Version + 1);
 
         //Act
         client.Read(_userName);

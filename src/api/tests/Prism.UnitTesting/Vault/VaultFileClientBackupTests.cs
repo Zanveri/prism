@@ -1,3 +1,4 @@
+using Prism.Infrastructure.Vault.Clients;
 using Prism.Infrastructure.Vault.Models;
 using Prism.TestingCore.Extensions;
 using Prism.TestingCore.Fakers.Vault;
@@ -113,7 +114,7 @@ public sealed partial class VaultFileClientTests
         var client = CreateClient();
         client.Write(_userName, VaultFakers.CreateFile());
         client.Write(_userName, VaultFakers.CreateFile());
-        Rewrite(node => node["version"] = 2, BackupPath);
+        Rewrite(node => node["version"] = VaultCrypto.Version + 1, BackupPath);
         var backupBytes = File.ReadAllBytes(BackupPath);
 
         //Act

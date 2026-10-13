@@ -340,7 +340,7 @@ public sealed partial class VaultServiceTests : IDisposable
     public async Task Unlock_WithRightPassword_ReturnsDocument()
     {
         //Arrange
-        var expected = new VaultDocument(_userName, [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection(), VaultFakers.CreateConnection()]);
+        var expected = new VaultDocument(_userName, [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection(), VaultFakers.CreateConnection()], [VaultFakers.CreateScript()]);
 
         using (var writer = CreateService())
         {
@@ -558,7 +558,7 @@ public sealed partial class VaultServiceTests : IDisposable
     {
         //Arrange
         await CreateVaultWithBackup();
-        Tamper(node => node["version"] = 2);
+        Tamper(node => node["version"] = VaultCrypto.Version + 1);
         var mainBytes = File.ReadAllBytes(VaultPath(_userName));
         var backupBytes = File.ReadAllBytes(VaultPath(_userName) + ".bak");
         var service = CreateService();
@@ -585,7 +585,7 @@ public sealed partial class VaultServiceTests : IDisposable
         //Arrange
         var otherUserName = new Faker().Random.String2(length: 12, chars: Letters);
         await CreateVault(_userName, _password);
-        Tamper(node => node["version"] = 2);
+        Tamper(node => node["version"] = VaultCrypto.Version + 1);
         var service = CreateService();
         await service.CreateAsync(otherUserName, _password, CancellationToken.None);
 
@@ -606,7 +606,7 @@ public sealed partial class VaultServiceTests : IDisposable
         //Arrange
         await CreateVaultWithBackup();
         File.Delete(VaultPath(_userName));
-        Tamper(node => node["version"] = 2, VaultPath(_userName) + ".bak");
+        Tamper(node => node["version"] = VaultCrypto.Version + 1, VaultPath(_userName) + ".bak");
         var backupBytes = File.ReadAllBytes(VaultPath(_userName) + ".bak");
         var service = CreateService();
 
@@ -627,7 +627,7 @@ public sealed partial class VaultServiceTests : IDisposable
     {
         //Arrange
         await CreateVaultWithBackup();
-        Tamper(node => node["version"] = 2);
+        Tamper(node => node["version"] = VaultCrypto.Version + 1);
         var mainBytes = File.ReadAllBytes(VaultPath(_userName));
         var backupBytes = File.ReadAllBytes(VaultPath(_userName) + ".bak");
         var service = CreateService();
@@ -677,7 +677,7 @@ public sealed partial class VaultServiceTests : IDisposable
     {
         //Arrange
         await CreateVaultWithBackup();
-        Tamper(node => node["version"] = 2);
+        Tamper(node => node["version"] = VaultCrypto.Version + 1);
         var mainBytes = File.ReadAllBytes(VaultPath(_userName));
         var backupBytes = File.ReadAllBytes(VaultPath(_userName) + ".bak");
         var service = CreateService();
@@ -700,7 +700,7 @@ public sealed partial class VaultServiceTests : IDisposable
         //Arrange
         await CreateVaultWithBackup();
         File.Delete(VaultPath(_userName));
-        Tamper(node => node["version"] = 2, VaultPath(_userName) + ".bak");
+        Tamper(node => node["version"] = VaultCrypto.Version + 1, VaultPath(_userName) + ".bak");
         var backupBytes = File.ReadAllBytes(VaultPath(_userName) + ".bak");
         var service = CreateService();
 
@@ -860,11 +860,62 @@ public sealed partial class VaultServiceTests : IDisposable
         var unlocked = await service.UnlockAsync(_userName, _password, CancellationToken.None);
 
         //Assert
-        var expected = new VaultDocument(_userName, [folder], [connection]);
+        var expected = new VaultDocument(_userName, [folder], [connection], []);
         Assert.True(saved.IsSuccess);
         Assert.True(afterSave.Value.JsonEquals(expected));
         Assert.True(unlocked.IsSuccess);
         Assert.True(service.Read().Value.JsonEquals(expected));
+    }
+
+    /// <summary>
+    /// RN-SCRIPT-002: o script mora no cofre, cifrado como o resto. Nem o SQL, nem o nome, nem o banco aparecem no arquivo, no `.bak` ou no temporário, em
+    /// texto ou em base64 (o `byte[]` do arquivo é base64): só quem tem a senha os lê de volta.
+    /// </summary>
+    [Trait("VaultService", "SaveAsync")]
+    [Fact(DisplayName = "OK o script vai cifrado para o disco: nem o SQL nem o nome aparecem no arquivo")]
+    public async Task Save_Script_IsNotWrittenInTheClear()
+    {
+        //Arrange
+        var mark = Guid.NewGuid().ToString("N");
+        var script = VaultFakers.CreateScript(name: $"Fechamento {mark}", sql: $"SELECT 'segredo-{mark}' FROM clientes", connectionID: Guid.CreateVersion7(), database: $"banco_{mark}");
+        var service = CreateService();
+        await service.CreateAsync(_userName, _password, CancellationToken.None);
+
+        //Act
+        var saved = await service.SaveAsync(document => document with { Scripts = [script] }, CancellationToken.None);
+        await service.SaveAsync(document => document with { Folders = [VaultFakers.CreateFolder()] }, CancellationToken.None);
+        service.Lock();
+        var unlocked = await service.UnlockAsync(_userName, _password, CancellationToken.None);
+
+        //Assert
+        Assert.True(saved.IsSuccess);
+        Assert.True(unlocked.IsSuccess);
+        Assert.Equal([script], service.Read().Value.Scripts);
+        foreach (var path in Directory.GetFiles(Path.Combine(_directory, "vaults")))
+        {
+            var text = File.ReadAllText(path);
+            var bytes = File.ReadAllBytes(path);
+            Assert.DoesNotContain(mark, text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Convert.ToBase64String(Encoding.UTF8.GetBytes(mark)), text, StringComparison.Ordinal);
+            Assert.DoesNotContain("segredo", Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>RN-VERSAO-005: o cofre nasce no formato atual, com a lista de scripts vazia (RN-SCRIPT-002).</summary>
+    [Trait("VaultService", "CreateAsync")]
+    [Fact(DisplayName = "OK o cofre criado é do formato atual e começa sem scripts")]
+    public async Task Create_WritesTheCurrentFormatWithoutScripts()
+    {
+        //Arrange
+        var service = CreateService();
+
+        //Act
+        await service.CreateAsync(_userName, _password, CancellationToken.None);
+
+        //Assert
+        var node = JsonNode.Parse(File.ReadAllText(VaultPath(_userName)))!;
+        Assert.Equal(VaultCrypto.Version, node["version"]!.GetValue<int>());
+        Assert.Empty(service.Read().Value.Scripts);
     }
 
     /// <summary>Review Focus 1: carregar, alterar, cifrar e gravar acontecem um de cada vez, e nenhuma alteração simultânea se perde.</summary>

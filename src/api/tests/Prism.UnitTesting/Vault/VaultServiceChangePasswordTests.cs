@@ -228,7 +228,7 @@ public sealed partial class VaultServiceTests
         var kdfBefore = KdfOf(before);
         var kdfAfter = KdfOf(after);
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, after["version"]!.GetValue<int>());
+        Assert.Equal(VaultCrypto.Version, after["version"]!.GetValue<int>());
         Assert.Equal(("argon2id", 8192, 1, 1), (kdfBefore.Algorithm, kdfBefore.MemoryKiB, kdfBefore.Iterations, kdfBefore.Parallelism));
         Assert.Equal(("argon2id", 16384, 2, 2), (kdfAfter.Algorithm, kdfAfter.MemoryKiB, kdfAfter.Iterations, kdfAfter.Parallelism));
         Assert.Equal(16, kdfAfter.Salt.Length);
