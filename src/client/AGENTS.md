@@ -1300,7 +1300,8 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   a tela (`prism:api-exit`) e ela mostra o erro com "Reiniciar"; a causa no diálogo diz que o serviço foi parado e manda usar
   "Reiniciar", e, quando o instalador não iniciou, que o pacote continua guardado (ele NÃO é apagado: "Tentar de novo" o confere de
   novo, sem baixar). Em `installing`, `check` responde `busy` e `skipVersion` é recusado (`isBusy`): nada troca a oferta por baixo de
-  uma instalação em andamento. O instalador é de um clique e por usuário (`RequestExecutionLevel user`): nunca pede elevação. **Os outros formatos** são copiados para a pasta de downloads (sem
+  uma instalação em andamento. Os argumentos são os mesmos nos dois modos do instalador (só do usuário ou para todos; ver "O instalador do
+  Windows", abaixo): o modo vem do registro, e a anotação `update-attempt.json` é gravada logo antes do `spawn` (RN-INSTALA-003). **Os outros formatos** são copiados para a pasta de downloads (sem
   gravar por cima de nada) e mostrados no gerenciador de arquivos, e a tela diz o que fazer por formato; o app continua aberto.
   O formato é o da instalação em uso (`choosePackage`, pura e testada): no Windows, o instalador se o desinstalador está ao lado do
   executável (`Uninstall <executável>`, que o instalador deixa), senão o **zip portátil** (o instalador criaria OUTRA instalação);
@@ -1315,8 +1316,8 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   tamanho declarado valer; se o servidor comprimir mesmo assim, o Chromium falha). Sem cookies e sem credenciais. Não há
   `setCertificateVerifyProc` nem tratador de `certificate-error` no app, e não pode haver.
 - **A ponte** (`window.prism.updates`): `getState`, `onState`, `onProgress`, `check`, `download(versão)`, `cancel`, `install(versão)`,
-  `getPreferences`, `setCheckOnStartup(booleano)` e `skipVersion(versão)`. Canais `prism:update-state`, `-check`, `-download`, `-cancel`,
-  `-install`, `-preferences`, `-check-on-startup` e `-skip`, e os avisos `prism:update-changed` (o estado inteiro, uma vez por mudança
+  `getPreferences`, `setCheckOnStartup(booleano)`, `skipVersion(versão)` e `takeNotice()`. Canais `prism:update-state`, `-check`, `-download`, `-cancel`,
+  `-install`, `-preferences`, `-check-on-startup`, `-skip` e `-notice`, e os avisos `prism:update-changed` (o estado inteiro, uma vez por mudança
   de estado) e `prism:update-progress` (o avanço do download, até cinco por segundo: `UpdateProgress`, só `checkId`, `receivedBytes`
   e `totalBytes`). **O progresso não passa por `setState`**: ele mandaria as notas de até 20 versões a cada aviso. O estado do
   processo principal fica em dia (quem chama `getState` no meio do download recebe o avanço de agora), e a tela junta os números ao
@@ -1367,8 +1368,33 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   abra com um `PATH` sem o `dotnet` (`-EnvVars @{ PATH = 'C:\Windows\System32;C:\Windows' }`). Para as teclas,
   `Emulation.setFocusEmulationEnabled` e depois `Input.dispatchKeyEvent` (`keyDown` com `text`, e `keyUp`): chegam à página mesmo na
   área escondida. `window.close()` pode fechar a janela antes de a resposta do pedido chegar: não espere por ela. O bloqueio pela linha de comando só existe no app empacotado: gere a pasta com `--dir`.
-- **Não exercitado:** o instalador NSIS de verdade por cima de uma instalação existente (o roteiro para conferir numa máquina virtual
-  está no relatório da Tarefa 23, "Rodada 1"); Linux e macOS (a escolha do formato e a entrega só têm teste de unidade); o último
+- **O instalador do Windows pede administrador e, sem a permissão, instala só para o usuário** (seção 25, RN-INSTALA-001 a 004,
+  versão 0.3.0). É o instalador **assistido** do electron-builder (`nsis.oneClick: false`), sem `perMachine`: o manifesto continua
+  `RequestExecutionLevel user` (o Windows recusaria o `spawn` de um que exige administrador, `ERROR_ELEVATION_REQUIRED`), e quem pede a
+  permissão é `build/installer.nsh`, pelo `UAC::RunElevated` (o pedido do próprio Windows). As regras moram no `customInit` dele (fim do
+  `.onInit`, depois do `initMultiUser` do modelo): a instalação que existe manda (HKLM `Software\<guid>` é a de todos, atualizada
+  pedindo a permissão; HKCU, a do usuário, atualizada sem pedir nada; sem a permissão para a de todos, nada é instalado, porque só do
+  usuário seriam duas); aberto pela pessoa sem instalação, pede a permissão e, negada ou numa conta sem administrador, instala só para o
+  usuário; `/allusers` e `/currentuser` escolhem o modo, e o que pede o outro modo de uma instalação existente é recusado (sai com 2);
+  o silencioso sem modo instala só para o usuário. O `customInstallMode` pula a página "para quem instalar". O include só existe na
+  compilação do instalador (`!ifndef BUILD_UNINSTALLER`), só com macros e variáveis que ele usa: o electron-builder compila com `-WX`.
+  O `nsis.guid` é o que o electron-builder calcularia do `appId` (as instalações da 0.2.0, de um clique e por usuário em
+  `%LOCALAPPDATA%\Programs\prism-client`, têm as mesmas chaves e são atualizadas no lugar); uma instalação nova vai para
+  `%LOCALAPPDATA%\Programs\Prism` ou `%ProgramFiles%\Prism`. A página de progresso e a de fim ("Executar Prism") são as do modelo.
+- **O app e os dois modos.** `install-scope.ts` diz se a instalação é para todos: o `reg.exe` do sistema (`%SystemRoot%\System32`),
+  sem shell, lê `HKLM\Software\<guid>` `InstallLocation` na visão de 64 bits, a mesma regra do instalador; qualquer falha vale "só do
+  usuário". O atualizador só pergunta na instalação feita pelo instalador, uma vez por abertura, e a oferta leva `forAllUsers`: o
+  diálogo avisa, antes de baixar e ao instalar, que o Windows vai pedir a permissão e o que acontece sem ela. Logo antes do `spawn`, o
+  atualizador grava `<pasta de dados>/update-attempt.json` (`install-attempt.ts`: de que versão para qual, e o modo); se o instalador
+  não inicia, a anotação sai. A abertura seguinte a lê e a apaga: na versão de antes, a atualização não entrou, e a primeira janela
+  recebe o aviso uma vez (`takeNotice`; `UpdateDialog` o mostra como aviso de atenção, `noticeToast`). Na de todos com a permissão
+  negada, quem abre o Prism de novo é o instalador (`prismReopenApp`: espera o Prism que o abriu, o processo pai, fechar, até 30 s, por
+  causa do bloqueio de instância única, e o abre na versão que está).
+- **Conferido:** as duas fases do NSIS compilam com `-WX` (no Linux, com o `makensis` do electron-builder e um `wine` de mentira que só
+  copia o gerador do desinstalador, o que não serve para instalar), e as duas macros entram no instalador e não no desinstalador. A
+  pipeline instala e desinstala o `.exe` gerado nos dois modos, no runner do Windows (`scripts/ci/check-windows-installer.sh`).
+- **Não exercitado:** o pedido de permissão do Windows (aceito, negado, numa conta sem administrador) e a reabertura depois dele; a
+  atualização de dentro do app por cima de uma instalação de verdade (com `--force-run`); Linux e macOS (a escolha do formato e a entrega só têm teste de unidade); o último
   passo do zip portátil no Windows (a cópia para a pasta de downloads) fora dos testes de unidade; o GitLab de verdade (o formato da
   resposta e o redirecionamento do registro vêm da documentação); proxy com autenticação.
 
