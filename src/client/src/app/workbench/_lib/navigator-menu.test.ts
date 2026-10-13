@@ -83,8 +83,8 @@ describe("menuFor: esquema, banco e grupo", () => {
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
   });
 
-  it("banco: Atualizar e Copiar nome (o 'Atualizar' que a linha já tem ao passar o mouse)", () => {
-    expect(ids(menuFor(databaseNode, idle))).toEqual([["refresh"], ["copyName"]]);
+  it("banco: Nova consulta, Atualizar e Copiar nome", () => {
+    expect(ids(menuFor(databaseNode, idle))).toEqual([["newQuery", "refresh"], ["copyName"]]);
   });
 
   it("grupo (Tabelas, Colunas…): só Atualizar; copiar o nome de um rótulo fixo não serve a ninguém", () => {

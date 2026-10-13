@@ -92,8 +92,9 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
       ];
     }
 
+    // A consulta nova de um banco roda na sessão dele (RN-ARVORE-006), como a de um esquema.
     case "database":
-      return [[refresh()], [copyName]];
+      return [[newQuery, refresh()], [copyName]];
 
     case "schema":
       return [[newQuery, refresh()], [copyName]];

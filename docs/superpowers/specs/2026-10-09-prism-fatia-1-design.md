@@ -289,9 +289,6 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   do objeto.
 - **RN-ARVORE-005.** Falha ao abrir a conexão aparece no próprio nó, com a mensagem do banco e
   "Tentar de novo".
-
-### 5.5 Editor e resultado
-
 - **RN-ARVORE-006.** Bancos do servidor (pedido do dono em 2026-10-13, como o DBeaver): ao expandir a
   conexão, a árvore lista os bancos do servidor a que a conta pode se conectar, em ordem de nome, com
   o banco da conexão primeiro e marcado como o padrão. No PostgreSQL são os de `pg_database` que
@@ -300,7 +297,11 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   bancos da instância, só o banco da conexão. Expandir um banco abre a sessão dele, com as mesmas
   credenciais e o nome desse banco no lugar do da conexão; o editor, os Registros e o diagrama
   abertos a partir de um banco usam a sessão dele. Desconectar a conexão fecha as sessões de todos os
-  bancos dela. A lista fica em memória até "Atualizar" no nó da conexão (RN-ARVORE-002).
+  bancos dela. A lista fica em memória até "Atualizar" no nó da conexão (RN-ARVORE-002). O menu do
+  banco tem "Nova consulta", que abre o editor na sessão dele.
+
+### 5.5 Editor e resultado
+
 - **RN-SQL-001.** Executar (botão ou Ctrl+Enter) envia o texto selecionado; sem seleção, envia o
   comando onde está o cursor. Uma execução leva um comando só: se a seleção tiver mais de um
   (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência entra na entrega 2.
@@ -453,7 +454,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `PUT api/user/password` `{ currentPassword, newPassword }` | 204 (troca a senha e recifra o cofre, RN-COFRE-013) | 422 `INVALID_PASSWORD` (a atual não confere), `PASSWORD_INVALID` (a nova), `PASSWORD_UNCHANGED`; 401 `VAULT_LOCKED` no quinto erro |
 | `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013) |
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
-| `GET api/user/database-sessions/{id}/databases` | 200 lista de `{ name, isCurrent }` (RN-ARVORE-006) | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`; 422 `SQL_EXECUTION_FAILED` |
+| `GET api/user/database-sessions/{id}/databases` | 200 lista de `{ name, isCurrent }` (RN-ARVORE-006; espera a vez na sessão, como as consultas de catálogo) | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `DELETE api/user/database-sessions/{id}` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `GET api/user/database-sessions/{id}/schemas` | 200 lista | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `GET .../schemas/{schema}/objects?kind=` | 200 lista (`tables`, `views`, `routines`) | as mesmas, mais 422 `OBJECT_KIND_INVALID` |
