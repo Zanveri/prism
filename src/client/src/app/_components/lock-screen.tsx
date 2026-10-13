@@ -8,6 +8,7 @@ import { sessionQuery, signInOrRefuse, signOut } from "@/app/sign-in/_lib/sign-i
 import { PrismMark } from "@/components/layout/prism-mark";
 import { Button, FormMessage, LockIcon, TextField } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
+import { sharePeerEvent } from "@/lib/api/bridge";
 import { ApiRequestError, unwrap, userActionDeadlineMs } from "@/lib/api/prism-api";
 import { parseForm, type FieldErrors } from "@/lib/utils/form";
 
@@ -164,6 +165,8 @@ export function LockScreen({ closeState, onUnlocked }: { closeState: CloseState;
     // Com prazo: a API que não responde não deixa a tela em "Saindo…" para sempre (nem "Desbloquear" desabilitado); estourado, ela volta a aceitar ação e diz a falha.
     mutationFn: async () => unwrap(await signOut(AbortSignal.timeout(userActionDeadlineMs))),
     onSuccess: () => {
+      // RN-ABAS-004: o "Sair" vale para todas as janelas.
+      sharePeerEvent("signOut");
       void navigate(pathsConfig.signIn, { replace: true });
       queryClient.clear();
     },

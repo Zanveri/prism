@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useState } from "react";
 
 import { createIdleTimer } from "./idle-timer";
 import { watchActivity } from "./idle-watch";
+import { shouldShareActivity } from "./peer-session";
 
 /** De quanto em quanto tempo a contagem é conferida; é também o passo do "faltam N s" do aviso. */
 const checkEveryMs = 1000;
@@ -14,6 +15,11 @@ type IdleLockOptions = {
   isBusy: () => boolean;
   /** O tempo acabou. Chamado uma vez; quem chama bloqueia, e `enabled` passa a falso. */
   onLock: () => void;
+  /**
+   * RN-ABAS-004: as outras janelas. A atividade desta (e, a cada conferência, o comando em andamento nela) vai a elas, no máximo uma vez por segundo
+   * (`share`), e a delas chega aqui (`subscribe`) e recomeça esta contagem: o Prism só bloqueia quando nenhuma janela foi usada no prazo. Estável.
+   */
+  peers?: { share: () => void; subscribe: (onActivity: () => void) => () => void };
 };
 
 /**
@@ -24,10 +30,12 @@ type IdleLockOptions = {
  * janela) estão em `watchActivity`, testada. Vale em qualquer tela de dentro do cofre, porque quem usa isto fica acima delas. A
  * conferência é a cada segundo e também quando a janela volta a aparecer.
  */
-export function useIdleLock({ enabled, minutes, isBusy, onLock }: IdleLockOptions): number | null {
+export function useIdleLock({ enabled, minutes, isBusy, onLock, peers }: IdleLockOptions): number | null {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const busy = useEffectEvent(isBusy);
   const lock = useEffectEvent(onLock);
+  const sharePeers = useEffectEvent(() => peers?.share());
+  const subscribePeers = useEffectEvent((listener: () => void) => peers?.subscribe(listener) ?? (() => {}));
 
   useEffect(() => {
     if (!enabled) return;
@@ -35,11 +43,31 @@ export function useIdleLock({ enabled, minutes, isBusy, onLock }: IdleLockOption
     // A contagem nasce junto do efeito: ligar de novo (ou desbloquear) começa do zero.
     const timer = createIdleTimer(Date.now);
     let stopped = false;
+    let lastShared: number | null = null;
+
+    function share() {
+      const now = Date.now();
+      if (!shouldShareActivity(lastShared, now)) return;
+      lastShared = now;
+      sharePeers();
+    }
+
+    // O que a pessoa faz nesta janela recomeça a contagem daqui e vai às outras.
+    const counted = {
+      activity() {
+        const restarted = timer.activity();
+        if (restarted) share();
+        return restarted;
+      },
+    };
 
     function check() {
       if (stopped) return;
 
-      const status = timer.check({ enabled: true, minutes, busy: busy() });
+      const running = busy();
+      // O comando em andamento aqui também segura as outras janelas: o tempo delas recomeça do fim dele, como o daqui.
+      if (running) share();
+      const status = timer.check({ enabled: true, minutes, busy: running });
       setSecondsLeft(status.phase === "warning" ? status.secondsLeft : null);
       if (status.phase === "lock") {
         stopped = true;
@@ -47,13 +75,19 @@ export function useIdleLock({ enabled, minutes, isBusy, onLock }: IdleLockOption
       }
     }
 
-    const stopWatching = watchActivity({ window, document, timer, check });
+    const stopWatching = watchActivity({ window, document, timer: counted, check });
+    // A pessoa mexeu em outra janela: a contagem daqui recomeça (ou, se o prazo já tinha acabado com esta janela dormindo, bloqueia).
+    const stopPeers = subscribePeers(() => {
+      timer.activity();
+      check();
+    });
     const interval = setInterval(check, checkEveryMs);
 
     return () => {
       stopped = true;
       clearInterval(interval);
       stopWatching();
+      stopPeers();
       setSecondsLeft(null);
     };
   }, [enabled, minutes]);

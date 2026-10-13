@@ -255,7 +255,19 @@ export function createPreferencesStore(getStorage: () => PreferencesStorage | nu
     return () => void listeners.delete(listener);
   }
 
-  return { get, set, subscribe };
+  /**
+   * Outra janela do app gravou (RN-ABAS-004: as mesmas preferências em todas): o que estava guardado daquela chave sai, e quem lê lê de novo do
+   * armazenamento. `null` é o armazenamento inteiro apagado. Chave que não é de preferências não muda nada.
+   */
+  function refresh(key: string | null): void {
+    if (key === null) cache.clear();
+    else if (!key.startsWith(preferencesKey(""))) return;
+    else cache.delete(key);
+
+    for (const listener of listeners) listener();
+  }
+
+  return { get, set, subscribe, refresh };
 }
 
 function browserStorage(): PreferencesStorage | null {
@@ -264,3 +276,6 @@ function browserStorage(): PreferencesStorage | null {
 
 /** O armazenamento da janela: o gancho `usePreferences` e a tela de Configurações falam com este. */
 export const preferencesStore = createPreferencesStore(browserStorage);
+
+// O `storage` chega a cada janela quando OUTRA janela do app grava: o tema, o editor e o bloqueio mudam em todas ao mesmo tempo.
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("storage", (event) => preferencesStore.refresh(event.key));

@@ -193,6 +193,26 @@ describe("a chave é por usuário do cofre", () => {
 });
 
 describe("o armazenamento das preferências", () => {
+  it("o que outra janela gravou (RN-ABAS-004) vale aqui: a chave dela sai do que estava guardado, e quem ouve lê de novo", () => {
+    const { storage, items } = fakeStorage();
+    const store = createPreferencesStore(() => storage);
+    const listener = vi.fn();
+    store.subscribe(listener);
+    expect(store.get("ana").theme).toBe(defaultPreferences.theme);
+
+    items.set("prism:preferences:ana", JSON.stringify({ ...defaultPreferences, theme: "light" }));
+    store.refresh("prism:preferences:ana");
+    expect(listener).toHaveBeenCalledOnce();
+    expect(store.get("ana").theme).toBe("light");
+
+    store.refresh("outra-coisa");
+    expect(listener).toHaveBeenCalledOnce();
+
+    items.clear();
+    store.refresh(null);
+    expect(store.get("ana")).toEqual(defaultPreferences);
+  });
+
   it("um usuário sem nada gravado recebe o padrão, sempre o mesmo objeto (o gancho depende disso para não redesenhar)", () => {
     const { storage } = fakeStorage();
     const store = createPreferencesStore(() => storage);

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 
 import { Button, FormMessage, TextField } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
+import { sharePeerEvent } from "@/lib/api/bridge";
 import { parseForm, type FieldErrors } from "@/lib/utils/form";
 
 import { signInCopy } from "../_lib/sign-in.copy";
@@ -25,8 +26,9 @@ export function SignInForm({ onCreateUser }: { onCreateUser: () => void }) {
     mutationFn: (input: Credentials) => signInOrRefuse(input),
     onSuccess: (result) => {
       if (result.ok) {
-        // RN-COFRE-007: entrar fecha o cofre de quem estava antes; o que estava em cache era dele.
+        // RN-COFRE-007: entrar fecha o cofre de quem estava antes; o que estava em cache era dele. RN-ABAS-004: o login libera as outras janelas.
         queryClient.clear();
+        sharePeerEvent("signIn");
         void navigate(pathsConfig.workbench, { replace: true });
         return;
       }

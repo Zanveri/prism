@@ -11,6 +11,7 @@ import { LockOpenIcon, RefreshIcon, WorkbenchIcon } from "@/components/ui";
 import { CheckUpdatesButton } from "@/components/update/check-updates-button";
 import { updateCopy } from "@/components/update/update.copy";
 import { pathsConfig } from "@/config/paths.config";
+import { sharePeerEvent } from "@/lib/api/bridge";
 import { unwrap } from "@/lib/api/prism-api";
 import { cn } from "@/lib/utils/cn";
 
@@ -47,6 +48,8 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
   const leave = useMutation({
     mutationFn: async () => unwrap(await signOut()),
     onSuccess: () => {
+      // RN-ABAS-004: o "Sair" vale para todas as janelas.
+      sharePeerEvent("signOut");
       void navigate(pathsConfig.signIn, { replace: true });
       queryClient.clear();
     },
