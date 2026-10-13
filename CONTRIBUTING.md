@@ -40,6 +40,71 @@ pnpm --dir src/client dev
 Os cofres do app em desenvolvimento ficam em `Zanveri/Prism-dev`, na pasta de dados de aplicativo do sistema, e nunca se misturam
 com os do app empacotado (veja [Onde ficam os dados](README.md#onde-ficam-os-dados)).
 
+## Testar e empacotar na sua máquina
+
+### Testes
+
+```bash
+dotnet build src/api/Prism.slnx          # zero avisos
+dotnet test src/api/Prism.slnx           # unitários e de integração (Docker ligado)
+pnpm --dir src/client lint
+pnpm --dir src/client typecheck
+pnpm --dir src/client test
+```
+
+### Empacotar
+
+O pacote de uma plataforma leva a API publicada para a mesma plataforma, e há uma só API em `src/client/resources/api`: publique
+a API e depois gere o pacote.
+
+```bash
+pnpm --dir src/client build:api -- win-x64      # ou linux-x64, osx-arm64, osx-x64; sem argumento, o da máquina
+pnpm --dir src/client dist -- win               # win, linux ou mac (mac aceita arm64 ou x64 depois: dist -- mac arm64)
+pnpm --dir src/client dist:dir                  # só a pasta do app, sem instalador: src/client/release/win-unpacked/Prism.exe
+```
+
+Os pacotes saem em `src/client/release/`, como `Prism-<versão>-<sistema>-<arquitetura>.<extensão>`. Cada um leva a API em
+`resources/api` e não precisa de .NET nem de Node na máquina; não há assinatura de código. O `dist` falha se a API da
+plataforma não foi publicada antes. No macOS, uma arquitetura por vez: `build:api -- osx-arm64` e `dist -- mac arm64`, depois
+`osx-x64` e `mac x64`. O deb e o rpm exigem a URL do projeto (`PRISM_HOMEPAGE`, que na pipeline é a página do repositório do
+workflow); o resto está em [docs/ci.md](docs/ci.md).
+
+O `build:api` mexe nos `packages.lock.json` da API: acrescenta o alvo vazio `net10.0/<identificador>` (por exemplo,
+`net10.0/win-x64`). Provisório: depois de publicar, olhe `git diff -- "src/api/*/packages.lock.json"` e desfaça
+(`git checkout -- "src/api/*/packages.lock.json"`) só se a única diferença for esse alvo.
+
+### Onde ficam os dados
+
+Os cofres e o log da API ficam na pasta de dados do app:
+
+- Windows, app empacotado: `%APPDATA%\Zanveri\Prism`
+- Linux e macOS, app empacotado: a subpasta `Zanveri/Prism` da pasta de dados de aplicativo do sistema
+- em desenvolvimento (`pnpm dev`): `Zanveri/Prism-dev` no mesmo lugar, para o app de desenvolvimento nunca abrir os
+  cofres de verdade
+
+Dentro dela: `vaults/`, com um arquivo cifrado por usuário (`<usuário>.vault.json`), `logs/` e os arquivos de perfil do
+Chromium que o Electron grava ali.
+
+`--user-data-dir=<pasta>` na linha de comando troca a pasta nos dois casos (use uma pasta de teste para conferir o
+app empacotado sem tocar nos dados de ninguém). O log do processo principal traz a linha
+`[prism] pasta de dados: ...`.
+
+### Estrutura do repositório
+
+| Caminho | O que é |
+| --- | --- |
+| `src/client/` | A interface: Electron, React e Vite. Orientação em [src/client/AGENTS.md](src/client/AGENTS.md). |
+| `src/api/` | A API em C# (.NET 10) e os testes. Orientação em [src/api/AGENTS.md](src/api/AGENTS.md). |
+| `docs/superpowers/specs/2026-10-09-prism-fatia-1-design.md` | Especificação da primeira entrega: regras `RN-*`, rotas, códigos de erro e critérios de aceite. |
+| `docs/design/canvas/` | Canvas de design aprovado: a medida de cores, espaçamentos e textos. |
+| `site/` | O site de documentação (HTML e CSS estáticos, em português), publicado no GitHub Pages pela pipeline em <https://zanveri.github.io/prism/>. |
+| `docs/versionamento.md` | Como o Prism é versionado e como se lança uma versão (o pull request de lançamento da `develop` para a `main`). |
+| `docs/ci.md` | A pipeline: o que cada workflow e cada job faz, o que cada merge publica, como rodar na máquina, os runners, a lista de conferência do repositório no GitHub e o ensaio com o repositório privado. |
+| `.github/workflows/`, `.github/actions/`, `scripts/ci/` | A pipeline (GitHub Actions: o workflow de entrada, os reutilizáveis e as actions compostas) e os roteiros que ela chama, um por passo, com os testes deles. |
+| `cliff.toml` | A configuração do `git-cliff`, que gera o changelog e as notas das releases. |
+| `.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md` | Os formulários de issue (defeito e sugestão) e o modelo de pull request. |
+| [AGENTS.md](AGENTS.md) | Orientação para quem programa, na raiz. |
+
 ## Onde estão as convenções
 
 - [AGENTS.md](AGENTS.md), na raiz: o que vale para o projeto inteiro.

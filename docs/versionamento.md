@@ -144,8 +144,7 @@ a pipeline avisa "nada novo desde a vX.Y.Z".
 
 Quem lança precisa ser [mantenedor](../CONTRIBUTING.md#mantenedores): é quem faz o merge na `main`.
 
-**Nenhuma execução da pipeline aconteceu ainda** ([Estado da validação](ci.md#estado-da-validação)). O que segue é o que os workflows
-e os roteiros mandam fazer, ensaiado fora do GitHub; não é o que já se viu acontecer.
+O que segue é o que os workflows e os roteiros fazem.
 
 ### Antes da primeira versão
 

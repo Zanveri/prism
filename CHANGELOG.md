@@ -32,8 +32,7 @@ Drivers. Nenhum pacote é assinado.
   saiu e, havendo versão estável mais nova, mostra as notas dela e pergunta. Só baixa quando você manda; confere o pacote
   baixado com duas somas SHA-256 (a das notas da release e a do `SHA256SUMS`) antes de instalar; e permite pular uma versão ou
   desligar a verificação. No Windows roda o instalador conferido; no Linux e no macOS deixa o pacote conferido na pasta de
-  downloads. Ainda não exercitado com o instalador de verdade por cima de uma instalação, no Linux, no macOS nem diante de uma
-  release de verdade do GitHub.
+  downloads.
 - Pasta de dados por usuário do sistema (`%APPDATA%\Zanveri\Prism` no Windows e a subpasta `Zanveri/Prism` da pasta de dados de
   aplicativo nos outros sistemas), separada da do app de desenvolvimento.
 

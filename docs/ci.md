@@ -636,37 +636,3 @@ Uma vez por mês, e num pull request só:
 5. **O Node e o .NET**: as entradas `node` e `sdk` das actions compostas. **O pnpm**: só o campo `packageManager` de
    `src/client/package.json` (com o hash) e o `pnpm-lock.yaml`; nada na pipeline muda.
 6. Rode as provas ([Rodar na própria máquina](#rodar-na-própria-máquina)).
-
-## Estado da validação
-
-**Esta seção é o registro das provas feitas antes de o primeiro beta sair**, quando nenhum workflow tinha rodado no GitHub: nada tinha
-sido enviado ao remoto (nem ramo, nem tag, nem release), e a API do GitHub não tinha sido usada para escrever. As provas foram feitas
-numa máquina Linux, com os roteiros, as imagens e as ferramentas fixadas. O job de páginas veio depois: só o `check-workflows.sh`, o
-actionlint e a leitura das actions o cobrem, e ele **não rodou no GitHub** (**a confirmar** na primeira execução na `develop`).
-
-<!-- validacao:inicio -->
-Feitas em 2026-10-12, na Tarefa 39, sobre o commit `53e88f9`. A máquina: Ubuntu 24.04.5 (o mesmo sistema do `ubuntu-24.04`), bash
-5.2.21, git 2.43.0, jq 1.7, Ruby 3.3.6, mawk 1.3.4 (o gawk não aparece na lista de pacotes do README da imagem do runner, cujo `awk` deve ser
-o mawk do Ubuntu), .NET SDK 10.0.401 e Docker 29.8.2. Os comandos de job rodaram numa cópia limpa (`git archive`), um de cada vez.
-
-| O que | Comando | Resultado | Tempo |
-| --- | --- | --- | --- |
-| Os testes dos roteiros | `bash scripts/ci/test-scripts.sh` | status 0: `check-version` 74/74, `check-workflows` 41/41, `leak-guard` 124/124, `packages` todos, `release-notes` 29/29, `release` 72/72, `set-build-version` 13/13 | 1 min 39 s |
-| O `release.test.sh` com o Python da imagem do runner | o mesmo, com o `python3` 3.12.3 | 72/72 | 25 s |
-| As regras dos workflows | `bash scripts/ci/check-workflows.sh` | `os workflows seguem as regras (6 workflows, 2 actions compostas, 19 jobs)` | 1,7 s |
-| O actionlint | `bash scripts/ci/actionlint.sh`, com o shellcheck 0.9.0 no `PATH` (a versão da imagem do runner) | `actionlint: os workflows passaram.` | 0,8 s |
-| O leak-guard da árvore | `bash scripts/ci/leak-guard.sh` | 19 achados, todos em `AGENTS.md`, `docs/superpowers/**` e `src/api/tests/Prism.UnitTesting/Databases/CellFormatterTests.cs`; nenhum em `.github/`, `scripts/ci/` nem nos documentos da pipeline. Num repositório público, reprovam até a limpeza | 0,5 s |
-| `interface` | `bash scripts/ci/verify-client.sh` (Node 22.22.0) | lint e typecheck limpos; 183 arquivos e 4082 testes passando | 75 s |
-| `api` (verificar) | `bash scripts/ci/verify-api.sh` | build Release com `-warnaserror`, 0 avisos; 793 testes de unidade passando | 28 s |
-| `api` (empacotar), uma plataforma por vez | `bash scripts/ci/set-build-version.sh 0.1.0-beta.1` e `PRISM_API_RIDS=<rid> bash scripts/ci/publish-api.sh` | `linux-x64` 114 MB, `win-x64` 115 MB, `osx-arm64` 122 MB, cada um num `.tar`, sem arquivo da IBM; o `Prism.Api` de `osx-arm64` é Mach-O arm64 com a assinatura ad hoc (`LC_CODE_SIGNATURE`) | 18 s, 16 s, 11 s |
-| `linux` (empacotar), no contêiner do job | `check-tools.sh node 22.23.2` e `package-desktop.sh linux` dentro de `electronuserland/builder:24-05.26@sha256:e41cd059…0df3` (baixada pelo espelho `mirror.gcr.io`, pelo mesmo digest: o Docker Hub respondeu 429), com o Node 22.23.2 oficial (conferido pelo `SHASUMS256.txt`), `GITHUB_ACTIONS=true` e a origem `https://api.github.com`, `https://github.com`, `Zanveri/prism` | `Prism-0.1.0-beta.1-linux-x86_64.AppImage`, `…-linux-amd64.deb`, `…-linux-x86_64.rpm` e `…-linux-x64.tar.gz`; o deb diz `Version: 0.1.0~beta.1` e `Homepage: https://github.com/Zanveri/prism`; o `package.json` do `app.asar` tem a versão `0.1.0-beta.1` e os três valores da origem | 6 min 2 s (o pnpm e o Electron baixados do zero) |
-| A decisão, num remoto git de ensaio (os passos de [versionamento.md](versionamento.md)) | `check-version.sh develop` e `… main`, com `--remote` (o remoto de ensaio) | o primeiro merge: `v0.1.0-beta.1`; repetido: nada; o seguinte: `beta.2`; a `main` sem a seção: não lança, com o `::warning` e o resumo; o `release: v0.1.0` na develop: `beta.3`; a `main` com a seção: `v0.1.0`; a develop ainda em 0.1.0: não lança, com o aviso; subida para 0.2.0: `v0.2.0-beta.1`, cuja tag anterior é `v0.1.0-beta.3` | 38 a 64 ms cada |
-| As notas, no mesmo ensaio, com o `git-cliff` de verdade | `release-notes.sh --sums <somas> --beta [--since <tag>] <versão>` e `release-notes.sh --sums <somas> 0.1.0` | `v0.1.0-beta.1` (sem tag nenhuma): 544 itens do histórico inteiro, 58 KB; `beta.2` desde a `beta.1`: o commit novo; `v0.2.0-beta.1` desde a `beta.3`: os dois commits novos; a `v0.1.0`: a seção do `CHANGELOG.md`; todas terminam no bloco "Somas SHA-256" | 0,3 a 0,5 s (beta), 19 ms (estável) |
-
-**Não exercitado**, além de toda execução no GitHub: os pacotes de Windows e de macOS (só a API deles foi publicada), os testes de
-integração com o Db2 e o Informix, as auditorias de dependências, o `setup-node` e o `setup-dotnet` (aqui o Node e o SDK já estavam
-na máquina), os artefatos entre os jobs, o `gh` e a API de releases de verdade (o `publicar` só rodou contra o `gh` de mentira do
-`release.test.sh`), a recusa da API de releases a um commit que muda `.github/workflows`, a regra de tag diante do `GITHUB_TOKEN`, o
-"Immutable", o CodeQL e o atualizador do app diante de uma release de verdade. O limite de tamanho das notas de uma release não está
-na documentação da API: as do primeiro beta têm 58 KB (**a confirmar** que cabem).
-<!-- validacao:fim -->
