@@ -171,6 +171,8 @@ type SqlEditorProps = {
   engine: Engine | undefined;
   /** A conexão da aba deste editor: de onde vêm os nomes da árvore que o autocompletar sugere. Lida na hora do pedido de sugestão. */
   connectionId: string;
+  /** RN-ARVORE-006: o outro banco do servidor da aba; o completar usa os nomes dele. */
+  database?: string;
   autoFocus: boolean;
   /** A posição, no texto, do erro que o banco apontou. */
   errorAt: number | null;
@@ -190,7 +192,7 @@ type SqlEditorProps = {
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, engine, connectionId, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
@@ -212,7 +214,7 @@ export function SqlEditor({ ref, initialSql, engine, connectionId, autoFocus, er
   const emitRunnable = useEffectEvent((runnable: boolean) => onRunnableChange(runnable));
   const emitEdited = useEffectEvent(() => onEdited());
   // Os níveis da árvore são lidos na hora do pedido, da conexão desta aba (sem busca nenhuma: só o cache).
-  const readLevels = useEffectEvent(() => cachedLevels(queryClient, connectionId));
+  const readLevels = useEffectEvent(() => cachedLevels(queryClient, connectionId, database));
   const completionFor = useEffectEvent(() => sqlCompletion({ dialect: dialectOf(initial.engine), engine: initial.engine, levels: () => readLevels() }));
 
   useEffect(() => {

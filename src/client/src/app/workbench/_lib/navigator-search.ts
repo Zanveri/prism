@@ -1,8 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import type { DatabaseSession } from "./database-sessions.schema";
-import type { FetchedPath } from "./database-sessions.service";
-import { childrenKey, databaseNodes, navKey, schemaGroupNodes, tableGroupNodes, type LevelState, type LoadedLevels, type NavNode, type NavPath, type ObjectsKind, type TableLevel } from "./navigator-model";
+import { databaseOfKey, type FetchedPath } from "./database-sessions.service";
+import { childrenKey, inDatabase, navKey, schemaGroupNodes, tableGroupNodes, type LevelState, type LoadedLevels, type NavNode, type NavPath, type ObjectsKind, type TableLevel } from "./navigator-model";
 
 /** O trecho do rótulo que casou: posições `[início, fim)` no texto do rótulo, como `slice` as lê. */
 export type MatchRange = readonly [start: number, end: number];
@@ -60,68 +59,67 @@ export function findMatch(label: string, needle: string): MatchRange | null {
  * que o teste confere. Mudou `treeKey`, mude aqui junto. Chave de outra coisa: `null`.
  */
 export function levelPathOf(queryKey: readonly unknown[]): FetchedPath | null {
-  const [root, connectionId, kind, schema, what, third, fourth] = queryKey as string[];
-  if (root !== "tree" || connectionId === undefined) return null;
-  if (kind === "schemas" && queryKey.length === 3) return { type: "database", connectionId };
-  if (kind === "schema" && what === "objects" && queryKey.length === 6) return { type: "objects", connectionId, schema, objects: third as ObjectsKind };
-  if (kind === "schema" && what === "table" && queryKey.length === 7) return { type: "tableLevel", connectionId, schema, table: third, level: fourth as TableLevel };
+  const [root, connectionId] = queryKey;
+  if (root !== "tree" || typeof connectionId !== "string") return null;
+  if (queryKey[2] === "databases" && queryKey.length === 3) return { type: "connection", connectionId };
+
+  // O que vem depois do banco: nada no banco da conexão, a marca `{ database }` em outro banco do servidor (RN-ARVORE-006).
+  const database = databaseOfKey(queryKey);
+  const [kind, schema, what, third, fourth] = queryKey.slice(database === undefined ? 2 : 3) as string[];
+  const rest = queryKey.length - (database === undefined ? 2 : 3);
+  const at = { connectionId, ...inDatabase(database) };
+  if (kind === "schemas" && rest === 1) return { type: "database", ...at };
+  if (kind === "schema" && what === "objects" && rest === 4) return { type: "objects", ...at, schema, objects: third as ObjectsKind };
+  if (kind === "schema" && what === "table" && rest === 5) return { type: "tableLevel", ...at, schema, table: third, level: fourth as TableLevel };
   return null;
 }
-
-/** Uma sessão da árvore que a API abriu: dela sai o banco, único filho da conexão. */
-export type LoadedSession = { connectionId: string; database: string };
 
 /** Uma consulta da árvore já respondida: a chave dela e os filhos que ela trouxe. */
 export type CachedLevel = { key: readonly unknown[]; nodes: NavNode[] };
 
-export type CachedTree = { sessions: LoadedSession[]; cached: CachedLevel[] };
+export type CachedTree = { cached: CachedLevel[] };
 
 const snapshots = new WeakMap<QueryClient, { signature: string; value: CachedTree }>();
 
 /**
- * O que o cache da árvore já guarda, para a busca: as sessões abertas (`["database-session", …]`) e os níveis respondidos (`["tree", …]`). Só lê; não
- * busca nada. Devolve o MESMO objeto enquanto nenhuma dessas consultas ganhou, perdeu ou trocou de dado (a assinatura é o hash e a contagem de
- * atualizações de cada uma): é isso que deixa o `useMemo` do filtro valer, em vez de refazê-lo a cada render.
+ * O que o cache da árvore já guarda, para a busca: os níveis respondidos (`["tree", …]`), a começar pela lista dos bancos de cada conexão
+ * (RN-ARVORE-006). Só lê; não busca nada. Devolve o MESMO objeto enquanto nenhuma dessas consultas ganhou, perdeu ou trocou de dado (a
+ * assinatura é o hash e a contagem de atualizações de cada uma): é isso que deixa o `useMemo` do filtro valer, em vez de refazê-lo a cada render.
  */
 export function cachedTree(queryClient: QueryClient): CachedTree {
   const queries = queryClient.getQueryCache();
-  const sessions = queries.findAll({ queryKey: ["database-session"] }).filter((query) => query.state.data !== undefined);
   const levels = queries.findAll({ queryKey: ["tree"] }).filter((query) => query.state.data !== undefined);
-  const signature = [...sessions, ...levels].map((query) => `${query.queryHash}#${query.state.dataUpdateCount}`).join("|");
+  const signature = levels.map((query) => `${query.queryHash}#${query.state.dataUpdateCount}`).join("|");
 
   const previous = snapshots.get(queryClient);
   if (previous?.signature === signature) return previous.value;
 
-  const value: CachedTree = {
-    sessions: sessions.map((query) => ({ connectionId: String(query.queryKey[1]), database: (query.state.data as DatabaseSession).database })),
-    cached: levels.map((query) => ({ key: query.queryKey, nodes: query.state.data as NavNode[] })),
-  };
+  const value: CachedTree = { cached: levels.map((query) => ({ key: query.queryKey, nodes: query.state.data as NavNode[] })) };
   snapshots.set(queryClient, { signature, value });
   return value;
 }
 
 /**
  * Tudo o que a árvore já carregou, nível por nível, aberto ou não (a busca olha o que está em memória, não só o que está à vista).
- * Parte dos níveis que o navegador já tem (`base`: as pastas e os nós abertos, que valem mais) e acrescenta, sem ir à API, o banco
- * de cada sessão aberta e o que cada consulta guardada trouxe, com os grupos fixos (Tabelas, Visões, Colunas…) que ligam um ao outro.
- * Só cria o grupo fixo de quem tem algo carregado abaixo: nenhum nível é inventado.
+ * Parte dos níveis que o navegador já tem (`base`: as pastas e os nós abertos, que valem mais) e acrescenta, sem ir à API, o que cada
+ * consulta guardada trouxe (os bancos de cada conexão, os esquemas de cada banco…), com os grupos fixos (Tabelas, Visões, Colunas…)
+ * que ligam um ao outro. Só cria o grupo fixo de quem tem algo carregado abaixo: nenhum nível é inventado.
  */
-export function loadedLevels(base: LoadedLevels, sessions: readonly LoadedSession[], cached: readonly CachedLevel[]): Map<string, LevelState> {
+export function loadedLevels(base: LoadedLevels, cached: readonly CachedLevel[]): Map<string, LevelState> {
   const levels = new Map(base);
   const add = (path: NavPath, children: NavNode[]) => {
     const key = childrenKey({ key: navKey(path) });
     if (!levels.has(key)) levels.set(key, { status: "loaded", children });
   };
 
-  for (const { connectionId, database } of sessions) add({ type: "connection", connectionId }, databaseNodes(connectionId, database));
 
   for (const { key, nodes } of cached) {
     const path = levelPathOf(key);
     if (path === null) continue;
 
     add(path, nodes);
-    if (path.type === "objects") add({ type: "schema", connectionId: path.connectionId, schema: path.schema }, schemaGroupNodes(path.connectionId, path.schema));
-    if (path.type === "tableLevel") add({ type: "table", connectionId: path.connectionId, schema: path.schema, table: path.table }, tableGroupNodes(path.connectionId, path.schema, path.table));
+    if (path.type === "objects") add({ type: "schema", connectionId: path.connectionId, ...inDatabase(path.database), schema: path.schema }, schemaGroupNodes(path.connectionId, path.schema, path.database));
+    if (path.type === "tableLevel") add({ type: "table", connectionId: path.connectionId, ...inDatabase(path.database), schema: path.schema, table: path.table }, tableGroupNodes(path.connectionId, path.schema, path.table, path.database));
   }
 
   return levels;

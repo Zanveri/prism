@@ -8,20 +8,21 @@ import { workbenchCopy } from "../../_lib/workbench.copy";
 
 const copy = workbenchCopy.tableTab;
 
-type DisconnectedViewProps = { connectionId: string };
+/** `database`: o outro banco do servidor da aba (RN-ARVORE-006); "Conectar" abre a sessão da árvore dele. */
+type DisconnectedViewProps = { connectionId: string; database?: string };
 
 /**
  * O que a Estrutura e o Diagrama mostram de uma conexão que a pessoa desconectou (RN-SESSAO-004): nada reconecta sozinho, nem ao
  * mostrar uma vista que nunca tinha sido aberta. O botão é o clique que conecta: abre a sessão da árvore (`connectTree`) e as vistas
  * carregam em seguida. Quem devolve o foco, que estava no botão, é o painel da aba (`table-tab.tsx`).
  */
-export function DisconnectedView({ connectionId }: DisconnectedViewProps) {
+export function DisconnectedView({ connectionId, database }: DisconnectedViewProps) {
   const queryClient = useQueryClient();
   const [connecting, setConnecting] = useState(false);
 
   async function connect() {
     setConnecting(true);
-    await connectTree(queryClient, connectionId);
+    await connectTree(queryClient, connectionId, database);
     setConnecting(false);
   }
 

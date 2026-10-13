@@ -4,7 +4,8 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
 
 import type { DatabaseObject } from "./database-sessions.schema";
-import { childrenKey, clickEffect, columnNodes, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parseNavKey, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { childrenKey, clickEffect, columnNodes, databaseNodes, databaseRefOf, flattenVisible, foreignKeyNodes, indexNodes, isFocusable, navKey, objectNodes, ownerConnectionId, parseNavKey, schemaGroupNodes, schemaNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
+import { workbenchCopy } from "./workbench.copy";
 
 const connectionPath: NavPath = { type: "connection", connectionId: "c1" };
 const databasePath: NavPath = { type: "database", connectionId: "c1" };
@@ -410,5 +411,78 @@ describe("ownerConnectionId (as ações do menu sabem de qual conexão a linha �
     const loading = flattenVisible([connection], new Set([connection.key]), new Map())[1];
 
     expect([folder, routine, loading].map(ownerConnectionId)).toEqual([null, null, null]);
+  });
+});
+
+describe("databaseNodes: os bancos do servidor sob a conexão (RN-ARVORE-006)", () => {
+  const listed = [
+    { name: "alfa", isCurrent: false },
+    { name: "mes", isCurrent: true },
+    { name: "zeta", isCurrent: false },
+  ];
+
+  it("o banco da conexão vem primeiro e marcado como padrão; os outros, na ordem em que a API os deu", () => {
+    const nodes = databaseNodes("c1", listed);
+
+    expect(nodes.map((item) => item.label)).toEqual(["mes", "alfa", "zeta"]);
+    expect(nodes.map((item) => item.badge)).toEqual([workbenchCopy.navigator.defaultDatabase, undefined, undefined]);
+    expect(nodes.every((item) => item.kind === "database" && item.hasChildren)).toBe(true);
+  });
+
+  it("o banco da conexão guarda a chave de sempre (a sessão da conexão); outro banco leva o nome dele no caminho", () => {
+    const [current, other] = databaseNodes("c1", listed);
+
+    expect(current.key).toBe(navKey({ type: "database", connectionId: "c1" }));
+    expect(parseNavKey(other.key)).toEqual({ type: "database", connectionId: "c1", database: "alfa" });
+  });
+
+  it("a lista do Db2, só com o banco da conexão, é um nó só", () => {
+    expect(databaseNodes("c1", [{ name: "PRISM", isCurrent: true }]).map((item) => item.key)).toEqual([navKey({ type: "database", connectionId: "c1" })]);
+  });
+
+  it("a chave não depende da ordem em que o caminho foi escrito: o banco fica sempre no mesmo lugar", () => {
+    expect(navKey({ schema: "s", database: "alfa", connectionId: "c1", type: "schema" } as NavPath)).toBe(navKey({ type: "schema", connectionId: "c1", database: "alfa", schema: "s" }));
+    expect(navKey({ type: "schema", connectionId: "c1", schema: "s", database: undefined })).toBe(navKey({ type: "schema", connectionId: "c1", schema: "s" }));
+  });
+
+  it("o que está abaixo de outro banco leva o nome dele, e a tabela e a visão dizem de que banco são", () => {
+    const [schema] = schemaNodes("c1", [{ name: "loja", isSystem: false }], "alfa");
+    const [tablesGroup] = schemaGroupNodes("c1", "loja", "alfa");
+    const [table, view] = objectNodes("c1", "loja", "tables", [{ name: "pedido", kind: "table" }, { name: "resumo", kind: "view" }], "alfa");
+    const [columnsGroup] = tableGroupNodes("c1", "loja", "pedido", "alfa");
+
+    expect(parseNavKey(schema.key)).toEqual({ type: "schema", connectionId: "c1", database: "alfa", schema: "loja" });
+    expect(parseNavKey(tablesGroup.key)).toEqual({ type: "objects", connectionId: "c1", database: "alfa", schema: "loja", objects: "tables" });
+    expect(parseNavKey(columnsGroup.key)).toEqual({ type: "tableLevel", connectionId: "c1", database: "alfa", schema: "loja", table: "pedido", level: "columns" });
+    expect(tableTargetOf(table)).toEqual({ connectionId: "c1", database: "alfa", schema: "loja", name: "pedido" });
+    expect(tableTargetOf(view)).toEqual({ connectionId: "c1", database: "alfa", schema: "loja", name: "resumo" });
+  });
+
+  it("no banco da conexão a tabela continua sem banco no alvo", () => {
+    const [table] = objectNodes("c1", "loja", "tables", [{ name: "pedido", kind: "table" }]);
+
+    expect(tableTargetOf(table)).toEqual({ connectionId: "c1", schema: "loja", name: "pedido" });
+  });
+});
+
+describe("databaseRefOf (de que banco é a linha: a nova consulta e as abas usam a sessão dele)", () => {
+  it("a conexão e o banco dela são o banco da conexão; outro banco e o que está abaixo dele levam o nome", () => {
+    const [current, other] = databaseNodes("c1", [{ name: "mes", isCurrent: true }, { name: "alfa", isCurrent: false }]);
+    const [schema] = schemaNodes("c1", [{ name: "loja", isSystem: false }], "alfa");
+    const [view] = objectNodes("c1", "loja", "views", [{ name: "resumo", kind: "view" }], "alfa");
+
+    expect(databaseRefOf(connection)).toEqual({ connectionId: "c1" });
+    expect(databaseRefOf(current)).toEqual({ connectionId: "c1" });
+    expect(databaseRefOf(other)).toEqual({ connectionId: "c1", database: "alfa" });
+    expect(databaseRefOf(schema)).toEqual({ connectionId: "c1", database: "alfa" });
+    expect(databaseRefOf(view)).toEqual({ connectionId: "c1", database: "alfa" });
+  });
+
+  it("pasta e folha que só copia o nome não são de banco nenhum", () => {
+    const [folder] = treeNodes(buildConnectionTree([{ id: "f1", parentID: null, name: "Fábrica", createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" }], [])).roots;
+    const [routine] = objectNodes("c1", "loja", "routines", [{ name: "dobro", kind: "function" }], "alfa");
+
+    expect(databaseRefOf(folder)).toBeNull();
+    expect(databaseRefOf(routine)).toBeNull();
   });
 });

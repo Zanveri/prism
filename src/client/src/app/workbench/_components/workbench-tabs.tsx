@@ -50,7 +50,7 @@ export function WorkbenchTabs() {
   useEffect(() => {
     latestOpenTable.current = openTableTab;
   });
-  const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView }) => latestOpenTable.current(connectionId, table), []);
+  const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante

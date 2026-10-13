@@ -80,6 +80,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             initialSql={tab.sql}
             engine={engine}
             connectionId={tab.connectionId}
+            database={tab.database}
             autoFocus={active}
             errorAt={shown?.status === "error" ? shown.errorAt : null}
             onRun={handleRun}

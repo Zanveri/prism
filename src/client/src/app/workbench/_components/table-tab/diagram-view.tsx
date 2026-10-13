@@ -15,6 +15,8 @@ const copy = workbenchCopy.tableTab;
 
 type DiagramViewProps = {
   connectionId: string;
+  /** RN-ARVORE-006: o outro banco do servidor da aba; sem ele, o banco da conexão. */
+  database?: string;
   schema: string;
   name: string;
   /** A aba está À VISTA: a escondida não busca nada até ser aberta (RN-SEG-001). */
@@ -32,15 +34,15 @@ type DiagramViewProps = {
  * desenho só aparece quando todas chegaram, para as caixas não crescerem por baixo do usuário; a vizinha
  * cujas colunas falharam aparece só com o nome (o aviso central diz o que houve).
  */
-export function DiagramView({ connectionId, schema, name, visible, onOpenTable, memoryKey }: DiagramViewProps) {
+export function DiagramView({ connectionId, database, schema, name, visible, onOpenTable, memoryKey }: DiagramViewProps) {
   const queryClient = useQueryClient();
-  const { refresh } = useStructureActions(connectionId);
-  const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible));
-  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible));
+  const { refresh } = useStructureActions(connectionId, database);
+  const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible, database));
+  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible, database));
 
   const neighbors = useMemo(() => (foreignKeys.data === undefined ? null : referencedTables({ schema, name }, foreignKeys.data)), [foreignKeys.data, schema, name]);
   const loaded = useQueries({
-    queries: (neighbors?.tables ?? []).map((table) => columnsQuery(connectionId, table.schema, table.name, queryClient, visible)),
+    queries: (neighbors?.tables ?? []).map((table) => columnsQuery(connectionId, table.schema, table.name, queryClient, visible, database)),
     // Um objeto só, com a mesma forma enquanto os dados não mudam: o desenho não é refeito a cada renderização.
     combine: (results) => ({ columns: results.map((result) => result.data ?? null), pending: results.some((result) => result.data === undefined && !result.isError) }),
   });

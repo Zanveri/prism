@@ -3,6 +3,7 @@ import { memo, useEffect, useRef } from "react";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { EngineTag, EnvironmentPill } from "@/components/ui";
 
+import { inDatabase } from "../../_lib/navigator-model";
 import type { TableRef } from "../../_lib/table-diagram";
 import { tableViews, viewOf } from "../../_lib/table-view";
 import type { QueryRunner } from "../../_lib/use-query-runner";
@@ -30,7 +31,7 @@ type TableTabPanelProps = {
   disconnected: boolean;
   onView: (tabId: string, view: TableView) => void;
   /** Abre a aba de outra tabela da mesma conexão: o duplo clique numa vizinha do diagrama e o valor de uma chave estrangeira (RN-TABELA-007, na vista Registros). */
-  onOpenTable: (connectionId: string, table: TableRef & { view?: TableView }) => void;
+  onOpenTable: (connectionId: string, table: TableRef & { view?: TableView; database?: string }) => void;
 };
 
 /**
@@ -62,16 +63,16 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
       <header className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-panel px-3 py-1.5">
         {connection ? <EngineTag engine={connection.engine} /> : null}
         <h2 className="font-mono text-[15px] leading-[22px] font-semibold text-ink">{name}</h2>
-        {connection ? <span className="text-xs text-muted">{copy.location(connection.name, connection.database, schema)}</span> : null}
+        {connection ? <span className="text-xs text-muted">{copy.location(connection.name, tab.database ?? connection.database, schema)}</span> : null}
         {connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} /> : null}
         <TableViewTabs tabId={tab.id} view={view} onChange={(next) => onView(tab.id, next)} />
       </header>
 
       <div ref={panel} tabIndex={-1} role={hasViews ? "tabpanel" : undefined} id={tableViewPanelId(tab.id)} aria-labelledby={hasViews ? tableViewTabId(tab.id, view) : undefined} className="flex min-h-0 flex-1 flex-col">
-        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, ref)} /> : null}
-        {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} /> : null}
-        {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} /> : null}
-        {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, ref)} memoryKey={tab.id} /> : null}
+        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} /> : null}
+        {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} database={tab.database} /> : null}
+        {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} database={tab.database} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} /> : null}
+        {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} memoryKey={tab.id} /> : null}
       </div>
     </div>
   );

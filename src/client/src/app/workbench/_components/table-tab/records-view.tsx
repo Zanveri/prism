@@ -7,6 +7,7 @@ import { useToast, type Engine } from "@/components/ui";
 import { csvExportOf } from "../../_lib/csv";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
+import { inDatabase } from "../../_lib/navigator-model";
 import { isBusy } from "../../_lib/result-paging";
 import { saveText } from "../../_lib/save-file";
 import { recall, remember } from "../../_lib/tab-memory";
@@ -28,6 +29,8 @@ type RecordsViewProps = {
   engine: Engine | undefined;
   /** A conexão da aba: as chaves estrangeiras da tabela e a passagem do filtro para outra aba são dela (RN-TABELA-007). */
   connectionId: string;
+  /** RN-ARVORE-006: o outro banco do servidor da aba; as chaves estrangeiras e a passagem do filtro são dele. */
+  database?: string;
   schema: string;
   name: string;
   /** A aba tem sessão aberta: sem ela não há sobre o que contar. */
@@ -67,7 +70,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, schema, name, connected, visible, disconnected, onOpenTable }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -120,7 +123,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
   // As chaves estrangeiras da tabela: o catálogo que a Estrutura e o Diagrama também usam (mesma consulta, mesmo cache). Só com linhas na tela, a vista
   // à frente e a conexão de pé: nada se busca por conta de uma aba escondida ou de uma conexão que a pessoa desconectou.
   const shown = state.status === "rows" ? state : null;
-  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible && !disconnected && shown !== null));
+  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible && !disconnected && shown !== null, database));
   const resultColumns = shown?.columns;
   // Com a conexão desconectada nenhum valor é link (`recordLinks`): o catálogo das chaves pode seguir em cache, mas seguir a chave não enviaria nada.
   const links = useMemo(() => recordLinks(resultColumns, foreignKeys.data, disconnected), [resultColumns, foreignKeys.data, disconnected]);
@@ -134,9 +137,9 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
   const sort = useMemo(() => (gridColumns === null ? null : sortOf(filter, gridColumns, engine)), [filter, gridColumns, engine]);
 
   // O clique tem identidade fixa (a linha da grade é memorizada) e lê o que muda por uma ref atualizada depois de cada renderização.
-  const latest = useRef({ engine, links, connectionId, onOpenTable });
+  const latest = useRef({ engine, links, connectionId, database, onOpenTable });
   useEffect(() => {
-    latest.current = { engine, links, connectionId, onOpenTable };
+    latest.current = { engine, links, connectionId, database, onOpenTable };
   });
   const follow = useCallback(
     (columnIndex: number, value: string) => {
@@ -149,7 +152,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
       if (request === null) return;
 
       // O pedido sai antes de a aba abrir: a vista de lá, ainda por montar, ou já montada e escondida, o encontra à espera.
-      filterHandoff.request(current.connectionId, request.table, request.where);
+      filterHandoff.request(current.connectionId, { ...request.table, ...inDatabase(current.database) }, request.where);
       current.onOpenTable({ ...request.table, view: "data" });
     },
     [runner],
@@ -158,7 +161,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
   // O filtro que outra aba pediu para esta tabela (RN-TABELA-007), levado ao campo quando esta vista está à vista, a aba não tem nada em andamento e a conexão
   // está de pé (`takeHandoff`, em `table-view.ts`). O ajuste é na renderização, e não num efeito: o campo e o comando já saem com ele, e a primeira carga de uma
   // aba nova (abaixo) executa com ele.
-  const requested = useSyncExternalStore(filterHandoff.subscribe, () => filterHandoff.peek(connectionId, { schema, name }));
+  const requested = useSyncExternalStore(filterHandoff.subscribe, () => filterHandoff.peek(connectionId, { ...inDatabase(database), schema, name }));
   const [applied, setApplied] = useState<number | null>(null);
   takeHandoff(requested, applied, { visible, disconnected, state, filter, engine }, { setApplied, setDraft, setProblem, setFilter });
 
@@ -169,8 +172,8 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
 
   // O pedido levado ao campo sai da passagem e, com resultado na tela, a consulta se refaz com ele (`settleHandoff`).
   useEffect(() => {
-    settleHandoff(requested, applied, runner.getState(), { clear: (id) => filterHandoff.clear(connectionId, { schema, name }, id), execute: () => execute(filter) });
-  }, [requested, applied, connectionId, schema, name, runner, execute, filter]);
+    settleHandoff(requested, applied, runner.getState(), { clear: (id) => filterHandoff.clear(connectionId, { ...inDatabase(database), schema, name }, id), execute: () => execute(filter) });
+  }, [requested, applied, connectionId, database, schema, name, runner, execute, filter]);
 
   const notice = idleNotice(state, { engine, disconnected });
 

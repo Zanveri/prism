@@ -11,9 +11,10 @@ export type TableTarget = { schema: string; name: string; view: TableView };
 /**
  * Uma aba. `sessionId` é a sessão da aba (RN-SESSAO-001), aberta na primeira execução; `sql`, o texto do editor.
  * Com `table`, é a aba de uma tabela, aberta pelo navegador (RN-TABELA-001): tem a sessão dela como qualquer aba, e os
- * registros vêm do mesmo executor.
+ * registros vêm do mesmo executor. Com `database`, foi aberta a partir de outro banco do servidor da conexão (RN-ARVORE-006):
+ * a sessão dela, a Estrutura e o Diagrama são desse banco.
  */
-export type QueryTab = { id: string; title: string; connectionId: string; sessionId: string | null; sql: string; table?: TableTarget };
+export type QueryTab = { id: string; title: string; connectionId: string; database?: string; sessionId: string | null; sql: string; table?: TableTarget };
 
 /**
  * A definição única de "conectada", para o ponto e o "Desconectar" do navegador e para a barra de

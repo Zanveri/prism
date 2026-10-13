@@ -108,6 +108,21 @@ beforeEach(() => vi.stubGlobal("window", { prism: bridge }));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("executar", () => {
+  it("a aba aberta a partir de outro banco do servidor abre a sessão dele e executa nela (RN-ARVORE-006)", async () => {
+    const api = fakeApi();
+    const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+    const runner = createQueryRunner({ connectionId: "c1", database: "arquivo", queryClient: createQueryClient(toast), toast, onSession: vi.fn() });
+    api.on(`POST ${sessions}`, session("s-arquivo"));
+    api.on(`POST ${sessions}/s-arquivo/queries`, page([["1", "a"]]));
+
+    await runner.run({ sql: "select 1", offset: 0 });
+
+    expect(api.calls).toEqual([
+      { method: "POST", path: sessions, body: { connectionID: "c1", database: "arquivo" } },
+      { method: "POST", path: `${sessions}/s-arquivo/queries`, body: { sql: "select 1" } },
+    ]);
+  });
+
   it("a primeira execução abre a sessão da aba e executa nela; a segunda usa a mesma (RN-SESSAO-001)", async () => {
     const { api, toast, onSession, runner } = setup();
     api.on(`POST ${sessions}`, session("s1"));

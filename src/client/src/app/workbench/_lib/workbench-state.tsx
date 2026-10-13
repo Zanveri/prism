@@ -7,9 +7,9 @@ import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal } from "@/lib/api/prism-api";
 
-import { closeDatabaseSession, databaseSessionKey, databaseSessionQuery } from "./database-sessions.service";
+import { closeDatabaseSession, databaseSessionKey, treeSessionIds } from "./database-sessions.service";
 import { filterHandoff } from "./filter-handoff";
-import { parseNavKey } from "./navigator-model";
+import { inDatabase, parseNavKey } from "./navigator-model";
 import { cancelQuery } from "./query.service";
 import { forgetExcept } from "./tab-memory";
 import { createQueryRunner, type QueryRunner } from "./use-query-runner";
@@ -22,10 +22,10 @@ export type { QueryTab };
 type WorkbenchState = {
   tabs: QueryTab[];
   activeTabId: string | null;
-  /** Abre uma aba de consulta; com `sql`, o editor já nasce com esse texto (nada é executado). */
-  openQueryTab: (connectionId: string, sql?: string) => void;
-  /** Abre a aba de uma tabela, ou volta para a que já está aberta; com `view`, já na vista pedida (RN-TABELA-001). */
-  openTableTab: (connectionId: string, table: { schema: string; name: string; view?: TableView }) => void;
+  /** Abre uma aba de consulta; com `sql`, o editor já nasce com esse texto (nada é executado); com `database`, na sessão desse outro banco do servidor (RN-ARVORE-006). */
+  openQueryTab: (connectionId: string, sql?: string, database?: string) => void;
+  /** Abre a aba de uma tabela, ou volta para a que já está aberta; com `view`, já na vista pedida (RN-TABELA-001); com `database`, a tabela é desse outro banco do servidor. */
+  openTableTab: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
   setTableView: (tabId: string, view: TableView) => void;
   /** Fecha a aba e a sessão dela (RN-SESSAO-004). */
   closeTab: (tabId: string) => void;
@@ -38,7 +38,7 @@ type WorkbenchState = {
   /** As chaves (`navKey`) dos nós da árvore que estão abertos, sem as pastas, que são só da tela do navegador. */
   expanded: ReadonlySet<string>;
   setNodeOpen: (key: string, open: boolean) => void;
-  /** Fecha a sessão da árvore e as das abas da conexão, e recolhe o que estava aberto nela (RN-SESSAO-004). */
+  /** Fecha as sessões da árvore (a de cada banco aberto, RN-ARVORE-006) e as das abas da conexão, e recolhe o que estava aberto nela (RN-SESSAO-004). */
   disconnect: (connectionId: string) => void;
   /** A conexão que está sendo desconectada agora, se alguma. */
   disconnecting: string | null;
@@ -124,7 +124,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // velho. O bloqueio por inatividade não tira aba nenhuma, então não apaga nada: o filtro sobrevive a ele (RN-SEG-001).
   useEffect(() => {
     forgetExcept(new Set(tabs.map((tab) => tab.id)));
-    filterHandoff.forgetExcept(tabs.flatMap((tab) => (tab.table ? [{ connectionId: tab.connectionId, table: tab.table }] : [])));
+    filterHandoff.forgetExcept(tabs.flatMap((tab) => (tab.table ? [{ connectionId: tab.connectionId, table: { ...inDatabase(tab.database), ...tab.table } }] : [])));
   }, [tabs]);
 
   // O filtro pedido que ninguém levou a tempo (a aba da tabela estava ocupada, ou a conexão desconectada) não some calado.
@@ -143,7 +143,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const disconnectMutation = useMutation({
     mutationFn: async (connectionId: string) => {
-      const treeSession = queryClient.getQueryData(databaseSessionQuery(connectionId).queryKey);
+      // As sessões da árvore são uma por banco aberto da conexão (RN-ARVORE-006): a do banco da conexão e a de cada outro banco que se abriu.
+      const treeSessions = treeSessionIds(queryClient, connectionId);
       // As abas soltam a sessão antes de ela fechar: o comando que rodava não a reabre ao saber que ela sumiu.
       // Se o fechamento falhar, a aba já a soltou: a segunda tentativa usa a cópia que ficou em `tab.sessionId`.
       const released = tabs
@@ -152,7 +153,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
           const fromRunner = runners.get(tab.id)?.release();
           return { sessionId: fromRunner?.sessionId ?? tab.sessionId, busy: fromRunner?.busy ?? false };
         });
-      await Promise.all([{ sessionId: treeSession?.id ?? null, busy: false }, ...released].map(endSession));
+      await Promise.all([...treeSessions.map((sessionId): Released => ({ sessionId, busy: false })), ...released].map(endSession));
     },
     onSuccess: (_result, connectionId) => {
       // Primeiro recolhe, depois esquece: com o nó ainda aberto a consulta removida seria refeita e abriria outra sessão.
@@ -168,7 +169,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   // A sessão é de quem executa; a aba só guarda uma cópia dela, para a tela dizer que a conexão está conectada.
   const createRunner = useCallback(
-    (tab: Pick<QueryTab, "id" | "connectionId">) => createQueryRunner({ connectionId: tab.connectionId, queryClient, toast, onSession: (sessionId) => updateTab(tab.id, { sessionId }) }),
+    (tab: Pick<QueryTab, "id" | "connectionId" | "database">) => createQueryRunner({ connectionId: tab.connectionId, database: tab.database, queryClient, toast, onSession: (sessionId) => updateTab(tab.id, { sessionId }) }),
     [queryClient, toast, updateTab],
   );
 
@@ -187,15 +188,18 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // estão em `createLockHandles`, em `workbench-lock.ts`.
   const { isBusy, discard } = createLockHandles({ runners, tabs, createRunner, setTabs, queryClient });
 
-  const openQueryTab = useCallback((connectionId: string, sql = "") => addTab({ id: crypto.randomUUID(), title: `consulta-${nextNumber.current++}.sql`, connectionId, sessionId: null, sql }), [addTab]);
+  const openQueryTab = useCallback(
+    (connectionId: string, sql = "", database?: string) => addTab({ id: crypto.randomUUID(), title: `consulta-${nextNumber.current++}.sql`, connectionId, ...inDatabase(database), sessionId: null, sql }),
+    [addTab],
+  );
 
   const setTableView = useCallback((tabId: string, view: TableView) => setTabs((current) => current.map((tab) => (tab.id === tabId && tab.table ? { ...tab, table: { ...tab.table, view } } : tab))), []);
 
   const openTableTab = useCallback(
-    (connectionId: string, { schema, name, view }: { schema: string; name: string; view?: TableView }) => {
-      // Uma aba por tabela: abrir de novo volta para ela, e só troca a vista se uma foi pedida.
-      const open = tabs.find((tab) => tab.connectionId === connectionId && tab.table?.schema === schema && tab.table.name === name);
-      if (open === undefined) return addTab({ id: crypto.randomUUID(), title: `${schema}.${name}`, connectionId, sessionId: null, sql: "", table: { schema, name, view: view ?? "data" } });
+    (connectionId: string, { schema, name, view, database }: { schema: string; name: string; view?: TableView; database?: string }) => {
+      // Uma aba por tabela: abrir de novo volta para ela, e só troca a vista se uma foi pedida. A mesma tabela em outro banco do servidor é outra aba, com o banco no título.
+      const open = tabs.find((tab) => tab.connectionId === connectionId && tab.database === database && tab.table?.schema === schema && tab.table.name === name);
+      if (open === undefined) return addTab({ id: crypto.randomUUID(), title: database === undefined ? `${schema}.${name}` : `${database}.${schema}.${name}`, connectionId, ...inDatabase(database), sessionId: null, sql: "", table: { schema, name, view: view ?? "data" } });
 
       if (view !== undefined) setTableView(open.id, view);
       setActiveTabId(open.id);

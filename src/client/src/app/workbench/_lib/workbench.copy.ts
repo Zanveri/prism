@@ -20,6 +20,8 @@ export const workbenchCopy = {
     nullable: "nulo",
     primaryKey: "PK",
     unique: "único",
+    // RN-ARVORE-006: a marca do banco da conexão na lista dos bancos do servidor.
+    defaultDatabase: "padrão",
     routineKinds: { procedure: "procedimento", function: "função" },
 
     // A dica da linha de uma tabela ou visão (o canvas a põe na tabela selecionada). Abre a ABA: com ela já aberta noutra vista (a Estrutura, por exemplo), o

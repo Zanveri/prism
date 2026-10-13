@@ -192,6 +192,8 @@ export type QueryRunner = {
 
 type QueryRunnerOptions = {
   connectionId: string;
+  /** RN-ARVORE-006: outro banco do servidor da conexão, de onde a aba foi aberta; sem ele, o banco da conexão. */
+  database?: string;
   queryClient: QueryClient;
   toast: ReturnType<typeof useToast>;
   /** A sessão da aba mudou: aberta na primeira execução, trocada quando cai, nula quando a API já não a tem. */
@@ -222,7 +224,7 @@ function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells:
  * de transação recusado antes de executar, API fora do ar, resposta inválida) deixa o resultado e o
  * cursor dele como estavam, e avisa.
  */
-export function createQueryRunner({ connectionId, queryClient, toast, onSession }: QueryRunnerOptions): QueryRunner {
+export function createQueryRunner({ connectionId, database, queryClient, toast, onSession }: QueryRunnerOptions): QueryRunner {
   let state: RunnerState = { status: "idle" };
   const listeners = new Set<() => void>();
 
@@ -333,7 +335,7 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
       let id = sessionId;
 
       if (id === null) {
-        const opened = await call(() => openDatabaseSession(connectionId));
+        const opened = await call(() => openDatabaseSession(connectionId, database));
         if (started !== epoch) {
           // A aba foi solta enquanto a sessão abria: ninguém mais a usaria nem a fecharia.
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);

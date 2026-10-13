@@ -14,6 +14,7 @@ export const prismEndpoints = {
   userConnectionsTest: "api/user/connections/test",
   userDatabaseSessions: "api/user/database-sessions",
   userDatabaseSession: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}`,
+  userDatabaseSessionDatabases: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/databases`,
   userDatabaseSessionSchemas: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/schemas`,
   // Nome de esquema e de tabela vêm do banco e podem ter espaço, aspas, barra e maiúsculas: sempre codificados.
   userDatabaseSessionObjects: (id: string, schema: string, kind: "tables" | "views" | "routines") => `api/user/database-sessions/${encodeURIComponent(id)}/schemas/${encodeURIComponent(schema)}/objects?kind=${kind}`,

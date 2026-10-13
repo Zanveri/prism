@@ -11,14 +11,16 @@ import {
   databaseSessionSchema,
   foreignKeysSchema,
   indexesSchema,
+  serverDatabasesSchema,
   type Column,
   type DatabaseObject,
   type DatabaseSchema,
   type DatabaseSession,
   type ForeignKey,
+  type ServerDatabase,
   type TableIndex,
 } from "./database-sessions.schema";
-import { columnNodes, foreignKeyNodes, indexNodes, objectNodes, schemaNodes, type NavNode, type NavPath, type ObjectsKind } from "./navigator-model";
+import { columnNodes, databaseNodes, foreignKeyNodes, inDatabase, indexNodes, objectNodes, schemaNodes, type NavNode, type NavPath, type ObjectsKind } from "./navigator-model";
 
 /**
  * Uma função por rota de `api/user/database-sessions`. Devolvem `ApiResult`; quem as chama numa
@@ -26,9 +28,17 @@ import { columnNodes, foreignKeyNodes, indexNodes, objectNodes, schemaNodes, typ
  * chegar ao aviso central (RN-AVISO-004).
  */
 
-/** Abre a sessão com o banco da conexão (RN-SESSAO-001). Falha: 422 `DATABASE_CONNECTION_FAILED` com a mensagem do banco. */
-export function openDatabaseSession(connectionId: string): Promise<ApiResult<DatabaseSession>> {
-  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "POST", body: { connectionID: connectionId }, schema: databaseSessionSchema });
+/**
+ * Abre a sessão com o banco da conexão (RN-SESSAO-001) ou, com `database`, com outro banco do mesmo servidor, pelas credenciais da
+ * conexão (RN-ARVORE-006). Falha: 422 `DATABASE_CONNECTION_FAILED` com a mensagem do banco.
+ */
+export function openDatabaseSession(connectionId: string, database?: string): Promise<ApiResult<DatabaseSession>> {
+  return apiRequest(prismEndpoints.userDatabaseSessions, { method: "POST", body: { connectionID: connectionId, ...inDatabase(database) }, schema: databaseSessionSchema });
+}
+
+/** RN-ARVORE-006: os bancos do servidor da sessão, com o dela primeiro. */
+export function getDatabases(sessionId: string): Promise<ApiResult<ServerDatabase[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionDatabases(sessionId), { schema: serverDatabasesSchema });
 }
 
 export function closeDatabaseSession(sessionId: string): Promise<ApiResult<void>> {
@@ -62,16 +72,33 @@ export function getForeignKeys(sessionId: string, schema: string, table: string)
  */
 export const keepUntilRefreshed = { staleTime: Infinity, gcTime: Infinity, refetchOnWindowFocus: false, refetchOnReconnect: false, retryOnMount: false } as const;
 
-export const databaseSessionKey = (connectionId: string) => ["database-session", connectionId] as const;
+/**
+ * O outro banco do servidor numa chave de consulta (RN-ARVORE-006): um objeto, que nome de esquema (texto) nunca imita. O banco da
+ * conexão não entra, e as chaves dele são as de antes da lista dos bancos.
+ */
+export const databaseMark = (database: string | undefined): [] | [{ database: string }] => (database === undefined ? [] : [{ database }]);
+
+/** O outro banco de uma chave da conexão (`["tree", conexão, …]`, `["database-session", conexão, …]`), ou `undefined` no banco da conexão. */
+export function databaseOfKey(queryKey: readonly unknown[]): string | undefined {
+  const mark = queryKey[2];
+  return typeof mark === "object" && mark !== null && "database" in mark && typeof mark.database === "string" ? mark.database : undefined;
+}
+
+/** A sessão da árvore de um banco da conexão. Todas ficam sob `["database-session", conexão]`: "Desconectar" as remove de uma vez. */
+export const databaseSessionKey = (connectionId: string, database?: string) => ["database-session", connectionId, ...databaseMark(database)] as const;
 
 /**
- * A sessão da árvore de uma conexão (RN-SESSAO-001): abri-la é um `POST`, então esta consulta
- * **nunca** é invalidada nem refeita enquanto tem dado. Refazer abriria uma segunda sessão e
- * deixaria a primeira órfã na API. Com `gcTime` infinito, sair da área de trabalho não a descarta;
- * só "Desconectar" a remove.
+ * A sessão da árvore de uma conexão (RN-SESSAO-001), ou de outro banco do servidor dela (RN-ARVORE-006): abri-la é um `POST`, então
+ * esta consulta **nunca** é invalidada nem refeita enquanto tem dado. Refazer abriria uma segunda sessão e deixaria a primeira órfã
+ * na API. Com `gcTime` infinito, sair da área de trabalho não a descarta; só "Desconectar" a remove.
  */
-export function databaseSessionQuery(connectionId: string) {
-  return queryOptions({ queryKey: databaseSessionKey(connectionId), queryFn: async () => unwrap(await openDatabaseSession(connectionId)), ...keepUntilRefreshed });
+export function databaseSessionQuery(connectionId: string, database?: string) {
+  return queryOptions({ queryKey: databaseSessionKey(connectionId, database), queryFn: async () => unwrap(await openDatabaseSession(connectionId, database)), ...keepUntilRefreshed });
+}
+
+/** As sessões da árvore abertas de todos os bancos da conexão (RN-ARVORE-006): é o que "Desconectar" fecha, além das abas. */
+export function treeSessionIds(queryClient: QueryClient, connectionId: string): string[] {
+  return queryClient.getQueriesData<DatabaseSession>({ queryKey: ["database-session", connectionId] }).flatMap(([, session]) => (session === undefined ? [] : [session.id]));
 }
 
 /** O código da API numa falha de nível da árvore; `undefined` se a falha não veio da API. */
@@ -89,72 +116,87 @@ export function isSessionLost(error: unknown): boolean {
   return error instanceof ApiRequestError && error.error.code === "DATABASE_SESSION_NOT_FOUND";
 }
 
+/** O banco cujas sessão e árvore uma consulta da árvore usa: a lista dos bancos (`["tree", conexão, "databases"]`) é da sessão da conexão. */
+const ofDatabase = (connectionId: string, database: string | undefined) => ({ queryKey: ["tree", connectionId], predicate: (query: { queryKey: readonly unknown[] }) => databaseOfKey(query.queryKey) === database });
+
 /**
- * Abre uma sessão nova para a conexão no lugar da que caiu: a consulta da sessão e as dos níveis
+ * Abre uma sessão nova para o banco no lugar da que caiu: a consulta da sessão e as dos níveis
  * dela voltam ao início e as abertas buscam de novo (a dos níveis espera pela sessão nova, que a
- * `queryFn` pede à consulta dela). Quem chama avisa o usuário (RN-AVISO-003). Devolve se a
- * sessão nova abriu; se não, o aviso de erro é o central.
+ * `queryFn` pede à consulta dela). Os outros bancos da conexão ficam como estão (RN-ARVORE-006).
+ * Quem chama avisa o usuário (RN-AVISO-003). Devolve se a sessão nova abriu; se não, o aviso de
+ * erro é o central.
  */
-export async function reopenDatabaseSession(queryClient: QueryClient, connectionId: string): Promise<boolean> {
+export async function reopenDatabaseSession(queryClient: QueryClient, connectionId: string, database?: string): Promise<boolean> {
   // As duas de uma vez, sem esperar a primeira: os níveis entram na mesma abertura da sessão, em vez de começar com o id morto.
-  const session = queryClient.resetQueries({ queryKey: databaseSessionKey(connectionId), exact: true });
-  const levels = queryClient.resetQueries({ queryKey: ["tree", connectionId] });
+  const session = queryClient.resetQueries({ queryKey: databaseSessionKey(connectionId, database), exact: true });
+  const levels = queryClient.resetQueries(ofDatabase(connectionId, database));
   await Promise.all([session, levels]);
-  return queryClient.getQueryState(databaseSessionKey(connectionId))?.status === "success";
+  return queryClient.getQueryState(databaseSessionKey(connectionId, database))?.status === "success";
 }
 
-/** O que a árvore busca ao abrir um nó: os esquemas do banco, os objetos de um grupo ou uma lista de uma tabela. */
-export type FetchedPath = Extract<NavPath, { type: "database" | "objects" | "tableLevel" }>;
+/** O que a árvore busca ao abrir um nó: os bancos do servidor da conexão, os esquemas de um banco, os objetos de um grupo ou uma lista de uma tabela. */
+export type FetchedPath = Extract<NavPath, { type: "connection" | "database" | "objects" | "tableLevel" }>;
 
-/** A chave da consulta de um nível. Em array, para "Atualizar" invalidar por prefixo (`treePrefix`). */
+/** O começo das chaves de um banco: as do banco da conexão são as de sempre; as de outro levam a marca dele. */
+const treeBase = (connectionId: string, database: string | undefined) => ["tree", connectionId, ...databaseMark(database)];
+
+/** A chave da consulta de um nível. Em array, para "Atualizar" invalidar por prefixo (`treePrefixes`). */
 export function treeKey(path: FetchedPath): readonly unknown[] {
   switch (path.type) {
+    case "connection":
+      return ["tree", path.connectionId, "databases"];
     case "database":
-      return ["tree", path.connectionId, "schemas"];
+      return [...treeBase(path.connectionId, path.database), "schemas"];
     case "objects":
-      return ["tree", path.connectionId, "schema", path.schema, "objects", path.objects];
+      return [...treeBase(path.connectionId, path.database), "schema", path.schema, "objects", path.objects];
     case "tableLevel":
-      return ["tree", path.connectionId, "schema", path.schema, "table", path.table, path.level];
+      return [...treeBase(path.connectionId, path.database), "schema", path.schema, "table", path.table, path.level];
   }
 }
 
 /**
- * Tudo o que "Atualizar" naquele nó invalida: a conexão e o banco, a árvore inteira; o esquema, o
- * que está dentro dele; a tabela, as três listas dela. As consultas abertas buscam de novo; as
- * demais ficam velhas e buscam quando o nó abrir. Nunca inclui a sessão (`databaseSessionKey`).
+ * Tudo o que "Atualizar" naquele nó invalida: a conexão, a árvore inteira dela, com a lista dos
+ * bancos; um banco, o que é dele (o da conexão não tem um começo de chave só seu, e são dois); o
+ * esquema, o que está dentro dele; a tabela, as três listas dela. As consultas abertas buscam de
+ * novo; as demais ficam velhas e buscam quando o nó abrir. Nunca inclui a sessão (`databaseSessionKey`).
  */
-export function treePrefix(path: NavPath): readonly unknown[] | null {
+export function treePrefixes(path: NavPath): readonly (readonly unknown[])[] {
   switch (path.type) {
     case "folder":
-      return null;
+      return [];
     case "connection":
+      return [["tree", path.connectionId]];
     case "database":
-      return ["tree", path.connectionId];
+      return path.database === undefined ? [treeKey(path), ["tree", path.connectionId, "schema"]] : [treeBase(path.connectionId, path.database)];
     case "schema":
-      return ["tree", path.connectionId, "schema", path.schema];
+      return [[...treeBase(path.connectionId, path.database), "schema", path.schema]];
     case "table":
-      return ["tree", path.connectionId, "schema", path.schema, "table", path.table];
+      return [[...treeBase(path.connectionId, path.database), "schema", path.schema, "table", path.table]];
     case "objects":
     case "tableLevel":
-      return treeKey(path);
+      return [treeKey(path)];
   }
 }
 
 /**
  * Os filhos de um nó que abre, já como linhas da árvore. A sessão vem da consulta dela: a primeira
- * `queryFn` a precisar a abre, as outras esperam a mesma resposta.
+ * `queryFn` a precisar a abre, as outras esperam a mesma resposta. A lista dos bancos vem pela
+ * sessão da conexão; o que está abaixo de outro banco, pela sessão dele (RN-ARVORE-006).
  */
 export function treeQuery(path: FetchedPath, queryClient: QueryClient, enabled: boolean) {
   return queryOptions({
     queryKey: treeKey(path),
     queryFn: async (): Promise<NavNode[]> => {
-      const { id } = await queryClient.ensureQueryData(databaseSessionQuery(path.connectionId));
+      const database = path.type === "connection" ? undefined : path.database;
+      const { id } = await queryClient.ensureQueryData(databaseSessionQuery(path.connectionId, database));
 
       switch (path.type) {
+        case "connection":
+          return databaseNodes(path.connectionId, unwrap(await getDatabases(id)));
         case "database":
-          return schemaNodes(path.connectionId, unwrap(await getSchemas(id)));
+          return schemaNodes(path.connectionId, unwrap(await getSchemas(id)), database);
         case "objects":
-          return objectNodes(path.connectionId, path.schema, path.objects, unwrap(await getObjects(id, path.schema, path.objects)));
+          return objectNodes(path.connectionId, path.schema, path.objects, unwrap(await getObjects(id, path.schema, path.objects)), database);
         case "tableLevel":
           switch (path.level) {
             case "columns":

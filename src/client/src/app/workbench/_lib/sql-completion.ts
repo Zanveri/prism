@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import type { Engine } from "@/components/ui";
 
+import { databaseOfKey } from "./database-sessions.service";
 import type { NavNode } from "./navigator-model";
 import { levelPathOf, type CachedLevel } from "./navigator-search";
 import { completionCopy as copy } from "./sql-completion.copy";
@@ -50,11 +51,14 @@ export function sqlName(name: string, engine: Engine | undefined): string {
 }
 
 /**
- * O que a árvore já carregou de uma conexão (esquemas, tabelas, visões, colunas): só lê o cache, e só o que já chegou. É a regra de "nunca
- * dispara consulta ao banco": `getQueriesData` não busca nada, e o que ainda não foi aberto na árvore simplesmente não existe aqui.
+ * O que a árvore já carregou de um banco da conexão (esquemas, tabelas, visões, colunas): só lê o cache, e só o que já chegou. É a regra de "nunca
+ * dispara consulta ao banco": `getQueriesData` não busca nada, e o que ainda não foi aberto na árvore simplesmente não existe aqui. `database` é o
+ * outro banco do servidor da aba (RN-ARVORE-006): cada banco completa com os nomes dele, e a lista dos bancos não é nome de nada.
  */
-export function cachedLevels(queryClient: QueryClient, connectionId: string): CachedLevel[] {
-  return queryClient.getQueriesData<NavNode[]>({ queryKey: ["tree", connectionId] }).flatMap(([key, nodes]) => (nodes === undefined ? [] : [{ key, nodes }]));
+export function cachedLevels(queryClient: QueryClient, connectionId: string, database?: string): CachedLevel[] {
+  return queryClient
+    .getQueriesData<NavNode[]>({ queryKey: ["tree", connectionId], predicate: (query) => databaseOfKey(query.queryKey) === database && levelPathOf(query.queryKey)?.type !== "connection" })
+    .flatMap(([key, nodes]) => (nodes === undefined ? [] : [{ key, nodes }]));
 }
 
 type Item = { name: string; view: boolean };

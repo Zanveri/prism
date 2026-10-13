@@ -13,7 +13,7 @@ const mes: Connection = { id: "c1", folderID: "f1", name: "MES Produção", engi
 const { roots } = treeNodes(buildConnectionTree([folder], [mes]));
 const [folderNode] = roots;
 const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 1, hasChildren: true };
-const [databaseNode] = databaseNodes("c1", "mes");
+const [databaseNode] = databaseNodes("c1", [{ name: "mes", isCurrent: true }]);
 const [schemaNode] = schemaNodes("c1", [{ name: "vendas", isSystem: false }]);
 const [table] = objectNodes("c1", "vendas", "tables", [{ name: "pedido", kind: "table" }]);
 const [view] = objectNodes("c1", "vendas", "views", [{ name: "v_pedido", kind: "view" }]);
@@ -177,8 +177,8 @@ describe("targetFolderId: onde Nova pasta e Nova conexão criam", () => {
   });
 
   it("na raiz: sem nada escolhido, ou com um item de uma conexão que está na raiz (ou que saiu da lista)", () => {
-    const [atRoot] = databaseNodes("c2", "outro");
-    const [gone] = databaseNodes("c404", "sumiu");
+    const [atRoot] = databaseNodes("c2", [{ name: "outro", isCurrent: true }]);
+    const [gone] = databaseNodes("c404", [{ name: "sumiu", isCurrent: true }]);
 
     expect(targetFolderId(null, connections)).toBeNull();
     expect(targetFolderId(atRoot, connections)).toBeNull();
