@@ -68,7 +68,7 @@ function filterShape(text: string, engine?: Engine) {
 }
 
 /**
- * O texto do filtro em duas partes (RN-GRADE-010 do "Filtrar"): `condition` vai do começo até o fim do último pedaço de código ANTES da ordem de fora (sem
+ * O texto do filtro em duas partes (RN-GRADE-013): `condition` vai do começo até o fim do último pedaço de código ANTES da ordem de fora (sem
  * comentário nem espaço no fim), e `tail` é o resto, aparado: a ordem, o `;` e os comentários do fim. É onde o "Filtrar" junta a condição nova, sem tocar a
  * ordem que a pessoa escreveu.
  */

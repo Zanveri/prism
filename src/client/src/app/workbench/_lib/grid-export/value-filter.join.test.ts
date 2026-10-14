@@ -7,7 +7,7 @@ import { filterParts } from "../table-sql";
 import { chars, column, hostileValues, randomText, seededRandom } from "./test-fixtures";
 import { customCondition, customFilterOptions, distinctValues, joinFilter, valuesCondition } from "./value-filter";
 
-// RN-GRADE-010 do "Filtrar como no DBeaver": o "Personalizado", o "Filtrar por valor…" e a junção da condição ao campo de filtro.
+// RN-GRADE-013: o "Personalizado", o "Filtrar por valor…" e a junção da condição ao campo de filtro.
 const engines: Engine[] = [1, 2, 3];
 
 describe("customFilterOptions e customCondition: o “Personalizado”", () => {

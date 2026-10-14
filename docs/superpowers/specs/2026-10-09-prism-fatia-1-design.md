@@ -466,7 +466,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET .../schemas/{schema}/views/{view}/definition` | 200 `{ definition }` (RN-CAT-006) | as mesmas |
 | `GET .../schemas/{schema}/diagram` | 200 `{ tables, foreignKeys }` (RN-CAT-008) | as mesmas |
 | `GET api/user/database-sessions/{id}/properties` | 200 lista de `{ name, value }` (RN-CAT-010) | as mesmas |
-| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize? }` | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` |
+| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem) |
 | `POST .../queries/next` | 200 página | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_CURSOR`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/count` | 200 `{ total }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_QUERY_TO_COUNT`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
@@ -2061,7 +2061,7 @@ F11, exibe os possíveis filtros pra coluna, isso tanto no resultado de um scrip
 registros"; e de um colega: "o filtro na tabela não recomenda as colunas". Substitui a RN-GRADE-005,
 que valia só nos Registros e nunca chegou à tela.
 
-- **RN-GRADE-010.** O menu de contexto da grade ganha "Filtrar" (F11), nos Registros e no
+- **RN-GRADE-013.** O menu de contexto da grade ganha "Filtrar" (F11), nos Registros e no
   resultado da aba de consulta. F11 abre o submenu na célula ativa, e Ctrl+F11 abre direto
   "Filtrar por valor…". Os itens do submenu:
   - "Filtrar por valor…" (Ctrl+F11): um diálogo com os valores distintos da coluna nas linhas já

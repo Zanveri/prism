@@ -30,7 +30,7 @@ describe("valueFilterOptions: as opções da RN-GRADE-005 para uma célula", () 
     });
   });
 
-  it("os rótulos são a condição como ela entra no campo (RN-GRADE-010 do Filtrar): o nome entre aspas e o literal do banco", () => {
+  it("os rótulos são a condição como ela entra no campo (RN-GRADE-013): o nome entre aspas e o literal do banco", () => {
     expect(optionsOf("Extrusão A").map((option) => option.label)).toEqual([`"nome" = 'Extrusão A'`, `"nome" <> 'Extrusão A'`, `"nome" > 'Extrusão A'`, `"nome" < 'Extrusão A'`, `"nome" LIKE '%Extrusão A%'`, `"nome" IS NULL`, `"nome" IS NOT NULL`]);
     expect(optionsOf("42", column("qtd", "number")).map((option) => option.label).slice(0, 4)).toEqual([`"qtd" = 42`, `"qtd" <> 42`, `"qtd" > 42`, `"qtd" < 42`]);
     // Fora o `ESCAPE '!'` do `contém`, o rótulo é a condição inteira.

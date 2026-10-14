@@ -10,7 +10,7 @@ const reasons = gridFilterCopy.reasons;
 export type ValueFilterId = "eq" | "ne" | "gt" | "lt" | "like" | "isNull" | "isNotNull";
 
 /**
- * Uma entrada do "Valor da célula" do "Filtrar" (RN-GRADE-010 do "Filtrar como no DBeaver"). `condition` é o texto que vai ao campo de filtro, e `label`,
+ * Uma entrada do "Valor da célula" do "Filtrar" (RN-GRADE-013). `condition` é o texto que vai ao campo de filtro, e `label`,
  * a mesma condição como o menu a mostra (com o valor encurtado); `null` quando a opção não se aplica, e então `reason` diz por quê (a tela a mostra
  * desabilitada, com o motivo).
  */
@@ -206,7 +206,7 @@ function separates(text: string, engine: Engine): boolean {
 export type JoinedFilter = { text: string } | { problem: "several" | "open" };
 
 /**
- * O texto do campo de filtro com a condição do "Filtrar" junta ao que estava lá (RN-GRADE-010 do "Filtrar"): por `AND`, entre parênteses
+ * O texto do campo de filtro com a condição do "Filtrar" junta ao que estava lá (RN-GRADE-013): por `AND`, entre parênteses
  * (`mergeCondition`), com a ordem e o que vem depois dela (`ORDER BY …`, o `;`, o comentário do fim) recolocados como estavam (`filterParts`).
  *
  * Não se junta, e o item fica desabilitado com o motivo, quando o campo tem mais de um comando (`several`) ou deixa aberto um texto entre aspas, um

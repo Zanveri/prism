@@ -1,7 +1,7 @@
 import { formatCount } from "@/lib/utils/format";
 
 /**
- * Os textos do "Filtrar" da grade (RN-GRADE-010 da seção "Filtrar como no DBeaver"), do campo de filtro no resultado da aba de consulta
+ * Os textos do "Filtrar" da grade (RN-GRADE-013), do campo de filtro no resultado da aba de consulta
  * (RN-GRADE-011) e do autocompletar do campo (RN-TABELA-011), num lugar só. Os rótulos das condições não estão aqui: eles são a própria
  * condição, como ela entra no campo.
  */

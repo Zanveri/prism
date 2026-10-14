@@ -1127,10 +1127,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   --noSandbox -- --user-data-dir=<descartável>` (o `--` leva o argumento ao Electron, e a pasta de dados fica fora da sua); a conexão de teste
   pode ser criada pela própria página, com `window.prism.getApiConfig()` e um `POST api/user/connections`, e um `location.reload()` a mostra no navegador.
 
-## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-010 a 012 e RN-TABELA-011)
+## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-011 a 013 e RN-TABELA-011)
 
-Subseção "Filtrar como no DBeaver, e o autocompletar do filtro" da especificação. **A numeração repete**: a especificação já tinha uma RN-GRADE-010 (o
-zoom da grade) quando ganhou a RN-GRADE-010 do "Filtrar"; no código, a do filtro é citada como "RN-GRADE-010 do Filtrar".
+Subseção "Filtrar como no DBeaver, e o autocompletar do filtro" da especificação: o "Filtrar" (F11) é a RN-GRADE-013, o filtro do resultado
+a RN-GRADE-011 e o F5 a RN-GRADE-012.
 
 - **O submenu "Filtrar" (F11)** no menu da célula, nas duas grades (Registros e resultado da aba de consulta). O modelo é `filterMenuItem`
   (`_lib/filter-menu.ts`, puro, com teste): "Filtrar por valor…" (Ctrl+F11); o grupo "Valor da célula" (`=`, `<>`, `>`, `<`, `LIKE` só em coluna de texto,

@@ -6,7 +6,7 @@ import { elementsOf } from "@/lib/testing/react-tree";
 
 import { ContextMenuItems, groupItems, placeSubmenu, type ContextMenuGroup, type ContextMenuItem } from "./context-menu";
 
-// O submenu e os grupos com título do menu de contexto: o "Filtrar" da grade (F11), com "Valor da célula" e "Personalizado" (RN-GRADE-010 do Filtrar,
+// O submenu e os grupos com título do menu de contexto: o "Filtrar" da grade (F11), com "Valor da célula" e "Personalizado" (RN-GRADE-013,
 // nas regras do RN-MENU-001).
 const item = (id: string, label: string, extra: Partial<ContextMenuItem> = {}): ContextMenuItem => ({ id, label, onSelect: vi.fn(), ...extra });
 const markupOf = (groups: ContextMenuGroup[], expanded: string | null = null) => renderToStaticMarkup(createElement(ContextMenuItems, { groups, onChoose: () => {}, expanded }));

@@ -40,7 +40,7 @@ function blockedOf(context: FilterMenuContext): string | null {
 }
 
 /**
- * O item "Filtrar" (F11) do menu da célula e o submenu dele (RN-GRADE-010 do "Filtrar como no DBeaver"): "Filtrar por valor…" (Ctrl+F11); o grupo
+ * O item "Filtrar" (F11) do menu da célula e o submenu dele (RN-GRADE-013): "Filtrar por valor…" (Ctrl+F11); o grupo
  * "Valor da célula" (`=`, `<>`, `>`, `<`, em coluna de texto também `LIKE`, e os de nulo), com a condição como rótulo; o grupo "Personalizado" (`= …`,
  * `<> …`, `> …`, `< …`, que pedem o valor); e "Remover todos os filtros e ordenações". O que não se aplica vem desabilitado, com o motivo embaixo do
  * rótulo: a célula nula, cortada ou binária (só os de nulo e o personalizado), a linha nova (que não está no banco), a aba ocupada e o campo em que a

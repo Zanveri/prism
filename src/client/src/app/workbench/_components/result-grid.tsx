@@ -478,7 +478,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       event.preventDefault();
       editing.onMenu(active, pointOf(active), true);
     } else if (filterKey(event) !== null && editing.onFilter !== undefined) {
-      // RN-GRADE-010 do "Filtrar": F11 abre o submenu na célula ativa, e Ctrl+F11 o "Filtrar por valor…".
+      // RN-GRADE-013: F11 abre o submenu na célula ativa, e Ctrl+F11 o "Filtrar por valor…".
       event.preventDefault();
       editing.onFilter(active, pointOf(active), filterKey(event)!);
     } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {

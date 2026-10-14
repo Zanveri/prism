@@ -18,7 +18,7 @@ function valueText(value: string | null): { text: string; special: boolean } {
 }
 
 /**
- * O "Filtrar por valor…" (Ctrl+F11, RN-GRADE-010 do "Filtrar como no DBeaver"): os valores distintos da coluna nas linhas já carregadas, cada um com
+ * O "Filtrar por valor…" (Ctrl+F11, RN-GRADE-013): os valores distintos da coluna nas linhas já carregadas, cada um com
  * quantas vezes aparece, do mais frequente ao menos, com busca e caixas de marcar. "Filtrar" monta `coluna IN (…)` (`=` com um valor só) e o nulo marcado
  * como `coluna IS NULL`, juntos por `OR`, e a condição entra no campo de filtro como a do menu. O valor cortado e o que não vira literal ficam na lista,
  * desabilitados. A lista desenha até 500 valores; a busca acha os outros.

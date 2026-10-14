@@ -4,7 +4,7 @@ import { cellMenu, type CellMenuGroup, type CellMenuItem, type CellMenuState } f
 import { customPlan, filterMenuItem, filterPlan, isFilterAction, valueListCap, valuesPlan, visibleValues, type FilterMenuContext } from "./filter-menu";
 import type { QueryColumn } from "./query.schema";
 
-// RN-GRADE-010 do "Filtrar como no DBeaver": o submenu "Filtrar" (F11) do menu da célula, o que cada item faz e quando não se aplica.
+// RN-GRADE-013: o submenu "Filtrar" (F11) do menu da célula, o que cada item faz e quando não se aplica.
 const code: QueryColumn = { name: "code", type: "varchar", kind: "text" };
 const qtd: QueryColumn = { name: "qtd", type: "int4", kind: "number" };
 const foto: QueryColumn = { name: "foto", type: "bytea", kind: "binary" };
@@ -185,7 +185,7 @@ describe("visibleValues: o que o diálogo “Filtrar por valor…” mostra para
   });
 });
 
-describe("cellMenu com o Filtrar e o Atualizar (RN-GRADE-010 do Filtrar e RN-GRADE-012)", () => {
+describe("cellMenu com o Filtrar e o Atualizar (RN-GRADE-013 e RN-GRADE-012)", () => {
   const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "11.901", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, deleteRow: { editable: true }, ...over });
 
   it("o Filtrar (F11) e o Atualizar (F5) entram num grupo depois dos de célula, antes de linha nova e excluir", () => {

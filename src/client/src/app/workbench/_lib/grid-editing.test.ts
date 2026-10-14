@@ -72,7 +72,7 @@ describe("Ctrl+C com o foco na grade (RN-GRADE-002, RN-SQL-017)", () => {
   });
 });
 
-describe("as teclas do Filtrar e do Atualizar (RN-GRADE-010 do Filtrar e RN-GRADE-012)", () => {
+describe("as teclas do Filtrar e do Atualizar (RN-GRADE-013 e RN-GRADE-012)", () => {
   const key = (name: string, over: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) => ({ key: name, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...over });
 
   it("F11 abre o submenu Filtrar; Ctrl+F11 (Cmd+F11) abre o Filtrar por valor; com Shift ou Alt, nada", () => {

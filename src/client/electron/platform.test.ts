@@ -38,7 +38,7 @@ describe("applicationMenuTemplate", () => {
   });
 });
 
-describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-010 do Filtrar)", () => {
+describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013)", () => {
   const input = (key: string, over: Partial<{ type: string; control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) => ({ type: "keyDown", key, control: false, meta: false, shift: false, alt: false, ...over });
 
   it("F5 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe", () => {

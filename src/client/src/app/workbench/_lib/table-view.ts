@@ -154,7 +154,7 @@ export function sortRecords(table: RecordsTable, { draft, filter, column, column
 }
 
 /**
- * O "Filtrar" do menu da célula (RN-GRADE-010 do "Filtrar como no DBeaver"): `text` é o campo com a condição já junta (`joinFilter`), e é enviado inteiro,
+ * O "Filtrar" do menu da célula (RN-GRADE-013): `text` é o campo com a condição já junta (`joinFilter`), e é enviado inteiro,
  * como o "Aplicar". Como no clique do cabeçalho, o campo só passa a mostrar o texto novo quando ele é de fato enviado: com a aba ocupada nada muda, e com
  * mais de um comando só o aviso aparece.
  */

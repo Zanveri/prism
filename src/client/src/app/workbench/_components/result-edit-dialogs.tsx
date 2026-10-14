@@ -28,7 +28,7 @@ function menuGroupOf(group: CellMenuGroup, choose: (action: CellMenuAction) => v
 
 /**
  * O que a edição de uma grade abre por cima da tela (seção 22), igual nos Registros e na aba de consulta: o menu da célula (com o submenu "Filtrar", que o
- * F11 abre já aberto), o "Filtrar por valor…" e o campo do "Personalizado" (RN-GRADE-010 do "Filtrar"), o "Ver SQL" (RN-EDIT-008) e a pergunta antes de
+ * F11 abre já aberto), o "Filtrar por valor…" e o campo do "Personalizado" (RN-GRADE-013), o "Ver SQL" (RN-EDIT-008) e a pergunta antes de
  * perder as alterações não salvas (RN-EDIT-007). Quem usa entrega o que `useRecordEdits` devolve.
  *
  * Uma função, e não um componente: os elementos entram direto na árvore de quem chama (sem estado próprio), e o teste da vista os encontra.

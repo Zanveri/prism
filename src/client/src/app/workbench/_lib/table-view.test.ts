@@ -565,7 +565,7 @@ describe("idleNotice: o que a área de resultado diz enquanto a vista Registros 
   });
 });
 
-describe("filterRecords: o Filtrar do menu da célula escreve o campo com a condição junta e o envia (RN-GRADE-010 do Filtrar)", () => {
+describe("filterRecords: o Filtrar do menu da célula escreve o campo com a condição junta e o envia (RN-GRADE-013)", () => {
   const spies = () => ({ setProblem: vi.fn(), setFilter: vi.fn(), setDraft: vi.fn(), execute: vi.fn() });
   const table = { engine: 1 as const, schema: "s", name: "t" };
 

@@ -10,7 +10,7 @@ import type { OpenCustomFilter } from "../_lib/use-record-edits";
 const copy = gridFilterCopy.custom;
 
 /**
- * O campo pequeno do "Personalizado" (RN-GRADE-010 do "Filtrar como no DBeaver"), sobre a grade, onde o menu abriu: `"code" =` e o valor. Enter filtra
+ * O campo pequeno do "Personalizado" (RN-GRADE-013), sobre a grade, onde o menu abriu: `"code" =` e o valor. Enter filtra
  * (o valor vira literal do banco, RN-TABELA-007, e a condição junta ao campo de filtro e é executada), Esc e o clique fora cancelam. O valor que não vira
  * literal fica no campo, com o motivo embaixo. As teclas não sobem para a grade nem para a aba. Ao fechar, o foco volta a quem o tinha (a grade).
  */

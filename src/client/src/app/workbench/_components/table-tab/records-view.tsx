@@ -120,7 +120,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
     if (reread) reload();
   }, [reload]);
 
-  // RN-GRADE-010 do "Filtrar": o "Filtrar" do menu da célula junta a condição ao texto do campo (lido na hora da escolha) e o envia como o "Aplicar", com a
+  // RN-GRADE-013: o "Filtrar" do menu da célula junta a condição ao texto do campo (lido na hora da escolha) e o envia como o "Aplicar", com a
   // pergunta das alterações não salvas antes (RN-EDIT-007); "Remover todos os filtros e ordenações" é o "Limpar". As funções leem o que muda por uma ref.
   const fieldNow = useRef({ draft, filter, engine });
   useEffect(() => {

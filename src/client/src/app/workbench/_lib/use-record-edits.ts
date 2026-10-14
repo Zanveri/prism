@@ -39,12 +39,12 @@ export type OpenCellMenu = {
   point: { x: number; y: number };
   keyboard: boolean;
   onChoose: (action: CellMenuAction) => void;
-  /** O F11 abre o menu com o submenu "Filtrar" já aberto (RN-GRADE-010 do "Filtrar"). */
+  /** O F11 abre o menu com o submenu "Filtrar" já aberto (RN-GRADE-013). */
   submenu?: "filter";
 };
 
 /**
- * O campo de filtro da grade (RN-GRADE-010 do "Filtrar"), que o "Filtrar" do menu da célula usa: nos Registros, o campo dos Registros; na aba de consulta, o
+ * O campo de filtro da grade (RN-GRADE-013), que o "Filtrar" do menu da célula usa: nos Registros, o campo dos Registros; na aba de consulta, o
  * do resultado. `field` e `removable` são lidos na hora da escolha (o campo muda enquanto o menu está aberto); `apply` recebe o texto novo do campo e o
  * executa (com a pergunta das alterações não salvas, RN-EDIT-007), e `clear` é o "Remover todos os filtros e ordenações".
  */
@@ -81,7 +81,7 @@ type Params = {
    * outra coisa logo em seguida (`reread` falso); a aba de consulta fica com a grade salva, sem executar (RN-EDIT-009).
    */
   onSaved: (saved: SavedEdits) => void;
-  /** RN-GRADE-010 do "Filtrar": o campo de filtro da grade; sem ele, o menu da célula não tem o "Filtrar". */
+  /** RN-GRADE-013: o campo de filtro da grade; sem ele, o menu da célula não tem o "Filtrar". */
   filter?: GridFilterSource;
   /** RN-GRADE-012: o "Atualizar" (F5) do menu da grade: os Registros lidos de novo, ou o comando do resultado executado de novo. */
   refresh?: () => void;
@@ -147,7 +147,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const [menu, setMenu] = useState<OpenCellMenu | null>(null);
   const [preview, setPreview] = useState<EditPreview | null>(null);
   const [question, setQuestion] = useState<{ count: number; proceed: () => void } | null>(null);
-  // RN-GRADE-010 do "Filtrar": o diálogo "Filtrar por valor…" e o campo do "Personalizado", com o que cada um precisa para juntar a condição ao campo.
+  // RN-GRADE-013: o diálogo "Filtrar por valor…" e o campo do "Personalizado", com o que cada um precisa para juntar a condição ao campo.
   const [valueFilter, setValueFilter] = useState<{ cell: GridCell; values: DistinctValue[]; rows: number; more: boolean } | null>(null);
   const [customFilter, setCustomFilter] = useState<{ cell: GridCell; operator: CompareOperator; point: { x: number; y: number }; problem: string | null } | null>(null);
   const sources = useRef({ filter, refresh });
@@ -466,7 +466,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   }, [runner, queryClient, ensureTarget]);
 
   /**
-   * O que o "Filtrar" sabe da célula agora (RN-GRADE-010 do "Filtrar"): o valor LIDO (a pendência ainda não está no banco), se chegou cortado, a linha nova, o
+   * O que o "Filtrar" sabe da célula agora (RN-GRADE-013): o valor LIDO (a pendência ainda não está no banco), se chegou cortado, a linha nova, o
    * texto do campo e se a aba está ocupada. Nulo sem campo de filtro, sem o banco da conexão ou sem a coluna.
    */
   const filterContextOf = useCallback((cell: GridCell): FilterMenuContext | null => {

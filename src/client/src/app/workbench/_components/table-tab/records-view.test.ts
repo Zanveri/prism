@@ -811,7 +811,7 @@ describe("RecordsView: a edição das células (seção 22)", () => {
   });
 });
 
-describe("RecordsView: o Filtrar do menu da célula (RN-GRADE-010 do Filtrar como no DBeaver)", () => {
+describe("RecordsView: o Filtrar do menu da célula (RN-GRADE-013)", () => {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
   /** A coluna `code`, de texto, na tabela da vista. */
   const textColumns: RowsState["columns"] = [...columns, { name: "code", type: "varchar", kind: "text" }];
