@@ -78,6 +78,18 @@ describe("a mudança não salva (RN-SCRIPT-001)", () => {
     expect(withEditedSql({ id: "t2", sql: "" }, "SELECT 2")).toEqual({ id: "t2", sql: "SELECT 2" });
   });
 
+  it("é também o banco da aba diferente do banco em que foi salvo (RN-ARVORE-007); sem banco, é o da conexão", () => {
+    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1", "vendas")).toBe(true);
+    expect(isScriptDirty({ savedSql: "SELECT 1", savedDatabase: "vendas" }, "SELECT 1", "vendas")).toBe(false);
+    expect(isScriptDirty({ savedSql: "SELECT 1", savedDatabase: "vendas" }, "SELECT 1")).toBe(true);
+  });
+
+  it("com a aba noutro banco, desfazer o texto até o salvo não apaga o ponto", () => {
+    const tab = { id: "t1", sql: "SELECT 2", database: "vendas", script: { id: "s1", name: "a", savedSql: "SELECT 1", dirty: true } };
+    expect(withEditedSql(tab, "SELECT 1").script?.dirty).toBe(true);
+    expect(withEditedSql({ ...tab, script: { ...tab.script, savedDatabase: "vendas" } }, "SELECT 1").script?.dirty).toBe(false);
+  });
+
   it("fechar pergunta só pelas abas que são scripts com mudança, na ordem da faixa", () => {
     const tabs = [
       { id: "t1", script: { id: "s1", name: "a", savedSql: "", dirty: true } },

@@ -126,31 +126,53 @@ describe("connectionSchema (RN-CONN-001)", () => {
   });
 });
 
-describe("folderSchema e formulários de pasta (RN-PASTA-001)", () => {
-  it("aceita a pasta da API, na raiz ou dentro de outra", () => {
-    const folder = { id: "8d0c5a54-5b51-4a0f-9d3b-6f0f5b8a2d11", parentID: null, name: "Fábrica", createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" };
+describe("folderSchema e formulários de pasta (RN-PASTA-001 e RN-PASTA-005)", () => {
+  const folder = { id: "8d0c5a54-5b51-4a0f-9d3b-6f0f5b8a2d11", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" };
+  const noEnvironment = { environmentName: "", environmentColor: "" };
 
+  it("aceita a pasta da API, na raiz ou dentro de outra, com ou sem ambiente", () => {
     expect(folderSchema.safeParse(folder).success).toBe(true);
     expect(folderSchema.safeParse({ ...folder, parentID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" }).success).toBe(true);
+    expect(folderSchema.safeParse({ ...folder, environmentName: "Produção", environmentColor: "#FF8A7A" }).success).toBe(true);
   });
 
-  it("nome da pasta: aparado, de 1 a 60 caracteres", () => {
-    const ok = createFolderSchema.safeParse({ name: "  Fábrica ", parentID: "" });
+  it("a pasta sem os campos do ambiente é recusada: a API os devolve sempre, nulos quando não há", () => {
+    const withoutEnvironment: Partial<typeof folder> = { ...folder };
+    delete withoutEnvironment.environmentName;
+    delete withoutEnvironment.environmentColor;
 
-    expect(ok.success && ok.data).toEqual({ name: "Fábrica", parentID: null });
-    expect(fieldErrors(createFolderSchema, { name: "   ", parentID: "" })).toHaveProperty("name");
-    expect(fieldErrors(createFolderSchema, { name: "a".repeat(61), parentID: "" })).toHaveProperty("name");
-    expect(createFolderSchema.safeParse({ name: "a".repeat(60), parentID: "" }).success).toBe(true);
+    expect(folderSchema.safeParse(withoutEnvironment).success).toBe(false);
   });
 
-  it("renomear pede só o nome e mover pede só a pasta pai", () => {
-    expect(renameFolderSchema.safeParse({ name: "Nova" }).success).toBe(true);
-    expect(fieldErrors(renameFolderSchema, { name: "" })).toHaveProperty("name");
+  it("nome da pasta: aparado, de 1 a 60 caracteres; o ambiente em branco vira nulo", () => {
+    const ok = createFolderSchema.safeParse({ name: "  Fábrica ", parentID: "", ...noEnvironment });
+
+    expect(ok.success && ok.data).toEqual({ name: "Fábrica", parentID: null, environmentName: null, environmentColor: null });
+    expect(fieldErrors(createFolderSchema, { name: "   ", parentID: "", ...noEnvironment })).toHaveProperty("name");
+    expect(fieldErrors(createFolderSchema, { name: "a".repeat(61), parentID: "", ...noEnvironment })).toHaveProperty("name");
+    expect(createFolderSchema.safeParse({ name: "a".repeat(60), parentID: "", ...noEnvironment }).success).toBe(true);
+  });
+
+  it("o ambiente da pasta tem as regras do da conexão: até 30 caracteres e cor #RRGGBB", () => {
+    const ok = createFolderSchema.safeParse({ name: "Produção", parentID: "", environmentName: "  Produção ", environmentColor: "#FF8A7A" });
+
+    expect(ok.success && ok.data).toEqual({ name: "Produção", parentID: null, environmentName: "Produção", environmentColor: "#FF8A7A" });
+    expect(fieldErrors(createFolderSchema, { name: "Produção", parentID: "", environmentName: "a".repeat(31), environmentColor: "" })).toHaveProperty("environmentName");
+    expect(fieldErrors(createFolderSchema, { name: "Produção", parentID: "", environmentName: "", environmentColor: "vermelho" })).toHaveProperty("environmentColor");
+    expect(fieldErrors(editConnectionSchema, { ...form, environmentName: "a".repeat(31) }).environmentName).toEqual(fieldErrors(createFolderSchema, { name: "P", parentID: "", environmentName: "a".repeat(31), environmentColor: "" }).environmentName);
+  });
+
+  it("renomear pede o nome e o ambiente, e mover pede só a pasta pai", () => {
+    const renamed = renameFolderSchema.safeParse({ name: "Nova", environmentName: "QAS", environmentColor: "#F2B644" });
+
+    expect(renamed.success && renamed.data).toEqual({ name: "Nova", environmentName: "QAS", environmentColor: "#F2B644" });
+    expect(fieldErrors(renameFolderSchema, { name: "", ...noEnvironment })).toHaveProperty("name");
 
     const toFolder = moveFolderSchema.safeParse({ parentID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" });
     const toRoot = moveFolderSchema.safeParse({ parentID: "" });
 
     expect(toFolder.success && toFolder.data.parentID).toBe("3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12");
     expect(toRoot.success && toRoot.data.parentID).toBeNull();
+    expect(Object.keys(moveFolderSchema.shape)).toEqual(["parentID"]);
   });
 });

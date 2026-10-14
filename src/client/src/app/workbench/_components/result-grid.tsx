@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { moveCell, type GridCell } from "../_lib/grid-cursor";
-import { savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesCell, savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
@@ -460,7 +460,11 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
     const active = editing.active;
     if (active === null) return;
-    if (event.key === "F2" || event.key === "Enter") {
+    if (copiesCell(event)) {
+      // RN-SQL-017: a célula cortada é copiada com o valor completo, que a edição busca na API.
+      event.preventDefault();
+      editing.onCopy(active);
+    } else if (event.key === "F2" || event.key === "Enter") {
       event.preventDefault();
       editing.onEdit(active);
     } else if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {

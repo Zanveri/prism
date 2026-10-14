@@ -1221,7 +1221,8 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   seleção atravessa a rolagem e o "carregar mais", e é esquecida numa nova execução.
 - **RN-GRADE-002.** Copiar. Ctrl+C copia a seleção como texto: células separadas por tabulação
   e linhas por quebra de linha (o que uma planilha cola); uma célula só é copiada como o valor
-  puro. Nulo vai vazio. Se alguma célula copiada estava cortada (RN-SQL-011), a tela avisa.
+  puro. Nulo vai vazio. A célula que chegou cortada (RN-SQL-011) é copiada com o valor completo
+  (RN-SQL-017); a tela avisa só quando algum valor não pôde vir inteiro.
 - **RN-GRADE-003.** Copiar avançado (Ctrl+Shift+C, como no DBeaver): um diálogo escolhe o que
   copiar (a seleção, as linhas inteiras da seleção ou todas as carregadas) e como: texto
   delimitado (delimitador, cabeçalho, número da linha, aspas, como escrever o nulo), JSON,
@@ -1993,3 +1994,57 @@ fechada, assim, ao reabrir já retorna as queries feitas".
 | `PUT api/user/workspace` `{ tabs, activeIndex }` | 204 | 422 `WORKSPACE_INVALID` (formato, índice fora da lista), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
 
 O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes.
+
+### Valor completo das células cortadas
+
+Defeito relatado pelo dono em 2026-10-13: copiar uma célula `CLOB` do Informix (um JSON longo) com
+Ctrl+C ou "Copiar valor" levou o texto cortado. Num cliente de banco a cópia tem de ser o valor
+inteiro.
+
+- **RN-SQL-017.** A grade continua mostrando o valor cortado (RN-SQL-011). Copiar (Ctrl+C,
+  "Copiar valor", copiar avançado) e exportar levam o valor completo, como veio do banco.
+  - A API guarda, em memória e só no processo dela, o valor completo de cada célula que cortou,
+    nas páginas que já entregou do resultado atual. Nunca grava em disco, nunca no log.
+  - Ela guarda até 256 MB por sessão. Passando disso, as células seguintes ficam sem valor
+    completo, e a página diz quais.
+  - Larga tudo quando a aba executa outro comando, quando o resultado é descartado e quando a
+    sessão fecha.
+  - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram.
+  - O texto vai inteiro. O binário vai como a grade o escreve (hexadecimal), inteiro.
+
+| Rota | Sucesso | Erros |
+| --- | --- | --- |
+| `POST api/user/database-sessions/{id}/results/{resultID}/cells` `{ cells: [{ row, column }] }` (até 10.000 células por pedido) | 200 `{ values: [{ row, column, value }] }`, na ordem pedida; `value` nulo quando a célula não tem valor completo | 404 `DATABASE_SESSION_NOT_FOUND`, `RESULT_NOT_FOUND` (outro comando já rodou); 422 `CELLS_INVALID` (lista vazia, acima do limite, linha ou coluna fora do resultado) |
+
+O log dessa rota registra só a contagem de células, nunca o valor.
+
+### Ambiente da pasta e o seletor de cor
+
+Pedidos do dono em 2026-10-13: "as pastas terem seus ambientes também, por exemplo uma pasta só de
+production, outra só de QAS, outra de develop"; e o seletor de "Outra cor" abria ao clicar em
+qualquer ponto da linha dele, e deve virar uma bolinha ao lado das outras, com o ícone de
+conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções herdadas continuam
+lá.
+
+- **RN-PASTA-005.** A pasta pode ter um ambiente, com nome e cor, nas mesmas regras do ambiente da
+  conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
+  ambiente: pasta ou conexão só com cor herda o de cima, e a subpasta sem ambiente não mostra o da
+  pasta de cima.
+  - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
+    a mesma do formulário da conexão.
+  - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
+  - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
+    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
+    status). O ambiente próprio da conexão sempre ganha.
+  - Mover a conexão ou a pasta muda o que ela herda. O formulário da conexão sem ambiente próprio
+    diz qual ela herda e de qual pasta.
+  - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
+    `environmentName` e `environmentColor`, opcionais, com as recusas do ambiente da conexão em
+    `FOLDER_NAME_INVALID` ou num código próprio, como a conexão já faz.
+- **RN-CONN-017.** O seletor de cor do ambiente (da conexão e da pasta) é uma fileira de bolinhas.
+  - A última bolinha é "Outra cor", com o ícone de conta-gotas. Só ela abre o seletor de cor do
+    sistema; clicar em outro ponto da fileira ou da seção não abre nada.
+  - Com uma cor escolhida por ela, a bolinha fica com essa cor, a marca de escolhida das outras e o
+    conta-gotas ainda à vista, em contraste. O código `#RRGGBB` aparece na dica e no nome acessível.
+  - A linha "Outra cor #RRGGBB" de baixo sai.
+  - Pelo teclado: cada bolinha é um botão, e Enter ou Espaço na última abre o seletor.

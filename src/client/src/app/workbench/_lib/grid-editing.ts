@@ -35,6 +35,8 @@ export type GridEditing = {
   onCancel: () => void;
   /** O menu da célula: o ponto do clique, ou o pé da célula quando veio do teclado. */
   onMenu: (cell: GridCell, point: { x: number; y: number }, keyboard: boolean) => void;
+  /** RN-GRADE-002 e RN-SQL-017: Ctrl+C com o foco na grade copia a célula ativa, com o valor completo quando ela chegou cortada. */
+  onCopy: (cell: GridCell) => void;
   /** Ctrl+S com o foco na grade. */
   onSave: () => void;
   /** Alt+Insert com o foco na grade. */
@@ -47,6 +49,14 @@ export type GridEditing = {
  */
 export function savesEdits(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, pending: number): boolean {
   return pending > 0 && (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "s";
+}
+
+/**
+ * RN-GRADE-002: Ctrl+C (Cmd+C) com o foco na grade copia a célula ativa, como o valor puro. Com Shift é o copiar avançado (RN-GRADE-003), e com Alt
+ * não é cópia: a tecla segue.
+ */
+export function copiesCell(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c";
 }
 
 /** As linhas que a grade desenha: as lidas e, depois, as novas, com o que foi preenchido (o resto vazio, para o padrão da tabela). */

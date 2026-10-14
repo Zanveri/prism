@@ -109,6 +109,15 @@ export const workbenchCopy = {
     runShortcut: "Ctrl+Enter",
     cancel: "Cancelar",
     cancelling: "Cancelando…",
+    // RN-ARVORE-007: o banco em que a aba roda, e a lista dos bancos do servidor (a mesma da árvore, RN-ARVORE-006).
+    database: {
+      label: "Banco",
+      defaultName: (name: string) => `${name} (padrão)`,
+      // Antes de a lista de conexões chegar, o banco da conexão ainda não tem nome.
+      connectionDatabase: "banco da conexão",
+      loading: "Carregando os bancos…",
+      locked: "No Db2, a conexão usa um banco só.",
+    },
   },
 
   result: {
@@ -206,7 +215,8 @@ export const workbenchCopy = {
       // sistema, que a pessoa ainda vai confirmar (ou cancelar), então nada aqui afirma que o arquivo foi gravado.
       exported: (count: number) => `Exportando ${formatCount(count, "linha", "linhas")}…`,
       exportedPartial: (count: number) => `Exportando ${formatCount(count, "linha", "linhas")}… As linhas que ainda não foram carregadas não entram no arquivo.`,
-      exportedTruncated: "Valores que chegaram cortados saem cortados no arquivo.",
+      // RN-SQL-017: o valor cortado na grade sai inteiro; este é o que a API não tinha inteiro (passou do teto, ou o resultado mudou).
+      exportedCut: (count: number) => (count === 1 ? "1 valor não pôde vir inteiro e sai cortado no arquivo." : `${formatCount(count, "valor", "valores")} não puderam vir inteiros e saem cortados no arquivo.`),
     },
     // RN-TABELA-003: as três seções da Estrutura. O canvas também mostra "Padrão", "Ao excluir" e "Método", que a API não devolve.
     structure: {
@@ -262,6 +272,8 @@ export const workbenchCopy = {
     connected: "Conectado",
     disconnected: "Desconectado",
     noTab: "Nenhuma aba ativa",
+    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
+    place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,
   },

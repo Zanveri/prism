@@ -13,6 +13,7 @@ import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from ".
 import { useRecordEdits, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
 import type { QueryTab, TableView } from "../_lib/workbench-model";
+import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
 import { ResultActions } from "./result-actions";
@@ -37,6 +38,8 @@ type QueryTabPanelProps = {
   onAssignConnection: (tabId: string, connectionId: string) => void;
   /** RN-LINK-001: o Ctrl+clique no nome de uma tabela abre a aba dela nos Registros, na conexão e no banco desta aba. Estável. */
   onOpenTable: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
+  /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
+  onSwitchDatabase: (tabId: string, database: string | undefined) => void;
 };
 
 /** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
@@ -62,7 +65,7 @@ function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScr
  * atalhos (`useRecordEdits`). Com alterações não salvas, executar outro comando e "Executar de novo" perguntam antes (RN-EDIT-007); o Salvar deixa
  * a grade com o que foi salvo, sem executar de novo, e o cursor que estava aberto fecha (RN-EDIT-009).
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection, onOpenTable }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
@@ -108,6 +111,10 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   );
   const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
 
+  // RN-ARVORE-007: trocar o banco, com alterações não salvas na grade, pergunta antes, como executar outro comando (RN-EDIT-007). O resultado na tela é do
+  // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
+  const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
+
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const mode = event.defaultPrevented ? null : saveShortcut(event);
@@ -129,7 +136,14 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     <>
       <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
         {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} forScript={tab.script !== undefined} onAssign={onAssignConnection} /> : null}
-        <EditorToolbar busy={busy} cancelling={cancelling} runnable={runnable} onRun={() => editor.current?.run()} onCancel={handleCancel} />
+        <EditorToolbar
+          busy={busy}
+          cancelling={cancelling}
+          runnable={runnable}
+          onRun={() => editor.current?.run()}
+          onCancel={handleCancel}
+          database={connectionId === null ? null : <DatabasePicker connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
+        />
   
         <div ref={area} className="flex min-h-0 flex-1 flex-col">
           {/* Maximizada, o editor fica sem altura e fora da ordem do Tab, mas montado. */}

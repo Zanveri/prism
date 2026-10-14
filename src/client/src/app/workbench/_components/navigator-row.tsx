@@ -1,9 +1,11 @@
 import type { ComponentProps, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
+import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import { engineOption, type Connection } from "@/app/connections/_lib/connections.schema";
+import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
-import { Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EnvironmentPill, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon } from "@/components/ui";
+import { Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
@@ -75,6 +77,11 @@ export type NavigatorRowProps = {
   selected: boolean;
   /** A conexão salva, só nas linhas de conexão. */
   connection?: Connection;
+  /**
+   * A etiqueta ao lado do nome (RN-CONN-015 e RN-PASTA-005): na pasta, o ambiente dela; na conexão, o que ela mostra, o próprio ou o herdado da
+   * pasta (`environmentLookup`). Sem ela, nada.
+   */
+  environment?: ShownEnvironment | null;
   status?: ConnectionStatus;
   busy?: boolean;
   onSelect: (node: NavNode) => void;
@@ -101,7 +108,7 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, index, open, tabbable, selected, connection, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+export function NavigatorRow({ node, index, open, tabbable, selected, connection, environment, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
   const paddingLeft = baseIndent + node.depth * levelIndent;
 
   if (node.kind === "loading") {
@@ -188,7 +195,7 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
         {/* O nome tem a prioridade: o detalhe ocupa só o que sobra, encolhe primeiro e some antes de o nome ser cortado. */}
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           <span className={cn("truncate", monoKinds.has(node.kind) && "font-mono", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
-          {isConnection && connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} /> : null}
+          <ShownEnvironmentPill environment={environment} />
           {node.badge ? <span className="flex-none text-[11px] font-semibold text-accent">{node.badge}</span> : null}
           {hasDetail ? <span className={cn("min-w-0 flex-1 truncate text-right text-xs text-subtle", node.kind !== "group" && "font-mono")}>{node.detail}</span> : null}
         </span>

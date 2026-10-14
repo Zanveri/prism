@@ -7,6 +7,7 @@ import { useToast, type Engine } from "@/components/ui";
 import { csvExportOf } from "../../_lib/csv";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
+import { allCutCells, noFullValues, withFullValues, type FullValues } from "../../_lib/full-values";
 import { inDatabase } from "../../_lib/navigator-model";
 import { isBusy } from "../../_lib/result-paging";
 import { saveText } from "../../_lib/save-file";
@@ -119,15 +120,25 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
 
-  /** "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. */
+  /**
+   * "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. RN-SQL-017: a célula
+   * cortada sai com o valor completo, pedido antes à API (sem célula cortada, nada é pedido e o arquivo sai na hora); cancelada a busca, nada é gravado.
+   */
+  const { completeValues } = edits;
   const exportCsv = useCallback(() => {
     const current = runner.getState();
     if (current.status !== "rows") return;
 
-    const { fileName, text, notice } = csvExportOf(current, schema, name);
-    saveText(fileName, text, "text/csv;charset=utf-8");
-    toast[notice.tone](notice.text);
-  }, [runner, schema, name, toast]);
+    const write = (full: FullValues) => {
+      const { fileName, text, notice } = csvExportOf(withFullValues(current, full), schema, name);
+      saveText(fileName, text, "text/csv;charset=utf-8");
+      toast[notice.tone](notice.text);
+    };
+    if (current.truncated.size === 0) return write(noFullValues);
+    void completeValues(allCutCells(current.truncated), current).then((full) => {
+      if (full !== null) write(full);
+    });
+  }, [runner, schema, name, toast, completeValues]);
 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);

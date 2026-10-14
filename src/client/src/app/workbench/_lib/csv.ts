@@ -78,18 +78,20 @@ export function csvFileName(schema: string, name: string): string {
 
 /**
  * O aviso depois de exportar (RN-TABELA-006): quantas linhas saíram e, havendo mais a ler, que as que ainda não
- * foram carregadas não entram. Um valor que chegou cortado (RN-SQL-011) sai cortado, e o aviso diz isso.
+ * foram carregadas não entram. O valor que chegou cortado (RN-SQL-011) sai inteiro (RN-SQL-017); o que não pôde vir
+ * inteiro (`cut`) sai cortado, e o aviso diz quantos.
  */
-export function exportNotice(rows: { count: number; hasMore: boolean; hasTruncated: boolean }): { tone: "success" | "warning"; text: string } {
+export function exportNotice(rows: { count: number; hasMore: boolean; cut: number }): { tone: "success" | "warning"; text: string } {
   const copy = workbenchCopy.tableTab.records;
   const base = rows.hasMore ? copy.exportedPartial(rows.count) : copy.exported(rows.count);
 
-  return { tone: rows.hasMore || rows.hasTruncated ? "warning" : "success", text: rows.hasTruncated ? `${base} ${copy.exportedTruncated}` : base };
+  return { tone: rows.hasMore || rows.cut > 0 ? "warning" : "success", text: rows.cut > 0 ? `${base} ${copy.exportedCut(rows.cut)}` : base };
 }
 
 /**
  * O que "Exportar CSV" entrega (RN-TABELA-006): o nome do arquivo, o texto das linhas CARREGADAS (as que ainda não foram lidas não entram) e o
- * aviso que a pessoa lê depois. `hasMore` vale também com o cursor fechado: as linhas que faltam seguem de fora.
+ * aviso que a pessoa lê depois. `hasMore` vale também com o cursor fechado: as linhas que faltam seguem de fora. Quem chama já pôs nas linhas o
+ * valor completo das células cortadas (`withFullValues`, RN-SQL-017): as marcas de corte que sobram são as que não puderam vir inteiras.
  */
 export function csvExportOf(result: Pick<RowsState, "columns" | "rows" | "hasMore" | "truncated">, schema: string, name: string): { fileName: string; text: string; notice: ReturnType<typeof exportNotice> } {
   return {
@@ -98,6 +100,6 @@ export function csvExportOf(result: Pick<RowsState, "columns" | "rows" | "hasMor
       result.columns.map((column) => column.name),
       result.rows,
     ),
-    notice: exportNotice({ count: result.rows.length, hasMore: result.hasMore, hasTruncated: result.truncated.size > 0 }),
+    notice: exportNotice({ count: result.rows.length, hasMore: result.hasMore, cut: [...result.truncated.values()].reduce((total, columns) => total + columns.size, 0) }),
   };
 }

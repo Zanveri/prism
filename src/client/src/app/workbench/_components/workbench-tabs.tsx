@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
+import { environmentLookup } from "@/app/connections/_lib/environment";
 import { ConfirmDialog, useToast } from "@/components/ui";
 import { currentWindowId, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
@@ -50,10 +51,13 @@ const askEverything = closeAsks({ closesTheApp: false });
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
+  const folders = useQuery(foldersQuery);
+  // RN-PASTA-005: o ambiente que a conexão de cada aba mostra, o próprio ou o herdado da pasta; o mesmo objeto enquanto as pastas não mudam.
+  const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
   const queryClient = useQueryClient();
 
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
@@ -78,11 +82,15 @@ export function WorkbenchTabs() {
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
+  // O mesmo com a troca do banco da aba de consulta (RN-ARVORE-007), que também consulta a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestSwitchDatabase = useRef(switchDatabase);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestSwitchDatabase.current = switchDatabase;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -287,6 +295,10 @@ export function WorkbenchTabs() {
   }
 
   const connectionOf = (connectionId: string | null) => (connectionId === null ? undefined : connections.data?.find((connection) => connection.id === connectionId));
+  const environmentOf = (connectionId: string | null) => {
+    const connection = connectionOf(connectionId);
+    return connection === undefined ? null : environments.connection(connection);
+  };
 
   const question = confirm === null ? null : closeConfirmationText(confirm.total, confirm.withSql);
 
@@ -294,7 +306,7 @@ export function WorkbenchTabs() {
     <>
       <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tabs.length === 0 ? null : (
-          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
+          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} environmentOf={environmentOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
         )}
 
         {tabs.length === 0 ? (
@@ -322,9 +334,9 @@ export function WorkbenchTabs() {
             return (
               <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
                 {isTableTab(tab) ? (
-                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
+                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
                 )}
               </div>
             );

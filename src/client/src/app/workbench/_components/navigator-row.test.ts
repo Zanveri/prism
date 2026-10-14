@@ -197,3 +197,30 @@ describe("a dica da linha da conexão (o que a lista da tela de Conexões mostra
     expect(render(node, { connection: { ...connection, host: '"srv"<b>' }, status: "disconnected" })).toContain('title="MES Produção\nInformix · &quot;srv&quot;&lt;b&gt;:9089 / mes"');
   });
 });
+
+describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () => {
+  const now = "2026-10-13T12:00:00Z";
+  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+  const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 1, hasChildren: true };
+  const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
+  const pill = (markup: string) => /<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/.exec(markup)?.[0];
+
+  it("a pasta com ambiente mostra a etiqueta ao lado do nome", () => {
+    expect(pill(render(folderNode, { environment: { name: "Produção", color: "#FF8A7A", folder: null } }))).toBeDefined();
+    expect(render(folderNode)).not.toContain("Produção");
+  });
+
+  it("a conexão sem ambiente próprio mostra o herdado, e a dica da etiqueta diz de qual pasta", () => {
+    const markup = render(connectionNode, { connection, status: "disconnected", environment: { name: "Produção", color: "#FF8A7A", folder: fabrica } });
+
+    expect(pill(markup)).toContain('title="Herdado da pasta Fábrica"');
+  });
+
+  it("o ambiente próprio da conexão aparece sem a dica de herdado", () => {
+    const markup = render(connectionNode, { connection: { ...connection, environmentName: "Produção", environmentColor: "#FF8A7A" }, status: "disconnected", environment: { name: "Produção", color: "#FF8A7A", folder: null } });
+
+    expect(pill(markup)).toBeDefined();
+    expect(pill(markup)).not.toContain("title=");
+  });
+});

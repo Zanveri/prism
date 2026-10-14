@@ -40,7 +40,7 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return undefined;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
-      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated } = state;
+      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows } = state;
       return {
         ...{ status, id, target, columns, rows, hasMore, totalRows, elapsedMs, pages, cursorClosed, total },
         ...(resultId === undefined ? {} : { resultId }),
@@ -48,6 +48,8 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
         truncated: pairsOf(truncated),
         // RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou.
         ...(generated === undefined || generated.size === 0 ? {} : { generated: pairsOf(generated) }),
+        // RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas.
+        ...(sourceRows === undefined ? {} : { sourceRows: [...sourceRows] }),
       };
     }
     default:
@@ -74,7 +76,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
       sessionId,
       sql: editor?.sql ?? tab.sql,
       ...(table === undefined ? {} : { table }),
-      ...(script === undefined ? {} : { script: { id: script.id, name: script.name, savedSql: script.savedSql } }),
+      ...(script === undefined ? {} : { script: { id: script.id, name: script.name, savedSql: script.savedSql, ...(script.savedDatabase === undefined ? {} : { savedDatabase: script.savedDatabase }) } }),
     },
     editor: editor === null ? null : { anchor: editor.anchor, head: editor.head },
     result,
@@ -106,8 +108,8 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
     sessionId: tab.sessionId,
     sql: tab.sql,
     ...(tab.table === undefined ? {} : { table: tab.table }),
-    // RN-SCRIPT-001: o ponto da faixa é o texto que chegou contra o que foi salvo.
-    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql) } }),
+    // RN-SCRIPT-001: o ponto da faixa é o texto que chegou e o banco da aba contra o que foi salvo (RN-ARVORE-007: a aba pode ter trocado de banco).
+    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab.database) } }),
   };
   const restored: TransferMemory = memory;
 

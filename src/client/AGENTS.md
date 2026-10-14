@@ -289,6 +289,38 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   do diálogo chegaria ao formulário de baixo.
 - **Mover pasta** oferece todas as pastas, a própria e as de dentro dela: o ciclo é recusa da API (RN-PASTA-003), e o
   aceite pede que ela apareça como aviso.
+- **A seção Ambiente** (`environment-picker.tsx`, RN-CONN-015, RN-CONN-017 e RN-PASTA-005) é uma só, no formulário da conexão e nos
+  diálogos de nova pasta e de renomear pasta (também pelo F2); mover pasta não a mostra. Os ids vêm do `idPrefix` (`cx` e `folder`), e a
+  explicação de baixo, do `hint` (`connectionHint`, `folderHint`). **A cor é uma fileira de botões**: as seis do canvas (clicar na escolhida
+  a tira) e, por último, "Outra cor", com o `EyedropperIcon`, a ÚNICA que abre o seletor do sistema, pelo `showPicker` do
+  `<input type="color">` (sem ele, o `click`). O defeito de antes era um `<label>` em volta do input: clicar em qualquer ponto da linha
+  "Outra cor #RRGGBB" abria o seletor. Agora o input fica ao lado da bolinha, fora de qualquer rótulo, invisível (`opacity-0`, 1 px,
+  `pointer-events-none`, e não `display:none`, para o seletor abrir ancorado nele, junto da bolinha), fora do Tab (`tabIndex={-1}`) e da
+  leitura (`aria-hidden`); Enter e Espaço abrem porque a bolinha é um `<button>` de verdade. Com uma cor que não é das seis (a comparação
+  ignora a caixa), a bolinha fica com ela, a marca `ring-2` das outras e o conta-gotas no contraste do `environmentTextColor`, e o
+  `#RRGGBB` vai no `aria-label` e no `title` (`otherColorChosen`); a cor do seletor volta em maiúsculas. A linha "Outra cor" de baixo e o
+  "Sem cor" saíram. O teste (`environment-picker.test.ts`) roda com os ganchos simulados: põe um seletor de mentira na referência do input,
+  clica em tudo o que tem `onClick` fora da bolinha (nada abre) e nela (abre), e confere que nenhum `<label>` o contém nem aponta para ele.
+  **Conferido sob Xvfb**: o seletor do Chromium é uma janela do X SEM nome, então quem conta janelas usa `xdotool search --onlyvisible
+  --name ''` (com `--name '.'` ele não aparece e a contagem não prova nada); oito cliques fora da bolinha (título, legenda, entre as
+  bolinhas, depois da última, o fim da fileira, a dica, a borda da seção, o canto onde o input está) deixaram 2 janelas, e o clique, o Enter e o Espaço na
+  bolinha, 3; Escape o fecha, e a cor digitada nos campos R, G e B dele chegou à bolinha.
+- **O ambiente herdado** (RN-PASTA-005). A pasta tem `environmentName` e `environmentColor` (o `folderSchema` os exige, nulos quando não
+  há), e quem diz o que cada uma mostra é o `environmentLookup(folders)` (`_lib/environment.ts`, puro e testado): `connection(c)` dá o
+  ambiente próprio, que sempre ganha, ou o da pasta mais próxima acima que tenha um, com a pasta em `folder` (o `ShownEnvironment`);
+  `folder(id)` dá só o da pasta, para a etiqueta dela na árvore (a subpasta sem ambiente não mostra o de cima); `inheritedIn(folderID)` dá o
+  que uma conexão sem ambiente herdaria ali, para o formulário dizer "Herda <ambiente> da pasta <pasta>." (a frase acompanha o nome
+  digitado e a pasta escolhida no campo, antes de gravar). **Só o nome faz um ambiente**: a cor sem nome não conta, como na
+  `EnvironmentPill`. A pasta que sumiu e as pastas em ciclo não passam nada adiante. As respostas são guardadas (a mesma conexão e a mesma
+  pasta dão o mesmo objeto), para o `TableTabPanel` memorizado não redesenhar; quem monta o lookup é um `useMemo` sobre `folders.data`, e
+  mover a conexão ou a pasta é outra lista, então a resposta muda sozinha depois do `invalidateLists`. A etiqueta é a
+  `ShownEnvironmentPill` (com a dica "Herdado da pasta <pasta>" quando é herdada), na árvore (`NavigatorRow` recebe `environment`), na
+  faixa de abas (`environmentOf` do `TabStrip`), no cabeçalho da aba da tabela (`environment` do `TableTabPanel`), na barra de status e no
+  cabeçalho do diálogo da conexão. A conexão continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o
+  dela): o herdado nunca é gravado nela. Não há mais "lista" de conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba e na barra.
+- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente inclusive: o corpo de cada modo do diálogo sai do `folderInputOf` (o que o
+  modo não perguntou vai como a pasta já tem, senão mover tiraria o ambiente dela). As recusas do ambiente da pasta são 422
+  `FOLDER_NAME_INVALID` no campo (`environmentName`, `environmentColor`), que o diálogo já mostra no lugar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
 - **`?connection=<id>`** (o "Editar conexão" do navegador de bancos): a página abre aquela conexão no formulário ao chegar,
@@ -494,7 +526,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   sessão; a aba aberta a partir dele guarda o banco (`QueryTab.database`): a sessão da aba, a Estrutura, o Diagrama, a passagem do
   filtro e o completar do editor são desse banco. `navKey` escreve o caminho sempre na mesma ordem de campos. "Desconectar" fecha
   as sessões da árvore de todos os bancos (`treeSessionIds`) e as das abas, e remove o prefixo `["database-session", conexão]`;
-  "Atualizar" na conexão traz a lista de novo, e num banco, só o que é dele.
+  "Atualizar" na conexão traz a lista de novo, e num banco, só o que é dele. A aba de consulta troca de banco pela barra do editor: ver
+  "Trocar o banco da aba de consulta", abaixo.
 - **Falha de nível**: linha de erro no nó (a mensagem do banco, `detail`, senão o `title`) com "Tentar de novo", mais o
   aviso central. "Desconectar" recolhe e esquece antes de remover as consultas: com o nó ainda aberto a consulta removida
   seria refeita e abriria outra sessão.
@@ -523,8 +556,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   no Tab. A largura do navegador é ajustável (arrastar a divisória ou setas nela, de 200 a 640 px; 320 px de saída, para os nomes de
   coluna caberem inteiros).
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
-  na barra do editor, "Explicar plano", "Formatar", a conexão da aba e a transação (a barra tem só Executar e Cancelar,
-  seção 9 da especificação); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
+  na barra do editor, "Explicar plano", "Formatar", a troca da conexão da aba e a transação (a barra tem Executar e Cancelar,
+  seção 9 da especificação, e o banco da aba, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -597,8 +630,9 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 - **O que passa** (`_lib/tab-transfer.ts`, puro e testado): `serializeTab` monta a aba com o texto e a seleção do editor DESTE instante
   (`liveEditors`, `_lib/live-editors.ts`: cada editor se registra pelo id da aba; o `tab.sql` chega com 400 ms de atraso), a sessão do executor
   (`sessionOf`, e não a cópia da aba), o resultado parado (o mapa das células cortadas vira pares) e o que a tela lembrava
-  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). A aba de um script leva o
-  id, o nome e o SQL salvo (o ponto é refeito na janela que recebe, pelo texto que chegou), e a aba sem conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
+  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). A aba leva o banco em que
+  roda (`database`, o de agora, depois de uma troca pela barra do editor). A aba de um script leva o id, o nome, o SQL salvo e o banco em que foi salvo
+  (`savedDatabase`; o ponto é refeito na janela que recebe, pelo texto que chegou e pelo banco da aba), e a aba sem conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
   andamento (executar, carregar mais, contar) não passa: a tela avisa `moveBusy`. `readTransfer` confere e devolve a aba, a seleção (cortada no
   fim do texto), o estado e a memória.
 - **A janela de origem** só tira a aba depois do `ok` do centro, por `detachTab`: o executor sai de cena (`retire`) e a sessão **não** fecha (é a
@@ -707,7 +741,10 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
 - **A aba de um script** tem o nome dele como título e, com mudança não salva, um ponto na faixa (desenho; o leitor de tela ouve "alterações não salvas", e o
   `title` diz o mesmo: `tabTitleOf`). Só a aba de um script tem o ponto e a pergunta: a consulta que nunca foi salva fecha como antes. O ponto acende na
   primeira tecla (`markScriptEdited`, pelo `onEdited` do editor, sem atraso; as teclas seguintes devolvem a mesma lista de abas e não redesenham nada) e é
-  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga.
+  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga. **Mudança não salva é o texto OU o banco**
+  (`isScriptDirty`): o `ScriptRef` guarda o banco em que o script foi salvo ou aberto (`savedDatabase`, sem ele o da conexão), e a aba que trocou de banco
+  (RN-ARVORE-007) fica com o ponto até o Ctrl+S gravar o banco novo, ou até voltar ao banco salvo com o texto salvo. `setTabScript` recebe o banco que foi
+  gravado (o da aba quando o Ctrl+S saiu).
 - **Fechar** (uma aba, as outras, todas, a janela): primeiro a pergunta dos Registros, depois a dos scripts com mudança não salva entre as que fecham
   (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
   script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
@@ -721,6 +758,36 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
   mantém o lugar antigo (o `PATCH` sem `connectionID`). **O editor segue o banco da aba com ele montado** (a gramática, o separador de comandos, as maiúsculas e o
   completar, por compartimentos): a aba que recebe uma conexão de outro banco não recria o editor, e o texto e o desfazer ficam.
+
+## Trocar o banco da aba de consulta (RN-ARVORE-007)
+
+Seção 24 da especificação (issue 1 do repositório público). A barra do editor da aba de consulta mostra, depois de Executar, o banco em que a aba roda
+("Banco", um `Select` com rótulo visível ligado a ele) e deixa trocá-lo. A aba sem conexão não tem a lista (a faixa pede a conexão antes).
+
+- **A lista é a da árvore** (RN-ARVORE-006): a mesma consulta e o mesmo cache (`["tree", conexão, "databases"]`, `databaseNodes`), sem rota nova. O
+  `DatabasePicker` (`_components/database-picker.tsx`; o desenho é `DatabasePickerView`, testado sem DOM) só LÊ o cache: a consulta dele é a `treeQuery`
+  desligada, que nunca abre sessão sozinha, nem depois de "Desconectar" remover as consultas (RN-SESSAO-004). Quem busca é **abrir a lista** (`onOpen` do
+  `Select`, novo), e só quando ela não está em cache ou foi atualizada: `loadServerDatabases` (`database-sessions.service.ts`, testado) abre a sessão da
+  árvore da conexão se ainda não estava, como expandir a conexão (o navegador passa a mostrá-la conectada), e pede a lista; a conexão que não abre para
+  ali, com o aviso central uma vez; a sessão da árvore que caiu abre outra e a lista vem de novo, com o aviso de sessão reaberta. Enquanto vem, uma região
+  viva diz "Carregando os bancos…", e a lista aberta cresce quando chega: o `Select` leva o destaque junto da opção escolhida (o Enter não escolhe outra).
+- **As opções** (`databaseChoices`, `_lib/tab-database.ts`, puro e testado): os bancos da lista na ordem dela, o da conexão primeiro, com o nome que o
+  servidor deu e "(padrão)"; antes de a lista chegar, só o banco da aba. O banco da aba que a lista não traz (um script salvo num banco que sumiu) fica no fim.
+  O valor de cada opção é o banco em JSON (`databaseValue`: o da conexão é `null`), para nenhum nome se confundir com o padrão. **No Db2** só o banco da
+  conexão, e a lista fica desabilitada com o motivo à vista, ligado ao controle por `aria-describedby`. Com comando em andamento (executar, carregar mais,
+  contar) a lista fica desabilitada: a resposta dele é do banco de agora.
+- **A troca** (`switchDatabase` no provedor, sobre `withDatabase`, puro e testado): a aba ganha um executor novo nesse banco (que abre a sessão dele na
+  próxima execução, como a aba aberta pela "Nova consulta" do banco), e o de antes sai de cena (`retire`) antes de a sessão dele fechar na API (pelo mesmo
+  caminho de fechar a aba, `endInBackground`, que a janela que fecha espera). **Nada é executado, o texto fica** (o do editor deste instante, `liveEditors`),
+  e **o resultado que estava na tela sai**: era do banco anterior, e o cursor dele fecha com a sessão (como ao dar uma conexão à aba de um script sem
+  conexão). O mesmo banco, a aba de uma tabela, a aba sem conexão e a aba ocupada não trocam. O editor segue o banco com ele montado: o completar e os
+  links de tabela leem o cache da árvore do banco novo.
+- **Pergunta antes** com alterações não salvas na grade (RN-EDIT-007): a troca passa pelo `guard` da edição, o mesmo diálogo de executar outro comando
+  ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). A aba de consulta ainda não tem o Commit manual
+  (RN-TX-001), então não há transação aberta a perguntar; quando ele entrar, a troca é uma das saídas da RN-TX-006.
+- **O que acompanha a troca**: a barra de status escreve a conexão e o banco da aba ativa (`conexão / banco`, o da conexão quando a aba não tem outro); o
+  Ctrl+S grava o banco da aba (`PATCH`/`POST` com `database`, nulo para o da conexão), e a aba de um script fica com o ponto enquanto o banco não é o salvo;
+  a aba que vai para outra janela leva o banco novo e o banco salvo do script; o bloqueio por inatividade dá à aba um executor no banco dela.
 
 ## Links de tabela no editor (RN-LINK-001)
 
@@ -854,7 +921,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   verde. A grade virtualizada não desenha linha sem DOM: para conferir o que a área de resultado entrega à grade, troque a grade por uma que
   anota as propriedades (`result-panel.grid.test.ts`).
 - **Exportar CSV** (RN-TABELA-006), só nos Registros. `csvExportOf` (`_lib/csv.ts`, puro) monta o arquivo das linhas CARREGADAS (as que ainda
-  não foram lidas não entram, e o aviso diz quantas saíram, que as outras ficaram de fora e que um valor cortado sai cortado): UTF-8 com BOM, separador `;`, aspas dobradas, CRLF, nulo como campo vazio
+  não foram lidas não entram, e o aviso diz quantas saíram, que as outras ficaram de fora e quantos valores não puderam vir inteiros; a célula cortada sai com o valor completo, RN-SQL-017, ver "Valor completo das células cortadas"): UTF-8 com BOM, separador `;`, aspas dobradas, CRLF, nulo como campo vazio
   e valor cujo primeiro caractere, depois de espaços, tabulação ou retorno de carro, é `=`, `+`, `-` ou `@` com um apóstrofo na frente, para a
   planilha não o executar. **O número simples, inclusive o negativo (`-12,50`), sai como está, sem apóstrofo** (`simpleNumber`, em `csv.ts`: é o
   que a especificação diz, e a coluna segue somando na planilha). A entrega é `saveText` (`_lib/save-file.ts`): o download do próprio navegador,
@@ -978,7 +1045,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     Cancelar o tira da passagem; fechar abas pergunta pelo registro `unsaved-edits.ts` (`unsavedQuestion`: uma aba oferece Salvar; várias, ou a aba
     com a vista Registros desmontada, só Descartar e Cancelar), antes da pergunta do SQL digitado. O provedor esquece o registro das abas que
     fecham, como a memória da aba.
-  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; colar vira pendência
+  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; copiar (Ctrl+C e
+    "Copiar valor") leva o valor completo da célula cortada (ver "Valor completo das células cortadas", abaixo); colar vira pendência
     da célula, como a edição.
   - **Na aba de consulta** (`query-tab.tsx`, `subject: "result"`, que muda só as frases da conferência do catálogo): executar outro comando (o botão
     e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
@@ -990,6 +1058,29 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
     trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. A
     aba de consulta ainda não tem o Commit manual na tela (RN-TX-001): o Salvar é sempre uma transação própria.
+- **Valor completo das células cortadas** (RN-SQL-017, RN-GRADE-002): a grade continua mostrando o valor cortado (RN-SQL-011), e copiar e
+  exportar levam o completo, que a API guarda em memória e devolve por `POST .../results/{resultID}/cells` (`full-values.service.ts`,
+  `resultCells`: nunca lança, e acha cada valor pela posição que a resposta diz). As decisões são de `_lib/full-values.ts`, pura, com teste:
+  `cutCellsOf` (só as cortadas da seleção, sem repetir, pela linha do resultado na API), `fetchFullValues` (lotes de até 10.000, um depois do
+  outro; o lote que não veio deixa as células cortadas e conta; cancelado, devolve nulo) e `withFullValues` (as linhas com o valor completo no
+  lugar e as marcas só das que ficaram sem). Quem liga é `completeValues`, em `use-record-edits.ts`: sem célula cortada responde na hora, sem
+  pedido; com, a faixa da grade (`EditsBanner`, `fetching`) diz "Buscando os valores completos…" com "Cancelar", e a grade segue livre; uma
+  busca nova cancela a anterior. `RESULT_NOT_FOUND`, `DATABASE_SESSION_NOT_FOUND` e `CELLS_INVALID` deixam as células cortadas sem aviso
+  central; o resto (a API fora do ar) passa pelo cache de mutações (RN-AVISO-004). O valor sem completo vai cortado, e o aviso diz quantos
+  (`recordsCopy.edit.menu.copiedCut` na cópia, `workbenchCopy.tableTab.records.exportedCut` no CSV).
+  - **Onde vale**: Ctrl+C com o foco na grade copia a célula ativa (`copiesCell`, em `grid-editing.ts`; com Shift é o copiar avançado e segue),
+    "Copiar valor" do menu da célula, e "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
+    como antes). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
+    nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
+    passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
+  - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
+    (RN-EDIT-009): `savedResultOf` devolve `sourceRows` (a linha de antes de cada uma, nula na nova; um segundo Salvar continua a conta), o
+    executor a guarda (`RowsState.sourceRows`, por `keepSaved`) e ela viaja com a aba para outra janela (`window-messages.ts`). Sem ela, a cópia de
+    uma linha depois de uma excluída pediria o valor da linha errada.
+  - **Conferido na tela** (Xvfb, PostgreSQL em contêiner, `text` de 50.000 caracteres com acentos e `bytea` de 100.000 bytes): o Ctrl+C e o
+    "Copiar valor" deixaram na área de transferência os 50.000 caracteres, com o MD5 igual ao do banco, e o "Exportar CSV" gravou o texto e o
+    binário inteiros (o `Blob` que a tela entrega ao download; o diálogo de salvar do sistema foi trocado no teste). Para ler a área de
+    transferência pelo protocolo de depuração: `navigator.clipboard.readText()` com `userGesture: true`.
 - **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
@@ -1547,7 +1638,7 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   `FormMessage`, `Dialog`, `ConfirmDialog`, `Select`, `Segmented`, `navItem` (a classe da entrada de uma lista de navegação vertical: a lista de Configurações e a de seções da Estrutura), `StatusBadge`, `EngineTag`,
   `EnvironmentPill`, os ícones (`icons.tsx`), `ToastProvider`, `useToast`. Vieram do etio com o que esta fatia usa (o `ContextMenu` é do
   Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
-  que o controle, o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
+  que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, e `aria-describedby`), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
   ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe

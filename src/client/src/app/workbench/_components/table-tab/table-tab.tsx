@@ -1,7 +1,9 @@
 import { memo, useEffect, useRef } from "react";
 
+import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
-import { EngineTag, EnvironmentPill } from "@/components/ui";
+import type { ShownEnvironment } from "@/app/connections/_lib/environment";
+import { EngineTag } from "@/components/ui";
 
 import { inDatabase } from "../../_lib/navigator-model";
 import type { TableRef } from "../../_lib/table-diagram";
@@ -25,6 +27,8 @@ type TableTabPanelProps = {
   runner: QueryRunner;
   /** A conexão da aba; `undefined` enquanto a lista não chega. */
   connection: Connection | undefined;
+  /** O ambiente que a conexão mostra (RN-PASTA-005): o próprio, ou o herdado da pasta. É o mesmo objeto enquanto nada muda (`environmentLookup`). */
+  environment: ShownEnvironment | null;
   /** A aba está À VISTA: é a ativa e a área de trabalho é a tela mostrada. A escondida não fala com o banco (RN-SEG-001). */
   visible: boolean;
   /** A pessoa desconectou a conexão e ainda não a reconectou: nada reconecta sozinho (`connection-intent.ts`). */
@@ -43,7 +47,7 @@ type TableTabPanelProps = {
  * Nada reconecta sozinho: com a conexão desconectada pela pessoa, a Estrutura e o Diagrama mostram o aviso com "Conectar", e os
  * Registros esperam o "Atualizar". E a aba escondida (`visible` falso) não busca nada até ser aberta.
  */
-export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, connection, visible, disconnected, onView, onOpenTable }: TableTabPanelProps) {
+export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, connection, environment, visible, disconnected, onView, onOpenTable }: TableTabPanelProps) {
   const { schema, name } = table;
   const view = viewOf(table.view);
   const hasViews = tableViews.length > 1;
@@ -64,7 +68,7 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
         {connection ? <EngineTag engine={connection.engine} /> : null}
         <h2 className="font-mono text-[15px] leading-[22px] font-semibold text-ink">{name}</h2>
         {connection ? <span className="text-xs text-muted">{copy.location(connection.name, tab.database ?? connection.database, schema)}</span> : null}
-        {connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} /> : null}
+        {connection ? <ShownEnvironmentPill environment={environment} /> : null}
         <TableViewTabs tabId={tab.id} view={view} onChange={(next) => onView(tab.id, next)} />
       </header>
 

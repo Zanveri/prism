@@ -16,6 +16,7 @@ export {
   DocumentIcon,
   DownloadIcon,
   DuplicateIcon,
+  EyedropperIcon,
   EyeIcon,
   EyeOffIcon,
   FolderIcon,

@@ -7,7 +7,8 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// <summary>
 /// RN-SQL-011: cada célula viaja como texto ou nulo, formatada aqui a partir do valor que o driver entrega. Nada depende da cultura da
 /// máquina: números e datas saem sempre no mesmo formato, e a tela só os desenha. O PostgreSQL já manda o texto pronto (ver
-/// `PostgresConnection`), e daqui ele só leva o corte, o booleano e o binário.
+/// `PostgresConnection`), e daqui ele só leva o corte, o booleano e o binário. O corte é só do que a grade mostra: o valor completo da
+/// célula cortada sai por <see cref="Full"/> (RN-SQL-017).
 /// </summary>
 internal static class CellFormatter
 {
@@ -40,6 +41,13 @@ internal static class CellFormatter
         // Um caractere fora do plano básico (um emoji) ocupa dois `char`: o corte não o deixa pela metade.
         return text[..(char.IsHighSurrogate(text[QueryPaging.MaxTextLength - 1]) ? QueryPaging.MaxTextLength - 1 : QueryPaging.MaxTextLength)];
     }
+
+    /// <summary>
+    /// RN-SQL-017: o valor completo de uma célula que <see cref="Format"/> cortou, para copiar e exportar: o texto inteiro, no mesmo
+    /// formato, ou os bytes inteiros do binário. Quem o guarda é o registro de sessões.
+    /// </summary>
+    public static FullCellValue Full(object value)
+        => value is byte[] bytes ? FullCellValue.Binary(bytes) : FullCellValue.Text(ToText(value));
 
     /// <summary>`text`, `number`, `datetime`, `boolean` ou `binary`, pelo tipo que o driver diz que a coluna entrega.</summary>
     public static string KindOf(Type type)

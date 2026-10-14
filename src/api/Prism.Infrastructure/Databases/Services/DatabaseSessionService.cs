@@ -147,14 +147,16 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
                 // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura.
                 var result = new ResultState(page.TotalRows is null ? EditableSql.Read(sql, DialectOf(session)) : ResultSource.ReadOnly(EditableSql.WroteRows), page.Columns);
-                session.CurrentResult = result;
+                var withoutFullValue = result.Cells.Add(page);
+                ReplaceResult(session, result);
 
-                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability } };
+                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue } };
             }
 
-            // O comando que rodou deixa a sessão sem resultado editável; a recusa pelo texto, antes de executar, deixa o anterior como estava.
+            // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
+            // de executar, deixa o anterior como estava.
             if (outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed)
-                session.CurrentResult = null;
+                ReplaceResult(session, null);
 
             return outcome;
         }, cancellationToken);
@@ -163,9 +165,39 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, async session =>
         {
             var page = await session.Connection.FetchNextAsync(cancellationToken);
+            if (page.IsFailure)
+                return page;
 
-            return page.IsSuccess && session.CurrentResult is { } result ? page.Value with { ResultID = result.ID, Editable = result.Editability } : page;
+            // RN-SQL-017: a página continua a contagem das linhas do resultado, e o valor completo das cortadas fica com ele.
+            return session.CurrentResult is { } result
+                ? page.Value with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = result.Cells.Add(page.Value) }
+                : page.Value with { FullValues = null, CellsWithoutFullValue = page.Value.TruncatedCells };
         }, cancellationToken);
+
+    /// <summary>
+    /// RN-SQL-017: o valor completo das células pedidas, do que está na memória. Não fala com o banco, então não toma a vez da sessão:
+    /// responde enquanto um "carregar mais" ou outro comando roda (o resultado de antes continua o atual até o outro comando terminar).
+    /// </summary>
+    public Result<IReadOnlyList<string?>, DatabaseFailure> GetCells(Guid sessionID, Guid resultID, IReadOnlyList<CellPosition> cells)
+    {
+        if (!_sessions.TryGetValue(sessionID, out var session) || session.Closed)
+            return SessionNotFound();
+
+        if (session.CurrentResult is not { } result || result.ID != resultID)
+            return new DatabaseFailure(EDatabaseFailure.ResultNotFound, "O resultado não existe mais: a sessão executou outro comando depois dele. Execute o comando de novo para copiar.");
+
+        var started = _timeProvider.GetTimestamp();
+        var values = result.Cells.Read(cells, result.Columns.Count);
+        var elapsedMs = (long)_timeProvider.GetElapsedTime(started).TotalMilliseconds;
+
+        // RN-LOG-001: só as contagens, nunca um valor.
+        if (values.IsSuccess)
+            _logger.Information("Sessão {SessionID}: {Operation} em {ElapsedMs} ms, {Cells} células pedidas, {Missing} sem valor completo.", session.Info.ID, nameof(GetCells), elapsedMs, cells.Count, values.Value.Count(value => value is null));
+        else
+            _logger.Information("Sessão {SessionID}: {Operation} recusado ({Failure}), {Cells} células pedidas.", session.Info.ID, nameof(GetCells), values.Error.Kind, cells.Count);
+
+        return values;
+    }
 
     public async Task<Result<long, DatabaseFailure>> CountAsync(Guid sessionID, CancellationToken cancellationToken)
     {
@@ -379,6 +411,14 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             long total => total,
             _ => 0
         };
+
+    /// <summary>RN-SQL-017: o resultado novo (ou nenhum) toma o lugar do de antes, cujos valores completos saem da memória.</summary>
+    private static void ReplaceResult(Session session, ResultState? next)
+    {
+        var previous = session.CurrentResult;
+        session.CurrentResult = next;
+        previous?.Cells.Clear();
+    }
 
     /// <summary>Com a vez da sessão tomada, ou antes de ela entrar no registro. A conexão não falha ao ser descartada.</summary>
     private static async Task ReleaseAsync(Session session)
@@ -604,18 +644,24 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         {
             Closed = true;
             _ = Volatile.Read(ref CountCancellation).CancelAsync();
+
+            // RN-SQL-017: a sessão que fecha larga os valores completos do resultado dela.
+            CurrentResult?.Cells.Clear();
         }
     }
 
     /// <summary>
     /// RN-EDIT-002: um resultado da sessão, com o identificador que a página leva (muda a cada execução), o que o texto do comando diz da
-    /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele.
+    /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele. RN-SQL-017:
+    /// guarda também o valor completo das células cortadas das páginas entregues.
     /// </summary>
     private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns)
     {
         private volatile EditTarget? _target;
 
         public Guid ID { get; } = Guid.CreateVersion7();
+
+        public ResultCells Cells { get; } = new();
 
         public ResultSource Source => source;
 

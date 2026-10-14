@@ -70,6 +70,13 @@ public interface IDatabaseSessionService
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-SQL-017: o valor completo de cada célula pedida do resultado `resultID`, na ordem pedida, pela linha no resultado inteiro;
+    /// nulo na célula que não foi cortada ou que passou do teto da sessão. Lê só da memória, sem tomar a vez. Outro resultado na sessão:
+    /// `ResultNotFound`; célula fora das linhas entregues ou das colunas: `CellsInvalid`.
+    /// </summary>
+    Result<IReadOnlyList<string?>, DatabaseFailure> GetCells(Guid sessionID, Guid resultID, IReadOnlyList<CellPosition> cells);
+
+    /// <summary>
     /// RN-SQL-006: conta, por outra conexão, o último comando da sessão que devolveu linhas; o cursor da sessão continua como está. Sem
     /// comando desse tipo, `NoQueryToCount`. Se esse comando gravou (RN-SQL-013), o total já veio com a resposta dele e é o que volta
     /// aqui, sem ir ao banco: contar seria gravar de novo.

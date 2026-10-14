@@ -1,4 +1,5 @@
 using FluentValidation;
+using Prism.Application.Common.Environments;
 using Prism.Application.Connections.Models;
 
 namespace Prism.Application.Connections.Features.CreateConnection;
@@ -18,7 +19,7 @@ public sealed class CreateConnectionValidator : AbstractValidator<CreateConnecti
 
         // Na criação a senha é obrigatória, e não é aparada: espaço nas pontas faz parte dela.
         RuleFor(request => request.Password).Must(password => !string.IsNullOrEmpty(password)).WithMessage("Informe a senha do banco.").WithErrorCode("CONNECTION_INVALID");
-        RuleFor(request => request.EnvironmentName).Must(ConnectionRules.EnvironmentNameIsValid).WithMessage("O ambiente pode ter no máximo 30 caracteres.").WithErrorCode("CONNECTION_INVALID");
-        RuleFor(request => request.EnvironmentColor).Must(ConnectionRules.EnvironmentColorIsValid).WithMessage("Use uma cor no formato #RRGGBB.").WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.EnvironmentName).MustBeAnEnvironmentName().WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.EnvironmentColor).MustBeAnEnvironmentColor().WithErrorCode("CONNECTION_INVALID");
     }
 }

@@ -210,6 +210,86 @@ public sealed class DatabaseSessionServiceTests
         Assert.Equal(EDatabaseFailure.SessionNotFound, afterwards.Error.Kind);
     }
 
+    private static readonly QueryColumn[] CutColumns = [new("id", "integer", "number"), new("corpo", "text", "text")];
+
+    /// <summary>Uma página de `rows` linhas com uma célula cortada na coluna `corpo`, com o valor completo que o driver leu.</summary>
+    private static QueryPage CutPage(int rows, int cutRow, string full, bool hasMore)
+        => new(CutColumns, [.. Enumerable.Range(0, rows).Select(row => new string?[] { row.ToString(), row == cutRow ? full[..10000] : "curto" })], hasMore, 0, [[cutRow, 1]], FullValues: [FullCellValue.Text(full)]);
+
+    /// <summary>
+    /// RN-SQL-017: o registro guarda o valor completo das células cortadas de cada página que entrega do resultado, pela linha no
+    /// resultado inteiro (a página do carregar mais continua a contagem), e a página não o leva para a tela: ela só diz as que ficaram sem.
+    /// </summary>
+    [Trait("DatabaseSessionService", "GetCells")]
+    [Fact(DisplayName = "OK os valores completos voltam pela linha no resultado inteiro, também os do carregar mais, na ordem pedida")]
+    public async Task GetCells_ShouldReturnTheFullValues_OfEveryDeliveredPage()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        var first = new string('a', 10001);
+        var second = new string('b', 50000);
+        _connection.Outcomes.Enqueue(new QueryOutcome(CutPage(200, 3, first, hasMore: true), null, 0));
+        _connection.NextPage = CutPage(200, 5, second, hasMore: false);
+
+        //Act
+        var executed = await service.ExecuteAsync(session.ID, "SELECT id, corpo FROM documento", CancellationToken.None);
+        var next = await service.FetchNextAsync(session.ID, CancellationToken.None);
+        var page = executed.Value.Page!;
+        var cells = service.GetCells(session.ID, page.ResultID!.Value, [new CellPosition(205, 1), new CellPosition(3, 1), new CellPosition(4, 1)]);
+
+        //Assert
+        Assert.True(cells.IsSuccess);
+        Assert.Equal([second, first, null], cells.Value);
+        Assert.Null(page.FullValues);
+        Assert.Empty(page.CellsWithoutFullValue!);
+        Assert.Null(next.Value.FullValues);
+        Assert.Empty(next.Value.CellsWithoutFullValue!);
+        Assert.Equal(page.ResultID, next.Value.ResultID);
+    }
+
+    /// <summary>RN-SQL-017: o registro larga os valores quando a sessão executa outro comando: o resultado de antes não existe mais.</summary>
+    [Trait("DatabaseSessionService", "GetCells")]
+    [Fact(DisplayName = "NOK depois de outro comando, o resultado de antes não existe mais, e um ID que nunca foi resultado também não")]
+    public async Task GetCells_ShouldRefuse_WhenAnotherCommandRan()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(CutPage(1, 0, new string('a', 10001), hasMore: false), null, 0));
+        _connection.Outcomes.Enqueue(new QueryOutcome(null, 3, 0));
+        var resultID = (await service.ExecuteAsync(session.ID, "SELECT id, corpo FROM documento", CancellationToken.None)).Value.Page!.ResultID!.Value;
+
+        //Act
+        var unknown = service.GetCells(session.ID, Guid.NewGuid(), [new CellPosition(0, 1)]);
+        await service.ExecuteAsync(session.ID, "UPDATE documento SET corpo = 'x'", CancellationToken.None);
+        var afterTheCommand = service.GetCells(session.ID, resultID, [new CellPosition(0, 1)]);
+
+        //Assert
+        Assert.Equal(EDatabaseFailure.ResultNotFound, unknown.Error.Kind);
+        Assert.Equal(EDatabaseFailure.ResultNotFound, afterTheCommand.Error.Kind);
+    }
+
+    [Trait("DatabaseSessionService", "GetCells")]
+    [Fact(DisplayName = "NOK sessão fechada não existe, e linha além das entregues está fora do resultado")]
+    public async Task GetCells_ShouldRefuse_AClosedSession_AndARowNotDelivered()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(CutPage(200, 0, new string('a', 10001), hasMore: true), null, 0));
+        var resultID = (await service.ExecuteAsync(session.ID, "SELECT id, corpo FROM documento", CancellationToken.None)).Value.Page!.ResultID!.Value;
+
+        //Act
+        var notDelivered = service.GetCells(session.ID, resultID, [new CellPosition(200, 1)]);
+        await service.CloseAsync(session.ID);
+        var closed = service.GetCells(session.ID, resultID, [new CellPosition(0, 1)]);
+
+        //Assert
+        Assert.Equal(EDatabaseFailure.CellsInvalid, notDelivered.Error.Kind);
+        Assert.Equal(EDatabaseFailure.SessionNotFound, closed.Error.Kind);
+    }
+
     /// <summary>
     /// RN-ABERTO-006: onde a IBM não publica o driver (macOS em processador Intel), a API sobe sem os clients do Db2 e do Informix.
     /// Abrir ou testar uma conexão desses bancos responde falha de conexão, e a mensagem diz que é o Prism daquela plataforma que
@@ -276,7 +356,10 @@ public sealed class DatabaseSessionServiceTests
             => Task.FromResult(Result.Success<IDatabaseConnection, DatabaseFailure>(connection));
     }
 
-    /// <summary>A conexão de mentira: executar nunca volta, e carregar mais devolve uma página vazia com o `HasMore` que o teste pediu.</summary>
+    /// <summary>
+    /// A conexão de mentira: executar nunca volta (a não ser que o teste dê o desfecho), e carregar mais devolve uma página vazia com o
+    /// `HasMore` que o teste pediu (ou a página que ele deu).
+    /// </summary>
     private sealed class FakeConnection : IDatabaseConnection
     {
         private int _cancelCalls;
@@ -297,15 +380,21 @@ public sealed class DatabaseSessionServiceTests
 
         public bool NextPageHasMore { get; set; }
 
+        /// <summary>O que executar responde; sem ele, o comando nunca volta.</summary>
+        public Queue<QueryOutcome> Outcomes { get; } = new();
+
+        /// <summary>A página do carregar mais; sem ela, uma página vazia com o `HasMore` pedido.</summary>
+        public QueryPage? NextPage { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
-            => new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+            => Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
         {
             if (ClosesItselfOnFetch)
                 IsOpen = false;
 
-            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(new QueryPage([], [], NextPageHasMore, 0, [])));
+            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(NextPage ?? new QueryPage([], [], NextPageHasMore, 0, [])));
         }
 
         public Task CloseCursorAsync()

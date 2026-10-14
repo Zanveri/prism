@@ -31,6 +31,10 @@ public static class InformixSingleton
     private const string Database = "prism";
     private const string UserName = "informix";
     private const string SeedPath = "/tmp/prism-seed.sql";
+    private const string SbspacePath = "/opt/ibm/data/spaces/sbspace.000";
+
+    /// <summary>O ambiente do servidor, que o `exec` não tem: vem do arquivo da imagem.</summary>
+    private const string ServerEnvironment = ". /usr/local/bin/informix_inf.env;";
 
     private static readonly Lock CreationLock = new();
     private static IContainer? _container;
@@ -88,6 +92,32 @@ public static class InformixSingleton
         if (utf8.ExitCode != 0)
             throw new InvalidOperationException($"O banco em UTF-8 do Informix de teste não foi criado: {utf8.Stdout}{utf8.Stderr}");
 
+        // RN-SQL-017: o `CLOB` precisa do espaço de objetos grandes que a configuração da imagem nomeia (`SBSPACENAME sbspace`) e a imagem
+        // não cria. Um segundo e meio, uma vez por execução.
+        var sbspace = await container.ExecAsync(["bash", "-c", $"{ServerEnvironment} touch {SbspacePath} && chmod 660 {SbspacePath} && onspaces -c -S sbspace -p {SbspacePath} -o 0 -s 20000"]);
+        if (sbspace.ExitCode != 0)
+            throw new InvalidOperationException($"O espaço de objetos grandes do Informix de teste não foi criado: {sbspace.Stdout}{sbspace.Stderr}");
+
         return new ConnectionSettings(EDatabaseEngine.Informix, ContainerAddress.Of(container), container.GetMappedPublicPort(DrdaPort), Database, UserName, password);
+    }
+
+    /// <summary>
+    /// Roda um script no `dbaccess` do contêiner, no banco `prism`, com os arquivos que ele lê (`LOAD`, `FILETOCLOB`) já copiados para
+    /// lá. É como o teste grava o que um comando só pelo driver não grava (o `TEXT`, que só entra por parâmetro ou pelo `LOAD`, e o
+    /// `CLOB` acima dos 32 KB de um literal), sem passar pelo driver que está sendo testado.
+    /// </summary>
+    public static async Task RunScriptAsync(string script, IReadOnlyDictionary<string, byte[]> files)
+    {
+        await GetSettingsAsync();
+        var container = _container!;
+        var path = $"/tmp/prism-script-{Guid.NewGuid():N}.sql";
+
+        foreach (var (file, content) in files)
+            await container.CopyAsync(content, file);
+
+        await container.CopyAsync(Encoding.UTF8.GetBytes($"DATABASE {Database};\n{script.ReplaceLineEndings("\n")}\n"), path);
+        var ran = await container.ExecAsync(["bash", "-c", $"{ServerEnvironment} export DELIMIDENT=y DBACCNOIGN=1; dbaccess - {path}"]);
+        if (ran.ExitCode != 0)
+            throw new InvalidOperationException($"O script no Informix de teste falhou: {ran.Stdout}{ran.Stderr}");
     }
 }

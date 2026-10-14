@@ -9,6 +9,8 @@ import { buildConnectionTree, folderOptions } from "../_lib/connection-tree";
 import { connectionsCopy } from "../_lib/connections.copy";
 import { createFolderSchema, moveFolderSchema, renameFolderSchema, type Folder, type FolderInput } from "../_lib/connections.schema";
 import { createFolder, invalidateLists, updateFolder } from "../_lib/connections.service";
+import { folderInputOf } from "../_lib/folder-input";
+import { EnvironmentPicker } from "./environment-picker";
 
 const copy = connectionsCopy.folder;
 const toasts = connectionsCopy.toasts;
@@ -24,7 +26,8 @@ const successToast = { create: toasts.folderCreated, rename: toasts.folderRename
 
 /**
  * Pasta: criar, criar dentro de outra, renomear e mover (RN-PASTA-001 a 003). É um diálogo só, e
- * cada modo mostra só o que pergunta: o nome, a pasta pai, ou os dois. Montado ao abrir e
+ * cada modo mostra só o que pergunta: criar, o nome, a pasta pai e o ambiente (RN-PASTA-005);
+ * renomear (também pelo F2, RN-NAV-009), o nome e o ambiente; mover, a pasta pai. Montado ao abrir e
  * desmontado ao fechar, o que foi digitado não sobra para a próxima vez.
  *
  * A pasta pai oferece todas as pastas, a própria e as de dentro dela inclusive: mover para dentro
@@ -34,6 +37,7 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
   const queryClient = useQueryClient();
   const toast = useToast();
   const [parentID, setParentID] = useState(state.mode === "create" ? (state.parentID ?? "") : state.mode === "move" ? (state.folder.parentID ?? "") : "");
+  const [color, setColor] = useState<string | null>(state.mode === "create" ? null : state.folder.environmentColor);
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const mutation = useMutation({
@@ -63,9 +67,8 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
     setErrors(parsed.ok ? {} : parsed.errors);
     if (!parsed.ok) return;
 
-    // O `PATCH` leva o nome e a pasta pai por inteiro: o que este modo não pergunta fica como estava.
-    const unchanged = state.mode === "create" ? { name: "", parentID: null } : { name: state.folder.name, parentID: state.folder.parentID };
-    mutation.mutate({ ...unchanged, ...parsed.data });
+    // O `PATCH` grava a pasta por inteiro: o que este modo não pergunta fica como estava (mover não tira o ambiente).
+    mutation.mutate(folderInputOf(state.mode === "create" ? null : state.folder, parsed.data));
   }
 
   const text = state.mode === "create" ? (state.parentID === null ? copy.create : { ...copy.create, title: copy.create.subfolderTitle }) : copy[state.mode];
@@ -74,7 +77,7 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
   return (
     <Dialog
       open
-      size="sm"
+      size={state.mode === "move" ? "sm" : "md"}
       title={text.title}
       description={state.mode === "move" ? copy.move.description(state.folder.name) : undefined}
       pending={pending}
@@ -100,6 +103,8 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
             <FieldError id="folder-parent-error">{errors.parentID}</FieldError>
           </Field>
         )}
+
+        {state.mode === "move" ? null : <EnvironmentPicker idPrefix="folder" defaultName={state.mode === "rename" ? (state.folder.environmentName ?? "") : ""} color={color} onColorChange={setColor} errors={errors} hint={connectionsCopy.form.environment.folderHint} />}
       </form>
     </Dialog>
   );
