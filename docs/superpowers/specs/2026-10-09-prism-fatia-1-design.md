@@ -1866,6 +1866,11 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 - **RN-ABAS-005.** Só o processo principal cria janelas e passa abas entre elas; a tela pede pelo
   preload, por canais com o conteúdo validado (RN-SHELL-001), e nenhuma janela fala com outra
   diretamente.
+- **RN-ABAS-008.** A aba de tabela mostra na barra só o nome da tabela enquanto as tabelas abertas na
+  janela são todas de um esquema só (pedido de 2026-10-14). Com tabelas de mais de um esquema abertas
+  (o mesmo esquema noutra conexão ou noutro banco conta como outro), todas mostram `esquema.tabela`.
+  Com tabelas de mais de um banco, a de um banco que não é o da conexão mostra também o banco. O nome
+  inteiro fica na dica da aba e na lista de abas.
 
 ### Scripts salvos
 

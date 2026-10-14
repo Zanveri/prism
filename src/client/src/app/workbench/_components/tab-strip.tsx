@@ -13,6 +13,7 @@ import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { dropIndex, isOutsideWindow, readTabDrag, tabDragType, writeTabDrag } from "../_lib/tab-order";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { closeShortcutLabel, moveMenu, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabTitleOf, wheelScroll, type CloseScope } from "../_lib/tab-strip";
+import { stripTitles } from "../_lib/tab-titles";
 import type { QueryTab } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -60,6 +61,8 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSel
   const frame = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<StripMenu | null>(null);
+  // RN-ABAS-008: o nome curto na barra; o inteiro fica na dica.
+  const titles = stripTitles(tabs);
   // As outras janelas, pedidas ao abrir o menu de uma aba ("Mover para a janela…", RN-ABAS-003).
   const [otherWindows, setOtherWindows] = useState<WindowEntry[]>([]);
   // Onde a aba arrastada entraria, enquanto ela passa por cima da faixa (RN-ABAS-001): a marca de soltar.
@@ -298,7 +301,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSel
                 className="flex h-10 cursor-pointer items-center gap-2 pr-1 pl-3.5"
               >
                 {tab.table ? <TableIcon /> : <DocumentIcon />}
-                <span className="max-w-[240px] truncate">{tab.title}</span>
+                <span className="max-w-[240px] truncate">{titles.get(tab.id) ?? tab.title}</span>
                 {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
                 {label.unsaved ? (
                   <>

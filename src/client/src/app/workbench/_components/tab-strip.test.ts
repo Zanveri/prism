@@ -48,11 +48,11 @@ describe("a faixa de abas (D2)", () => {
     expect(markup.match(/class="flex flex-none items-center border-b-2/g)).toHaveLength(12);
   });
 
-  it("o título comprido encurta com reticências e leva o nome inteiro na dica", () => {
+  it("o título comprido encurta com reticências e leva o nome inteiro na dica (sozinha, a tabela aparece sem o esquema, RN-ABAS-008)", () => {
     const long = table("t1", "producao", "apontamento_de_producao_por_turno_e_por_maquina_do_mes_corrente");
     const markup = render([long], "t1");
 
-    expect(markup).toMatch(/<span class="[^"]*\btruncate\b[^"]*">producao\.apontamento_de_producao_por_turno_e_por_maquina_do_mes_corrente<\/span>/);
+    expect(markup).toMatch(/<span class="[^"]*\btruncate\b[^"]*">apontamento_de_producao_por_turno_e_por_maquina_do_mes_corrente<\/span>/);
     expect(markup).toContain(`title="${long.title}"`);
   });
 
