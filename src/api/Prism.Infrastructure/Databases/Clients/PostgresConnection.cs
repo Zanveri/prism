@@ -323,15 +323,15 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>
     /// O servidor escreve booleano como `t` e `f` e binário como `\x` e os dígitos hexadecimais: os dois voltam ao valor, para sair como
-    /// nos outros bancos (`true`, `0x…` cortado). Do binário só se converte o que cabe na tela e um byte a mais, que é o que marca o corte.
-    /// O resto é o texto do servidor, que segue como veio.
+    /// nos outros bancos (`true`, `0x…` cortado). O binário é convertido inteiro: o corte é só da grade, e copiar e exportar levam os bytes
+    /// todos (RN-SQL-017). O resto é o texto do servidor, que segue como veio.
     /// </summary>
     protected override object ReadCell(DbDataReader reader, int ordinal, string kind)
         => (kind, reader.GetValue(ordinal)) switch
         {
             ("boolean", "t") => true,
             ("boolean", "f") => false,
-            ("binary", string hex) when hex.StartsWith(@"\x", StringComparison.Ordinal) => Convert.FromHexString(hex.AsSpan(2, Math.Min(hex.Length - 2, 2 * (CellFormatter.MaxBinaryBytes + 1)))),
+            ("binary", string hex) when hex.StartsWith(@"\x", StringComparison.Ordinal) => Convert.FromHexString(hex.AsSpan(2)),
             var (_, value) => value
         };
 

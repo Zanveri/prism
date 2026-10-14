@@ -1061,6 +1061,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         var reader = _reader!;
         var rows = new List<string?[]>(_pageSize);
         var truncatedCells = new List<int[]>();
+        var fullValues = new List<FullCellValue>();
 
         while (rows.Count < _pageSize && (_rowPending || await reader.ReadAsync(cancellationToken)))
         {
@@ -1069,11 +1070,15 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             var row = new string?[_columns.Count];
             for (var column = 0; column < row.Length; column++)
             {
-                // ponytail: a célula vem inteira para a memória antes do corte; um texto ou binário de centenas de MB custa esse tanto por
-                // linha. Se pesar, ler em pedaços (`GetChars`/`GetBytes` com `SequentialAccess`) só até o limite da RN-SQL-011.
-                row[column] = CellFormatter.Format(ReadCell(reader, column, _columns[column].Kind), out var truncated);
-                if (truncated)
-                    truncatedCells.Add([rows.Count, column]);
+                // A célula vem inteira para a memória antes do corte, e é ela inteira que copiar e exportar levam (RN-SQL-017): o registro
+                // de sessões guarda o valor completo da cortada, com o teto dele.
+                var value = ReadCell(reader, column, _columns[column].Kind);
+                row[column] = CellFormatter.Format(value, out var truncated);
+                if (!truncated)
+                    continue;
+
+                truncatedCells.Add([rows.Count, column]);
+                fullValues.Add(CellFormatter.Full(value));
             }
 
             rows.Add(row);
@@ -1087,7 +1092,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
             await FinishCursorAsync(cancellationToken);
 
-            return new QueryPage(_columns, rows, false, ElapsedMs(started), truncatedCells, totalRows);
+            return new QueryPage(_columns, rows, false, ElapsedMs(started), truncatedCells, totalRows, FullValues: fullValues);
         }
 
         // Uma leitura a mais diz se há outra página sem contar o total: a linha fica no leitor para a página seguinte.
@@ -1097,7 +1102,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (!hasMore)
             await FinishCursorAsync(cancellationToken);
 
-        return new QueryPage(_columns, rows, hasMore, ElapsedMs(started), truncatedCells);
+        return new QueryPage(_columns, rows, hasMore, ElapsedMs(started), truncatedCells, FullValues: fullValues);
     }
 
     /// <summary>

@@ -38,6 +38,10 @@ internal static class DatabaseSessionErrors
             EDatabaseFailure.EditInvalid => ApiErrorDto.CreateUnprocessableEntity("A alteração não se aplica.", "EDIT_INVALID", failure.Message, EditDetails(failure)),
             EDatabaseFailure.EditRowMismatch => ApiErrorDto.CreateUnprocessableEntity("O comando não afetou exatamente uma linha.", "EDIT_ROW_MISMATCH", failure.Message, EditDetails(failure)),
 
+            // RN-SQL-017: o valor completo das células cortadas.
+            EDatabaseFailure.ResultNotFound => ApiErrorDto.CreateNotFound("Resultado não localizado.", "RESULT_NOT_FOUND", failure.Message),
+            EDatabaseFailure.CellsInvalid => ApiErrorDto.CreateUnprocessableEntity("Células inválidas.", "CELLS_INVALID", failure.Message),
+
             // O cofre aberto mudou enquanto a sessão abria: para quem chamou, é o cofre que ele usava que fechou.
             EDatabaseFailure.VaultChanged => VaultErrors.From(EVaultError.Locked),
             _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")

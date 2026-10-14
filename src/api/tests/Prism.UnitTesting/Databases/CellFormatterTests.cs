@@ -200,6 +200,43 @@ public sealed class CellFormatterTests : IDisposable
         Assert.False(truncated);
     }
 
+    /// <summary>RN-SQL-017: o corte é só da grade. O valor completo da célula cortada é o texto inteiro, sem o corte do par de `char`.</summary>
+    [Trait("CellFormatter", "Full")]
+    [Fact(DisplayName = "OK o valor completo do texto cortado é o texto inteiro, e conta 2 bytes por caractere")]
+    public void Full_ShouldKeepTheWholeText()
+    {
+        //Arrange
+        var value = new string('x', 9999) + "😀" + new string('y', 40000);
+
+        //Act
+        CellFormatter.Format(value, out var truncated);
+        var full = CellFormatter.Full(value);
+
+        //Assert
+        Assert.True(truncated);
+        Assert.Equal(value, full.Write());
+        Assert.Equal(2L * value.Length, full.Bytes);
+    }
+
+    /// <summary>RN-SQL-017: o binário inteiro, em hexadecimal como a grade escreve os primeiros 32 bytes; na memória ele fica como veio, um byte por byte.</summary>
+    [Trait("CellFormatter", "Full")]
+    [Fact(DisplayName = "OK o valor completo do binário cortado é o binário inteiro em hexadecimal, e conta 1 byte por byte")]
+    public void Full_ShouldKeepTheWholeBinary()
+    {
+        //Arrange
+        var bytes = Enumerable.Range(0, 70000).Select(index => (byte)(index * 7)).ToArray();
+
+        //Act
+        var cut = CellFormatter.Format(bytes, out var truncated);
+        var full = CellFormatter.Full(bytes);
+
+        //Assert
+        Assert.True(truncated);
+        Assert.Equal("0x" + Convert.ToHexString(bytes), full.Write());
+        Assert.StartsWith(cut!, full.Write(), StringComparison.Ordinal);
+        Assert.Equal(bytes.Length, full.Bytes);
+    }
+
     [Trait("CellFormatter", "Format")]
     [Fact(DisplayName = "OK tipo que o formatador não conhece sai pelo texto do próprio valor")]
     public void Format_ShouldFallBackToTheValueText()

@@ -59,6 +59,10 @@ public sealed class AdoDatabaseConnectionTests
     /// <summary>Quantas linhas a leitura devolve.</summary>
     private int _rows = 250;
 
+    /// <summary>O valor da coluna da leitura na linha de número dado (a partir de 1), e o tipo do C# que o driver diz que ela entrega.</summary>
+    private Func<int, object> _value = row => row;
+    private Type _fieldType = typeof(int);
+
     /// <summary>O que o banco de mentira lança no lugar da linha de número dado (a partir de 1); nulo é entregar a linha.</summary>
     private Func<int, Exception?> _rowFailure = _ => null;
 
@@ -170,13 +174,40 @@ public sealed class AdoDatabaseConnectionTests
         reader.SetupGet(mock => mock.FieldCount).Returns(1);
         reader.Setup(mock => mock.GetName(0)).Returns("numero");
         reader.Setup(mock => mock.GetDataTypeName(0)).Returns("integer");
-        reader.Setup(mock => mock.GetFieldType(0)).Returns(typeof(int));
+        reader.Setup(mock => mock.GetFieldType(0)).Returns(() => _fieldType);
         reader.Setup(mock => mock.ReadAsync(It.IsAny<CancellationToken>())).Returns(() => _rowFailure(row + 1) is { } failure ? Task.FromException<bool>(failure) : Task.FromResult(row++ < _rows));
-        reader.Setup(mock => mock.GetValue(0)).Returns(() => row);
+        reader.Setup(mock => mock.GetValue(0)).Returns(() => _value(row));
         reader.Setup(mock => mock.NextResultAsync(It.IsAny<CancellationToken>())).Returns(() => _endOfResult());
         reader.Setup(mock => mock.DisposeAsync()).Returns(() => _disposeReader());
 
         return reader.Object;
+    }
+
+    /// <summary>
+    /// RN-SQL-017: a página leva, ao lado das marcas de corte, o valor completo de cada célula cortada, na mesma ordem (o texto inteiro, o
+    /// binário inteiro), nas duas páginas do cursor. Quem o guarda e o tira da página é o registro de sessões.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "ExecuteAsync")]
+    [Fact(DisplayName = "OK a página leva o valor completo das células cortadas, na ordem das marcas, também no carregar mais")]
+    public async Task Execute_ShouldCarryTheFullValueOfEveryCutCell()
+    {
+        //Arrange
+        _rows = 4;
+        _fieldType = typeof(string);
+        _value = row => row % 2 == 0 ? new string((char)('a' + row), 10000 + row) : "curto";
+        var connection = await OpenAsync();
+
+        //Act
+        var first = await connection.ExecuteAsync(ReadQuery, 2, CancellationToken.None);
+        var next = await connection.FetchNextAsync(CancellationToken.None);
+
+        //Assert
+        var page = first.Value.Page!;
+        Assert.Equal([new[] { 1, 0 }], page.TruncatedCells);
+        Assert.Equal([new string('c', 10002)], page.FullValues!.Select(value => value.Write()));
+        Assert.Equal(new string('c', 10000), page.Rows[1][0]);
+        Assert.Equal([new[] { 1, 0 }], next.Value.TruncatedCells);
+        Assert.Equal([new string('e', 10004)], next.Value.FullValues!.Select(value => value.Write()));
     }
 
     /// <summary>
