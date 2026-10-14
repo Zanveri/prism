@@ -277,7 +277,13 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// esquema). A tabela comum e a particionada se editam; a visão, a materializada e a estrangeira, não.
     /// </summary>
     protected override (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table)
-        => (@"SELECT pg_namespace.nspname,
+        => ($"{EditRelationSql} WHERE pg_class.oid = pg_catalog.to_regclass($1)", [table.Written]);
+
+    /// <summary>RN-EDIT-003: a tabela pelo identificador que a resposta do comando dá a ela (o `TableOID` da descrição das colunas).</summary>
+    protected override (string Sql, IReadOnlyList<object> Parameters)? EditRelationByIdQuery(long id)
+        => ($"{EditRelationSql} WHERE pg_class.oid::bigint = $1", [id]);
+
+    private const string EditRelationSql = @"SELECT pg_namespace.nspname,
                      pg_class.relname,
                      CASE WHEN pg_class.relkind IN ('r', 'p') THEN 'table'
                           WHEN pg_class.relkind = 'v' THEN 'view'
@@ -288,8 +294,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                      pg_class.oid::bigint,
                      FALSE
                 FROM pg_catalog.pg_class
-                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
-               WHERE pg_class.oid = pg_catalog.to_regclass($1)", [table.Written]);
+                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace";
 
     /// <summary>RN-EDIT-002: os índices únicos válidos, sem condição (`indpred`) e sem expressão (`indexprs`); a chave primária e as restrições únicas são índices assim.</summary>
     protected override string EditKeysSql => @"SELECT index_class.relname,

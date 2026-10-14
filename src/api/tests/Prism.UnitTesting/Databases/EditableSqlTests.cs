@@ -4,8 +4,8 @@ namespace Prism.UnitTesting.Databases;
 
 /// <summary>
 /// RN-EDIT-002 e 003: a leitura do texto do comando, sem consultar o banco. Diz quando o resultado inteiro é só leitura, e com que
-/// motivo, e, quando ele lê uma tabela só, qual é ela e de onde vem cada coluna da lista do `SELECT`. Nesta leitura a junção ainda é só
-/// leitura: a edição entra pelos Registros, que leem uma tabela só.
+/// motivo, e, quando não é, cada tabela do `FROM` (com o apelido, na ordem em que aparece, também numa junção) e de onde vem cada item
+/// da lista do `SELECT`.
 /// </summary>
 public sealed class EditableSqlTests
 {
@@ -21,9 +21,7 @@ public sealed class EditableSqlTests
     [InlineData("SELECT * FROM loja.pedido FOR NO KEY UPDATE", "SELECT ... FOR UPDATE")]
     [InlineData("WITH x AS (SELECT * FROM loja.pedido) SELECT * FROM x", "subconsulta ou WITH no FROM")]
     [InlineData("SELECT * FROM (SELECT * FROM loja.pedido) AS x", "subconsulta ou WITH no FROM")]
-    [InlineData("SELECT * FROM loja.pedido JOIN loja.cliente ON cliente.id = pedido.cliente_id", "junção de tabelas")]
-    [InlineData("SELECT * FROM loja.pedido, loja.cliente", "junção de tabelas")]
-    [InlineData("SELECT * FROM loja.pedido p LEFT OUTER JOIN loja.cliente c USING (id)", "junção de tabelas")]
+    [InlineData("SELECT * FROM loja.pedido p JOIN (SELECT * FROM loja.cliente) c ON c.id = p.cliente_id", "subconsulta ou WITH no FROM")]
     [InlineData("SELECT 1", "o comando não lê uma tabela")]
     [InlineData("VALUES (1)", "o comando não é um SELECT")]
     [InlineData("SHOW search_path", "o comando não é um SELECT")]
@@ -33,6 +31,13 @@ public sealed class EditableSqlTests
     [InlineData("SELECT * FROM ONLY loja.pedido", "o Prism não conseguiu saber de onde vêm as colunas")]
     [InlineData("SELECT * FROM generate_series(1, 3)", "o Prism não conseguiu saber de onde vêm as colunas")]
     [InlineData("SELECT * FROM banco.loja.pedido", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM loja.pedido p, LATERAL (SELECT 1) x", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM (loja.pedido p JOIN loja.cliente c ON c.id = p.cliente_id)", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM loja.pedido p JOIN loja.cliente c", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM loja.pedido AS p (a, b)", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM loja.pedido p, generate_series(1, 3) g", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM loja.pedido p JOIN", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM loja.pedido,", "o Prism não conseguiu saber de onde vêm as colunas")]
     public void Read_ShouldGiveTheReasonOfAReadOnlyResult(string sql, string reason)
     {
         //Act
@@ -40,7 +45,74 @@ public sealed class EditableSqlTests
 
         //Assert
         Assert.Equal(reason, source.Reason);
-        Assert.Null(source.Table);
+        Assert.Empty(source.Tables);
+    }
+
+    /// <summary>RN-EDIT-002: as junções são permitidas; cada tabela do `FROM` vem na ordem em que aparece, com o apelido.</summary>
+    [Trait("EditableSql", "Read")]
+    [Theory(DisplayName = "OK cada forma de junção lê as tabelas do FROM na ordem, com o apelido")]
+    [InlineData("SELECT * FROM loja.pedido JOIN loja.cliente ON cliente.id = pedido.cliente_id", "loja.pedido,loja.cliente")]
+    [InlineData("SELECT * FROM loja.pedido p INNER JOIN loja.cliente AS c ON c.id = p.cliente_id", "loja.pedido p,loja.cliente c")]
+    [InlineData("SELECT * FROM loja.pedido p LEFT OUTER JOIN loja.cliente c ON (c.id = p.cliente_id AND c.ativo) RIGHT JOIN item i ON i.pedido_id = p.id", "loja.pedido p,loja.cliente c,item i")]
+    [InlineData("SELECT * FROM loja.pedido p FULL JOIN loja.cliente c ON c.id = p.cliente_id LEFT JOIN item ON left(item.codigo, 2) = c.full AND p.left = 1", "loja.pedido p,loja.cliente c,item")]
+    [InlineData("SELECT * FROM loja.pedido p CROSS JOIN loja.cliente c", "loja.pedido p,loja.cliente c")]
+    [InlineData("SELECT * FROM loja.pedido p, loja.cliente c WHERE c.id = p.cliente_id", "loja.pedido p,loja.cliente c")]
+    [InlineData("SELECT * FROM loja.pedido p JOIN loja.cliente c USING (id) NATURAL JOIN item", "loja.pedido p,loja.cliente c,item")]
+    [InlineData("SELECT * FROM loja.pedido p JOIN loja.cliente c ON c.id IN (SELECT id FROM loja.cliente x JOIN y ON y.a = x.a) ORDER BY 1", "loja.pedido p,loja.cliente c")]
+    [InlineData("SELECT * FROM pedido p JOIN pedido q ON q.pai = p.id", "pedido p,pedido q")]
+    public void Read_ShouldReadEachTableOfAJoin(string sql, string tables)
+    {
+        //Act
+        var source = EditableSql.Read(sql, ESqlDialect.PostgreSql);
+
+        //Assert
+        Assert.Null(source.Reason);
+        Assert.Equal(tables.Split(','), source.Tables.Select(Written));
+    }
+
+    /// <summary>
+    /// RN-EDIT-003: no Db2 e no Informix, `NATURAL JOIN` e `JOIN ... USING` com `*` deixam o resultado inteiro só leitura (a coluna da
+    /// junção aparece uma vez só, e a leitura não sabe de que tabela). Com `tabela.*` ou as colunas escritas, não. No PostgreSQL quem diz
+    /// de onde vem cada coluna é o banco, e a junção vale com `*`.
+    /// </summary>
+    [Trait("EditableSql", "Read")]
+    [Theory(DisplayName = "OK NATURAL JOIN e USING com * são só leitura no Db2 e no Informix, e não no PostgreSQL")]
+    [InlineData("SELECT * FROM pedido p JOIN cliente c USING (id)", "Db2", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT * FROM pedido NATURAL JOIN cliente", "Informix", "o Prism não conseguiu saber de onde vêm as colunas")]
+    [InlineData("SELECT p.*, c.nome FROM pedido p JOIN cliente c USING (id)", "Informix", null)]
+    [InlineData("SELECT * FROM pedido p JOIN cliente c USING (id)", "PostgreSql", null)]
+    [InlineData("SELECT * FROM pedido NATURAL LEFT JOIN cliente", "PostgreSql", null)]
+    public void Read_ShouldKeepAStarOverAMergedJoinReadOnlyInDb2AndInformix(string sql, string dialect, string? reason)
+    {
+        //Act
+        var source = EditableSql.Read(sql, Enum.Parse<ESqlDialect>(dialect));
+
+        //Assert
+        Assert.Equal(reason, source.Reason);
+        Assert.Equal(reason is null ? 2 : 0, source.Tables.Count);
+    }
+
+    /// <summary>O comando do dono (2026-10-14), no Informix: as colunas de uma tabela, numa junção de três, sem apelido.</summary>
+    [Trait("EditableSql", "Read")]
+    [Fact(DisplayName = "OK o SELECT com junção do dono lê as três tabelas e as colunas de uma delas")]
+    public void Read_ShouldReadTheOwnersJoin()
+    {
+        //Arrange
+        const string sql = """
+            select pallets_items.*
+              from pallets
+             inner join pallets_items on pallets_items.pallet_id = pallets.id
+             inner join items on pallets_items.item_id = items.id
+             where pallets.is_integrated = 1 and pallets.location_id = 6 and items.code = '66903015';
+            """;
+
+        //Act
+        var source = EditableSql.Read(sql, ESqlDialect.Informix);
+
+        //Assert
+        Assert.Null(source.Reason);
+        Assert.Equal(["pallets", "pallets_items", "items"], source.Tables.Select(Written));
+        Assert.Equal(["pallets_items"], Assert.IsType<SelectItem.AllOf>(Assert.Single(source.Items)).Qualifier);
     }
 
     [Trait("EditableSql", "Read")]
@@ -55,7 +127,8 @@ public sealed class EditableSqlTests
 
         //Assert
         Assert.Null(source.Reason);
-        Assert.Equal(("loja", "pedido", "\"loja\".\"pedido\""), (source.Table!.Schema, source.Table.Name, source.Table.Written));
+        var table = Assert.Single(source.Tables);
+        Assert.Equal(("loja", "pedido", "\"loja\".\"pedido\"", (string?)null), (table.Name.Schema, table.Name.Name, table.Name.Written, table.Alias));
         Assert.IsType<SelectItem.All>(Assert.Single(source.Items));
     }
 
@@ -76,7 +149,7 @@ public sealed class EditableSqlTests
 
         //Assert
         Assert.Null(source.Reason);
-        Assert.Equal("pedido", source.Table!.Name);
+        Assert.Equal("pedido", Assert.Single(source.Tables).Name.Name);
     }
 
     [Trait("EditableSql", "Read")]
@@ -92,9 +165,9 @@ public sealed class EditableSqlTests
         var informix = EditableSql.Read(sql, ESqlDialect.Informix);
 
         //Assert
-        Assert.Equal(("loja", "Pedido", "p", "\"loja\".\"Pedido\""), (postgres.Table!.Schema, postgres.Table.Name, postgres.Alias, postgres.Table.Written));
-        Assert.Equal(("LOJA", "Pedido", "P"), (db2.Table!.Schema, db2.Table.Name, db2.Alias));
-        Assert.Equal(("loja", "Pedido", "p"), (informix.Table!.Schema, informix.Table.Name, informix.Alias));
+        Assert.Equal(("loja", "Pedido", "p", "\"loja\".\"Pedido\""), (postgres.Tables[0].Name.Schema, postgres.Tables[0].Name.Name, postgres.Tables[0].Alias, postgres.Tables[0].Name.Written));
+        Assert.Equal(("LOJA", "Pedido", "P"), (db2.Tables[0].Name.Schema, db2.Tables[0].Name.Name, db2.Tables[0].Alias));
+        Assert.Equal(("loja", "Pedido", "p"), (informix.Tables[0].Name.Schema, informix.Tables[0].Name.Name, informix.Tables[0].Alias));
     }
 
     [Trait("EditableSql", "Read")]
@@ -106,7 +179,7 @@ public sealed class EditableSqlTests
 
         //Assert
         Assert.Null(source.Reason);
-        Assert.Equal((null, "PEDIDO", "\"PEDIDO\""), (source.Table!.Schema, source.Table.Name, source.Table.Written));
+        Assert.Equal((null, "PEDIDO", "\"PEDIDO\""), (source.Tables[0].Name.Schema, source.Tables[0].Name.Name, source.Tables[0].Name.Written));
     }
 
     [Trait("EditableSql", "Read")]
@@ -133,7 +206,7 @@ public sealed class EditableSqlTests
     [InlineData("SELECT FIRST 10 * FROM pedido", null)]
     [InlineData("SELECT SKIP 5 LIMIT 10 * FROM pedido", null)]
     [InlineData("SELECT UNIQUE status FROM pedido", "DISTINCT")]
-    [InlineData("SELECT * FROM pedido, OUTER cliente", "junção de tabelas")]
+
     [InlineData("SELECT * FROM banco:pedido", "o Prism não conseguiu saber de onde vêm as colunas")]
     [InlineData("SELECT * FROM pedido {GROUP BY} WHERE 1 = 1", null)]
     [InlineData("SELECT * FROM pedido INTO TEMP copia", "o comando não é um SELECT")]
@@ -146,10 +219,32 @@ public sealed class EditableSqlTests
         Assert.Equal(reason, source.Reason);
         if (reason is null)
         {
-            Assert.Equal("pedido", source.Table!.Name);
+            Assert.Equal("pedido", Assert.Single(source.Tables).Name.Name);
             Assert.IsType<SelectItem.All>(Assert.Single(source.Items));
         }
     }
+
+    /// <summary>RN-EDIT-002 e 003: a forma `, OUTER tabela` do Informix é uma junção; o `OUTER (...)` com parênteses fica só leitura.</summary>
+    [Trait("EditableSql", "Read")]
+    [Theory(DisplayName = "OK a junção , OUTER tabela do Informix lê as tabelas; com parênteses, não; e fora do Informix não é junção")]
+    [InlineData("SELECT * FROM pedido p, OUTER cliente c WHERE c.id = p.cliente_id", "pedido p,cliente c")]
+    [InlineData("SELECT * FROM pedido, OUTER cliente, OUTER item", "pedido,cliente,item")]
+    [InlineData("SELECT * FROM pedido p, OUTER (cliente c, OUTER item i) WHERE c.id = p.cliente_id", null)]
+    public void Read_ShouldReadTheInformixOuterJoin(string sql, string? tables)
+    {
+        //Act
+        var source = EditableSql.Read(sql, ESqlDialect.Informix);
+        var postgres = EditableSql.Read(sql, ESqlDialect.PostgreSql);
+
+        //Assert
+        Assert.Equal(tables is null ? EditableSql.UnknownOrigin : null, source.Reason);
+        Assert.Equal(tables?.Split(',') ?? [], source.Tables.Select(Written));
+        Assert.Equal(EditableSql.UnknownOrigin, postgres.Reason);
+    }
+
+    /// <summary>A tabela como a leitura a guardou: `[esquema.]nome [apelido]`.</summary>
+    private static string Written(FromTable table)
+        => $"{(table.Name.Schema is null ? string.Empty : $"{table.Name.Schema}.")}{table.Name.Name}{(table.Alias is null ? string.Empty : $" {table.Alias}")}";
 
     private static (string Qualifier, string Name, string Output) Parts(SelectItem item)
     {

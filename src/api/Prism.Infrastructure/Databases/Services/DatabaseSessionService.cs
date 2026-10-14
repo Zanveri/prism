@@ -279,13 +279,14 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 return ResultChanged();
 
             var dialect = DialectOf(session);
-            if (result.Source.Table is not { } table)
+            if (result.Source.Tables.Count == 0)
                 return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null).Error;
 
+            var tables = TablesOf(result);
             var expected = result.Target;
             if (expected is null)
             {
-                var described = await session.Connection.DescribeEditTableAsync(table, cancellationToken);
+                var described = await session.Connection.DescribeEditTablesAsync(tables, cancellationToken);
                 if (described.IsFailure)
                     return described.Error;
 
@@ -300,9 +301,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (planned.IsFailure)
                 return planned.Error;
 
-            return await session.Connection.ApplyEditsAsync(table, expected.OneAtATime, catalog =>
+            return await session.Connection.ApplyEditsAsync(tables, expected.OneAtATime, catalogs =>
             {
-                var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog);
+                var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalogs);
                 if (now.IsFailure || !EditTargetResolver.Same(expected, now.Value))
                     return Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(TableChanged(expected, now));
 
@@ -323,15 +324,37 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     private static DatabaseFailure ResultChanged()
         => new(EDatabaseFailure.ResultChanged, "O resultado mudou: a sessão executou outro comando depois dele. Execute o comando de novo para editar.");
 
-    /// <summary>RN-EDIT-005: o catálogo de dentro da transação não é o da consulta. Nada foi executado.</summary>
+    /// <summary>
+    /// RN-EDIT-005: o catálogo de dentro da transação não é o da consulta. Nada foi executado. Diz a primeira tabela do `FROM` que mudou
+    /// (a que agora é outra, pelo esquema atual da sessão, ou a de chave, colunas ou tipos diferentes).
+    /// </summary>
     private static DatabaseFailure TableChanged(EditTarget expected, Result<EditTarget, DatabaseFailure> now)
     {
-        var before = expected.Tables[0];
-        if (now.IsSuccess && now.Value.Tables[0] is var table && (table.Schema != before.Schema || table.Name != before.Name))
-            return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"O comando agora lê outra tabela ({table.Schema}.{table.Name}, e não {before.Schema}.{before.Name}): o esquema atual da sessão mudou desde a consulta. Nada foi gravado; execute o comando de novo.");
+        var changed = expected.Tables[0];
+        for (var index = 0; now.IsSuccess && index < expected.Tables.Count; index++)
+        {
+            var before = expected.Tables[index];
+            if (index >= now.Value.Tables.Count)
+                break;
 
-        return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"A tabela {before.Name} mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.");
+            var table = now.Value.Tables[index];
+            if (table.Schema != before.Schema || table.Name != before.Name)
+                return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"O comando agora lê outra tabela ({table.Schema}.{table.Name}, e não {before.Schema}.{before.Name}): o esquema atual da sessão mudou desde a consulta. Nada foi gravado; execute o comando de novo.");
+
+            var position = index;
+            if (table.Editable != before.Editable || !table.Key.SequenceEqual(before.Key) || !expected.Columns.Where(column => column.Table == position).SequenceEqual(now.Value.Columns.Where(column => column.Table == position)))
+            {
+                changed = before;
+                break;
+            }
+        }
+
+        return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"A tabela {changed.Name} mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.");
     }
+
+    /// <summary>RN-EDIT-003: as tabelas do `FROM` e, no PostgreSQL, as que a resposta do comando diz de onde vêm as colunas.</summary>
+    private static EditTables TablesOf(ResultState result)
+        => new([.. result.Source.Tables.Select(table => table.Name)], [.. result.Columns.Select(column => column.Origin?.Table ?? 0).Where(table => table != 0).Distinct()]);
 
     private static ESqlDialect DialectOf(Session session)
         => session.Info.Engine switch
@@ -351,11 +374,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             return known;
 
         var dialect = DialectOf(session);
-        if (result.Source.Table is not { } table)
+        if (result.Source.Tables.Count == 0)
             return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null);
 
         var started = _timeProvider.GetTimestamp();
-        var catalog = await DescribeElsewhereAsync(session, table, catalogSessionID, cancellationToken);
+        var catalog = await DescribeElsewhereAsync(session, TablesOf(result), catalogSessionID, cancellationToken);
         var target = catalog.IsFailure ? catalog.Error : EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog.Value);
         Log(session, nameof(GetEditTargetAsync), started, target);
 
@@ -371,11 +394,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// parte, com as credenciais da sessão e prazo de espera de trava, que o "cancelar" e o fechamento da sessão interrompem como a
     /// contagem.
     /// </summary>
-    private async Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeElsewhereAsync(Session session, EditTableName table, Guid? catalogSessionID, CancellationToken cancellationToken)
+    private async Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeElsewhereAsync(Session session, EditTables tables, Guid? catalogSessionID, CancellationToken cancellationToken)
     {
         if (catalogSessionID is { } catalogID && catalogID != session.Info.ID && _sessions.TryGetValue(catalogID, out var tree) && tree.Info.ConnectionID == session.Info.ConnectionID && tree.Info.Database == session.Info.Database && tree.VaultGeneration == session.VaultGeneration)
         {
-            var described = await RunAsync(catalogID, nameof(DescribeElsewhereAsync), waitsForTurn: true, other => other.Connection.DescribeEditTableAsync(table, cancellationToken), cancellationToken);
+            var described = await RunAsync(catalogID, nameof(DescribeElsewhereAsync), waitsForTurn: true, other => other.Connection.DescribeEditTablesAsync(tables, cancellationToken), cancellationToken);
             if (described.IsSuccess || described.Error.Kind != EDatabaseFailure.SessionNotFound)
                 return described;
         }
@@ -388,7 +411,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         await using var connection = opened.Value;
         var limited = await connection.LimitLockWaitAsync(describing.Token);
 
-        return limited.IsFailure ? limited.Error : await connection.DescribeEditTableAsync(table, describing.Token);
+        return limited.IsFailure ? limited.Error : await connection.DescribeEditTablesAsync(tables, describing.Token);
     }
 
     /// <summary>RN-SQL-007: só há cursor aberto quando a página diz que há mais linhas; qualquer outro desfecho de um comando o fechou.</summary>

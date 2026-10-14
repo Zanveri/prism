@@ -5,8 +5,9 @@ namespace Prism.Infrastructure.Databases.Clients;
 
 /// <summary>
 /// RN-EDIT-005 e 008: os comandos do "Salvar" a partir das pendências, na ordem da regra: primeiro as exclusões, depois as alterações,
-/// depois as linhas novas, cada grupo na ordem em que veio. Cada alteração e cada exclusão é um comando pela chave da tabela, com os
-/// valores que a grade leu; a linha nova leva só as colunas preenchidas. Os valores vão como parâmetros (`$1` no PostgreSQL, `?` no Db2
+/// depois as linhas novas, cada grupo na ordem em que veio. Cada alteração e cada exclusão é um comando pela chave da tabela dela (numa
+/// junção, as alterações de uma linha da grade em duas tabelas são duas alterações, cada uma com a sua tabela), com os valores que a
+/// grade leu; a linha nova leva só as colunas preenchidas. Os valores vão como parâmetros (`$1` no PostgreSQL, `?` no Db2
 /// e no Informix), nunca dentro do texto, e os nomes entre aspas duplas (RN-TABELA-002). O "Ver SQL" é o mesmo comando, com os valores
 /// escritos como literais do banco para leitura.
 ///
@@ -87,7 +88,10 @@ internal static class EditPlanner
                 return Invalid("A coluna não existe no resultado.", value.Column);
 
             var column = target.Columns[value.Column];
-            if (column.Table != change.Table || !column.Editable)
+            if (column.Editable && column.Table != change.Table)
+                return Invalid("A coluna não é da tabela da alteração.", value.Column);
+
+            if (!column.Editable)
                 return Invalid($"A coluna não se edita: {column.Reason}.", value.Column);
 
             if (!seen.Add(column.BaseColumn!))

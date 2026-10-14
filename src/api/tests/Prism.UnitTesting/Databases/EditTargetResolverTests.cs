@@ -4,15 +4,21 @@ using Prism.Infrastructure.Databases.Models;
 namespace Prism.UnitTesting.Databases;
 
 /// <summary>
-/// RN-EDIT-002 e 003: o que se edita num resultado de uma tabela só, a partir da leitura do comando, das colunas que o banco devolveu e
-/// do catálogo. No PostgreSQL a origem de cada coluna vem do próprio banco (a tabela e o número da coluna); no Db2 e no Informix, da
-/// lista do `SELECT`, que tem de bater com as colunas devolvidas.
+/// RN-EDIT-002 e 003: o que se edita num resultado, tabela por tabela do `FROM` e coluna por coluna, a partir da leitura do comando, das
+/// colunas que o banco devolveu e do catálogo. No PostgreSQL a origem de cada coluna vem do próprio banco (a tabela e o número da
+/// coluna); no Db2 e no Informix, da lista do `SELECT`, que tem de bater com as colunas devolvidas.
 /// </summary>
 public sealed class EditTargetResolverTests
 {
     private const long TableID = 16384;
 
+    private const long ClienteID = 16390;
+
     private static readonly EditTableName Pedido = new("loja", "pedido", "\"loja\".\"pedido\"");
+
+    private static readonly EditTableName Cliente = new("loja", "cliente", "\"loja\".\"cliente\"");
+
+    private static readonly EditCatalogTable ClienteTable = new("loja", "cliente", "table", ClienteID, false, [new("id", "integer", false, true, 1, null, null), new("nome", "text", true, false, 2, null, null), new("criado", "date", true, false, 3, null, null)], [new EditKey("cliente_pkey", true, ["id"])]);
 
     private static readonly ColumnInfo[] Columns =
     [
@@ -69,7 +75,7 @@ public sealed class EditTargetResolverTests
     public void Resolve_ShouldTellATableTheCatalogDoesNotFindIsNotATable()
     {
         //Act
-        var target = Resolve(ESqlDialect.Db2, Source(new SelectItem.All()), [new QueryColumn("ID", "INTEGER", "number")], null);
+        var target = Resolve(ESqlDialect.Db2, Source(new SelectItem.All()), [new QueryColumn("ID", "INTEGER", "number")], (EditCatalogTable?)null);
 
         //Assert
         Assert.Equal(("pedido", "pedido não é uma tabela"), (target.Tables[0].Name, target.Tables[0].Reason));
@@ -136,7 +142,7 @@ public sealed class EditTargetResolverTests
         var result = names.Split(',').Select(Ibm).ToArray();
 
         //Act
-        var resolved = EditTargetResolver.Resolve(ESqlDialect.Db2, Source(new SelectItem.All()), result, Table("table", columns));
+        var resolved = EditTargetResolver.Resolve(ESqlDialect.Db2, Source(new SelectItem.All()), result, [Table("table", columns)]);
 
         //Assert
         Assert.True(resolved.IsFailure);
@@ -148,7 +154,7 @@ public sealed class EditTargetResolverTests
     public void Resolve_ShouldRefuseAStarOfAnotherTable()
     {
         //Act
-        var resolved = EditTargetResolver.Resolve(ESqlDialect.Informix, Source(new SelectItem.AllOf(["cliente"])), [Ibm("id")], Table("table", [new("id", "INTEGER", false, true, 1, null, null)]));
+        var resolved = EditTargetResolver.Resolve(ESqlDialect.Informix, Source(new SelectItem.AllOf(["cliente"])), [Ibm("id")], [Table("table", [new("id", "INTEGER", false, true, 1, null, null)])]);
 
         //Assert
         Assert.Equal(EditableSql.UnknownOrigin, resolved.Error.Reason);
@@ -183,9 +189,157 @@ public sealed class EditTargetResolverTests
         Assert.False(EditTargetResolver.Same(before, view));
     }
 
-    private static EditTarget Resolve(ESqlDialect dialect, ResultSource source, IReadOnlyList<QueryColumn> result, EditCatalogTable? catalog)
+    /// <summary>RN-EDIT-002: na junção, cada tabela se edita pela chave dela; a coluna da chave não se edita, e as outras sim.</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK no PostgreSQL a junção edita cada coluna na tabela de onde ela veio, menos as da chave, e não tem linha nova nem exclusão")]
+    public void Resolve_ShouldEditEachColumnOfAPostgresJoinInItsOwnTable()
     {
-        var resolved = EditTargetResolver.Resolve(dialect, source, result, catalog);
+        //Arrange
+        var result = new[] { Origin("id", 1), Origin("status", 2), Origin("id", 1, ClienteID), Origin("nome", 2, ClienteID), new QueryColumn("dobro", "integer", "number", new ColumnOrigin(0, 0)) };
+
+        //Act
+        var target = Resolve(ESqlDialect.PostgreSql, Join(new SelectItem.All()), result, Table("table"), ClienteTable);
+
+        //Assert
+        Assert.Equal([("pedido", true, null), ("cliente", true, null)], target.Tables.Select(table => (table.Name, table.Editable, table.Reason)));
+        Assert.Equal([[0], [2]], target.Tables.Select(table => table.Key.ToArray()));
+        Assert.Equal([0, 0, 1, 1, null], target.Columns.Select(column => column.Table));
+        Assert.Equal([(false, "coluna da chave numa junção"), (true, null), (false, "coluna da chave numa junção"), (true, null), (false, "coluna calculada")], target.Columns.Select(column => (column.Editable, column.Reason)));
+        Assert.False(target.RowOperations);
+    }
+
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK na junção a tabela sem a chave inteira no resultado fica só leitura, e a outra continua editável")]
+    public void Resolve_ShouldKeepOnlyTheTableWithoutItsKeyReadOnlyInAJoin()
+    {
+        //Arrange
+        var result = new[] { Origin("id", 1), Origin("status", 2), Origin("nome", 2, ClienteID) };
+
+        //Act
+        var target = Resolve(ESqlDialect.PostgreSql, Join(new SelectItem.All()), result, Table("table"), ClienteTable);
+
+        //Assert
+        Assert.Equal((true, null), (target.Tables[0].Editable, target.Tables[0].Reason));
+        Assert.Equal((false, "a chave de cliente não está inteira no resultado: faltam id"), (target.Tables[1].Editable, target.Tables[1].Reason));
+        Assert.Equal([false, true, false], target.Columns.Select(column => column.Editable));
+        Assert.Equal("a chave de cliente não está inteira no resultado: faltam id", target.Columns[2].Reason);
+    }
+
+    /// <summary>RN-EDIT-002: a mesma tabela duas vezes, ou duas de mesmo nome em esquemas diferentes, ficam só leitura.</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK a tabela que aparece mais de uma vez no FROM, mesmo noutro esquema, fica só leitura")]
+    public void Resolve_ShouldKeepATableThatAppearsTwiceReadOnly()
+    {
+        //Arrange
+        var twice = new ResultSource(null, [new FromTable(Pedido, "p"), new FromTable(Pedido, "q"), new FromTable(Cliente, null)], [new SelectItem.All()]);
+        var elsewhere = new ResultSource(null, [new FromTable(Pedido, null), new FromTable(new EditTableName("arquivo", "pedido", "\"arquivo\".\"pedido\""), null)], [new SelectItem.All()]);
+        var result = new[] { Origin("id", 1), Origin("status", 2), Origin("id", 1, ClienteID), Origin("nome", 2, ClienteID) };
+
+        //Act
+        var same = Resolve(ESqlDialect.PostgreSql, twice, result, Table("table"), Table("table"), ClienteTable);
+        var other = Resolve(ESqlDialect.PostgreSql, elsewhere, [Origin("id", 1), Origin("id", 1, 17000)], Table("table"), Table("table") with { Schema = "arquivo", Id = 17000 });
+
+        //Assert
+        Assert.Equal([(false, "pedido aparece mais de uma vez no comando"), (false, "pedido aparece mais de uma vez no comando"), (true, null)], same.Tables.Select(table => (table.Editable, table.Reason)));
+        Assert.Equal([0, 0, 2, 2], same.Columns.Select(column => column.Table));
+        Assert.Equal([false, false, false, true], same.Columns.Select(column => column.Editable));
+        Assert.Equal([false, false], other.Tables.Select(table => table.Editable));
+        Assert.Equal([0, 1], other.Columns.Select(column => column.Table));
+    }
+
+    /// <summary>RN-EDIT-003: no Db2 e no Informix o `*` de uma junção são as colunas de cada tabela, na ordem do catálogo, tabela por tabela, na ordem do `FROM`.</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK no Db2 o * de uma junção são as colunas de cada tabela na ordem do FROM, e cada uma se edita na sua")]
+    public void Resolve_ShouldExpandTheStarOfAnIbmJoinTableByTable()
+    {
+        //Arrange
+        var result = new[] { Ibm("ID"), Ibm("STATUS"), Ibm("ID"), Ibm("NOME") };
+
+        //Act
+        var target = Resolve(ESqlDialect.Db2, IbmJoin(new SelectItem.All()), result, IbmPedido, IbmCliente);
+
+        //Assert
+        Assert.Equal([0, 0, 1, 1], target.Columns.Select(column => column.Table));
+        Assert.Equal(["ID", "STATUS", "ID", "NOME"], target.Columns.Select(column => column.BaseColumn));
+        Assert.Equal([[0], [2]], target.Tables.Select(table => table.Key.ToArray()));
+        Assert.Equal([false, true, false, true], target.Columns.Select(column => column.Editable));
+    }
+
+    /// <summary>
+    /// RN-EDIT-003: `apelido.*`, `apelido.coluna` e `tabela.coluna` (sem apelido) dizem a tabela; a coluna sem tabela é da única tabela
+    /// do `FROM` que tem uma coluna com esse nome, e a que está em mais de uma não se edita.
+    /// </summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK no Informix a coluna sem tabela é da única tabela que a tem, e a que está em duas não se edita")]
+    public void Resolve_ShouldTakeAnUnqualifiedIbmColumnFromTheOnlyTableThatHasIt()
+    {
+        //Arrange
+        var source = new ResultSource(null, [new FromTable(new EditTableName("loja", "pedido", "\"loja\".\"pedido\""), null), new FromTable(new EditTableName(null, "cliente", "\"cliente\""), "c")],
+        [
+            new SelectItem.Column(["pedido"], "id", "id"),
+            new SelectItem.Column([], "status", "status"),
+            new SelectItem.Column(["c"], "id", "cid"),
+            new SelectItem.Column([], "nome", "nome"),
+            new SelectItem.Column([], "criado", "criado")
+        ]);
+        var pedido = Table("table", [new("id", "INTEGER", false, true, 1, null, null), new("status", "VARCHAR(20)", true, false, 2, null, null), new("criado", "DATE", true, false, 3, null, null)]);
+        var cliente = ClienteTable with { Columns = [new("id", "INTEGER", false, true, 1, null, null), new("nome", "VARCHAR(40)", true, false, 2, null, null), new("criado", "DATE", true, false, 3, null, null)] };
+
+        //Act
+        var target = Resolve(ESqlDialect.Informix, source, [Ibm("id"), Ibm("status"), Ibm("cid"), Ibm("nome"), Ibm("criado")], pedido, cliente);
+
+        //Assert
+        Assert.Equal([0, 0, 1, 1, null], target.Columns.Select(column => column.Table));
+        Assert.Equal([(false, "coluna da chave numa junção"), (true, null), (false, "coluna da chave numa junção"), (true, null), (false, "a coluna sem tabela pode ser de mais de uma tabela do comando")], target.Columns.Select(column => (column.Editable, column.Reason)));
+        Assert.Equal([[0], [2]], target.Tables.Select(table => table.Key.ToArray()));
+    }
+
+    /// <summary>O comando do dono (2026-10-14), no Informix: `pallets_items.*` numa junção de três; só `pallets_items` tem a chave inteira no resultado.</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK no SELECT com junção do dono se editam as colunas de pallets_items, menos a chave")]
+    public void Resolve_ShouldEditTheItemsOfTheOwnersJoin()
+    {
+        //Arrange
+        var source = EditableSql.Read("select pallets_items.* from pallets inner join pallets_items on pallets_items.pallet_id = pallets.id inner join items on pallets_items.item_id = items.id where items.code = '66903015'", ESqlDialect.Informix);
+        EditCatalogTable Catalog(string name, params string[] columns)
+            => new("informix", name, "table", null, false, [.. columns.Select((column, index) => new ColumnInfo(column, "INTEGER", index > 0, index == 0, index + 1, null, null))], [new EditKey($"pk_{name}", true, ["id"])]);
+
+        //Act
+        var target = Resolve(ESqlDialect.Informix, source, [Ibm("id"), Ibm("pallet_id"), Ibm("item_id"), Ibm("quantity")], Catalog("pallets", "id", "location_id", "is_integrated"), Catalog("pallets_items", "id", "pallet_id", "item_id", "quantity"), Catalog("items", "id", "code"));
+
+        //Assert
+        Assert.Equal([(false, "a chave de pallets não está inteira no resultado: faltam id"), (true, null), (false, "a chave de items não está inteira no resultado: faltam id")], target.Tables.Select(table => (table.Editable, table.Reason)));
+        Assert.Equal([1, 1, 1, 1], target.Columns.Select(column => column.Table));
+        Assert.Equal([false, true, true, true], target.Columns.Select(column => column.Editable));
+        Assert.Equal([0], target.Tables[1].Key);
+        Assert.False(target.RowOperations);
+    }
+
+    /// <summary>RN-EDIT-003: o sinônimo (que o catálogo não acha como tabela) deixa só leitura as colunas dele; com `*` numa junção, a leitura não sabe quantas são, e o resultado inteiro fica só leitura.</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK numa junção a tabela que o catálogo não acha deixa só leitura as colunas dela, e o * sobre ela o resultado inteiro")]
+    public void Resolve_ShouldKeepTheColumnsOfATableTheCatalogDoesNotFindReadOnlyInAJoin()
+    {
+        //Arrange
+        var columns = new SelectItem[] { new SelectItem.Column(["P"], "ID", "ID"), new SelectItem.Column(["P"], "STATUS", "STATUS"), new SelectItem.Column(["C"], "NOME", "NOME") };
+
+        //Act
+        var target = Resolve(ESqlDialect.Db2, IbmJoin(columns), [Ibm("ID"), Ibm("STATUS"), Ibm("NOME")], IbmPedido, null);
+        var star = EditTargetResolver.Resolve(ESqlDialect.Db2, IbmJoin(new SelectItem.All()), [Ibm("ID"), Ibm("STATUS"), Ibm("NOME")], [IbmPedido, null]);
+
+        //Assert
+        Assert.Equal([(true, null), (false, "CLIENTE não é uma tabela")], target.Tables.Select(table => (table.Editable, table.Reason)));
+        Assert.Equal([(false, "coluna da chave numa junção"), (true, null), (false, "CLIENTE não é uma tabela")], target.Columns.Select(column => (column.Editable, column.Reason)));
+        Assert.Equal(EditableSql.UnknownOrigin, star.Error.Reason);
+    }
+
+    private static readonly EditCatalogTable IbmPedido = new("LOJA", "PEDIDO", "table", null, false, [new("ID", "INTEGER", false, true, 1, null, null), new("STATUS", "VARCHAR(20)", true, false, 2, null, null)], [new EditKey("PK_PEDIDO", true, ["ID"])]);
+
+    private static readonly EditCatalogTable IbmCliente = new("LOJA", "CLIENTE", "table", null, false, [new("ID", "INTEGER", false, true, 1, null, null), new("NOME", "VARCHAR(40)", true, false, 2, null, null)], [new EditKey("PK_CLIENTE", true, ["ID"])]);
+
+    private static EditTarget Resolve(ESqlDialect dialect, ResultSource source, IReadOnlyList<QueryColumn> result, params EditCatalogTable?[] catalogs)
+    {
+        var resolved = EditTargetResolver.Resolve(dialect, source, result, catalogs);
         Assert.True(resolved.IsSuccess, resolved.IsFailure ? resolved.Error.Message : null);
 
         return resolved.Value;
@@ -195,13 +349,19 @@ public sealed class EditTargetResolverTests
         => Source([item]);
 
     private static ResultSource Source(IReadOnlyList<SelectItem> items, string? alias = null)
-        => new(null, Pedido, alias, items);
+        => new(null, [new FromTable(Pedido, alias)], items);
+
+    private static ResultSource Join(params SelectItem[] items)
+        => new(null, [new FromTable(Pedido, "p"), new FromTable(Cliente, "c")], items);
+
+    private static ResultSource IbmJoin(params SelectItem[] items)
+        => new(null, [new FromTable(new EditTableName("LOJA", "PEDIDO", "\"LOJA\".\"PEDIDO\""), "P"), new FromTable(new EditTableName("LOJA", "CLIENTE", "\"LOJA\".\"CLIENTE\""), "C")], items);
 
     private static EditCatalogTable Table(string kind, IReadOnlyList<ColumnInfo>? columns = null, IReadOnlyList<EditKey>? keys = null)
         => new("loja", "pedido", kind, TableID, false, columns ?? Columns, keys ?? [new EditKey("pedido_pkey", true, ["id"])]);
 
-    private static QueryColumn Origin(string name, int column)
-        => new(name, "text", "text", new ColumnOrigin(TableID, column));
+    private static QueryColumn Origin(string name, int column, long table = TableID)
+        => new(name, "text", "text", new ColumnOrigin(table, column));
 
     private static QueryColumn Ibm(string name)
         => new(name, "VARCHAR", "text");
