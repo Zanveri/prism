@@ -1,7 +1,7 @@
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 
-import { fieldAttributes, singleLine } from "./filter-field";
+import { fieldAttributes, fieldThemeSpec, singleLine } from "./filter-field";
 
 // O campo de filtro (RN-TABELA-005, 010 e 011) é um CodeMirror de uma linha. O vitest não tem DOM: o que se confere é o estado do editor, que é onde a
 // regra mora (a vista do CodeMirror só desenha).
@@ -39,5 +39,22 @@ describe("os atributos do texto editável", () => {
       autocapitalize: "off",
     });
     expect(fieldAttributes({ label: "x", describedBy: "h", invalid: false })["aria-invalid"]).toBe("false");
+  });
+});
+
+// A lista de sugestões vai para o `body` (`tooltips({ parent: document.body })`), num recipiente que o CodeMirror cria lá com as classes de tema do
+// editor. Uma regra em `&` vale para ele também: com a altura de 28 px do campo, cada campo montado (uma aba de consulta com resultado, os
+// Registros de uma tabela) deixava um bloco de 28 px no fim do `body`, o documento passava da janela e a área de trabalho rolava como página.
+describe("o tema do campo vale só para o editor, não para o recipiente da lista de sugestões", () => {
+  it("nenhuma regra em `&` sozinho: a caixa do campo é a de `&.cm-editor`", () => {
+    expect(Object.keys(fieldThemeSpec)).not.toContain("&");
+    expect(fieldThemeSpec["&.cm-editor"]).toMatchObject({ flex: "1 1 0%", minWidth: "0", height: "28px" });
+  });
+
+  it("toda regra que começa em `&` nomeia o editor (`&.cm-editor`, `&.cm-focused`) ou desce a um elemento dele", () => {
+    for (const selector of Object.keys(fieldThemeSpec).flatMap((key) => key.split(","))) {
+      const own = selector.trim();
+      if (own.startsWith("&")) expect(own, own).toMatch(/^&\.cm-(editor|focused)\b/);
+    }
   });
 });

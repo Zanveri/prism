@@ -29,9 +29,13 @@ export function fieldAttributes({ label, describedBy, invalid }: { label: string
   return { "aria-label": label, "aria-describedby": describedBy, "aria-invalid": invalid ? "true" : "false", spellcheck: "false", autocorrect: "off", autocapitalize: "off" };
 }
 
-/** O tema do campo: a altura de uma linha, sem borda própria (a caixa em volta é a do formulário), a fonte do editor SQL e a lista de sugestões do editor. */
-const fieldTheme = EditorView.theme({
-  "&": { flex: "1 1 0%", minWidth: "0", height: "28px", backgroundColor: "transparent", color: "var(--color-ink)" },
+/**
+ * O tema do campo: a altura de uma linha, sem borda própria (a caixa em volta é a do formulário), a fonte do editor SQL e a lista de sugestões do editor.
+ * A caixa é a de `&.cm-editor`, nunca a de `&` sozinho: o recipiente que o CodeMirror põe no `body` para a lista de sugestões leva as classes de tema do
+ * editor, e com a altura do campo ele virava um bloco de 28 px no fim do `body` que deixava o documento mais alto que a janela.
+ */
+export const fieldThemeSpec = {
+  "&.cm-editor": { flex: "1 1 0%", minWidth: "0", height: "28px", backgroundColor: "transparent", color: "var(--color-ink)" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "inherit", lineHeight: "28px", overflowX: "auto", overflowY: "hidden", scrollbarWidth: "none" },
   ".cm-content": { padding: "0", caretColor: "var(--color-accent)" },
@@ -40,7 +44,9 @@ const fieldTheme = EditorView.theme({
   ".cm-cursor": { borderLeftColor: "var(--color-accent)" },
   ".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { backgroundColor: "var(--color-selection)" },
   ...completionTheme("var(--font-editor)"),
-});
+};
+
+const fieldTheme = EditorView.theme(fieldThemeSpec);
 
 type FilterFieldProps = {
   value: string;
