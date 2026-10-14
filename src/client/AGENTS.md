@@ -297,7 +297,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **Mover pasta** oferece todas as pastas, a própria e as de dentro dela: o ciclo é recusa da API (RN-PASTA-003), e o
   aceite pede que ela apareça como aviso.
 - **A seção Ambiente** (`environment-picker.tsx`, RN-CONN-015, RN-CONN-017 e RN-PASTA-005) é uma só, no formulário da conexão e nos
-  diálogos de nova pasta e de renomear pasta (também pelo F2); mover pasta não a mostra. Os ids vêm do `idPrefix` (`cx` e `folder`), e a
+  diálogos de nova pasta e de "Editar pasta" (também pelo F2); mover pasta não a mostra. Os ids vêm do `idPrefix` (`cx` e `folder`), e a
   explicação de baixo, do `hint` (`connectionHint`, `folderHint`). **A cor é uma fileira de botões**: as seis do canvas (clicar na escolhida
   a tira) e, por último, "Outra cor", com o `EyedropperIcon`, a ÚNICA que abre o seletor do sistema, pelo `showPicker` do
   `<input type="color">` (sem ele, o `click`). O defeito de antes era um `<label>` em volta do input: clicar em qualquer ponto da linha
@@ -325,6 +325,23 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   faixa de abas (`environmentOf` do `TabStrip`), no cabeçalho da aba da tabela (`environment` do `TableTabPanel`), na barra de status e no
   cabeçalho do diálogo da conexão. A conexão continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o
   dela): o herdado nunca é gravado nela. Não há mais "lista" de conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba e na barra.
+- **Os ambientes do usuário** (RN-AMB-001) saem de `userEnvironments(folders, connections)` (`_lib/user-environments.ts`, pura e testada): um
+  por nome, sem diferenciar maiúsculas nem os espaços das pontas (`environmentKey`; o acento conta), com o nome e a cor da pasta ou conexão de
+  `updatedAt` mais novo (a API manda nas duas; a data que não se lê perde, e no empate fica a primeira encontrada: as pastas antes das conexões,
+  na ordem da lista), em ordem alfabética. Só o nome faz um ambiente. Nada é gravado à parte: as listas são as do cache (`foldersQuery` e
+  `connectionsQuery`), e o ambiente que ninguém mais usa some. O `FolderDialog` e o `ConnectionDialog` leem a lista de conexões do cache
+  (`useQuery(connectionsQuery)`) e passam o resultado à seção Ambiente (`environments`). Lá, acima do nome, o grupo "Ambientes já usados"
+  (`role="group"`) tem uma etiqueta por ambiente, cada uma um `<button>` com `aria-pressed` (a do nome que está no campo) e a dica "Usar o
+  ambiente X": escolher preenche o nome e a cor, que continuam editáveis. O campo do nome passou a ser controlado (o valor ainda vai pelo
+  `FormData`) e completa pela `<datalist>` dele (`<prefixo>-environment-options`): o teclado e o leitor de tela são os do Chromium. O nome
+  digitado que VIRA o de um ambiente (com qualquer caixa) traz a cor dele uma vez; seguir digitando no mesmo nome não a troca de novo, e abrir
+  o formulário não muda nada sozinho. Sem ambiente nenhum, nem o grupo nem a `<datalist>` aparecem. **Conferido sob Xvfb** (a API de
+  desenvolvimento, sem banco): o grupo aparece no "Editar pasta" e na "Nova conexão", e a etiqueta escolhida pelo clique preenche o nome e a
+  cor e fica marcada.
+- **"Editar pasta…"** (RN-PASTA-006) é o antigo "Renomear" da pasta: o item do menu (F2, lápis) e o modo `edit` do `FolderDialog` (título
+  "Editar pasta", "Salvar", aviso "Pasta alterada.", `editFolderSchema` com o nome e o ambiente). A ação do menu continua `renameFolder`
+  (`keyActionFor` e `menuFor`), e o navegador a leva ao modo `edit` (`folderActionTypes`). Pôr só o ambiente numa pasta que já existia é o
+  `PATCH` com o nome e a pasta pai como estavam (`folderInputOf`; conferido sob Xvfb pelo `GET api/user/folders`).
 - **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente inclusive: o corpo de cada modo do diálogo sai do `folderInputOf` (o que o
   modo não perguntou vai como a pasta já tem, senão mover tiraria o ambiente dela). As recusas do ambiente da pasta são 422
   `FOLDER_NAME_INVALID` no campo (`environmentName`, `environmentColor`), que o diálogo já mostra no lugar.
@@ -842,14 +859,30 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   dentro dobrada); "Editar conexão" usa `editConnectionTo` (ver "Conexões"); a pasta reaproveita o `FolderDialog` e o
   `DeleteFolderDialog` da tela de Conexões (`folder-action-dialogs.tsx` só escolhe qual).
 - **F2, Renomear e Duplicar conexão** (RN-NAV-009 e RN-CONN-016). O F2 sem modificador na linha da pasta ou da conexão é `keyActionFor`
-  (`_lib/navigator-menu.ts`, pura), que devolve a MESMA `MenuAction` do item "Renomear" do menu (que mostra o atalho F2), e a árvore a
-  executa pelo `runMenuAction`, como se viesse do menu; nas outras linhas, e com Shift, Ctrl, Alt ou Cmd, não faz nada. A pasta abre o
-  `FolderDialog` de renomear de sempre. A conexão abre o `RenameConnectionDialog` (`connections/_components`), só com o nome: grava pelo
+  (`_lib/navigator-menu.ts`, pura), que devolve a MESMA `MenuAction` do item do menu que mostra o atalho F2 ("Editar pasta…" na pasta,
+  RN-PASTA-006; "Renomear" na conexão), e a árvore a executa pelo `runMenuAction`, como se viesse do menu; nas outras linhas, e com Shift,
+  Ctrl, Alt ou Cmd, não faz nada. A pasta abre o `FolderDialog` no modo `edit` (o nome e o ambiente; ver "Conexões"). A conexão abre o `RenameConnectionDialog` (`connections/_components`), só com o nome: grava pelo
   mesmo `PATCH` do formulário com a conexão como está e o nome novo (`renamedConnectionInput`, em `_lib/rename-connection.ts`, sobre o
   `movedConnectionInput`: senha nula, que a API mantém), e o nome repetido (`CONNECTION_ALREADY_EXISTS`) e o 422 do nome ficam no campo
   (`renameRefusalFields`); o 422 de outro campo vai ao aviso pelo título. "Duplicar conexão" chama `POST api/user/connections/{id}/duplicate`
   (`duplicateConnection`, sem corpo: a senha é copiada dentro do cofre), atualiza as listas e pede ao `connectionReveal` a cópia, que aparece
   escolhida e com o foco, desconectada; a recusa vai ao aviso central.
+- **Filtro por ambiente** (RN-NAV-010). Ao lado do campo de busca, na mesma linha (que quebra no navegador estreito: o campo é
+  `flex-[1_1_8rem]`, o seletor `flex-[1_1_9rem]`, e a 200 px o seletor desce), o `NavigatorEnvironmentFilter` (`navigator-environment-filter.tsx`,
+  sem estado) é o `Select` do app com "Todos os ambientes" (valor vazio, o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente". Cada
+  ambiente vai como a `EnvironmentPill` dele, na lista e no controle fechado (o `content` da opção do `Select`); o controle fechado fica numa linha
+  só, cortado com reticências (`[&>span:first-child]:truncate`), e na lista o texto quebra. Com um filtro escolhido aparece o `x` "Limpar o filtro
+  de ambiente", que volta a "Todos". Quem filtra é `filterByEnvironment(folders, connections, escolha, environmentLookup)`
+  (`_lib/navigator-environment.ts`, pura e testada): as conexões cujo ambiente mostrado (o próprio ou o herdado) tem a chave escolhida, ou que não
+  têm nenhum ("Sem ambiente"), e as pastas no caminho até elas, na ordem da lista; "Todos" devolve as MESMAS listas. O navegador monta a árvore
+  (`buildConnectionTree`) sobre o que sai daí, e a busca roda depois, sobre essa árvore: os dois se combinam sem tocar em `searchTree`. A pasta do
+  ambiente sem conexão dele dentro não aparece (a regra fala das pastas no caminho). A escolha é estado do `Navigator`, que fica montado enquanto o
+  cofre está aberto (`WorkbenchSlot`): vale enquanto a janela está aberta, ir às Configurações e voltar a mantém, e sair do cofre a apaga (uma
+  janela nova começa em "Todos"). O ambiente que ninguém mais usa volta a escolha a "Todos" (`choiceAvailable`, um ajuste durante a renderização,
+  só com as duas listas já na tela), e a conexão que o formulário salvou ou a duplicada que o filtro esconderia também (no mesmo ajuste do
+  `connectionReveal`, como a busca). A árvore vazia pelo filtro diz "Nenhuma conexão em X." (ou "sem ambiente") numa região viva, e não é o
+  primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
+  "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
 - **`ContextMenu`** (`components/ui/context-menu.tsx`) é genérico. Portal `position: fixed` em `document.body`; `role="menu"` com
   `menuitem` e `separator`; o item desabilitado é `aria-disabled` e continua na ordem das setas; as setas dão a volta, Home e End,
   Enter e Espaço (o clique do botão), Esc e Tab fecham, e clique fora, rolar e trocar o foco da janela também. `placeMenu` (abre com
@@ -1736,7 +1769,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   `FormMessage`, `Dialog`, `ConfirmDialog`, `Select`, `Segmented`, `navItem` (a classe da entrada de uma lista de navegação vertical: a lista de Configurações e a de seções da Estrutura), `StatusBadge`, `EngineTag`,
   `EnvironmentPill`, os ícones (`icons.tsx`), `ToastProvider`, `useToast`. Vieram do etio com o que esta fatia usa (o `ContextMenu` é do
   Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
-  que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, e `aria-describedby`), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
+  que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
+  a desenha no lugar do rótulo, na lista e no controle fechado: a etiqueta de ambiente do navegador; o rótulo segue sendo o da busca pela inicial), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
   ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
