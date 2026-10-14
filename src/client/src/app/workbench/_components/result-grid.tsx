@@ -307,7 +307,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const cellIdOf = useCallback((row: number, column: number) => `${gridId}-${row}-${column}`, [gridId]);
   // A primeira página é a que conta para a largura de saída: carregar mais não muda o que está na tela.
   const [firstPage] = useState(read);
-  const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes), [columns, firstPage, nullText, showTypes]);
+  // RN-EDIT-002: a marca "somente leitura" do cabeçalho cabe na largura de saída quando o catálogo responde (na aba de consulta).
+  const readOnly = editing?.columnReadOnly ?? null;
+  const marks = useMemo(() => readOnly?.map((marked) => (marked ? editCopy.readOnlyMark : null)) ?? null, [readOnly]);
+  const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes, marks), [columns, firstPage, nullText, showTypes, marks]);
   const widths = useMemo(() => base.map((width, index) => chosen[index] ?? width), [base, chosen]);
   // O zoom (RN-GRADE-010) muda juntos o texto, a altura das linhas, o número da linha, as larguras (as escolhidas também, na mesma proporção) e os espaços.
   // As larguras guardadas são as de 100%; o que se desenha é a conta delas no zoom, em pixels inteiros.
@@ -538,7 +541,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               readOnlyMark={editing?.columnReadOnly?.[item.index] === true}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
               // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009).
-              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes }))}
+              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null }))}
             />
           ))}
         </div>

@@ -121,6 +121,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const rows = useMemo(() => (shown === null ? [] : gridRowsOf(shown.rows, view, shown.columns.length)), [shown, view]);
   const marks = useMemo(() => rowMarksOf(view, shown?.rows.length ?? 0, banner.failedRow), [view, shown, banner.failedRow]);
   const count = pendingCount(edits);
+  const columnHints = useMemo(() => columnHintsOf(target), [target]);
+  // Na aba de consulta o cabeçalho marca a coluna que não se edita, como no canvas; os Registros, de uma tabela só, ficam como estavam. Memorizado:
+  // a grade conta a largura das colunas por ele.
+  const columnReadOnly = useMemo(() => (subject === "result" && target !== null ? target.columns.map((column) => !column.editable) : null), [subject, target]);
 
   // Tudo o que as ações leem depois de um `await`: o estado de agora, e não o da renderização em que a ação começou.
   const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, saving });
@@ -500,9 +504,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           marks,
           active,
           editor,
-          columnHints: columnHintsOf(target),
-          // Na aba de consulta o cabeçalho marca a coluna que não se edita, como no canvas; os Registros, de uma tabela só, ficam como estavam.
-          columnReadOnly: subject === "result" && target !== null ? target.columns.map((column) => !column.editable) : null,
+          columnHints,
+          columnReadOnly,
           onActivate: setActive,
           onEdit: openEditor,
           onDraft: (text) => {

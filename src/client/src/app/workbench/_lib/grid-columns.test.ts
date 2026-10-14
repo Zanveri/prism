@@ -22,6 +22,13 @@ describe("baseWidths: a largura de saída de cada coluna, contada em caracteres 
     expect(baseWidths([name], [["x".repeat(200)]], "NULL")).toEqual([480]);
   });
 
+  it("a marca da coluna que não se edita (RN-EDIT-002, na aba de consulta) cabe depois do tipo, ou sozinha sem ele", () => {
+    // `id int4 · somente leitura`: 2 × 7,8 + 6 + 22 × 6,6 = 166,8 px; sem o tipo, `id somente leitura`: 2 × 7,8 + 6 + 15 × 6,6 = 120,6 px.
+    expect(baseWidths([id, name], [["1", "a"]], "NULL", true, ["somente leitura", null])).toEqual([192, 208]);
+    expect(baseWidths([id], [["1"]], "NULL", false, ["somente leitura"])).toEqual([146]);
+    expect(fitWidth(id, 0, [["1"]], "NULL", { mark: "somente leitura" })).toBe(192);
+  });
+
   it("o nulo conta com o texto que a pessoa escolheu para ele", () => {
     const narrow = { name: "n", type: "t", kind: "text" } as const;
     expect(baseWidths([narrow], [[null]], "(nenhum valor aqui)")[0]).toBe(Math.ceil("(nenhum valor aqui)".length * 7.8) + 25);

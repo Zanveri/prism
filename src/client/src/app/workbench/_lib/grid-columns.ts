@@ -26,9 +26,13 @@ export const maxWidth = 2000;
 /** O teto do ajuste ao conteúdo (o duplo clique na divisa): um valor de 10.000 caracteres não vira uma coluna de 78.000 px. */
 export const fitCap = 600;
 
-/** A largura do cabeçalho de uma coluna: o nome, o tipo (quando o cabeçalho o mostra, RN-CONFIG-006) e, quando o cabeçalho ordena, a seta. */
-function headerWidth(column: QueryColumn, { sortable, showType }: { sortable: boolean; showType: boolean }): number {
-  return column.name.length * charWidth + (showType ? nameTypeGap + column.type.length * typeCharWidth : 0) + (sortable ? sortArrowWidth : 0);
+/**
+ * A largura do cabeçalho de uma coluna: o nome, o tipo (quando o cabeçalho o mostra, RN-CONFIG-006), a marca da coluna que não se edita (RN-EDIT-002,
+ * depois do tipo, com ` · `) e, quando o cabeçalho ordena, a seta.
+ */
+function headerWidth(column: QueryColumn, { sortable, showType, mark = null }: { sortable: boolean; showType: boolean; mark?: string | null }): number {
+  const note = showType ? (mark === null ? column.type : `${column.type} · ${mark}`) : (mark ?? "");
+  return column.name.length * charWidth + (note.length > 0 || showType ? nameTypeGap + note.length * typeCharWidth : 0) + (sortable ? sortArrowWidth : 0);
 }
 
 /** A largura do texto de uma célula (o nulo conta com o texto que a pessoa escolheu para ele). */
@@ -38,9 +42,9 @@ const valueWidth = (value: string | null, nullText: string) => (value?.length ??
  * A largura de saída de cada coluna, pelo cabeçalho e pelos valores das linhas dadas (a grade passa a PRIMEIRA página: carregar mais não muda o que está na
  * tela). Valor mais largo que o teto termina em reticências. Sem o tipo no cabeçalho (RN-CONFIG-006) a coluna não reserva lugar para ele.
  */
-export function baseWidths(columns: readonly QueryColumn[], rows: readonly QueryRow[], nullText: string, showType = true): number[] {
+export function baseWidths(columns: readonly QueryColumn[], rows: readonly QueryRow[], nullText: string, showType = true, marks: readonly (string | null)[] | null = null): number[] {
   return columns.map((column, index) => {
-    let width = headerWidth(column, { sortable: false, showType });
+    let width = headerWidth(column, { sortable: false, showType, mark: marks?.[index] ?? null });
     for (const row of rows) width = Math.max(width, valueWidth(row[index] ?? null, nullText));
     return Math.min(maxBaseWidth, Math.max(minBaseWidth, Math.ceil(width) + cellPadding));
   });
@@ -50,8 +54,8 @@ export function baseWidths(columns: readonly QueryColumn[], rows: readonly Query
  * O ajuste ao conteúdo (o duplo clique na divisa, e o Enter com o foco nela): o maior valor entre TODAS as linhas carregadas e o cabeçalho, com a seta da
  * ordem quando ele ordena, até o teto do ajuste. O que passa do teto continua com reticências.
  */
-export function fitWidth(column: QueryColumn, index: number, rows: readonly QueryRow[], nullText: string, { sortable = false, showType = true }: { sortable?: boolean; showType?: boolean } = {}): number {
-  let width = headerWidth(column, { sortable, showType });
+export function fitWidth(column: QueryColumn, index: number, rows: readonly QueryRow[], nullText: string, { sortable = false, showType = true, mark = null }: { sortable?: boolean; showType?: boolean; mark?: string | null } = {}): number {
+  let width = headerWidth(column, { sortable, showType, mark });
   for (const row of rows) width = Math.max(width, valueWidth(row[index] ?? null, nullText));
   return Math.min(fitCap, Math.max(minWidth, Math.ceil(width) + cellPadding));
 }
