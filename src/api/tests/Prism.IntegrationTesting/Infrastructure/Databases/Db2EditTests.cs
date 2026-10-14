@@ -63,4 +63,8 @@ public sealed class Db2EditTests : DatabaseEditContractTests
 
     protected override string Name(string name)
         => name.ToUpperInvariant();
+
+    /// <summary>No Db2 o qualificador sem esquema é lido no esquema atual da sessão, e não no da tabela do `FROM`: vai com ele.</summary>
+    protected override string JoinQualifier(string table)
+        => $"{Schema}.{Table(table)}";
 }
