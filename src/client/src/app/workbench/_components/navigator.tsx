@@ -9,6 +9,7 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
+import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -154,6 +155,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const connectionList = useMemo(() => connections.data ?? [], [connections.data]);
   const tree = useMemo(() => treeNodes(buildConnectionTree(folders.data ?? [], connectionList)), [folders.data, connectionList]);
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
+  // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
+  const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
 
   const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
@@ -552,6 +555,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           onSelect={setSelectedKey}
           reveal={reveal}
           connectionById={connectionById}
+          environments={environments}
           statuses={statuses}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
@@ -611,6 +615,7 @@ type NavigatorListProps = {
   rows: NavNode[];
   open: ReadonlySet<string>;
   connectionById: ReadonlyMap<string, Connection>;
+  environments: EnvironmentLookup;
   statuses: ReadonlyMap<string, ConnectionStatus>;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
@@ -642,7 +647,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -765,6 +770,8 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
           // Só a linha da conexão recebe a conexão salva (a etiqueta do banco, o ambiente e as ações); as outras linhas têm dono, mas não a recebem.
           const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
           const connection = connectionId === null ? undefined : connectionById.get(connectionId);
+          const folderId = node.kind === "folder" ? folderIdOf(node) : null;
+          const environment = folderId !== null ? environments.folder(folderId) : connection ? environments.connection(connection) : null;
 
           return (
             <div
@@ -784,6 +791,7 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
                 tabbable={node.key === tabbable}
                 selected={node.key === selectedKey}
                 connection={connection}
+                environment={environment}
                 status={connection ? statuses.get(connection.id) : undefined}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}

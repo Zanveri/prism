@@ -72,7 +72,19 @@ export const connectionsCopy = {
     showPassword: "Mostrar senha",
     hidePassword: "Ocultar senha",
     passwordNotice: "A senha do banco fica criptografada com a sua senha do Prism. Para exibi-la, o Prism pede a sua senha de novo.",
-    environment: { title: "Ambiente", name: "Nome do ambiente", color: "Cor do ambiente", otherColor: "Outra cor", noColor: "Sem cor", hint: "O nome e a cor identificam esta conexão na lista e na árvore. Deixe o nome em branco se ela não pertence a um ambiente." },
+    // RN-CONN-017: a última bolinha é "Outra cor", e a cor escolhida por ela vai no nome dela. RN-PASTA-005: a seção é a mesma na pasta.
+    environment: {
+      title: "Ambiente",
+      name: "Nome do ambiente",
+      color: "Cor do ambiente",
+      otherColor: "Outra cor",
+      otherColorChosen: (hex: string) => `Outra cor: ${hex}`,
+      connectionHint: "O nome e a cor identificam esta conexão na árvore, nas abas e na barra de status. Em branco, ela herda o ambiente da pasta, se houver.",
+      folderHint: "O nome e a cor identificam esta pasta na árvore. As conexões dela sem ambiente próprio herdam este.",
+      inherits: (environment: string, folder: string) => `Herda ${environment} da pasta ${folder}.`,
+      // A dica da etiqueta herdada, na árvore, na aba e na barra de status.
+      inheritedFrom: (folder: string) => `Herdado da pasta ${folder}`,
+    },
     save: "Salvar",
     saving: "Salvando…",
     test: "Testar conexão",

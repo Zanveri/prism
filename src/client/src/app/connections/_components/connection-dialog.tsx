@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDriverActions } from "@/app/drivers/_components/driver-actions";
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
-import { Button, ConfirmDialog, Dialog, EnvironmentPill, FieldError, FormMessage, useToast, type Engine } from "@/components/ui";
+import { Button, ConfirmDialog, Dialog, FieldError, FormMessage, useToast, type Engine } from "@/components/ui";
 import { allowRefusal, type ApiError } from "@/lib/api/prism-api";
 import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type FieldErrors } from "@/lib/utils/form";
 
@@ -12,12 +12,14 @@ import { connectionsCopy } from "../_lib/connections.copy";
 import { createConnectionSchema, editConnectionSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
 import { createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
 import { choiceOf, engineChoices } from "../_lib/engine-choices";
+import { environmentLookup } from "../_lib/environment";
 import { hasChanges, snapshotOf, type FormSnapshot } from "../_lib/form-leave";
 import { ConnectionFields } from "./connection-fields";
 import { DeleteConnectionDialog } from "./delete-connection-dialog";
 import { DriverNotice } from "./driver-notice";
 import { EngineGrid, EngineSummary } from "./engine-grid";
 import { RevealPasswordDialog } from "./reveal-password-dialog";
+import { ShownEnvironmentPill } from "./shown-environment-pill";
 import { TestFailure, type TestFailureState } from "./test-failure";
 
 const copy = connectionsCopy.form;
@@ -258,7 +260,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
         <div hidden={!onSettings} className={onSettings ? "flex flex-col gap-5" : undefined}>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             {selected === undefined ? null : <EngineSummary choice={selected} />}
-            {connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} className="h-[22px] px-[9px] text-xs leading-[22px]" /> : null}
+            {connection ? <ShownEnvironmentPill environment={environmentLookup(folders).connection(connection)} className="h-[22px] px-[9px] text-xs leading-[22px]" /> : null}
           </div>
           {selected === undefined ? null : <DriverNotice choice={selected} actions={driverActions} />}
 

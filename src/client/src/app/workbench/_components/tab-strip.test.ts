@@ -2,6 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { Folder } from "@/app/connections/_lib/connections.schema";
+import type { ShownEnvironment } from "@/app/connections/_lib/environment";
+
 import type { QueryTab } from "../_lib/workbench-model";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 
@@ -10,7 +13,8 @@ const noop = () => {};
 const query = (id: string, title: string): QueryTab => ({ id, title, connectionId: "c-1", sessionId: null, sql: "" });
 const table = (id: string, schema: string, name: string): QueryTab => ({ id, title: `${schema}.${name}`, connectionId: "c-1", sessionId: null, sql: "", table: { schema, name, view: "data" } });
 
-const render = (tabs: QueryTab[], activeTabId: string | null) => renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, connectionOf: () => undefined, onSelect: noop, onClose: noop, windowId: 1, onReorder: noop, onMove: noop, onReceive: noop }));
+const render = (tabs: QueryTab[], activeTabId: string | null, environmentOf: (connectionId: string | null) => ShownEnvironment | null = () => null) =>
+  renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, connectionOf: () => undefined, environmentOf, onSelect: noop, onClose: noop, windowId: 1, onReorder: noop, onMove: noop, onReceive: noop }));
 
 const twelve = Array.from({ length: 12 }, (_, index) => (index % 2 === 0 ? query(`q${index}`, `consulta-${index + 1}.sql`) : table(`t${index}`, "producao", `tabela_${index}`)));
 
@@ -90,5 +94,20 @@ describe("a faixa de abas (D2)", () => {
 
     expect(markup).not.toContain('aria-selected="true"');
     expect(markup.match(/role="tab"/g)).toHaveLength(3);
+  });
+});
+
+describe("a etiqueta do ambiente na aba (RN-CONN-015 e RN-PASTA-005)", () => {
+  const now = "2026-10-13T12:00:00Z";
+  const producao: Folder = { id: "f1", parentID: null, name: "Produção", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+
+  it("a aba mostra o ambiente que a conexão mostra: o herdado da pasta, com a dica de onde vem", () => {
+    const markup = render([query("q1", "consulta.sql")], "q1", (connectionId) => (connectionId === "c-1" ? { name: "Produção", color: "#FF8A7A", folder: producao } : null));
+
+    expect(markup).toMatch(/<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*title="Herdado da pasta Produção"[^>]*>Produção<\/span>|<span[^>]*title="Herdado da pasta Produção"[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/);
+  });
+
+  it("sem ambiente, nenhuma etiqueta", () => {
+    expect(render([query("q1", "consulta.sql")], "q1")).not.toContain("background-color");
   });
 });

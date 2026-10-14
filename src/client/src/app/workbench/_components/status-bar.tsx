@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { engineOption } from "@/app/connections/_lib/connections.schema";
-import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
+import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
+import { environmentLookup } from "@/app/connections/_lib/environment";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
-import { EnvironmentPill, LockOpenIcon } from "@/components/ui";
+import { LockOpenIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { databaseSessionQuery } from "../_lib/database-sessions.service";
@@ -22,6 +24,7 @@ const copy = workbenchCopy.status;
 export function StatusBar() {
   const { tabs, activeTabId } = useWorkbench();
   const connections = useQuery(connectionsQuery);
+  const folders = useQuery(foldersQuery);
   // O guard já buscou a sessão do cofre (mesma chave): aqui só se lê.
   const vault = useQuery({ ...sessionQuery, staleTime: Infinity });
 
@@ -43,7 +46,7 @@ export function StatusBar() {
           <span>
             {connected ? copy.connected : copy.disconnected} · {connection.name} · {engineOption(connection.engine).label}
           </span>
-          <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} />
+          <ShownEnvironmentPill environment={environmentLookup(folders.data ?? []).connection(connection)} />
         </span>
       )}
       <span>{copy.autoCommit}</span>

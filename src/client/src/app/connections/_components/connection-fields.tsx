@@ -4,6 +4,7 @@ import type { FieldErrors } from "@/lib/utils/form";
 import { buildConnectionTree, folderOptions } from "../_lib/connection-tree";
 import { connectionsCopy } from "../_lib/connections.copy";
 import type { Connection, Folder } from "../_lib/connections.schema";
+import { environmentLookup } from "../_lib/environment";
 import { EnvironmentPicker } from "./environment-picker";
 
 const copy = connectionsCopy.form;
@@ -82,7 +83,8 @@ export function ConnectionFields({ connection, folders, errors, folderID, onFold
         </p>
       </div>
 
-      <EnvironmentPicker defaultName={connection?.environmentName ?? ""} color={color} onColorChange={onColorChange} errors={errors} />
+      {/* RN-PASTA-005: sem ambiente próprio, a conexão herda o da pasta escolhida aqui (a do campo, que pode ainda não estar gravada). */}
+      <EnvironmentPicker idPrefix="cx" defaultName={connection?.environmentName ?? ""} color={color} onColorChange={onColorChange} errors={errors} hint={copy.environment.connectionHint} inherited={environmentLookup(folders).inheritedIn(folderID === "" ? null : folderID)} />
     </div>
   );
 }

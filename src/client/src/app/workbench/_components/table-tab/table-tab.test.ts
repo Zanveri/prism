@@ -18,7 +18,7 @@ function render(view: TableView, over: { disconnected: boolean; visible?: boolea
   const tab: TableTab = { id: "t1", title: "producao.apontamento", connectionId: "c-1", sessionId: null, sql: "", table };
   // Só as vistas Estrutura e Diagrama: os Registros leem o executor, que o React só lê no navegador.
   const runner = {} as QueryRunner;
-  const panel = createElement(TableTabPanel, { tab, table, runner, connection: undefined, visible: over.visible ?? true, disconnected: over.disconnected, onView: noop, onOpenTable: noop });
+  const panel = createElement(TableTabPanel, { tab, table, runner, connection: undefined, environment: null, visible: over.visible ?? true, disconnected: over.disconnected, onView: noop, onOpenTable: noop });
 
   return renderToStaticMarkup(createElement(QueryClientProvider, { client: new QueryClient() }, panel));
 }
