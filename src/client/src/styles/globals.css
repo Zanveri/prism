@@ -245,6 +245,22 @@
     height: 100%;
   }
 
+  /*
+   * A raiz não rola nunca: o app é uma janela, não uma página. Só as áreas de dentro rolam (a árvore, o editor, a grade, as listas, e cada tela que
+   * precisa rolar numa janela baixa tem a própria área: o login, as Configurações, o primeiro uso). `clip`, e não `hidden`: com `hidden` o
+   * `scrollIntoView`, o `focus()` e a roda do mouse que sobra de uma área de dentro ainda rolam o documento que passou da janela.
+   * No `html` o `clip` vai para a janela como `hidden` (é a regra do CSS para a raiz), então quem corta de fato é o `body`; e o `position: relative`
+   * faz dele o bloco de quem é `absolute` sem ancestral posicionado, que senão escaparia do corte e daria à janela o que rolar.
+   */
+  html,
+  body {
+    overflow: clip;
+  }
+
+  body {
+    position: relative;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-ink);

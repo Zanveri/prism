@@ -249,3 +249,23 @@ describe("todos os temas", () => {
     expect(themes).toHaveLength(6);
   });
 });
+
+describe("a raiz não rola: a área de trabalho não é uma página", () => {
+  /** Os valores de uma propriedade (`overflow` pega também `overflow-x` e `overflow-y`) que as regras do CSS dão a um seletor, na ordem do arquivo. */
+  const valuesOf = (selector: string, property: "overflow" | "position") =>
+    [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((rule) => rule[1].split(",").some((part) => part.trim() === selector))
+      .flatMap((rule) => [...rule[2].matchAll(new RegExp(`(?:^|[;\\s])${property}${property === "overflow" ? "(?:-[xy])?" : ""}:\\s*([^;]+);`, "g"))].map((declaration) => declaration[1].trim()));
+
+  // Com o documento mais alto que a janela, ele rolava pela roda do mouse (na barra de status, no editor curto, no fim da grade) e por um
+  // `focus()` ou `scrollIntoView`. `hidden` ainda deixa o `scrollIntoView` e o `scrollTop` rolarem; `clip` não. Quem precisa rolar tem a própria área.
+  it.each(["html", "body"])("%s corta o que passa da janela (overflow: clip), e nenhuma outra regra o troca", (selector) => {
+    expect(valuesOf(selector, "overflow")).toEqual(["clip"]);
+  });
+
+  // No `html`, o `clip` vai para a janela como `hidden`: quem corta é o `body`. Sem ser posicionado, um `absolute` sem ancestral posicionado tem a
+  // janela como bloco, escapa do corte do `body` e dá à janela o que rolar (conferido no Electron: o `scrollIntoView` dele rolava 257 px).
+  it("o body é o bloco de quem é absolute sem ancestral posicionado (position: relative), para nada escapar do corte", () => {
+    expect(valuesOf("body", "position")).toEqual(["relative"]);
+  });
+});

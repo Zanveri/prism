@@ -47,7 +47,7 @@ export function VaultGuard() {
   if (state !== "failed") return null;
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+    <div className="flex h-full flex-col items-center justify-center-safe gap-4 overflow-y-auto p-8">
       <FormMessage tone="error">Não foi possível consultar o cofre.</FormMessage>
       <Button type="button" variant="secondary" onClick={() => void session.refetch()}>
         Tentar de novo

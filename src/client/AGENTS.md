@@ -1200,6 +1200,9 @@ a RN-GRADE-011 e o F5 a RN-GRADE-012.
   em `_lib/completion-theme.ts`, com a lista de sugestões do editor, `completionTheme`) e a lista vai para o `body` (`tooltips({ parent })`), para a barra
   não a recortar. O texto de ajuda do campo vazio é o mesmo nos dois: "Insira uma expressão SQL para filtrar os resultados (use Ctrl+Espaço)". O teste
   do `RecordsFilter` troca o `FilterField` por um `input` que mostra o que recebeu.
+  **O tema do campo nunca usa `&` sozinho** (`fieldThemeSpec`, com teste): o recipiente que o CodeMirror cria no `body` para a lista leva as classes de tema
+  do editor, e o `"&": { height: "28px" }` de antes fazia dele um bloco de 28 px no fim do `body`, um por campo montado. O documento passava da janela e a
+  área de trabalho rolava como página (a roda do mouse na barra de status, no editor curto ou no fim da grade). A caixa do campo é a de `&.cm-editor`.
 - **O autocompletar do campo** (RN-TABELA-011; `_lib/filter-completion.ts`, com teste pela fonte de verdade): as colunas (nos Registros, as da grade, que
   são as da tabela; no resultado, as do resultado; as duas vistas guardam as da última grade, para o filtro que deu erro continuar sugerindo) e as
   palavras do filtro (`AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, `LIKE`, `IN`, `BETWEEN`, `ORDER BY`, `ASC`, `DESC`; as de duas palavras continuam
@@ -1779,6 +1782,14 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
 
 ## Design
 
+- **A raiz não rola nunca** (`globals.css`, com teste em `globals.test.ts`): `html` e `body` com `overflow: clip`, e o `body` com `position: relative`.
+  No `html` o `clip` vai para a janela como `hidden` (a regra do CSS para a raiz), e com `hidden` o `scrollIntoView` e o `scrollTop` ainda rolam: quem corta
+  é o `body`, e o `position: relative` faz dele o bloco de quem é `absolute` sem ancestral posicionado, que senão escaparia do corte (conferido no Electron:
+  sem ele, o `scrollIntoView` de um `absolute` além da janela rolava 257 px). Só as áreas de dentro rolam, e **toda tela que precisa rolar numa janela
+  baixa tem a própria área**: o login (`h-full overflow-y-auto` por fora, `min-h-full` por dentro), as Configurações (e os Drivers, que são uma seção
+  delas), o primeiro uso, a falha da API e a do cofre (`overflow-y-auto` com `justify-center-safe`, que não esconde o topo do que passa da altura) e a
+  tela de bloqueio (o `<dialog>` de `h-dvh overflow-auto`). Para conferir: `document.scrollingElement.scrollHeight === innerHeight` (e a largura) na área
+  de trabalho, e quem passa da borda é o elemento com `getBoundingClientRect().bottom > innerHeight` fora de um ancestral que o corte.
 - Os tokens estão em `src/styles/globals.css` e vêm do canvas (`docs/design/canvas/`). A paleta
   padrão do Tailwind está desligada: só existem as cores do Prism (`background`, `panel`, `raised`,
   `selected`, `border`, `border-strong`, `ink`, `body`, `muted`, `subtle`, `accent`, `postgres`,

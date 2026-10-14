@@ -25,4 +25,12 @@ describe("o primeiro uso (RN-NAV-007): sem nenhuma conexão, a área de trabalho
     (elementsOf(FirstUse({ onNewConnection })).find((element) => element.type !== "div" && typeof element.props.onClick === "function")?.props.onClick as () => void)();
     expect(onNewConnection).toHaveBeenCalledOnce();
   });
+
+  // A raiz do app não rola: numa janela baixa, o estado vazio rola por dentro, e o centro "seguro" não esconde o topo do que passou da altura.
+  it("rola por dentro quando a janela é baixa, sem perder o topo", () => {
+    const root = /^<div class="([^"]*)"/.exec(render())?.[1].split(" ") ?? [];
+
+    expect(root).toEqual(expect.arrayContaining(["min-h-0", "overflow-y-auto", "justify-center-safe"]));
+    expect(root).not.toContain("justify-center");
+  });
 });
