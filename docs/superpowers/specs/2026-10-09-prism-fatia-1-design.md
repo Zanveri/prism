@@ -2101,5 +2101,16 @@ que valia só nos Registros e nunca chegou à tela.
     completa sempre.
   - Nos Registros, as colunas são as da tabela. No resultado, as do resultado.
   - O nome é escrito como o banco pede (com aspas, quando precisa).
+- **RN-GRADE-012.** F5 atualiza, como no DBeaver (pedido de 2026-10-14: "F5 não atualiza os dados").
+  - Nos Registros, F5 lê a tabela de novo, com o filtro e a ordem do campo: é o "Atualizar".
+  - Na aba de consulta, F5 executa de novo o comando do resultado, com o filtro: é o "Executar de
+    novo".
+  - Na Estrutura e no Diagrama, F5 recarrega a vista.
+  - No navegador, F5 atualiza o nó escolhido, como o "Atualizar" do menu dele.
+  - Com alterações não salvas na grade, F5 pergunta antes, como executar outro comando. Com um
+    comando em andamento, não faz nada.
+  - Vale com o foco em qualquer ponto da aba, menos no campo de edição de uma célula.
+  - O menu da grade mostra "Atualizar" (F5).
+  - F5 e Ctrl+R nunca recarregam a janela do app.
 - **Fica para depois:** "Localizar e Substituir" na grade, salvar o filtro como padrão da tabela,
   voltar ao filtro padrão e o diálogo "Personalizar filtros…".
