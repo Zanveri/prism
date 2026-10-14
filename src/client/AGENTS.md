@@ -825,7 +825,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   verde. A grade virtualizada não desenha linha sem DOM: para conferir o que a área de resultado entrega à grade, troque a grade por uma que
   anota as propriedades (`result-panel.grid.test.ts`).
 - **Exportar CSV** (RN-TABELA-006), só nos Registros. `csvExportOf` (`_lib/csv.ts`, puro) monta o arquivo das linhas CARREGADAS (as que ainda
-  não foram lidas não entram, e o aviso diz quantas saíram, que as outras ficaram de fora e que um valor cortado sai cortado): UTF-8 com BOM, separador `;`, aspas dobradas, CRLF, nulo como campo vazio
+  não foram lidas não entram, e o aviso diz quantas saíram, que as outras ficaram de fora e quantos valores não puderam vir inteiros; a célula cortada sai com o valor completo, RN-SQL-017, ver "Valor completo das células cortadas"): UTF-8 com BOM, separador `;`, aspas dobradas, CRLF, nulo como campo vazio
   e valor cujo primeiro caractere, depois de espaços, tabulação ou retorno de carro, é `=`, `+`, `-` ou `@` com um apóstrofo na frente, para a
   planilha não o executar. **O número simples, inclusive o negativo (`-12,50`), sai como está, sem apóstrofo** (`simpleNumber`, em `csv.ts`: é o
   que a especificação diz, e a coluna segue somando na planilha). A entrega é `saveText` (`_lib/save-file.ts`): o download do próprio navegador,
@@ -949,7 +949,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     Cancelar o tira da passagem; fechar abas pergunta pelo registro `unsaved-edits.ts` (`unsavedQuestion`: uma aba oferece Salvar; várias, ou a aba
     com a vista Registros desmontada, só Descartar e Cancelar), antes da pergunta do SQL digitado. O provedor esquece o registro das abas que
     fecham, como a memória da aba.
-  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; colar vira pendência
+  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; copiar (Ctrl+C e
+    "Copiar valor") leva o valor completo da célula cortada (ver "Valor completo das células cortadas", abaixo); colar vira pendência
     da célula, como a edição.
   - **Na aba de consulta** (`query-tab.tsx`, `subject: "result"`, que muda só as frases da conferência do catálogo): executar outro comando (o botão
     e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
@@ -961,6 +962,29 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
     trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. A
     aba de consulta ainda não tem o Commit manual na tela (RN-TX-001): o Salvar é sempre uma transação própria.
+- **Valor completo das células cortadas** (RN-SQL-017, RN-GRADE-002): a grade continua mostrando o valor cortado (RN-SQL-011), e copiar e
+  exportar levam o completo, que a API guarda em memória e devolve por `POST .../results/{resultID}/cells` (`full-values.service.ts`,
+  `resultCells`: nunca lança, e acha cada valor pela posição que a resposta diz). As decisões são de `_lib/full-values.ts`, pura, com teste:
+  `cutCellsOf` (só as cortadas da seleção, sem repetir, pela linha do resultado na API), `fetchFullValues` (lotes de até 10.000, um depois do
+  outro; o lote que não veio deixa as células cortadas e conta; cancelado, devolve nulo) e `withFullValues` (as linhas com o valor completo no
+  lugar e as marcas só das que ficaram sem). Quem liga é `completeValues`, em `use-record-edits.ts`: sem célula cortada responde na hora, sem
+  pedido; com, a faixa da grade (`EditsBanner`, `fetching`) diz "Buscando os valores completos…" com "Cancelar", e a grade segue livre; uma
+  busca nova cancela a anterior. `RESULT_NOT_FOUND`, `DATABASE_SESSION_NOT_FOUND` e `CELLS_INVALID` deixam as células cortadas sem aviso
+  central; o resto (a API fora do ar) passa pelo cache de mutações (RN-AVISO-004). O valor sem completo vai cortado, e o aviso diz quantos
+  (`recordsCopy.edit.menu.copiedCut` na cópia, `workbenchCopy.tableTab.records.exportedCut` no CSV).
+  - **Onde vale**: Ctrl+C com o foco na grade copia a célula ativa (`copiesCell`, em `grid-editing.ts`; com Shift é o copiar avançado e segue),
+    "Copiar valor" do menu da célula, e "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
+    como antes). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
+    nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
+    passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
+  - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
+    (RN-EDIT-009): `savedResultOf` devolve `sourceRows` (a linha de antes de cada uma, nula na nova; um segundo Salvar continua a conta), o
+    executor a guarda (`RowsState.sourceRows`, por `keepSaved`) e ela viaja com a aba para outra janela (`window-messages.ts`). Sem ela, a cópia de
+    uma linha depois de uma excluída pediria o valor da linha errada.
+  - **Conferido na tela** (Xvfb, PostgreSQL em contêiner, `text` de 50.000 caracteres com acentos e `bytea` de 100.000 bytes): o Ctrl+C e o
+    "Copiar valor" deixaram na área de transferência os 50.000 caracteres, com o MD5 igual ao do banco, e o "Exportar CSV" gravou o texto e o
+    binário inteiros (o `Blob` que a tela entrega ao download; o diálogo de salvar do sistema foi trocado no teste). Para ler a área de
+    transferência pelo protocolo de depuração: `navigator.clipboard.readText()` com `userGesture: true`.
 - **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
