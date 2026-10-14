@@ -2048,3 +2048,53 @@ lá.
     conta-gotas ainda à vista, em contraste. O código `#RRGGBB` aparece na dica e no nome acessível.
   - A linha "Outra cor #RRGGBB" de baixo sai.
   - Pelo teclado: cada bolinha é um botão, e Enter ou Espaço na última abre o seletor.
+
+### Filtrar como no DBeaver, e o autocompletar do filtro
+
+Pedidos do dono em 2026-10-14: "adiciona os filtros do DBeaver exatamente como ele faz, atalho em
+F11, exibe os possíveis filtros pra coluna, isso tanto no resultado de um script SQL quanto nos
+registros"; e de um colega: "o filtro na tabela não recomenda as colunas". Substitui a RN-GRADE-005,
+que valia só nos Registros e nunca chegou à tela.
+
+- **RN-GRADE-010.** O menu de contexto da grade ganha "Filtrar" (F11), nos Registros e no
+  resultado da aba de consulta. F11 abre o submenu na célula ativa, e Ctrl+F11 abre direto
+  "Filtrar por valor…". Os itens do submenu:
+  - "Filtrar por valor…" (Ctrl+F11): um diálogo com os valores distintos da coluna nas linhas já
+    carregadas, cada um com quantas vezes aparece, em ordem de quantidade, com busca e caixas de
+    marcar. Confirmar monta `coluna IN (…)` (`=` com um valor só), e o nulo marcado entra como
+    `coluna IS NULL`, junto por `OR`.
+  - "Valor da célula": `coluna = valor`, `coluna <> valor`, `coluna > valor` e `coluna < valor`;
+    em coluna de texto, também `coluna LIKE '%valor%'`; e "É nulo" e "Não é nulo".
+  - "Personalizado": `coluna = …`, `<> …`, `> …` e `< …`, que pedem o valor num campo pequeno, sobre
+    a grade.
+  - "Remover todos os filtros e ordenações".
+
+  O valor vira literal pela RN-TABELA-007, e o rótulo mostra a condição como ela vai entrar. A
+  célula cortada ou binária só oferece as opções de nulo e o "Personalizado". A condição entra no
+  campo de filtro, junta por `AND` e entre parênteses ao que já estava (o `mergeCondition` de
+  `_lib/grid-export`), e é executada. Quando não dá para juntar com segurança, o item fica
+  desabilitado, com o motivo.
+- **RN-GRADE-011.** O resultado da aba de consulta ganha o campo de filtro dos Registros, acima da
+  grade, com o mesmo texto de ajuda ("Insira uma expressão SQL para filtrar os resultados (use
+  Ctrl+Espaço)").
+  - O texto do editor não muda. Ao aplicar, a aba executa de novo o mesmo comando com o filtro, e
+    a API junta o filtro ao comando: a condição entra no `WHERE` por `AND`, e a ordem troca o
+    `ORDER BY` do comando.
+  - Quando o comando não é um `SELECT` só que a API saiba ler, ela o embrulha
+    (`SELECT * FROM (<comando>) … WHERE …`). Nesse caso, o resultado fica só leitura e diz por
+    quê.
+  - Executar o comando do editor de novo limpa o filtro.
+  - Rota: `POST api/user/database-sessions/{id}/queries` ganha `filter`, opcional: o texto do campo
+    (condição, ordem ou as duas, como na RN-TABELA-010).
+  - A resposta diz como o filtro entrou, em `filterApplied`: `merged` ou `wrapped`.
+  - O filtro com terminador de comando, com comentário aberto ou com aspas abertas é recusado com
+    422 `FILTER_INVALID`.
+- **RN-TABELA-011.** O campo de filtro (dos Registros e do resultado) completa os nomes das colunas
+  e as palavras do filtro: `AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, `LIKE`, `IN`, `BETWEEN`,
+  `ORDER BY`, `ASC` e `DESC`.
+  - Ao digitar, segue a chave do autocompletar do editor (RN-CONFIG-004). Com Ctrl+Espaço,
+    completa sempre.
+  - Nos Registros, as colunas são as da tabela. No resultado, as do resultado.
+  - O nome é escrito como o banco pede (com aspas, quando precisa).
+- **Fica para depois:** "Localizar e Substituir" na grade, salvar o filtro como padrão da tabela,
+  voltar ao filtro padrão e o diálogo "Personalizar filtros…".
