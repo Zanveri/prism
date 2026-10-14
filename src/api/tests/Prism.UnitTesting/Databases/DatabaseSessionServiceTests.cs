@@ -165,6 +165,31 @@ public sealed class DatabaseSessionServiceTests
     }
 
     /// <summary>
+    /// RN-SQL-007: o temporizador do sistema pode disparar uns milissegundos antes da hora marcada pelo relógio da última leitura. O
+    /// aviso adiantado não fecha o cursor, e tem de rearmar para o que falta; sem isso, o cursor ficava aberto até a sessão fechar.
+    /// </summary>
+    [Trait("DatabaseSessionService", "FetchNextAsync")]
+    [Fact(DisplayName = "OK o temporizador que dispara adiantado rearma e fecha o cursor quando dá a hora")]
+    public async Task IdleTimer_ShouldRearm_WhenItFiresEarly()
+    {
+        //Arrange
+        var clock = new EarlyTimers(TimeSpan.FromMilliseconds(10));
+        var service = new DatabaseSessionService([new FakeClient(_connection)], _vault.Object, clock, Logger.None);
+        var session = await OpenAsync(service);
+        _connection.NextPageHasMore = true;
+        await service.FetchNextAsync(session.ID, CancellationToken.None);
+
+        //Act
+        clock.Advance(TimeSpan.FromMinutes(5) - TimeSpan.FromMilliseconds(10));
+        var closedTooEarly = _connection.CloseCursorCalls;
+        clock.Advance(TimeSpan.FromHours(1));
+
+        //Assert
+        Assert.Equal(0, closedTooEarly);
+        Assert.Equal(1, _connection.CloseCursorCalls);
+    }
+
+    /// <summary>
     /// A limpeza da transação falhou e a conexão se fechou (é o que a base faz para não ficar presa numa transação abortada). No
     /// fechamento por ociosidade ninguém recebe uma falha: é o registro que confere a conexão e tira a sessão.
     /// </summary>
@@ -314,6 +339,28 @@ public sealed class DatabaseSessionServiceTests
         Assert.True(tested.IsFailure);
         Assert.Equal(EDatabaseFailure.ConnectionFailed, tested.Error.Kind);
         Assert.Equal(message, tested.Error.Message);
+    }
+
+    /// <summary>O relógio falso cujos temporizadores disparam `early` antes da hora, como o do sistema às vezes faz.</summary>
+    private sealed class EarlyTimers(TimeSpan early) : FakeTimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+            => new Early(base.CreateTimer(callback, state, Adjust(dueTime), period), this);
+
+        private TimeSpan Adjust(TimeSpan dueTime)
+            => dueTime == Timeout.InfiniteTimeSpan || dueTime <= early ? dueTime : dueTime - early;
+
+        private sealed class Early(ITimer inner, EarlyTimers clock) : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+                => inner.Change(clock.Adjust(dueTime), period);
+
+            public void Dispose()
+                => inner.Dispose();
+
+            public ValueTask DisposeAsync()
+                => inner.DisposeAsync();
+        }
     }
 
     /// <summary>O relógio falso, com os temporizadores na mão do teste: `FireTimers` dispara todos, estejam ou não na hora.</summary>

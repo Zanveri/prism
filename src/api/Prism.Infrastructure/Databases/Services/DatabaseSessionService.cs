@@ -546,10 +546,22 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     {
         using var turnEnd = new TurnEnd(session.Turn);
 
-        // O aviso pode chegar atrasado, depois de uma leitura que acabou de rearmar o temporizador: quem decide é a hora da última leitura.
-        if (session.Closed || _timeProvider.GetElapsedTime(session.LastReadAt) < QueryPaging.CursorIdleTimeout)
+        // O aviso pode chegar atrasado, depois de uma leitura que acabou de rearmar o temporizador, ou adiantado uns milissegundos em
+        // relação ao relógio da última leitura: quem decide é a hora da última leitura. Antes da hora, com o cursor ainda aberto, o
+        // temporizador volta a contar o que falta; sem isso, o aviso adiantado deixava o cursor aberto até a sessão fechar.
+        if (session.Closed)
             return;
 
+        var idle = _timeProvider.GetElapsedTime(session.LastReadAt);
+        if (idle < QueryPaging.CursorIdleTimeout)
+        {
+            if (session.CursorOpen)
+                session.IdleTimer.Change(QueryPaging.CursorIdleTimeout - idle, Timeout.InfiniteTimeSpan);
+
+            return;
+        }
+
+        session.CursorOpen = false;
         await session.Connection.CloseCursorAsync();
         _logger.Information("Sessão {SessionID}: cursor fechado por tempo sem leitura.", session.Info.ID);
         await RemoveIfClosedAsync(session);
@@ -603,6 +615,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         // RN-SQL-007: o temporizador recomeça a cada página que deixa o cursor aberto.
         var cursorOpen = result.IsSuccess && HasOpenCursor(result.Value);
         session.LastReadAt = _timeProvider.GetTimestamp();
+        session.CursorOpen = cursorOpen;
         session.IdleTimer.Change(cursorOpen ? QueryPaging.CursorIdleTimeout : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         // A tela recebe a resposta desta chamada (o erro do banco, quando a conexão caiu no meio dela); a seguinte já não encontra a sessão.
@@ -658,6 +671,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         /// <summary>O instante da última página lida com a vez tomada, pelo relógio do registro (RN-SQL-007).</summary>
         public long LastReadAt { get; set; }
+
+        /// <summary>A última operação deixou um cursor aberto, que o temporizador da RN-SQL-007 vigia.</summary>
+        public bool CursorOpen { get; set; }
 
         /// <summary>
         /// A sessão não atende mais ninguém, e a contagem em andamento para. O cancelamento roda em outra thread: ele fala com o banco, e
