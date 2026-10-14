@@ -192,8 +192,10 @@ type GridHeaderCellProps = {
   showType?: boolean;
   /** O zoom como fator (RN-GRADE-010): o arrasto da divisa anda na escala dele. */
   scale?: number;
-  /** RN-EDIT-002: por que a coluna não se edita, na dica do cabeçalho, quando o catálogo já respondeu. */
+  /** RN-EDIT-002: por que a coluna não se edita (ou, numa junção, o que a editável altera), na dica do cabeçalho, quando o catálogo já respondeu. */
   hint?: string | null;
+  /** RN-EDIT-002: a coluna não se edita, e o cabeçalho diz "somente leitura" depois do tipo, como no canvas (na aba de consulta). */
+  readOnlyMark?: boolean;
 };
 
 /**
@@ -203,7 +205,7 @@ type GridHeaderCellProps = {
  * que termina um arrasto não ordena. O nome do cabeçalho para o leitor de tela é o da coluna e o tipo
  * (`aria-label`), e não o que se juntaria da divisa que mora dentro dele.
  */
-export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null }: GridHeaderCellProps) {
+export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false }: GridHeaderCellProps) {
   // A largura de saída da coluna é contada sem a seta da ordem (`baseWidths`, em `grid-columns.ts`). Quando a seta aparece, quem cede os 18 px dela é o TIPO, e só ele: o nome não
   // encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com um peso, por maior que fosse o do tipo,
   // o nome ainda perdia centésimos de pixel, e com 1/64 de pixel a menos o Chromium já desenha a reticência (`cliente_id` virava `cliente_…`; antes disso o `id`
@@ -213,13 +215,15 @@ export function GridHeaderCell({ column, item, sort, onSort, width = item.size, 
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <span className="max-w-full shrink-0 truncate">{column.name}</span>
       {/* 11 px em 100%, no zoom da grade (RN-GRADE-010). */}
-      {showType ? <span className="min-w-0 truncate text-[length:calc(11px*var(--grid-zoom))] font-normal text-subtle">{column.type}</span> : null}
+      {showType || readOnlyMark ? (
+        <span className="min-w-0 truncate text-[length:calc(11px*var(--grid-zoom))] font-normal text-subtle">{showType && readOnlyMark ? `${column.type} · ${editCopy.readOnlyMark}` : showType ? column.type : editCopy.readOnlyMark}</span>
+      ) : null}
     </span>
   );
   const align = column.kind === "number" ? " justify-end" : "";
   const position = { left: item.start, width: item.size };
   // O nome para o leitor de tela é o que se vê; a dica do cabeçalho só de texto diz o tipo mesmo com ele escondido.
-  const name = showType ? `${column.name} ${column.type}` : column.name;
+  const name = `${showType ? `${column.name} ${column.type}` : column.name}${readOnlyMark ? `, ${editCopy.readOnlyMark}` : ""}`;
   const resizer = onResize === undefined ? null : <ColumnResizer name={column.name} width={width} zoom={scale} last={last} onResize={onResize} onFit={onFit ?? (() => {})} />;
 
   if (onSort === undefined) {
@@ -531,6 +535,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               showType={showTypes}
               scale={metrics.factor}
               hint={editing?.columnHints?.[item.index] ?? null}
+              readOnlyMark={editing?.columnReadOnly?.[item.index] === true}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
               // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009).
               onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes }))}

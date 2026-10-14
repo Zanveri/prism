@@ -5,7 +5,7 @@ import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { unwrap } from "@/lib/api/prism-api";
 
-import { cellAccess, deleteRowAccess, newRowAccess, type EditAccess, type RowContext } from "./cell-editing";
+import { cellAccess, columnHintsOf, deleteRowAccess, isJoin, newRowAccess, resultReadOnly, type EditAccess, type RowContext } from "./cell-editing";
 import { cellMenu, type CellMenuAction, type CellMenuItem } from "./cell-menu";
 import type { DatabaseSession } from "./database-sessions.schema";
 import { databaseSessionKey } from "./database-sessions.service";
@@ -13,7 +13,7 @@ import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullVa
 import { resultCells } from "./full-values.service";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
-import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
+import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
 import { editErrorDetails, type EditPreview, type EditTarget } from "./record-edits.schema";
 import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
 import { recordsCopy } from "./records.copy";
@@ -116,8 +116,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const [fetching, setFetching] = useState<AbortController | null>(null);
   const fetchingRef = useRef<AbortController | null>(null);
 
-  const rows = useMemo(() => (shown === null ? [] : gridRowsOf(shown.rows, edits, shown.columns.length)), [shown, edits]);
-  const marks = useMemo(() => rowMarksOf(edits, shown?.rows.length ?? 0, banner.failedRow), [edits, shown, banner.failedRow]);
+  // RN-EDIT-002: numa junção, a pendência de uma linha de uma tabela aparece em todas as linhas da grade que a mostram.
+  const view = useMemo(() => (shown === null || target === null || !isJoin(target) ? edits : linkedCells(edits, shown.rows, target)), [edits, shown, target]);
+  const rows = useMemo(() => (shown === null ? [] : gridRowsOf(shown.rows, view, shown.columns.length)), [shown, view]);
+  const marks = useMemo(() => rowMarksOf(view, shown?.rows.length ?? 0, banner.failedRow), [view, shown, banner.failedRow]);
   const count = pendingCount(edits);
 
   // Tudo o que as ações leem depois de um `await`: o estado de agora, e não o da renderização em que a ação começou.
@@ -125,6 +127,19 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   useEffect(() => {
     latest.current = { shown, resultId, edits, target, readOnlyReason, busy, saving };
   });
+
+  /** As pendências como a grade as mostra agora (numa junção, repetidas nas linhas que mostram a mesma linha da tabela). */
+  const viewNow = useCallback((): PendingEdits => {
+    const { shown: current, edits: pending, target: known } = latest.current;
+    return current === null || known === null || !isJoin(known) ? pending : linkedCells(pending, current.rows, known);
+  }, []);
+
+  /** Numa junção, a linha da tabela da coluna nesta linha lida (RN-EDIT-002); fora dela, nada. */
+  const changeAt = useCallback((cell: GridCell): string | undefined => {
+    const { shown: current, target: known } = latest.current;
+    if (current === null || known === null || !isJoin(known) || cell.row >= current.rows.length) return undefined;
+    return changeKeyOf(current.rows, known, cell.row, cell.column) ?? undefined;
+  }, []);
   const editorRef = useRef<(CellEditorState & { resultId: string | null }) | null>(null);
   const setEditor = useCallback((next: CellEditorState | null) => {
     const value = next === null ? null : { ...next, resultId: latest.current.resultId };
@@ -188,7 +203,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const rowOf = useCallback((row: number): RowContext => {
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
-    return row < read ? { kind: "read", truncated: current?.truncated.get(row), deleted: pending.deleted.includes(row), generated: current?.generated?.get(row) } : { kind: "new" };
+    return row < read ? { kind: "read", truncated: current?.truncated.get(row), deleted: pending.deleted.includes(row), generated: current?.generated?.get(row), values: current?.rows[row] } : { kind: "new" };
   }, []);
 
   const accessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target): EditAccess => {
@@ -201,11 +216,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
     if (cell.row < read) {
-      const changed = pendingCell(pending, cell.row, cell.column);
+      const changed = pendingCell(viewNow(), cell.row, cell.column);
       return changed === null ? (current?.rows[cell.row][cell.column] ?? null) : changed.value;
     }
     return pending.added[cell.row - read]?.values[cell.column] ?? null;
-  }, []);
+  }, [viewNow]);
 
   /**
    * RN-SQL-017: o valor completo das células cortadas entre `cells`, pedido à API pela linha do resultado, em lotes de até 10.000. Sem célula
@@ -252,12 +267,12 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const applyValue = useCallback((cell: GridCell, value: EditValue) => {
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
-    if (cell.row < read) putEdits(editCell(pending, cell.row, cell.column, value, current!.rows[cell.row][cell.column]));
+    if (cell.row < read) putEdits(editCell(pending, cell.row, cell.column, value, current!.rows[cell.row][cell.column], changeAt(cell)));
     else {
       const row = pending.added[cell.row - read];
       if (row !== undefined) putEdits(editNewCell(pending, row.id, cell.column, value));
     }
-  }, [putEdits]);
+  }, [putEdits, changeAt]);
 
   /** RN-GRADE-002 e RN-SQL-017: copiar a célula (Ctrl+C, "Copiar valor"), com o valor completo quando ela chegou cortada. */
   const copyCell = useCallback(
@@ -335,12 +350,12 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const undo = useCallback((cell: GridCell) => {
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
-    if (cell.row < read) putEdits(pending.deleted.includes(cell.row) ? undoDelete(pending, cell.row) : undoCell(pending, cell.row, cell.column));
+    if (cell.row < read) putEdits(pending.deleted.includes(cell.row) ? undoDelete(pending, cell.row) : undoCell(pending, cell.row, cell.column, changeAt(cell)));
     else {
       const row = pending.added[cell.row - read];
       if (row !== undefined) putEdits(undoNewCell(pending, row.id, cell.column));
     }
-  }, [putEdits]);
+  }, [putEdits, changeAt]);
 
   const discard = useCallback(() => {
     setEditor(null);
@@ -369,7 +384,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         toast.success(copy.saved(result.data.applied));
         putEdits(noEdits);
         setBanner(noBanner);
-        const saved = savedResultOf(current, pending, current.columns.length);
+        // RN-EDIT-009: numa junção, o valor salvo fica em todas as linhas que mostram a mesma linha da tabela.
+        const saved = savedResultOf(current, isJoin(known) ? linkedCells(pending, current.rows, known) : pending, current.columns.length);
         // Na grade que fica (a aba de consulta), as excluídas saíram: a célula ativa não aponta para depois da última linha.
         setActiveState((held) => (held === null || held.resultId !== id || held.cell.row < saved.rows.length ? held : { resultId: id, cell: { row: Math.max(saved.rows.length - 1, 0), column: held.cell.column } }));
         onSaved({ resultId: id, result: saved, reread });
@@ -411,7 +427,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
 
     const access = accessOf(cell, known);
     const read = current.rows.length;
-    const changed = cell.row < read ? pendingCell(pending, cell.row, cell.column) !== null : pending.added[cell.row - read]?.values[cell.column] !== undefined;
+    const changed = cell.row < read ? pendingCell(viewNow(), cell.row, cell.column) !== null : pending.added[cell.row - read]?.values[cell.column] !== undefined;
     const groups = cellMenu({
       value: valueAt(cell),
       access,
@@ -456,7 +472,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         }
       },
     });
-  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, removeRow, copyCell, toast]);
+  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, removeRow, copyCell, toast, viewNow]);
 
   /** RN-EDIT-007: com pendências, a ação (filtrar, ordenar, atualizar, executar de novo) espera a resposta da pergunta. */
   const guard = useCallback((proceed: () => void) => {
@@ -484,7 +500,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           marks,
           active,
           editor,
-          columnHints: target === null ? null : target.columns.map((column) => (column.editable ? null : copy.readOnly(column.reason ?? ""))),
+          columnHints: columnHintsOf(target),
+          // Na aba de consulta o cabeçalho marca a coluna que não se edita, como no canvas; os Registros, de uma tabela só, ficam como estavam.
+          columnReadOnly: subject === "result" && target !== null ? target.columns.map((column) => !column.editable) : null,
           onActivate: setActive,
           onEdit: openEditor,
           onDraft: (text) => {
@@ -506,7 +524,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       pending: count,
       oneAtATime: target?.oneAtATime === true,
       saving,
-      readOnly: readOnlyReason === null ? (target !== null && !target.tables[0].editable ? copy.readOnly(target.tables[0].reason ?? "") : null) : copy.readOnly(readOnlyReason),
+      readOnly: resultReadOnly(readOnlyReason, target),
       notice: banner.notice,
       failure: banner.failure,
       fetching: fetching !== null,

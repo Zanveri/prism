@@ -212,6 +212,25 @@ describe("a divisa à direita do cabeçalho de cada coluna (RN-GRADE-009)", () =
   });
 });
 
+describe("a marca da coluna que não se edita, na aba de consulta (RN-EDIT-002)", () => {
+  const item = virtualColumns[0];
+  const renderHeader = (over: Partial<Parameters<typeof GridHeaderCell>[0]> = {}) => renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[0], item, ...over }));
+  const mark = recordsCopy.edit.readOnlyMark;
+
+  it("depois do tipo, como no canvas, e no nome para o leitor de tela; a dica diz o motivo", () => {
+    const markup = renderHeader({ readOnlyMark: true, hint: recordsCopy.edit.readOnly("coluna da chave numa junção") });
+
+    expect(markup).toContain(`>int4 · ${mark}<`);
+    expect(markup).toMatch(new RegExp(`aria-label="id int4, ${mark}"`));
+    expect(markup).toContain("Somente leitura: coluna da chave numa junção.");
+  });
+
+  it("sem o tipo à mostra, só a marca; a coluna que se edita não tem marca", () => {
+    expect(renderHeader({ readOnlyMark: true, showType: false })).toContain(`>${mark}<`);
+    expect(renderHeader()).not.toContain(mark);
+  });
+});
+
 describe("o tipo de dado no cabeçalho é uma preferência (RN-CONFIG-006)", () => {
   const item = virtualColumns[0];
   const renderHeader = (over: Partial<Parameters<typeof GridHeaderCell>[0]> = {}) => renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[0], item, ...over }));

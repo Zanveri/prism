@@ -24,8 +24,13 @@ export type GridEditing = {
   marks: ReadonlyMap<number, RowMark>;
   active: GridCell | null;
   editor: CellEditorState | null;
-  /** O motivo de cada coluna não se editar, para a dica do cabeçalho; nulo enquanto o catálogo não respondeu. */
+  /**
+   * A dica do cabeçalho de cada coluna (RN-EDIT-002): o motivo de ela não se editar e, num resultado de junção, a tabela e a coluna que a
+   * editável altera; nulo enquanto o catálogo não respondeu.
+   */
   columnHints: readonly (string | null)[] | null;
+  /** As colunas que não se editam, marcadas no cabeçalho ("somente leitura", como no canvas): só na aba de consulta, com o catálogo respondido. */
+  columnReadOnly?: readonly boolean[] | null;
   onActivate: (cell: GridCell) => void;
   /** Abrir o campo na célula: duplo clique, F2, Enter, ou começar a digitar (`initial` substitui o valor). */
   onEdit: (cell: GridCell, initial?: string) => void;

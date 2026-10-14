@@ -153,19 +153,19 @@ describe("QueryTabPanel: a grade do resultado de um comando se edita como a dos 
   });
 
   it("o resultado só leitura mostra o motivo que a página trouxe na faixa, no lugar dos Registros (RN-EDIT-002)", () => {
-    const { banner } = mount(fakeRunner(rowsState({ readOnly: "junção de tabelas" }))).show();
+    const { banner } = mount(fakeRunner(rowsState({ readOnly: "união de consultas" }))).show();
 
-    expect(banner?.props.readOnly).toBe(copy.readOnly("junção de tabelas"));
+    expect(banner?.props.readOnly).toBe(copy.readOnly("união de consultas"));
   });
 
   it("no resultado só leitura, o menu da célula mostra 'Editar célula' desabilitado, com o motivo; copiar continua", async () => {
-    const view = mount(fakeRunner(rowsState({ readOnly: "junção de tabelas" })));
+    const view = mount(fakeRunner(rowsState({ readOnly: "união de consultas" })));
 
     view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
     await settle();
     const items = view.show().menu!.groups.flat();
 
-    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("junção de tabelas") });
+    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("união de consultas") });
     expect(items.find((item) => item.label === copy.menu.copyValue)?.disabled).toBe(false);
     expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
   });
@@ -351,6 +351,77 @@ describe("QueryTabPanel: o Salvar deixa a grade com o que foi salvo, sem executa
 
     expect(runner.keepSaved).toHaveBeenCalledTimes(1);
     expect(runner.run).toHaveBeenCalledWith(command);
+  });
+});
+
+describe("QueryTabPanel: num resultado de junção cada coluna se edita na tabela de onde veio (RN-EDIT-002)", () => {
+  const joinColumns: RowsState["columns"] = [
+    { name: "id", type: "int4", kind: "number" },
+    { name: "status", type: "text", kind: "text" },
+    { name: "cliente_id", type: "int4", kind: "number" },
+    { name: "nome", type: "text", kind: "text" },
+  ];
+  /** `pedido p JOIN cliente c`: a chave de cada tabela não se edita; o cliente 7 aparece nas duas linhas. */
+  const joinTarget: EditTarget = {
+    tables: [
+      { schema: "loja", name: "pedido", key: [0], editable: true, reason: null },
+      { schema: "loja", name: "cliente", key: [2], editable: true, reason: null },
+    ],
+    columns: [
+      { table: 0, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+      { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+      { table: 1, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+      { table: 1, baseColumn: "nome", editable: true, reason: null, nullable: true, generated: null },
+    ],
+    rowOperations: false,
+    oneAtATime: false,
+  };
+  const joined = () => rowsState({ columns: joinColumns, rows: [["1", "aberta", "7", "Ana"], ["2", "aberta", "7", "Ana"]], hasMore: false });
+
+  /** Abre o campo na célula, escreve e confirma, como a pessoa faz. */
+  async function type(view: ReturnType<typeof mount>, row: number, column: number, text: string) {
+    view.show().area.editing!.onEdit({ row, column });
+    await settle();
+    view.show().area.editing!.onDraft(text);
+    view.show().area.editing!.onCommit();
+  }
+
+  it("a linha do cliente muda nas duas linhas da grade e conta uma alteração; o Salvar manda um UPDATE por tabela e a grade salva mostra o valor nas duas", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: joinTarget });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 2 } });
+    const runner = fakeRunner(joined());
+    const view = mount(runner);
+
+    await type(view, 0, 3, "Ana Maria");
+    await type(view, 1, 1, "paga");
+    const shown = view.show();
+
+    expect([0, 1].map((row) => shown.area.editing!.marks.get(row)?.pending.get(3))).toEqual(["Ana Maria", "Ana Maria"]);
+    expect(shown.banner!.props.pending).toBe(2);
+    expect(shown.area.editing!.columnReadOnly).toEqual([true, false, true, false]);
+    expect(shown.area.editing!.columnHints).toEqual([copy.readOnly("coluna da chave numa junção"), copy.editsColumn("pedido", "status"), copy.readOnly("coluna da chave numa junção"), copy.editsColumn("cliente", "nome")]);
+
+    shown.banner!.props.onSave();
+    await settle();
+
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledWith("s1", "r1", [
+      { kind: "update", table: 1, key: ["7"], set: [{ column: 3, value: "Ana Maria" }] },
+      { kind: "update", table: 0, key: ["2"], set: [{ column: 1, value: "paga" }] },
+    ]);
+    expect(runner.keepSaved).toHaveBeenCalledWith("r1", { rows: [["1", "aberta", "7", "Ana Maria"], ["2", "paga", "7", "Ana Maria"]], truncated: new Map(), generated: new Map() });
+  });
+
+  it("Linha nova e Excluir linha ficam desabilitados no menu, com o motivo; a coluna da chave também", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: joinTarget });
+    const view = mount(fakeRunner(joined()));
+
+    view.show().area.editing!.onMenu({ row: 0, column: 2 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flat();
+
+    expect(items.find((item) => item.label === copy.menu.newRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
+    expect(items.find((item) => item.label === copy.menu.deleteRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
+    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("coluna da chave numa junção") });
   });
 });
 
