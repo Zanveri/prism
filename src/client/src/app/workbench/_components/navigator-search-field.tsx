@@ -17,7 +17,7 @@ type NavigatorSearchFieldProps = {
 /**
  * O campo de busca do navegador (RN-BUSCA-001), no tamanho e nas cores do canvas: 32 px, fundo e borda dos campos, lupa à esquerda.
  * Esc limpa o texto; com o campo vazio, devolve o foco à lista. O botão de limpar só existe com texto, e o do próprio navegador
- * (o `x` do `type="search"`) fica escondido para não haver dois.
+ * (o `x` do `type="search"`) fica escondido para não haver dois. Divide a linha com o seletor de ambiente (RN-NAV-010): quem dá a margem é a linha.
  */
 export function NavigatorSearchField({ value, onChange, onFocusList, inputRef }: NavigatorSearchFieldProps) {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -32,7 +32,7 @@ export function NavigatorSearchField({ value, onChange, onFocusList, inputRef }:
   }
 
   return (
-    <div className="mx-2 mb-2 flex h-8 flex-none items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
+    <div className="flex h-8 min-w-32 flex-[1_1_8rem] items-center gap-2 rounded-md border border-border bg-raised px-2.5 text-subtle focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
       <SearchIcon />
       <input
         ref={inputRef}

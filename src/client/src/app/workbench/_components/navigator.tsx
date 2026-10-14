@@ -10,6 +10,7 @@ import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
+import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -17,6 +18,7 @@ import { connectionReveal } from "../_lib/connection-intent";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
@@ -30,6 +32,7 @@ import { useWorkbench } from "../_lib/workbench-state";
 import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
+import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
 import { NavigatorRow, rowHeight, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
@@ -146,6 +149,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; keys: ReadonlySet<string> }>({ query: "", keys: noKeys });
   const searchInput = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  // RN-NAV-010: o seletor de ambiente. É estado daqui: a área de trabalho fica montada enquanto o cofre está aberto, então a escolha vale enquanto a
+  // janela está aberta, e sair do cofre a apaga, como o resto.
+  const [environmentChoice, setEnvironmentChoice] = useState<EnvironmentChoice>(allEnvironments);
   // O filtro roda sobre o texto adiado: a digitação não espera a lista de milhares de linhas.
   const searchText = useDeferredValue(query);
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
@@ -154,10 +160,16 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [reveal, setReveal] = useState<{ key: string; seq: number } | null>(null);
 
   const connectionList = useMemo(() => connections.data ?? [], [connections.data]);
-  const tree = useMemo(() => treeNodes(buildConnectionTree(folders.data ?? [], connectionList)), [folders.data, connectionList]);
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
   // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-NAV-010: os ambientes do usuário no seletor (RN-AMB-001), e a árvore só com as conexões do escolhido e as pastas no caminho até elas. A busca
+  // filtra depois, sobre esta árvore. O ambiente que ninguém mais usa sai da lista, e a escolha dele volta a "Todos" (ajuste durante a renderização,
+  // só com as duas listas já na tela).
+  const savedEnvironments = useMemo(() => userEnvironments(folders.data ?? [], connectionList), [folders.data, connectionList]);
+  if (folders.data !== undefined && connections.data !== undefined && !choiceAvailable(environmentChoice, savedEnvironments)) setEnvironmentChoice(allEnvironments);
+  const shown = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
+  const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
 
   const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
@@ -208,6 +220,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     setSelectedKey(plan.key);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
+    // O filtro de ambiente que a esconde também sai (RN-NAV-010): a conexão salva ou duplicada sem o ambiente escolhido tem de aparecer.
+    if (!shown.connections.includes(revealTarget)) setEnvironmentChoice(allEnvironments);
   }
 
   const announcedReveal = useRef(0);
@@ -526,8 +540,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       );
     }
 
-    // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página).
-    if (tree.roots.length === 0) {
+    // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página). A árvore vazia pelo
+    // filtro de ambiente não é o primeiro uso: há o que mostrar, só não nesse ambiente.
+    const filtering = environmentChoice.type !== "all";
+    if (tree.roots.length === 0 && (!filtering || (connectionList.length === 0 && (folders.data ?? []).length === 0))) {
       return (
         <div className="flex flex-col gap-1 px-3 py-2">
           <p className="font-semibold text-ink">{copy.empty.title}</p>
@@ -538,9 +554,17 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
     return (
       <>
-        <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
+        {/* RN-NAV-010: o seletor de ambiente ao lado do campo de busca; no navegador estreito ele desce para a linha de baixo. */}
+        <div className="mx-2 mb-2 flex flex-none flex-wrap gap-1.5">
+          <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
+          <NavigatorEnvironmentFilter environments={savedEnvironments} value={environmentChoice} onChange={setEnvironmentChoice} />
+        </div>
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
-        {search === null ? null : search.rows.length === 0 ? (
+        {filtering && tree.roots.length === 0 ? (
+          <p role="status" className="px-3 py-2 text-muted">
+            {environmentChoice.type === "environment" ? navigatorCopy.environmentFilter.nothingIn(savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : navigatorCopy.environmentFilter.nothingWithout}
+          </p>
+        ) : search === null ? null : search.rows.length === 0 ? (
           <div role="status" className="flex flex-col gap-1 px-3 py-2">
             <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
             <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>

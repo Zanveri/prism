@@ -1,10 +1,14 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { controlClassName } from "@/components/ui/field";
 import { cn } from "@/lib/utils/cn";
 
-export type SelectOption = { value: string; label: string };
+/**
+ * Uma opção. `content` desenha a opção no lugar do rótulo, na lista e no controle fechado (a etiqueta colorida de um ambiente, RN-NAV-010); o rótulo
+ * continua sendo o nome dela na busca pela inicial, e o que o `content` mostra tem de dizer o mesmo para o leitor de tela.
+ */
+export type SelectOption = { value: string; label: string; content?: ReactNode };
 
 type SelectProps = {
   id?: string;
@@ -227,7 +231,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         // `h-auto`: um rótulo comprido quebra a linha em vez de ser cortado.
         className={cn(controlClassName, "flex h-auto min-h-10 cursor-pointer items-center justify-between gap-2 py-2 text-left", open && "border-accent", className)}
       >
-        <span className={cn("min-w-0 flex-1 break-words", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected?.label ?? placeholder ?? ""}</span>
+        <span className={cn("min-w-0 flex-1 break-words", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected === undefined ? (placeholder ?? "") : (selected.content ?? selected.label)}</span>
         <span aria-hidden className="flex-none text-xs text-subtle">▾</span>
       </button>
 
@@ -248,7 +252,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
                     onClick={() => choose(index)}
                     className={cn("cursor-pointer rounded-sm px-2.5 py-2 break-words", index === activeIndex ? "bg-selected" : "bg-transparent", isSelected ? "font-semibold text-ink" : item.value === "" ? "text-subtle" : "text-body")}
                   >
-                    {item.label}
+                    {item.content ?? item.label}
                   </div>
                 );
               })}
