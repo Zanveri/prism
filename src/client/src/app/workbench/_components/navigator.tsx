@@ -20,7 +20,8 @@ import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, na
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
-import { selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { refreshKey } from "../_lib/grid-editing";
 import { measureRendered, observeRenderedOffset } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
@@ -311,6 +312,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       event.preventDefault();
       searchInput.current?.focus();
       searchInput.current?.select();
+    } else if (!event.defaultPrevented && refreshKey(event)) {
+      // RN-GRADE-012: F5 é o "Atualizar" do nó escolhido, quando ele se aplica (o mesmo da barra e do menu).
+      event.preventDefault();
+      if (refreshesSelection(toolbar)) runToolbarAction("refresh");
     }
   }
 

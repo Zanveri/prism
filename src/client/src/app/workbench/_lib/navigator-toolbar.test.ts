@@ -5,7 +5,7 @@ import type { Connection, Folder } from "@/app/connections/_lib/connections.sche
 
 import type { MenuState } from "./navigator-menu";
 import { columnNodes, databaseNodes, flattenVisible, foreignKeyNodes, indexNodes, navKey, objectNodes, schemaNodes, tableGroupNodes, treeNodes, type NavNode, type TableLevelPath } from "./navigator-model";
-import { isRefreshable, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarButton, type ToolbarSelection } from "./navigator-toolbar";
+import { isRefreshable, refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarButton, type ToolbarSelection } from "./navigator-toolbar";
 
 const now = "2026-10-12T12:00:00Z";
 const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
@@ -198,5 +198,15 @@ describe("isRefreshable: onde 'Atualizar' tem o que buscar de novo", () => {
 
   it("a pasta, as folhas e as linhas de aviso, nunca", () => {
     for (const node of [folderNode, view, routine, column, index, foreignKey, loadingRow, errorRow]) expect(isRefreshable(node, true)).toBe(false);
+  });
+});
+
+describe("refreshesSelection: F5 no navegador é o Atualizar do nó escolhido (RN-GRADE-012)", () => {
+  const button = (id: ToolbarButton["id"], disabled: boolean): ToolbarButton => ({ id, label: id, title: id, disabled });
+
+  it("só quando o Atualizar da barra se aplica ao nó escolhido", () => {
+    expect(refreshesSelection([button("connect", false), button("refresh", false)])).toBe(true);
+    expect(refreshesSelection([button("connect", false), button("refresh", true)])).toBe(false);
+    expect(refreshesSelection([])).toBe(false);
   });
 });
