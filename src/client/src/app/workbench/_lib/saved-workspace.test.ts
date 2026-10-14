@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SavedTab, SavedWorkspace } from "../../../../electron/workspace-messages";
+import { isScriptDirty } from "./saved-scripts";
 import { createWorkspaceSource, holdWorkspace, restoreWorkspace, savedTabOf, toSavedWorkspace, withHeld, type RestoreContext } from "./saved-workspace";
 import type { QueryTab } from "./workbench-model";
 
@@ -114,6 +115,17 @@ describe("o que volta na próxima entrada (RN-ABAS-006)", () => {
 
     expect(restored.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 1", dirty: false });
     expect(restored.tabs[1].script?.dirty).toBe(true);
+  });
+
+  it("o script salvo noutro banco volta com esse banco como o salvo, e a aba nele não fica marcada (RN-ARVORE-007)", () => {
+    const restored = restoreWorkspace(
+      { tabs: [query("SELECT 'salvo'", { scriptID: s1, database: "vendas" })], activeIndex: 0 },
+      context({ scripts: new Map([[s1, { name: "Relatório", sql: "SELECT 'salvo'", database: "vendas" }]]) }),
+    );
+    const tab = restored.tabs[0] as QueryTab;
+
+    expect(tab.script).toMatchObject({ id: s1, savedDatabase: "vendas", dirty: false });
+    expect(isScriptDirty(tab.script!, tab.sql, tab.database)).toBe(false);
   });
 
   it("a aba de consulta cuja conexão foi excluída volta sem conexão (e sem banco), e a de tabela não volta; a ativa passa à vizinha", () => {

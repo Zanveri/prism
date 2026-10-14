@@ -96,8 +96,8 @@ export function createWorkspaceSource(liveSql: LiveSql) {
 /** O que a reabertura precisa saber: as conexões que existem, os scripts que existem (com o texto salvo, quando foi lido), e de onde vêm os ids e os números. */
 export type RestoreContext = {
   connections: ReadonlySet<string>;
-  /** O nome de cada script, e o SQL salvo dele (`null` se não foi lido: só a aba com mudança não salva precisa dele). */
-  scripts: ReadonlyMap<string, { name: string; sql: string | null }>;
+  /** O nome de cada script, o SQL salvo dele (`null` se não foi lido: só a aba com mudança não salva precisa dele) e o banco em que foi salvo (RN-ARVORE-007). */
+  scripts: ReadonlyMap<string, { name: string; sql: string | null; database?: string | null }>;
   newId: () => string;
   /** O número da próxima "consulta-N.sql" da janela. */
   nextNumber: () => number;
@@ -142,7 +142,7 @@ export function restoreWorkspace(saved: SavedWorkspace, context: RestoreContext)
     if (tab.connectionID !== null && connectionId === null) withoutConnection++;
 
     const script = tab.scriptID === null ? undefined : context.scripts.get(tab.scriptID);
-    const ref: ScriptRef | undefined = script === undefined || tab.scriptID === null ? undefined : { id: tab.scriptID, name: script.name, savedSql: script.sql ?? (tab.dirty ? "" : tab.sql), dirty: tab.dirty };
+    const ref: ScriptRef | undefined = script === undefined || tab.scriptID === null ? undefined : { id: tab.scriptID, name: script.name, savedSql: script.sql ?? (tab.dirty ? "" : tab.sql), ...(script.database == null ? {} : { savedDatabase: script.database }), dirty: tab.dirty };
     const title = ref?.name ?? `consulta-${context.nextNumber()}.sql`;
     if (tab.sqlTooLarge) emptied.push(title);
 

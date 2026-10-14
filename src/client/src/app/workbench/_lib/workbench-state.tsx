@@ -509,7 +509,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
       const restored = restoreWorkspace(saved.data, {
         connections: new Set(connectionList.map((connection) => connection.id)),
-        scripts: new Map(scriptList.map((script) => [script.id, { name: script.name, sql: read.get(script.id) ?? null }])),
+        scripts: new Map(scriptList.map((script) => [script.id, { name: script.name, sql: read.get(script.id) ?? null, database: script.database }])),
         newId: () => crypto.randomUUID(),
         nextNumber: () => nextNumber.current++,
       });
