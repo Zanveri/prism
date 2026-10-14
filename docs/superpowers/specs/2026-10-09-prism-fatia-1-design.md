@@ -2020,7 +2020,9 @@ conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções
 lá.
 
 - **RN-PASTA-005.** A pasta pode ter um ambiente, com nome e cor, nas mesmas regras do ambiente da
-  conexão (RN-CONN-001: nome opcional de até 30 caracteres, cor `#RRGGBB`).
+  conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
+  ambiente: pasta ou conexão só com cor herda o de cima, e a subpasta sem ambiente não mostra o da
+  pasta de cima.
   - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
     a mesma do formulário da conexão.
   - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
