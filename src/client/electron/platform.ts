@@ -22,3 +22,14 @@ export function applicationMenuTemplate(platform: NodeJS.Platform): MenuItemCons
     { label: "Editar", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" }] },
   ];
 }
+
+/**
+ * A tecla que o menu do app não recebe (RN-GRADE-012 e RN-GRADE-010 do "Filtrar"): F5 e F11, com qualquer modificador, e Ctrl+R (Cmd+R), com ou sem Shift.
+ * O app empacotado do Windows e do Linux não tem menu, e o do macOS não tem Recarregar; o menu padrão de desenvolvimento tem Recarregar (Ctrl+R), Forçar
+ * recarga (Ctrl+Shift+R) e Tela cheia (F11), e o Chromium do Electron não recarrega nada sem menu. Ignorado pelo menu (`setIgnoreMenuShortcuts`, a cada
+ * tecla, no `before-input-event`), o atalho chega à tela como qualquer tecla: F5 atualiza a aba, F11 abre o "Filtrar" da grade, e Ctrl+R não faz nada.
+ */
+export function menuShortcutIgnored(input: { key: string; control: boolean; meta: boolean }): boolean {
+  if (input.key === "F5" || input.key === "F11") return true;
+  return (input.control || input.meta) && input.key.toLowerCase() === "r";
+}

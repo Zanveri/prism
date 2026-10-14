@@ -9,7 +9,7 @@ import { apiExitMessage, closeVaultAndStop, startApi, type ApiProcess } from "./
 import { versionArgument, windowArgument } from "./app-version";
 import { userDataDir } from "./data-dir";
 import { permissionAllowed } from "./permissions";
-import { applicationMenuTemplate, windowIconFile } from "./platform";
+import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
 import { createSplash } from "./splash";
 import { startUp } from "./startup";
@@ -342,6 +342,9 @@ function createAppWindow(bounds?: Rect) {
     if (devServerUrl === undefined || url.split("#")[0] !== new URL(devServerUrl).href) event.preventDefault();
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // RN-GRADE-012: F5 e Ctrl+R nunca recarregam a janela (o texto das abas de SQL se perderia), e F5 e F11 chegam à tela (atualizar e o "Filtrar" da grade):
+  // o menu, que só existe em desenvolvimento e no macOS, não recebe essas teclas (`menuShortcutIgnored`, com teste).
+  window.webContents.on("before-input-event", (_event, input) => window.webContents.setIgnoreMenuShortcuts(menuShortcutIgnored(input)));
 
   // A página que recarrega (ou cujo processo caiu) desmonta a área de trabalho sem avisar: ela deixa de estar pronta para receber abas, e fechar a
   // janela deixa de perguntar até ela montar de novo.
