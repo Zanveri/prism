@@ -1015,7 +1015,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   (`ResizeObserver`) o diagrama se ajusta ou volta à rolagem lembrada.
 - **Edição das células** (seção 22, RN-EDIT-001 a 012): a mesma nos Registros de uma tabela e na grade do resultado de um comando da aba de
   consulta (o mesmo campo, faixa, menu e atalhos; a diferença da aba de consulta está em "Na aba de consulta", abaixo). As decisões são funções puras com teste:
-  `record-edits.ts` (as pendências, `PendingEdits`: células de linha lida, exclusões e linhas novas, cada lista na ordem em que foi feita; uma
+  `record-edits.ts` (as pendências, `PendingEdits`: células de linha lida, numa junção com a linha da tabela, `change`; exclusões e linhas novas, cada lista na ordem em que foi feita; uma
   alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
   `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
   `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
@@ -1035,7 +1035,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
-    com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho.
+    com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
   - **A faixa** (`_components/edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
     erro do último Salvar (`role="alert"`), que fica até o próximo; e o motivo de só leitura, à vista. Salvar que gravou tudo avisa "N alterações
     salvas." e chama `onSaved`: os Registros leem de novo. Sem o alvo (as pendências lembradas voltam sem ele), o Salvar e o "Ver SQL" o perguntam
@@ -1058,6 +1058,26 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
     trata o Ctrl+S do script: vão por portal, e o teclado deles subiria até ela. Fechar a aba pergunta pelo mesmo registro `unsaved-edits.ts`. A
     aba de consulta ainda não tem o Commit manual na tela (RN-TX-001): o Salvar é sempre uma transação própria.
+  - **Num resultado de junção** (RN-EDIT-002, pedido do dono de 2026-10-14; só a aba de consulta tem junção, os Registros são de uma tabela só e
+    ficam como estavam): o `edit-target` diz a tabela de cada coluna (`columns[].table`) e a chave de cada tabela, e cada coluna se edita na
+    tabela de onde veio (`cell-editing.ts`: `cellAccess` olha a tabela DA COLUNA, e numa tabela só, sempre a 0, como antes; a chave cortada,
+    gerada ou NULA vale por tabela, e a nula é a junção externa sem linha ali, "<tabela> não tem linha aqui (junção externa)", pelos valores
+    da linha em `RowContext.values`). "Linha nova" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
+    (`isJoin`: mais de uma tabela). **A linha repetida** (a mesma linha de uma tabela em várias linhas da grade): a célula alterada guarda
+    `change`, a linha da tabela (`changeKeyOf`: a tabela e os textos da chave, em JSON), e `editCell`/`undoCell` com `change` acham a pendência
+    por ela em qualquer linha que a mostre; `linkedCells` repete a pendência nas outras linhas para a grade, o valor da célula, o menu e a
+    grade salva (também nas que chegam pelo "carregar mais"), e `pendingCount` e `changesOf` contam e mandam UMA alteração por linha de tabela:
+    a linha da grade editada em duas tabelas vira duas, cada uma com a sua `table` e a sua chave, e a API faz um `UPDATE` de cada (a faixa
+    conta duas, e o "Ver SQL" mostra os dois). No banco sem log, a gravada sai pela `change` (`withoutApplied`), sem levar a da outra tabela.
+    O cabeçalho (`columnHintsOf`): a dica diz o motivo da coluna que não se edita e, na junção, o que a editável altera ("Altera nome de
+    cliente."); só na aba de consulta (`subject: "result"`, `GridEditing.columnReadOnly`), a coluna que não se edita leva "somente leitura"
+    depois do tipo, como no canvas (e no nome para o leitor de tela), e a largura de saída da coluna passa a contar a marca quando o catálogo
+    responde (`baseWidths` e `fitWidth` com a marca; sem isso o tipo a cortava com reticências). `columnHints` e `columnReadOnly` são
+    memorizados pelo alvo: a grade refaz as larguras por eles. A barra do resultado só diz "Somente leitura" quando nenhuma tabela se edita,
+    com o motivo de cada uma (`resultReadOnly`). **Conferido na tela** (Xvfb, PostgreSQL em contêiner, as tabelas `pallets`, `items` e
+    `pallets_items` do pedido): o SELECT do dono (`pallets_items.*` numa junção de três) com `id` "somente leitura" e "Linha nova"/"Excluir
+    linha" desabilitados no menu; uma junção com colunas de duas tabelas, a edição de uma célula de cada (a descrição do item repetido mudou nas
+    duas linhas dele), o "Ver SQL" com os dois `UPDATE`, o Salvar ("2 alterações salvas.") e a releitura com os valores novos.
 - **Valor completo das células cortadas** (RN-SQL-017, RN-GRADE-002): a grade continua mostrando o valor cortado (RN-SQL-011), e copiar e
   exportar levam o completo, que a API guarda em memória e devolve por `POST .../results/{resultID}/cells` (`full-values.service.ts`,
   `resultCells`: nunca lança, e acha cada valor pela posição que a resposta diz). As decisões são de `_lib/full-values.ts`, pura, com teste:
