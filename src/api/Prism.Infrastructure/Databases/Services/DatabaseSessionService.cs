@@ -135,22 +135,47 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => RunAsync(sessionID, nameof(GetDatabasesAsync), waitsForTurn: true, session => session.Connection.GetDatabasesAsync(cancellationToken), cancellationToken);
 
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken)
+        => ExecuteAsync(sessionID, sql, null, pageSize, cancellationToken);
+
+    public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
-            var outcome = await session.Connection.ExecuteAsync(sql, pageSize, cancellationToken);
+            var dialect = DialectOf(session);
+
+            // RN-GRADE-011: o comando montado é o que roda. A recusa do filtro, como a do texto do comando, deixa o resultado anterior como estava.
+            FilteredSql? filtered = null;
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                var applied = SqlFilter.Apply(sql, filter, dialect);
+                if (applied.IsFailure)
+                    return applied.Error;
+
+                filtered = applied.Value;
+            }
+
+            var sent = filtered?.Sql ?? sql;
+            var outcome = await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
+
+            // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
+            if (outcome.IsFailure && filtered is not null)
+                outcome = outcome.Error with { Position = null };
 
             // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
             if (outcome.IsSuccess && outcome.Value.Page is { } page)
             {
-                session.LastRowQuery = new RowQuery(sql, page.TotalRows);
+                session.LastRowQuery = new RowQuery(sent, page.TotalRows);
 
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
-                // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura.
-                var result = new ResultState(page.TotalRows is null ? EditableSql.Read(sql, DialectOf(session)) : ResultSource.ReadOnly(EditableSql.WroteRows), page.Columns);
+                // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
+                // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
+                var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
+                    : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
+                    : EditableSql.Read(sent, dialect);
+                var result = new ResultState(source, page.Columns, filtered?.Applied);
                 var withoutFullValue = result.Cells.Add(page);
                 ReplaceResult(session, result);
 
-                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue } };
+                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue, FilterApplied = result.FilterApplied } };
             }
 
             // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
@@ -161,6 +186,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             return outcome;
         }, cancellationToken);
 
+    public string? FilterRefusal(Guid sessionID, string? filter)
+        => _sessions.TryGetValue(sessionID, out var session) ? SqlFilter.Refusal(filter, DialectOf(session)) : null;
+
     public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, async session =>
         {
@@ -170,7 +198,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             // RN-SQL-017: a página continua a contagem das linhas do resultado, e o valor completo das cortadas fica com ele.
             return session.CurrentResult is { } result
-                ? page.Value with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = result.Cells.Add(page.Value) }
+                ? page.Value with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = result.Cells.Add(page.Value), FilterApplied = result.FilterApplied }
                 : page.Value with { FullValues = null, CellsWithoutFullValue = page.Value.TruncatedCells };
         }, cancellationToken);
 
@@ -694,7 +722,8 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele. RN-SQL-017:
     /// guarda também o valor completo das células cortadas das páginas entregues.
     /// </summary>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns)
+    /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, EFilterApplied? filterApplied = null)
     {
         private volatile EditTarget? _target;
 
@@ -707,6 +736,8 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         public IReadOnlyList<QueryColumn> Columns => columns;
 
         public ResultEditability Editability { get; } = source.Reason is { } reason ? ResultEditability.ReadOnly(reason) : ResultEditability.Unknown;
+
+        public EFilterApplied? FilterApplied => filterApplied;
 
         public EditTarget? Target
         {

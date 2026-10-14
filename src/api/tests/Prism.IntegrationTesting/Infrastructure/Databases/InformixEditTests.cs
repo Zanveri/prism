@@ -62,6 +62,12 @@ public sealed class InformixEditTests : DatabaseEditContractTests
     protected override async Task ConfigureAsync(IServiceCollection services)
         => services.UseDriverSource(directory: await IbmDriverSingleton.GetDirectoryAsync());
 
+    /// <summary>O limite de linhas do Informix vai na cabeça do `SELECT`.</summary>
+    protected override string WithFirstRows(string select, int rows)
+        => $"SELECT FIRST {rows} {select["SELECT ".Length..]}";
+
+    protected override string? ReadOnlyClause => "FOR READ ONLY";
+
     protected override string Name(string name)
         => name;
 

@@ -17,4 +17,5 @@ namespace Prism.Infrastructure.Databases.Models;
 /// RN-SQL-017: as células de `TruncatedCells` cujo valor completo a API não guardou (passou do teto da sessão), como `[linha, coluna]`
 /// dentro desta página. Quem o põe é o registro de sessões.
 /// </param>
-public sealed record QueryPage(IReadOnlyList<QueryColumn> Columns, IReadOnlyList<string?[]> Rows, bool HasMore, long ElapsedMs, IReadOnlyList<int[]> TruncatedCells, long? TotalRows = null, Guid? ResultID = null, ResultEditability? Editable = null, IReadOnlyList<FullCellValue>? FullValues = null, IReadOnlyList<int[]>? CellsWithoutFullValue = null);
+/// <param name="FilterApplied">RN-GRADE-011: como o filtro do resultado entrou no comando; nulo sem filtro. Quem o põe é o registro de sessões.</param>
+public sealed record QueryPage(IReadOnlyList<QueryColumn> Columns, IReadOnlyList<string?[]> Rows, bool HasMore, long ElapsedMs, IReadOnlyList<int[]> TruncatedCells, long? TotalRows = null, Guid? ResultID = null, ResultEditability? Editable = null, IReadOnlyList<FullCellValue>? FullValues = null, IReadOnlyList<int[]>? CellsWithoutFullValue = null, EFilterApplied? FilterApplied = null);

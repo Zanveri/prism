@@ -29,6 +29,8 @@ public sealed class LogHygieneTests
     private static readonly string MarkedDetail = $"DETALHE-MARCADO-{Run}";
     private static readonly string MarkedSchema = $"ESQUEMA-MARCADO-{Run}";
     private static readonly string MarkedTable = $"TABELA-MARCADA-{Run}";
+    private static readonly string MarkedFilter = $"FILTRO-MARCADO-{Run}";
+    private static readonly string MarkedFilterColumn = $"coluna_do_filtro_{Run}";
 
     /// <summary>A conexão que não abre: usuário e senha marcados. A mensagem do banco ("password authentication failed for user ...") leva o usuário, e é ela que não pode ir para o log.</summary>
     private static readonly string MarkedWrongUser = $"usuariomarcado{Run}";
@@ -72,6 +74,12 @@ public sealed class LogHygieneTests
             var cells = await api.Client.PostAsJsonAsync($"{PrismCalls.SessionsPath}/{sessionID}/results/{cut.GetProperty("resultID").GetGuid()}/cells", new { cells = new[] { new { row = 0, column = 0 } } });
             Assert.That((await cells.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("values")[0].GetProperty("value").GetString(), Has.Length.EqualTo(1000 * MarkedSql.Length));
 
+            // RN-GRADE-011: o filtro e o comando montado com ele (junto ou por fora) também não, nem quando o banco ou a rota o recusam.
+            var queries = $"{PrismCalls.SessionsPath}/{sessionID}/queries";
+            Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT n FROM generate_series(1, 3) AS n", filter = $"n::text <> '{MarkedFilter}' ORDER BY n DESC" })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT 1 AS a", filter = $"{MarkedFilterColumn} = 1" })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+            Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT 1 AS a", filter = $"a = '{MarkedFilter}" })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+
             // ...e as demais rotas que falam com o banco, inclusive as que recebem nomes na rota e a que recusa a conexão.
             await api.Client.ExecuteAsync(sessionID, "SELECT n FROM generate_series(1, 300) AS n");
             Assert.That((await api.Client.PostAsync($"{PrismCalls.SessionsPath}/{sessionID}/queries/next", null)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -107,6 +115,9 @@ public sealed class LogHygieneTests
                 Assert.That(log, Does.Not.Contain(MarkedSql), $"{file} tem o texto de um SQL ou o dado de um resultado.");
                 Assert.That(log, Does.Not.Contain(MarkedMissingTable), $"{file} tem a mensagem de erro do banco ou o SQL.");
                 Assert.That(log, Does.Not.Contain(MarkedDetail), $"{file} tem o DETAIL do banco.");
+                Assert.That(log, Does.Not.Contain(MarkedFilter), $"{file} tem o texto de um filtro.");
+                Assert.That(log, Does.Not.Contain(MarkedFilterColumn), $"{file} tem a mensagem de erro do banco sobre um filtro.");
+                Assert.That(log, Does.Not.Contain("prism_filtro"), $"{file} tem o comando montado com o filtro.");
                 Assert.That(log, Does.Not.Contain(MarkedSchema), $"{file} tem um nome de esquema da rota.");
                 Assert.That(log, Does.Not.Contain(MarkedTable), $"{file} tem um nome de tabela da rota.");
                 Assert.That(log, Does.Not.Contain("Password="), $"{file} tem uma string de conexão.");

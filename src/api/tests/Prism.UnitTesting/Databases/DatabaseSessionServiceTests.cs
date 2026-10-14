@@ -341,6 +341,129 @@ public sealed class DatabaseSessionServiceTests
         Assert.Equal(message, tested.Error.Message);
     }
 
+    /// <summary>
+    /// RN-GRADE-011: com filtro, o comando que vai à conexão é o montado, com a condição no `WHERE` e a ordem no lugar do `ORDER BY`; a
+    /// página e o "carregar mais" dizem que ele entrou junto, e a edição fica como sem o filtro (o catálogo decide).
+    /// </summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK com filtro junto, a conexão executa o comando montado e a página diz merged")]
+    public async Task Execute_WithAFilter_RunsTheMergedCommand()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: true), null, 0));
+
+        //Act
+        var executed = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido ORDER BY numero -- todos", "status = 'aberto' ORDER BY numero DESC", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var next = await service.FetchNextAsync(session.ID, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(["SELECT * FROM loja.pedido WHERE (status = 'aberto') ORDER BY numero DESC -- todos"], _connection.Executed);
+        Assert.Equal((EFilterApplied.Merged, ResultEditability.Unknown), (executed.Value.Page!.FilterApplied, executed.Value.Page.Editable));
+        Assert.Equal(EFilterApplied.Merged, next.Value.FilterApplied);
+    }
+
+    /// <summary>RN-GRADE-011: o comando com agrupamento vai por fora, e o resultado é só leitura com o motivo do próprio comando.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK com filtro por fora, a conexão executa a tabela derivada e o resultado é só leitura")]
+    public async Task Execute_WithAFilter_RunsTheWrappedCommand_ReadOnly()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: false), null, 0));
+
+        //Act
+        var executed = await service.ExecuteAsync(session.ID, "SELECT status, count(*) AS n FROM loja.pedido GROUP BY status", "n > 1", QueryPaging.DefaultPageSize, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(["SELECT * FROM (\nSELECT status, count(*) AS n FROM loja.pedido GROUP BY status\n) prism_filtro\nWHERE n > 1"], _connection.Executed);
+        Assert.Equal((EFilterApplied.Wrapped, ResultEditability.ReadOnly("agrupamento")), (executed.Value.Page!.FilterApplied, executed.Value.Page.Editable));
+    }
+
+    /// <summary>RN-GRADE-011: sem filtro (nulo ou só espaços), o comando vai como veio, e a página não fala de filtro.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK sem filtro, o comando vai como veio e a página não diz filtro")]
+    public async Task Execute_WithoutAFilter_RunsTheCommandAsIs()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: false), null, 0));
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: false), null, 0));
+
+        //Act
+        var blank = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "  ", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var without = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", CancellationToken.None);
+
+        //Assert
+        Assert.Equal(["SELECT * FROM loja.pedido", "SELECT * FROM loja.pedido"], _connection.Executed);
+        Assert.Null(blank.Value.Page!.FilterApplied);
+        Assert.Null(without.Value.Page!.FilterApplied);
+    }
+
+    /// <summary>RN-GRADE-011: o filtro que não se junta com segurança e o envio de mais de um comando são recusados sem ir à conexão.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "Erro filtro inválido e comando de mais de um envio não vão à conexão")]
+    public async Task Execute_WithAnInvalidFilter_IsRefusedWithoutRunning()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+
+        //Act
+        var invalid = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "a = 1; DELETE FROM loja.pedido", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var several = await service.ExecuteAsync(session.ID, "SELECT 1; SELECT 2", "a = 1", QueryPaging.DefaultPageSize, CancellationToken.None);
+
+        //Assert
+        Assert.Equal((EDatabaseFailure.FilterInvalid, SqlFilter.Terminator), (invalid.Error.Kind, invalid.Error.Message));
+        Assert.Equal(EDatabaseFailure.MultipleStatementsNotSupported, several.Error.Kind);
+        Assert.Empty(_connection.Executed);
+    }
+
+    /// <summary>RN-SQL-009 e RN-GRADE-011: a posição do erro é a do comando montado, que a tela não mostra, e não vai; sem filtro, vai.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK a falha do banco com filtro vem sem a posição do erro")]
+    public async Task Execute_WithAFilter_DropsThePositionOfTheError()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Failure = new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "column \"x\" does not exist", "42703", 40);
+
+        //Act
+        var filtered = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "x = 1", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var plain = await service.ExecuteAsync(session.ID, "SELECT x FROM loja.pedido", CancellationToken.None);
+
+        //Assert
+        Assert.Equal((EDatabaseFailure.ExecutionFailed, "column \"x\" does not exist", "42703", (int?)null), (filtered.Error.Kind, filtered.Error.Message, filtered.Error.SqlState, filtered.Error.Position));
+        Assert.Equal(40, plain.Error.Position);
+    }
+
+    /// <summary>RN-GRADE-011: a recusa do filtro sai do banco da sessão, sem tomar a vez; sem a sessão, nula (a execução responde que ela não existe).</summary>
+    [Trait("DatabaseSessionService", "FilterRefusal")]
+    [Fact(DisplayName = "OK a recusa do filtro é a do banco da sessão, e nula sem a sessão")]
+    public async Task FilterRefusal_ShouldReadTheFilterOfTheSessionsDatabase()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+
+        //Act
+        var refused = service.FilterRefusal(session.ID, "a = $$x");
+        var accepted = service.FilterRefusal(session.ID, "a = 1 ORDER BY b");
+        var unknown = service.FilterRefusal(Guid.NewGuid(), "a = $$x");
+
+        //Assert
+        Assert.Equal(SqlFilter.OpenQuote, refused);
+        Assert.Null(accepted);
+        Assert.Null(unknown);
+    }
+
+    private static QueryPage OnePage(bool hasMore)
+        => new([new QueryColumn("numero", "integer", "number")], [["1001"]], hasMore, 0, []);
+
     /// <summary>O relógio falso cujos temporizadores disparam `early` antes da hora, como o do sistema às vezes faz.</summary>
     private sealed class EarlyTimers(TimeSpan early) : FakeTimeProvider
     {
@@ -433,8 +556,20 @@ public sealed class DatabaseSessionServiceTests
         /// <summary>A página do carregar mais; sem ela, uma página vazia com o `HasMore` pedido.</summary>
         public QueryPage? NextPage { get; set; }
 
+        /// <summary>Os comandos que chegaram a executar, na ordem.</summary>
+        public List<string> Executed { get; } = [];
+
+        /// <summary>A recusa do banco que executar responde, quando o teste a dá.</summary>
+        public DatabaseFailure? Failure { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
-            => Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+        {
+            Executed.Add(sql);
+            if (Failure is { } failure)
+                return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
+
+            return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+        }
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
         {

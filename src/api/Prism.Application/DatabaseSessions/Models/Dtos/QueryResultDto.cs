@@ -30,4 +30,7 @@ public sealed record QueryResultDto
     /// coluna]` dentro da página; copiar e exportar levam essas cortadas. Nulo nas linhas afetadas.
     /// </summary>
     public IReadOnlyList<int[]>? CellsWithoutFullValue { get; init; }
+
+    /// <summary>RN-GRADE-011: como o filtro do resultado entrou no comando, `merged` (junto) ou `wrapped` (por fora, só leitura); nulo sem filtro e nas linhas afetadas.</summary>
+    public string? FilterApplied { get; init; }
 }

@@ -62,6 +62,15 @@ public abstract class DatabaseEditContractTests
     protected virtual string JoinQualifier(string table)
         => Table(table);
 
+    /// <summary>
+    /// RN-GRADE-011: o `SELECT` (que termina em `ORDER BY`) só com as primeiras `rows` linhas, no limite de linhas do banco: `LIMIT` no
+    /// PostgreSQL, `FETCH FIRST` no Db2, `FIRST` na cabeça no Informix.
+    /// </summary>
+    protected abstract string WithFirstRows(string select, int rows);
+
+    /// <summary>RN-GRADE-011: o fim de comando que a tabela derivada do banco não aceita dentro dela (`FOR READ ONLY` no Db2 e no Informix); nulo onde não se testa.</summary>
+    protected virtual string? ReadOnlyClause => null;
+
     protected IDatabaseSessionService Service => _service;
 
     [OneTimeSetUp]
@@ -340,6 +349,74 @@ public abstract class DatabaseEditContractTests
 
         Assert.That(preview.Statements.Select(statement => statement.Sql), Is.EqualTo(new[] { $"UPDATE {Quoted("pedido")} SET {Q(Name("status"))} = 'it''s' WHERE {Q(Name("id"))} = 1" }));
         Assert.That(await RowsAsync("pedido", "status"), Does.Contain(("1", (string?)"aberta")));
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: o filtro junto aos Registros (com o `WHERE` e o `ORDER BY` deles) dá as linhas certas, na ordem do filtro, e o
+    /// resultado continua editável: o catálogo diz o mesmo que sem o filtro, e o "Salvar" grava pela chave. O "contar total" conta o
+    /// comando montado.
+    /// </summary>
+    [Test]
+    public async Task Filter_MergedIntoTheCommand_GivesTheRightRows_AndStaysEditable()
+    {
+        var session = await OpenSessionAsync();
+        var sql = $"SELECT * FROM {Quoted("pedido")} WHERE {Q(Name("quantidade"))} >= 1 ORDER BY 1";
+        var page = Value(await _service.ExecuteAsync(session, sql, $"{Q(Name("status"))} = 'aberta' ORDER BY {Q(Name("id"))} DESC", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Merged, ResultEditability.Unknown)));
+        Assert.That(page.Rows.Select(row => row[Column(page, "id")]), Is.EqualTo(new[] { "2", "1" }));
+        Assert.That(Value(await _service.CountAsync(session, CancellationToken.None)), Is.EqualTo(2));
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+        Assert.That((target.Tables.Single().Editable, target.RowOperations, target.Columns[Column(page, "status")].Editable), Is.EqualTo((true, true, true)));
+
+        var applied = await _service.ApplyEditsAsync(session, page.ResultID.Value, [new EditChange(EEditKind.Update, 0, ["2"], [new EditValue(Column(page, "status"), "paga")])], CancellationToken.None);
+        Assert.That(Value(applied), Is.EqualTo(1));
+        Assert.That(await RowsAsync("pedido", "status"), Is.EqualTo(new[] { ("1", (string?)"aberta"), ("2", "paga"), ("3", "fechada") }));
+    }
+
+    /// <summary>RN-GRADE-011: a ordem do filtro troca a do comando e entra antes do limite de linhas do banco: das abertas, a primeira na ordem nova.</summary>
+    [Test]
+    public async Task Filter_MergedIntoACommandWithARowLimit_OrdersBeforeTheLimit()
+    {
+        var session = await OpenSessionAsync();
+        var sql = WithFirstRows($"SELECT * FROM {Quoted("pedido")} ORDER BY 1", 1);
+        var page = Value(await _service.ExecuteAsync(session, sql, $"{Q(Name("status"))} = 'aberta' ORDER BY {Q(Name("id"))} DESC", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Merged, ResultEditability.Unknown)));
+        Assert.That(page.Rows.Select(row => row[Column(page, "id")]), Is.EqualTo(new[] { "2" }));
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: o agrupamento vai por fora, como tabela derivada com o `ORDER BY` e o limite de linhas dentro (o fim de comando que
+    /// ela não aceita, como o `FOR READ ONLY`, vai depois); as linhas são as certas, e o resultado é só leitura, com o motivo do comando.
+    /// </summary>
+    [Test]
+    public async Task Filter_AroundAGroupedCommand_GivesTheRightRows_AndIsReadOnly()
+    {
+        var session = await OpenSessionAsync();
+        var status = Q(Name("status"));
+        var grouped = WithFirstRows($"SELECT {status}, COUNT(*) AS quantos FROM {Quoted("pedido")} GROUP BY {status} ORDER BY 2 DESC", 1) + (ReadOnlyClause is { } clause ? $" {clause}" : string.Empty);
+        var page = Value(await _service.ExecuteAsync(session, grouped, $"quantos >= 1 ORDER BY {status}", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Wrapped, ResultEditability.ReadOnly("agrupamento"))));
+        Assert.That(page.Rows.Select(row => (row[Column(page, "status")], row[Column(page, "quantos")])), Is.EqualTo(new[] { ((string?)"aberta", (string?)"2") }));
+
+        var target = await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None);
+        Assert.That((target.Error.Kind, target.Error.Reason), Is.EqualTo((EDatabaseFailure.ResultNotEditable, "agrupamento")));
+    }
+
+    /// <summary>RN-GRADE-011: a união vai por fora; a condição e a ordem do filtro valem para as linhas das duas partes, e o resultado é só leitura.</summary>
+    [Test]
+    public async Task Filter_AroundAUnion_GivesTheRightRows_AndIsReadOnly()
+    {
+        var session = await OpenSessionAsync();
+        var (id, status) = (Q(Name("id")), Q(Name("status")));
+        var union = $"SELECT {id}, {status} FROM {Quoted("pedido")} WHERE {id} = 1 UNION SELECT {id}, {status} FROM {Quoted("pedido")} WHERE {id} = 3";
+        var page = Value(await _service.ExecuteAsync(session, union, $"{id} > 0 ORDER BY {id} DESC", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Wrapped, ResultEditability.ReadOnly("união de consultas"))));
+        Assert.That(page.Rows.Select(row => (row[Column(page, "id")], row[Column(page, "status")])), Is.EqualTo(new[] { ((string?)"3", (string?)"fechada"), ("1", "aberta") }));
     }
 
     /// <summary>As tabelas das junções (o pedido do dono): paletes, itens e os itens de cada palete. Os tipos são os mesmos nos três bancos.</summary>

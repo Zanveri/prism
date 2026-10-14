@@ -746,6 +746,86 @@ public sealed class DatabaseSessionsTests
         Assert.That(withNullBody.GetProperty("rows").GetArrayLength(), Is.EqualTo(200));
     }
 
+    /// <summary>
+    /// RN-GRADE-011: `filter` entra no comando: a condição no `WHERE` dele e a ordem no lugar do `ORDER BY`, e a página diz
+    /// `filterApplied: "merged"`, com a edição como sem o filtro. A união vai por fora (`"wrapped"`), só leitura e com o motivo. Sem
+    /// filtro (ausente, nulo, vazio ou só de espaços), `filterApplied` é nulo.
+    /// </summary>
+    [Test]
+    public async Task Query_WithFilter_Returns200_WithTheFilteredRows_AndHowTheFilterWentIn()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+
+        var merged = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido WHERE numero <= 1010 ORDER BY numero", filter = "numero > 1005 ORDER BY numero DESC" });
+        var mergedBody = await ReadJsonAsync(merged);
+        Assert.That(merged.StatusCode, Is.EqualTo(HttpStatusCode.OK), mergedBody.ToString());
+        Assert.That(mergedBody.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1010", "1009", "1008", "1007", "1006" }));
+        Assert.That(mergedBody.GetProperty("filterApplied").GetString(), Is.EqualTo("merged"));
+        Assert.That(mergedBody.GetProperty("editable").GetProperty("known").GetBoolean(), Is.False);
+
+        var wrapped = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido UNION SELECT numero FROM loja.pedido", filter = "numero < 1004 ORDER BY numero DESC" });
+        var wrappedBody = await ReadJsonAsync(wrapped);
+        Assert.That(wrapped.StatusCode, Is.EqualTo(HttpStatusCode.OK), wrappedBody.ToString());
+        Assert.That(wrappedBody.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1003", "1002", "1001" }));
+        Assert.That(wrappedBody.GetProperty("filterApplied").GetString(), Is.EqualTo("wrapped"));
+        Assert.That((wrappedBody.GetProperty("editable").GetProperty("known").GetBoolean(), wrappedBody.GetProperty("editable").GetProperty("reason").GetString()), Is.EqualTo((true, "união de consultas")));
+
+        foreach (var body in new object[] { new { sql = "SELECT numero FROM loja.pedido ORDER BY numero" }, new { sql = "SELECT numero FROM loja.pedido ORDER BY numero", filter = (string?)null }, new { sql = "SELECT numero FROM loja.pedido ORDER BY numero", filter = "  " } })
+        {
+            var plain = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), body);
+            var plainBody = await ReadJsonAsync(plain);
+            Assert.That(plain.StatusCode, Is.EqualTo(HttpStatusCode.OK), plainBody.ToString());
+            Assert.That(plainBody.GetProperty("rows")[0][0].GetString(), Is.EqualTo("1001"));
+            Assert.That(plainBody.GetProperty("filterApplied").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        }
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: o filtro com `;`, com aspas ou comentário sem fechar (o `$marca$` do PostgreSQL também), que termina em comentário,
+    /// com parênteses sem par ou com mais de um `ORDER BY` é 422 `FILTER_INVALID` no campo, pelo mesmo caminho do SQL vazio, e nada vai
+    /// ao banco: o resultado de antes continua o da sessão.
+    /// </summary>
+    [Test]
+    public async Task Query_InvalidFilter_Returns422FilterInvalidOnTheField()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+        var before = await ReadJsonAsync(await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido ORDER BY numero", pageSize = 50 }));
+
+        foreach (var filter in new[] { "numero = 1; DELETE FROM loja.pedido", "observacao = 'x", "numero = $$x", "numero = 1 /* x", "numero = 1 -- x", "(numero = 1", "numero = 1 ORDER BY numero ORDER BY id" })
+        {
+            var response = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT * FROM loja.pedido", filter });
+            var body = await AssertProblemAsync(response, HttpStatusCode.UnprocessableEntity, "FILTER_INVALID");
+            Assert.That(body.GetProperty("errorCodes").GetProperty("Filter")[0].GetString(), Is.EqualTo("FILTER_INVALID"), filter);
+            Assert.That(body.GetProperty("errors").GetProperty("Filter")[0].GetString(), Does.StartWith("O filtro "), filter);
+            Assert.That(body.GetProperty("errorCodes").TryGetProperty("Sql", out _), Is.False, filter);
+        }
+
+        var next = await host.Client.PostAsync(Url(sessionID, "/queries/next"), null);
+        var nextBody = await ReadJsonAsync(next);
+        Assert.That(next.StatusCode, Is.EqualTo(HttpStatusCode.OK), nextBody.ToString());
+        Assert.That(nextBody.GetProperty("resultID").GetString(), Is.EqualTo(before.GetProperty("resultID").GetString()));
+        Assert.That(nextBody.GetProperty("rows")[0][0].GetString(), Is.EqualTo("1051"));
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: com filtro, o envio de mais de um comando é 422 `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (não se sabe a qual iria), e a
+    /// recusa do banco vem sem a posição do erro, que seria a do comando montado.
+    /// </summary>
+    [Test]
+    public async Task Query_WithFilter_RefusesSeveralStatements_AndTheErrorHasNoPosition()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+
+        await AssertProblemAsync(await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT 1; SELECT 2", filter = "a = 1" }), HttpStatusCode.UnprocessableEntity, "MULTIPLE_STATEMENTS_NOT_SUPPORTED");
+
+        var failed = await AssertProblemAsync(await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido", filter = "nao_existe = 1" }), HttpStatusCode.UnprocessableEntity, "SQL_EXECUTION_FAILED");
+        Assert.That(failed.GetProperty("sqlState").GetString(), Is.EqualTo("42703"));
+        Assert.That(failed.TryGetProperty("position", out _), Is.False);
+    }
+
     [Test]
     public async Task Query_UnknownSession_Returns404DatabaseSessionNotFound()
     {

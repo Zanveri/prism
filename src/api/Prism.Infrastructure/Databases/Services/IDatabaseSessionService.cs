@@ -67,6 +67,21 @@ public interface IDatabaseSessionService
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" do cursor que o comando abrir.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é
+    /// um `SELECT` que a leitura do comando reconheça; a página diz como (`FilterApplied`), e o comando embrulhado é só leitura. O
+    /// comando montado é o que roda, o que o "contar total" conta e o que a edição lê; a falha do banco vem sem a posição do erro, que
+    /// seria a do comando montado. O filtro que não se junta com segurança: `FilterInvalid`; o comando de mais de um envio:
+    /// `MultipleStatementsNotSupported`. Nos dois, nada vai ao banco. Sem filtro (nulo ou só espaços), é o comando sem filtro.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-GRADE-011: por que o filtro não se junta ao comando, no banco da sessão (as aspas e os comentários de cada um), ou nulo quando
+    /// ele se junta. Não toma a vez da sessão nem fala com o banco. Sem a sessão, nulo: quem responde é a execução.
+    /// </summary>
+    string? FilterRefusal(Guid sessionID, string? filter);
+
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken);
 
     /// <summary>

@@ -10,13 +10,14 @@ public sealed class ExecuteQueryCommandTests
     public void ExecuteQueryCommand_ToString_DoesNotContainSql()
     {
         //Arrange
-        var command = new ExecuteQueryCommand { SessionID = Guid.CreateVersion7(), Sql = "SELECT 'sql-com-dado-sensivel'" };
+        var command = new ExecuteQueryCommand { SessionID = Guid.CreateVersion7(), Sql = "SELECT 'sql-com-dado-sensivel'", Filter = "nome = 'filtro-com-dado-sensivel'" };
 
         //Act
         var text = command.ToString();
 
         //Assert
         Assert.DoesNotContain("sql-com-dado-sensivel", text);
+        Assert.DoesNotContain("filtro-com-dado-sensivel", text);
         Assert.DoesNotContain(command.SessionID.ToString(), text);
     }
 }

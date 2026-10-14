@@ -1,15 +1,17 @@
 using FluentValidation.TestHelper;
+using Moq;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.GetSchemaObjects;
 using Prism.Application.DatabaseSessions.Features.OpenDatabaseSession;
+using Prism.Infrastructure.Databases.Services;
 using System.Text.Json;
 
 namespace Prism.UnitTesting.DatabaseSessions;
 
-/// <summary>Seção 6 da especificação: SQL vazio e linhas por busca fora da faixa (RN-SQL-016) são `QUERY_INVALID`, um tipo de objeto fora dos três é `OBJECT_KIND_INVALID`, e o nome de outro banco vazio, longo demais ou com caractere de controle é `DATABASE_NAME_INVALID` (RN-ARVORE-006). Regra de validator sem código vira 500, então cada uma leva o seu.</summary>
+/// <summary>Seção 6 da especificação: SQL vazio e linhas por busca fora da faixa (RN-SQL-016) são `QUERY_INVALID`, o filtro que não se junta ao comando é `FILTER_INVALID` (RN-GRADE-011), um tipo de objeto fora dos três é `OBJECT_KIND_INVALID`, e o nome de outro banco vazio, longo demais ou com caractere de controle é `DATABASE_NAME_INVALID` (RN-ARVORE-006). Regra de validator sem código vira 500, então cada uma leva o seu.</summary>
 public sealed class DatabaseSessionValidatorsTests
 {
-    private static readonly ExecuteQueryValidator ExecuteQueryValidator = new();
+    private static readonly ExecuteQueryValidator ExecuteQueryValidator = new(new Mock<IDatabaseSessionService>().Object);
     private static readonly GetSchemaObjectsValidator GetSchemaObjectsValidator = new();
     private static readonly OpenDatabaseSessionValidator OpenDatabaseSessionValidator = new();
 
@@ -87,6 +89,33 @@ public sealed class DatabaseSessionValidatorsTests
         //Assert
         result.ShouldHaveValidationErrorFor(command => command.PageSize).WithErrorCode("QUERY_INVALID");
         result.ShouldNotHaveValidationErrorFor(command => command.Sql);
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: quem lê o filtro é o registro de sessões, com as aspas e os comentários do banco da sessão; a recusa dele é
+    /// `FILTER_INVALID` no campo `Filter`, com o motivo. Sem recusa (ou sem a sessão), o filtro passa.
+    /// </summary>
+    [Trait("ExecuteQueryValidator", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "Erro filtro que o registro de sessões recusa, e OK o que ele aceita")]
+    public void ExecuteQuery_Filter_ShouldBeError_WhenTheSessionServiceRefusesIt()
+    {
+        //Arrange
+        var sessionID = Guid.CreateVersion7();
+        var databaseSessionService = new Mock<IDatabaseSessionService>();
+        databaseSessionService.Setup(s => s.FilterRefusal(sessionID, "a = 1;")).Returns("O filtro não pode ter ponto e vírgula.");
+        var validator = new ExecuteQueryValidator(databaseSessionService.Object);
+
+        //Act
+        var refused = validator.TestValidate(new ExecuteQueryCommand { SessionID = sessionID, Sql = "SELECT 1", Filter = "a = 1;" });
+        var accepted = validator.TestValidate(new ExecuteQueryCommand { SessionID = sessionID, Sql = "SELECT 1", Filter = "a = 1" });
+        var without = validator.TestValidate(new ExecuteQueryCommand { SessionID = sessionID, Sql = "SELECT 1" });
+
+        //Assert
+        refused.ShouldHaveValidationErrorFor(command => command.Filter).WithErrorCode("FILTER_INVALID").WithErrorMessage("O filtro não pode ter ponto e vírgula.");
+        refused.ShouldNotHaveValidationErrorFor(command => command.Sql);
+        accepted.ShouldNotHaveAnyValidationErrors();
+        without.ShouldNotHaveAnyValidationErrors();
+        databaseSessionService.Verify(s => s.FilterRefusal(sessionID, "a = 1;"), Times.Once);
     }
 
     [Trait("GetSchemaObjectsValidator", "GetSchemaObjectsCommand")]
