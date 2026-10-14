@@ -69,6 +69,13 @@ depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, ca
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
+- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5 e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
+  recarrega é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11), e o app empacotado do Windows e do
+  Linux não tem menu, e o do macOS não tem Recarregar. Mesmo assim, cada janela ignora o menu para essas teclas: o `before-input-event` de
+  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5 e F11 com qualquer
+  modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
+  ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
+  F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
 - Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
@@ -901,7 +908,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   única: o `SELECT` da aba, o "Gerar SELECT" e o "Copiar nome qualificado" escrevem o nome por ela, e o texto gerado tem
   `statementCount` 1. A vista usa o `ResultPanel` no modo `records` (título, rótulo, rodapé com "Atualizar" ou
   "Cancelar", e o cursor fechado que pede "Atualizar", e não "Executar de novo"): sem editor de SQL; a grade edita as células (ver "Edição das células", abaixo).
-- **Filtro e ordem** (RN-TABELA-005). O campo `WHERE` (`records-filter.tsx`) recebe a condição **como o usuário a escreve**, só sem o espaço
+- **Filtro e ordem** (RN-TABELA-005). O campo `WHERE` (`records-filter.tsx`, um CodeMirror de uma linha, `filter-field.tsx`: ver "Filtrar como no DBeaver",
+  abaixo) recebe a condição **como o usuário a escreve**, só sem o espaço
   das pontas: não se lê, não se escapa e não se põe entre parênteses (RN-SQL-003). `recordsSql(engine, esquema, nome, { where, sort })` monta
   o comando com cada parte numa linha própria (uma condição que termina em `--` não engole o `ORDER BY`), e a recusa de mais de um comando é
   `filterProblem` (`statementCount`, no dialeto do banco): ela aparece no próprio campo, antes de a API ser chamada. Clicar no cabeçalho de
@@ -1118,6 +1126,76 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   (`returnByValue` falha com "Object reference chain is too long"). No Linux, sob Xvfb: `xvfb-run -a pnpm dev --remoteDebuggingPort <porta>
   --noSandbox -- --user-data-dir=<descartável>` (o `--` leva o argumento ao Electron, e a pasta de dados fica fora da sua); a conexão de teste
   pode ser criada pela própria página, com `window.prism.getApiConfig()` e um `POST api/user/connections`, e um `location.reload()` a mostra no navegador.
+
+## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-010 a 012 e RN-TABELA-011)
+
+Subseção "Filtrar como no DBeaver, e o autocompletar do filtro" da especificação. **A numeração repete**: a especificação já tinha uma RN-GRADE-010 (o
+zoom da grade) quando ganhou a RN-GRADE-010 do "Filtrar"; no código, a do filtro é citada como "RN-GRADE-010 do Filtrar".
+
+- **O submenu "Filtrar" (F11)** no menu da célula, nas duas grades (Registros e resultado da aba de consulta). O modelo é `filterMenuItem`
+  (`_lib/filter-menu.ts`, puro, com teste): "Filtrar por valor…" (Ctrl+F11); o grupo "Valor da célula" (`=`, `<>`, `>`, `<`, `LIKE` só em coluna de texto,
+  `IS NULL`, `IS NOT NULL`); o grupo "Personalizado" (`= …`, `<> …`, `> …`, `< …`); e "Remover todos os filtros e ordenações". **O rótulo é a condição como
+  ela entra** (`valueFilterOptions`, em `_lib/grid-export/value-filter.ts`: o nome por `quoteIdentifier` e o literal por `sqlLiteral`, cada um cortado em 30
+  caracteres com reticências, sem controles nem marcas de direção; a condição que vai ao campo é a inteira). O que não se aplica vem desabilitado com
+  "Não se aplica: <motivo>." (`grid-filter.copy.ts`): célula nula, cortada ou binária (só os de nulo e o personalizado), valor com controle, o literal que
+  o Informix não aceita, o lógico que o Informix não ordena, o `contém` vazio, a linha nova (que não está no banco; os de nulo e o personalizado valem), a
+  aba ocupada e **o campo em que a condição não se junta com segurança** (`joinFilter`: aspas, comentário de bloco, `{` do Informix ou `$tag$` abertos, ou
+  um `;` que não é o do fim). O valor do "Filtrar" é o LIDO do banco, e não a alteração pendente da célula.
+- **A junção ao campo** é `joinFilter(engine, campo, condição)`: separa a condição do que vem depois dela (`filterParts`, em `table-sql.ts`: a ordem de fora,
+  o `;` e o comentário do fim), junta por `AND` entre parênteses (`mergeCondition`) e recoloca o resto como estava. A condição existente nunca termina num
+  comentário (ele fica na parte de depois), então o campo continua numa linha só. O texto novo vai ao campo e é executado como o "Aplicar" (`filterRecords`,
+  em `table-view.ts`, no molde do `sortRecords`; na aba de consulta, `applyResultFilter`), com a pergunta das alterações não salvas antes (RN-EDIT-007).
+- **"Filtrar por valor…"** (`value-filter-dialog.tsx`): `distinctValues` conta os valores das linhas CARREGADAS (do mais frequente ao menos; empate, o que
+  aparece primeiro; o nulo é um valor; a célula cortada conta à parte e não entra, nem o valor sem literal), a busca acha o texto em qualquer parte
+  (`visibleValues`, no máximo 500 desenhados), e "Filtrar" monta `valuesCondition`: `coluna IN (…)`, `=` com um, e o nulo como `coluna IS NULL`, por `OR`.
+  O "Personalizado" abre um campo pequeno sobre a grade, onde o menu abriu (`custom-filter-field.tsx`): o valor escrito vira literal pela RN-TABELA-007
+  (`customCondition`), nunca SQL; o que não vira fica no campo com o motivo. **O foco entra no campo pequeno depois de ele ser posto no lugar**: escondido
+  (`visibility: hidden`, até a medida) ele não o recebe, e o `autoFocus` do React chega antes (o defeito apareceu na tela: o que se digitava ia para a
+  célula). Ao sair, o foco volta à grade só com o campo fora do DOM (o `StrictMode` desmonta os efeitos de mentira).
+- **Quem liga** é `use-record-edits.ts`: recebe `filter` (`GridFilterSource`: o banco, o texto do campo e "há o que remover", lidos na hora da escolha, e
+  `apply`/`clear`) e `refresh` (o "Atualizar" do menu, F5). A escolha é decidida de novo na hora (`filterPlan` com o contexto de agora: o campo pode ter
+  mudado com o menu aberto). A grade chama `editing.onFilter(célula, ponto, "menu" | "values")` com F11 e Ctrl+F11 (`filterKey`, em `grid-editing.ts`), e
+  `resultEditDialogs` desenha o menu (com `openSubmenu`), o diálogo e o campo pequeno.
+- **O submenu do `ContextMenu`** (`components/ui/context-menu.tsx`): o item com `submenu` abre outro `menu` num portal ao lado (`placeSubmenu`, com
+  teste), pela seta para a direita, Enter, Espaço, o clique e o mouse em cima; no submenu, seta para a esquerda e Esc voltam ao item, e Tab fecha tudo. O
+  grupo com título (`{ label, items }`) é um `group` com nome, e o título não é item. `openSubmenu` abre o menu já com o submenu aberto e o foco no
+  primeiro item dele; por isso **quem tinha o foco é lido na primeira renderização** (`useState`), e não no efeito: o submenu foca antes do efeito do menu.
+  O clique fora considera os dois menus. Um nível só.
+- **O campo de filtro é um CodeMirror de uma linha** (`filter-field.tsx`), o mesmo nos Registros e no resultado: controlado como o `input` de antes (`value`
+  de fora troca o texto com o cursor no fim, anotado para não voltar como digitação), Enter aplica (com uma sugestão escolhida, o Enter a aceita: a lista
+  abre sem nada escolhido), a quebra de linha que chega vira espaço (`singleLine`, com teste), desfazer vale, as cores são as do editor (`highlight`, agora
+  em `_lib/completion-theme.ts`, com a lista de sugestões do editor, `completionTheme`) e a lista vai para o `body` (`tooltips({ parent })`), para a barra
+  não a recortar. O texto de ajuda do campo vazio é o mesmo nos dois: "Insira uma expressão SQL para filtrar os resultados (use Ctrl+Espaço)". O teste
+  do `RecordsFilter` troca o `FilterField` por um `input` que mostra o que recebeu.
+- **O autocompletar do campo** (RN-TABELA-011; `_lib/filter-completion.ts`, com teste pela fonte de verdade): as colunas (nos Registros, as da grade, que
+  são as da tabela; no resultado, as do resultado; as duas vistas guardam as da última grade, para o filtro que deu erro continuar sugerindo) e as
+  palavras do filtro (`AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, `LIKE`, `IN`, `BETWEEN`, `ORDER BY`, `ASC`, `DESC`; as de duas palavras continuam
+  depois do espaço, `is n`). O nome sai por `sqlName` (cru só quando o banco o lê como está; senão entre aspas), e com as aspas já abertas, por
+  `quoteIdentifier`. Nada dentro de texto, de comentário ou depois de um ponto. Ao digitar, segue a chave do autocompletar do editor
+  (`preferences.editor.autocomplete`, `activateOnTyping`); Ctrl+Espaço abre sempre (o mapa da biblioteca).
+- **O campo no resultado da aba de consulta** (RN-GRADE-011): o mesmo `RecordsFilter` (`subject: "result"`, sem a linha do comando), no topo do corpo do
+  `ResultPanel` (propriedade `filter`), quando há o que filtrar (`filterBaseOf`, em `_lib/result-filter.ts`: o comando do resultado na tela, sem o filtro; com
+  o erro do comando filtrado na tela, o último filtrado, para a correção). Aplicar executa de novo o comando com `filter` no corpo de `POST …/queries`
+  (`executeQuery`, só quando há filtro); o texto do editor não muda; o filtro viaja no `RunTarget` (`filter`), então "Executar de novo" e a aba que vai
+  para outra janela o levam (`window-messages.ts` e `tab-transfer.ts`). A página traz `filterApplied` (`merged` ou `wrapped`, qualquer outro valor vira
+  nulo); o embrulhado é só leitura, com o motivo da API ou, sem ele, `gridFilterCopy.result.wrapped`, que a faixa mostra. O 422 `FILTER_INVALID` (só com
+  filtro) volta de `runner.run` como valor (`FilterRefusal`): nada é executado, o resultado e o cursor de antes ficam, sem aviso, e a frase da API vai ao
+  campo (`problem: { message }`). O erro do banco num comando filtrado não marca o editor (a posição é a do comando que a API montou). Executar pelo editor
+  limpa o filtro (`clearResultFilter`, só quando o comando vai de fato ser enviado). A ordem pelo clique no cabeçalho não existe no resultado: a ordem vai
+  escrita no campo.
+- **F5** (RN-GRADE-012): nos Registros é o "Atualizar"; na Estrutura e no Diagrama, o "Atualizar" da vista; na aba de consulta, o "Executar de novo"; no
+  navegador, o "Atualizar" do nó escolhido, quando se aplica (`refreshesSelection`). Com algo em andamento, nada; com alterações não salvas na grade, a
+  pergunta antes. Vale com o foco em qualquer ponto da aba: a aba de uma tabela trata a tecla na raiz (`refreshFromKey`, em `_lib/tab-refresh.ts`) e chama o
+  que a vista à vista deixou ali (`useRefreshSlot`); a de consulta, na caixa que já trata o Ctrl+S. O campo de edição da célula não deixa a tecla subir. O
+  menu da grade mostra "Atualizar" (F5).
+- **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 18 em contêiner, `estoque.itens`): F11 na célula `11.901` abriu o submenu com o
+  foco em "Filtrar por valor…", as setas e a seta para a esquerda e a direita andaram, Esc fechou um nível e depois o menu, com o foco de volta na grade;
+  `"code" = '11.901'` deu 3 linhas e o comando `WHERE "code" = '11.901'`; Ctrl+F11 na coluna `quantidade` mostrou os valores com a contagem, e dois
+  marcados deram `("code" = '11.901') AND ("quantidade" IN (10, 1))`; o personalizado `"code" <> …` com `A1` deu `"code" <> 'A1'`; "Remover todos" voltou ao
+  `SELECT` puro; o campo sugeriu `CodigoBarras` e `code` para `Co` e escreveu `"CodigoBarras"`, sugeriu `IS NULL` e `IS NOT NULL` para `code is n`, e com
+  o autocompletar desligado só abriu com Ctrl+Espaço; F5 na grade, no campo, na Estrutura e no nó da conexão pediu de novo o que cada um mostra. O filtro do
+  resultado da aba de consulta só foi conferido com a API simulada (`use-query-runner.filter.test.ts` e `query-tab.test.ts`): a parte da API é de outra
+  tarefa; na tela, o campo aparece acima da grade do resultado.
 
 ## Configurações (`src/app/settings`)
 
