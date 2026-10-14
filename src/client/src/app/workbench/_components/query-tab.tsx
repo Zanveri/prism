@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useReducer, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
@@ -6,11 +6,14 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { refreshKey } from "../_lib/grid-editing";
+import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/result-layout";
 import { saveShortcut } from "../_lib/saved-scripts";
 import { recall, remember } from "../_lib/tab-memory";
 import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
-import { useRecordEdits, type SavedEdits } from "../_lib/use-record-edits";
+import { canClear } from "../_lib/table-view";
+import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
 import type { QueryTab, TableView } from "../_lib/workbench-model";
 import { DatabasePicker } from "./database-picker";
@@ -21,6 +24,7 @@ import { resultEditDialogs } from "./result-edit-dialogs";
 import { ResultPanel } from "./result-panel";
 import { ResultSplitter } from "./result-splitter";
 import { NoConnectionBarView } from "./script-dialogs";
+import { RecordsFilter } from "./table-tab/records-filter";
 import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
 
 type QueryTabPanelProps = {
@@ -92,8 +96,45 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   // RN-EDIT-009: o Salvar que gravou tudo deixa na grade o que foi salvo, sem executar de novo (também antes de a aba ir para outra janela).
   const keepSaved = useCallback(({ resultId, result }: SavedEdits) => runner.keepSaved(resultId, result), [runner]);
-  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved });
+
+  // RN-GRADE-011: o campo de filtro do resultado, o mesmo dos Registros, acima da grade. Aplicar executa de novo o comando do resultado com o texto do campo
+  // (a API o junta ao comando), e o texto do editor não muda; executar pelo editor limpa o filtro. O que se decide é de `result-filter.ts`, com teste.
+  const [filterDraft, setFilterDraft] = useState("");
+  const [filterApplied, setFilterApplied] = useState("");
+  const [filterProblem, setFilterProblem] = useState<{ message: string } | null>(null);
+  const [pinned, setPinned] = useState<RunTarget | null>(null);
+  const base = filterBaseOf(state, pinned);
+  const filterNow = useRef({ base, draft: filterDraft, applied: filterApplied });
+  useEffect(() => {
+    filterNow.current = { base, draft: filterDraft, applied: filterApplied };
+  });
+  const guardRef = useRef<(proceed: () => void) => void>((proceed) => proceed());
+  const sendFilter = useCallback(
+    (draft: string) =>
+      guardRef.current(() => {
+        const { base: target, applied } = filterNow.current;
+        void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next) });
+      }),
+    [runner],
+  );
+  const filterSource = useMemo<GridFilterSource>(
+    () => ({
+      engine,
+      field: () => filterNow.current.draft,
+      removable: () => canClear(filterNow.current.draft, filterNow.current.applied),
+      apply: sendFilter,
+      clear: () => sendFilter(""),
+    }),
+    [engine, sendFilter],
+  );
+  const rerunRef = useRef<() => void>(() => {});
+  const menuRerun = useCallback(() => rerunRef.current(), []);
+
+  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun });
   const { guard } = edits;
+  useEffect(() => {
+    guardRef.current = guard;
+  });
 
   // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
   // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
@@ -101,7 +142,11 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const handleRun = useCallback(
     (target: RunTarget) => {
       const go = () => {
-        if (commandWillRun(target, isBusyState(runner.getState()))) dispatch({ type: "run" });
+        if (commandWillRun(target, isBusyState(runner.getState()))) {
+          dispatch({ type: "run" });
+          // RN-GRADE-011: o comando do editor vai sem o filtro do resultado, e o campo fica limpo.
+          clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+        }
         void runner.run(target);
       };
       if (commandWillRun(target, isBusyState(runner.getState()))) guard(go);
@@ -110,6 +155,14 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     [runner, guard],
   );
   const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
+  useEffect(() => {
+    rerunRef.current = handleRerun;
+  });
+
+  // RN-TABELA-011: o campo completa as colunas do resultado. Um filtro que dá erro deixa a área sem grade: as colunas continuam as da última.
+  const shownRows = shown?.status === "rows" ? shown : null;
+  const [seenColumns, setSeenColumns] = useState<readonly { name: string; type: string }[]>([]);
+  if (shownRows !== null && shownRows.columns !== seenColumns) setSeenColumns(shownRows.columns);
 
   // RN-ARVORE-007: trocar o banco, com alterações não salvas na grade, pergunta antes, como executar outro comando (RN-EDIT-007). O resultado na tela é do
   // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
@@ -117,6 +170,13 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // RN-GRADE-012: F5 executa de novo o comando do resultado, com o filtro ("Executar de novo"), com o foco em qualquer ponto da aba; com algo em
+    // andamento, nada. O campo de edição da célula não deixa a tecla subir.
+    if (!event.defaultPrevented && refreshKey(event)) {
+      event.preventDefault();
+      if (!isBusyState(runner.getState())) handleRerun();
+      return;
+    }
     const mode = event.defaultPrevented ? null : saveShortcut(event);
     if (mode === null) return;
     event.preventDefault();
@@ -182,6 +242,27 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             onRerun={handleRerun}
             editing={edits.editing}
             banner={<EditsBanner {...edits.banner} />}
+            filter={
+              base === null ? undefined : (
+                <RecordsFilter
+                  subject="result"
+                  draft={filterDraft}
+                  onDraft={(text) => {
+                    setFilterDraft(text);
+                    setFilterProblem(null);
+                  }}
+                  applied={filterApplied}
+                  problem={filterProblem}
+                  busy={busy}
+                  command={null}
+                  onApply={() => sendFilter(filterDraft)}
+                  onClear={() => sendFilter("")}
+                  engine={engine}
+                  columns={shownRows?.columns ?? seenColumns}
+                  autocomplete={preferences.editor.autocomplete}
+                />
+              )
+            }
           />
         </div>
       </div>

@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { moveCell, type GridCell } from "../_lib/grid-cursor";
-import { copiesCell, savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesCell, filterKey, savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
@@ -477,6 +477,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     } else if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
       event.preventDefault();
       editing.onMenu(active, pointOf(active), true);
+    } else if (filterKey(event) !== null && editing.onFilter !== undefined) {
+      // RN-GRADE-010 do "Filtrar": F11 abre o submenu na célula ativa, e Ctrl+F11 o "Filtrar por valor…".
+      event.preventDefault();
+      editing.onFilter(active, pointOf(active), filterKey(event)!);
     } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
       // Começar a digitar abre o campo com o que foi digitado, no lugar do valor.
       event.preventDefault();

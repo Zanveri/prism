@@ -9,7 +9,6 @@ export const recordsCopy = {
   filter: {
     label: "Filtro e ordem dos registros",
     hint: "O que vem depois do nome da tabela: uma condição, uma ordem (ORDER BY) ou as duas.",
-    placeholder: "status = 'aberta' ORDER BY quantidade DESC",
     severalStatements: "O filtro tem mais de um comando. Escreva só a condição e a ordem, sem ponto e vírgula entre comandos.",
   },
 
@@ -85,6 +84,8 @@ export const recordsCopy = {
       undo: "Desfazer alteração",
       newRow: "Linha nova",
       deleteRow: "Excluir linha",
+      // RN-GRADE-012: o "Atualizar" da grade (F5), que lê de novo os Registros ou executa de novo o comando do resultado, com o filtro.
+      refresh: "Atualizar",
       notNullable: "a coluna não aceita NULL",
       pasteFailed: "Não foi possível ler a área de transferência.",
       copied: "Copiado.",

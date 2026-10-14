@@ -46,6 +46,11 @@ export type GridEditing = {
   onSave: () => void;
   /** Alt+Insert com o foco na grade. */
   onNewRow: () => void;
+  /**
+   * RN-GRADE-010 do "Filtrar": F11 com o foco na grade abre o menu da célula ativa com o submenu "Filtrar" aberto (`menu`), e Ctrl+F11 abre direto o
+   * "Filtrar por valor…" (`values`). Só existe na grade que tem campo de filtro.
+   */
+  onFilter?: (cell: GridCell, point: { x: number; y: number }, mode: "menu" | "values") => void;
 };
 
 /**
@@ -62,6 +67,23 @@ export function savesEdits(event: { key: string; ctrlKey: boolean; metaKey: bool
  */
 export function copiesCell(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c";
+}
+
+/**
+ * RN-GRADE-010 do "Filtrar": F11 abre o submenu "Filtrar" na célula ativa, e Ctrl+F11 (Cmd+F11) abre o "Filtrar por valor…". Com Shift ou Alt não é o
+ * filtro: a tecla segue.
+ */
+export function filterKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): "menu" | "values" | null {
+  if (event.key !== "F11" || event.shiftKey || event.altKey) return null;
+  return event.ctrlKey || event.metaKey ? "values" : "menu";
+}
+
+/**
+ * RN-GRADE-012: F5 atualiza (os Registros lidos de novo, o resultado executado de novo, a Estrutura e o Diagrama recarregados, o nó do navegador), como
+ * no DBeaver. Só a tecla sozinha: Ctrl+F5 e Shift+F5 também não recarregam a janela (o processo principal as segura), mas não atualizam nada.
+ */
+export function refreshKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return event.key === "F5" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 
 /** As linhas que a grade desenha: as lidas e, depois, as novas, com o que foi preenchido (o resto vazio, para o padrão da tabela). */

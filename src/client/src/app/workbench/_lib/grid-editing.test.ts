@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { copiesCell, gridRowOf, gridRowsOf, rowMarksOf, savesEdits } from "./grid-editing";
+import { copiesCell, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarksOf, savesEdits } from "./grid-editing";
 import { addRow, deleteRow, editCell, editNewCell, noEdits } from "./record-edits";
 
 const rows = [
@@ -69,5 +69,24 @@ describe("Ctrl+C com o foco na grade (RN-GRADE-002, RN-SQL-017)", () => {
     expect(copiesCell(key({ altKey: true }))).toBe(false);
     expect(copiesCell(key({ ctrlKey: false }))).toBe(false);
     expect(copiesCell(key({ key: "v" }))).toBe(false);
+  });
+});
+
+describe("as teclas do Filtrar e do Atualizar (RN-GRADE-010 do Filtrar e RN-GRADE-012)", () => {
+  const key = (name: string, over: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) => ({ key: name, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...over });
+
+  it("F11 abre o submenu Filtrar; Ctrl+F11 (Cmd+F11) abre o Filtrar por valor; com Shift ou Alt, nada", () => {
+    expect(filterKey(key("F11"))).toBe("menu");
+    expect(filterKey(key("F11", { ctrlKey: true }))).toBe("values");
+    expect(filterKey(key("F11", { metaKey: true }))).toBe("values");
+    expect(filterKey(key("F11", { shiftKey: true }))).toBeNull();
+    expect(filterKey(key("F11", { altKey: true }))).toBeNull();
+    expect(filterKey(key("F10"))).toBeNull();
+  });
+
+  it("F5 sozinha atualiza; com Ctrl, Cmd, Shift ou Alt, não", () => {
+    expect(refreshKey(key("F5"))).toBe(true);
+    for (const over of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }]) expect(refreshKey(key("F5", over)), JSON.stringify(over)).toBe(false);
+    expect(refreshKey(key("r", { ctrlKey: true }))).toBe(false);
   });
 });

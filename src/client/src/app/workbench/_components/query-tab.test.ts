@@ -25,7 +25,7 @@ const rt = await vi.hoisted(async () => {
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => rt.queryClient }));
-vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: false } } }) }));
+vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: false }, editor: { autocomplete: true } } }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
 vi.mock("../_lib/record-edits.service", () => rt.service);
@@ -36,6 +36,7 @@ vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
 } }));
 
 import { ContextMenu } from "@/components/ui";
+import { groupItems } from "@/components/ui/context-menu";
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import { editCell, noEdits } from "../_lib/record-edits";
@@ -50,6 +51,8 @@ import { QueryTabPanel } from "./query-tab";
 import { ResultPanel } from "./result-panel";
 import { SqlEditor } from "./sql-editor";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
+import { RecordsFilter } from "./table-tab/records-filter";
+import type { FilterRefusal } from "../_lib/use-query-runner";
 
 const copy = recordsCopy.edit;
 /** PostgreSQL, como a API numera os bancos. */
@@ -83,7 +86,14 @@ function fakeRunner(initial: RunnerState) {
     sent: [] as RunTarget[],
     subscribe: () => () => {},
     getState: (): RunnerState => runner.state,
-    run: vi.fn((target: RunTarget): Promise<void> => {
+    /** RN-GRADE-011: a recusa do filtro que o próximo `run` devolve (a API simulada respondendo 422 `FILTER_INVALID`). */
+    refuse: null as FilterRefusal | null,
+    run: vi.fn((target: RunTarget): Promise<FilterRefusal | void> => {
+      if (runner.refuse !== null && target.filter !== undefined) {
+        const refusal = runner.refuse;
+        runner.refuse = null;
+        return Promise.resolve(refusal);
+      }
       if (!isBusyState(runner.state)) {
         runner.sent.push(target);
         runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : null };
@@ -120,8 +130,11 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = 
     const toolbar = found.find((element) => element.type === EditorToolbar)!.props as unknown as ComponentProps<typeof EditorToolbar>;
     const slot = toolbar.database as { type: unknown; props: ComponentProps<typeof DatabasePicker> } | null | undefined;
     const picker = slot?.type === DatabasePicker ? slot.props : null;
+    const filterSlot = area.filter as { type: unknown; props: ComponentProps<typeof RecordsFilter> } | undefined;
+    const filter = filterSlot?.type === RecordsFilter ? filterSlot.props : null;
+    const keys = found.find((element) => typeof element.props.onKeyDown === "function")!.props.onKeyDown as (event: unknown) => void;
 
-    return { area, editor, question, menu, banner, picker };
+    return { area, editor, question, menu, banner, picker, filter, keys };
   }
 
   return { show, props };
@@ -163,7 +176,7 @@ describe("QueryTabPanel: a grade do resultado de um comando se edita como a dos 
 
     view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
     await settle();
-    const items = view.show().menu!.groups.flat();
+    const items = view.show().menu!.groups.flatMap(groupItems);
 
     expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("união de consultas") });
     expect(items.find((item) => item.label === copy.menu.copyValue)?.disabled).toBe(false);
@@ -209,7 +222,7 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
 
     view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
     await settle();
-    view.show().menu!.groups.flat().find((item) => item.label === copy.menu.copyValue)!.onSelect();
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.label === copy.menu.copyValue)!.onSelect!();
     await settle();
 
     expect(clipboard.writeText.mock.calls).toEqual([[full]]);
@@ -417,7 +430,7 @@ describe("QueryTabPanel: num resultado de junção cada coluna se edita na tabel
 
     view.show().area.editing!.onMenu({ row: 0, column: 2 }, { x: 4, y: 4 }, false);
     await settle();
-    const items = view.show().menu!.groups.flat();
+    const items = view.show().menu!.groups.flatMap(groupItems);
 
     expect(items.find((item) => item.label === copy.menu.newRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
     expect(items.find((item) => item.label === copy.menu.deleteRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
@@ -486,5 +499,139 @@ describe("QueryTabPanel: o banco da aba na barra do editor (RN-ARVORE-007)", () 
 
     expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledWith("s1", "r1", expect.any(Array));
     expect(view.props.onSwitchDatabase).toHaveBeenCalledWith("q1", "vendas");
+  });
+});
+
+describe("QueryTabPanel: o campo de filtro no resultado (RN-GRADE-011)", () => {
+  const filtered = (text: string) => ({ ...rowsState().target, filter: text });
+  const key = (name: string) => ({ key: name, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn() });
+
+  it("com linhas na tela, o campo dos Registros aparece acima da grade, com as colunas do resultado; sem resultado, não", () => {
+    const { filter } = mount(fakeRunner(rowsState())).show();
+
+    expect(filter).toMatchObject({ subject: "result", draft: "", applied: "", problem: null, command: null, engine: pg, autocomplete: true });
+    expect(filter!.columns.map((column) => column.name)).toEqual(["id", "status"]);
+    expect(mount(fakeRunner({ status: "idle" })).show().filter).toBeNull();
+    expect(mount(fakeRunner({ status: "affected", rowsAffected: 1, elapsedMs: 1 })).show().filter).toBeNull();
+  });
+
+  it("aplicar executa de novo o comando do resultado com o filtro, e o texto do editor não muda", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().filter!.onDraft(`"status" = 'aberta' ORDER BY "id" DESC`);
+    view.show().filter!.onApply();
+    await settle();
+
+    expect(runner.sent).toEqual([filtered(`"status" = 'aberta' ORDER BY "id" DESC`)]);
+    expect(view.show().filter).toMatchObject({ applied: `"status" = 'aberta' ORDER BY "id" DESC` });
+    expect(view.props.onSqlChange).not.toHaveBeenCalled();
+  });
+
+  it("a recusa da API (FILTER_INVALID) aparece no campo com a frase dela, e o filtro em vigor fica o de antes", async () => {
+    const runner = fakeRunner(rowsState());
+    runner.refuse = { code: "FILTER_INVALID", message: "O filtro tem um terminador de comando (;)." };
+    const view = mount(runner);
+
+    view.show().filter!.onDraft("id > 0; drop table t");
+    view.show().filter!.onApply();
+    await settle();
+
+    expect(view.show().filter).toMatchObject({ problem: { message: "O filtro tem um terminador de comando (;)." }, applied: "", draft: "id > 0; drop table t" });
+    // Escrever no campo tira a recusa.
+    view.show().filter!.onDraft("id > 0");
+    expect(view.show().filter!.problem).toBeNull();
+  });
+
+  it("o erro do banco no comando filtrado deixa o campo à vista, para a pessoa corrigir o filtro", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().filter!.onDraft("x = 1");
+    view.show().filter!.onApply();
+    await settle();
+    runner.state = { status: "error", source: "database", title: "Erro do banco", message: 'column "x" does not exist', sqlState: "42703", errorAt: null };
+
+    expect(view.show().filter).toMatchObject({ draft: "x = 1", applied: "x = 1" });
+    expect(view.show().filter!.columns.map((column) => column.name)).toEqual(["id", "status"]);
+  });
+
+  it("executar pelo editor limpa o filtro e envia o comando do editor sem ele", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().filter!.onDraft("id > 0");
+    view.show().filter!.onApply();
+    await settle();
+    runner.state = rowsState({ target: filtered("id > 0") });
+
+    view.show().editor.onRun(command);
+    runner.state = rowsState({ target: command });
+
+    expect(runner.sent.at(-1)).toEqual(command);
+    expect(view.show().filter).toMatchObject({ draft: "", applied: "", problem: null });
+  });
+
+  it("com alterações não salvas na grade, aplicar o filtro pergunta antes, como executar outro comando (RN-EDIT-007)", async () => {
+    withPending();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().filter!.onDraft("id > 0");
+    view.show().filter!.onApply();
+    expect(runner.run).not.toHaveBeenCalled();
+
+    view.show().question!.onDiscard();
+    await settle();
+    expect(runner.sent).toEqual([filtered("id > 0")]);
+  });
+
+  it("Limpar executa o comando sem filtro", async () => {
+    const runner = fakeRunner(rowsState({ target: filtered("id > 0") }));
+    const view = mount(runner);
+
+    view.show().filter!.onClear();
+    await settle();
+
+    expect(runner.sent).toEqual([rowsState().target]);
+  });
+
+  it("o Filtrar do menu da célula junta a condição ao campo e executa o comando com ela", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().filter!.onDraft("id > 5");
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "filter")!.submenu!.groups.flatMap(groupItems);
+    items.find((item) => item.id === "filter:cell:eq")!.onSelect!();
+    await settle();
+
+    expect(runner.sent).toEqual([filtered(`(id > 5) AND ("status" = 'aberta')`)]);
+    expect(view.show().filter).toMatchObject({ draft: `(id > 5) AND ("status" = 'aberta')` });
+  });
+
+  it("F5 é o Executar de novo, com o foco em qualquer ponto da aba; com algo em andamento, nada (RN-GRADE-012)", () => {
+    const runner = fakeRunner(rowsState({ target: filtered("id > 0") }));
+    const view = mount(runner);
+
+    const press = key("F5");
+    view.show().keys(press);
+    expect(press.preventDefault).toHaveBeenCalled();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+
+    runner.state = rowsState({ loadingMore: true });
+    view.show().keys(key("F5"));
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("F5 com alterações não salvas pergunta antes", () => {
+    withPending();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().keys(key("F5"));
+    expect(runner.rerun).not.toHaveBeenCalled();
+    expect(view.show().question).toMatchObject({ count: 1 });
   });
 });

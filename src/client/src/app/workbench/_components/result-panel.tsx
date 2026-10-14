@@ -112,6 +112,11 @@ type ResultPanelProps = {
   editing?: GridEditing;
   /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
   banner?: ReactNode;
+  /**
+   * RN-GRADE-011: o campo de filtro do resultado da aba de consulta, no topo do corpo da área (acima da faixa e da grade). Fica também com o erro do comando
+   * filtrado na tela, para a pessoa corrigir o filtro; recolhida a área, recolhe com ela.
+   */
+  filter?: ReactNode;
 };
 
 /**
@@ -119,7 +124,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter }: ResultPanelProps) {
   const running = state.status === "running";
   // O que está na tela: o estado ou, enquanto um comando novo roda, o resultado que já estava lá
   // (linhas, linhas afetadas ou um erro de SQL). Só a API aceitar o comando novo o substitui;
@@ -191,6 +196,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
 
       {/* Recolhida, `inert` tira o corpo da ordem do Tab e da leitura de tela sem desmontá-lo. */}
       <div inert={collapsed} className={cn("flex min-h-0 flex-1 flex-col", collapsed && "h-0 flex-none overflow-hidden")}>
+        {filter ?? null}
         {shown === null ? (
           // `flex-1`: na vista Registros o rodapé (com "Cancelar") fica no fim da área, e não colado à frase.
           <p role="status" className="flex-1 p-4 text-muted">
