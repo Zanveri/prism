@@ -6,11 +6,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { parseSums, sumRefusal } from "./checksums";
 import { downloadFile, fetchText, sha256OfFile, type HttpGet } from "./download";
 import { deliverToDownloads, runInstaller, type SpawnInstaller } from "./install";
+import { attemptFileName, takeAttempt, writeAttempt } from "./install-attempt";
 import { githubApiHeaders, maxReleasePages, packageUrl, releasesPerPage, releasesUrl, type UpdateOrigin } from "./origin";
 import { choosePackage, isPackageFile, sumsFile, type InstallFacts, type InstallFormat } from "./packages";
 import { dueForStartupCheck, readPreferences, writePreferences, type UpdatePreferences } from "./preferences";
 import { clipNotes, mergeReleasePages, readReleasePage, type ReleaseInfo, type ReleasePage } from "./releases";
-import type { CheckOutcome, UpdateOffer, UpdateProgress, UpdateState } from "./update-state";
+import type { CheckOutcome, UpdateNotice, UpdateOffer, UpdateProgress, UpdateState } from "./update-state";
 
 export type UpdaterDeps = {
   /** `null`: pacote gerado sem origem (RN-ATUALIZA-001). */
@@ -19,7 +20,12 @@ export type UpdaterDeps = {
   blocked?: boolean;
   currentVersion: string;
   facts: InstallFacts;
-  /** A pasta de dados do app: as preferências e `updates/` ficam nela, fora do cofre. */
+  /**
+   * Instalado pelo instalador do Windows, a instalação é para todos os usuários (RN-INSTALA-003; `install-scope.ts`)? Só é
+   * perguntado nessa instalação, uma vez por abertura; sem a função, ou com ela falhando, vale "só do usuário".
+   */
+  installedForAllUsers?: () => Promise<boolean>;
+  /** A pasta de dados do app: as preferências, `updates/` e a anotação da instalação (`install-attempt.ts`) ficam nela, fora do cofre. */
   dataDir: string;
   downloadsDir: string;
   http: HttpGet;
@@ -118,7 +124,7 @@ async function withRetries<T>(work: () => Promise<T>, attempts = 3, waitMs = 150
  * preferências. O que chega da tela (`unknown`) é conferido aqui: ela só diz "baixe", "instale" ou "pule" a versão que a
  * última consulta DESTE processo achou, e nunca um endereço, um caminho ou um nome de arquivo.
  */
-export function createUpdater({ origin: recordedOrigin, blocked = false, currentVersion, facts, dataDir, downloadsDir, http, now, log, spawn, stopApi, apiStopTimeoutMs = 15_000, quit, reveal, onState, onProgress }: UpdaterDeps) {
+export function createUpdater({ origin: recordedOrigin, blocked = false, currentVersion, facts, installedForAllUsers, dataDir, downloadsDir, http, now, log, spawn, stopApi, apiStopTimeoutMs = 15_000, quit, reveal, onState, onProgress }: UpdaterDeps) {
   // Bloqueado é sem origem: nenhum caminho abaixo chega à rede sem ela.
   const origin = blocked ? null : recordedOrigin;
   const preferencesFile = join(dataDir, "update-preferences.json");
@@ -133,10 +139,20 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
     log(`atualização: a pasta de downloads antigos não foi apagada (${messageOf(error)})`);
   }
 
+  // A atualização que a abertura anterior mandou o instalador fazer (RN-INSTALA-003): se o Prism abriu na versão de antes, ela
+  // não foi instalada, e a tela avisa uma vez (`takeNotice`).
+  const attemptFile = join(dataDir, attemptFileName);
+  let notice: UpdateNotice | null = takeAttempt(attemptFile, currentVersion);
+  if (notice !== null) log(`atualização: a versão ${notice.version} não foi instalada; o Prism abriu de novo na ${notice.current}`);
+
   let preferences = readPreferences(preferencesFile);
   let state: UpdateState = { status: "none" };
   let found: ReleaseInfo[] = [];
-  let offer: UpdateOffer = { checkId: 0, current: currentVersion, format: null, releases: [], omitted: 0 };
+  let offer: UpdateOffer = { checkId: 0, current: currentVersion, format: null, forAllUsers: false, releases: [], omitted: 0 };
+  /** O modo da instalação, perguntado uma vez (`installedForAllUsers`) e só na instalação feita pelo instalador do Windows. */
+  let forAllUsers: Promise<boolean> | null = null;
+  const isForAllUsers = () =>
+    (forAllUsers ??= facts.platform === "win32" && facts.nsisInstalled && installedForAllUsers !== undefined ? installedForAllUsers().catch(() => false) : Promise.resolve(false));
   let downloading: AbortController | null = null;
   /** O arquivo baixado e conferido contra as duas somas, e a soma dele: `install` confere de novo antes de usar. */
   let verified: { version: string; path: string; sha256: string; format: InstallFormat } | null = null;
@@ -187,7 +203,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
    * à versão instalada (a pipeline publica um beta a cada merge, e cem betas podem esconder a estável que falta a quem está atrás),
    * e no máximo `maxReleasePages`. Uma página seguinte que falha não derruba a consulta: vale o que já veio, e a falha vai para o log.
    */
-  async function query(source: UpdateOrigin): Promise<{ releases: ReleaseInfo[] } | { failure: string }> {
+  async function query(source: UpdateOrigin): Promise<{ releases: ReleaseInfo[]; forAllUsers: boolean } | { failure: string }> {
     save({ lastCheckedAt: now().toISOString() });
 
     const pages: ReleasePage[] = [];
@@ -202,11 +218,11 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       pages.push(read);
       if (read.items < releasesPerPage || read.reachedInstalled) break;
     }
-    return { releases: mergeReleasePages(pages) };
+    return { releases: mergeReleasePages(pages), forAllUsers: await isForAllUsers() };
   }
 
   /** Passa a valer o que a consulta achou. O que tinha sido baixado para o achado anterior deixa de valer. */
-  function adopt(releases: ReleaseInfo[]) {
+  function adopt(releases: ReleaseInfo[], forAllUsers = false) {
     found = releases;
     verified = null;
     if (releases.length === 0) {
@@ -218,6 +234,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       checkId: offer.checkId + 1,
       current: currentVersion,
       format: choosePackage(releases[0].version, facts)?.format ?? null,
+      forAllUsers,
       // O que vai para a tela é menos do que o processo principal guarda (`found` fica inteiro, e é dele que sai a
       // conferência): as notas com o teto de linhas, e só as somas dos pacotes conhecidos da versão. Um bloco de somas com
       // milhares de linhas de outros nomes não atravessa a ponte.
@@ -304,6 +321,13 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
     state: () => state,
     preferences: () => preferences,
 
+    /** O aviso da atualização que não foi instalada (RN-INSTALA-003), uma vez: a primeira janela que pergunta o leva. */
+    takeNotice(): UpdateNotice | null {
+      const taken = notice;
+      notice = null;
+      return taken;
+    },
+
     /** Ao abrir: no máximo uma vez a cada 24 horas, e a falha só vai para o log (RN-ATUALIZA-002). */
     async checkOnStartup(): Promise<void> {
       if (blocked) return log("atualização: desligada nesta abertura: a linha de comando dispensa a conferência do certificado ou troca o endereço dos servidores");
@@ -320,7 +344,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       if (state.status !== "none") return;
 
       log(`atualização: versão ${latest.version} disponível`);
-      adopt(result.releases);
+      adopt(result.releases, result.forAllUsers);
     },
 
     /** "Verificar atualizações": não depende das 24 horas, da opção de abrir nem da versão pulada, e o resultado sempre volta. */
@@ -337,7 +361,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       // O download ou a instalação podem ter começado enquanto a consulta esperava a rede: o que eles puseram na tela fica.
       if (isBusy()) return { outcome: "busy" };
 
-      adopt(result.releases);
+      adopt(result.releases, result.forAllUsers);
       return { outcome: result.releases.length === 0 ? "upToDate" : "available" };
     },
 
@@ -430,7 +454,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
      */
     async install(version: unknown): Promise<UpdateState> {
       if (state.status !== "ready" || verified === null || version !== verified.version) throw invalid();
-      const { path, sha256, format } = verified;
+      const { version: target, path, sha256, format } = verified;
       // Uma instalação de cada vez: tirado daqui, o arquivo conferido não serve a um segundo pedido que chegue junto.
       verified = null;
 
@@ -470,7 +494,24 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
 
       try {
         if (format === "nsis") {
-          await runInstaller(spawn, path);
+          // A anotação que a próxima abertura lê para saber se a versão entrou (RN-INSTALA-003). Gravar é síncrono: nada roda
+          // entre a conferência do arquivo, acima, e o instalador. Sem ela a atualização segue; só o aviso, se nada entrar, falta.
+          try {
+            writeAttempt(attemptFile, { from: currentVersion, to: target, forAllUsers: offer.forAllUsers });
+          } catch (error) {
+            log(`atualização: a anotação da instalação não foi gravada (${messageOf(error)})`);
+          }
+          try {
+            await runInstaller(spawn, path);
+          } catch (error) {
+            // O instalador não iniciou: a anotação sai, para a próxima abertura não avisar de uma instalação que nem começou.
+            try {
+              rmSync(attemptFile, { force: true });
+            } catch (removal) {
+              log(`atualização: a anotação da instalação não foi apagada (${messageOf(removal)})`);
+            }
+            throw error;
+          }
           log("atualização: a API terminou e o instalador iniciou; o Prism vai encerrar");
           quit();
           return state;

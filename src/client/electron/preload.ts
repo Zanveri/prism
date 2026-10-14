@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
 import type { UpdatePreferences } from "./update/preferences";
-import type { CheckOutcome, UpdateProgress, UpdateState } from "./update/update-state";
+import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
 import type { PeerEvent, TabMoveRequest, TabRequest, WindowSummary } from "./window-messages";
 import type { WorkspaceReport } from "./workspace-messages";
 
@@ -104,6 +104,8 @@ export type PrismUpdates = {
   /** "Receber versões beta" (RN-ATUALIZA-010): só grava; vale a partir da próxima consulta. */
   setReceiveBeta(value: boolean): Promise<UpdatePreferences>;
   skipVersion(version: string): Promise<UpdatePreferences>;
+  /** A atualização do Windows que não foi instalada (RN-INSTALA-003), uma vez por abertura: a primeira janela que pede a leva. */
+  takeNotice(): Promise<UpdateNotice | null>;
 };
 
 /** O que o processo principal responde aos dois pedidos. Falha vem como dado, não como exceção. */
@@ -152,6 +154,7 @@ const bridge: PrismBridge = {
     setCheckOnStartup: (value) => ipcRenderer.invoke("prism:update-check-on-startup", value),
     setReceiveBeta: (value) => ipcRenderer.invoke("prism:update-receive-beta", value),
     skipVersion: (version) => ipcRenderer.invoke("prism:update-skip", version),
+    takeNotice: () => ipcRenderer.invoke("prism:update-notice"),
   },
   windows: {
     id: windowIdFromArgv(process.argv),

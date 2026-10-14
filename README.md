@@ -29,7 +29,7 @@ the file for your system:
 
 | System | File | What it is |
 | --- | --- | --- |
-| Windows x64 | `Prism-<version>-win-x64.exe` | the installer (recommended): installs for your user only, without asking for administrator rights, and updates itself from inside the app |
+| Windows x64 | `Prism-<version>-win-x64.exe` | the installer (recommended): asks for administrator rights to install for all users; if you say no, it installs only for you. It updates itself from inside the app, and an all-users installation asks for administrator rights on each update |
 | Windows x64 | `Prism-<version>-win-x64.zip` | the portable copy, no installation; each update is a new download |
 | Linux x64 | `Prism-<version>-linux-x86_64.AppImage` | runs on most distributions, no installation |
 | Linux x64 | `Prism-<version>-linux-amd64.deb` | Debian, Ubuntu and derivatives |

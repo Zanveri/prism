@@ -90,6 +90,7 @@ export function getBridge(): PrismBridge {
         setCheckOnStartup: async () => noPreferences,
         setReceiveBeta: async () => noPreferences,
         skipVersion: async () => noPreferences,
+        takeNotice: async () => null,
       },
       // Fora do Electron há uma janela só, e nenhuma outra para onde levar uma aba ou a quem contar do cofre.
       windows: {

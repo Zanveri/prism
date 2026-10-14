@@ -63,8 +63,18 @@ win:
 
 # O atualizador do Prism (seção 17 da especificação, `electron/update/`) baixa o instalador inteiro e o confere por soma
 # SHA-256: o `.blockmap`, que serve ao download por diferença do electron-updater, não é usado.
+#
+# O instalador pede administrador e, sem a permissão, instala só para o usuário (seção 25, RN-INSTALA-001 a 004). É o instalador
+# assistido (`oneClick: false`): o modelo do electron-builder com os dois modos e o plugin UAC. Sem `perMachine`, o manifesto não
+# exige administrador, e quem pede a permissão, decide o modo e pula a página da escolha é `build/installer.nsh`.
+# `guid` é o que o electron-builder calcularia do `appId` (UUID v5; `scripts/builder-config.test.ts` confere): é o nome das chaves
+# do registro da instalação, então a de uma versão anterior é achada e atualizada. O app (`electron/update/install-scope.ts`) e a
+# conferência da pipeline (`scripts/ci/check-windows-installer.sh`) leem o modo da instalação dessas chaves.
 nsis:
   differentialPackage: false
+  oneClick: false
+  guid: d551cb2c-c57f-514a-ba30-6878b60cf922
+  include: build/installer.nsh
 
 # Linux: AppImage (roda na maioria das distribuições sem instalar), `.deb`, `.rpm` e `tar.gz`. O ícone da janela e do
 # splash é o PNG de 512 px em `resources/` (`main.ts`); o do sistema é o conjunto de `build/icons/<N>x<N>.png`.

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,6 +13,7 @@ import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./
 import type { ApiConfigReply } from "./preload";
 import { createSplash } from "./splash";
 import { startUp } from "./startup";
+import { installedForAllUsers } from "./update/install-scope";
 import { createHttpGet } from "./update/net-transport";
 import { resolveOrigin, updatesBlocked } from "./update/origin";
 import { createUpdater, type Updater } from "./update/updater";
@@ -222,6 +223,7 @@ function startUpdater() {
   const blocked = updatesBlocked({ isPackaged: app.isPackaged, hasSwitch: (name) => app.commandLine.hasSwitch(name) });
 
   const linux = process.platform === "linux";
+  const nsisInstalled = process.platform === "win32" && existsSync(join(dirname(process.execPath), `Uninstall ${basename(process.execPath)}`));
   updater = createUpdater({
     origin,
     blocked,
@@ -236,8 +238,20 @@ function startUpdater() {
       execPath: process.execPath,
       debInstalled: linux && existsSync("/var/lib/dpkg/info/prism.list"),
       hasRpm: linux && (existsSync("/usr/bin/rpm") || existsSync("/bin/rpm")),
-      nsisInstalled: process.platform === "win32" && existsSync(join(dirname(process.execPath), `Uninstall ${basename(process.execPath)}`)),
+      nsisInstalled,
     },
+    // O modo da instalação do Windows (RN-INSTALA-003): a chave que o instalador grava em HKLM na instalação para todos, lida pelo
+    // `reg.exe` do sistema, sem shell (`update/install-scope.ts`). O atualizador só pergunta na instalação feita pelo instalador.
+    installedForAllUsers: () =>
+      installedForAllUsers(
+        (command, args) =>
+          new Promise((done) => {
+            execFile(command, args, { windowsHide: true, timeout: 5_000, encoding: "utf8", shell: false }, (error, stdout) => {
+              done({ status: error === null ? 0 : typeof error.code === "number" ? error.code : null, stdout });
+            });
+          }),
+        process.env.SystemRoot,
+      ),
     dataDir: app.getPath("userData"),
     downloadsDir: app.getPath("downloads"),
     // Uma sessão só do atualizador, em memória: sem os cookies nem o cache da janela (RN-ATUALIZA-008).
@@ -287,6 +301,7 @@ ipcMain.handle("prism:update-preferences", (event) => updates(event).preferences
 ipcMain.handle("prism:update-check-on-startup", (event, value: unknown) => updates(event).setCheckOnStartup(value));
 ipcMain.handle("prism:update-receive-beta", (event, value: unknown) => updates(event).setReceiveBeta(value));
 ipcMain.handle("prism:update-skip", (event, version: unknown) => updates(event).skipVersion(version));
+ipcMain.handle("prism:update-notice", (event) => updates(event).takeNotice());
 
 /** Entrega os arquivos de `out/renderer` em `app://prism/`, e nada de fora dessa pasta. */
 function serveRenderer() {
