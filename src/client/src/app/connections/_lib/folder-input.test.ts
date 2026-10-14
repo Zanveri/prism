@@ -12,8 +12,14 @@ describe("o corpo que o diálogo de pasta manda (RN-PASTA-001 a 005)", () => {
     expect(folderInputOf(null, { name: "QAS" })).toEqual({ name: "QAS", parentID: null, environmentName: null, environmentColor: null });
   });
 
-  it("renomear (também pelo F2) troca o nome e o ambiente, e a pasta fica onde está", () => {
+  it("editar (Editar pasta…, também pelo F2, RN-PASTA-006) troca o nome e o ambiente, e a pasta fica onde está", () => {
     expect(folderInputOf(producao, { name: "Produção Sul", environmentName: null, environmentColor: null })).toEqual({ name: "Produção Sul", parentID: "raiz", environmentName: null, environmentColor: null });
+  });
+
+  it("pôr só o ambiente numa pasta que já existia: o PATCH leva o nome e a pasta pai como estavam, e o ambiente novo", () => {
+    const desenvolvimento: Folder = { ...producao, name: "Desenvolvimento", environmentName: null, environmentColor: null };
+
+    expect(folderInputOf(desenvolvimento, { name: "Desenvolvimento", environmentName: "Develop", environmentColor: "#5ED3A3" })).toEqual({ name: "Desenvolvimento", parentID: "raiz", environmentName: "Develop", environmentColor: "#5ED3A3" });
   });
 
   it("mover muda só a pasta pai: o PATCH grava a pasta por inteiro, e o ambiente dela vai junto, como estava", () => {

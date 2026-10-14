@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 
-import { CheckIcon, EyedropperIcon, FieldError, TextField, environmentTextColor } from "@/components/ui";
+import { CheckIcon, EnvironmentPill, EyedropperIcon, FieldError, TextField, environmentTextColor } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import type { FieldErrors } from "@/lib/utils/form";
 
 import { connectionsCopy } from "../_lib/connections.copy";
 import type { ShownEnvironment } from "../_lib/environment";
+import { environmentKey, findEnvironment, type UserEnvironment } from "../_lib/user-environments";
 
 const copy = connectionsCopy.form.environment;
 
@@ -28,6 +29,8 @@ export type EnvironmentPickerProps = {
   hint: string;
   /** Só na conexão: o que ela herda da pasta em que está, se ficar sem ambiente próprio (RN-PASTA-005). */
   inherited?: ShownEnvironment | null;
+  /** Os ambientes do usuário (RN-AMB-001), para reaproveitar: as etiquetas acima do nome e o que o campo completa ao digitar. */
+  environments?: readonly UserEnvironment[];
 };
 
 /** O seletor de cor do sistema: o `showPicker`, onde houver; senão o clique, que é como ele abria antes. */
@@ -46,10 +49,17 @@ function openSystemPicker(input: HTMLInputElement | null) {
  * `#RRGGBB` vai na dica e no nome acessível. A cor vai ao `FormData` por um campo escondido.
  *
  * Na conexão, com o nome em branco, a seção diz o que ela herda e de qual pasta: o nome digitado é acompanhado (o campo continua do `FormData`).
+ *
+ * Os ambientes do usuário (RN-AMB-001) ficam acima do nome, como etiquetas coloridas, cada uma um botão (`aria-pressed` na do nome que está no
+ * campo): escolher uma preenche o nome e a cor, que continuam editáveis. O campo completa com eles ao digitar (a `<datalist>` do próprio campo, com o
+ * teclado e o leitor de tela do Chromium). O nome digitado que vira o de um ambiente, com qualquer caixa, traz a cor dele uma vez, ao virar; depois
+ * a cor é de quem edita. Abrir o formulário não muda nada sozinho.
  */
-export function EnvironmentPicker({ idPrefix, defaultName, color, onColorChange, errors, hint, inherited = null }: EnvironmentPickerProps) {
+export function EnvironmentPicker({ idPrefix, defaultName, color, onColorChange, errors, hint, inherited = null, environments = [] }: EnvironmentPickerProps) {
   const systemPicker = useRef<HTMLInputElement>(null);
   const [typedName, setTypedName] = useState(defaultName);
+  const typedKey = environmentKey(typedName);
+  const optionsId = `${idPrefix}-environment-options`;
 
   const chosen = color === null ? null : color.toUpperCase();
   const otherChosen = chosen !== null && !connectionsCopy.colors.some((swatch) => swatch.hex === chosen);
@@ -63,7 +73,59 @@ export function EnvironmentPicker({ idPrefix, defaultName, color, onColorChange,
         {copy.title}
       </h3>
 
-      <TextField id={`${idPrefix}-environment-name`} name="environmentName" label={copy.name} defaultValue={defaultName} onChange={(event) => setTypedName(event.target.value)} autoComplete="off" error={errors.environmentName} />
+      {environments.length === 0 ? null : (
+        <div role="group" aria-labelledby={`${idPrefix}-environment-saved`} className="flex flex-col gap-2">
+          <span id={`${idPrefix}-environment-saved`} className="text-sm text-muted">
+            {copy.saved}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {environments.map((environment) => {
+              const selected = environment.key === typedKey;
+
+              return (
+                <button
+                  key={environment.key}
+                  type="button"
+                  data-environment={environment.key}
+                  aria-pressed={selected}
+                  title={copy.useSaved(environment.name)}
+                  onClick={() => {
+                    setTypedName(environment.name);
+                    onColorChange(environment.color);
+                  }}
+                  className={cn("inline-flex cursor-pointer rounded-full", selected && chosenClassName)}
+                >
+                  <EnvironmentPill name={environment.name} color={environment.color} className="h-[22px] px-[9px] text-xs leading-[22px]" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <TextField
+        id={`${idPrefix}-environment-name`}
+        name="environmentName"
+        label={copy.name}
+        value={typedName}
+        onChange={(event) => {
+          const typed = event.target.value;
+          setTypedName(typed);
+          // O nome que acaba de virar o de um ambiente traz a cor dele; quem segue digitando no mesmo nome (um espaço, outra caixa) não a perde.
+          const found = findEnvironment(environments, typed);
+          if (found !== undefined && found.key !== typedKey) onColorChange(found.color);
+        }}
+        list={environments.length === 0 ? undefined : optionsId}
+        autoComplete="off"
+        error={errors.environmentName}
+      />
+      {environments.length === 0 ? null : (
+        <datalist id={optionsId}>
+          {environments.map((environment) => (
+            <option key={environment.key} value={environment.name} />
+          ))}
+        </datalist>
+      )}
 
       <fieldset className="m-0 min-w-0 border-0 p-0">
         <legend className="mb-2 p-0 text-sm text-muted">{copy.color}</legend>

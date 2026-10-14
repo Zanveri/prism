@@ -52,7 +52,8 @@ export const workbenchCopy = {
       copyName: "Copiar nome",
       copyQualifiedName: "Copiar nome qualificado",
       newSubfolder: "Nova subpasta",
-      renameFolder: "Renomear",
+      // RN-PASTA-006: o diálogo da pasta tem o nome e o ambiente.
+      renameFolder: "Editar pasta…",
       moveFolder: "Mover",
       deleteFolder: "Excluir",
       // RN-AVISO-002 e 003: o resultado de copiar. Quando a área de transferência recusa, o texto continua na tela para a pessoa copiar.

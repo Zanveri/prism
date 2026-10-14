@@ -82,7 +82,7 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A ação do menu sobre uma pasta que existe e o modo do diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). */
-const folderActionTypes = { renameFolder: "rename", moveFolder: "move", deleteFolder: "delete" } as const;
+const folderActionTypes = { renameFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
 
 /** A ação de conexão que o menu pediu (RN-NAV-003 e 009): renomear, mover de pasta ou excluir, cada uma com o diálogo dela. */
 type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connection };

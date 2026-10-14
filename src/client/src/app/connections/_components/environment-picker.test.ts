@@ -167,3 +167,81 @@ describe("o ambiente herdado no formulário da conexão (RN-PASTA-005)", () => {
     expect(markup).toContain(copy.folderHint);
   });
 });
+
+describe("os ambientes do usuário na seção Ambiente (RN-AMB-001)", () => {
+  const environments = [
+    { key: "produção", name: "Produção", color: "#FF8A7A" },
+    { key: "qas", name: "QAS", color: null },
+  ];
+  const nameField = (props: Partial<EnvironmentPickerProps>) => drawn(props).all.find((element) => element.props.name === "environmentName") as Found;
+  const chips = (props: Partial<EnvironmentPickerProps>) => drawn(props).all.filter((element) => element.type === "button" && element.props["data-environment"] !== undefined);
+  const type = (props: Partial<EnvironmentPickerProps>, value: string) => (nameField(props).props.onChange as (event: unknown) => void)({ target: { value } });
+
+  it("acima do campo do nome, uma etiqueta colorida por ambiente, cada uma um botão num grupo com nome", () => {
+    const markup = markupOf({ environments });
+
+    expect(markup).toContain('<div role="group" aria-labelledby="cx-environment-saved"');
+    expect(markup).toMatch(new RegExp(`id="cx-environment-saved"[^>]*>${copy.saved}<`));
+    expect(markup.indexOf("cx-environment-saved")).toBeLessThan(markup.indexOf('id="cx-environment-name"'));
+    expect(markup).toMatch(/<button type="button" data-environment="produção" aria-pressed="false" title="Usar o ambiente Produção"[^>]*><span style="background-color:#FF8A7A;color:#14181D"[^>]*>Produção<\/span><\/button>/);
+  });
+
+  it("sem ambiente nenhum ainda, a seção não mostra o grupo", () => {
+    expect(markupOf({ environments: [] })).not.toContain(copy.saved);
+    expect(markupOf()).not.toContain("<datalist");
+  });
+
+  it("escolher uma etiqueta preenche o nome e a cor, que continuam editáveis; a escolhida fica marcada", () => {
+    rt.unmount();
+    const onColorChange = vi.fn();
+    const props = { environments, onColorChange, color: "#7DB2FF" };
+
+    (chips(props)[0].props.onClick as () => void)();
+
+    expect(nameField(props).props.value).toBe("Produção");
+    expect(onColorChange).toHaveBeenLastCalledWith("#FF8A7A");
+    expect(chips(props).map((chip) => chip.props["aria-pressed"])).toEqual([true, false]);
+
+    // Sem cor no ambiente escolhido, a cor sai.
+    (chips(props)[1].props.onClick as () => void)();
+    expect(nameField(props).props.value).toBe("QAS");
+    expect(onColorChange).toHaveBeenLastCalledWith(null);
+
+    // O nome continua do campo: digitar outro tira a marca.
+    type(props, "QAS Sul");
+    expect(nameField(props).props.value).toBe("QAS Sul");
+    expect(chips(props).every((chip) => chip.props["aria-pressed"] === false)).toBe(true);
+  });
+
+  it("o campo do nome completa com os ambientes ao digitar (a lista de sugestões do campo)", () => {
+    rt.unmount();
+    const { all } = drawn({ environments });
+    const field = all.find((element) => element.props.name === "environmentName") as Found;
+    const list = all.find((element) => element.type === "datalist") as Found;
+
+    expect(field.props.list).toBe("cx-environment-options");
+    expect(list.props.id).toBe("cx-environment-options");
+    expect(elementsOf(list.props.children as never).map((option) => option.props.value)).toEqual(["Produção", "QAS"]);
+  });
+
+  it("o nome digitado que é o de um ambiente, com qualquer caixa, traz a cor dele uma vez; depois a cor é de quem edita", () => {
+    rt.unmount();
+    const onColorChange = vi.fn();
+    const props = { environments, onColorChange };
+
+    type(props, "produ");
+    expect(onColorChange).not.toHaveBeenCalled();
+    type(props, "produção");
+    expect(onColorChange).toHaveBeenCalledExactlyOnceWith("#FF8A7A");
+    type(props, "produção ");
+    expect(onColorChange).toHaveBeenCalledOnce();
+  });
+
+  it("ao abrir com um ambiente, nada muda sozinho: a cor gravada fica", () => {
+    rt.unmount();
+    const onColorChange = vi.fn();
+    drawn({ environments, onColorChange, defaultName: "Produção", color: "#7DB2FF" });
+
+    expect(onColorChange).not.toHaveBeenCalled();
+  });
+});

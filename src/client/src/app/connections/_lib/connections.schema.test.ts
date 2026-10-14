@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, engineOptions, folderSchema, moveFolderSchema, renameFolderSchema } from "./connections.schema";
+import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema } from "./connections.schema";
 
 const form = { engine: "1", name: "ERP", folderID: "", host: "srv-pg.exemplo.local", port: "5432", database: "erp", userName: "prism_leitura", password: "demonstracao", environmentName: "", environmentColor: "" };
 
@@ -162,11 +162,11 @@ describe("folderSchema e formulários de pasta (RN-PASTA-001 e RN-PASTA-005)", (
     expect(fieldErrors(editConnectionSchema, { ...form, environmentName: "a".repeat(31) }).environmentName).toEqual(fieldErrors(createFolderSchema, { name: "P", parentID: "", environmentName: "a".repeat(31), environmentColor: "" }).environmentName);
   });
 
-  it("renomear pede o nome e o ambiente, e mover pede só a pasta pai", () => {
-    const renamed = renameFolderSchema.safeParse({ name: "Nova", environmentName: "QAS", environmentColor: "#F2B644" });
+  it("editar (Editar pasta…, RN-PASTA-006) pede o nome e o ambiente, e mover pede só a pasta pai", () => {
+    const renamed = editFolderSchema.safeParse({ name: "Nova", environmentName: "QAS", environmentColor: "#F2B644" });
 
     expect(renamed.success && renamed.data).toEqual({ name: "Nova", environmentName: "QAS", environmentColor: "#F2B644" });
-    expect(fieldErrors(renameFolderSchema, { name: "", ...noEnvironment })).toHaveProperty("name");
+    expect(fieldErrors(editFolderSchema, { name: "", ...noEnvironment })).toHaveProperty("name");
 
     const toFolder = moveFolderSchema.safeParse({ parentID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" });
     const toRoot = moveFolderSchema.safeParse({ parentID: "" });

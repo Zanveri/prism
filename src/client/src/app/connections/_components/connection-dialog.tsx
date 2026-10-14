@@ -10,10 +10,11 @@ import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type
 
 import { connectionsCopy } from "../_lib/connections.copy";
 import { createConnectionSchema, editConnectionSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
-import { createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
+import { connectionsQuery, createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
 import { choiceOf, engineChoices } from "../_lib/engine-choices";
 import { environmentLookup } from "../_lib/environment";
 import { hasChanges, snapshotOf, type FormSnapshot } from "../_lib/form-leave";
+import { userEnvironments } from "../_lib/user-environments";
 import { ConnectionFields } from "./connection-fields";
 import { DeleteConnectionDialog } from "./delete-connection-dialog";
 import { DriverNotice } from "./driver-notice";
@@ -68,6 +69,9 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
   const drivers = useQuery(driversQuery);
   const choices = useMemo(() => engineChoices(drivers.data), [drivers.data]);
   const driverActions = useDriverActions();
+  // RN-AMB-001: os ambientes que as pastas e as conexões já usam, para a seção Ambiente reaproveitar (a lista é a do navegador, já no cache).
+  const savedConnections = useQuery(connectionsQuery);
+  const environments = useMemo(() => userEnvironments(folders, savedConnections.data ?? []), [folders, savedConnections.data]);
 
   const [step, setStep] = useState<"engine" | "settings">(connection === null ? "engine" : "settings");
   const [engine, setEngine] = useState<Engine | null>(connection?.engine ?? null);
@@ -281,6 +285,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
               onPasswordEye={handlePasswordEye}
               color={color}
               onColorChange={setColor}
+              environments={environments}
             />
             {refusal === null ? null : <FormMessage tone="error">{refusal}</FormMessage>}
           </form>

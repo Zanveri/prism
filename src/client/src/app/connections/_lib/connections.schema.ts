@@ -104,8 +104,8 @@ const folderName = z.string().trim().min(1, "Informe o nome da pasta.").max(60, 
 /** Criar uma pasta: o nome, onde ela fica (`""` é a raiz) e o ambiente (RN-PASTA-005). */
 export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), ...environmentFields });
 
-/** Renomear (também pelo F2, RN-NAV-009) pergunta o nome e o ambiente. */
-export const renameFolderSchema = createFolderSchema.pick({ name: true, environmentName: true, environmentColor: true });
+/** "Editar pasta…" (também pelo F2, RN-NAV-009 e RN-PASTA-006) pergunta o nome e o ambiente. */
+export const editFolderSchema = createFolderSchema.pick({ name: true, environmentName: true, environmentColor: true });
 
 export const moveFolderSchema = createFolderSchema.pick({ parentID: true });
 
