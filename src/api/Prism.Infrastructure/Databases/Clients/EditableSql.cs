@@ -28,6 +28,9 @@ internal static class EditableSql
     public const string WroteRows = "o comando gravou e devolveu linhas";
     public const string UnknownOrigin = "o Prism não conseguiu saber de onde vêm as colunas";
 
+    /// <summary>RN-GRADE-011: o filtro embrulhou um comando que a leitura aceitaria, mas cujas cláusulas a junção do filtro não conhece.</summary>
+    public const string FilteredOutside = "o filtro foi aplicado por fora do comando";
+
     /// <summary>As palavras que encerram o `FROM` no nível de fora. O `WITH` do fim é o nível de isolamento do Db2 (`WITH UR`).</summary>
     private static readonly HashSet<string> FromEnd = ["WHERE", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET", "FETCH", "FOR", "UNION", "INTERSECT", "EXCEPT", "MINUS", "WINDOW", "WITH", "INTO"];
 
@@ -375,9 +378,10 @@ internal static class EditableSql
     /// <summary>
     /// O texto fora de comentário, pedaço por pedaço: a palavra (com `$` no meio, como os três bancos aceitam num nome), o identificador
     /// entre aspas (com o conteúdo, a aspa dobrada desfeita), o texto (em qualquer forma: `'...'`, `E'...'`, `X'...'`, `U&amp;'...'` e o
-    /// `$marca$` do PostgreSQL) e cada outro caractere que não é espaço.
+    /// `$marca$` do PostgreSQL) e cada outro caractere que não é espaço, com a posição de cada um no texto. É também o leitor do filtro
+    /// do resultado (<see cref="SqlFilter"/>), que junta o filtro ao comando pelas posições.
     /// </summary>
-    private static IEnumerable<Token> Lex(string sql, ESqlDialect dialect)
+    internal static IEnumerable<Token> Lex(string sql, ESqlDialect dialect)
     {
         var position = 0;
 
@@ -400,19 +404,19 @@ internal static class EditableSql
             if (character == '\'')
             {
                 position = SqlText.SkipQuoted(sql, position, backslashEscapes: false);
-                yield return new Token(ETokenKind.Text, sql[start..position], string.Empty);
+                yield return new Token(ETokenKind.Text, sql[start..position], string.Empty, start, position);
             }
             else if (character == '"')
             {
                 position = SqlText.SkipQuoted(sql, position, backslashEscapes: false);
                 var closed = position - 1 > start && sql[position - 1] == '"';
                 var content = sql[(start + 1)..(closed ? position - 1 : position)];
-                yield return new Token(ETokenKind.Identifier, content.Replace("\"\"", "\"", StringComparison.Ordinal), string.Empty);
+                yield return new Token(ETokenKind.Identifier, content.Replace("\"\"", "\"", StringComparison.Ordinal), string.Empty, start, position);
             }
             else if (dialect == ESqlDialect.PostgreSql && character == '$' && SqlText.SkipDollarQuoted(sql, position) is var afterDollar && afterDollar > position + 1)
             {
                 position = afterDollar;
-                yield return new Token(ETokenKind.Text, sql[start..position], string.Empty);
+                yield return new Token(ETokenKind.Text, sql[start..position], string.Empty, start, position);
             }
             else if (SqlText.IsWordCharacter(character))
             {
@@ -425,25 +429,25 @@ internal static class EditableSql
                 if (word.Length == 1 && position < sql.Length && sql[position] == '\'')
                 {
                     position = SqlText.SkipQuoted(sql, position, backslashEscapes: dialect == ESqlDialect.PostgreSql && word is "E" or "e");
-                    yield return new Token(ETokenKind.Text, sql[start..position], string.Empty);
+                    yield return new Token(ETokenKind.Text, sql[start..position], string.Empty, start, position);
                 }
                 else if (word is "U" or "u" && position + 1 < sql.Length && sql[position] == '&' && sql[position + 1] == '\'')
                 {
                     position = SqlText.SkipQuoted(sql, position + 1, backslashEscapes: false);
-                    yield return new Token(ETokenKind.Text, sql[start..position], string.Empty);
+                    yield return new Token(ETokenKind.Text, sql[start..position], string.Empty, start, position);
                 }
                 else
-                    yield return new Token(ETokenKind.Word, word, Ascii.IsValid(word) ? word.ToUpperInvariant() : word);
+                    yield return new Token(ETokenKind.Word, word, Ascii.IsValid(word) ? word.ToUpperInvariant() : word, start, position);
             }
             else
             {
                 position++;
-                yield return new Token(ETokenKind.Symbol, character.ToString(), character.ToString());
+                yield return new Token(ETokenKind.Symbol, character.ToString(), character.ToString(), start, position);
             }
         }
     }
 
-    private enum ETokenKind
+    internal enum ETokenKind
     {
         Word,
         Identifier,
@@ -452,7 +456,9 @@ internal static class EditableSql
     }
 
     /// <param name="Upper">A palavra em maiúsculas, quando é toda do ASCII: só assim ela pode ser palavra reservada.</param>
-    private readonly record struct Token(ETokenKind Kind, string Text, string Upper)
+    /// <param name="Start">Onde o pedaço começa no texto lido.</param>
+    /// <param name="End">Onde ele acaba (a posição depois do último caractere).</param>
+    internal readonly record struct Token(ETokenKind Kind, string Text, string Upper, int Start, int End)
     {
         public bool Is(string symbol)
             => Kind == ETokenKind.Symbol && Text == symbol;

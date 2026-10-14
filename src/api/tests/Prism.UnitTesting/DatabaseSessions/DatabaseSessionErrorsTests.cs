@@ -269,6 +269,18 @@ public sealed class DatabaseSessionErrorsTests
         Assert.Equal(("CELLS_INVALID", HttpStatusCode.UnprocessableEntity, "A linha 300 não está no resultado."), (error.Type, error.StatusCode, error.Detail));
     }
 
+    /// <summary>RN-GRADE-011: a recusa do filtro pelo registro de sessões, com o motivo no detalhe (pela rota, o validator recusa antes, com o mesmo código).</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK FilterInvalid vira 422 FILTER_INVALID com o motivo")]
+    public void From_FilterInvalid_Is422FilterInvalid()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar."));
+
+        //Assert
+        Assert.Equal(("FILTER_INVALID", HttpStatusCode.UnprocessableEntity, "O filtro tem aspas sem fechar."), (error.Type, error.StatusCode, error.Detail));
+    }
+
     [Trait("DatabaseSessionErrors", "From")]
     [Fact(DisplayName = "OK ResultNotEditable vira 422 RESULT_NOT_EDITABLE com a extensão reason")]
     public void From_ResultNotEditable_Is422_WithTheReason()
