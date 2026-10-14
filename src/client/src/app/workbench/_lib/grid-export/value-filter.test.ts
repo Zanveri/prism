@@ -30,9 +30,11 @@ describe("valueFilterOptions: as opções da RN-GRADE-005 para uma célula", () 
     });
   });
 
-  it("os rótulos dizem a operação e mostram o valor (texto entre aspas, número como está)", () => {
-    expect(optionsOf("Extrusão A").map((option) => option.label)).toEqual(["Igual a “Extrusão A”", "Diferente de “Extrusão A”", "Maior que “Extrusão A”", "Menor que “Extrusão A”", "Contém “Extrusão A”", "É nulo", "Não é nulo"]);
-    expect(optionsOf("42", column("qtd", "number")).map((option) => option.label).slice(0, 4)).toEqual(["Igual a 42", "Diferente de 42", "Maior que 42", "Menor que 42"]);
+  it("os rótulos são a condição como ela entra no campo (RN-GRADE-010 do Filtrar): o nome entre aspas e o literal do banco", () => {
+    expect(optionsOf("Extrusão A").map((option) => option.label)).toEqual([`"nome" = 'Extrusão A'`, `"nome" <> 'Extrusão A'`, `"nome" > 'Extrusão A'`, `"nome" < 'Extrusão A'`, `"nome" LIKE '%Extrusão A%'`, `"nome" IS NULL`, `"nome" IS NOT NULL`]);
+    expect(optionsOf("42", column("qtd", "number")).map((option) => option.label).slice(0, 4)).toEqual([`"qtd" = 42`, `"qtd" <> 42`, `"qtd" > 42`, `"qtd" < 42`]);
+    // Fora o `ESCAPE '!'` do `contém`, o rótulo é a condição inteira.
+    for (const option of optionsOf("11.901")) expect(option.condition?.replace(` ESCAPE '!'`, ""), option.id).toBe(option.label);
   });
 
   it("célula numérica: o número vai sem aspas, e `contém` não se aplica", () => {
@@ -59,18 +61,33 @@ describe("valueFilterOptions: as opções da RN-GRADE-005 para uma célula", () 
     expect(conditions.eq).toBe(`"nome" = ''`);
   });
 
-  it("célula nula: só as de nulo, e os rótulos não mostram valor", () => {
+  it("célula nula: só as de nulo; as outras mostram o operador com o lugar do valor, e dizem por quê", () => {
     const options = optionsOf(null);
 
     expect(conditionsOf(options)).toEqual({ eq: null, ne: null, gt: null, lt: null, like: null, isNull: `"nome" IS NULL`, isNotNull: `"nome" IS NOT NULL` });
-    expect(options.map((option) => option.label)).toEqual(["Igual a", "Diferente de", "Maior que", "Menor que", "Contém", "É nulo", "Não é nulo"]);
+    expect(options.map((option) => option.label)).toEqual([`"nome" = (valor da célula)`, `"nome" <> (valor da célula)`, `"nome" > (valor da célula)`, `"nome" < (valor da célula)`, `"nome" LIKE (valor da célula)`, `"nome" IS NULL`, `"nome" IS NOT NULL`]);
+    expect(options.map((option) => option.reason)).toEqual(["a célula é nula", "a célula é nula", "a célula é nula", "a célula é nula", "a célula é nula", null, null]);
+  });
+
+  it("cada opção que não se aplica diz o motivo, e a que se aplica não tem motivo", () => {
+    const reasonOf = (value: string | null, col: QueryColumn = column("nome"), truncated = false, engine: Engine = 1) => Object.fromEntries(valueFilterOptions(engine, col, value, truncated).map((option) => [option.id, option.reason]));
+
+    expect(reasonOf("x")).toEqual({ eq: null, ne: null, gt: null, lt: null, like: null, isNull: null, isNotNull: null });
+    expect(reasonOf("x", column("nome"), true).eq).toBe("o valor chegou cortado, e a tela não o tem inteiro");
+    expect(reasonOf("0x00", column("foto", "binary")).eq).toBe("a coluna é binária");
+    expect(reasonOf(hostile.lf).eq).toBe("o valor tem quebra de linha, tabulação ou outro caractere de controle");
+    expect(reasonOf("sim", column("ativo", "boolean"), false, 3).eq).toBe("o Informix não aceita este valor como literal");
+    expect(reasonOf("true", column("ativo", "boolean"), false, 3)).toMatchObject({ eq: null, gt: "o Informix não ordena valores lógicos", lt: "o Informix não ordena valores lógicos" });
+    expect(reasonOf("").like).toBe("o valor é vazio, e “contém” casaria tudo");
+    expect(reasonOf("1", column("n", "number")).like).toBe("só vale em coluna de texto");
+    for (const options of [optionsOf(null), optionsOf("x", column("t"), true), optionsOf(hostile.tab)]) for (const option of options) expect(option.condition === null, option.id).toBe(option.reason !== null);
   });
 
   it("célula cortada (RN-SQL-011): só as de nulo, porque o valor que a tela tem não é o que o banco guarda", () => {
     const options = optionsOf("começo do texto que foi cortado…", column("nome"), true);
 
     expect(conditionsOf(options)).toEqual({ eq: null, ne: null, gt: null, lt: null, like: null, isNull: `"nome" IS NULL`, isNotNull: `"nome" IS NOT NULL` });
-    expect(options[0].label).toBe("Igual a");
+    expect(options[0].label).toBe(`"nome" = (valor da célula)`);
   });
 
   it("coluna binária: só as de nulo", () => {
@@ -105,35 +122,31 @@ describe("valueFilterOptions: as opções da RN-GRADE-005 para uma célula", () 
   });
 });
 
-describe("valueFilterOptions: o rótulo encurta o valor sem quebrar o menu", () => {
-  const labelOf = (value: string, kind: QueryColumn["kind"] = "text") => optionsOf(value, column("c", kind))[0].label;
+describe("valueFilterOptions: o rótulo encurta o nome e o literal sem quebrar o menu", () => {
+  const labelOf = (value: string, kind: QueryColumn["kind"] = "text", name = "c") => optionsOf(value, column(name, kind))[0].label;
 
-  it("um valor comprido é cortado com reticências (28 caracteres no total), por caractere e não por unidade UTF-16", () => {
-    expect(labelOf("x".repeat(100))).toBe(`Igual a “${"x".repeat(27)}…”`);
-    expect(labelOf("x".repeat(28))).toBe(`Igual a “${"x".repeat(28)}”`);
+  it("um literal comprido é cortado com reticências (30 caracteres), por caractere e não por unidade UTF-16; a condição vai inteira", () => {
+    expect(labelOf("x".repeat(100))).toBe(`"c" = '${"x".repeat(28)}…`);
+    expect(labelOf("x".repeat(28))).toBe(`"c" = '${"x".repeat(28)}'`);
+    expect(optionsOf("x".repeat(100), column("c"))[0].condition).toBe(`"c" = '${"x".repeat(100)}'`);
     // Cada emoji ocupa dois `char`: cortar no meio de um daria um par solto.
     const label = labelOf("🙂".repeat(40));
-    expect(label).toBe(`Igual a “${"🙂".repeat(27)}…”`);
+    expect(label).toBe(`"c" = '${"🙂".repeat(28)}…`);
     expect([...label].every((char) => !/[\ud800-\udfff]/.test(char) || char.length === 2)).toBe(true);
   });
 
-  it("quebra de linha, tabulação e outros controles viram um espaço só, e as pontas são aparadas", () => {
-    expect(labelOf(hostile.lf)).toBe("Igual a “linha1 linha2”");
-    expect(labelOf(hostile.crlf)).toBe("Igual a “linha1 linha2”");
-    expect(labelOf(`  \t a${chars(0, 7, 27)}  b \n`)).toBe("Igual a “a b”");
+  it("o nome comprido também é cortado, e o operador fica à vista", () => {
+    expect(labelOf("1", "number", "n".repeat(60))).toBe(`"${"n".repeat(28)}… = 1`);
   });
 
-  it("as marcas de direção de texto (U+202E) e os caracteres invisíveis não chegam ao rótulo", () => {
-    expect(labelOf(`fatura${chars(0x202e)}vsc.exe`)).toBe("Igual a “fatura vsc.exe”");
-    expect(labelOf(`a${chars(0x200b, 0xfeff, 0x2066)}b`)).toBe("Igual a “a b”");
-  });
-
-  it("o par substituto solto não chega ao rótulo", () => {
-    expect(labelOf(`x${chars(0xd800)}y`)).toBe("Igual a “x y”");
+  it("as marcas de direção de texto (U+202E) e os caracteres invisíveis não chegam ao rótulo; a condição os leva", () => {
+    expect(labelOf(`fatura${chars(0x202e)}vsc.exe`)).toBe(`"c" = 'fatura vsc.exe'`);
+    expect(labelOf(`a${chars(0x200b, 0xfeff, 0x2066)}b`)).toBe(`"c" = 'a b'`);
+    expect(optionsOf(`a${chars(0x200b)}b`, column("c"))[0].condition).toBe(`"c" = 'a${chars(0x200b)}b'`);
   });
 
   it("o número aparece sem aspas", () => {
-    expect(labelOf("12.5", "number")).toBe("Igual a 12.5");
+    expect(labelOf("12.5", "number")).toBe(`"c" = 12.5`);
   });
 });
 
