@@ -2114,3 +2114,27 @@ que valia só nos Registros e nunca chegou à tela.
   - F5 e Ctrl+R nunca recarregam a janela do app.
 - **Fica para depois:** "Localizar e Substituir" na grade, salvar o filtro como padrão da tabela,
   voltar ao filtro padrão e o diálogo "Personalizar filtros…".
+
+### Editar pasta, ambientes reaproveitados e o filtro por ambiente
+
+Pedido do dono em 2026-10-14: "não dá pra editar pasta: queria pôr o ambiente numa pasta que já
+existia e não tem a opção no botão direito"; "depois de criar o ambiente, salve para que ele possa
+ser reutilizado; assim dá pra agrupar tudo e até criar um filtro no navegador que busca só pelo
+ambiente".
+
+- **RN-PASTA-006.** O "Renomear" do menu da pasta passa a se chamar "Editar pasta…" (F2). O diálogo
+  dele se chama "Editar pasta" e tem o nome e a seção Ambiente (RN-PASTA-005).
+- **RN-AMB-001.** Os ambientes do usuário são os que as pastas e as conexões dele já usam: cada nome
+  distinto (sem diferenciar maiúsculas), com a cor da pasta ou conexão alterada por último. Nada é
+  gravado à parte; o ambiente some da lista quando ninguém mais o usa.
+  - A seção Ambiente (da conexão e da pasta) mostra, acima do campo do nome, os ambientes do
+    usuário como etiquetas coloridas. Escolher uma preenche o nome e a cor, que continuam
+    editáveis.
+  - O campo do nome também completa com eles ao digitar.
+- **RN-NAV-010.** O navegador ganha, ao lado do campo de filtro, um seletor de ambiente: "Todos os
+  ambientes" (o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+  - Com um ambiente escolhido, a árvore mostra só as conexões cujo ambiente (próprio ou herdado da
+    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas.
+  - Ele se combina com o campo de filtro de objetos.
+  - A escolha vale enquanto a janela está aberta.
+  - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
