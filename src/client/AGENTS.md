@@ -288,6 +288,38 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   do diálogo chegaria ao formulário de baixo.
 - **Mover pasta** oferece todas as pastas, a própria e as de dentro dela: o ciclo é recusa da API (RN-PASTA-003), e o
   aceite pede que ela apareça como aviso.
+- **A seção Ambiente** (`environment-picker.tsx`, RN-CONN-015, RN-CONN-017 e RN-PASTA-005) é uma só, no formulário da conexão e nos
+  diálogos de nova pasta e de renomear pasta (também pelo F2); mover pasta não a mostra. Os ids vêm do `idPrefix` (`cx` e `folder`), e a
+  explicação de baixo, do `hint` (`connectionHint`, `folderHint`). **A cor é uma fileira de botões**: as seis do canvas (clicar na escolhida
+  a tira) e, por último, "Outra cor", com o `EyedropperIcon`, a ÚNICA que abre o seletor do sistema, pelo `showPicker` do
+  `<input type="color">` (sem ele, o `click`). O defeito de antes era um `<label>` em volta do input: clicar em qualquer ponto da linha
+  "Outra cor #RRGGBB" abria o seletor. Agora o input fica ao lado da bolinha, fora de qualquer rótulo, invisível (`opacity-0`, 1 px,
+  `pointer-events-none`, e não `display:none`, para o seletor abrir ancorado nele, junto da bolinha), fora do Tab (`tabIndex={-1}`) e da
+  leitura (`aria-hidden`); Enter e Espaço abrem porque a bolinha é um `<button>` de verdade. Com uma cor que não é das seis (a comparação
+  ignora a caixa), a bolinha fica com ela, a marca `ring-2` das outras e o conta-gotas no contraste do `environmentTextColor`, e o
+  `#RRGGBB` vai no `aria-label` e no `title` (`otherColorChosen`); a cor do seletor volta em maiúsculas. A linha "Outra cor" de baixo e o
+  "Sem cor" saíram. O teste (`environment-picker.test.ts`) roda com os ganchos simulados: põe um seletor de mentira na referência do input,
+  clica em tudo o que tem `onClick` fora da bolinha (nada abre) e nela (abre), e confere que nenhum `<label>` o contém nem aponta para ele.
+  **Conferido sob Xvfb**: o seletor do Chromium é uma janela do X SEM nome, então quem conta janelas usa `xdotool search --onlyvisible
+  --name ''` (com `--name '.'` ele não aparece e a contagem não prova nada); oito cliques fora da bolinha (título, legenda, entre as
+  bolinhas, depois da última, o fim da fileira, a dica, a borda da seção, o canto onde o input está) deixaram 2 janelas, e o clique, o Enter e o Espaço na
+  bolinha, 3; Escape o fecha, e a cor digitada nos campos R, G e B dele chegou à bolinha.
+- **O ambiente herdado** (RN-PASTA-005). A pasta tem `environmentName` e `environmentColor` (o `folderSchema` os exige, nulos quando não
+  há), e quem diz o que cada uma mostra é o `environmentLookup(folders)` (`_lib/environment.ts`, puro e testado): `connection(c)` dá o
+  ambiente próprio, que sempre ganha, ou o da pasta mais próxima acima que tenha um, com a pasta em `folder` (o `ShownEnvironment`);
+  `folder(id)` dá só o da pasta, para a etiqueta dela na árvore (a subpasta sem ambiente não mostra o de cima); `inheritedIn(folderID)` dá o
+  que uma conexão sem ambiente herdaria ali, para o formulário dizer "Herda <ambiente> da pasta <pasta>." (a frase acompanha o nome
+  digitado e a pasta escolhida no campo, antes de gravar). **Só o nome faz um ambiente**: a cor sem nome não conta, como na
+  `EnvironmentPill`. A pasta que sumiu e as pastas em ciclo não passam nada adiante. As respostas são guardadas (a mesma conexão e a mesma
+  pasta dão o mesmo objeto), para o `TableTabPanel` memorizado não redesenhar; quem monta o lookup é um `useMemo` sobre `folders.data`, e
+  mover a conexão ou a pasta é outra lista, então a resposta muda sozinha depois do `invalidateLists`. A etiqueta é a
+  `ShownEnvironmentPill` (com a dica "Herdado da pasta <pasta>" quando é herdada), na árvore (`NavigatorRow` recebe `environment`), na
+  faixa de abas (`environmentOf` do `TabStrip`), no cabeçalho da aba da tabela (`environment` do `TableTabPanel`), na barra de status e no
+  cabeçalho do diálogo da conexão. A conexão continua com o ambiente PRÓPRIO no estado e no `PATCH` (mover e renomear conexão mandam o
+  dela): o herdado nunca é gravado nela. Não há mais "lista" de conexões (RN-NAV-001): a RN-CONN-015 vale na árvore, na aba e na barra.
+- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente inclusive: o corpo de cada modo do diálogo sai do `folderInputOf` (o que o
+  modo não perguntou vai como a pasta já tem, senão mover tiraria o ambiente dela). As recusas do ambiente da pasta são 422
+  `FOLDER_NAME_INVALID` no campo (`environmentName`, `environmentColor`), que o diálogo já mostra no lugar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
 - **`?connection=<id>`** (o "Editar conexão" do navegador de bancos): a página abre aquela conexão no formulário ao chegar,
