@@ -45,6 +45,9 @@ export const recordsCopy = {
     manyRows: (count: number) => `O comando alteraria ${count.toLocaleString("pt-BR")} linhas, e não uma só.`,
     manyRowsWritten: (count: number) => `O comando alterou ${count.toLocaleString("pt-BR")} linhas, e já está gravado: não há como desfazê-lo.`,
     readOnly: (reason: string) => `Somente leitura: ${reason}.`,
+    // RN-EDIT-002, na aba de consulta: a dica do cabeçalho da coluna que se edita num resultado de junção, e a marca da que não se edita (como no canvas).
+    editsColumn: (table: string, column: string) => `Altera ${column} de ${table}.`,
+    readOnlyMark: "somente leitura",
     loadingTarget: "Conferindo o que se edita nesta tabela…",
     checkFailed: "Não foi possível saber o que se edita nesta tabela.",
     // A mesma conferência, no resultado de um comando da aba de consulta.
@@ -97,6 +100,9 @@ export const recordsCopy = {
       keyTruncated: "a chave desta linha chegou cortada",
       deleted: "a linha está marcada para exclusão",
       noRowOperations: "este resultado não aceita linha nova nem exclusão",
+      // RN-EDIT-002: num resultado de junção só se alteram células, e a tabela que não tem linha ali (junção externa) não se edita.
+      joinRowOperations: "num resultado de junção só se alteram células",
+      noRowHere: (table: string) => `${table} não tem linha aqui (junção externa)`,
       busy: "há um comando em andamento na aba",
       // RN-EDIT-009: a linha nova salva na aba de consulta, que não executa de novo.
       generated: "o valor foi gerado pelo banco; execute de novo para vê-lo",
