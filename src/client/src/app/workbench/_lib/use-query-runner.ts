@@ -93,6 +93,8 @@ export type RowsState = {
   readOnly?: string | null;
   /** RN-EDIT-009: as colunas de cada linha nova salva na aba de consulta que o banco preencheu, e cujo valor a tela não sabe. */
   generated?: ReadonlyMap<number, ReadonlySet<number>>;
+  /** RN-SQL-017: depois de um Salvar da aba de consulta, a linha do resultado na API de cada linha da grade (`SavedResult.sourceRows`). */
+  sourceRows?: readonly (number | null)[];
 };
 
 export type AffectedState = { status: "affected"; rowsAffected: number; elapsedMs: number };
@@ -189,7 +191,7 @@ export type QueryRunner = {
    * consulta). Salvar é um comando na sessão: o cursor que estava aberto fechou, e "carregar mais" dá lugar a "executar de novo". Com outro
    * resultado na tela, ou um comando em andamento, nada muda.
    */
-  keepSaved: (resultId: string, saved: { rows: QueryRow[]; truncated: ReadonlyMap<number, ReadonlySet<number>>; generated: ReadonlyMap<number, ReadonlySet<number>> }) => void;
+  keepSaved: (resultId: string, saved: { rows: QueryRow[]; truncated: ReadonlyMap<number, ReadonlySet<number>>; generated: ReadonlyMap<number, ReadonlySet<number>>; sourceRows?: readonly (number | null)[] }) => void;
   /**
    * Solta a aba da sessão dela (fechar a aba, desconectar, conexão excluída) e devolve o que há
    * para encerrar na API. O que estava a caminho chega e não muda mais nada.
@@ -665,9 +667,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       else if (state.status === "running" && state.previous?.status === "error" && state.previous.errorAt !== null) set({ ...state, previous: { ...state.previous, errorAt: null } });
     },
     sessionOf: () => sessionId,
-    keepSaved: (savedIn, { rows, truncated, generated }) => {
+    keepSaved: (savedIn, { rows, truncated, generated, sourceRows }) => {
       if (state.status !== "rows" || state.resultId !== savedIn || isBusy()) return;
-      set({ ...state, rows, truncated, generated, cursorClosed: state.cursorClosed || state.hasMore });
+      set({ ...state, rows, truncated, generated, ...(sourceRows === undefined ? {} : { sourceRows }), cursorClosed: state.cursorClosed || state.hasMore });
     },
     release,
     retire,

@@ -205,7 +205,8 @@ export const workbenchCopy = {
       // sistema, que a pessoa ainda vai confirmar (ou cancelar), então nada aqui afirma que o arquivo foi gravado.
       exported: (count: number) => `Exportando ${formatCount(count, "linha", "linhas")}…`,
       exportedPartial: (count: number) => `Exportando ${formatCount(count, "linha", "linhas")}… As linhas que ainda não foram carregadas não entram no arquivo.`,
-      exportedTruncated: "Valores que chegaram cortados saem cortados no arquivo.",
+      // RN-SQL-017: o valor cortado na grade sai inteiro; este é o que a API não tinha inteiro (passou do teto, ou o resultado mudou).
+      exportedCut: (count: number) => (count === 1 ? "1 valor não pôde vir inteiro e sai cortado no arquivo." : `${formatCount(count, "valor", "valores")} não puderam vir inteiros e saem cortados no arquivo.`),
     },
     // RN-TABELA-003: as três seções da Estrutura. O canvas também mostra "Padrão", "Ao excluir" e "Método", que a API não devolve.
     structure: {

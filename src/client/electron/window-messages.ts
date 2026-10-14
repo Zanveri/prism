@@ -43,6 +43,8 @@ const resultSchema = z.discriminatedUnion("status", [
     readOnly: name.nullable().optional(),
     /** RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou, como `truncated`. */
     generated: z.array(z.tuple([count, z.array(count)])).optional(),
+    /** RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas; nula na linha nova. */
+    sourceRows: z.array(count.nullable()).optional(),
   }),
   z.object({ status: z.literal("affected"), rowsAffected: z.number().int(), elapsedMs: z.number().min(0) }),
   z.object({ status: z.literal("cancelled") }),

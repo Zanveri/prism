@@ -1,3 +1,5 @@
+import { formatCount } from "@/lib/utils/format";
+
 /**
  * Os textos novos da vista Registros e da grade do resultado (seção 20 da especificação). Os de antes seguem em `workbench.copy.ts`; os que estes
  * trocam (`tableTab.records.filterLabel`, `where`, `placeholder` e `severalStatements`) ficaram lá, sem uso, até o fechamento da leva.
@@ -84,7 +86,11 @@ export const recordsCopy = {
       pasteFailed: "Não foi possível ler a área de transferência.",
       copied: "Copiado.",
       notCopied: "Não foi possível copiar.",
+      // RN-SQL-017: a célula cortada é copiada inteira; esta é a que a API não tinha inteira (passou do teto, ou o resultado mudou).
+      copiedCut: (count: number) => (count === 1 ? "Copiado, mas 1 valor não pôde vir inteiro e foi cortado." : `Copiado, mas ${formatCount(count, "valor", "valores")} não puderam vir inteiros e foram cortados.`),
     },
+    // RN-SQL-017: enquanto copiar ou exportar busca na API o valor completo das células cortadas.
+    fullValues: { fetching: "Buscando os valores completos…", cancel: "Cancelar" },
     // Por que uma célula ou uma linha não se edita (além dos motivos que a API manda).
     reasons: {
       truncated: "o valor chegou cortado",

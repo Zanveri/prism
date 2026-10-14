@@ -139,6 +139,11 @@ export type SavedResult = {
   truncated: CellMarks;
   /** As colunas de cada linha nova salva que a pessoa não preencheu: o banco pôs o padrão da tabela (ou gerou o valor), e a tela não o sabe. */
   generated: CellMarks;
+  /**
+   * RN-SQL-017: a linha do resultado na API de cada linha da grade (nula na linha nova), para copiar e exportar pedirem o valor completo da célula
+   * cortada pela linha certa depois que as excluídas saíram. Sem ele, a linha da grade é a do resultado.
+   */
+  sourceRows?: readonly (number | null)[];
 };
 
 /** As marcas das linhas que ficam, pela posição nova delas (as excluídas saem e as de depois sobem). */
@@ -156,16 +161,18 @@ function shifted(marks: CellMarks | undefined, positionOf: (row: number) => numb
  * salvos (a que não mudou é o mesmo objeto); as excluídas saem; as novas entram no fim com o que foi digitado, e as colunas que ninguém preencheu
  * ficam marcadas como preenchidas pelo banco ("gerado pelo banco — execute de novo para ver"). As marcas de corte acompanham a linha.
  */
-export function savedResultOf(result: { rows: readonly QueryRow[]; truncated: CellMarks; generated?: CellMarks }, edits: PendingEdits, columns: number): SavedResult {
+export function savedResultOf(result: { rows: readonly QueryRow[]; truncated: CellMarks; generated?: CellMarks; sourceRows?: readonly (number | null)[] }, edits: PendingEdits, columns: number): SavedResult {
   const { rows, truncated } = result;
-  if (pendingCount(edits) === 0) return { rows: rows as QueryRow[], truncated, generated: result.generated ?? new Map() };
+  if (pendingCount(edits) === 0) return { rows: rows as QueryRow[], truncated, generated: result.generated ?? new Map(), ...(result.sourceRows === undefined ? {} : { sourceRows: result.sourceRows }) };
 
   const deleted = new Set(edits.deleted);
   const positions: (number | null)[] = [];
   const kept: QueryRow[] = [];
+  const sourceRows: (number | null)[] = [];
   rows.forEach((row, index) => {
     if (deleted.has(index)) return void positions.push(null);
     positions.push(kept.length);
+    sourceRows.push(result.sourceRows === undefined ? index : (result.sourceRows[index] ?? null));
     const cells = edits.cells.filter((cell) => cell.row === index);
     if (cells.length === 0) return void kept.push(row);
     const next = [...row];
@@ -179,9 +186,12 @@ export function savedResultOf(result: { rows: readonly QueryRow[]; truncated: Ce
     const filled = Array.from({ length: columns }, (_, column) => column in row.values);
     generated.set(kept.length, new Set(filled.flatMap((done, column) => (done ? [] : [column]))));
     kept.push(filled.map((done, column) => (done ? (row.values[column] ?? null) : null)));
+    sourceRows.push(null);
   }
 
-  return { rows: kept, truncated: truncated.size === 0 ? truncated : shifted(truncated, positionOf), generated: new Map([...generated].filter(([, cells]) => cells.size > 0)) };
+  // A linha de cada uma no resultado só muda quando alguma saiu ou entrou; sem isso, é a mesma posição, e o campo não vai.
+  const moved = edits.deleted.length > 0 || edits.added.length > 0 || result.sourceRows !== undefined;
+  return { rows: kept, truncated: truncated.size === 0 ? truncated : shifted(truncated, positionOf), generated: new Map([...generated].filter(([, cells]) => cells.size > 0)), ...(moved ? { sourceRows } : {}) };
 }
 
 /** O que a faixa mostra depois de um Salvar recusado: a frase de cima, a mensagem (a do banco, como veio), a alteração e a coluna que falharam. */

@@ -167,6 +167,15 @@ describe("a grade depois de um Salvar que gravou tudo, sem executar de novo (RN-
     expect(savedResultOf(result, noEdits, 3)).toEqual({ rows, truncated: result.truncated, generated: new Map() });
   });
 
+  it("cada linha que fica sabe a linha de onde veio no resultado da API, e a nova não tem; um segundo Salvar continua a conta (RN-SQL-017)", () => {
+    const added = addRow(deleteRow(noEdits, 0));
+    const first = savedResultOf(result, added.edits, 3);
+    const second = savedResultOf({ ...first, rows: first.rows }, deleteRow(noEdits, 0), 3);
+
+    expect(first.sourceRows).toEqual([1, 2, null]);
+    expect(second.sourceRows).toEqual([2, null]);
+  });
+
   it("as marcas de corte e as do banco acompanham a linha quando uma de antes dela sai", () => {
     const marked = { rows, truncated: new Map([[2, new Set([2])]]), generated: new Map([[1, new Set([2])]]) };
 

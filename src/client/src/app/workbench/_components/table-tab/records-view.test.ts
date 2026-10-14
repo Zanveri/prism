@@ -25,6 +25,7 @@ const rt = await vi.hoisted(async () => {
     queryClient: {},
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     saveText: vi.fn(),
+    cells: { resultCells: vi.fn() },
   };
 });
 
@@ -40,6 +41,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: true } } }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("../../_lib/save-file", () => ({ saveText: rt.saveText }));
+vi.mock("../../_lib/full-values.service", () => rt.cells);
 
 import { elementsOf } from "@/lib/testing/react-tree";
 
@@ -109,6 +111,7 @@ function fakeRunner(initial: RunnerState) {
     cancel: vi.fn(),
     loadMore: vi.fn(),
     countTotal: vi.fn(),
+    sessionOf: () => "s1",
   };
   return runner;
 }
@@ -672,6 +675,32 @@ describe("RecordsView: a memória da aba, o CSV e o que a área de resultado rec
     runner.state = { status: "cancelled" };
     records.onExport();
     expect(rt.saveText).toHaveBeenCalledTimes(1);
+  });
+
+  it("'Exportar CSV' com uma célula cortada pede o valor completo pela linha do resultado e grava o valor inteiro (RN-SQL-017)", async () => {
+    const full = "9".repeat(50_000);
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
+    const runner = fakeRunner(rowsState({ rows: [["10", full.slice(0, 10_000)]], truncated: new Map([[0, new Set([1])]]), resultId: "r1" }));
+    const { records } = mount(runner).show();
+
+    records.onExport();
+    await new Promise((done) => setTimeout(done, 0));
+
+    expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 1 }], expect.any(AbortSignal));
+    expect(rt.saveText.mock.calls).toEqual([["loja.pedidos.csv", `${csvBom}id;cliente_id\r\n10;${full}\r\n`, "text/csv;charset=utf-8"]]);
+    expect(rt.toast.success.mock.calls).toEqual([[workbenchCopy.tableTab.records.exported(1)]]);
+  });
+
+  it("'Exportar CSV' sem o valor completo grava o cortado e avisa quantos não vieram inteiros", async () => {
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [null] });
+    const runner = fakeRunner(rowsState({ rows: [["10", "4".repeat(10_000)]], truncated: new Map([[0, new Set([1])]]), resultId: "r1" }));
+    const { records } = mount(runner).show();
+
+    records.onExport();
+    await new Promise((done) => setTimeout(done, 0));
+
+    expect(rt.saveText.mock.calls[0][1]).toBe(`${csvBom}id;cliente_id\r\n10;${"4".repeat(10_000)}\r\n`);
+    expect(rt.toast.warning.mock.calls).toEqual([[`${workbenchCopy.tableTab.records.exported(1)} ${workbenchCopy.tableTab.records.exportedCut(1)}`]]);
   });
 
   it("a área de resultado recebe o estado do executor, a sessão da aba, o nome da tabela e as preferências da grade, e os botões dela falam com o executor", () => {

@@ -19,6 +19,7 @@ const rt = await vi.hoisted(async () => {
     queryClient: { getQueryData: () => undefined },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
+    cells: { resultCells: vi.fn() },
   };
 });
 
@@ -28,6 +29,7 @@ vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
 vi.mock("../_lib/record-edits.service", () => rt.service);
+vi.mock("../_lib/full-values.service", () => rt.cells);
 // O editor de SQL é CodeMirror, que precisa da página; aqui basta o que a aba entrega a ele.
 vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
   return null;
@@ -169,6 +171,86 @@ describe("QueryTabPanel: a grade do resultado de um comando se edita como a dos 
 
     expect(unsavedEdits.countOf("q1")).toBe(1);
     expect(unsavedEdits.saveOf("q1")).not.toBeNull();
+  });
+});
+
+describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL-017)", () => {
+  const full = `{"json":"${"x".repeat(50_000)}"}`;
+  const cut = () => rowsState({ rows: [["10", full.slice(0, 10_000)]], truncated: new Map([[0, new Set([1])]]) });
+  let clipboard: { writeText: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    clipboard = { writeText: vi.fn(async () => {}) };
+    vi.stubGlobal("navigator", { clipboard });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("Ctrl+C na célula cortada pede o valor completo pela linha do resultado e copia o valor inteiro", async () => {
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
+    const view = mount(fakeRunner(cut()));
+
+    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    await settle();
+
+    expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 1 }], expect.any(AbortSignal));
+    expect(clipboard.writeText.mock.calls).toEqual([[full]]);
+    expect(rt.toast.success.mock.calls).toEqual([[copy.menu.copied]]);
+  });
+
+  it("'Copiar valor' do menu da célula também leva o valor completo", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
+    const view = mount(fakeRunner(cut()));
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    view.show().menu!.groups.flat().find((item) => item.label === copy.menu.copyValue)!.onSelect();
+    await settle();
+
+    expect(clipboard.writeText.mock.calls).toEqual([[full]]);
+  });
+
+  it("sem célula cortada, nada é pedido: copia o que a grade tem", async () => {
+    const view = mount(fakeRunner(cut()));
+
+    view.show().area.editing!.onCopy({ row: 0, column: 0 });
+    await settle();
+
+    expect(rt.cells.resultCells).not.toHaveBeenCalled();
+    expect(clipboard.writeText.mock.calls).toEqual([["10"]]);
+  });
+
+  it("sem o valor completo (o resultado mudou), copia o cortado e avisa quantos não vieram inteiros", async () => {
+    rt.cells.resultCells.mockResolvedValue({ ok: false, error: { status: 404, code: "RESULT_NOT_FOUND", title: "Resultado não localizado.", detail: null, errors: null, extensions: {} } });
+    const view = mount(fakeRunner(cut()));
+
+    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    await settle();
+
+    expect(clipboard.writeText.mock.calls).toEqual([[full.slice(0, 10_000)]]);
+    expect(rt.toast.warning.mock.calls).toEqual([[copy.menu.copiedCut(1)]]);
+  });
+
+  it("enquanto busca, a faixa mostra que está buscando; cancelar não copia nada, e a grade segue livre", async () => {
+    let answer: (value: unknown) => void = () => {};
+    rt.cells.resultCells.mockImplementation((_session: string, _result: string, _cells: unknown, signal: AbortSignal) => new Promise((done) => {
+      answer = done;
+      signal.addEventListener("abort", () => done({ ok: false, error: { status: 0, code: "NETWORK_ERROR", title: "Sem resposta da API.", detail: null, errors: null, extensions: {} } }));
+    }));
+    const view = mount(fakeRunner(cut()));
+
+    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    const busy = view.show();
+    busy.banner!.props.onCancelFetch();
+    await settle();
+    answer({ ok: true, data: [full] });
+    await settle();
+
+    expect(busy.banner!.props.fetching).toBe(true);
+    expect(busy.area.editing).toBeDefined();
+    expect(view.show().banner!.props.fetching).toBe(false);
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+    expect(rt.toast.error).not.toHaveBeenCalled();
   });
 });
 

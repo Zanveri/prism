@@ -200,20 +200,22 @@ describe("csvFileName: o nome que o diálogo de salvar propõe", () => {
 
 describe("exportNotice: o aviso de quando a exportação começa (RN-TABELA-006)", () => {
   it("diz o que se sabe, que são N linhas indo para o arquivo, e não que foram gravadas: a pessoa ainda vai confirmar o diálogo de salvar", () => {
-    expect(exportNotice({ count: 650, hasMore: false, hasTruncated: false })).toEqual({ tone: "success", text: "Exportando 650 linhas…" });
-    expect(exportNotice({ count: 1, hasMore: false, hasTruncated: false }).text).toBe("Exportando 1 linha…");
-    expect(exportNotice({ count: 650, hasMore: false, hasTruncated: false }).text).not.toMatch(/exportadas?\b/);
+    expect(exportNotice({ count: 650, hasMore: false, cut: 0 })).toEqual({ tone: "success", text: "Exportando 650 linhas…" });
+    expect(exportNotice({ count: 1, hasMore: false, cut: 0 }).text).toBe("Exportando 1 linha…");
+    expect(exportNotice({ count: 650, hasMore: false, cut: 0 }).text).not.toMatch(/exportadas?\b/);
   });
 
   it("havendo mais a ler, diz que as não carregadas não entram, e é um aviso de atenção", () => {
-    expect(exportNotice({ count: 200, hasMore: true, hasTruncated: false })).toEqual({ tone: "warning", text: "Exportando 200 linhas… As linhas que ainda não foram carregadas não entram no arquivo." });
+    expect(exportNotice({ count: 200, hasMore: true, cut: 0 })).toEqual({ tone: "warning", text: "Exportando 200 linhas… As linhas que ainda não foram carregadas não entram no arquivo." });
   });
 
-  it("valor cortado na leitura sai cortado, e o aviso diz", () => {
-    const notice = exportNotice({ count: 3, hasMore: false, hasTruncated: true });
+  it("o valor que não pôde vir inteiro sai cortado, e o aviso diz quantos (RN-SQL-017)", () => {
+    const one = exportNotice({ count: 3, hasMore: false, cut: 1 });
+    const two = exportNotice({ count: 3, hasMore: false, cut: 2 });
 
-    expect(notice.tone).toBe("warning");
-    expect(notice.text).toBe("Exportando 3 linhas… Valores que chegaram cortados saem cortados no arquivo.");
+    expect(one.tone).toBe("warning");
+    expect(one.text).toBe("Exportando 3 linhas… 1 valor não pôde vir inteiro e sai cortado no arquivo.");
+    expect(two.text).toBe("Exportando 3 linhas… 2 valores não puderam vir inteiros e saem cortados no arquivo.");
   });
 });
 
@@ -244,11 +246,11 @@ describe("csvExportOf: o que 'Exportar CSV' entrega das linhas carregadas (RN-TA
     expect(notice.text).toContain("As linhas que ainda não foram carregadas não entram no arquivo.");
   });
 
-  it("um valor que chegou cortado sai cortado, e o aviso diz isso", () => {
+  it("o valor que continua cortado (a API não tinha o completo) sai cortado, e o aviso diz quantos", () => {
     const { notice } = csvExportOf({ ...result, truncated: new Map([[2, new Set([1])]]) }, "producao", "apontamento");
 
     expect(notice.tone).toBe("warning");
-    expect(notice.text).toContain("Valores que chegaram cortados saem cortados no arquivo.");
+    expect(notice.text).toContain("1 valor não pôde vir inteiro e sai cortado no arquivo.");
   });
 
   it("sem nenhuma linha carregada, só o cabeçalho", () => {

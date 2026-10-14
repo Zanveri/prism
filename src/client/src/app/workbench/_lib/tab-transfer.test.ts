@@ -137,5 +137,14 @@ describe("a aba de consulta que salvou a edição vai com a grade salva (RN-EDIT
 
   it("o resultado sem marca nenhuma volta sem o campo, como ia antes", () => {
     expect(roundTrip(serializeTab(snapshot()))?.state).not.toHaveProperty("generated");
+    expect(roundTrip(serializeTab(snapshot()))?.state).not.toHaveProperty("sourceRows");
+  });
+
+  it("a linha de cada linha no resultado da API vai junto: copiar a célula cortada pede a linha certa na outra janela (RN-SQL-017)", () => {
+    const saved: RowsState = { ...rows, cursorClosed: true, sourceRows: [1, null] };
+
+    const state = roundTrip(serializeTab(snapshot({ state: saved })))?.state as RowsState;
+
+    expect(state.sourceRows).toEqual([1, null]);
   });
 });

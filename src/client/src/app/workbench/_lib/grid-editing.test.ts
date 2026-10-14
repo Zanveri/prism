@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { gridRowOf, gridRowsOf, rowMarksOf, savesEdits } from "./grid-editing";
+import { copiesCell, gridRowOf, gridRowsOf, rowMarksOf, savesEdits } from "./grid-editing";
 import { addRow, deleteRow, editCell, editNewCell, noEdits } from "./record-edits";
 
 const rows = [
@@ -52,5 +52,22 @@ describe("Ctrl+S com o foco na grade (RN-EDIT-004)", () => {
     expect(savesEdits(key(), 0)).toBe(false);
     expect(savesEdits(key({ shiftKey: true }), 1)).toBe(false);
     expect(savesEdits(key({ ctrlKey: false }), 1)).toBe(false);
+  });
+});
+
+describe("Ctrl+C com o foco na grade (RN-GRADE-002, RN-SQL-017)", () => {
+  const key = (over: Partial<{ key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) => ({ key: "c", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, ...over });
+
+  it("Ctrl+C (ou Cmd+C) copia a célula ativa", () => {
+    expect(copiesCell(key())).toBe(true);
+    expect(copiesCell(key({ key: "C" }))).toBe(true);
+    expect(copiesCell(key({ ctrlKey: false, metaKey: true }))).toBe(true);
+  });
+
+  it("com Shift (o copiar avançado) ou Alt, ou sem Ctrl, não é a cópia simples", () => {
+    expect(copiesCell(key({ shiftKey: true }))).toBe(false);
+    expect(copiesCell(key({ altKey: true }))).toBe(false);
+    expect(copiesCell(key({ ctrlKey: false }))).toBe(false);
+    expect(copiesCell(key({ key: "v" }))).toBe(false);
   });
 });

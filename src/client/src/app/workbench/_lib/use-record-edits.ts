@@ -3,11 +3,14 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
+import { unwrap } from "@/lib/api/prism-api";
 
 import { cellAccess, deleteRowAccess, newRowAccess, type EditAccess, type RowContext } from "./cell-editing";
 import { cellMenu, type CellMenuAction, type CellMenuItem } from "./cell-menu";
 import type { DatabaseSession } from "./database-sessions.schema";
 import { databaseSessionKey } from "./database-sessions.service";
+import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullValues, type GridPosition } from "./full-values";
+import { resultCells } from "./full-values.service";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
 import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
@@ -51,11 +54,18 @@ type Params = {
 
 const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notice: null };
 
-/** "Copiar valor": o mesmo jeito de copiar do "Copiar nome" do navegador, a área de transferência do navegador e o aviso. */
-async function copyText(text: string, toast: ReturnType<typeof useToast>) {
+/** RN-SQL-017: as recusas com que as células pedidas ficam cortadas, sem o aviso central: o resultado mudou, a sessão caiu, a célula está fora dele. */
+const cellRefusals = ["RESULT_NOT_FOUND", "DATABASE_SESSION_NOT_FOUND", "CELLS_INVALID"];
+
+/**
+ * "Copiar valor" e Ctrl+C: o mesmo jeito de copiar do "Copiar nome" do navegador, a área de transferência do navegador e o aviso. `cut` são os
+ * valores que não puderam vir inteiros (RN-SQL-017): copiados cortados, e o aviso diz quantos.
+ */
+async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 0) {
   try {
     await navigator.clipboard.writeText(text);
-    toast.success(copy.menu.copied);
+    if (cut > 0) toast.warning(copy.menu.copiedCut(cut));
+    else toast.success(copy.menu.copied);
   } catch {
     toast.warning(copy.menu.notCopied);
   }
@@ -102,6 +112,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const [menu, setMenu] = useState<OpenCellMenu | null>(null);
   const [preview, setPreview] = useState<EditPreview | null>(null);
   const [question, setQuestion] = useState<{ count: number; proceed: () => void } | null>(null);
+  // RN-SQL-017: a busca dos valores completos em andamento, que a faixa mostra e deixa cancelar.
+  const [fetching, setFetching] = useState<AbortController | null>(null);
+  const fetchingRef = useRef<AbortController | null>(null);
 
   const rows = useMemo(() => (shown === null ? [] : gridRowsOf(shown.rows, edits, shown.columns.length)), [shown, edits]);
   const marks = useMemo(() => rowMarksOf(edits, shown?.rows.length ?? 0, banner.failedRow), [edits, shown, banner.failedRow]);
@@ -194,6 +207,47 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     return pending.added[cell.row - read]?.values[cell.column] ?? null;
   }, []);
 
+  /**
+   * RN-SQL-017: o valor completo das células cortadas entre `cells`, pedido à API pela linha do resultado, em lotes de até 10.000. Sem célula
+   * cortada, responde na hora, sem pedido. Enquanto busca, a faixa diz e oferece cancelar (nulo: quem pediu não copia nem grava nada), e a grade
+   * segue livre; uma busca nova cancela a anterior. `from` é o resultado de onde as células são (por padrão, o da tela).
+   */
+  const completeValues = useCallback(
+    async (cells: Iterable<GridPosition>, from: RowsState | null = latest.current.shown): Promise<FullValues | null> => {
+      const cut = from === null ? [] : cutCellsOf(cells, from.truncated, from.sourceRows);
+      if (cut.length === 0) return noFullValues;
+      const sessionId = runner.sessionOf();
+      const id = from?.resultId ?? null;
+      if (sessionId === null || id === null) return { valueOf: () => undefined, missing: cut.length };
+
+      fetchingRef.current?.abort();
+      const controller = new AbortController();
+      fetchingRef.current = controller;
+      setFetching(controller);
+      const fetchCells: FetchCells = async (batch, signal) => {
+        const answer = await resultCells(sessionId, id, batch, signal);
+        if (signal.aborted) return null;
+        if (answer.ok) return answer.data;
+        // O resto (a API fora do ar) vai também ao aviso central, como toda chamada que falha (RN-AVISO-004); as células ficam cortadas do mesmo jeito.
+        if (!cellRefusals.includes(answer.error.code)) await throughMutationCache(queryClient, async () => unwrap(answer)).catch(() => undefined);
+        return null;
+      };
+      const full = await fetchFullValues(cut, fetchCells, controller.signal);
+      if (fetchingRef.current === controller) {
+        fetchingRef.current = null;
+        setFetching(null);
+      }
+      return full;
+    },
+    [runner, queryClient],
+  );
+
+  const cancelFetch = useCallback(() => {
+    fetchingRef.current?.abort();
+    fetchingRef.current = null;
+    setFetching(null);
+  }, []);
+
   /** Grava um valor na célula como pendência; voltar ao valor lido tira a pendência. */
   const applyValue = useCallback((cell: GridCell, value: EditValue) => {
     const { shown: current, edits: pending } = latest.current;
@@ -204,6 +258,17 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       if (row !== undefined) putEdits(editNewCell(pending, row.id, cell.column, value));
     }
   }, [putEdits]);
+
+  /** RN-GRADE-002 e RN-SQL-017: copiar a célula (Ctrl+C, "Copiar valor"), com o valor completo quando ela chegou cortada. */
+  const copyCell = useCallback(
+    async (cell: GridCell) => {
+      const shownValue = valueAt(cell) ?? "";
+      const full = await completeValues([cell]);
+      if (full === null) return;
+      await copyText(full.valueOf(cell.row, cell.column) ?? shownValue, toast, full.missing);
+    },
+    [valueAt, completeValues, toast],
+  );
 
   /** A ação que precisa da célula editável: pergunta o alvo, confere, e só então age; senão a faixa diz por quê. */
   const whenEditable = useCallback(async (cell: GridCell, act: () => void) => {
@@ -365,7 +430,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         setMenu(null);
         switch (action) {
           case "copy":
-            void copyText(valueAt(cell) ?? "", toast);
+            void copyCell(cell);
             break;
           case "paste":
             void navigator.clipboard.readText().then(
@@ -391,7 +456,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         }
       },
     });
-  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, removeRow, toast]);
+  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, removeRow, copyCell, toast]);
 
   /** RN-EDIT-007: com pendências, a ação (filtrar, ordenar, atualizar, executar de novo) espera a resposta da pergunta. */
   const guard = useCallback((proceed: () => void) => {
@@ -429,6 +494,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCommit: commit,
           onCancel: cancel,
           onMenu: (cell, point, keyboard) => void openMenu(cell, point, keyboard),
+          onCopy: (cell) => void copyCell(cell),
           onSave: () => void save(),
           onNewRow: () => void newRow(),
         };
@@ -443,6 +509,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       readOnly: readOnlyReason === null ? (target !== null && !target.tables[0].editable ? copy.readOnly(target.tables[0].reason ?? "") : null) : copy.readOnly(readOnlyReason),
       notice: banner.notice,
       failure: banner.failure,
+      fetching: fetching !== null,
+      onCancelFetch: cancelFetch,
       onViewSql: () => void viewSql(),
       onDiscard: discard,
       onSave: () => void save(),
@@ -475,6 +543,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     discard,
     /** Salvar sem ler de novo: quem pediu vai executar outro comando logo em seguida (o filtro que chegou de outra aba). */
     saveOnly: () => void save(false),
+    /** RN-SQL-017: o valor completo das células cortadas, para exportar (copiar já passa por aqui). */
+    completeValues,
   };
 }
 

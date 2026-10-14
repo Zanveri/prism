@@ -17,6 +17,9 @@ type EditsBannerProps = {
   notice: string | null;
   /** O último Salvar recusado, com a mensagem do banco como veio. */
   failure: SaveFailure | null;
+  /** RN-SQL-017: copiar ou exportar está buscando na API o valor completo das células cortadas; "Cancelar" desiste, e a grade segue livre. */
+  fetching: boolean;
+  onCancelFetch: () => void;
   onViewSql: () => void;
   onDiscard: () => void;
   onSave: () => void;
@@ -28,11 +31,22 @@ type EditsBannerProps = {
  * veio, que fica até o próximo Salvar ou o Descartar); e o motivo de só leitura. É estado da tela, e não aviso (RN-AVISO-005). Sem
  * nada disso, não aparece.
  */
-export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, failure, onViewSql, onDiscard, onSave }: EditsBannerProps) {
-  if (pending === 0 && failure === null && readOnly === null && notice === null) return null;
+export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, failure, fetching, onCancelFetch, onViewSql, onDiscard, onSave }: EditsBannerProps) {
+  if (pending === 0 && failure === null && readOnly === null && notice === null && !fetching) return null;
 
   return (
     <div className="flex flex-none flex-col gap-1.5 border-b border-border bg-raised px-3 py-1.5 text-xs">
+      {fetching ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span aria-hidden className="size-2 flex-none animate-pulse rounded-full bg-accent" />
+          <span role="status" className="text-ink">
+            {copy.fullValues.fetching}
+          </span>
+          <Button type="button" variant="secondary" size="compact" className="ml-auto h-7 px-2.5 text-xs" onClick={onCancelFetch}>
+            {copy.fullValues.cancel}
+          </Button>
+        </div>
+      ) : null}
       {pending === 0 ? null : (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />

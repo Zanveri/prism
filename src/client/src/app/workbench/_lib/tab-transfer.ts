@@ -40,7 +40,7 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return undefined;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
-      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated } = state;
+      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows } = state;
       return {
         ...{ status, id, target, columns, rows, hasMore, totalRows, elapsedMs, pages, cursorClosed, total },
         ...(resultId === undefined ? {} : { resultId }),
@@ -48,6 +48,8 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
         truncated: pairsOf(truncated),
         // RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou.
         ...(generated === undefined || generated.size === 0 ? {} : { generated: pairsOf(generated) }),
+        // RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas.
+        ...(sourceRows === undefined ? {} : { sourceRows: [...sourceRows] }),
       };
     }
     default:
