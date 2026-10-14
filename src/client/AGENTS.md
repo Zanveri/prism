@@ -525,7 +525,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   sessão; a aba aberta a partir dele guarda o banco (`QueryTab.database`): a sessão da aba, a Estrutura, o Diagrama, a passagem do
   filtro e o completar do editor são desse banco. `navKey` escreve o caminho sempre na mesma ordem de campos. "Desconectar" fecha
   as sessões da árvore de todos os bancos (`treeSessionIds`) e as das abas, e remove o prefixo `["database-session", conexão]`;
-  "Atualizar" na conexão traz a lista de novo, e num banco, só o que é dele.
+  "Atualizar" na conexão traz a lista de novo, e num banco, só o que é dele. A aba de consulta troca de banco pela barra do editor: ver
+  "Trocar o banco da aba de consulta", abaixo.
 - **Falha de nível**: linha de erro no nó (a mensagem do banco, `detail`, senão o `title`) com "Tentar de novo", mais o
   aviso central. "Desconectar" recolhe e esquece antes de remover as consultas: com o nó ainda aberto a consulta removida
   seria refeita e abriria outra sessão.
@@ -554,8 +555,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   no Tab. A largura do navegador é ajustável (arrastar a divisória ou setas nela, de 200 a 640 px; 320 px de saída, para os nomes de
   coluna caberem inteiros).
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
-  na barra do editor, "Explicar plano", "Formatar", a conexão da aba e a transação (a barra tem só Executar e Cancelar,
-  seção 9 da especificação); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
+  na barra do editor, "Explicar plano", "Formatar", a troca da conexão da aba e a transação (a barra tem Executar e Cancelar,
+  seção 9 da especificação, e o banco da aba, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -627,8 +628,9 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 - **O que passa** (`_lib/tab-transfer.ts`, puro e testado): `serializeTab` monta a aba com o texto e a seleção do editor DESTE instante
   (`liveEditors`, `_lib/live-editors.ts`: cada editor se registra pelo id da aba; o `tab.sql` chega com 400 ms de atraso), a sessão do executor
   (`sessionOf`, e não a cópia da aba), o resultado parado (o mapa das células cortadas vira pares) e o que a tela lembrava
-  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). A aba de um script leva o
-  id, o nome e o SQL salvo (o ponto é refeito na janela que recebe, pelo texto que chegou), e a aba sem conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
+  (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). A aba leva o banco em que
+  roda (`database`, o de agora, depois de uma troca pela barra do editor). A aba de um script leva o id, o nome, o SQL salvo e o banco em que foi salvo
+  (`savedDatabase`; o ponto é refeito na janela que recebe, pelo texto que chegou e pelo banco da aba), e a aba sem conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
   andamento (executar, carregar mais, contar) não passa: a tela avisa `moveBusy`. `readTransfer` confere e devolve a aba, a seleção (cortada no
   fim do texto), o estado e a memória.
 - **A janela de origem** só tira a aba depois do `ok` do centro, por `detachTab`: o executor sai de cena (`retire`) e a sessão **não** fecha (é a
@@ -678,7 +680,10 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
 - **A aba de um script** tem o nome dele como título e, com mudança não salva, um ponto na faixa (desenho; o leitor de tela ouve "alterações não salvas", e o
   `title` diz o mesmo: `tabTitleOf`). Só a aba de um script tem o ponto e a pergunta: a consulta que nunca foi salva fecha como antes. O ponto acende na
   primeira tecla (`markScriptEdited`, pelo `onEdited` do editor, sem atraso; as teclas seguintes devolvem a mesma lista de abas e não redesenham nada) e é
-  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga.
+  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga. **Mudança não salva é o texto OU o banco**
+  (`isScriptDirty`): o `ScriptRef` guarda o banco em que o script foi salvo ou aberto (`savedDatabase`, sem ele o da conexão), e a aba que trocou de banco
+  (RN-ARVORE-007) fica com o ponto até o Ctrl+S gravar o banco novo, ou até voltar ao banco salvo com o texto salvo. `setTabScript` recebe o banco que foi
+  gravado (o da aba quando o Ctrl+S saiu).
 - **Fechar** (uma aba, as outras, todas, a janela): primeiro a pergunta dos Registros, depois a dos scripts com mudança não salva entre as que fecham
   (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
   script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
@@ -692,6 +697,36 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
   mantém o lugar antigo (o `PATCH` sem `connectionID`). **O editor segue o banco da aba com ele montado** (a gramática, o separador de comandos, as maiúsculas e o
   completar, por compartimentos): a aba que recebe uma conexão de outro banco não recria o editor, e o texto e o desfazer ficam.
+
+## Trocar o banco da aba de consulta (RN-ARVORE-007)
+
+Seção 24 da especificação (issue 1 do repositório público). A barra do editor da aba de consulta mostra, depois de Executar, o banco em que a aba roda
+("Banco", um `Select` com rótulo visível ligado a ele) e deixa trocá-lo. A aba sem conexão não tem a lista (a faixa pede a conexão antes).
+
+- **A lista é a da árvore** (RN-ARVORE-006): a mesma consulta e o mesmo cache (`["tree", conexão, "databases"]`, `databaseNodes`), sem rota nova. O
+  `DatabasePicker` (`_components/database-picker.tsx`; o desenho é `DatabasePickerView`, testado sem DOM) só LÊ o cache: a consulta dele é a `treeQuery`
+  desligada, que nunca abre sessão sozinha, nem depois de "Desconectar" remover as consultas (RN-SESSAO-004). Quem busca é **abrir a lista** (`onOpen` do
+  `Select`, novo), e só quando ela não está em cache ou foi atualizada: `loadServerDatabases` (`database-sessions.service.ts`, testado) abre a sessão da
+  árvore da conexão se ainda não estava, como expandir a conexão (o navegador passa a mostrá-la conectada), e pede a lista; a conexão que não abre para
+  ali, com o aviso central uma vez; a sessão da árvore que caiu abre outra e a lista vem de novo, com o aviso de sessão reaberta. Enquanto vem, uma região
+  viva diz "Carregando os bancos…", e a lista aberta cresce quando chega: o `Select` leva o destaque junto da opção escolhida (o Enter não escolhe outra).
+- **As opções** (`databaseChoices`, `_lib/tab-database.ts`, puro e testado): os bancos da lista na ordem dela, o da conexão primeiro, com o nome que o
+  servidor deu e "(padrão)"; antes de a lista chegar, só o banco da aba. O banco da aba que a lista não traz (um script salvo num banco que sumiu) fica no fim.
+  O valor de cada opção é o banco em JSON (`databaseValue`: o da conexão é `null`), para nenhum nome se confundir com o padrão. **No Db2** só o banco da
+  conexão, e a lista fica desabilitada com o motivo à vista, ligado ao controle por `aria-describedby`. Com comando em andamento (executar, carregar mais,
+  contar) a lista fica desabilitada: a resposta dele é do banco de agora.
+- **A troca** (`switchDatabase` no provedor, sobre `withDatabase`, puro e testado): a aba ganha um executor novo nesse banco (que abre a sessão dele na
+  próxima execução, como a aba aberta pela "Nova consulta" do banco), e o de antes sai de cena (`retire`) antes de a sessão dele fechar na API (pelo mesmo
+  caminho de fechar a aba, `endInBackground`, que a janela que fecha espera). **Nada é executado, o texto fica** (o do editor deste instante, `liveEditors`),
+  e **o resultado que estava na tela sai**: era do banco anterior, e o cursor dele fecha com a sessão (como ao dar uma conexão à aba de um script sem
+  conexão). O mesmo banco, a aba de uma tabela, a aba sem conexão e a aba ocupada não trocam. O editor segue o banco com ele montado: o completar e os
+  links de tabela leem o cache da árvore do banco novo.
+- **Pergunta antes** com alterações não salvas na grade (RN-EDIT-007): a troca passa pelo `guard` da edição, o mesmo diálogo de executar outro comando
+  ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). A aba de consulta ainda não tem o Commit manual
+  (RN-TX-001), então não há transação aberta a perguntar; quando ele entrar, a troca é uma das saídas da RN-TX-006.
+- **O que acompanha a troca**: a barra de status escreve a conexão e o banco da aba ativa (`conexão / banco`, o da conexão quando a aba não tem outro); o
+  Ctrl+S grava o banco da aba (`PATCH`/`POST` com `database`, nulo para o da conexão), e a aba de um script fica com o ponto enquanto o banco não é o salvo;
+  a aba que vai para outra janela leva o banco novo e o banco salvo do script; o bloqueio por inatividade dá à aba um executor no banco dela.
 
 ## Links de tabela no editor (RN-LINK-001)
 
@@ -1542,7 +1577,7 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   `FormMessage`, `Dialog`, `ConfirmDialog`, `Select`, `Segmented`, `navItem` (a classe da entrada de uma lista de navegação vertical: a lista de Configurações e a de seções da Estrutura), `StatusBadge`, `EngineTag`,
   `EnvironmentPill`, os ícones (`icons.tsx`), `ToastProvider`, `useToast`. Vieram do etio com o que esta fatia usa (o `ContextMenu` é do
   Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
-  que o controle, o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
+  que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, e `aria-describedby`), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
   ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe

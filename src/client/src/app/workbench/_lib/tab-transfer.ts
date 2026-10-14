@@ -76,7 +76,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
       sessionId,
       sql: editor?.sql ?? tab.sql,
       ...(table === undefined ? {} : { table }),
-      ...(script === undefined ? {} : { script: { id: script.id, name: script.name, savedSql: script.savedSql } }),
+      ...(script === undefined ? {} : { script: { id: script.id, name: script.name, savedSql: script.savedSql, ...(script.savedDatabase === undefined ? {} : { savedDatabase: script.savedDatabase }) } }),
     },
     editor: editor === null ? null : { anchor: editor.anchor, head: editor.head },
     result,
@@ -108,8 +108,8 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
     sessionId: tab.sessionId,
     sql: tab.sql,
     ...(tab.table === undefined ? {} : { table: tab.table }),
-    // RN-SCRIPT-001: o ponto da faixa é o texto que chegou contra o que foi salvo.
-    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql) } }),
+    // RN-SCRIPT-001: o ponto da faixa é o texto que chegou e o banco da aba contra o que foi salvo (RN-ARVORE-007: a aba pode ter trocado de banco).
+    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab.database) } }),
   };
   const restored: TransferMemory = memory;
 

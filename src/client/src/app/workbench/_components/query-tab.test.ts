@@ -43,6 +43,8 @@ import { recordsCopy } from "../_lib/records.copy";
 import { forgetExcept, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
+import { DatabasePicker } from "./database-picker";
+import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
 import { QueryTabPanel } from "./query-tab";
 import { ResultPanel } from "./result-panel";
@@ -102,9 +104,9 @@ function fakeRunner(initial: RunnerState) {
 const tab: QueryTab = { id: "q1", title: "Consulta 1", connectionId: "c1", sessionId: "s1", sql: "select * from loja.pedido" };
 
 /** A aba `q1` na conexão `c1`, à vista. O painel é memorizado: a função dele é a de dentro do `memo`. */
-function mount(runner: ReturnType<typeof fakeRunner>) {
+function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
   const panel = (QueryTabPanel as unknown as { type: (props: ComponentProps<typeof QueryTabPanel>) => ReactNode }).type;
-  const props = { tab, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onAssignConnection: vi.fn(), onOpenTable: vi.fn() };
+  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onAssignConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn() };
 
   /** O que a aba entrega agora à área de resultado, ao editor e às janelas por cima. Duas voltas, como no teste dos Registros: os efeitos da primeira mexem nos registros de módulo. */
   function show() {
@@ -115,11 +117,14 @@ function mount(runner: ReturnType<typeof fakeRunner>) {
     const question = found.find((element) => element.type === UnsavedEditsDialog)?.props as unknown as ComponentProps<typeof UnsavedEditsDialog> | undefined;
     const menu = found.find((element) => element.type === ContextMenu)?.props as unknown as ComponentProps<typeof ContextMenu> | undefined;
     const banner = (area.banner as { type: unknown; props: ComponentProps<typeof EditsBanner> } | undefined) ?? null;
+    const toolbar = found.find((element) => element.type === EditorToolbar)!.props as unknown as ComponentProps<typeof EditorToolbar>;
+    const slot = toolbar.database as { type: unknown; props: ComponentProps<typeof DatabasePicker> } | null | undefined;
+    const picker = slot?.type === DatabasePicker ? slot.props : null;
 
-    return { area, editor, question, menu, banner };
+    return { area, editor, question, menu, banner, picker };
   }
 
-  return { show };
+  return { show, props };
 }
 
 /** Uma alteração pendente na coluna `status` da primeira linha do resultado `r1`. */
@@ -346,5 +351,69 @@ describe("QueryTabPanel: o Salvar deixa a grade com o que foi salvo, sem executa
 
     expect(runner.keepSaved).toHaveBeenCalledTimes(1);
     expect(runner.run).toHaveBeenCalledWith(command);
+  });
+});
+
+describe("QueryTabPanel: o banco da aba na barra do editor (RN-ARVORE-007)", () => {
+  it("a barra mostra o banco em que a aba roda, da conexão dela, e sabe se há comando em andamento", () => {
+    const idle = mount(fakeRunner(rowsState()), { database: "vendas" }).show().picker;
+    expect(idle).toMatchObject({ connectionId: "c1", database: "vendas", engine: pg, busy: false });
+    rt.unmount();
+
+    expect(mount(fakeRunner(rowsState({ loadingMore: true }))).show().picker?.busy).toBe(true);
+  });
+
+  it("a aba sem conexão não tem banco a trocar: a faixa pede a conexão antes", () => {
+    expect(mount(fakeRunner({ status: "idle" }), { connectionId: null }).show().picker).toBeNull();
+  });
+
+  it("escolher outro banco passa a aba para ele, sem executar nada", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().picker!.onChoose("vendas");
+
+    expect(view.props.onSwitchDatabase).toHaveBeenCalledWith("q1", "vendas");
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(runner.rerun).not.toHaveBeenCalled();
+  });
+
+  it("com alterações não salvas na grade, a troca pergunta antes, como executar outro comando (RN-EDIT-007); Cancelar fica no banco", () => {
+    withPending();
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().picker!.onChoose("vendas");
+    const { question } = view.show();
+    expect(view.props.onSwitchDatabase).not.toHaveBeenCalled();
+    expect(question).toMatchObject({ count: 1, canSave: true });
+
+    question!.onCancel();
+    expect(view.props.onSwitchDatabase).not.toHaveBeenCalled();
+    expect(view.show().banner?.props.pending).toBe(1);
+  });
+
+  it("Descartar na pergunta descarta as alterações e troca o banco", () => {
+    withPending();
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().picker!.onChoose(undefined);
+    view.show().question!.onDiscard();
+
+    expect(view.props.onSwitchDatabase).toHaveBeenCalledWith("q1", undefined);
+  });
+
+  it("Salvar na pergunta grava pela sessão de antes e só então troca o banco", async () => {
+    withPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().picker!.onChoose("vendas");
+    view.show().question!.onSave();
+    expect(view.props.onSwitchDatabase).not.toHaveBeenCalled();
+    await settle();
+
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledWith("s1", "r1", expect.any(Array));
+    expect(view.props.onSwitchDatabase).toHaveBeenCalledWith("q1", "vendas");
   });
 });
