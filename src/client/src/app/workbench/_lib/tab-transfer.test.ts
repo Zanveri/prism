@@ -58,6 +58,12 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(adopted?.memory).toEqual({ layout: { mode: "maximized", resultPercent: 70 }, grid: { key: "[]", widths: { 0: 120 } } });
   });
 
+  it("o resultado filtrado leva o filtro com o comando e diz como ele entrou (RN-GRADE-011): Executar de novo na outra janela repete os dois", () => {
+    const filtered: RowsState = { ...rows, target: { ...rows.target, filter: `"nota" IS NULL ORDER BY "id" DESC` }, filterApplied: "wrapped", readOnly: "o filtro foi aplicado por fora do comando" };
+
+    expect(roundTrip(serializeTab(snapshot({ state: filtered })))?.state).toEqual(filtered);
+  });
+
   it("as células cortadas voltam como mapa de conjuntos, e o resultado volta parado (sem carregar, contar nem cancelar)", () => {
     const state = roundTrip(serializeTab(snapshot()))?.state as RowsState;
     expect(state.truncated.get(1)?.has(1)).toBe(true);

@@ -337,7 +337,7 @@ describe("\"executar de novo\" executa o comando do resultado que está na tela,
   type Context = Awaited<ReturnType<typeof withResult>>;
 
   /** Cada caso tenta um comando que grava (`delete from t`) e é recusado antes de a API aceitar; as linhas do `select` ficam na tela. */
-  const refusals: [string, (context: Context) => Promise<void>][] = [
+  const refusals: [string, (context: Context) => Promise<unknown>][] = [
     ["seleção com mais de um comando", async ({ runner }) => runner.run({ sql: "delete from t; delete from u", offset: 0 })],
     [
       "SESSION_BUSY",
@@ -717,7 +717,7 @@ describe("linhas afetadas e erro de SQL também são resultado na tela", () => {
 
   type Context = Awaited<ReturnType<typeof withAffected>>;
 
-  const refusals: [string, (context: Context) => Promise<void>][] = [
+  const refusals: [string, (context: Context) => Promise<unknown>][] = [
     ["seleção com mais de um comando", async ({ runner }) => runner.run({ sql: "select 1; select 2", offset: 0 })],
     [
       "controle de transação",

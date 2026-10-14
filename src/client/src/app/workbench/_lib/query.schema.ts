@@ -28,7 +28,15 @@ export type QueryPage = {
   resultId?: string | null;
   /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando a API já o sabe sem consultar o banco ("união de consultas"). */
   readOnly?: string | null;
+  /**
+   * RN-GRADE-011: como o filtro do resultado entrou no comando: `merged` (no `WHERE` e no `ORDER BY` do próprio comando) ou `wrapped` (por fora, `SELECT *
+   * FROM (<comando>) … WHERE …`); nulo sem filtro.
+   */
+  filterApplied?: FilterApplied | null;
 };
+
+/** RN-GRADE-011: o filtro do resultado juntado ao comando (`merged`) ou por fora dele (`wrapped`). */
+export type FilterApplied = "merged" | "wrapped";
 
 /** O que um comando que não devolve linhas responde (RN-SQL-008). */
 export type QueryAffected = { kind: "affected"; rowsAffected: number; elapsedMs: number };
@@ -54,6 +62,8 @@ const responseSchema = z.object({
   // A edição (seção 22): fora do formato não recusa a página, que o banco já entregou; só não há o que editar.
   resultID: z.string().nullish().catch(null),
   editable: z.object({ known: z.boolean(), reason: z.string().nullish() }).nullish().catch(null),
+  // RN-GRADE-011: um valor que a tela não conhece não recusa a página, que o banco já entregou; só não se sabe como o filtro entrou.
+  filterApplied: z.enum(["merged", "wrapped"]).nullish().catch(null),
 });
 
 export const queryResultSchema = responseSchema.transform((response, context): QueryResult => {
@@ -68,7 +78,7 @@ export const queryResultSchema = responseSchema.transform((response, context): Q
   if (rows.some((row) => row.length !== columns.length)) return refuse("Há linha com tamanho diferente do número de colunas.");
 
   const readOnly = response.editable?.known === true ? (response.editable.reason ?? null) : null;
-  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly };
+  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly, filterApplied: response.filterApplied ?? null };
 });
 
 /** "Carregar mais" só devolve página de linhas. */

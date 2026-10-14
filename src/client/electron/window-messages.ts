@@ -16,7 +16,8 @@ const count = z.number().int().min(0);
 /** O texto do editor que passa: 32 MB de texto é mais do que um editor aguenta. */
 const maxSqlLength = 32 * 1024 * 1024;
 
-const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional() });
+/** RN-GRADE-011: `filter` é o texto do campo de filtro do resultado, que viaja com o comando para "Executar de novo" o repetir na outra janela. */
+const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), filter: z.string().max(maxSqlLength).optional() });
 
 const columnSchema = z.object({ name, type: name, kind: z.enum(["text", "number", "datetime", "boolean", "binary"]) });
 
@@ -41,6 +42,8 @@ const resultSchema = z.discriminatedUnion("status", [
     total: count.nullable(),
     resultId: id.nullable().optional(),
     readOnly: name.nullable().optional(),
+    /** RN-GRADE-011: como o filtro do resultado entrou no comando. */
+    filterApplied: z.enum(["merged", "wrapped"]).optional(),
     /** RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou, como `truncated`. */
     generated: z.array(z.tuple([count, z.array(count)])).optional(),
     /** RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas; nula na linha nova. */
