@@ -14,10 +14,11 @@ namespace Prism.Infrastructure.Vault.Clients;
 internal static class VaultCrypto
 {
     /// <summary>
-    /// RN-VERSAO-005: o número do formato que esta versão grava. O 2 acrescentou os scripts ao documento (RN-SCRIPT-002); o 1 ainda se lê, e é migrado
-    /// ao abrir (`VaultMigration`). Sobe só quando o formato muda, e a mudança vem com a migração.
+    /// RN-VERSAO-005: o número do formato que esta versão grava. O 2 acrescentou os scripts ao documento (RN-SCRIPT-002), e o 3, a área de trabalho (as abas
+    /// que voltam na próxima entrada, RN-ABAS-006); o 1 e o 2 ainda se leem, e são migrados ao abrir (`VaultMigration`). Sobe só quando o formato muda, e a
+    /// mudança vem com a migração.
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>RN-VERSAO-005: o formato mais antigo que ainda se lê. Abaixo dele (e o 0, o negativo e o que não é número) o arquivo é corrompido.</summary>
     public const int OldestVersion = 1;

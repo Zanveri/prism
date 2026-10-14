@@ -13,6 +13,7 @@ import { updateCopy } from "@/components/update/update.copy";
 import { pathsConfig } from "@/config/paths.config";
 import { sharePeerEvent } from "@/lib/api/bridge";
 import { unwrap } from "@/lib/api/prism-api";
+import { workspaceSync } from "@/lib/api/workspace-sync";
 import { cn } from "@/lib/utils/cn";
 
 import { PoweredByZanveri } from "./powered-by-zanveri";
@@ -46,7 +47,11 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
   const version = typeof window === "undefined" ? "" : (window.prism?.version ?? "");
 
   const leave = useMutation({
-    mutationFn: async () => unwrap(await signOut()),
+    // RN-ABAS-006: as abas de todas as janelas são gravadas antes de o cofre fechar (com prazo, e a falha não impede a saída).
+    mutationFn: async () => {
+      await workspaceSync.flush();
+      return unwrap(await signOut());
+    },
     onSuccess: () => {
       // RN-ABAS-004: o "Sair" vale para todas as janelas.
       sharePeerEvent("signOut");

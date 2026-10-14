@@ -148,6 +148,13 @@ export const windowListSchema = z.array(z.object({ id: windowId, number: windowI
 export type WindowEntry = z.infer<typeof windowListSchema>[number];
 
 /**
+ * A pessoa fechou a janela (RN-ABAS-004): `last`, ela é a única aberta, e fechá-la fecha o app (RN-ABAS-007: só pergunta pelo que não volta na próxima entrada).
+ */
+export const windowCloseRequestSchema = z.object({ last: z.boolean() });
+
+export type WindowCloseRequest = z.infer<typeof windowCloseRequestSchema>;
+
+/**
  * O que uma janela conta às outras sobre o cofre (RN-ABAS-004): a pessoa mexeu (ou há comando em andamento), bloqueou, desbloqueou, saiu ou entrou.
  * Só o tipo: nada de usuário, senha ou dado.
  */

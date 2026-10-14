@@ -13,11 +13,11 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
-src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos)
+src/lib/api/     prism-api.ts, prism-endpoints.ts, query-client.ts, bridge.ts, vault-lock.ts (o estado de bloqueio e a barreira dos pedidos), workspace-sync.ts ("grave as abas agora", antes de o cofre fechar)
 src/lib/utils/   cn.ts, format.ts, form.ts (a submissão e a fiação de aria dos formulários), route-params.ts (a tela gasta o parâmetro da rota que leu), zod-jitless.ts
 src/lib/testing/ react-tree.ts (`elementsOf`: o que um componente sem estado monta, para testar sem DOM) e react-hooks.ts (`createHookRuntime`: os ganchos do React simulados, para o componente COM estado); só para testes
 src/styles/      globals.css (tokens em @theme como light-dark(claro, escuro) e um bloco :root[data-theme] por tema: são seis; as fontes `--font-sans`, `--font-mono` e `--font-editor`)
@@ -69,13 +69,14 @@ depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, ca
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
-- Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`:
-  `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
-  máximo 2 s e para a API. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
+- Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
+  no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
+  máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
-  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"). Os canais da API são
+  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas") e `workspace` (ver "Abas que voltam na
+  próxima entrada"). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  os das janelas, `prism:windows-*` e `prism:session-*`; os das abas que voltam, `prism:workspace-*`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -613,7 +614,8 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 
 - **A ordem** (`_lib/tab-order.ts`, puro e testado): `moveTab(tabs, id, insertAt)` com a posição de ANTES de a aba sair do lugar (a marca de
   soltar), `shiftTab` (Ctrl+Shift+PageUp e PageDown na aba ativa, sem dar a volta, `tabMoveShortcut`, tratado em `WorkbenchTabs` como o Ctrl+W),
-  `dropIndex` (pela metade de cada aba) e `isOutsideWindow`. O provedor tem `reorderTab` e `shiftTab`. A ordem não é gravada.
+  `dropIndex` (pela metade de cada aba) e `isOutsideWindow`. O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
+  "Abas que voltam na próxima entrada").
 - **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`), com o tipo `application/x-prism-tab` e o dado `{ windowId, tabId }`
   (`writeTabDrag`/`readTabDrag`, conferido: qualquer programa pode soltar algo na faixa). A faixa aceita só esse tipo, mostra a marca de soltar
   (`data-drop` `before`/`after`, uma sombra interna da cor de destaque) e, solta, ou muda de lugar (veio desta janela) ou pede a aba à janela de
@@ -642,7 +644,7 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   a chave da grade continua do resultado que veio, e "Carregar mais" continua no cursor da sessão). Nada é executado. O número da próxima
   consulta não repete o da aba que chegou. O provedor diz ao centro quando está pronto (`setReady`, ao montar e ao desmontar): o centro guarda a
   aba até lá (a janela nova ainda está abrindo o cofre), e a que fecha antes de recebê-la a devolve à de origem.
-- **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele; cancelar uma
+- **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele (na última janela, só a da grade, RN-ABAS-007); cancelar uma
   pergunta deixa a janela aberta; quando a última aba fechou, `releaseWindow` espera os fechamentos de sessão a caminho e fecha as sessões da
   árvore DESTA janela, e só então a janela fecha. Com o cofre bloqueado fecha direto (a API já fechou as sessões).
 - **O cofre é um só** (RN-ABAS-004). O que uma janela conta às outras (`prism:session-share`, `peerEventSchema`: `activity`, `lock`, `unlock`,
@@ -663,6 +665,65 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   pelo `will-navigate`; o `Page.reload` do protocolo de depuração passa. A janela nova é outro alvo em `/json/list`: ache-o por
   `window.prism.windows.id`. Para provar que nada foi executado de novo, conte as linhas `ExecuteAsync` do log da API (`<dados>/logs/`); o
   "Carregar mais" aparece como `FetchNextAsync` na MESMA sessão.
+
+## Abas que voltam na próxima entrada (RN-ABAS-006)
+
+Seção 24 da especificação (issue 2 do repositório público). As abas de TODAS as janelas vão para o cofre do usuário pela API (`PUT api/user/workspace`, ver o
+guia da API) e voltam na janela principal na próxima entrada. **Nada vai ao `localStorage`**, e nenhuma janela fala com outra (RN-ABAS-005): cada uma conta as
+suas abas ao processo principal, que junta as de todas e grava.
+
+- **O que vai e o que volta** (`_lib/saved-workspace.ts`, puro e testado). Vai, de cada aba de consulta, o texto do editor DESTE instante (`liveEditors`), a
+  conexão, o banco, o script de onde veio e a marca de mudança não salva (`isScriptDirty`, pelo texto); de cada aba de tabela, a conexão, o banco, o esquema,
+  a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
+  o resultado, o cursor e as alterações não salvas da grade. O texto acima de 1 MB em bytes de UTF-8 não vai: a aba vai vazia com `sqlTooLarge`, e volta vazia
+  com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
+  só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), a de um script excluído como consulta comum, a de consulta
+  cuja conexão foi excluída sem conexão (`NoConnectionBarView` com `forScript` falso: "A conexão desta aba não existe mais"; aviso `restoredWithoutConnection`),
+  e a de tabela cuja conexão foi excluída **não volta**, e a entrada avisa (a regra, RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; aviso
+  `restoredTablesDropped`). A ativa que não voltou
+  passa à vizinha. O schema é um só, `electron/workspace-messages.ts`, com os nomes da API (`connectionID`, `scriptID`), conferido no processo principal (o
+  relato de cada janela) e na tela (a resposta do `GET`, `workspace.service.ts`: a aba que não confere fica de fora, sem derrubar as outras).
+- **Nada conecta nem executa sozinho.** As abas voltam sem sessão; as conexões das abas de tabela que voltaram são marcadas como desconectadas
+  (`DisconnectLog.mark`, pelo `restoredTableConnections` do provedor), e as vistas delas esperam o clique, como as de uma conexão que a pessoa desconectou. A
+  árvore não abre nada (os nós abertos não são gravados).
+- **Quem reabre** (`WorkbenchProvider`): ao montar, a área de trabalho pergunta ao processo principal se reabre (`claimWorkspaceRestore`, canal
+  `prism:workspace-claim`: só a janela principal, a primeira das vivas, e uma vez por entrada; a que recarrega com outra janela aberta não reabre, porque as abas
+  estão nas janelas). A principal lê (`getWorkspace`), as conexões e os scripts, e só DEPOIS começa a contar as suas; uma falha em qualquer leitura não reabre
+  nada e não conta nada nesta entrada (gravar sem ter reaberto apagaria o que não voltou). As outras janelas contam desde já.
+- **Quem conta** (`_lib/workspace-reporter.ts`, com o relógio injetado): a fonte (`createWorkspaceSource`, criada por `useState` como os executores, e não
+  por `useRef`, que o lint do React não deixa passar a uma função durante a renderização) recebe as abas a cada renderização; o relato as lê 1 s depois de uma
+  mudança (a lista de abas, ou uma tecla: `markScriptEdited` também o avisa, porque o texto da aba chega com 400 ms de atraso), várias mudanças são um relato
+  só, o que não mudou não vai, e a aba que fecha vai na hora, com urgência (`urgentReport`, ligado no `closeTab`). Desmontar (sair do cofre) para o relato e
+  tira as abas da janela do que volta (`withdrawWorkspace`). Canais: `prism:workspace-report` e `prism:workspace-withdraw`.
+- **Quem grava** (`electron/workspace-hub.ts`, sem Electron, com teste): junta as janelas (a principal primeiro, as outras pela ordem em que abriram; a ativa é a
+  da principal, ou a da primeira janela que tem uma) e grava 3 s depois da PRIMEIRA mudança ainda não gravada (digitar sem parar não adia a gravação), na hora
+  com urgência, ao fechar uma janela que não é a última (as abas dela saem do que volta) e quando pedem (`flush`). Uma gravação de cada vez, a mesma área de
+  trabalho não vai de novo, e nada se grava antes de a principal contar as dela. A gravação é o `PUT` com o token (`saveWorkspaceThroughApi`, prazo de 5 s); a
+  falha (o cofre fechado, a API que caiu) não aparece na tela: o log do processo principal leva `[prism] abas: a gravação não valeu: …` com o status, nunca o
+  conteúdo. Fora do Electron (`getBridge` de desenvolvimento) a própria tela faz o papel do processo principal, com o mesmo centro e uma janela só.
+- **Antes de o cofre fechar** (`src/lib/api/workspace-sync.ts`: a área de trabalho registra o relato urgente; `flush` conta e espera o processo principal gravar,
+  no máximo 5 s, e nunca lança): o "Sair" da barra superior grava antes do `signOut`; o bloqueio por inatividade grava entre o descarte e o fechamento do cofre
+  (`saveWorkspace` de `lock-vault.ts`, uma vez, e a falha não impede o fechamento; a janela que só acompanha o bloqueio de outra não grava); fechar o app grava no
+  `before-quit`, canal `prism:workspace-flush`. O "Sair" da tela de bloqueio não grava: o cofre já fechou, e o bloqueio gravou antes.
+- **A janela que fecha** (RN-ABAS-004 com a RN-ABAS-006 e 007): fechar a janela fecha as abas dela com as perguntas de sempre, mas fechar a ÚLTIMA é o app saindo, e as
+  abas voltam na próxima entrada. Por isso, ao começar a fechar, a janela segura as abas dela (`holdForWindowClose` → `source.hold`, `withHeld`: as que fecham
+  ficam como estavam por último, na ordem e com a ativa de então); se a pessoa cancela uma pergunta, solta (`releaseWindowClose`) e o que fechou até ali sai do
+  que volta. O processo principal decide no `closed`: a última janela (ou qualquer uma com o app saindo) deixa as abas para a gravação do `before-quit`; as
+  outras as tiram do que volta, na hora. A navegação de página inteira e a queda do processo da tela também tiram as abas da janela (`withdraw`).
+- **Como conferir sob o Xvfb**: sem banco nenhum (as abas voltam desconectadas); a conexão pode apontar para um host que não existe. Crie o usuário e a conexão
+  pela página (`window.prism.getApiConfig()` e `fetch`), entre pelo formulário, abra consultas pelo menu da conexão ("Nova consulta"), digite com
+  `Input.insertText` (o texto acima de 1 MB entra por `document.execCommand("insertText", …)` no `.cm-content`, porque um argumento de linha de comando não
+  passa de 128 KB), e leia o que foi gravado com `GET api/user/workspace` pela página. Feche o app pelo "X" (`WM_DELETE_WINDOW`, ver "Abas que se movem e outras
+  janelas"), responda as perguntas, abra de novo com a mesma `--user-data-dir` e entre: as abas voltam. Para a conexão excluída: saia, entre, exclua e saia pela
+  API (com a área de trabalho desmontada nada é podado), e entre pelo formulário. O log da API (`<dados>/logs/`) tem "Área de trabalho gravada com N abas." e
+  nunca o SQL.
+- **Fechar o app só pergunta pelo que não volta** (RN-ABAS-007). O aviso `prism:windows-close-requested` leva `{ last }` (`windowCloseRequestSchema`; o centro
+  das janelas diz, `hub.isLast`), e a tela o confere (`onWindowCloseRequested`: o aviso que não confere vale "não é a última", e pergunta tudo). A última janela
+  fecha as abas com `closeAsks({ closesTheApp: true })`: só a pergunta das alterações não salvas da grade (RN-EDIT-007), que não voltam; o SQL digitado e os
+  scripts com mudança não salva voltam, e não perguntam. Fechar uma aba, várias ou uma janela que não é a última pergunta como antes, e o texto da pergunta do
+  SQL diz que o que fecha não volta na próxima entrada (`confirmClose.description`).
+- **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
+  voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
 
 ## Scripts salvos (RN-SCRIPT-001 a 004)
 

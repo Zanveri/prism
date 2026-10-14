@@ -12,6 +12,7 @@ function setup(overrides: Partial<LockVaultDeps> = {}) {
     arm: vi.fn(() => void order.push("arm")),
     closePortals: vi.fn(() => void order.push("closePortals")),
     discard: vi.fn(() => void order.push("discard")),
+    saveWorkspace: vi.fn(async () => void order.push("saveWorkspace")),
     closeVault: vi.fn(async () => {
       order.push("closeVault");
       return true;
@@ -31,13 +32,34 @@ function setup(overrides: Partial<LockVaultDeps> = {}) {
 }
 
 describe("lockVault: a ordem do bloqueio (RN-SEG-001)", () => {
-  it("arma a barreira PRIMEIRO, depois fecha os portais, descarta a área de trabalho e só então fecha o cofre na API", async () => {
+  it("arma a barreira PRIMEIRO, depois fecha os portais, descarta a área de trabalho, grava as abas (RN-ABAS-006) e só então fecha o cofre na API", async () => {
     const { order, deps } = setup();
 
     await lockVault(deps);
 
     // Armar depois deixaria um 401 mandar ao login e perder as abas.
-    expect(order).toEqual(["arm", "report:closing", "closePortals", "discard", "closeVault", "report:closed"]);
+    expect(order).toEqual(["arm", "report:closing", "closePortals", "discard", "saveWorkspace", "closeVault", "report:closed"]);
+  });
+
+  it("a gravação das abas que falha não impede o fechamento do cofre, e é gravada uma vez só, mesmo com novas tentativas de fechar", async () => {
+    let attempts = 0;
+    const { order, deps } = setup({
+      saveWorkspace: vi.fn(async () => {
+        order.push("saveWorkspace");
+        throw new Error("a API caiu");
+      }),
+      closeVault: vi.fn(async () => {
+        order.push("closeVault");
+        return ++attempts > 1;
+      }),
+      backoffMs: [10],
+    });
+
+    await lockVault(deps);
+
+    expect(order.filter((step) => step === "saveWorkspace")).toHaveLength(1);
+    expect(order.filter((step) => step === "closeVault")).toHaveLength(2);
+    expect(deps.onError).toHaveBeenCalledWith(new Error("a API caiu"));
   });
 
   it("diz que fechou quando o cofre fechou", async () => {
@@ -72,7 +94,7 @@ describe("lockVault: o fechamento do cofre não depende de os passos de tela dar
 
     await lockVault(deps);
 
-    expect(order).toEqual(["arm", "report:closing", "discard", "closeVault", "report:closed"]);
+    expect(order).toEqual(["arm", "report:closing", "discard", "saveWorkspace", "closeVault", "report:closed"]);
     expect(deps.onError).toHaveBeenCalledWith(new Error("portais"));
   });
 
@@ -81,7 +103,7 @@ describe("lockVault: o fechamento do cofre não depende de os passos de tela dar
 
     await lockVault(deps);
 
-    expect(order).toEqual(["arm", "report:closing", "closePortals", "closeVault", "report:closed"]);
+    expect(order).toEqual(["arm", "report:closing", "closePortals", "saveWorkspace", "closeVault", "report:closed"]);
     expect(deps.onError).toHaveBeenCalledWith(new Error("descarte"));
   });
 
@@ -235,6 +257,15 @@ describe("createLockVaultDeps: a fiação do bloqueio com as peças de verdade",
     deps.closePortals();
 
     expect(sent).toEqual([expect.objectContaining({ type: "keydown", key: "Escape" })]);
+  });
+
+  it("saveWorkspace é a gravação das abas que quem bloqueia deu; sem ela, não grava nada (a janela que acompanha o bloqueio de outra)", async () => {
+    const saveWorkspace = vi.fn(async () => undefined);
+
+    await build({ saveWorkspace }).deps.saveWorkspace();
+    await build().deps.saveWorkspace();
+
+    expect(saveWorkspace).toHaveBeenCalledOnce();
   });
 
   it("discard é o descarte da área de trabalho que o provedor deu", () => {

@@ -21,6 +21,8 @@
   <ItemGroup>
     <!-- RN-VERSAO-005: um cofre do formato 1 gravado antes da regra, aberto em VaultFormatOneSampleTests. -->
     <EmbeddedResource Include="Vault/Samples/vault-format-1.json" LogicalName="vault-format-1.json" />
+    <!-- RN-VERSAO-005 e RN-ABAS-006: um cofre do formato 2 gravado antes do formato 3, aberto em VaultFormatTwoSampleTests. -->
+    <EmbeddedResource Include="Vault/Samples/vault-format-2.json" LogicalName="vault-format-2.json" />
   </ItemGroup>
 
   <ItemGroup>

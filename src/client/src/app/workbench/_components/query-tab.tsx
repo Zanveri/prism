@@ -43,12 +43,12 @@ type QueryTabPanelProps = {
 };
 
 /** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
-function NoConnectionBar({ tabId, onAssign }: { tabId: string; onAssign: (tabId: string, connectionId: string) => void }) {
+function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScript: boolean; onAssign: (tabId: string, connectionId: string) => void }) {
   const connections = useQuery(connectionsQuery);
   const [value, setValue] = useState("");
   const options = (connections.data ?? []).map((connection) => ({ value: connection.id, label: connection.name }));
 
-  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={(connectionId) => onAssign(tabId, connectionId)} />;
+  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={(connectionId) => onAssign(tabId, connectionId)} forScript={forScript} />;
 }
 
 /**
@@ -135,7 +135,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   return (
     <>
       <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
-        {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} onAssign={onAssignConnection} /> : null}
+        {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} forScript={tab.script !== undefined} onAssign={onAssignConnection} /> : null}
         <EditorToolbar
           busy={busy}
           cancelling={cancelling}

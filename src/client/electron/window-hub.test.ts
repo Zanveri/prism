@@ -167,6 +167,20 @@ describe("o processo principal e as janelas (RN-ABAS-002 a 005)", () => {
     ]);
   });
 
+  it("a última janela (RN-ABAS-007: fechá-la fecha o app) é a única que o centro tem", () => {
+    const { hub, fakeWindow } = setup();
+    hub.add(fakeWindow(1));
+    expect(hub.isLast(1)).toBe(true);
+
+    hub.add(fakeWindow(2));
+    expect(hub.isLast(1)).toBe(false);
+    expect(hub.isLast(2)).toBe(false);
+
+    hub.remove(1);
+    expect(hub.isLast(2)).toBe(true);
+    expect(hub.isLast(1)).toBe(false);
+  });
+
   it("pronta é só o que a tela disse com um booleano", () => {
     const { hub, fakeWindow } = setup();
     hub.add(fakeWindow(1));
