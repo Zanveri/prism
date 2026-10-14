@@ -5,7 +5,10 @@ using Prism.TestingCore.Fakers.Folders;
 
 namespace Prism.UnitTesting.Folders;
 
-/// <summary>RN-PASTA-001: o nome tem de 1 a 60 caracteres depois de normalizado, e só ele é regra de validator (a pasta pai e o ID inexistentes são 404 do handler).</summary>
+/// <summary>
+/// RN-PASTA-001: o nome tem de 1 a 60 caracteres depois de normalizado; RN-PASTA-005: o ambiente, opcional, segue as regras do ambiente da conexão, com a
+/// recusa em `FOLDER_NAME_INVALID` no campo dele. A pasta pai e o ID inexistentes são 404 do handler, e não regra de validator.
+/// </summary>
 public sealed class FolderValidatorsTests
 {
     private static void AssertCreateNameInvalid(string name)
@@ -30,6 +33,30 @@ public sealed class FolderValidatorsTests
 
         //Assert
         result.ShouldHaveValidationErrorFor(command => command.Name).WithErrorCode("FOLDER_NAME_INVALID");
+    }
+
+    private static void AssertCreateInvalid(CreateFolderCommand command, string field)
+    {
+        //Arrange
+        var validator = new CreateFolderValidator();
+
+        //Act
+        var result = validator.TestValidate(command);
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(field).WithErrorCode("FOLDER_NAME_INVALID");
+    }
+
+    private static void AssertUpdateInvalid(UpdateFolderCommand command, string field)
+    {
+        //Arrange
+        var validator = new UpdateFolderValidator();
+
+        //Act
+        var result = validator.TestValidate(command);
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(field).WithErrorCode("FOLDER_NAME_INVALID");
     }
 
     [Trait("CreateFolderValidator", "CreateFolderCommand")]
@@ -99,6 +126,62 @@ public sealed class FolderValidatorsTests
 
         //Assert
         result.ShouldHaveValidationErrorFor(command => command.Name).WithErrorCode("FOLDER_NAME_INVALID");
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK com ambiente de 30 caracteres e cor #RRGGBB, e sem ambiente")]
+    public void CreateFolder_ShouldBeOK_WithAndWithoutEnvironment()
+    {
+        //Arrange
+        var validator = new CreateFolderValidator();
+
+        //Act
+        var with = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(environmentName: new string('a', 30), environmentColor: "#ff8a7a"));
+        var blank = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(environmentName: "  ", environmentColor: ""));
+        var without = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid());
+
+        //Assert
+        with.ShouldNotHaveAnyValidationErrors();
+        blank.ShouldNotHaveAnyValidationErrors();
+        without.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "Erro ambiente com 31 caracteres")]
+    public void CreateFolder_ShouldBeError_EnvironmentNameTooLong()
+        => AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(environmentName: new string('a', 31)), "EnvironmentName");
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente fora do formato #RRGGBB")]
+    public void CreateFolder_ShouldBeError_EnvironmentColorInvalid()
+    {
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(environmentColor: "red"), "EnvironmentColor");
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(environmentColor: "#12345"), "EnvironmentColor");
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(environmentColor: "#GGGGGG"), "EnvironmentColor");
+    }
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "Erro ambiente com 31 caracteres")]
+    public void UpdateFolder_ShouldBeError_EnvironmentNameTooLong()
+        => AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(environmentName: new string('a', 31)), "EnvironmentName");
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "Erro cor do ambiente fora do formato #RRGGBB")]
+    public void UpdateFolder_ShouldBeError_EnvironmentColorInvalid()
+        => AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(environmentColor: "#1234567"), "EnvironmentColor");
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK com ambiente válido")]
+    public void UpdateFolder_ShouldBeOK_WithEnvironment()
+    {
+        //Arrange
+        var validator = new UpdateFolderValidator();
+
+        //Act
+        var result = validator.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(environmentName: "Produção", environmentColor: "#FF8A7A"));
+
+        //Assert
+        result.ShouldNotHaveAnyValidationErrors();
     }
 
     [Trait("UpdateFolderValidator", "UpdateFolderCommand")]

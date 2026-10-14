@@ -8,9 +8,12 @@ import { queryPageSchema, queryResultSchema, queryTotalSchema, type QueryPage, t
  * decide qual recusa trata no lugar e qual vai ao aviso central é o `use-query-runner.ts`.
  */
 
-/** Executa o comando como está (RN-SQL-003) e devolve a primeira página ou as linhas afetadas. */
-export function executeQuery(sessionId: string, sql: string): Promise<ApiResult<QueryResult>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionQueries(sessionId), { method: "POST", body: { sql }, schema: queryResultSchema });
+/**
+ * Executa o comando como está (RN-SQL-003) e devolve a primeira página ou as linhas afetadas. `filter` é o texto do campo de filtro do resultado (RN-GRADE-011:
+ * a condição, a ordem ou as duas), que a API junta ao comando; sem ele (ou vazio), o corpo não o leva. O filtro que a API não aceita volta 422 `FILTER_INVALID`.
+ */
+export function executeQuery(sessionId: string, sql: string, filter?: string): Promise<ApiResult<QueryResult>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionQueries(sessionId), { method: "POST", body: filter === undefined || filter === "" ? { sql } : { sql, filter }, schema: queryResultSchema });
 }
 
 /** As próximas linhas do mesmo cursor, sem executar de novo (RN-SQL-005). Cursor fechado: 409 `NO_OPEN_CURSOR`. */

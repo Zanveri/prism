@@ -27,13 +27,29 @@ public sealed record ExecuteQueryCommand : IRequest<Result<QueryResultDto, ApiEr
     /// </summary>
     public JsonElement? PageSize { get; init; }
 
+    /// <summary>
+    /// RN-GRADE-011: o filtro do resultado, o texto do campo (condição, ordem ou as duas, como na RN-TABELA-010), que a API junta ao
+    /// comando ou põe por fora dele. Ausente, nulo ou só de espaços, o comando vai sem filtro.
+    /// </summary>
+    public string? Filter { get; init; }
+
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e o SQL do usuário pode ter dado sensível.</summary>
     public override string ToString() => nameof(ExecuteQueryCommand);
 }
 
 internal sealed class ExecuteQueryHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
 {
-    /// <summary>O validator já recusou o que não é um inteiro da faixa: aqui só há o número ou a falta dele.</summary>
+    /// <summary>
+    /// O validator já recusou o que não é um inteiro da faixa (aqui só há o número ou a falta dele) e o filtro que não se junta ao
+    /// comando. Sem filtro, o comando vai como veio.
+    /// </summary>
     public async Task<Result<QueryResultDto, ApiErrorDto>> Handle(ExecuteQueryCommand request, CancellationToken cancellationToken)
-        => (await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, request.PageSize is { ValueKind: JsonValueKind.Number } pageSize ? pageSize.GetInt32() : QueryPaging.DefaultPageSize, cancellationToken)).Map(outcome => outcome.ToDto()).MapError(DatabaseSessionErrors.From);
+    {
+        var pageSize = request.PageSize is { ValueKind: JsonValueKind.Number } size ? size.GetInt32() : QueryPaging.DefaultPageSize;
+        var outcome = string.IsNullOrWhiteSpace(request.Filter)
+            ? await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, pageSize, cancellationToken)
+            : await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, request.Filter, pageSize, cancellationToken);
+
+        return outcome.Map(executed => executed.ToDto()).MapError(DatabaseSessionErrors.From);
+    }
 }

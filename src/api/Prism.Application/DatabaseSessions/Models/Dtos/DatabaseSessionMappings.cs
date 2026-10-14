@@ -13,7 +13,7 @@ internal static class DatabaseSessionMappings
         => source.Page is { } page ? page.ToDto() with { ElapsedMs = source.ElapsedMs } : new QueryResultDto { RowsAffected = source.RowsAffected, ElapsedMs = source.ElapsedMs };
 
     public static QueryResultDto ToDto(this QueryPage source)
-        => new() { Columns = [.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], Rows = source.Rows, HasMore = source.HasMore, ElapsedMs = source.ElapsedMs, TruncatedCells = source.TruncatedCells, TotalRows = source.TotalRows, ResultID = source.ResultID, Editable = source.Editable };
+        => new() { Columns = [.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], Rows = source.Rows, HasMore = source.HasMore, ElapsedMs = source.ElapsedMs, TruncatedCells = source.TruncatedCells, TotalRows = source.TotalRows, ResultID = source.ResultID, Editable = source.Editable, CellsWithoutFullValue = source.CellsWithoutFullValue ?? [], FilterApplied = FilterText(source.FilterApplied) };
 
     /// <summary>RN-EDIT-002: o tipo de catálogo de cada coluna fica na API, que é quem converte o texto (RN-EDIT-006).</summary>
     public static EditTargetDto ToDto(this EditTarget source)
@@ -30,4 +30,14 @@ internal static class DatabaseSessionMappings
 
     private static IReadOnlyList<EditValue> ToValues(IReadOnlyList<EditValueDto>? values)
         => [.. (values ?? []).Select(value => new EditValue(value.Column, value.Value))];
+
+    /// <summary>RN-GRADE-011: a tela lê o texto, e não o número do enum.</summary>
+    private static string? FilterText(EFilterApplied? applied)
+        => applied switch
+        {
+            null => null,
+            EFilterApplied.Merged => "merged",
+            EFilterApplied.Wrapped => "wrapped",
+            _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")
+        };
 }

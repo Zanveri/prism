@@ -33,6 +33,9 @@ public abstract class IbmDatabaseSessionsTests
 
     protected abstract Task<ConnectionSettings> StartDatabaseAsync();
 
+    /// <summary>RN-GRADE-011: um filtro que só este banco recusa, pelas aspas ou pelos comentários dele; nulo onde não há.</summary>
+    protected virtual string? InvalidFilterOfThisDatabase => null;
+
     [OneTimeSetUp]
     public async Task StartAsync()
         => _settings = await StartDatabaseAsync();
@@ -104,6 +107,13 @@ public abstract class IbmDatabaseSessionsTests
         var smallNext = await StepAsync("POST queries/next (pageSize 50)", await client.PostAsync($"{session}/queries/next", null), HttpStatusCode.OK);
         var outOfRange = await StepAsync("POST queries (pageSize 1001)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido", pageSize = 1001 }), HttpStatusCode.UnprocessableEntity);
 
+        // RN-GRADE-011: o filtro junto ao comando, por fora da união, e as recusas, com as aspas e os comentários deste banco.
+        var merged = await StepAsync("POST queries (filtro junto)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido WHERE numero <= 1010 ORDER BY numero", filter = "numero > 1005 ORDER BY numero DESC" }), HttpStatusCode.OK);
+        var wrapped = await StepAsync("POST queries (filtro por fora)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido UNION SELECT numero FROM loja.pedido", filter = "numero < 1004 ORDER BY numero DESC" }), HttpStatusCode.OK);
+        var invalidFilter = await StepAsync("POST queries (filtro com ;)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido", filter = "numero = 1; DELETE FROM loja.pedido" }), HttpStatusCode.UnprocessableEntity);
+        if (InvalidFilterOfThisDatabase is { } ofThisDatabase)
+            Assert.That((await StepAsync("POST queries (filtro com o comentário deste banco aberto)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido", filter = ofThisDatabase }), HttpStatusCode.UnprocessableEntity)).GetProperty("type").GetString(), Is.EqualTo("FILTER_INVALID"));
+
         // RN-SQL-008, 009, 003 e 001.
         var updated = await StepAsync("POST queries (UPDATE)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "UPDATE loja.cliente SET nome = nome WHERE id <= 4"), HttpStatusCode.OK);
         var syntax = await StepAsync("POST queries (erro de sintaxe)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "SELEC 1"), HttpStatusCode.UnprocessableEntity);
@@ -160,6 +170,11 @@ public abstract class IbmDatabaseSessionsTests
         Assert.That(smallNext.GetProperty("rows").GetArrayLength(), Is.EqualTo(50));
         Assert.That(smallNext.GetProperty("rows")[0][0].GetString(), Is.EqualTo("1051"));
         Assert.That(outOfRange.GetProperty("type").GetString(), Is.EqualTo("QUERY_INVALID"));
+        Assert.That(merged.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1010", "1009", "1008", "1007", "1006" }));
+        Assert.That(merged.GetProperty("filterApplied").GetString(), Is.EqualTo("merged"));
+        Assert.That(wrapped.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1003", "1002", "1001" }));
+        Assert.That((wrapped.GetProperty("filterApplied").GetString(), wrapped.GetProperty("editable").GetProperty("reason").GetString()), Is.EqualTo(("wrapped", "união de consultas")));
+        Assert.That(invalidFilter.GetProperty("errorCodes").GetProperty("Filter")[0].GetString(), Is.EqualTo("FILTER_INVALID"));
         Assert.That(updated.GetProperty("rowsAffected").GetInt64(), Is.EqualTo(4));
         Assert.That(syntax.GetProperty("type").GetString(), Is.EqualTo("SQL_EXECUTION_FAILED"));
         Assert.That(syntax.GetProperty("sqlState").GetString(), Is.EqualTo(SyntaxErrorSqlState));
@@ -208,6 +223,9 @@ public sealed class InformixDatabaseSessionsTests : IbmDatabaseSessionsTests
     protected override string SyntaxErrorSqlState => "42000";
 
     protected override string DefaultForeignKeyRule => "restrict";
+
+    /// <summary>A chave abre comentário só no Informix: no PostgreSQL o mesmo filtro chega ao banco.</summary>
+    protected override string? InvalidFilterOfThisDatabase => "numero = 1 { o resto";
 
     protected override string Name(string name)
         => name.ToLowerInvariant();

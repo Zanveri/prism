@@ -245,6 +245,42 @@ public sealed class DatabaseSessionErrorsTests
         Assert.Equal(("RESULT_CHANGED", HttpStatusCode.Conflict, "O resultado mudou."), (error.Type, error.StatusCode, error.Detail));
     }
 
+    /// <summary>RN-SQL-017: o resultado de que se pedem os valores completos não é mais o da sessão (outro comando rodou), ou nunca foi.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ResultNotFound vira 404 RESULT_NOT_FOUND")]
+    public void From_ResultNotFound_Is404ResultNotFound()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ResultNotFound, "O resultado não existe mais."));
+
+        //Assert
+        Assert.Equal(("RESULT_NOT_FOUND", HttpStatusCode.NotFound, "O resultado não existe mais."), (error.Type, error.StatusCode, error.Detail));
+    }
+
+    /// <summary>RN-SQL-017: uma linha ou uma coluna fora do resultado.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK CellsInvalid vira 422 CELLS_INVALID")]
+    public void From_CellsInvalid_Is422CellsInvalid()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.CellsInvalid, "A linha 300 não está no resultado."));
+
+        //Assert
+        Assert.Equal(("CELLS_INVALID", HttpStatusCode.UnprocessableEntity, "A linha 300 não está no resultado."), (error.Type, error.StatusCode, error.Detail));
+    }
+
+    /// <summary>RN-GRADE-011: a recusa do filtro pelo registro de sessões, com o motivo no detalhe (pela rota, o validator recusa antes, com o mesmo código).</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK FilterInvalid vira 422 FILTER_INVALID com o motivo")]
+    public void From_FilterInvalid_Is422FilterInvalid()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar."));
+
+        //Assert
+        Assert.Equal(("FILTER_INVALID", HttpStatusCode.UnprocessableEntity, "O filtro tem aspas sem fechar."), (error.Type, error.StatusCode, error.Detail));
+    }
+
     [Trait("DatabaseSessionErrors", "From")]
     [Fact(DisplayName = "OK ResultNotEditable vira 422 RESULT_NOT_EDITABLE com a extensão reason")]
     public void From_ResultNotEditable_Is422_WithTheReason()

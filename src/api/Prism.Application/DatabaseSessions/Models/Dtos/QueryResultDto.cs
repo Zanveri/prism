@@ -24,4 +24,13 @@ public sealed record QueryResultDto
 
     /// <summary>RN-EDIT-002: `{ known: false }` enquanto só o catálogo sabe, ou `{ known: true, reason }` quando o resultado inteiro já se sabe só leitura.</summary>
     public ResultEditability? Editable { get; init; }
+
+    /// <summary>
+    /// RN-SQL-017: as células cortadas desta página cujo valor completo a API não guardou (passou dos 256 MB da sessão), como `[linha,
+    /// coluna]` dentro da página; copiar e exportar levam essas cortadas. Nulo nas linhas afetadas.
+    /// </summary>
+    public IReadOnlyList<int[]>? CellsWithoutFullValue { get; init; }
+
+    /// <summary>RN-GRADE-011: como o filtro do resultado entrou no comando, `merged` (junto) ou `wrapped` (por fora, só leitura); nulo sem filtro e nas linhas afetadas.</summary>
+    public string? FilterApplied { get; init; }
 }

@@ -11,7 +11,7 @@ describe("queryResultSchema (seção 6: página de resultado)", () => {
   it("página com linhas", () => {
     const parsed = queryResultSchema.parse({ columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], rowsAffected: null });
 
-    expect(parsed).toEqual({ kind: "rows", columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], totalRows: null, resultId: null, readOnly: null });
+    expect(parsed).toEqual({ kind: "rows", columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], totalRows: null, resultId: null, readOnly: null, filterApplied: null });
   });
 
   it("totalRows presente: o comando gravou, foi até o fim e esse é o total que devolveu (RN-SQL-013)", () => {

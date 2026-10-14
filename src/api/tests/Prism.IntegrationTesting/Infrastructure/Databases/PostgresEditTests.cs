@@ -53,6 +53,9 @@ public sealed class PostgresEditTests : DatabaseEditContractTests
     protected override Task<ConnectionSettings> StartDatabaseAsync()
         => PostgresSingleton.GetSettingsAsync();
 
+    protected override string WithFirstRows(string select, int rows)
+        => $"{select} LIMIT {rows}";
+
     protected override string Name(string name)
         => name;
 

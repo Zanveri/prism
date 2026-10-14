@@ -24,8 +24,13 @@ export type GridEditing = {
   marks: ReadonlyMap<number, RowMark>;
   active: GridCell | null;
   editor: CellEditorState | null;
-  /** O motivo de cada coluna não se editar, para a dica do cabeçalho; nulo enquanto o catálogo não respondeu. */
+  /**
+   * A dica do cabeçalho de cada coluna (RN-EDIT-002): o motivo de ela não se editar e, num resultado de junção, a tabela e a coluna que a
+   * editável altera; nulo enquanto o catálogo não respondeu.
+   */
   columnHints: readonly (string | null)[] | null;
+  /** As colunas que não se editam, marcadas no cabeçalho ("somente leitura", como no canvas): só na aba de consulta, com o catálogo respondido. */
+  columnReadOnly?: readonly boolean[] | null;
   onActivate: (cell: GridCell) => void;
   /** Abrir o campo na célula: duplo clique, F2, Enter, ou começar a digitar (`initial` substitui o valor). */
   onEdit: (cell: GridCell, initial?: string) => void;
@@ -35,10 +40,17 @@ export type GridEditing = {
   onCancel: () => void;
   /** O menu da célula: o ponto do clique, ou o pé da célula quando veio do teclado. */
   onMenu: (cell: GridCell, point: { x: number; y: number }, keyboard: boolean) => void;
+  /** RN-GRADE-002 e RN-SQL-017: Ctrl+C com o foco na grade copia a célula ativa, com o valor completo quando ela chegou cortada. */
+  onCopy: (cell: GridCell) => void;
   /** Ctrl+S com o foco na grade. */
   onSave: () => void;
   /** Alt+Insert com o foco na grade. */
   onNewRow: () => void;
+  /**
+   * RN-GRADE-013: F11 com o foco na grade abre o menu da célula ativa com o submenu "Filtrar" aberto (`menu`), e Ctrl+F11 abre direto o
+   * "Filtrar por valor…" (`values`). Só existe na grade que tem campo de filtro.
+   */
+  onFilter?: (cell: GridCell, point: { x: number; y: number }, mode: "menu" | "values") => void;
 };
 
 /**
@@ -47,6 +59,31 @@ export type GridEditing = {
  */
 export function savesEdits(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }, pending: number): boolean {
   return pending > 0 && (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "s";
+}
+
+/**
+ * RN-GRADE-002: Ctrl+C (Cmd+C) com o foco na grade copia a célula ativa, como o valor puro. Com Shift é o copiar avançado (RN-GRADE-003), e com Alt
+ * não é cópia: a tecla segue.
+ */
+export function copiesCell(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c";
+}
+
+/**
+ * RN-GRADE-013: F11 abre o submenu "Filtrar" na célula ativa, e Ctrl+F11 (Cmd+F11) abre o "Filtrar por valor…". Com Shift ou Alt não é o
+ * filtro: a tecla segue.
+ */
+export function filterKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): "menu" | "values" | null {
+  if (event.key !== "F11" || event.shiftKey || event.altKey) return null;
+  return event.ctrlKey || event.metaKey ? "values" : "menu";
+}
+
+/**
+ * RN-GRADE-012: F5 atualiza (os Registros lidos de novo, o resultado executado de novo, a Estrutura e o Diagrama recarregados, o nó do navegador), como
+ * no DBeaver. Só a tecla sozinha: Ctrl+F5 e Shift+F5 também não recarregam a janela (o processo principal as segura), mas não atualizam nada.
+ */
+export function refreshKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return event.key === "F5" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 
 /** As linhas que a grade desenha: as lidas e, depois, as novas, com o que foi preenchido (o resto vazio, para o padrão da tabela). */

@@ -45,7 +45,7 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
 
   const finish = useCallback(
     (tab: QueryTab, saved: ScriptSummary, sql: string) => {
-      setTabScript(tab.id, { id: saved.id, name: saved.name }, sql);
+      setTabScript(tab.id, { id: saved.id, name: saved.name }, sql, tab.database);
       void queryClient.invalidateQueries({ queryKey: scriptsQuery.queryKey });
       toast.success(copy.toasts.saved(saved.name));
     },

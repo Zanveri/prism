@@ -67,6 +67,18 @@ function filterShape(text: string, engine?: Engine) {
   return { code, order, start: order < 0 ? end : code[order].start, end };
 }
 
+/**
+ * O texto do filtro em duas partes (RN-GRADE-013): `condition` vai do começo até o fim do último pedaço de código ANTES da ordem de fora (sem
+ * comentário nem espaço no fim), e `tail` é o resto, aparado: a ordem, o `;` e os comentários do fim. É onde o "Filtrar" junta a condição nova, sem tocar a
+ * ordem que a pessoa escreveu.
+ */
+export function filterParts(text: string, engine?: Engine): { condition: string; tail: string } {
+  const { code, order } = filterShape(text, engine);
+  const last = order < 0 ? code.length - 1 : order - 1;
+  const cut = last < 0 ? 0 : code[last].end;
+  return { condition: text.slice(0, cut), tail: text.slice(cut).trim() };
+}
+
 /** A ordem de fora do texto do filtro, como foi escrita (`ORDER BY ...`, sem o `;` e sem o comentário do fim), ou vazio se ele não tem. */
 export function orderOf(text: string, engine?: Engine): string {
   const { start, end } = filterShape(text, engine);

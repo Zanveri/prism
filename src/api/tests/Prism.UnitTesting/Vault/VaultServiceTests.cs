@@ -340,7 +340,7 @@ public sealed partial class VaultServiceTests : IDisposable
     public async Task Unlock_WithRightPassword_ReturnsDocument()
     {
         //Arrange
-        var expected = new VaultDocument(_userName, [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection(), VaultFakers.CreateConnection()], [VaultFakers.CreateScript()]);
+        var expected = new VaultDocument(_userName, [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection(), VaultFakers.CreateConnection()], [VaultFakers.CreateScript()], VaultFakers.CreateWorkspace(1, VaultFakers.CreateQueryTab(), VaultFakers.CreateTableTab()));
 
         using (var writer = CreateService())
         {
@@ -860,7 +860,7 @@ public sealed partial class VaultServiceTests : IDisposable
         var unlocked = await service.UnlockAsync(_userName, _password, CancellationToken.None);
 
         //Assert
-        var expected = new VaultDocument(_userName, [folder], [connection], []);
+        var expected = new VaultDocument(_userName, [folder], [connection], [], VaultWorkspaceRecord.Empty);
         Assert.True(saved.IsSuccess);
         Assert.True(afterSave.Value.JsonEquals(expected));
         Assert.True(unlocked.IsSuccess);
@@ -901,10 +901,10 @@ public sealed partial class VaultServiceTests : IDisposable
         }
     }
 
-    /// <summary>RN-VERSAO-005: o cofre nasce no formato atual, com a lista de scripts vazia (RN-SCRIPT-002).</summary>
+    /// <summary>RN-VERSAO-005: o cofre nasce no formato atual, com a lista de scripts vazia (RN-SCRIPT-002) e a área de trabalho vazia (RN-ABAS-006).</summary>
     [Trait("VaultService", "CreateAsync")]
-    [Fact(DisplayName = "OK o cofre criado é do formato atual e começa sem scripts")]
-    public async Task Create_WritesTheCurrentFormatWithoutScripts()
+    [Fact(DisplayName = "OK o cofre criado é do formato atual e começa sem scripts e sem abas")]
+    public async Task Create_WritesTheCurrentFormatWithoutScriptsNorTabs()
     {
         //Arrange
         var service = CreateService();
@@ -916,6 +916,43 @@ public sealed partial class VaultServiceTests : IDisposable
         var node = JsonNode.Parse(File.ReadAllText(VaultPath(_userName)))!;
         Assert.Equal(VaultCrypto.Version, node["version"]!.GetValue<int>());
         Assert.Empty(service.Read().Value.Scripts);
+        Assert.Empty(service.Read().Value.Workspace.Tabs);
+        Assert.Null(service.Read().Value.Workspace.ActiveIndex);
+    }
+
+    /// <summary>
+    /// RN-ABAS-006: as abas moram no cofre, cifradas como os scripts (RN-SCRIPT-002). Nem o texto, nem o banco, nem o esquema, nem a tabela aparecem no arquivo,
+    /// no `.bak` ou no temporário, em texto ou em base64, e voltam inteiros, na ordem e com a ativa, na entrada seguinte.
+    /// </summary>
+    [Trait("VaultService", "SaveAsync")]
+    [Fact(DisplayName = "OK as abas vão cifradas para o disco: nem o texto nem os nomes aparecem no arquivo")]
+    public async Task Save_Workspace_IsNotWrittenInTheClear()
+    {
+        //Arrange
+        var mark = Guid.NewGuid().ToString("N");
+        var workspace = VaultFakers.CreateWorkspace(1, VaultFakers.CreateQueryTab(connectionID: Guid.CreateVersion7(), database: $"banco_{mark}", sql: $"SELECT 'segredo-{mark}' FROM clientes", scriptID: Guid.CreateVersion7(), dirty: true), VaultFakers.CreateTableTab(schema: $"esquema_{mark}", table: $"tabela_{mark}", view: "diagram"));
+        var service = CreateService();
+        await service.CreateAsync(_userName, _password, CancellationToken.None);
+
+        //Act
+        var saved = await service.SaveAsync(document => document with { Workspace = workspace }, CancellationToken.None);
+        await service.SaveAsync(document => document with { Folders = [VaultFakers.CreateFolder()] }, CancellationToken.None);
+        service.Lock();
+        var unlocked = await service.UnlockAsync(_userName, _password, CancellationToken.None);
+
+        //Assert
+        Assert.True(saved.IsSuccess);
+        Assert.True(unlocked.IsSuccess);
+        Assert.Equal(workspace.Tabs, service.Read().Value.Workspace.Tabs);
+        Assert.Equal(1, service.Read().Value.Workspace.ActiveIndex);
+        foreach (var path in Directory.GetFiles(Path.Combine(_directory, "vaults")))
+        {
+            var text = File.ReadAllText(path);
+            var bytes = File.ReadAllBytes(path);
+            Assert.DoesNotContain(mark, text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(Convert.ToBase64String(Encoding.UTF8.GetBytes(mark)), text, StringComparison.Ordinal);
+            Assert.DoesNotContain("segredo", Encoding.UTF8.GetString(bytes), StringComparison.Ordinal);
+        }
     }
 
     /// <summary>Review Focus 1: carregar, alterar, cifrar e gravar acontecem um de cada vez, e nenhuma alteração simultânea se perde.</summary>

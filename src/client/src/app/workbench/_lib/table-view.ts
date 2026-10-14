@@ -153,6 +153,21 @@ export function sortRecords(table: RecordsTable, { draft, filter, column, column
   applyRunPlan(plan, deps);
 }
 
+/**
+ * O "Filtrar" do menu da célula (RN-GRADE-013): `text` é o campo com a condição já junta (`joinFilter`), e é enviado inteiro,
+ * como o "Aplicar". Como no clique do cabeçalho, o campo só passa a mostrar o texto novo quando ele é de fato enviado: com a aba ocupada nada muda, e com
+ * mais de um comando só o aviso aparece.
+ */
+export function filterRecords(table: RecordsTable, text: string, state: RunnerState, deps: FieldDeps): void {
+  const plan = recordsRunPlan(table.engine, table.schema, table.name, text, isBusy(state));
+
+  if (plan.kind === "send") {
+    deps.setDraft(plan.filter);
+    deps.setProblem(null);
+  }
+  applyRunPlan(plan, deps);
+}
+
 /** "Limpar" vale sempre que há filtro ou ordem, em vigor ou só digitados (RN-TABELA-010): a ordem do cabeçalho mora no texto, e conta. */
 export function canClear(draft: string, filter: string): boolean {
   return draft !== "" || filter !== "";

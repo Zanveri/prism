@@ -1,10 +1,9 @@
 import { useEffect, useEffectEvent, useImperativeHandle, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { PostgreSQL, sql, StandardSQL } from "@codemirror/lang-sql";
-import { bracketMatching, HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { bracketMatching, indentOnInput, indentUnit, syntaxHighlighting } from "@codemirror/language";
 import { Compartment, EditorSelection, EditorState, Prec, StateEffect, StateField, type Text } from "@codemirror/state";
 import { Decoration, drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
@@ -14,6 +13,7 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 
 import type { CachedLevel } from "../_lib/navigator-search";
+import { completionTheme, highlight } from "../_lib/completion-theme";
 import { cachedLevels, sqlCompletion } from "../_lib/sql-completion";
 import { tableLinks } from "../_lib/table-link-extension";
 import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type TableLink } from "../_lib/table-links";
@@ -64,33 +64,13 @@ const editorTheme = (preferences: EditorPreferences, dark: boolean) => {
       ".cm-table-link *": { color: "var(--color-link)", cursor: "pointer" },
       ".cm-sql-error": { textDecoration: "underline wavy var(--color-danger)", textDecorationSkipInk: "none", textUnderlineOffset: "3px" },
 
-      // A lista de sugestões (RN-CONFIG-004) é o que flutua, como a lista do Select: fundo elevado, borda forte, sombra. Os seletores
-      // repetem os da biblioteca, que tem o mesmo peso e vem antes; só pares de cor que o teste de contraste já cobre (texto sobre elevado e sobre selecionado).
-      ".cm-tooltip": { backgroundColor: "var(--color-raised)", color: "var(--color-body)", border: "1px solid var(--color-border-strong)", borderRadius: "6px", boxShadow: "var(--shadow-2xl)" },
-      ".cm-tooltip.cm-tooltip-autocomplete > ul": { fontFamily: font.fontFamily, padding: "4px", minWidth: "260px" },
-      ".cm-tooltip.cm-tooltip-autocomplete > ul > li": { padding: "3px 10px", borderRadius: "4px", lineHeight: "1.4" },
-      ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "var(--color-selected)", color: "var(--color-ink)" },
-      ".cm-completionDetail": { color: "var(--color-muted)", fontStyle: "normal" },
-      ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "600", color: "var(--color-accent)" },
-      ".cm-completion-keyword .cm-completionLabel": { color: "var(--color-syntax-keyword)" },
+      // A lista de sugestões (RN-CONFIG-004), a mesma do campo de filtro.
+      ...completionTheme(font.fontFamily),
     },
     { dark },
   );
 };
 
-/**
- * As cores de sintaxe do tema (RN-CONFIG-003): palavra-chave e tipo, texto entre aspas simples, número e comentário. Cada tema do canvas
- * define as quatro (`kw`, `str`, `num` e `com`); no Prism Escuro são o azul do PostgreSQL, o verde, o acento e o apagado.
- * O nome entre aspas duplas é um nome, e não texto. O canvas pinta em rosa a função do banco
- * (`now`); a gramática do `lang-sql` não distingue função de nome, então ela fica na cor do texto.
- */
-const highlight = HighlightStyle.define([
-  { tag: [tags.keyword, tags.typeName], color: "var(--color-syntax-keyword)" },
-  { tag: tags.string, color: "var(--color-syntax-string)" },
-  { tag: tags.special(tags.string), color: "var(--color-ink)" },
-  { tag: tags.number, color: "var(--color-syntax-number)" },
-  { tag: [tags.lineComment, tags.blockComment], color: "var(--color-syntax-comment)", fontStyle: "italic" },
-]);
 
 /**
  * As partes do editor que as preferências mudam com ele já montado, cada uma num compartimento do CodeMirror: reconfigurar um

@@ -92,6 +92,9 @@ export function createWindowHub(deps: WindowHubDeps) {
       flush(entry);
     },
 
+    /** RN-ABAS-007: a janela é a única aberta? Fechá-la fecha o app, e as abas dela voltam na próxima entrada. */
+    isLast: (id: number): boolean => entries.size === 1 && entries.has(id),
+
     /** A janela tem a área de trabalho montada? Só ela tem abas a perguntar antes de fechar. */
     isReady: (id: number): boolean => entries.get(id)?.ready === true,
 

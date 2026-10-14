@@ -54,6 +54,23 @@ public abstract class DatabaseEditContractTests
     protected virtual string Table(string name)
         => Name(name);
 
+    /// <summary>Uma tabela das junções como o `FROM` a escreve: com o esquema, onde o caminho de busca da sessão não a acha sem ele.</summary>
+    protected virtual string JoinFrom(string table)
+        => Quoted(table);
+
+    /// <summary>O qualificador de uma coluna das junções, sem apelido: o nome da tabela, como o comando do dono escreve.</summary>
+    protected virtual string JoinQualifier(string table)
+        => Table(table);
+
+    /// <summary>
+    /// RN-GRADE-011: o `SELECT` (que termina em `ORDER BY`) só com as primeiras `rows` linhas, no limite de linhas do banco: `LIMIT` no
+    /// PostgreSQL, `FETCH FIRST` no Db2, `FIRST` na cabeça no Informix.
+    /// </summary>
+    protected abstract string WithFirstRows(string select, int rows);
+
+    /// <summary>RN-GRADE-011: o fim de comando que a tabela derivada do banco não aceita dentro dela (`FOR READ ONLY` no Db2 e no Informix); nulo onde não se testa.</summary>
+    protected virtual string? ReadOnlyClause => null;
+
     protected IDatabaseSessionService Service => _service;
 
     [OneTimeSetUp]
@@ -68,7 +85,7 @@ public abstract class DatabaseEditContractTests
         _vault = _provider.GetRequiredService<IVaultService>();
         _client = _provider.GetServices<IDatabaseClient>().Single(client => client.Engine == Engine);
 
-        await RunAsync(Settings, [.. Setup]);
+        await RunAsync(Settings, [.. Setup, .. JoinTables.Select(table => $"CREATE TABLE {Schema}.{Table(table.Name)} ({table.Columns})")]);
     }
 
     [OneTimeTearDown]
@@ -76,7 +93,7 @@ public abstract class DatabaseEditContractTests
     {
         await using (var connection = Value(await _client.OpenAsync(Settings, CancellationToken.None)))
         {
-            foreach (var sql in Teardown)
+            foreach (var sql in JoinTables.Select(table => $"DROP TABLE {Schema}.{Table(table.Name)}").Concat(Teardown))
                 await connection.ExecuteAsync(sql, CancellationToken.None);
         }
 
@@ -224,6 +241,103 @@ public abstract class DatabaseEditContractTests
         Assert.That(await RowsAsync("pedido", "status"), Has.Length.EqualTo(3));
     }
 
+    /// <summary>
+    /// O pedido do dono (2026-10-14): o SELECT com junção de três tabelas que lê as colunas de uma só, sem apelido. Edita-se a tabela que
+    /// tem a chave inteira no resultado (menos a coluna da chave); as outras duas ficam só leitura, com o motivo. Não há linha nova nem
+    /// exclusão. O "Salvar" grava pela chave da tabela da coluna.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfTheOwnersJoin_SaveTheTableThatHasItsKeyInTheResult()
+    {
+        await ResetJoinTablesAsync();
+        var session = await OpenSessionAsync();
+        var page = Value(await _service.ExecuteAsync(session, $"""
+            select {JoinQualifier("pallets_items")}.*
+              from {JoinFrom("pallets")}
+             inner join {JoinFrom("pallets_items")} on {JoinQualifier("pallets_items")}.pallet_id = {JoinQualifier("pallets")}.id
+             inner join {JoinFrom("items")} on {JoinQualifier("pallets_items")}.item_id = {JoinQualifier("items")}.id
+             where {JoinQualifier("pallets")}.is_integrated = 1 and {JoinQualifier("pallets")}.location_id = 6 and {JoinQualifier("items")}.code = '66903015'
+             order by 1
+            """, QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+        Assert.That(page.Editable, Is.EqualTo(ResultEditability.Unknown));
+        Assert.That(page.Rows.Select(row => row[Column(page, "id")]), Is.EqualTo(new[] { "100", "103" }));
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+
+        Assert.That(target.Tables.Select(table => (table.Name, table.Editable)), Is.EqualTo(new[] { (Table("pallets"), false), (Table("pallets_items"), true), (Table("items"), false) }));
+        Assert.That(target.Tables[0].Reason, Is.EqualTo($"a chave de {Table("pallets")} não está inteira no resultado: faltam {Name("id")}"));
+        Assert.That(target.Tables[1].Key, Is.EqualTo(new[] { Column(page, "id") }));
+        Assert.That(target.Columns.Select(column => column.Table), Is.All.EqualTo(1));
+        Assert.That((target.Columns[Column(page, "id")].Editable, target.Columns[Column(page, "id")].Reason), Is.EqualTo((false, (string?)"coluna da chave numa junção")));
+        Assert.That(target.Columns[Column(page, "quantity")].Editable, Is.True);
+        Assert.That(target.RowOperations, Is.False);
+
+        var applied = await _service.ApplyEditsAsync(session, page.ResultID.Value, [new EditChange(EEditKind.Update, 1, ["100"], [new EditValue(Column(page, "quantity"), "50")])], CancellationToken.None);
+
+        Assert.That(Value(applied), Is.EqualTo(1));
+        Assert.That(await RowsAsync("pallets_items", "quantity"), Is.EqualTo(new[] { ("100", (string?)"50"), ("101", "7"), ("102", "9"), ("103", "3") }));
+    }
+
+    /// <summary>
+    /// RN-EDIT-002, 005 e 008: numa junção, as alterações de uma linha da grade em duas tabelas são dois `UPDATE`, cada um pela chave da
+    /// sua tabela, num "Salvar" só; a linha de uma tabela que aparece repetida no resultado muda em todas as linhas dele.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfTwoTablesInTheSameRowOfAJoin_AreTwoUpdatesByEachKey()
+    {
+        await ResetJoinTablesAsync();
+        var session = await OpenSessionAsync();
+        var sql = $"SELECT pi.id, pi.quantity, i.id AS item_key, i.description FROM {JoinFrom("pallets_items")} pi JOIN {JoinFrom("items")} i ON i.id = pi.item_id WHERE pi.pallet_id = 1 ORDER BY pi.id";
+        var page = Value(await _service.ExecuteAsync(session, sql, QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+        var (quantity, description) = (Column(page, "quantity"), Column(page, "description"));
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+        Assert.That(target.Tables.Select(table => table.Key.ToArray()), Is.EqualTo(new[] { new[] { Column(page, "id") }, new[] { Column(page, "item_key") } }));
+        Assert.That(target.Columns.Select(column => (column.Table, column.Editable)), Is.EqualTo(new[] { ((int?)0, false), (0, true), (1, false), (1, true) }));
+
+        EditChange[] changes = [new(EEditKind.Update, 0, ["100"], [new EditValue(quantity, "6")]), new(EEditKind.Update, 1, ["10"], [new EditValue(description, "parafuso sextavado")])];
+        var preview = Value(await _service.PreviewEditsAsync(session, page.ResultID.Value, changes, CancellationToken.None));
+        Assert.That(preview.Statements.Select(statement => statement.Sql), Is.EqualTo(new[]
+        {
+            $"UPDATE {Quoted("pallets_items")} SET {Q(Name("quantity"))} = 6 WHERE {Q(Name("id"))} = 100",
+            $"UPDATE {Quoted("items")} SET {Q(Name("description"))} = 'parafuso sextavado' WHERE {Q(Name("id"))} = 10"
+        }));
+
+        Assert.That(Value(await _service.ApplyEditsAsync(session, page.ResultID.Value, changes, CancellationToken.None)), Is.EqualTo(2));
+
+        var read = Value(await _service.ExecuteAsync(session, sql, QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+        Assert.That(read.Rows.Select(row => (row[0], row[quantity], row[description])), Is.EqualTo(new[] { ("100", (string?)"6", (string?)"parafuso sextavado"), ("101", "7", "porca"), ("103", "3", "parafuso sextavado") }));
+    }
+
+    /// <summary>RN-EDIT-002: numa junção externa, a tabela que não tem linha ali veio com a chave nula, e a alteração dela é recusada antes do banco.</summary>
+    [Test]
+    public async Task Edits_OfTheMissingSideOfAnOuterJoin_AreRefusedBeforeTheDatabase()
+    {
+        await ResetJoinTablesAsync();
+        var session = await OpenSessionAsync();
+        var page = Value(await _service.ExecuteAsync(session, $"SELECT p.id, p.location_id, pi.id AS item_row, pi.quantity FROM {JoinFrom("pallets")} p LEFT JOIN {JoinFrom("pallets_items")} pi ON pi.pallet_id = p.id WHERE p.id = 4", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+        Assert.That(page.Rows.Single()[Column(page, "item_row")], Is.Null);
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+        Assert.That(target.Tables.Select(table => table.Editable), Is.All.True);
+
+        var applied = await _service.ApplyEditsAsync(session, page.ResultID.Value, [new EditChange(EEditKind.Update, 1, [null], [new EditValue(Column(page, "quantity"), "1")])], CancellationToken.None);
+        Assert.That((applied.Error.Kind, applied.Error.Change), Is.EqualTo((EDatabaseFailure.EditInvalid, (int?)0)));
+    }
+
+    /// <summary>RN-EDIT-002: a mesma tabela duas vezes no `FROM` fica só leitura, com o motivo; a junção não deixa o resultado inteiro só leitura.</summary>
+    [Test]
+    public async Task EditTarget_OfATableThatAppearsTwice_IsReadOnly()
+    {
+        var session = await OpenSessionAsync();
+        var page = Value(await _service.ExecuteAsync(session, $"SELECT a.id, a.code, b.id AS other FROM {JoinFrom("items")} a JOIN {JoinFrom("items")} b ON b.id = a.id", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+
+        Assert.That(target.Tables.Select(table => table.Reason), Is.All.EqualTo($"{Table("items")} aparece mais de uma vez no comando"));
+        Assert.That(target.Columns.Select(column => column.Editable), Is.All.False);
+    }
+
     /// <summary>RN-EDIT-008: o "Ver SQL" mostra os comandos com os valores como literais, sem executar nada.</summary>
     [Test]
     public async Task Preview_WritesTheCommandsWithoutRunningThem()
@@ -236,6 +350,95 @@ public abstract class DatabaseEditContractTests
         Assert.That(preview.Statements.Select(statement => statement.Sql), Is.EqualTo(new[] { $"UPDATE {Quoted("pedido")} SET {Q(Name("status"))} = 'it''s' WHERE {Q(Name("id"))} = 1" }));
         Assert.That(await RowsAsync("pedido", "status"), Does.Contain(("1", (string?)"aberta")));
     }
+
+    /// <summary>
+    /// RN-GRADE-011: o filtro junto aos Registros (com o `WHERE` e o `ORDER BY` deles) dá as linhas certas, na ordem do filtro, e o
+    /// resultado continua editável: o catálogo diz o mesmo que sem o filtro, e o "Salvar" grava pela chave. O "contar total" conta o
+    /// comando montado.
+    /// </summary>
+    [Test]
+    public async Task Filter_MergedIntoTheCommand_GivesTheRightRows_AndStaysEditable()
+    {
+        var session = await OpenSessionAsync();
+        var sql = $"SELECT * FROM {Quoted("pedido")} WHERE {Q(Name("quantidade"))} >= 1 ORDER BY 1";
+        var page = Value(await _service.ExecuteAsync(session, sql, $"{Q(Name("status"))} = 'aberta' ORDER BY {Q(Name("id"))} DESC", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Merged, ResultEditability.Unknown)));
+        Assert.That(page.Rows.Select(row => row[Column(page, "id")]), Is.EqualTo(new[] { "2", "1" }));
+        Assert.That(Value(await _service.CountAsync(session, CancellationToken.None)), Is.EqualTo(2));
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+        Assert.That((target.Tables.Single().Editable, target.RowOperations, target.Columns[Column(page, "status")].Editable), Is.EqualTo((true, true, true)));
+
+        var applied = await _service.ApplyEditsAsync(session, page.ResultID.Value, [new EditChange(EEditKind.Update, 0, ["2"], [new EditValue(Column(page, "status"), "paga")])], CancellationToken.None);
+        Assert.That(Value(applied), Is.EqualTo(1));
+        Assert.That(await RowsAsync("pedido", "status"), Is.EqualTo(new[] { ("1", (string?)"aberta"), ("2", "paga"), ("3", "fechada") }));
+    }
+
+    /// <summary>RN-GRADE-011: a ordem do filtro troca a do comando e entra antes do limite de linhas do banco: das abertas, a primeira na ordem nova.</summary>
+    [Test]
+    public async Task Filter_MergedIntoACommandWithARowLimit_OrdersBeforeTheLimit()
+    {
+        var session = await OpenSessionAsync();
+        var sql = WithFirstRows($"SELECT * FROM {Quoted("pedido")} ORDER BY 1", 1);
+        var page = Value(await _service.ExecuteAsync(session, sql, $"{Q(Name("status"))} = 'aberta' ORDER BY {Q(Name("id"))} DESC", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Merged, ResultEditability.Unknown)));
+        Assert.That(page.Rows.Select(row => row[Column(page, "id")]), Is.EqualTo(new[] { "2" }));
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: o agrupamento vai por fora, como tabela derivada com o `ORDER BY` e o limite de linhas dentro (o fim de comando que
+    /// ela não aceita, como o `FOR READ ONLY`, vai depois); as linhas são as certas, e o resultado é só leitura, com o motivo do comando.
+    /// </summary>
+    [Test]
+    public async Task Filter_AroundAGroupedCommand_GivesTheRightRows_AndIsReadOnly()
+    {
+        var session = await OpenSessionAsync();
+        var status = Q(Name("status"));
+        var grouped = WithFirstRows($"SELECT {status}, COUNT(*) AS quantos FROM {Quoted("pedido")} GROUP BY {status} ORDER BY 2 DESC", 1) + (ReadOnlyClause is { } clause ? $" {clause}" : string.Empty);
+        var page = Value(await _service.ExecuteAsync(session, grouped, $"quantos >= 1 ORDER BY {status}", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Wrapped, ResultEditability.ReadOnly("agrupamento"))));
+        Assert.That(page.Rows.Select(row => (row[Column(page, "status")], row[Column(page, "quantos")])), Is.EqualTo(new[] { ((string?)"aberta", (string?)"2") }));
+
+        var target = await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None);
+        Assert.That((target.Error.Kind, target.Error.Reason), Is.EqualTo((EDatabaseFailure.ResultNotEditable, "agrupamento")));
+    }
+
+    /// <summary>RN-GRADE-011: a união vai por fora; a condição e a ordem do filtro valem para as linhas das duas partes, e o resultado é só leitura.</summary>
+    [Test]
+    public async Task Filter_AroundAUnion_GivesTheRightRows_AndIsReadOnly()
+    {
+        var session = await OpenSessionAsync();
+        var (id, status) = (Q(Name("id")), Q(Name("status")));
+        var union = $"SELECT {id}, {status} FROM {Quoted("pedido")} WHERE {id} = 1 UNION SELECT {id}, {status} FROM {Quoted("pedido")} WHERE {id} = 3";
+        var page = Value(await _service.ExecuteAsync(session, union, $"{id} > 0 ORDER BY {id} DESC", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        Assert.That((page.FilterApplied, page.Editable), Is.EqualTo((EFilterApplied.Wrapped, ResultEditability.ReadOnly("união de consultas"))));
+        Assert.That(page.Rows.Select(row => (row[Column(page, "id")], row[Column(page, "status")])), Is.EqualTo(new[] { ((string?)"3", (string?)"fechada"), ("1", "aberta") }));
+    }
+
+    /// <summary>As tabelas das junções (o pedido do dono): paletes, itens e os itens de cada palete. Os tipos são os mesmos nos três bancos.</summary>
+    private static readonly (string Name, string Columns)[] JoinTables =
+    [
+        ("pallets", "id INTEGER NOT NULL PRIMARY KEY, location_id INTEGER, is_integrated INTEGER"),
+        ("items", "id INTEGER NOT NULL PRIMARY KEY, code VARCHAR(20), description VARCHAR(40)"),
+        ("pallets_items", "id INTEGER NOT NULL PRIMARY KEY, pallet_id INTEGER NOT NULL, item_id INTEGER NOT NULL, quantity INTEGER")
+    ];
+
+    /// <summary>
+    /// O palete 1 está no local 6, integrado, com o item 10 ('66903015') duas vezes e o 11 uma; o 2 não está integrado; o 3 está noutro
+    /// local; o 4 não tem itens.
+    /// </summary>
+    protected Task ResetJoinTablesAsync()
+        => RunAsync(Settings,
+        [
+            .. JoinTables.Select(table => $"DELETE FROM {Quoted(table.Name)}"),
+            .. new[] { "1, 6, 1", "2, 6, 0", "3, 7, 1", "4, 8, 1" }.Select(values => $"INSERT INTO {Quoted("pallets")} VALUES ({values})"),
+            .. new[] { "10, '66903015', 'parafuso'", "11, '11111111', 'porca'" }.Select(values => $"INSERT INTO {Quoted("items")} VALUES ({values})"),
+            .. new[] { "100, 1, 10, 5", "101, 1, 11, 7", "102, 2, 10, 9", "103, 1, 10, 3" }.Select(values => $"INSERT INTO {Quoted("pallets_items")} VALUES ({values})")
+        ]);
 
     protected static T Value<T>(Result<T, DatabaseFailure> result)
     {

@@ -135,37 +135,97 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => RunAsync(sessionID, nameof(GetDatabasesAsync), waitsForTurn: true, session => session.Connection.GetDatabasesAsync(cancellationToken), cancellationToken);
 
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken)
+        => ExecuteAsync(sessionID, sql, null, pageSize, cancellationToken);
+
+    public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
-            var outcome = await session.Connection.ExecuteAsync(sql, pageSize, cancellationToken);
+            var dialect = DialectOf(session);
+
+            // RN-GRADE-011: o comando montado é o que roda. A recusa do filtro, como a do texto do comando, deixa o resultado anterior como estava.
+            FilteredSql? filtered = null;
+            if (!string.IsNullOrWhiteSpace(filter))
+            {
+                var applied = SqlFilter.Apply(sql, filter, dialect);
+                if (applied.IsFailure)
+                    return applied.Error;
+
+                filtered = applied.Value;
+            }
+
+            var sent = filtered?.Sql ?? sql;
+            var outcome = await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
+
+            // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
+            if (outcome.IsFailure && filtered is not null)
+                outcome = outcome.Error with { Position = null };
 
             // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
             if (outcome.IsSuccess && outcome.Value.Page is { } page)
             {
-                session.LastRowQuery = new RowQuery(sql, page.TotalRows);
+                session.LastRowQuery = new RowQuery(sent, page.TotalRows);
 
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
-                // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura.
-                var result = new ResultState(page.TotalRows is null ? EditableSql.Read(sql, DialectOf(session)) : ResultSource.ReadOnly(EditableSql.WroteRows), page.Columns);
-                session.CurrentResult = result;
+                // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
+                // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
+                var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
+                    : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
+                    : EditableSql.Read(sent, dialect);
+                var result = new ResultState(source, page.Columns, filtered?.Applied);
+                var withoutFullValue = result.Cells.Add(page);
+                ReplaceResult(session, result);
 
-                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability } };
+                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue, FilterApplied = result.FilterApplied } };
             }
 
-            // O comando que rodou deixa a sessão sem resultado editável; a recusa pelo texto, antes de executar, deixa o anterior como estava.
+            // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
+            // de executar, deixa o anterior como estava.
             if (outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed)
-                session.CurrentResult = null;
+                ReplaceResult(session, null);
 
             return outcome;
         }, cancellationToken);
+
+    public string? FilterRefusal(Guid sessionID, string? filter)
+        => _sessions.TryGetValue(sessionID, out var session) ? SqlFilter.Refusal(filter, DialectOf(session)) : null;
 
     public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(FetchNextAsync), waitsForTurn: false, async session =>
         {
             var page = await session.Connection.FetchNextAsync(cancellationToken);
+            if (page.IsFailure)
+                return page;
 
-            return page.IsSuccess && session.CurrentResult is { } result ? page.Value with { ResultID = result.ID, Editable = result.Editability } : page;
+            // RN-SQL-017: a página continua a contagem das linhas do resultado, e o valor completo das cortadas fica com ele.
+            return session.CurrentResult is { } result
+                ? page.Value with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = result.Cells.Add(page.Value), FilterApplied = result.FilterApplied }
+                : page.Value with { FullValues = null, CellsWithoutFullValue = page.Value.TruncatedCells };
         }, cancellationToken);
+
+    /// <summary>
+    /// RN-SQL-017: o valor completo das células pedidas, do que está na memória. Não fala com o banco, então não toma a vez da sessão:
+    /// responde enquanto um "carregar mais" ou outro comando roda (o resultado de antes continua o atual até o outro comando terminar).
+    /// </summary>
+    public Result<IReadOnlyList<string?>, DatabaseFailure> GetCells(Guid sessionID, Guid resultID, IReadOnlyList<CellPosition> cells)
+    {
+        if (!_sessions.TryGetValue(sessionID, out var session) || session.Closed)
+            return SessionNotFound();
+
+        if (session.CurrentResult is not { } result || result.ID != resultID)
+            return new DatabaseFailure(EDatabaseFailure.ResultNotFound, "O resultado não existe mais: a sessão executou outro comando depois dele. Execute o comando de novo para copiar.");
+
+        var started = _timeProvider.GetTimestamp();
+        var values = result.Cells.Read(cells, result.Columns.Count);
+        var elapsedMs = (long)_timeProvider.GetElapsedTime(started).TotalMilliseconds;
+
+        // RN-LOG-001: só as contagens, nunca um valor.
+        if (values.IsSuccess)
+            _logger.Information("Sessão {SessionID}: {Operation} em {ElapsedMs} ms, {Cells} células pedidas, {Missing} sem valor completo.", session.Info.ID, nameof(GetCells), elapsedMs, cells.Count, values.Value.Count(value => value is null));
+        else
+            _logger.Information("Sessão {SessionID}: {Operation} recusado ({Failure}), {Cells} células pedidas.", session.Info.ID, nameof(GetCells), values.Error.Kind, cells.Count);
+
+        return values;
+    }
 
     public async Task<Result<long, DatabaseFailure>> CountAsync(Guid sessionID, CancellationToken cancellationToken)
     {
@@ -247,13 +307,14 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 return ResultChanged();
 
             var dialect = DialectOf(session);
-            if (result.Source.Table is not { } table)
+            if (result.Source.Tables.Count == 0)
                 return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null).Error;
 
+            var tables = TablesOf(result);
             var expected = result.Target;
             if (expected is null)
             {
-                var described = await session.Connection.DescribeEditTableAsync(table, cancellationToken);
+                var described = await session.Connection.DescribeEditTablesAsync(tables, cancellationToken);
                 if (described.IsFailure)
                     return described.Error;
 
@@ -268,9 +329,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (planned.IsFailure)
                 return planned.Error;
 
-            return await session.Connection.ApplyEditsAsync(table, expected.OneAtATime, catalog =>
+            return await session.Connection.ApplyEditsAsync(tables, expected.OneAtATime, catalogs =>
             {
-                var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog);
+                var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalogs);
                 if (now.IsFailure || !EditTargetResolver.Same(expected, now.Value))
                     return Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(TableChanged(expected, now));
 
@@ -291,15 +352,37 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     private static DatabaseFailure ResultChanged()
         => new(EDatabaseFailure.ResultChanged, "O resultado mudou: a sessão executou outro comando depois dele. Execute o comando de novo para editar.");
 
-    /// <summary>RN-EDIT-005: o catálogo de dentro da transação não é o da consulta. Nada foi executado.</summary>
+    /// <summary>
+    /// RN-EDIT-005: o catálogo de dentro da transação não é o da consulta. Nada foi executado. Diz a primeira tabela do `FROM` que mudou
+    /// (a que agora é outra, pelo esquema atual da sessão, ou a de chave, colunas ou tipos diferentes).
+    /// </summary>
     private static DatabaseFailure TableChanged(EditTarget expected, Result<EditTarget, DatabaseFailure> now)
     {
-        var before = expected.Tables[0];
-        if (now.IsSuccess && now.Value.Tables[0] is var table && (table.Schema != before.Schema || table.Name != before.Name))
-            return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"O comando agora lê outra tabela ({table.Schema}.{table.Name}, e não {before.Schema}.{before.Name}): o esquema atual da sessão mudou desde a consulta. Nada foi gravado; execute o comando de novo.");
+        var changed = expected.Tables[0];
+        for (var index = 0; now.IsSuccess && index < expected.Tables.Count; index++)
+        {
+            var before = expected.Tables[index];
+            if (index >= now.Value.Tables.Count)
+                break;
 
-        return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"A tabela {before.Name} mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.");
+            var table = now.Value.Tables[index];
+            if (table.Schema != before.Schema || table.Name != before.Name)
+                return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"O comando agora lê outra tabela ({table.Schema}.{table.Name}, e não {before.Schema}.{before.Name}): o esquema atual da sessão mudou desde a consulta. Nada foi gravado; execute o comando de novo.");
+
+            var position = index;
+            if (table.Editable != before.Editable || !table.Key.SequenceEqual(before.Key) || !expected.Columns.Where(column => column.Table == position).SequenceEqual(now.Value.Columns.Where(column => column.Table == position)))
+            {
+                changed = before;
+                break;
+            }
+        }
+
+        return new DatabaseFailure(EDatabaseFailure.ResultChanged, $"A tabela {changed.Name} mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.");
     }
+
+    /// <summary>RN-EDIT-003: as tabelas do `FROM` e, no PostgreSQL, as que a resposta do comando diz de onde vêm as colunas.</summary>
+    private static EditTables TablesOf(ResultState result)
+        => new([.. result.Source.Tables.Select(table => table.Name)], [.. result.Columns.Select(column => column.Origin?.Table ?? 0).Where(table => table != 0).Distinct()]);
 
     private static ESqlDialect DialectOf(Session session)
         => session.Info.Engine switch
@@ -319,11 +402,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             return known;
 
         var dialect = DialectOf(session);
-        if (result.Source.Table is not { } table)
+        if (result.Source.Tables.Count == 0)
             return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null);
 
         var started = _timeProvider.GetTimestamp();
-        var catalog = await DescribeElsewhereAsync(session, table, catalogSessionID, cancellationToken);
+        var catalog = await DescribeElsewhereAsync(session, TablesOf(result), catalogSessionID, cancellationToken);
         var target = catalog.IsFailure ? catalog.Error : EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog.Value);
         Log(session, nameof(GetEditTargetAsync), started, target);
 
@@ -339,11 +422,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// parte, com as credenciais da sessão e prazo de espera de trava, que o "cancelar" e o fechamento da sessão interrompem como a
     /// contagem.
     /// </summary>
-    private async Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeElsewhereAsync(Session session, EditTableName table, Guid? catalogSessionID, CancellationToken cancellationToken)
+    private async Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeElsewhereAsync(Session session, EditTables tables, Guid? catalogSessionID, CancellationToken cancellationToken)
     {
         if (catalogSessionID is { } catalogID && catalogID != session.Info.ID && _sessions.TryGetValue(catalogID, out var tree) && tree.Info.ConnectionID == session.Info.ConnectionID && tree.Info.Database == session.Info.Database && tree.VaultGeneration == session.VaultGeneration)
         {
-            var described = await RunAsync(catalogID, nameof(DescribeElsewhereAsync), waitsForTurn: true, other => other.Connection.DescribeEditTableAsync(table, cancellationToken), cancellationToken);
+            var described = await RunAsync(catalogID, nameof(DescribeElsewhereAsync), waitsForTurn: true, other => other.Connection.DescribeEditTablesAsync(tables, cancellationToken), cancellationToken);
             if (described.IsSuccess || described.Error.Kind != EDatabaseFailure.SessionNotFound)
                 return described;
         }
@@ -356,7 +439,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         await using var connection = opened.Value;
         var limited = await connection.LimitLockWaitAsync(describing.Token);
 
-        return limited.IsFailure ? limited.Error : await connection.DescribeEditTableAsync(table, describing.Token);
+        return limited.IsFailure ? limited.Error : await connection.DescribeEditTablesAsync(tables, describing.Token);
     }
 
     /// <summary>RN-SQL-007: só há cursor aberto quando a página diz que há mais linhas; qualquer outro desfecho de um comando o fechou.</summary>
@@ -379,6 +462,14 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             long total => total,
             _ => 0
         };
+
+    /// <summary>RN-SQL-017: o resultado novo (ou nenhum) toma o lugar do de antes, cujos valores completos saem da memória.</summary>
+    private static void ReplaceResult(Session session, ResultState? next)
+    {
+        var previous = session.CurrentResult;
+        session.CurrentResult = next;
+        previous?.Cells.Clear();
+    }
 
     /// <summary>Com a vez da sessão tomada, ou antes de ela entrar no registro. A conexão não falha ao ser descartada.</summary>
     private static async Task ReleaseAsync(Session session)
@@ -483,10 +574,22 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     {
         using var turnEnd = new TurnEnd(session.Turn);
 
-        // O aviso pode chegar atrasado, depois de uma leitura que acabou de rearmar o temporizador: quem decide é a hora da última leitura.
-        if (session.Closed || _timeProvider.GetElapsedTime(session.LastReadAt) < QueryPaging.CursorIdleTimeout)
+        // O aviso pode chegar atrasado, depois de uma leitura que acabou de rearmar o temporizador, ou adiantado uns milissegundos em
+        // relação ao relógio da última leitura: quem decide é a hora da última leitura. Antes da hora, com o cursor ainda aberto, o
+        // temporizador volta a contar o que falta; sem isso, o aviso adiantado deixava o cursor aberto até a sessão fechar.
+        if (session.Closed)
             return;
 
+        var idle = _timeProvider.GetElapsedTime(session.LastReadAt);
+        if (idle < QueryPaging.CursorIdleTimeout)
+        {
+            if (session.CursorOpen)
+                session.IdleTimer.Change(QueryPaging.CursorIdleTimeout - idle, Timeout.InfiniteTimeSpan);
+
+            return;
+        }
+
+        session.CursorOpen = false;
         await session.Connection.CloseCursorAsync();
         _logger.Information("Sessão {SessionID}: cursor fechado por tempo sem leitura.", session.Info.ID);
         await RemoveIfClosedAsync(session);
@@ -540,6 +643,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         // RN-SQL-007: o temporizador recomeça a cada página que deixa o cursor aberto.
         var cursorOpen = result.IsSuccess && HasOpenCursor(result.Value);
         session.LastReadAt = _timeProvider.GetTimestamp();
+        session.CursorOpen = cursorOpen;
         session.IdleTimer.Change(cursorOpen ? QueryPaging.CursorIdleTimeout : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         // A tela recebe a resposta desta chamada (o erro do banco, quando a conexão caiu no meio dela); a seguinte já não encontra a sessão.
@@ -596,6 +700,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         /// <summary>O instante da última página lida com a vez tomada, pelo relógio do registro (RN-SQL-007).</summary>
         public long LastReadAt { get; set; }
 
+        /// <summary>A última operação deixou um cursor aberto, que o temporizador da RN-SQL-007 vigia.</summary>
+        public bool CursorOpen { get; set; }
+
         /// <summary>
         /// A sessão não atende mais ninguém, e a contagem em andamento para. O cancelamento roda em outra thread: ele fala com o banco, e
         /// quem chama pode ser a thread que fechou o cofre.
@@ -604,24 +711,33 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         {
             Closed = true;
             _ = Volatile.Read(ref CountCancellation).CancelAsync();
+
+            // RN-SQL-017: a sessão que fecha larga os valores completos do resultado dela.
+            CurrentResult?.Cells.Clear();
         }
     }
 
     /// <summary>
     /// RN-EDIT-002: um resultado da sessão, com o identificador que a página leva (muda a cada execução), o que o texto do comando diz da
-    /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele.
+    /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele. RN-SQL-017:
+    /// guarda também o valor completo das células cortadas das páginas entregues.
     /// </summary>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns)
+    /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, EFilterApplied? filterApplied = null)
     {
         private volatile EditTarget? _target;
 
         public Guid ID { get; } = Guid.CreateVersion7();
+
+        public ResultCells Cells { get; } = new();
 
         public ResultSource Source => source;
 
         public IReadOnlyList<QueryColumn> Columns => columns;
 
         public ResultEditability Editability { get; } = source.Reason is { } reason ? ResultEditability.ReadOnly(reason) : ResultEditability.Unknown;
+
+        public EFilterApplied? FilterApplied => filterApplied;
 
         public EditTarget? Target
         {

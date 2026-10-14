@@ -16,7 +16,8 @@ const count = z.number().int().min(0);
 /** O texto do editor que passa: 32 MB de texto é mais do que um editor aguenta. */
 const maxSqlLength = 32 * 1024 * 1024;
 
-const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional() });
+/** RN-GRADE-011: `filter` é o texto do campo de filtro do resultado, que viaja com o comando para "Executar de novo" o repetir na outra janela. */
+const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), filter: z.string().max(maxSqlLength).optional() });
 
 const columnSchema = z.object({ name, type: name, kind: z.enum(["text", "number", "datetime", "boolean", "binary"]) });
 
@@ -41,8 +42,12 @@ const resultSchema = z.discriminatedUnion("status", [
     total: count.nullable(),
     resultId: id.nullable().optional(),
     readOnly: name.nullable().optional(),
+    /** RN-GRADE-011: como o filtro do resultado entrou no comando. */
+    filterApplied: z.enum(["merged", "wrapped"]).optional(),
     /** RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou, como `truncated`. */
     generated: z.array(z.tuple([count, z.array(count)])).optional(),
+    /** RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas; nula na linha nova. */
+    sourceRows: z.array(count.nullable()).optional(),
   }),
   z.object({ status: z.literal("affected"), rowsAffected: z.number().int(), elapsedMs: z.number().min(0) }),
   z.object({ status: z.literal("cancelled") }),
@@ -81,8 +86,11 @@ export const tabTransferSchema = z.object({
     sessionId: id.nullable(),
     sql: z.string().max(maxSqlLength),
     table: z.object({ schema: name, name, view: z.enum(["data", "structure", "diagram"]) }).optional(),
-    /** RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo; a mudança não salva, a janela que recebe a refaz pelo texto. */
-    script: z.object({ id: z.uuid(), name: z.string().min(1).max(200), savedSql: z.string().max(maxSqlLength) }).optional(),
+    /**
+     * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o banco em que foi salvo (sem ele, o da conexão); a mudança não salva, a janela que
+     * recebe a refaz pelo texto e pelo banco da aba (RN-ARVORE-007).
+     */
+    script: z.object({ id: z.uuid(), name: z.string().min(1).max(200), savedSql: z.string().max(maxSqlLength), savedDatabase: z.string().min(1).max(10_000).optional() }).optional(),
   }),
   /** A seleção do editor (o cursor é a seleção vazia), em posições do texto. */
   editor: z.object({ anchor: count, head: count }).nullable(),
@@ -141,6 +149,13 @@ export type WindowSummary = z.infer<typeof windowSummarySchema>;
 export const windowListSchema = z.array(z.object({ id: windowId, number: windowId, activeTitle: z.string().max(10_000).nullable(), tabCount: count }));
 
 export type WindowEntry = z.infer<typeof windowListSchema>[number];
+
+/**
+ * A pessoa fechou a janela (RN-ABAS-004): `last`, ela é a única aberta, e fechá-la fecha o app (RN-ABAS-007: só pergunta pelo que não volta na próxima entrada).
+ */
+export const windowCloseRequestSchema = z.object({ last: z.boolean() });
+
+export type WindowCloseRequest = z.infer<typeof windowCloseRequestSchema>;
 
 /**
  * O que uma janela conta às outras sobre o cofre (RN-ABAS-004): a pessoa mexeu (ou há comando em andamento), bloqueou, desbloqueou, saiu ou entrou.

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ApiError } from "@/lib/api/prism-api";
 
-import { addRow, changesOf, deleteRow, editCell, editNewCell, failureOf, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type PendingEdits } from "./record-edits";
+import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type PendingEdits } from "./record-edits";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
 
@@ -167,6 +167,15 @@ describe("a grade depois de um Salvar que gravou tudo, sem executar de novo (RN-
     expect(savedResultOf(result, noEdits, 3)).toEqual({ rows, truncated: result.truncated, generated: new Map() });
   });
 
+  it("cada linha que fica sabe a linha de onde veio no resultado da API, e a nova não tem; um segundo Salvar continua a conta (RN-SQL-017)", () => {
+    const added = addRow(deleteRow(noEdits, 0));
+    const first = savedResultOf(result, added.edits, 3);
+    const second = savedResultOf({ ...first, rows: first.rows }, deleteRow(noEdits, 0), 3);
+
+    expect(first.sourceRows).toEqual([1, 2, null]);
+    expect(second.sourceRows).toEqual([2, null]);
+  });
+
   it("as marcas de corte e as do banco acompanham a linha quando uma de antes dela sai", () => {
     const marked = { rows, truncated: new Map([[2, new Set([2])]]), generated: new Map([[1, new Set([2])]]) };
 
@@ -174,5 +183,85 @@ describe("a grade depois de um Salvar que gravou tudo, sem executar de novo (RN-
 
     expect(saved.truncated).toEqual(new Map([[1, new Set([2])]]));
     expect(saved.generated).toEqual(new Map([[0, new Set([2])]]));
+  });
+});
+
+/**
+ * `loja.pedido p JOIN loja.cliente c`: `p.id` (0, chave de pedido), `p.status` (1), `c.id` (2, chave de cliente) e `c.nome` (3). As
+ * colunas da chave não se editam numa junção; o cliente 7 aparece em duas linhas.
+ */
+const join: EditTarget = {
+  tables: [
+    { schema: "loja", name: "pedido", key: [0], editable: true, reason: null },
+    { schema: "loja", name: "cliente", key: [2], editable: true, reason: null },
+  ],
+  columns: [
+    { table: 0, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+    { table: 1, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 1, baseColumn: "nome", editable: true, reason: null, nullable: true, generated: null },
+  ],
+  rowOperations: false,
+  oneAtATime: false,
+};
+
+const joined = [
+  ["1", "aberta", "7", "Ana"],
+  ["2", "aberta", "7", "Ana"],
+  ["3", "fechada", "8", "Bia"],
+  ["4", "aberta", null, null],
+];
+
+/** Editar a célula como a tela faz numa junção: com a linha da tabela da coluna. */
+const editJoined = (edits: PendingEdits, row: number, column: number, value: string | null) => editCell(edits, row, column, value, joined[row][column], changeKeyOf(joined, join, row, column) ?? undefined);
+
+describe("as pendências numa junção (RN-EDIT-002 e 004)", () => {
+  it("a linha de uma tabela é a chave dela: a mesma em linhas diferentes da grade, nenhuma na calculada e na junção externa sem linha", () => {
+    expect(changeKeyOf(joined, join, 0, 3)).toBe(changeKeyOf(joined, join, 1, 3));
+    expect(changeKeyOf(joined, join, 0, 1)).not.toBe(changeKeyOf(joined, join, 1, 1));
+    expect(changeKeyOf(joined, join, 3, 3)).toBeNull();
+    expect(changeKeyOf(joined, { ...join, columns: [...join.columns.slice(0, 3), { ...join.columns[3], table: null }] }, 0, 3)).toBeNull();
+  });
+
+  it("a linha repetida muda em todas as linhas da grade e conta como uma alteração; editar de novo noutra linha troca a mesma pendência", () => {
+    const once = editJoined(noEdits, 0, 3, "Ana Maria");
+    const again = editJoined(once, 1, 3, "Ana Paula");
+
+    expect(pendingCount(once)).toBe(1);
+    expect(linkedCells(once, joined, join).cells.map(({ row, value }) => [row, value])).toEqual([[0, "Ana Maria"], [1, "Ana Maria"]]);
+    expect(pendingCount(again)).toBe(1);
+    expect(again.cells).toEqual([{ row: 0, column: 3, value: "Ana Paula", change: changeKeyOf(joined, join, 0, 3) }]);
+    expect(pendingCell(linkedCells(again, joined, join), 1, 3)).toEqual({ value: "Ana Paula" });
+    expect(editJoined(again, 1, 3, "Ana")).toEqual(noEdits);
+    expect(undoCell(again, 1, 3, changeKeyOf(joined, join, 1, 3) ?? undefined)).toEqual(noEdits);
+  });
+
+  it("uma linha da grade editada em duas tabelas são duas alterações, cada uma pela chave da sua tabela, na ordem da primeira edição", () => {
+    const edits = editJoined(editJoined(editJoined(noEdits, 0, 3, "Ana Maria"), 0, 1, "paga"), 2, 1, "paga");
+
+    const plan = changesOf(edits, joined, join);
+
+    expect(pendingCount(edits)).toBe(3);
+    expect(plan.changes).toEqual([
+      { kind: "update", table: 1, key: ["7"], set: [{ column: 3, value: "Ana Maria" }] },
+      { kind: "update", table: 0, key: ["1"], set: [{ column: 1, value: "paga" }] },
+      { kind: "update", table: 0, key: ["3"], set: [{ column: 1, value: "paga" }] },
+    ]);
+    expect(plan.origins.map((origin) => origin.kind === "row" && origin.row)).toEqual([0, 0, 2]);
+  });
+
+  it("no banco sem log, a alteração gravada sai sem levar a da outra tabela da mesma linha", () => {
+    const edits = editJoined(editJoined(noEdits, 0, 3, "Ana Maria"), 0, 1, "paga");
+    const plan = changesOf(edits, joined, join);
+
+    expect(withoutApplied(edits, plan.origins, 1).cells).toEqual([{ row: 0, column: 1, value: "paga", change: changeKeyOf(joined, join, 0, 1) }]);
+  });
+
+  it("depois de salvar, todas as linhas que mostram a linha da tabela ficam com o valor salvo (RN-EDIT-009)", () => {
+    const edits = editJoined(noEdits, 1, 3, "Ana Maria");
+
+    const saved = savedResultOf({ rows: joined, truncated: new Map() }, linkedCells(edits, joined, join), 4);
+
+    expect(saved.rows.map((row) => row[3])).toEqual(["Ana Maria", "Ana Maria", "Bia", null]);
   });
 });

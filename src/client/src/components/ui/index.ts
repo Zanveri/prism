@@ -1,6 +1,6 @@
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
-export { ContextMenu, type ContextMenuItem, type ContextMenuProps } from "./context-menu";
+export { ContextMenu, type ContextMenuGroup, type ContextMenuItem, type ContextMenuProps } from "./context-menu";
 export { Dialog, type DialogProps, type DialogSize } from "./dialog";
 export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
@@ -16,6 +16,7 @@ export {
   DocumentIcon,
   DownloadIcon,
   DuplicateIcon,
+  EyedropperIcon,
   EyeIcon,
   EyeOffIcon,
   FolderIcon,

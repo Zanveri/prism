@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FilterRequest } from "./filter-handoff";
 import { recordsRunPlan } from "./table-sql";
 import type { RunnerState } from "./use-query-runner";
-import { afterHandoff, applyRunPlan, canClear, clearRecords, handoffToTake, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, tableViews, tabForKey, takeHandoff, viewOf } from "./table-view";
+import { afterHandoff, applyRunPlan, canClear, clearRecords, handoffToTake, idleNotice, filterRecords, needsFirstRun, runRecords, settleHandoff, sortRecords, tableViews, tabForKey, takeHandoff, viewOf } from "./table-view";
 
 const all = ["data", "structure", "diagram"] as const;
 
@@ -562,5 +562,37 @@ describe("idleNotice: o que a área de resultado diz enquanto a vista Registros 
     ];
 
     for (const state of others) for (const disconnected of [true, false]) expect(idleNotice(state, { engine: 1, disconnected }), `${state.status} ${disconnected}`).toEqual({ waiting: false, disconnected: false });
+  });
+});
+
+describe("filterRecords: o Filtrar do menu da célula escreve o campo com a condição junta e o envia (RN-GRADE-013)", () => {
+  const spies = () => ({ setProblem: vi.fn(), setFilter: vi.fn(), setDraft: vi.fn(), execute: vi.fn() });
+  const table = { engine: 1 as const, schema: "s", name: "t" };
+
+  it("enviado: o campo, o filtro em vigor e o executor recebem o mesmo texto, e o aviso do campo sai", () => {
+    const deps = spies();
+    filterRecords(table, `(a = 1) AND ("code" = '11.901') ORDER BY "id" ASC`, loaded, deps);
+
+    const text = `(a = 1) AND ("code" = '11.901') ORDER BY "id" ASC`;
+    expect(deps.setDraft.mock.calls).toEqual([[text]]);
+    expect(deps.setFilter.mock.calls).toEqual([[text]]);
+    expect(deps.execute.mock.calls).toEqual([[text]]);
+    expect(deps.setProblem.mock.calls).toEqual([[null]]);
+  });
+
+  it("com a aba ocupada nada muda: nem o campo, nem o filtro em vigor, nem o executor", () => {
+    for (const state of busyStates) {
+      const deps = spies();
+      filterRecords(table, `"code" = 1`, state, deps);
+      expect([deps.setDraft, deps.setFilter, deps.execute, deps.setProblem].every((spy) => spy.mock.calls.length === 0), state.status).toBe(true);
+    }
+  });
+
+  it("com mais de um comando, só o aviso do campo", () => {
+    const deps = spies();
+    filterRecords(table, `a = 1; DROP TABLE t`, loaded, deps);
+
+    expect(deps.setProblem.mock.calls).toEqual([["severalStatements"]]);
+    expect([deps.setDraft, deps.setFilter, deps.execute].every((spy) => spy.mock.calls.length === 0)).toBe(true);
   });
 });

@@ -7,6 +7,10 @@ public sealed record FolderDto
     /// <summary>`null` é a raiz.</summary>
     public Guid? ParentID { get; init; }
     public string Name { get; init; } = string.Empty;
+
+    /// <summary>RN-PASTA-005: o ambiente da pasta, que as conexões dela sem ambiente próprio herdam. Os dois são nulos na pasta sem ambiente.</summary>
+    public string? EnvironmentName { get; init; }
+    public string? EnvironmentColor { get; init; }
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }

@@ -134,6 +134,34 @@ export async function reopenDatabaseSession(queryClient: QueryClient, connection
   return queryClient.getQueryState(databaseSessionKey(connectionId, database))?.status === "success";
 }
 
+/**
+ * RN-ARVORE-007: a lista dos bancos do servidor para a barra do editor, pedida quando a pessoa abre a lista. É a da árvore (RN-ARVORE-006), na mesma
+ * consulta e no mesmo cache (`["tree", conexão, "databases"]`): a sessão da árvore da conexão abre se ainda não estava, como ao expandir a conexão, e a lista
+ * que a árvore já trouxe não é pedida de novo (fica até o "Atualizar" da conexão, RN-ARVORE-002). As falhas vão ao aviso central, pelas consultas; a
+ * conexão que não abre para ali, sem pedir a lista. A sessão da árvore que caiu abre outra no lugar dela e a lista vem de novo, como no "Tentar de novo" da
+ * árvore (`reopened`: quem chama avisa, RN-AVISO-003).
+ */
+export async function loadServerDatabases(queryClient: QueryClient, connectionId: string): Promise<"loaded" | "reopened" | "failed"> {
+  const list = () => queryClient.fetchQuery(treeQuery({ type: "connection", connectionId }, queryClient, true));
+
+  try {
+    await queryClient.fetchQuery(databaseSessionQuery(connectionId));
+    await list();
+    return "loaded";
+  } catch (error) {
+    if (!isSessionLost(error)) return "failed";
+  }
+
+  try {
+    await reopenDatabaseSession(queryClient, connectionId);
+    await queryClient.fetchQuery(databaseSessionQuery(connectionId));
+    await list();
+    return "reopened";
+  } catch {
+    return "failed";
+  }
+}
+
 /** O que a árvore busca ao abrir um nó: os bancos do servidor da conexão, os esquemas de um banco, os objetos de um grupo ou uma lista de uma tabela. */
 export type FetchedPath = Extract<NavPath, { type: "connection" | "database" | "objects" | "tableLevel" }>;
 

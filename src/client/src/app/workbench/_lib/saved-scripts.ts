@@ -9,8 +9,11 @@ export const maxScriptNameLength = 200;
 /** RN-SCRIPT-004: 1 MB de SQL, em bytes de UTF-8 (1.048.576), a mesma conta da API (`ScriptRules.MaxSqlBytes`). */
 export const maxScriptBytes = 1024 * 1024;
 
-/** O que a aba guarda do script dela: o id e o nome, o SQL como foi salvo e se o texto do editor mudou desde então. */
-export type ScriptRef = { id: string; name: string; savedSql: string; dirty: boolean };
+/**
+ * O que a aba guarda do script dela: o id e o nome, o SQL como foi salvo, o banco em que foi salvo (`savedDatabase`; sem ele, o da conexão) e se o texto do
+ * editor ou o banco da aba mudaram desde então.
+ */
+export type ScriptRef = { id: string; name: string; savedSql: string; savedDatabase?: string; dirty: boolean };
 
 /** O nome como a API o grava (`NormalizeName`): sem espaço nas pontas, sem espaço repetido no meio, na forma composta do Unicode. */
 export function normalizeScriptName(name: string): string {
@@ -69,18 +72,21 @@ export function exceedsScriptLimit(sql: string): boolean {
   return encoder.encode(sql).length > maxScriptBytes;
 }
 
-/** RN-SCRIPT-001: há mudança não salva quando o texto do editor não é o que foi salvo. */
-export function isScriptDirty(script: Pick<ScriptRef, "savedSql">, sql: string): boolean {
-  return sql !== script.savedSql;
+/**
+ * RN-SCRIPT-001: há mudança não salva quando o texto do editor não é o que foi salvo, ou quando a aba roda noutro banco que não o salvo (RN-ARVORE-007: o Ctrl+S
+ * grava o banco da aba). `database` é o banco da aba; sem ele, o da conexão.
+ */
+export function isScriptDirty(script: Pick<ScriptRef, "savedSql" | "savedDatabase">, sql: string, database?: string): boolean {
+  return sql !== script.savedSql || database !== script.savedDatabase;
 }
 
 /**
- * O texto da aba chegou do editor (com o atraso de sempre): a aba de um script recalcula o ponto pelo texto. Uma tecla já o acendeu na hora; desfazer até o
- * texto salvo o apaga aqui.
+ * O texto da aba chegou do editor (com o atraso de sempre): a aba de um script recalcula o ponto pelo texto e pelo banco dela. Uma tecla já o acendeu na hora;
+ * desfazer até o texto salvo o apaga aqui, se a aba está no banco salvo.
  */
-export function withEditedSql<T extends { sql: string; script?: ScriptRef }>(tab: T, sql: string): T {
+export function withEditedSql<T extends { sql: string; database?: string; script?: ScriptRef }>(tab: T, sql: string): T {
   if (tab.script === undefined) return { ...tab, sql };
-  return { ...tab, sql, script: { ...tab.script, dirty: isScriptDirty(tab.script, sql) } };
+  return { ...tab, sql, script: { ...tab.script, dirty: isScriptDirty(tab.script, sql, tab.database) } };
 }
 
 /** As abas, entre as que vão fechar, que são scripts com mudança não salva: as que fazem a pergunta "Salvar?". Na ordem da faixa. */

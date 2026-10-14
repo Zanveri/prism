@@ -130,6 +130,30 @@ public sealed class EditPlannerTests
         Assert.Equal((0, 0, "«um» não é um número inteiro."), (key.Error.Change, key.Error.Column, key.Error.Message));
     }
 
+    /// <summary>RN-EDIT-002 e 005: numa junção, as alterações de uma linha da grade em duas tabelas são dois comandos, cada um pela chave da sua tabela.</summary>
+    [Trait("EditPlanner", "Preview")]
+    [Fact(DisplayName = "OK numa junção cada tabela tem o seu UPDATE pela sua chave, e a coluna de outra tabela é recusada")]
+    public void Preview_ShouldWriteOneUpdatePerTableOfAJoin()
+    {
+        //Arrange
+        var target = new EditTarget(
+            [new EditTable("loja", "pedido", [0], true, null), new EditTable("loja", "cliente", [2], true, null)],
+            [new EditColumn(0, "id", false, "coluna da chave numa junção", false, null, "integer"), new EditColumn(0, "status", true, null, true, null, "text"), new EditColumn(1, "id", false, "coluna da chave numa junção", false, null, "integer"), new EditColumn(1, "nome", true, null, true, null, "text")],
+            RowOperations: false,
+            OneAtATime: false);
+        QueryColumn[] result = [new("id", "integer", "number"), new("status", "text", "text"), new("id", "integer", "number"), new("nome", "text", "text")];
+
+        //Act
+        var preview = EditPlanner.Preview(ESqlDialect.PostgreSql, target, result, [new(EEditKind.Update, 0, ["1"], [new EditValue(1, "paga")]), new(EEditKind.Update, 1, ["7"], [new EditValue(3, "Ana")])]);
+        var other = EditPlanner.Plan(ESqlDialect.PostgreSql, target, result, [new(EEditKind.Update, 1, ["7"], [new EditValue(1, "paga")])]);
+        var key = EditPlanner.Plan(ESqlDialect.PostgreSql, target, result, [new(EEditKind.Update, 1, ["7"], [new EditValue(2, "8")])]);
+
+        //Assert
+        Assert.Equal(["UPDATE \"loja\".\"pedido\" SET \"status\" = 'paga' WHERE \"id\" = 1", "UPDATE \"loja\".\"cliente\" SET \"nome\" = 'Ana' WHERE \"id\" = 7"], preview.Value.Statements.Select(statement => statement.Sql));
+        Assert.Equal((EDatabaseFailure.EditInvalid, 0, 1, "A coluna não é da tabela da alteração."), (other.Error.Kind, other.Error.Change, other.Error.Column, other.Error.Message));
+        Assert.Equal((2, "A coluna não se edita: coluna da chave numa junção."), (key.Error.Column, key.Error.Message));
+    }
+
     [Trait("EditPlanner", "Preview")]
     [Fact(DisplayName = "OK o Ver SQL escreve os valores como literais, e o que não tem literal vai como ? com o valor ao lado")]
     public void Preview_ShouldWriteTheLiteralsAndMarkWhatHasNone()

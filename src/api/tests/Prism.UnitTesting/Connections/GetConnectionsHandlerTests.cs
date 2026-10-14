@@ -24,7 +24,7 @@ public sealed class GetConnectionsHandlerTests
         var alfa = VaultFakers.CreateConnection(name: "Alfa");
         var twinB = VaultFakers.CreateConnection(name: "Gama", iD: high, password: string.Empty);
         var twinA = VaultFakers.CreateConnection(name: "gama", iD: low, password: "segredo");
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [beta, twinB, alfa, twinA], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [beta, twinB, alfa, twinA], [], VaultWorkspaceRecord.Empty)));
         var handler = new GetConnectionsHandler(_vault.Object);
 
         //Act
@@ -43,7 +43,7 @@ public sealed class GetConnectionsHandlerTests
     public async Task Handle_ShouldBeOK_Empty()
     {
         //Arrange
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [VaultFakers.CreateFolder()], [], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [VaultFakers.CreateFolder()], [], [], VaultWorkspaceRecord.Empty)));
         var handler = new GetConnectionsHandler(_vault.Object);
 
         //Act

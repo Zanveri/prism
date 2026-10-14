@@ -27,7 +27,7 @@ public sealed class ScriptHandlersTests
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 13, 12, 0, 0, TimeSpan.Zero));
 
     private void SetDocument(params VaultScriptRecord[] scripts)
-        => _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], scripts)));
+        => _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], scripts, VaultWorkspaceRecord.Empty)));
 
     [Trait("GetScriptsHandler", "GetScriptsCommand")]
     [Fact(DisplayName = "OK a lista vem em ordem de nome, sem diferenciar maiúsculas, e sem o SQL")]

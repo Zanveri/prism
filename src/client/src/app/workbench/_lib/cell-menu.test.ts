@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cellAccess, deleteRowAccess, newRowAccess, type CellContext } from "./cell-editing";
+import { cellAccess, columnHintsOf, deleteRowAccess, newRowAccess, resultReadOnly, type CellContext } from "./cell-editing";
 import { cellMenu, type CellMenuState } from "./cell-menu";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
@@ -22,6 +22,74 @@ const target: EditTarget = {
 const withoutKey: EditTarget = { ...target, tables: [{ ...target.tables[0], key: [], editable: false, reason: "pedido não tem chave primária nem chave única de colunas não nulas" }], columns: target.columns.map((column) => ({ ...column, editable: false, reason: "pedido não tem chave primária nem chave única de colunas não nulas" })), rowOperations: false };
 
 const read = (column: number, over: Partial<Extract<CellContext["row"], { kind: "read" }>> = {}): CellContext => ({ readOnly: null, target, busy: false, column, row: { kind: "read", truncated: undefined, deleted: false, ...over } });
+
+/** `pedido p JOIN cliente c JOIN item i`: a chave de pedido em 0, a de cliente em 2; item fica só leitura. */
+const join: EditTarget = {
+  tables: [
+    { schema: "loja", name: "pedido", key: [0], editable: true, reason: null },
+    { schema: "loja", name: "cliente", key: [2], editable: true, reason: null },
+    { schema: "loja", name: "item", key: [], editable: false, reason: "a chave de item não está inteira no resultado: faltam id" },
+  ],
+  columns: [
+    { table: 0, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+    { table: 1, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 1, baseColumn: "nome", editable: true, reason: null, nullable: true, generated: null },
+    { table: 2, baseColumn: "codigo", editable: false, reason: "a chave de item não está inteira no resultado: faltam id", nullable: true, generated: null },
+    { table: null, baseColumn: null, editable: false, reason: "coluna calculada", nullable: true, generated: null },
+  ],
+  rowOperations: false,
+  oneAtATime: false,
+};
+
+const inJoin = (column: number, over: Partial<Extract<CellContext["row"], { kind: "read" }>> = {}): CellContext => ({ readOnly: null, target: join, busy: false, column, row: { kind: "read", truncated: undefined, deleted: false, values: ["1", "aberta", "7", "Ana", "x", "2"], ...over } });
+
+describe("o que se edita num resultado de junção (RN-EDIT-002)", () => {
+  it("cada coluna vale na tabela de onde veio: a tabela só leitura não impede as outras, e a chave e a calculada não se editam", () => {
+    expect(cellAccess(inJoin(1))).toEqual({ editable: true });
+    expect(cellAccess(inJoin(3))).toEqual({ editable: true });
+    expect(cellAccess(inJoin(4))).toEqual({ editable: false, reason: copy.readOnly("a chave de item não está inteira no resultado: faltam id") });
+    expect(cellAccess(inJoin(2))).toEqual({ editable: false, reason: copy.readOnly("coluna da chave numa junção") });
+    expect(cellAccess(inJoin(5))).toEqual({ editable: false, reason: copy.readOnly("coluna calculada") });
+  });
+
+  it("numa junção externa sem linha (a chave veio nula), as células daquela tabela são só leitura; a chave cortada vale por tabela", () => {
+    const missing = inJoin(3, { values: ["1", "aberta", null, null, "x", "2"] });
+
+    expect(cellAccess(missing)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.noRowHere("cliente")) });
+    expect(cellAccess({ ...missing, column: 1 })).toEqual({ editable: true });
+    expect(cellAccess(inJoin(3, { truncated: new Set([2]) }))).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.keyTruncated) });
+    expect(cellAccess(inJoin(1, { truncated: new Set([2]) }))).toEqual({ editable: true });
+  });
+
+  it("linha nova e excluir linha ficam desabilitados, com o motivo", () => {
+    expect(newRowAccess(null, join, false)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.joinRowOperations) });
+    expect(deleteRowAccess(inJoin(1).row, null, join, false)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.joinRowOperations) });
+  });
+
+  it("a barra diz só leitura quando nenhuma tabela se edita, com o motivo de cada uma; numa tabela só, o motivo dela", () => {
+    const none: EditTarget = { ...join, tables: join.tables.map((table, index) => (index === 2 ? table : { ...table, editable: false, reason: `${table.name} é uma visão` })) };
+
+    expect(resultReadOnly(null, join)).toBeNull();
+    expect(resultReadOnly(null, none)).toBe(copy.readOnly("pedido é uma visão; cliente é uma visão; a chave de item não está inteira no resultado: faltam id"));
+    expect(resultReadOnly(null, withoutKey)).toBe(copy.readOnly("pedido não tem chave primária nem chave única de colunas não nulas"));
+    expect(resultReadOnly("união de consultas", null)).toBe(copy.readOnly("união de consultas"));
+    expect(resultReadOnly(null, target)).toBeNull();
+  });
+
+  it("a dica do cabeçalho diz o motivo da coluna que não se edita e, na junção, a tabela e a coluna que a editável altera", () => {
+    expect(columnHintsOf(join)).toEqual([
+      copy.readOnly("coluna da chave numa junção"),
+      copy.editsColumn("pedido", "status"),
+      copy.readOnly("coluna da chave numa junção"),
+      copy.editsColumn("cliente", "nome"),
+      copy.readOnly("a chave de item não está inteira no resultado: faltam id"),
+      copy.readOnly("coluna calculada"),
+    ]);
+    expect(columnHintsOf(target)).toEqual([null, null, copy.readOnly("gerada pelo banco"), copy.readOnly("coluna binária")]);
+    expect(columnHintsOf(null)).toBeNull();
+  });
+});
 
 describe("o que uma célula permite editar (RN-EDIT-002)", () => {
   it("a coluna que se edita, numa linha lida inteira, se edita", () => {

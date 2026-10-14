@@ -44,6 +44,16 @@ export const navigatorCopy = {
     connectionHint: (engine: string, host: string, port: number, database: string) => `${engine} · ${host}:${port} / ${database}`,
   },
 
+  // RN-NAV-010: o seletor de ambiente ao lado do campo de busca.
+  environmentFilter: {
+    label: "Filtrar por ambiente",
+    all: "Todos os ambientes",
+    none: "Sem ambiente",
+    clear: "Limpar o filtro de ambiente",
+    nothingIn: (environment: string) => `Nenhuma conexão em ${environment}.`,
+    nothingWithout: "Nenhuma conexão sem ambiente.",
+  },
+
   // RN-NAV-003: os itens do menu de contexto que vieram da tela de Conexões.
   menu: {
     label: "Ações do navegador",

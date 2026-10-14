@@ -1,7 +1,9 @@
 import { z } from "zod";
 
-import type { PrismBridge } from "../../../electron/preload";
-import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowEntry } from "../../../electron/window-messages";
+import type { PrismBridge, PrismWorkspace } from "../../../electron/preload";
+import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowCloseRequestSchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowCloseRequest, type WindowEntry } from "../../../electron/window-messages";
+import { createWorkspaceHub, saveWorkspaceThroughApi } from "../../../electron/workspace-hub";
+import type { SavedWorkspace } from "../../../electron/workspace-messages";
 
 declare global {
   interface Window {
@@ -26,6 +28,33 @@ export async function readDataFolder(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Fora do Electron (só em desenvolvimento) não há processo principal para juntar e gravar as abas (RN-ABAS-006): a própria tela faz o papel dele, com o
+ * mesmo centro (`workspace-hub.ts`), uma janela só e a gravação direto na API. É um só por página, como o processo principal é um só para todas as janelas.
+ */
+let devWorkspace: PrismWorkspace | null = null;
+
+function devWorkspaceBridge(api: { baseUrl: string; token: string }): PrismWorkspace {
+  if (devWorkspace !== null) return devWorkspace;
+
+  const hub = createWorkspaceHub({
+    save: async (workspace: SavedWorkspace) => (await saveWorkspaceThroughApi(api, workspace, { fetch: (url, init) => fetch(url, init), timeoutMs: 5000 })).ok,
+    schedule(run, ms) {
+      const timer = setTimeout(run, ms);
+      return () => clearTimeout(timer);
+    },
+    liveWindows: () => [1],
+    log: (message) => console.warn(`[prism] abas: ${message}`),
+  });
+  devWorkspace = {
+    claim: async () => hub.claim(1),
+    report: async (report) => hub.report(1, report),
+    withdraw: async () => hub.withdraw(1),
+    flush: () => hub.flush(),
+  };
+  return devWorkspace;
 }
 
 /**
@@ -77,6 +106,7 @@ export function getBridge(): PrismBridge {
         onCloseRequested: () => () => {},
       },
       session: { share: async () => {}, onPeer: () => () => {} },
+      workspace: devWorkspaceBridge({ baseUrl: url.replace(/\/$/, ""), token }),
     };
   }
 
@@ -147,8 +177,14 @@ export function onTabWanted(listener: (give: TabGive) => void): () => void {
   );
 }
 
-export function onWindowCloseRequested(listener: () => void): () => void {
-  return listen(() => getBridge().windows.onCloseRequested(listener));
+/** A pessoa fechou a janela. O aviso que não diz direito se ela é a última vale "não é": o fechamento pergunta tudo, como antes (RN-ABAS-007). */
+export function onWindowCloseRequested(listener: (request: WindowCloseRequest) => void): () => void {
+  return listen(() =>
+    getBridge().windows.onCloseRequested((raw) => {
+      const parsed = windowCloseRequestSchema.safeParse(raw);
+      listener(parsed.success ? parsed.data : { last: false });
+    }),
+  );
 }
 
 /** Pedidos sem resposta que a tela espere (pronta, resumo, pedir a aba, fechar): a falha só não faz nada. */
@@ -179,4 +215,49 @@ export function onPeerEvent(listener: (kind: PeerEvent["kind"]) => void): () => 
       if (parsed.success) listener(parsed.data.kind);
     }),
   );
+}
+
+/**
+ * As abas que voltam na próxima entrada (RN-ABAS-006), do lado da tela. Sem a ponte (a tela num teste, ou uma ponte antiga) nada é gravado e nada volta, e
+ * nenhuma falha chega à tela: gravar com o cofre fechado, ou sem processo principal, não é erro que a pessoa precise ver.
+ */
+
+/** Esta janela reabre as abas gravadas? Só a principal, uma vez por entrada. A resposta que não é `true` é "não". */
+export async function claimWorkspaceRestore(): Promise<boolean> {
+  try {
+    return (await getBridge().workspace.claim()) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Conta ao processo principal as abas desta janela; `urgent`, uma aba fechou e a gravação é na hora. */
+export function reportWorkspace(workspace: SavedWorkspace, urgent: boolean): void {
+  try {
+    void getBridge()
+      .workspace.report({ workspace, urgent })
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há quem grave.
+  }
+}
+
+/** A área de trabalho desta janela desmontou: as abas dela deixam de contar. */
+export function withdrawWorkspace(): void {
+  try {
+    void getBridge()
+      .workspace.withdraw()
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há quem grave.
+  }
+}
+
+/** Grava agora as abas de todas as janelas, e espera. Nunca lança. */
+export async function flushWorkspace(): Promise<void> {
+  try {
+    await getBridge().workspace.flush();
+  } catch {
+    // Sem a ponte, ou a gravação falhou: o processo principal já registrou, e a tela segue.
+  }
 }

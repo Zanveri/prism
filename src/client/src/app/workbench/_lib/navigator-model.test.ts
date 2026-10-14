@@ -273,7 +273,7 @@ describe("filhos de um nível", () => {
 
 describe("treeNodes", () => {
   const now = "2026-10-09T12:00:00Z";
-  const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", createdAt: now, updatedAt: now };
+  const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
   const mes: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
 
   it("a pasta guarda as conexões como filhos; a conexão na raiz fica na raiz", () => {
@@ -495,7 +495,7 @@ describe("databaseRefOf (de que banco é a linha: a nova consulta e as abas usam
   });
 
   it("pasta e folha que só copia o nome não são de banco nenhum", () => {
-    const [folder] = treeNodes(buildConnectionTree([{ id: "f1", parentID: null, name: "Fábrica", createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" }], [])).roots;
+    const [folder] = treeNodes(buildConnectionTree([{ id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" }], [])).roots;
     const [routine] = objectNodes("c1", "loja", "routines", [{ name: "dobro", kind: "function" }], "alfa");
 
     expect(databaseRefOf(folder)).toBeNull();

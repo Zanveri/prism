@@ -236,6 +236,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     protected abstract (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table);
 
     /// <summary>
+    /// RN-EDIT-003: a mesma consulta de <see cref="EditRelationQuery"/>, pelo identificador que a resposta de um comando dá à tabela de
+    /// cada coluna (PostgreSQL); nula no banco cuja resposta não o dá.
+    /// </summary>
+    protected virtual (string Sql, IReadOnlyList<object> Parameters)? EditRelationByIdQuery(long id)
+        => null;
+
+    /// <summary>
     /// RN-EDIT-002: as chaves da tabela que servem à edição (a primária, as restrições únicas e os índices únicos sem condição e só de
     /// colunas), uma coluna por linha: o nome da chave, se ela é a primária (0 ou 1) e a coluna, a primária primeiro e as colunas na ordem
     /// da chave. Os parâmetros são o esquema e a tabela, como em <see cref="ColumnsSql"/>.
@@ -651,8 +658,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         => (await QueryAsync(nameof(GetDatabasesAsync), EDatabaseFailure.ExecutionFailed, DatabasesSql, [], reader => new DatabaseInfo(Text(reader, 0), Flag(reader, 1)), cancellationToken)).Map(CurrentFirst);
 
     /// <summary>RN-ARVORE-006: o banco da sessão sobe para o começo; os outros ficam na ordem de nome em que o banco os devolveu.</summary>
-    public Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeEditTableAsync(EditTableName table, CancellationToken cancellationToken)
-        => RunAsync(nameof(DescribeEditTableAsync), EDatabaseFailure.ExecutionFailed, token => DescribeCoreAsync(table, token), cancellationToken);
+    public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken)
+        => RunAsync(nameof(DescribeEditTablesAsync), EDatabaseFailure.ExecutionFailed, token => DescribeCoreAsync(tables, token), cancellationToken);
 
     public async Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
         => await RunAsync(nameof(LimitLockWaitAsync), EDatabaseFailure.ExecutionFailed, async token =>
@@ -669,7 +676,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// restrição adiada desfaz a transação), e o `ROLLBACK` do fim não tem o que desfazer. No banco sem log cada comando é confirmado
     /// sozinho, e a recusa diz quantos já estavam gravados (`Applied`).
     /// </summary>
-    public async Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTableName table, bool oneAtATime, Func<EditCatalogTable?, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
+    public async Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
     {
         int? failing = null;
         var applied = 0;
@@ -679,7 +686,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             if (!oneAtATime)
                 _editTransaction = await _connection!.BeginTransactionAsync(token);
 
-            var planned = plan(await DescribeCoreAsync(table, token));
+            var planned = plan(await DescribeCoreAsync(tables, token));
             if (planned.IsFailure)
                 return Result.Failure<int, DatabaseFailure>(planned.Error);
 
@@ -841,10 +848,38 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return items;
     }
 
-    /// <summary>RN-EDIT-002 e 010: a tabela, as colunas e as chaves, dentro do comando em andamento (e, no "Salvar", da transação dele).</summary>
-    private async Task<EditCatalogTable?> DescribeCoreAsync(EditTableName table, CancellationToken cancellationToken)
+    /// <summary>
+    /// RN-EDIT-002, 003 e 010: cada tabela do `FROM`, com as colunas e as chaves, dentro do comando em andamento (e, no "Salvar", da
+    /// transação dele). No PostgreSQL vêm antes as tabelas que a resposta do comando diz, pelo identificador, e a do `FROM` é a que tem o
+    /// nome dela (e o esquema, quando o comando o escreveu): o caminho de busca que valeu foi o da sessão da aba, e não o desta conexão.
+    /// A que não está entre elas (nenhuma coluna do resultado vem dela) é procurada pelo nome; a escrita duas vezes do mesmo jeito, uma vez.
+    /// </summary>
+    private async Task<IReadOnlyList<EditCatalogTable?>> DescribeCoreAsync(EditTables tables, CancellationToken cancellationToken)
     {
-        var (sql, parameters) = EditRelationQuery(table);
+        var reported = new List<EditCatalogTable>();
+        foreach (var id in tables.Relations.Distinct())
+        {
+            if (EditRelationByIdQuery(id) is { } query && await DescribeCoreAsync(query, cancellationToken) is { } relation)
+                reported.Add(relation);
+        }
+
+        var described = new Dictionary<EditTableName, EditCatalogTable?>();
+        var catalogs = new List<EditCatalogTable?>();
+        foreach (var table in tables.Names)
+        {
+            var found = reported.FirstOrDefault(relation => relation.Name == table.Name && (table.Schema is null || relation.Schema == table.Schema));
+            if (found is null && !described.TryGetValue(table, out found))
+                described[table] = found = await DescribeCoreAsync(EditRelationQuery(table), cancellationToken);
+
+            catalogs.Add(found);
+        }
+
+        return catalogs;
+    }
+
+    private async Task<EditCatalogTable?> DescribeCoreAsync((string Sql, IReadOnlyList<object> Parameters) query, CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = query;
         var relations = await ReadAllAsync(sql, parameters, reader => (Schema: Text(reader, 0).TrimEnd(), Name: Text(reader, 1).TrimEnd(), Kind: Text(reader, 2).Trim(), ID: reader.IsDBNull(3) ? (long?)null : Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture), OneAtATime: Flag(reader, 4)), cancellationToken);
         if (relations.Count == 0)
             return null;
@@ -1061,6 +1096,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         var reader = _reader!;
         var rows = new List<string?[]>(_pageSize);
         var truncatedCells = new List<int[]>();
+        var fullValues = new List<FullCellValue>();
 
         while (rows.Count < _pageSize && (_rowPending || await reader.ReadAsync(cancellationToken)))
         {
@@ -1069,11 +1105,15 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             var row = new string?[_columns.Count];
             for (var column = 0; column < row.Length; column++)
             {
-                // ponytail: a célula vem inteira para a memória antes do corte; um texto ou binário de centenas de MB custa esse tanto por
-                // linha. Se pesar, ler em pedaços (`GetChars`/`GetBytes` com `SequentialAccess`) só até o limite da RN-SQL-011.
-                row[column] = CellFormatter.Format(ReadCell(reader, column, _columns[column].Kind), out var truncated);
-                if (truncated)
-                    truncatedCells.Add([rows.Count, column]);
+                // A célula vem inteira para a memória antes do corte, e é ela inteira que copiar e exportar levam (RN-SQL-017): o registro
+                // de sessões guarda o valor completo da cortada, com o teto dele.
+                var value = ReadCell(reader, column, _columns[column].Kind);
+                row[column] = CellFormatter.Format(value, out var truncated);
+                if (!truncated)
+                    continue;
+
+                truncatedCells.Add([rows.Count, column]);
+                fullValues.Add(CellFormatter.Full(value));
             }
 
             rows.Add(row);
@@ -1087,7 +1127,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
             await FinishCursorAsync(cancellationToken);
 
-            return new QueryPage(_columns, rows, false, ElapsedMs(started), truncatedCells, totalRows);
+            return new QueryPage(_columns, rows, false, ElapsedMs(started), truncatedCells, totalRows, FullValues: fullValues);
         }
 
         // Uma leitura a mais diz se há outra página sem contar o total: a linha fica no leitor para a página seguinte.
@@ -1097,7 +1137,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (!hasMore)
             await FinishCursorAsync(cancellationToken);
 
-        return new QueryPage(_columns, rows, hasMore, ElapsedMs(started), truncatedCells);
+        return new QueryPage(_columns, rows, hasMore, ElapsedMs(started), truncatedCells, FullValues: fullValues);
     }
 
     /// <summary>

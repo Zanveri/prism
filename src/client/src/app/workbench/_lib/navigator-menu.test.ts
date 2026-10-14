@@ -8,7 +8,7 @@ import { selectAllSql } from "./table-sql";
 import { columnNodes, databaseNodes, flattenVisible, foreignKeyNodes, indexNodes, navKey, objectNodes, schemaNodes, tableGroupNodes, treeNodes, type NavNode, type TableLevelPath } from "./navigator-model";
 
 const now = "2026-10-09T12:00:00Z";
-const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", createdAt: now, updatedAt: now };
+const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
 const mes: Connection = { id: "c1", folderID: "f1", name: "MES Produção", engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
 const { roots } = treeNodes(buildConnectionTree([folder], [mes]));
 const [folderNode] = roots;
@@ -201,15 +201,15 @@ describe("menuFor: o resto da árvore", () => {
     expect(menuFor(node, idle)).toEqual([[expect.objectContaining({ id: "copyName", action: { type: "copy", text: name } })]]);
   });
 
-  it("pasta: Nova conexão e Nova pasta (criam dentro dela), Renomear, Mover, Excluir e Copiar nome (o que a tela de Conexões oferecia, RN-NAV-003)", () => {
+  it("pasta: Nova conexão e Nova pasta (criam dentro dela), Editar pasta…, Mover, Excluir e Copiar nome (o que a tela de Conexões oferecia, RN-NAV-003)", () => {
     const groups = menuFor(folderNode, idle);
 
     expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "moveFolder", "deleteFolder"], ["copyName"]]);
     expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "moveFolder", "deleteFolder", "copy"]);
     expect([byId(groups, "newConnection")?.label, byId(groups, "newFolder")?.label]).toEqual(["Nova conexão", "Nova pasta"]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
-    // RN-NAV-009: o "Renomear" da pasta passa a mostrar o atalho F2.
-    expect(byId(groups, "renameFolder")).toMatchObject({ label: "Renomear", shortcut: "F2" });
+    // RN-PASTA-006: o "Renomear" da pasta virou "Editar pasta…" (o nome e o ambiente), com o mesmo F2 (RN-NAV-009).
+    expect(byId(groups, "renameFolder")).toMatchObject({ label: "Editar pasta…", shortcut: "F2" });
   });
 
   it("as linhas Carregando… e de erro não têm menu", () => {

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
+import { environmentLookup } from "@/app/connections/_lib/environment";
 import { ConfirmDialog, useToast } from "@/components/ui";
 import { currentWindowId, onTabWanted, onWindowCloseRequested, sendTabAway, tellWindows } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
@@ -12,7 +13,7 @@ import { createDisconnectLog } from "../_lib/connection-intent";
 import { liveEditors } from "../_lib/live-editors";
 import { recallForTransfer } from "../_lib/tab-memory";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
-import { closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseScope } from "../_lib/tab-strip";
+import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
@@ -31,6 +32,9 @@ import { useScriptSaving, type SaveMode } from "./use-script-saving";
 
 const copy = workbenchCopy.tabs;
 
+/** Fechar abas, ou uma janela que não é a última, pergunta tudo (RN-ABAS-007). */
+const askEverything = closeAsks({ closesTheApp: false });
+
 /**
  * A faixa de abas e o painel de cada uma. Cada aba é uma consulta (`QueryTab`) de uma conexão, com
  * a etiqueta do ambiente (RN-CONN-015); a que tem `table` é a de uma tabela (RN-TABELA-001), com o
@@ -47,10 +51,13 @@ const copy = workbenchCopy.tabs;
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
+  const folders = useQuery(foldersQuery);
+  // RN-PASTA-005: o ambiente que a conexão de cada aba mostra, o próprio ou o herdado da pasta; o mesmo objeto enquanto as pastas não mudam.
+  const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
   const queryClient = useQueryClient();
 
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
@@ -67,14 +74,23 @@ export function WorkbenchTabs() {
   useEffect(() => {
     for (const tab of tabs) if (tab.sessionId !== null && tab.connectionId !== null) disconnectLog.forget(tab.connectionId);
   }, [tabs, disconnectLog]);
+  // RN-ABAS-006: as abas de tabela que voltaram na entrada voltam desconectadas, e nada conecta sozinho: as vistas delas esperam o clique, como as de uma
+  // conexão que a pessoa desconectou.
+  useEffect(() => {
+    for (const connectionId of restoredTableConnections) disconnectLog.mark(connectionId);
+  }, [restoredTableConnections, disconnectLog]);
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
+  // O mesmo com a troca do banco da aba de consulta (RN-ARVORE-007), que também consulta a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestSwitchDatabase = useRef(switchDatabase);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestSwitchDatabase.current = switchDatabase;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -102,10 +118,12 @@ export function WorkbenchTabs() {
     [tabs, closeTab, setActiveTab],
   );
 
-  // Fechar várias abas pergunta UMA vez quando alguma das que fecham é consulta com SQL digitado (o texto não é guardado); fechar uma só, não.
+  // Fechar várias abas pergunta UMA vez quando alguma das que fecham é consulta com SQL digitado (o texto não volta na próxima entrada); fechar uma só, não.
+  // Fechar o app não pergunta (RN-ABAS-007: as abas voltam).
   const [confirm, setConfirm] = useState<{ scope: CloseScope; tabId: string; total: number; withSql: number } | null>(null);
   const askAboutSql = useCallback(
-    (scope: CloseScope, tabId: string) => {
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
+      if (!asks.sql) return closeNow(scope, tabId);
       const question = closeConfirmation(scope, tabs, tabId);
       if (question === null) closeNow(scope, tabId);
       else setConfirm({ scope, tabId, ...question });
@@ -113,10 +131,12 @@ export function WorkbenchTabs() {
     [tabs, closeNow],
   );
 
-  // RN-SCRIPT-001: depois dos Registros e antes da pergunta do SQL, a dos scripts com mudança não salva entre as abas que fecham.
+  // RN-SCRIPT-001: depois dos Registros e antes da pergunta do SQL, a dos scripts com mudança não salva entre as abas que fecham. Fechar o app não pergunta
+  // (RN-ABAS-007: o script volta com a marca de mudança não salva).
   const [scriptQuestion, setScriptQuestion] = useState<{ scope: CloseScope; tabId: string; dirty: { id: string; name: string }[]; saving: boolean } | null>(null);
   const askAboutScripts = useCallback(
-    (scope: CloseScope, tabId: string) => {
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
+      if (!asks.scripts) return askAboutSql(scope, tabId, asks);
       const dirty = scriptsToAsk(tabsToClose(scope, tabs, tabId), tabs).map((tab) => ({ id: tab.id, name: tab.script?.name ?? tab.title }));
       if (dirty.length === 0) askAboutSql(scope, tabId);
       else setScriptQuestion({ scope, tabId, dirty, saving: false });
@@ -136,6 +156,7 @@ export function WorkbenchTabs() {
       // Não gravou (cancelou o nome, a API recusou ou caiu): nada fecha, e a janela fica aberta.
       setScriptQuestion(null);
       setWindowClosing(false);
+      releaseWindowClose();
       return;
     }
     setScriptQuestion(null);
@@ -144,13 +165,14 @@ export function WorkbenchTabs() {
 
   // RN-EDIT-007: antes, as alterações não salvas dos Registros das abas que fecham: uma aba oferece Salvar; várias, só Descartar e Cancelar. Levar a aba
   // para outra janela pergunta o mesmo (as alterações não salvas não mudam de janela): Salvar e levar, ou Descartar e levar.
-  type Intent = { kind: "close"; scope: CloseScope } | { kind: "move"; target: TabMoveTarget };
+  // Elas não voltam na próxima entrada, e perguntam também ao fechar o app (RN-ABAS-007); `asks` diz o que vem depois.
+  type Intent = { kind: "close"; scope: CloseScope; asks: CloseAsks } | { kind: "move"; target: TabMoveTarget };
   const [unsaved, setUnsaved] = useState<{ intent: Intent; tabId: string; count: number; canSave: boolean; saving: boolean } | null>(null);
   const handleClose = useCallback(
-    (scope: CloseScope, tabId: string) => {
+    (scope: CloseScope, tabId: string, asks: CloseAsks = askEverything) => {
       const question = unsavedQuestion(tabsToClose(scope, tabs, tabId), unsavedEdits.countOf, unsavedEdits.saveOf);
-      if (question === null) askAboutScripts(scope, tabId);
-      else setUnsaved({ intent: { kind: "close", scope }, tabId, ...question, saving: false });
+      if (question === null) askAboutScripts(scope, tabId, asks);
+      else setUnsaved({ intent: { kind: "close", scope, asks }, tabId, ...question, saving: false });
     },
     [tabs, askAboutScripts, setUnsaved],
   );
@@ -192,7 +214,7 @@ export function WorkbenchTabs() {
   // Depois da pergunta: fecha (com a pergunta do SQL, se for o caso) ou leva a aba. Levar depois de "Descartar" é levá-la sem as alterações: elas
   // ficam na memória desta janela, que a aba deixa, e não vão.
   function proceed(intent: Intent, tabId: string, saved = false) {
-    if (intent.kind === "close") askAboutScripts(intent.scope, tabId);
+    if (intent.kind === "close") askAboutScripts(intent.scope, tabId, intent.asks);
     else void sendTab(tabId, intent.target, saved);
   }
 
@@ -203,7 +225,10 @@ export function WorkbenchTabs() {
     const saved = await save();
     setUnsaved(null);
     if (saved) proceed(intent, tabId, true);
-    else if (intent.kind === "close") setWindowClosing(false);
+    else if (intent.kind === "close") {
+      setWindowClosing(false);
+      releaseWindowClose();
+    }
   }
 
   // RN-ABAS-003: a aba desta janela foi solta na faixa de outra, e o processo principal pede que ela vá para lá, pelo caminho de sempre.
@@ -218,6 +243,8 @@ export function WorkbenchTabs() {
    * a caminho terminam de fechar, as da árvore desta janela também, e a janela fecha de verdade. Cancelar uma pergunta deixa a janela aberta. Com o
    * cofre bloqueado não há o que perguntar: a API já fechou as sessões, e a janela fecha.
    */
+  // RN-ABAS-006: a janela que fecha segura as abas dela no que volta (`holdForWindowClose`: fechar a última janela é o app saindo, e as abas voltam na
+  // próxima entrada); a pergunta cancelada deixa a janela aberta e solta (`releaseWindowClose`), e o que fechou até ali sai do que volta.
   const [windowClosing, setWindowClosing] = useState(false);
   const finishWindow = useCallback(() => {
     setWindowClosing(false);
@@ -231,14 +258,16 @@ export function WorkbenchTabs() {
   });
   useEffect(
     () =>
-      onWindowCloseRequested(() => {
+      onWindowCloseRequested(({ last }) => {
         const open = latestTabs.current;
         if (vaultLock.isLocked() || open.length === 0) return finishWindow();
 
+        holdForWindowClose();
         setWindowClosing(true);
-        latestHandleClose.current("all", open[0].id);
+        // RN-ABAS-007: a última janela fecha o app, e só pergunta pelo que não volta na próxima entrada (as alterações não salvas da grade).
+        latestHandleClose.current("all", open[0].id, closeAsks({ closesTheApp: last }));
       }),
-    [finishWindow],
+    [finishWindow, holdForWindowClose],
   );
   useEffect(() => {
     if (windowClosing && tabs.length === 0) finishWindow();
@@ -266,6 +295,10 @@ export function WorkbenchTabs() {
   }
 
   const connectionOf = (connectionId: string | null) => (connectionId === null ? undefined : connections.data?.find((connection) => connection.id === connectionId));
+  const environmentOf = (connectionId: string | null) => {
+    const connection = connectionOf(connectionId);
+    return connection === undefined ? null : environments.connection(connection);
+  };
 
   const question = confirm === null ? null : closeConfirmationText(confirm.total, confirm.withSql);
 
@@ -273,7 +306,7 @@ export function WorkbenchTabs() {
     <>
       <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tabs.length === 0 ? null : (
-          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
+          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} environmentOf={environmentOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
         )}
 
         {tabs.length === 0 ? (
@@ -301,9 +334,9 @@ export function WorkbenchTabs() {
             return (
               <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
                 {isTableTab(tab) ? (
-                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
+                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
                 )}
               </div>
             );
@@ -324,6 +357,7 @@ export function WorkbenchTabs() {
           onCancel={() => {
             setUnsaved(null);
             setWindowClosing(false);
+            releaseWindowClose();
           }}
         />
       )}
@@ -340,6 +374,7 @@ export function WorkbenchTabs() {
           onCancel={() => {
             setScriptQuestion(null);
             setWindowClosing(false);
+            releaseWindowClose();
           }}
         />
       )}
@@ -361,6 +396,7 @@ export function WorkbenchTabs() {
           onCancel={() => {
             setConfirm(null);
             setWindowClosing(false);
+            releaseWindowClose();
           }}
         />
       )}

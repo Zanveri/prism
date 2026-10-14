@@ -23,6 +23,10 @@ public sealed class DatabaseSessionEditsTests
 
     private string Pedido => $"\"{_schema}\".\"pedido\"";
 
+    private string Cliente => $"\"{_schema}\".\"cliente\"";
+
+    private string Conta => $"\"{_schema}\".\"conta\"";
+
     [OneTimeSetUp]
     public async Task StartAsync()
     {
@@ -30,7 +34,7 @@ public sealed class DatabaseSessionEditsTests
 
         await using var host = await ApiHost.StartAsync();
         var session = await StartSessionAsync(host);
-        foreach (var sql in new[] { $"CREATE SCHEMA {_schema}", $"CREATE TABLE {Pedido} (id integer PRIMARY KEY, status text, total integer GENERATED ALWAYS AS (id * 2) STORED)", $"INSERT INTO {Pedido} (id, status) VALUES (1, 'aberta'), (2, 'aberta')" })
+        foreach (var sql in new[] { $"CREATE SCHEMA {_schema}", $"CREATE TABLE {Pedido} (id integer PRIMARY KEY, status text, total integer GENERATED ALWAYS AS (id * 2) STORED)", $"INSERT INTO {Pedido} (id, status) VALUES (1, 'aberta'), (2, 'aberta')", $"CREATE TABLE {Cliente} (id integer PRIMARY KEY, nome text)", $"CREATE TABLE {Conta} (id integer PRIMARY KEY, cliente_id integer NOT NULL, saldo integer)", $"INSERT INTO {Cliente} VALUES (7, 'Ana')", $"INSERT INTO {Conta} VALUES (1, 7, 10), (2, 7, 20)" })
             await host.Client.ExecuteAsync(session, sql);
     }
 
@@ -65,6 +69,37 @@ public sealed class DatabaseSessionEditsTests
 
         var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {Pedido} ORDER BY 1")).GetProperty("rows").ToString();
         Assert.That(rows, Is.EqualTo("""[["1","paga"],["2","aberta"],["3",null]]"""));
+    }
+
+    /// <summary>
+    /// RN-EDIT-002: o resultado de junção responde, no `edit-target`, as tabelas do `FROM` com a chave de cada uma e a tabela de cada
+    /// coluna; as alterações de uma linha em duas tabelas são dois `UPDATE` no "Ver SQL" e no "Salvar".
+    /// </summary>
+    [Test]
+    public async Task Edits_OfAJoin_AnswerEachTableAndSaveOneUpdatePerTable()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+
+        var page = await host.Client.ExecuteAsync(session, $"SELECT conta.id, conta.saldo, c.id AS cliente, c.nome FROM {Conta} conta JOIN {Cliente} c ON c.id = conta.cliente_id ORDER BY 1");
+        var resultID = page.GetProperty("resultID").GetGuid();
+        Assert.That(page.GetProperty("editable").ToString(), Is.EqualTo("""{"known":false,"reason":null}"""));
+
+        var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID }), HttpStatusCode.OK);
+        Assert.That(target.ToString(), Is.EqualTo($$"""{"tables":[{"schema":"{{_schema}}","name":"conta","key":[0],"editable":true,"reason":null},{"schema":"{{_schema}}","name":"cliente","key":[2],"editable":true,"reason":null}],"columns":[{"table":0,"baseColumn":"id","editable":false,"reason":"coluna da chave numa junção","nullable":false,"generated":null},{"table":0,"baseColumn":"saldo","editable":true,"reason":null,"nullable":true,"generated":null},{"table":1,"baseColumn":"id","editable":false,"reason":"coluna da chave numa junção","nullable":false,"generated":null},{"table":1,"baseColumn":"nome","editable":true,"reason":null,"nullable":true,"generated":null}],"rowOperations":false,"oneAtATime":false}"""));
+
+        var changes = new object[] { new { kind = "update", table = 0, key = new[] { "1" }, set = new[] { new { column = 1, value = (string?)"15" } } }, new { kind = "update", table = 1, key = new[] { "7" }, set = new[] { new { column = 3, value = (string?)"Ana Maria" } } } };
+        var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID, changes }), HttpStatusCode.OK);
+        Assert.That(preview.GetProperty("statements").EnumerateArray().Select(statement => statement.GetProperty("sql").GetString()), Is.EqualTo(new[] { $"UPDATE {Conta} SET \"saldo\" = 15 WHERE \"id\" = 1", $"UPDATE {Cliente} SET \"nome\" = 'Ana Maria' WHERE \"id\" = 7" }));
+
+        var refused = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { kind = "delete", table = 0, key = new[] { "1" } } } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+        Assert.That(refused.GetProperty("change").GetInt32(), Is.Zero);
+
+        var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes }), HttpStatusCode.OK);
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":2}"""));
+
+        var rows = (await host.Client.ExecuteAsync(session, $"SELECT conta.id, conta.saldo, c.nome FROM {Conta} conta JOIN {Cliente} c ON c.id = conta.cliente_id ORDER BY 1")).GetProperty("rows").ToString();
+        Assert.That(rows, Is.EqualTo("""[["1","15","Ana Maria"],["2","20","Ana Maria"]]"""));
     }
 
     [Test]

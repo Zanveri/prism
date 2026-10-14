@@ -89,6 +89,82 @@ public sealed class UpdateFolderHandlerTests
         _folderRepository.VerifyNoOtherCalls();
     }
 
+    /// <summary>RN-PASTA-005: o ambiente igual depois de normalizado também é "nada mudou".</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK o mesmo ambiente, com espaços sobrando, não é mudança e nada é gravado")]
+    public async Task Handle_ShouldBeOK_WhenTheEnvironmentDidNotChange()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var updatedAt = CreatedAt.AddDays(1);
+        var folder = FolderFakers.Create(name: "Produção", createdAt: CreatedAt, updatedAt: updatedAt, environmentName: "Produção Sul", environmentColor: "#FF8A7A");
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Produção", environmentName: " Produção  Sul", environmentColor: "#FF8A7A ");
+        SetupGetByID(folder, cancellationToken);
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Produção Sul", result.Value.EnvironmentName);
+        Assert.Equal(updatedAt, result.Value.UpdatedAt);
+        _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
+        _folderQueries.VerifyNoOtherCalls();
+        _folderRepository.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-PASTA-005: só o ambiente muda. Grava e carimba, sem conferir nome nem ciclo, porque a chave da pasta é a mesma.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK só o ambiente muda: grava sem conferir duplicidade nem ciclo")]
+    public async Task Handle_ShouldBeOK_WhenOnlyTheEnvironmentChanged()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var parentID = Guid.CreateVersion7();
+        var folder = FolderFakers.Create(parentID: parentID, name: "Produção", createdAt: CreatedAt);
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Produção", parentID: parentID, environmentName: "Produção", environmentColor: "#FF8A7A");
+        SetupGetByID(folder, cancellationToken);
+        SetupUpdateOK(cancellationToken);
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Produção", result.Value.EnvironmentName);
+        Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
+        Assert.Equal(_timeProvider.GetUtcNow().UtcDateTime, result.Value.UpdatedAt);
+        _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.EnvironmentName == "Produção" && updated.EnvironmentColor == "#FF8A7A"), cancellationToken), Times.Once);
+        _folderQueries.VerifyNoOtherCalls();
+        _folderRepository.VerifyNoOtherCalls();
+    }
+
+    /// <summary>O `PATCH` grava a pasta por inteiro, como o da conexão: sem ambiente no corpo, a pasta fica sem ambiente. Quem só move ou renomeia manda o que ela já tem.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK sem ambiente no corpo a pasta fica sem ambiente")]
+    public async Task Handle_ShouldRemoveTheEnvironment_WhenTheBodyHasNone()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = FolderFakers.Create(name: "Produção", createdAt: CreatedAt, environmentName: "Produção", environmentColor: "#FF8A7A");
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Produção");
+        SetupGetByID(folder, cancellationToken);
+        SetupUpdateOK(cancellationToken);
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.EnvironmentName);
+        Assert.Null(result.Value.EnvironmentColor);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.EnvironmentName == null && updated.EnvironmentColor == null), cancellationToken), Times.Once);
+    }
+
     /// <summary>Só a caixa da letra muda: grava, mas não é duplicidade, porque a pasta não colide com ela mesma. RN-PASTA-002.</summary>
     [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
     [Fact(DisplayName = "OK só a caixa do nome muda e nada é conferido")]

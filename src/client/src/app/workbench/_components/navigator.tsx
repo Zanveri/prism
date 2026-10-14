@@ -9,6 +9,8 @@ import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
 import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
+import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
+import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -16,10 +18,12 @@ import { connectionReveal } from "../_lib/connection-intent";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
-import { selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { refreshKey } from "../_lib/grid-editing";
 import { measureRendered, observeRenderedOffset } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
@@ -28,6 +32,7 @@ import { useWorkbench } from "../_lib/workbench-state";
 import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
+import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
 import { NavigatorRow, rowHeight, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
@@ -80,7 +85,7 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A ação do menu sobre uma pasta que existe e o modo do diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). */
-const folderActionTypes = { renameFolder: "rename", moveFolder: "move", deleteFolder: "delete" } as const;
+const folderActionTypes = { renameFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
 
 /** A ação de conexão que o menu pediu (RN-NAV-003 e 009): renomear, mover de pasta ou excluir, cada uma com o diálogo dela. */
 type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connection };
@@ -144,6 +149,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; keys: ReadonlySet<string> }>({ query: "", keys: noKeys });
   const searchInput = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  // RN-NAV-010: o seletor de ambiente. É estado daqui: a área de trabalho fica montada enquanto o cofre está aberto, então a escolha vale enquanto a
+  // janela está aberta, e sair do cofre a apaga, como o resto.
+  const [environmentChoice, setEnvironmentChoice] = useState<EnvironmentChoice>(allEnvironments);
   // O filtro roda sobre o texto adiado: a digitação não espera a lista de milhares de linhas.
   const searchText = useDeferredValue(query);
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
@@ -152,8 +160,16 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [reveal, setReveal] = useState<{ key: string; seq: number } | null>(null);
 
   const connectionList = useMemo(() => connections.data ?? [], [connections.data]);
-  const tree = useMemo(() => treeNodes(buildConnectionTree(folders.data ?? [], connectionList)), [folders.data, connectionList]);
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
+  // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
+  const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-NAV-010: os ambientes do usuário no seletor (RN-AMB-001), e a árvore só com as conexões do escolhido e as pastas no caminho até elas. A busca
+  // filtra depois, sobre esta árvore. O ambiente que ninguém mais usa sai da lista, e a escolha dele volta a "Todos" (ajuste durante a renderização,
+  // só com as duas listas já na tela).
+  const savedEnvironments = useMemo(() => userEnvironments(folders.data ?? [], connectionList), [folders.data, connectionList]);
+  if (folders.data !== undefined && connections.data !== undefined && !choiceAvailable(environmentChoice, savedEnvironments)) setEnvironmentChoice(allEnvironments);
+  const shown = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
+  const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
 
   const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
@@ -204,6 +220,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     setSelectedKey(plan.key);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
+    // O filtro de ambiente que a esconde também sai (RN-NAV-010): a conexão salva ou duplicada sem o ambiente escolhido tem de aparecer.
+    if (!shown.connections.includes(revealTarget)) setEnvironmentChoice(allEnvironments);
   }
 
   const announcedReveal = useRef(0);
@@ -308,6 +326,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       event.preventDefault();
       searchInput.current?.focus();
       searchInput.current?.select();
+    } else if (!event.defaultPrevented && refreshKey(event)) {
+      // RN-GRADE-012: F5 é o "Atualizar" do nó escolhido, quando ele se aplica (o mesmo da barra e do menu).
+      event.preventDefault();
+      if (refreshesSelection(toolbar)) runToolbarAction("refresh");
     }
   }
 
@@ -518,8 +540,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       );
     }
 
-    // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página).
-    if (tree.roots.length === 0) {
+    // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página). A árvore vazia pelo
+    // filtro de ambiente não é o primeiro uso: há o que mostrar, só não nesse ambiente.
+    const filtering = environmentChoice.type !== "all";
+    if (tree.roots.length === 0 && (!filtering || (connectionList.length === 0 && (folders.data ?? []).length === 0))) {
       return (
         <div className="flex flex-col gap-1 px-3 py-2">
           <p className="font-semibold text-ink">{copy.empty.title}</p>
@@ -530,9 +554,17 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
     return (
       <>
-        <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
+        {/* RN-NAV-010: o seletor de ambiente ao lado do campo de busca; no navegador estreito ele desce para a linha de baixo. */}
+        <div className="mx-2 mb-2 flex flex-none flex-wrap gap-1.5">
+          <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
+          <NavigatorEnvironmentFilter environments={savedEnvironments} value={environmentChoice} onChange={setEnvironmentChoice} />
+        </div>
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
-        {search === null ? null : search.rows.length === 0 ? (
+        {filtering && tree.roots.length === 0 ? (
+          <p role="status" className="px-3 py-2 text-muted">
+            {environmentChoice.type === "environment" ? navigatorCopy.environmentFilter.nothingIn(savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : navigatorCopy.environmentFilter.nothingWithout}
+          </p>
+        ) : search === null ? null : search.rows.length === 0 ? (
           <div role="status" className="flex flex-col gap-1 px-3 py-2">
             <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
             <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>
@@ -552,6 +584,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           onSelect={setSelectedKey}
           reveal={reveal}
           connectionById={connectionById}
+          environments={environments}
           statuses={statuses}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
@@ -611,6 +644,7 @@ type NavigatorListProps = {
   rows: NavNode[];
   open: ReadonlySet<string>;
   connectionById: ReadonlyMap<string, Connection>;
+  environments: EnvironmentLookup;
   statuses: ReadonlyMap<string, ConnectionStatus>;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
@@ -642,7 +676,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -765,6 +799,8 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
           // Só a linha da conexão recebe a conexão salva (a etiqueta do banco, o ambiente e as ações); as outras linhas têm dono, mas não a recebem.
           const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
           const connection = connectionId === null ? undefined : connectionById.get(connectionId);
+          const folderId = node.kind === "folder" ? folderIdOf(node) : null;
+          const environment = folderId !== null ? environments.folder(folderId) : connection ? environments.connection(connection) : null;
 
           return (
             <div
@@ -784,6 +820,7 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
                 tabbable={node.key === tabbable}
                 selected={node.key === selectedKey}
                 connection={connection}
+                environment={environment}
                 status={connection ? statuses.get(connection.id) : undefined}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}

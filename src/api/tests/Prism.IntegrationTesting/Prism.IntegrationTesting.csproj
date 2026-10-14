@@ -29,6 +29,11 @@
     <EmbeddedResource Include="..\Prism.UnitTesting\Vault\Samples\vault-format-1.json" LogicalName="vault-format-1.json" />
   </ItemGroup>
 
+  <!-- RN-VERSAO-005 e RN-ABAS-006: o cofre do formato 2 gravado antes do formato 3 (o mesmo de Prism.UnitTesting), aberto pela rota de entrada em WorkspaceTests. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\Prism.UnitTesting\Vault\Samples\vault-format-2.json" LogicalName="vault-format-2.json" />
+  </ItemGroup>
+
   <!-- As cargas dos bancos de teste vão para a saída: o fixture as lê de lá e as roda no contêiner. -->
   <ItemGroup>
     <None Update="Infrastructure\Databases\Seeds\*.sql" CopyToOutputDirectory="PreserveNewest" />

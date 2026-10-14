@@ -58,6 +58,12 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(adopted?.memory).toEqual({ layout: { mode: "maximized", resultPercent: 70 }, grid: { key: "[]", widths: { 0: 120 } } });
   });
 
+  it("o resultado filtrado leva o filtro com o comando e diz como ele entrou (RN-GRADE-011): Executar de novo na outra janela repete os dois", () => {
+    const filtered: RowsState = { ...rows, target: { ...rows.target, filter: `"nota" IS NULL ORDER BY "id" DESC` }, filterApplied: "wrapped", readOnly: "o filtro foi aplicado por fora do comando" };
+
+    expect(roundTrip(serializeTab(snapshot({ state: filtered })))?.state).toEqual(filtered);
+  });
+
   it("as células cortadas voltam como mapa de conjuntos, e o resultado volta parado (sem carregar, contar nem cancelar)", () => {
     const state = roundTrip(serializeTab(snapshot()))?.state as RowsState;
     expect(state.truncated.get(1)?.has(1)).toBe(true);
@@ -113,6 +119,16 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(same?.tab.script).toEqual(script);
   });
 
+  it("a aba que trocou de banco leva o banco novo, e o script leva o banco em que foi salvo: o ponto continua aceso do outro lado (RN-ARVORE-007)", () => {
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedDatabase: "mes2", dirty: true };
+    const moved = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", database: "vendas", sessionId: null, script }, sessionId: null, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+    const back = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", database: "mes2", script }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+
+    expect(moved?.tab.database).toBe("vendas");
+    expect(moved?.tab.script).toEqual(script);
+    expect(back?.tab.script).toEqual({ ...script, dirty: false });
+  });
+
   it("a aba sem conexão (o script cuja conexão sumiu, RN-SCRIPT-003) passa sem conexão", () => {
     const adopted = roundTrip(serializeTab(snapshot({ tab: { ...tab, connectionId: null, sessionId: null } })));
 
@@ -137,5 +153,14 @@ describe("a aba de consulta que salvou a edição vai com a grade salva (RN-EDIT
 
   it("o resultado sem marca nenhuma volta sem o campo, como ia antes", () => {
     expect(roundTrip(serializeTab(snapshot()))?.state).not.toHaveProperty("generated");
+    expect(roundTrip(serializeTab(snapshot()))?.state).not.toHaveProperty("sourceRows");
+  });
+
+  it("a linha de cada linha no resultado da API vai junto: copiar a célula cortada pede a linha certa na outra janela (RN-SQL-017)", () => {
+    const saved: RowsState = { ...rows, cursorClosed: true, sourceRows: [1, null] };
+
+    const state = roundTrip(serializeTab(snapshot({ state: saved })))?.state as RowsState;
+
+    expect(state.sourceRows).toEqual([1, null]);
   });
 });

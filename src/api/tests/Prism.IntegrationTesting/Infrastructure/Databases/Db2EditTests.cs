@@ -61,6 +61,15 @@ public sealed class Db2EditTests : DatabaseEditContractTests
     protected override async Task ConfigureAsync(IServiceCollection services)
         => services.UseDriverSource(directory: await IbmDriverSingleton.GetDirectoryAsync());
 
+    protected override string WithFirstRows(string select, int rows)
+        => $"{select} FETCH FIRST {rows} ROWS ONLY";
+
+    protected override string? ReadOnlyClause => "FOR READ ONLY";
+
     protected override string Name(string name)
         => name.ToUpperInvariant();
+
+    /// <summary>No Db2 o qualificador sem esquema é lido no esquema atual da sessão, e não no da tabela do `FROM`: vai com ele.</summary>
+    protected override string JoinQualifier(string table)
+        => $"{Schema}.{Table(table)}";
 }

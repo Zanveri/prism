@@ -64,6 +64,18 @@ describe("createDisconnectLog: quem a pessoa desconectou (RN-SESSAO-004)", () =>
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
+  it("as abas de tabela que voltaram na entrada (RN-ABAS-006) marcam a conexão delas sem sessão nenhuma: as vistas esperam o clique, e conectar a tira", () => {
+    const { log, listener } = watch();
+
+    log.mark("c1");
+    log.mark("c1");
+
+    expect([...log.getSnapshot()]).toEqual(["c1"]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    openSession("c1");
+    expect(log.getSnapshot().size).toBe(0);
+  });
+
   it("uma sessão de aba (o 'Atualizar' dos registros) também a tira: quem avisa é `forget`", () => {
     openSession("c1");
     const { log } = watch();

@@ -8,8 +8,11 @@ const emptyToNull = (value: string) => (value === "" ? null : value);
 const id = z.guid();
 const timestamp = z.string();
 
-/** A pasta como a API a devolve (RN-PASTA-001). `parentID` nulo é a raiz. */
-export const folderSchema = z.object({ id, parentID: id.nullable(), name: z.string(), createdAt: timestamp, updatedAt: timestamp });
+/**
+ * A pasta como a API a devolve (RN-PASTA-001). `parentID` nulo é a raiz. O ambiente (RN-PASTA-005) vem sempre, nulo quando a pasta não tem: é o
+ * que as conexões dela sem ambiente próprio herdam (`environment.ts`).
+ */
+export const folderSchema = z.object({ id, parentID: id.nullable(), name: z.string(), environmentName: z.string().nullable(), environmentColor: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
 
 export type Folder = z.infer<typeof folderSchema>;
 
@@ -61,7 +64,13 @@ export function engineOption(engine: Engine) {
   return engineOptions.find((option) => option.value === engine) ?? engineOptions[0];
 }
 
-const portMessage ="Informe uma porta de 1 a 65535.";
+const portMessage = "Informe uma porta de 1 a 65535.";
+
+/** O ambiente do formulário (RN-CONN-010), o mesmo na conexão e na pasta (RN-PASTA-005): o nome em branco e a cor vazia viram `null`. */
+const environmentFields = {
+  environmentName: z.string().trim().max(30, "O ambiente pode ter no máximo 30 caracteres.").transform(emptyToNull),
+  environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "Use uma cor no formato #RRGGBB.").transform(emptyToNull),
+};
 
 /** Os campos do formulário de conexão (RN-CONN-010), como o `FormData` os entrega: tudo texto. */
 const connectionFields = z.object({
@@ -72,8 +81,7 @@ const connectionFields = z.object({
   port: z.string().trim().regex(/^\d+$/, portMessage).transform(Number).pipe(z.number().min(1, portMessage).max(65535, portMessage)),
   database: z.string().trim().min(1, "Informe o banco de dados."),
   userName: z.string().trim().min(1, "Informe o usuário do banco."),
-  environmentName: z.string().trim().max(30, "O ambiente pode ter no máximo 30 caracteres.").transform(emptyToNull),
-  environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "Use uma cor no formato #RRGGBB.").transform(emptyToNull),
+  ...environmentFields,
 });
 
 /** Na criação a senha é obrigatória. Não é aparada: espaço nas pontas faz parte dela. */
@@ -93,12 +101,13 @@ export const revealPasswordSchema = z.object({ password: z.string().min(1, "Info
 
 const folderName = z.string().trim().min(1, "Informe o nome da pasta.").max(60, "O nome pode ter no máximo 60 caracteres.");
 
-/** Criar uma pasta: o nome e onde ela fica (`""` é a raiz). */
-export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull) });
+/** Criar uma pasta: o nome, onde ela fica (`""` é a raiz) e o ambiente (RN-PASTA-005). */
+export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), ...environmentFields });
 
-export const renameFolderSchema = createFolderSchema.pick({ name: true });
+/** "Editar pasta…" (também pelo F2, RN-NAV-009 e RN-PASTA-006) pergunta o nome e o ambiente. */
+export const editFolderSchema = createFolderSchema.pick({ name: true, environmentName: true, environmentColor: true });
 
 export const moveFolderSchema = createFolderSchema.pick({ parentID: true });
 
-/** O que a API recebe ao criar (`id` ausente) ou alterar uma pasta. */
-export type FolderInput = { name: string; parentID: string | null };
+/** O que a API recebe ao criar (`id` ausente) ou alterar uma pasta: o `PATCH` grava a pasta por inteiro, o ambiente inclusive. */
+export type FolderInput = z.output<typeof createFolderSchema>;

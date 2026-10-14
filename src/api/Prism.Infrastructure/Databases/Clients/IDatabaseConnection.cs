@@ -78,20 +78,21 @@ public interface IDatabaseConnection : IAsyncDisposable
     Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// RN-EDIT-002 e 010: o que o catálogo diz de uma tabela do `FROM` para a edição, numa vez só: o tipo dela, as colunas e as chaves.
-    /// Nulo quando o catálogo não a acha como tabela nem visão (um sinônimo, um apelido de tabela). A tabela sem esquema é a do esquema
-    /// atual desta conexão (Db2), a do dono que o banco resolver (Informix) ou a do caminho de busca (PostgreSQL).
+    /// RN-EDIT-002 e 010: o que o catálogo diz de cada tabela do `FROM` para a edição, numa vez só para todas: o tipo dela, as colunas e
+    /// as chaves, na ordem das tabelas. Nulo na que o catálogo não acha como tabela nem visão (um sinônimo, um apelido de tabela). A
+    /// tabela sem esquema é a do esquema atual desta conexão (Db2), a do dono que o banco resolver (Informix) ou a do caminho de busca
+    /// (PostgreSQL).
     /// </summary>
-    Task<Result<EditCatalogTable?, DatabaseFailure>> DescribeEditTableAsync(EditTableName table, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken);
 
     /// <summary>RN-EDIT-010: o catálogo da edição numa conexão à parte espera uma trava por um prazo, e não para sempre.</summary>
     Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// RN-EDIT-005 e 012: o "Salvar". Numa transação própria (ou, no banco sem log de transação, uma alteração por vez), confere a
-    /// tabela no catálogo antes do primeiro comando e entrega o que achou a `plan`, que devolve os comandos ou a recusa; cada comando
+    /// RN-EDIT-005 e 012: o "Salvar". Numa transação própria (ou, no banco sem log de transação, uma alteração por vez), confere as
+    /// tabelas no catálogo antes do primeiro comando e entrega o que achou a `plan`, que devolve os comandos ou a recusa; cada comando
     /// tem de afetar exatamente uma linha. Qualquer falha desfaz tudo o que este "Salvar" fez, menos no banco sem log, em que as
     /// anteriores ficam gravadas (`Applied`). O cursor aberto fecha antes, como antes de qualquer comando. Devolve quantas foram gravadas.
     /// </summary>
-    Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTableName table, bool oneAtATime, Func<EditCatalogTable?, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken);
+    Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken);
 }

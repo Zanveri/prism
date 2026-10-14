@@ -23,7 +23,7 @@ public sealed class FolderRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord> folders, IReadOnlyList<VaultConnectionRecord>? connections = null)
-        => new("marina.costa", folders, connections ?? [], []);
+        => new("marina.costa", folders, connections ?? [], [], VaultWorkspaceRecord.Empty);
 
     private static VaultFolderRecord ToRecord(Folder folder)
         => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt);
@@ -212,6 +212,45 @@ public sealed class FolderRepositoryTests
         Assert.True(result.IsSuccess);
         Assert.Equal([before, ToRecord(folder), after, newParent], _saved!.Folders);
         VerifySavedOnce(cancellationToken);
+    }
+
+    /// <summary>RN-PASTA-005: o ambiente vai ao registro do cofre junto com o resto da pasta.</summary>
+    [Trait("FolderRepository", "Update")]
+    [Fact(DisplayName = "OK grava o ambiente no registro da pasta")]
+    public async Task Update_ShouldWriteTheEnvironment()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateFolder(name: "Produção");
+        var folder = FolderFakers.Create(iD: target.ID, name: "Produção", createdAt: target.CreatedAt);
+        folder.ChangeEnvironment("Produção", "#FF8A7A", target.UpdatedAt.AddDays(1));
+        var repository = CreateRepository(Document([target]));
+
+        //Act
+        var result = await repository.Update(folder, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal([new VaultFolderRecord(target.ID, null, "Produção", target.CreatedAt, target.UpdatedAt.AddDays(1), "Produção", "#FF8A7A")], _saved!.Folders);
+        VerifySavedOnce(cancellationToken);
+    }
+
+    [Trait("FolderRepository", "GetByID")]
+    [Fact(DisplayName = "OK devolve a pasta com o ambiente gravado")]
+    public async Task GetByID_ShouldRestoreTheEnvironment()
+    {
+        //Arrange
+        var record = VaultFakers.CreateFolder(name: "Produção") with { EnvironmentName = "Produção", EnvironmentColor = "#FF8A7A" };
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(Document([record])));
+        var repository = new FolderRepository(_vault.Object);
+
+        //Act
+        var result = await repository.GetByID(record.ID, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Produção", result.Value.EnvironmentName);
+        Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
     }
 
     /// <summary>Só a caixa muda: a pasta continua sendo a mesma chave entre as irmãs, e não colide com ela mesma.</summary>

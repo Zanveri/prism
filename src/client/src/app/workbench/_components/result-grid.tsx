@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { moveCell, type GridCell } from "../_lib/grid-cursor";
-import { savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesCell, filterKey, savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
@@ -192,8 +192,10 @@ type GridHeaderCellProps = {
   showType?: boolean;
   /** O zoom como fator (RN-GRADE-010): o arrasto da divisa anda na escala dele. */
   scale?: number;
-  /** RN-EDIT-002: por que a coluna não se edita, na dica do cabeçalho, quando o catálogo já respondeu. */
+  /** RN-EDIT-002: por que a coluna não se edita (ou, numa junção, o que a editável altera), na dica do cabeçalho, quando o catálogo já respondeu. */
   hint?: string | null;
+  /** RN-EDIT-002: a coluna não se edita, e o cabeçalho diz "somente leitura" depois do tipo, como no canvas (na aba de consulta). */
+  readOnlyMark?: boolean;
 };
 
 /**
@@ -203,7 +205,7 @@ type GridHeaderCellProps = {
  * que termina um arrasto não ordena. O nome do cabeçalho para o leitor de tela é o da coluna e o tipo
  * (`aria-label`), e não o que se juntaria da divisa que mora dentro dele.
  */
-export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null }: GridHeaderCellProps) {
+export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false }: GridHeaderCellProps) {
   // A largura de saída da coluna é contada sem a seta da ordem (`baseWidths`, em `grid-columns.ts`). Quando a seta aparece, quem cede os 18 px dela é o TIPO, e só ele: o nome não
   // encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com um peso, por maior que fosse o do tipo,
   // o nome ainda perdia centésimos de pixel, e com 1/64 de pixel a menos o Chromium já desenha a reticência (`cliente_id` virava `cliente_…`; antes disso o `id`
@@ -213,13 +215,15 @@ export function GridHeaderCell({ column, item, sort, onSort, width = item.size, 
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <span className="max-w-full shrink-0 truncate">{column.name}</span>
       {/* 11 px em 100%, no zoom da grade (RN-GRADE-010). */}
-      {showType ? <span className="min-w-0 truncate text-[length:calc(11px*var(--grid-zoom))] font-normal text-subtle">{column.type}</span> : null}
+      {showType || readOnlyMark ? (
+        <span className="min-w-0 truncate text-[length:calc(11px*var(--grid-zoom))] font-normal text-subtle">{showType && readOnlyMark ? `${column.type} · ${editCopy.readOnlyMark}` : showType ? column.type : editCopy.readOnlyMark}</span>
+      ) : null}
     </span>
   );
   const align = column.kind === "number" ? " justify-end" : "";
   const position = { left: item.start, width: item.size };
   // O nome para o leitor de tela é o que se vê; a dica do cabeçalho só de texto diz o tipo mesmo com ele escondido.
-  const name = showType ? `${column.name} ${column.type}` : column.name;
+  const name = `${showType ? `${column.name} ${column.type}` : column.name}${readOnlyMark ? `, ${editCopy.readOnlyMark}` : ""}`;
   const resizer = onResize === undefined ? null : <ColumnResizer name={column.name} width={width} zoom={scale} last={last} onResize={onResize} onFit={onFit ?? (() => {})} />;
 
   if (onSort === undefined) {
@@ -303,7 +307,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const cellIdOf = useCallback((row: number, column: number) => `${gridId}-${row}-${column}`, [gridId]);
   // A primeira página é a que conta para a largura de saída: carregar mais não muda o que está na tela.
   const [firstPage] = useState(read);
-  const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes), [columns, firstPage, nullText, showTypes]);
+  // RN-EDIT-002: a marca "somente leitura" do cabeçalho cabe na largura de saída quando o catálogo responde (na aba de consulta).
+  const readOnly = editing?.columnReadOnly ?? null;
+  const marks = useMemo(() => readOnly?.map((marked) => (marked ? editCopy.readOnlyMark : null)) ?? null, [readOnly]);
+  const base = useMemo(() => baseWidths(columns, firstPage, nullText, showTypes, marks), [columns, firstPage, nullText, showTypes, marks]);
   const widths = useMemo(() => base.map((width, index) => chosen[index] ?? width), [base, chosen]);
   // O zoom (RN-GRADE-010) muda juntos o texto, a altura das linhas, o número da linha, as larguras (as escolhidas também, na mesma proporção) e os espaços.
   // As larguras guardadas são as de 100%; o que se desenha é a conta delas no zoom, em pixels inteiros.
@@ -460,12 +467,20 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
     const active = editing.active;
     if (active === null) return;
-    if (event.key === "F2" || event.key === "Enter") {
+    if (copiesCell(event)) {
+      // RN-SQL-017: a célula cortada é copiada com o valor completo, que a edição busca na API.
+      event.preventDefault();
+      editing.onCopy(active);
+    } else if (event.key === "F2" || event.key === "Enter") {
       event.preventDefault();
       editing.onEdit(active);
     } else if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
       event.preventDefault();
       editing.onMenu(active, pointOf(active), true);
+    } else if (filterKey(event) !== null && editing.onFilter !== undefined) {
+      // RN-GRADE-013: F11 abre o submenu na célula ativa, e Ctrl+F11 o "Filtrar por valor…".
+      event.preventDefault();
+      editing.onFilter(active, pointOf(active), filterKey(event)!);
     } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
       // Começar a digitar abre o campo com o que foi digitado, no lugar do valor.
       event.preventDefault();
@@ -527,9 +542,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               showType={showTypes}
               scale={metrics.factor}
               hint={editing?.columnHints?.[item.index] ?? null}
+              readOnlyMark={editing?.columnReadOnly?.[item.index] === true}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
               // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009).
-              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes }))}
+              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null }))}
             />
           ))}
         </div>

@@ -1,28 +1,35 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { VaultLock } from "@/app/_components/vault-lock";
 import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
-import { onTabArrived, tellWindows } from "@/lib/api/bridge";
+import { claimWorkspaceRestore, onTabArrived, reportWorkspace, tellWindows, withdrawWorkspace } from "@/lib/api/bridge";
 import { allowRefusal } from "@/lib/api/prism-api";
+import { workspaceSync } from "@/lib/api/workspace-sync";
 
 import type { DatabaseSession } from "./database-sessions.schema";
 import { closeDatabaseSession, databaseSessionKey, treeSessionIds } from "./database-sessions.service";
 import { filterHandoff } from "./filter-handoff";
+import { liveEditors } from "./live-editors";
 import { inDatabase, parseNavKey } from "./navigator-model";
 import { withEditedSql, type ScriptRef } from "./saved-scripts";
+import { createWorkspaceSource, restoreWorkspace, type LiveSql } from "./saved-workspace";
 import type { Script } from "./scripts.schema";
+import { getScript, scriptsQuery } from "./scripts.service";
 import { cancelQuery } from "./query.service";
 import { forgetExcept, rememberTransferred } from "./tab-memory";
 import { moveTab, shiftTab } from "./tab-order";
+import { withDatabase } from "./tab-database";
 import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
-import { createQueryRunner, type QueryRunner } from "./use-query-runner";
+import { createQueryRunner, isBusyState, type QueryRunner } from "./use-query-runner";
 import { createLockHandles } from "./workbench-lock";
 import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type TableView } from "./workbench-model";
 import { workbenchCopy } from "./workbench.copy";
+import { getWorkspace } from "./workspace.service";
+import { createWorkspaceReporter } from "./workspace-reporter";
 
 export type { QueryTab };
 
@@ -58,8 +65,8 @@ type WorkbenchState = {
    * O script que já tem aba volta para ela: uma aba por script.
    */
   openScriptTab: (script: Script, place: { connectionId: string | null; database?: string }) => void;
-  /** RN-SCRIPT-001: a aba foi salva como o script dado, com este texto (o ponto apaga, se o editor ainda tem esse texto). */
-  setTabScript: (tabId: string, script: { id: string; name: string }, savedSql: string) => void;
+  /** RN-SCRIPT-001: a aba foi salva como o script dado, com este texto e neste banco (o ponto apaga, se o editor ainda tem esse texto e a aba, esse banco). */
+  setTabScript: (tabId: string, script: { id: string; name: string }, savedSql: string, savedDatabase: string | undefined) => void;
   /** RN-SCRIPT-001: o texto do editor mudou, sem atraso: o ponto da aba de um script acende na hora (só a primeira tecla muda o estado). */
   markScriptEdited: (tabId: string) => void;
   /** RN-SCRIPT-003: o script mudou de nome no navegador; as abas dele mudam de título. */
@@ -68,6 +75,12 @@ type WorkbenchState = {
   forgetScript: (scriptId: string) => void;
   /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu, no banco da conexão, com um executor novo. */
   assignConnection: (tabId: string, connectionId: string) => void;
+  /**
+   * RN-ARVORE-007: a aba de consulta passa a outro banco do servidor da conexão (`undefined`: o da conexão), sem executar nada. Ganha um executor novo nesse
+   * banco, que abre a sessão dele na próxima execução, como a aba aberta pela árvore (RN-ARVORE-006); o de antes sai de cena com o resultado, e a sessão dele
+   * fecha. O texto fica. Com comando em andamento não troca (a barra não oferece).
+   */
+  switchDatabase: (tabId: string, database: string | undefined) => void;
   /** O que a aba executa e mostra: a sessão dela, o comando em andamento e o resultado (`use-query-runner.ts`). */
   runnerOf: (tabId: string) => QueryRunner;
 
@@ -78,6 +91,18 @@ type WorkbenchState = {
   disconnect: (connectionId: string) => void;
   /** A conexão que está sendo desconectada agora, se alguma. */
   disconnecting: string | null;
+
+  /**
+   * RN-ABAS-006: as conexões das abas de tabela que voltaram na entrada. Elas voltam desconectadas, e as vistas delas esperam o clique para conectar
+   * (`DisconnectLog.mark`), como as de uma conexão que a pessoa desconectou.
+   */
+  restoredTableConnections: ReadonlySet<string>;
+  /**
+   * RN-ABAS-004 com a RN-ABAS-006: a janela começou a fechar. As abas que fecham por causa dela continuam no que volta (a última janela fechada é o app
+   * saindo, e as abas voltam na próxima entrada); a janela que fica aberta (a pessoa cancelou uma pergunta) solta, e o que fechou até ali sai do que volta.
+   */
+  holdForWindowClose: () => void;
+  releaseWindowClose: () => void;
 };
 
 const WorkbenchContext = createContext<WorkbenchState | null>(null);
@@ -130,6 +155,24 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [runners] = useState(() => new Map<string, QueryRunner>());
   // Os fechamentos de sessão a caminho (as abas fechadas): a janela que fecha espera por eles antes de sumir (`releaseWindow`).
   const [closing] = useState(() => new Set<Promise<unknown>>());
+
+  // RN-ABAS-006: as abas desta janela, contadas ao processo principal, que junta as de todas e as grava pela API. O relato lê o estado DESTE instante (a
+  // fonte, que recebe as abas a cada renderização) e o texto vivo dos editores; a aba que fecha é contada com urgência (`urgentReport`), e a gravação é na hora.
+  // Criados uma vez e nunca trocados, por `useState`, como `runners`.
+  const [source] = useState(() => createWorkspaceSource(liveSql));
+  const [reporter] = useState(() =>
+    createWorkspaceReporter({
+      read: () => source.read(),
+      send: reportWorkspace,
+      schedule: (run, ms) => {
+        const timer = setTimeout(run, ms);
+        return () => clearTimeout(timer);
+      },
+    }),
+  );
+  const urgentReport = useRef(false);
+  const [restoredTableConnections, setRestoredTableConnections] = useState<ReadonlySet<string>>(() => new Set());
+  const [reporting, setReporting] = useState(false);
 
   // A mesma consulta de Conexões e do navegador (mesma chave, mesmo cache): aqui só se olha o que sumiu dela.
   const connections = useQuery(connectionsQuery);
@@ -212,23 +255,27 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // A cada tecla, e sem atraso: só a primeira depois de salvar muda a lista de abas. As outras devolvem a MESMA lista, e o React não redesenha nada.
+  // A cada tecla, e sem atraso: só a primeira depois de salvar muda a lista de abas. As outras devolvem a MESMA lista, e o React não redesenha nada. A tecla
+  // também avisa o relato das abas (RN-ABAS-006): o texto da aba chega com atraso, e digitar sem parar não pode adiar a gravação.
   const markScriptEdited = useCallback(
-    (tabId: string) =>
+    (tabId: string) => {
+      reporter.touch();
       setTabs((current) => {
         const tab = current.find((candidate) => candidate.id === tabId);
         if (tab?.script === undefined || tab.script.dirty) return current;
         return current.map((candidate) => (candidate === tab && candidate.script !== undefined ? { ...candidate, script: { ...candidate.script, dirty: true } } : candidate));
-      }),
-    [],
+      });
+    },
+    [reporter],
   );
 
+  // O ponto é recalculado contra o que acabou de ser salvo: o banco pode ter mudado enquanto a gravação ia (RN-ARVORE-007).
   const setTabScript = useCallback(
-    (tabId: string, saved: { id: string; name: string }, savedSql: string) =>
+    (tabId: string, saved: { id: string; name: string }, savedSql: string, savedDatabase: string | undefined) =>
       setTabs((current) =>
         current.map((tab) => {
           if (tab.id !== tabId) return tab;
-          const script: ScriptRef = { id: saved.id, name: saved.name, savedSql, dirty: false };
+          const script: ScriptRef = { id: saved.id, name: saved.name, savedSql, ...(savedDatabase === undefined ? {} : { savedDatabase }), dirty: tab.database !== savedDatabase };
           return { ...tab, title: saved.name, script };
         }),
       ),
@@ -284,7 +331,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const open = tabs.find((tab) => tab.script?.id === script.id);
       if (open !== undefined) return setActiveTabId(open.id);
 
-      addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: { id: script.id, name: script.name, savedSql: script.sql, dirty: false } });
+      const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...(place.database === undefined ? {} : { savedDatabase: place.database }), dirty: false };
+      addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref });
     },
     [tabs, addTab],
   );
@@ -300,6 +348,36 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setTabs((current) => current.map((candidate) => (candidate.id === tabId ? { ...candidate, connectionId, database: undefined, sessionId: null } : candidate)));
     },
     [tabs, runners, createRunner],
+  );
+
+  // O que uma aba soltou fecha na API em segundo plano (cancela o que rodava e fecha a sessão, RN-SESSAO-004), pelo cache de mutações sem ficar nele; a falha
+  // já foi ao aviso central. A janela que fecha espera por estes fechamentos (`closing`).
+  const endInBackground = useCallback(
+    (released: Released) => {
+      const ending = throughMutationCache(queryClient, () => endSession(released)).catch(() => undefined);
+      closing.add(ending);
+      void ending.finally(() => closing.delete(ending));
+    },
+    [queryClient, closing],
+  );
+
+  const switchDatabase = useCallback(
+    (tabId: string, database: string | undefined) => {
+      const tab = tabs.find((candidate) => candidate.id === tabId);
+      const runner = runners.get(tabId);
+      if (tab === undefined || (runner !== undefined && isBusyState(runner.getState()))) return;
+      // O texto do editor deste instante: o da aba chega com atraso, e o ponto de um script é recalculado por ele.
+      const sql = liveEditors.snapshot(tabId)?.sql;
+      const next = withDatabase(tab, database, sql);
+      if (next === null) return;
+
+      // O executor de antes sai de cena primeiro: o resultado na tela é do banco anterior, e nada do que estava a caminho chega ao executor novo.
+      const released = runner?.retire();
+      runners.set(tabId, createRunner(next));
+      setTabs((current) => current.map((candidate) => (candidate.id === tabId ? (withDatabase(candidate, database, sql) ?? candidate) : candidate)));
+      if (released) endInBackground(released);
+    },
+    [tabs, runners, createRunner, endInBackground],
   );
 
   const setTableView = useCallback((tabId: string, view: TableView) => setTabs((current) => current.map((tab) => (tab.id === tabId && tab.table ? { ...tab, table: { ...tab.table, view } } : tab))), []);
@@ -395,21 +473,103 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const index = tabs.findIndex((tab) => tab.id === tabId);
       if (index < 0) return;
 
+      // RN-ABAS-006: fechar uma aba a tira do que volta, e a gravação é na hora.
+      urgentReport.current = true;
       const remaining = tabs.filter((tab) => tab.id !== tabId);
       setTabs(remaining);
       // Fechou a ativa: passa para a vizinha da direita, ou da esquerda se era a última.
       setActiveTabId(nextActiveTab(tabs, activeTabId, remaining));
-      // Fechar a aba cancela o que estiver rodando e fecha a sessão dela (RN-SESSAO-004). Como as
-      // chamadas da aba, passa pelo cache de mutações sem ficar nele; a falha já foi ao aviso central.
+      // Fechar a aba cancela o que estiver rodando e fecha a sessão dela (RN-SESSAO-004).
       const released = runners.get(tabId)?.retire();
-      if (released) {
-        const ending = throughMutationCache(queryClient, () => endSession(released)).catch(() => undefined);
-        closing.add(ending);
-        void ending.finally(() => closing.delete(ending));
-      }
+      if (released) endInBackground(released);
     },
-    [tabs, activeTabId, queryClient, runners, closing],
+    [tabs, activeTabId, runners, endInBackground],
   );
+
+  /**
+   * RN-ABAS-006: na entrada, a janela principal reabre as abas gravadas (as de todas as janelas, na ordem em que estavam), desconectadas: nada conecta nem
+   * executa. Precisa das conexões (a aba cuja conexão foi excluída volta sem ela) e dos scripts (a aba de um script volta com o nome dele, e a de um script
+   * excluído volta como consulta comum); o texto salvo de um script só é lido para a aba que tinha mudança não salva. Uma falha em qualquer leitura não reabre
+   * nada e não grava nada nesta entrada: gravar sem ter reaberto apagaria o que ainda não voltou.
+   */
+  const restoreSaved = useEffectEvent(async (isCancelled: () => boolean): Promise<boolean> => {
+    const saved = await getWorkspace();
+    if (!saved.ok) {
+      console.error("[prism] abas: as abas gravadas não puderam ser lidas:", saved.error.code);
+      return false;
+    }
+    if (saved.data.tabs.length === 0) return true;
+
+    try {
+      const [connectionList, scriptList] = await Promise.all([queryClient.fetchQuery(connectionsQuery), queryClient.fetchQuery(scriptsQuery)]);
+      const known = new Set(scriptList.map((script) => script.id));
+      const toRead = [...new Set(saved.data.tabs.flatMap((tab) => (tab.kind === "query" && tab.dirty && tab.scriptID !== null && known.has(tab.scriptID) ? [tab.scriptID] : [])))];
+      const read = new Map((await Promise.all(toRead.map(async (id) => [id, await getScript(id)] as const))).flatMap(([id, result]) => (result.ok ? [[id, result.data.sql] as const] : [])));
+      if (isCancelled()) return false;
+
+      const restored = restoreWorkspace(saved.data, {
+        connections: new Set(connectionList.map((connection) => connection.id)),
+        scripts: new Map(scriptList.map((script) => [script.id, { name: script.name, sql: read.get(script.id) ?? null, database: script.database }])),
+        newId: () => crypto.randomUUID(),
+        nextNumber: () => nextNumber.current++,
+      });
+
+      for (const tab of restored.tabs) runners.set(tab.id, createRunner(tab));
+      setTabs((current) => [...restored.tabs, ...current]);
+      setActiveTabId((current) => restored.activeTabId ?? current);
+      setRestoredTableConnections(restored.tableConnections);
+      for (const title of restored.emptied) toast.warning(workbenchCopy.toasts.restoredEmpty(title));
+      if (restored.withoutConnection > 0) toast.warning(workbenchCopy.toasts.restoredWithoutConnection(restored.withoutConnection));
+      if (restored.droppedTables > 0) toast.warning(workbenchCopy.toasts.restoredTablesDropped(restored.droppedTables));
+      return true;
+    } catch (error) {
+      console.error("[prism] abas: as abas gravadas não puderam ser reabertas:", error);
+      return false;
+    }
+  });
+
+  // RN-ABAS-006: a área de trabalho montou (o cofre abriu). A janela principal reabre as abas gravadas e só então começa a contar as suas; as outras contam
+  // desde já. Ao desmontar (saiu do cofre), as abas desta janela deixam de contar. O bloqueio por inatividade não desmonta nada: as abas continuam contando.
+  useEffect(() => {
+    let cancelled = false;
+    const unregister = workspaceSync.register(() => reporter.urgent());
+    void (async () => {
+      const restores = await claimWorkspaceRestore();
+      if (cancelled) return;
+      if (restores && !(await restoreSaved(() => cancelled))) return;
+      if (!cancelled) setReporting(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      unregister();
+      reporter.stop();
+      withdrawWorkspace();
+    };
+  }, [reporter]);
+
+  // O estado deste instante, para o relato: a fonte se atualiza a cada renderização, antes do efeito que conta.
+  useEffect(() => source.update(tabs, activeTabId));
+
+  useEffect(() => {
+    if (reporting) reporter.start();
+  }, [reporting, reporter]);
+
+  useEffect(() => {
+    if (!urgentReport.current) return reporter.touch();
+    urgentReport.current = false;
+    reporter.urgent();
+  }, [tabs, activeTabId, reporter]);
+
+  const holdForWindowClose = useCallback(() => {
+    source.hold();
+    reporter.urgent();
+  }, [source, reporter]);
+
+  const releaseWindowClose = useCallback(() => {
+    source.release();
+    reporter.urgent();
+  }, [source, reporter]);
 
   const setNodeOpen = useCallback((key: string, open: boolean) => setExpanded((current) => (current.has(key) === open ? current : new Set(open ? [...current, key] : [...current].filter((other) => other !== key)))), []);
 
@@ -417,8 +577,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab: setActiveTabId, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, markScriptEdited, renameScript, forgetScript, assignConnection, runnerOf, expanded, setNodeOpen, disconnect, disconnecting }),
-    [tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, markScriptEdited, renameScript, forgetScript, assignConnection, runnerOf, expanded, setNodeOpen, disconnect, disconnecting],
+    () => ({ tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab: setActiveTabId, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, markScriptEdited, renameScript, forgetScript, assignConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose }),
+    [tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, markScriptEdited, renameScript, forgetScript, assignConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose],
   );
 
   return (
@@ -434,6 +594,9 @@ export function useWorkbench(): WorkbenchState {
   if (context === null) throw new Error("useWorkbench precisa de um <WorkbenchProvider> acima na árvore.");
   return context;
 }
+
+/** O texto do editor da aba agora (`liveEditors`): a cópia da aba chega com atraso. */
+const liveSql: LiveSql = (tabId) => liveEditors.snapshot(tabId)?.sql ?? null;
 
 /** As chaves abertas são sempre de nós que abrem e não de pastas (`setNodeOpen` só recebe essas). */
 function isOfConnection(key: string, connectionId: string): boolean {

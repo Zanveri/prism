@@ -62,11 +62,41 @@ public sealed class InformixEditTests : DatabaseEditContractTests
     protected override async Task ConfigureAsync(IServiceCollection services)
         => services.UseDriverSource(directory: await IbmDriverSingleton.GetDirectoryAsync());
 
+    /// <summary>O limite de linhas do Informix vai na cabeça do `SELECT`.</summary>
+    protected override string WithFirstRows(string select, int rows)
+        => $"SELECT FIRST {rows} {select["SELECT ".Length..]}";
+
+    protected override string? ReadOnlyClause => "FOR READ ONLY";
+
     protected override string Name(string name)
         => name;
 
     protected override string Table(string name)
         => $"{name}_{_suffix}";
+
+    /// <summary>Sem o dono, como o comando do dono escreve: num banco que não é ANSI o nome da tabela é único no banco inteiro.</summary>
+    protected override string JoinFrom(string table)
+        => Table(table);
+
+    /// <summary>RN-EDIT-002 e 003: a junção `, OUTER tabela` do Informix se edita como as outras, cada coluna na tabela de onde veio.</summary>
+    [Test]
+    public async Task Edits_OfTheInformixOuterJoin_SaveEachTableByItsKey()
+    {
+        await ResetJoinTablesAsync();
+        var session = await OpenSessionAsync();
+        var page = Value(await Service.ExecuteAsync(session, $"SELECT p.id, p.location_id, pi.id AS item_row, pi.quantity FROM {Table("pallets")} p, OUTER {Table("pallets_items")} pi WHERE pi.pallet_id = p.id AND p.id IN (1, 4) ORDER BY 1, 3", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+        Assert.That(page.Rows, Has.Count.EqualTo(4));
+
+        var target = Value(await Service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+        Assert.That(target.Tables.Select(table => (table.Name, table.Editable, table.Key.Single())), Is.EqualTo(new[] { (Table("pallets"), true, 0), (Table("pallets_items"), true, 2) }));
+        Assert.That(target.Columns.Select(column => column.Editable), Is.EqualTo(new[] { false, true, false, true }));
+
+        var applied = await Service.ApplyEditsAsync(session, page.ResultID.Value, [new EditChange(EEditKind.Update, 0, ["4"], [new EditValue(Column(page, "location_id"), "9")]), new EditChange(EEditKind.Update, 1, ["101"], [new EditValue(Column(page, "quantity"), "70")])], CancellationToken.None);
+
+        Assert.That(Value(applied), Is.EqualTo(2));
+        Assert.That(await RowsAsync("pallets", "location_id"), Does.Contain(("4", (string?)"9")));
+        Assert.That(await RowsAsync("pallets_items", "quantity"), Does.Contain(("101", (string?)"70")));
+    }
 
     /// <summary>
     /// RN-EDIT-012: sem log de transação, o "Salvar" grava uma alteração por vez, cada uma confirmada sozinha, e para na primeira que

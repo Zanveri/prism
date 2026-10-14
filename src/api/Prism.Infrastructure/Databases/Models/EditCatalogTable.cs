@@ -8,6 +8,12 @@ namespace Prism.Infrastructure.Databases.Models;
 public sealed record EditTableName(string? Schema, string Name, string Written);
 
 /// <summary>
+/// RN-EDIT-003 e 010: as tabelas que o catálogo da edição consulta: as do `FROM`, como o comando as escreveu, na ordem dele, e os
+/// identificadores das tabelas de onde a resposta do comando diz que vêm as colunas (PostgreSQL; vazio nos outros).
+/// </summary>
+public sealed record EditTables(IReadOnlyList<EditTableName> Names, IReadOnlyList<long> Relations);
+
+/// <summary>
 /// RN-EDIT-002 e 010: o que o catálogo diz de uma tabela do `FROM`, numa consulta só para a edição: o tipo dela (`table`, `view`,
 /// `materializedView`, `foreign` ou `other`), as colunas e as chaves (a primária primeiro).
 /// </summary>

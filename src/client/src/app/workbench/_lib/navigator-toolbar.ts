@@ -80,3 +80,11 @@ export function toolbarFor({ node, connection, folder }: ToolbarSelection, { can
     button("hide", copy.hide, false, hideShortcut),
   ];
 }
+
+/**
+ * RN-GRADE-012: F5 no navegador é o "Atualizar" do nó escolhido, o mesmo da barra e do menu: só quando ele se aplica (o botão da barra está habilitado).
+ * A tecla nunca recarrega a janela, aplicando-se ou não (o processo principal não a deixa chegar ao menu).
+ */
+export function refreshesSelection(buttons: readonly ToolbarButton[]): boolean {
+  return buttons.some((button) => button.id === "refresh" && !button.disabled);
+}

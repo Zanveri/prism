@@ -166,4 +166,68 @@ public sealed class ExecuteQueryHandlerTests
         _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, 200, cancellationToken), Times.Exactly(2));
         _databaseSessionService.VerifyNoOtherCalls();
     }
+
+    /// <summary>RN-GRADE-011: com filtro, o registro de sessões recebe o comando e o filtro como vieram, e a página diz como ele entrou.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "OK com filtro envia o comando e o filtro, e a página diz como o filtro entrou")]
+    public async Task Handle_WithFilter_ShouldSendTheFilter()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        var page = new QueryPage([new QueryColumn("numero", "integer", "number")], [["1001"]], false, 2, [], FilterApplied: EFilterApplied.Merged);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 2)));
+        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Filter = "numero > 1000 ORDER BY numero DESC" }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("merged", result.Value.FilterApplied);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-GRADE-011: o filtro vazio ou só de espaços é a falta dele, e o comando vai sem filtro, como antes.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Theory(DisplayName = "OK filtro vazio ou só de espaços envia o comando sem filtro")]
+    [InlineData("")]
+    [InlineData("  \n ")]
+    public async Task Handle_WithBlankFilter_ShouldSendWithoutFilter(string filter)
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Filter = filter }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.FilterApplied);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-GRADE-011: a recusa do filtro pelo registro de sessões é 422 `FILTER_INVALID`, com o motivo.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "Erro filtro recusado pelo registro de sessões")]
+    public async Task Handle_ShouldBeError_DatabaseSessionService_ExecuteAsync_FilterInvalid()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "a = 'x", QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar.")));
+        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Filter = "a = 'x" }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal(("FILTER_INVALID", HttpStatusCode.UnprocessableEntity, "O filtro tem aspas sem fechar."), (result.Error.Type, result.Error.StatusCode, result.Error.Detail));
+    }
 }

@@ -67,7 +67,29 @@ public interface IDatabaseSessionService
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" do cursor que o comando abrir.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é
+    /// um `SELECT` que a leitura do comando reconheça; a página diz como (`FilterApplied`), e o comando embrulhado é só leitura. O
+    /// comando montado é o que roda, o que o "contar total" conta e o que a edição lê; a falha do banco vem sem a posição do erro, que
+    /// seria a do comando montado. O filtro que não se junta com segurança: `FilterInvalid`; o comando de mais de um envio:
+    /// `MultipleStatementsNotSupported`. Nos dois, nada vai ao banco. Sem filtro (nulo ou só espaços), é o comando sem filtro.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-GRADE-011: por que o filtro não se junta ao comando, no banco da sessão (as aspas e os comentários de cada um), ou nulo quando
+    /// ele se junta. Não toma a vez da sessão nem fala com o banco. Sem a sessão, nulo: quem responde é a execução.
+    /// </summary>
+    string? FilterRefusal(Guid sessionID, string? filter);
+
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(Guid sessionID, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-SQL-017: o valor completo de cada célula pedida do resultado `resultID`, na ordem pedida, pela linha no resultado inteiro;
+    /// nulo na célula que não foi cortada ou que passou do teto da sessão. Lê só da memória, sem tomar a vez. Outro resultado na sessão:
+    /// `ResultNotFound`; célula fora das linhas entregues ou das colunas: `CellsInvalid`.
+    /// </summary>
+    Result<IReadOnlyList<string?>, DatabaseFailure> GetCells(Guid sessionID, Guid resultID, IReadOnlyList<CellPosition> cells);
 
     /// <summary>
     /// RN-SQL-006: conta, por outra conexão, o último comando da sessão que devolveu linhas; o cursor da sessão continua como está. Sem

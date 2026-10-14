@@ -19,6 +19,11 @@ export type DisconnectLog = {
   getSnapshot: () => ReadonlySet<string>;
   /** Uma sessão da conexão voltou a existir por outro caminho que o da árvore (a de uma aba): a conexão deixa de estar desconectada. */
   forget: (connectionId: string) => void;
+  /**
+   * RN-ABAS-006: a conexão de uma aba de tabela que voltou na entrada. Ela volta desconectada, e nada conecta sozinho: as vistas esperam o clique, como as de uma
+   * conexão que a pessoa desconectou, até a sessão da árvore (ou a de uma aba) voltar a existir.
+   */
+  mark: (connectionId: string) => void;
 };
 
 /** A família da consulta da sessão da árvore: o primeiro item de `databaseSessionKey`. */
@@ -68,6 +73,7 @@ export function createDisconnectLog(queryClient: QueryClient): DisconnectLog {
     },
     getSnapshot: () => disconnected,
     forget: (connectionId) => change(connectionId, false),
+    mark: (connectionId) => change(connectionId, true),
   };
 }
 

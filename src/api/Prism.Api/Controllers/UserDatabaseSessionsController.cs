@@ -9,6 +9,7 @@ using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
 using Prism.Application.DatabaseSessions.Features.GetDatabases;
 using Prism.Application.DatabaseSessions.Features.GetEditTarget;
+using Prism.Application.DatabaseSessions.Features.GetResultCells;
 using Prism.Application.DatabaseSessions.Features.GetDatabaseProperties;
 using Prism.Application.DatabaseSessions.Features.GetSchemaDiagram;
 using Prism.Application.DatabaseSessions.Features.GetSchemaObjects;
@@ -232,6 +233,20 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     public async Task<IActionResult> PreviewEdits(Guid id, [FromBody] PreviewEditsCommand command, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-SQL-017: o valor completo das células que chegaram cortadas, para copiar e exportar. O corpo leva `cells` (até 10.000), cada uma
+    /// pela linha no resultado inteiro e pela coluna; a resposta, `{ values }` na ordem pedida.
+    /// </summary>
+    [HttpPost("{id:guid}/results/{resultID:guid}/cells")]
+    public async Task<IActionResult> GetResultCells(Guid id, Guid resultID, [FromBody] GetResultCellsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id, ResultID = resultID }, cancellationToken);
         if (result.IsFailure)
             return result.ToIActionResult();
 

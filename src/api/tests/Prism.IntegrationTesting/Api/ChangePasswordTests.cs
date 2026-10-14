@@ -425,7 +425,7 @@ public sealed class ChangePasswordTests
         Assert.That((await ChangeAsync(host, oldPassword, UserFakers.RandomPassword())).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
         var after = ReadVaultFile(host);
-        Assert.That(after["version"]!.GetValue<int>(), Is.EqualTo(2));
+        Assert.That(after["version"]!.GetValue<int>(), Is.EqualTo(3));
         Assert.That(after["kdf"]!["algorithm"]!.GetValue<string>(), Is.EqualTo("argon2id"));
         Assert.That((after["kdf"]!["memoryKiB"]!.GetValue<int>(), after["kdf"]!["iterations"]!.GetValue<int>(), after["kdf"]!["parallelism"]!.GetValue<int>()), Is.EqualTo((8192, 1, 1)));
         Assert.That(Convert.FromBase64String(after["kdf"]!["salt"]!.GetValue<string>()), Has.Length.EqualTo(16));

@@ -17,7 +17,7 @@ public sealed class ConnectionQueriesTests
     {
         //Arrange
         var record = VaultFakers.CreateConnection(password: "segredo");
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [VaultFakers.CreateConnection(), record], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [VaultFakers.CreateConnection(), record], [], VaultWorkspaceRecord.Empty)));
         var queries = new ConnectionQueries(_vault.Object);
 
         //Act
@@ -34,7 +34,7 @@ public sealed class ConnectionQueriesTests
     public async Task GetRecordByID_ShouldBeNull_WhenTheConnectionDoesNotExist()
     {
         //Arrange
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [VaultFakers.CreateConnection()], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [VaultFakers.CreateConnection()], [], VaultWorkspaceRecord.Empty)));
         var queries = new ConnectionQueries(_vault.Object);
 
         //Act

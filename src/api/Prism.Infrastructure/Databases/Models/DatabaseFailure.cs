@@ -31,7 +31,19 @@ public enum EDatabaseFailure
     EditInvalid,
 
     /// <summary>RN-EDIT-005: um comando do "Salvar" afetou zero linhas ou mais de uma; o "Salvar" foi desfeito (menos no Informix sem log, RN-EDIT-012).</summary>
-    EditRowMismatch
+    EditRowMismatch,
+
+    /// <summary>RN-SQL-017: o resultado de que se pedem os valores completos não é mais o da sessão (outro comando rodou), ou nunca foi.</summary>
+    ResultNotFound,
+
+    /// <summary>RN-SQL-017: uma célula pedida está fora do resultado (linha que ainda não foi entregue, coluna que ele não tem).</summary>
+    CellsInvalid,
+
+    /// <summary>
+    /// RN-GRADE-011: o filtro do resultado não se junta ao comando com segurança (`;`, aspas ou comentário sem fechar, comentário no fim,
+    /// parênteses sem par, mais de um `ORDER BY`); nada foi ao banco. Pela rota, quem recusa antes é o validator, com o mesmo código.
+    /// </summary>
+    FilterInvalid
 }
 
 /// <summary>

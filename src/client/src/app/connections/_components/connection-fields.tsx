@@ -4,6 +4,8 @@ import type { FieldErrors } from "@/lib/utils/form";
 import { buildConnectionTree, folderOptions } from "../_lib/connection-tree";
 import { connectionsCopy } from "../_lib/connections.copy";
 import type { Connection, Folder } from "../_lib/connections.schema";
+import { environmentLookup } from "../_lib/environment";
+import type { UserEnvironment } from "../_lib/user-environments";
 import { EnvironmentPicker } from "./environment-picker";
 
 const copy = connectionsCopy.form;
@@ -25,6 +27,8 @@ type ConnectionFieldsProps = {
   onPasswordEye: () => void;
   color: string | null;
   onColorChange: (color: string | null) => void;
+  /** Os ambientes do usuário (RN-AMB-001), que a seção Ambiente oferece para reaproveitar. */
+  environments?: readonly UserEnvironment[];
 };
 
 /**
@@ -32,7 +36,7 @@ type ConnectionFieldsProps = {
  * porta, banco, usuário, senha (com o olho e o aviso de que ela fica cifrada) e o ambiente. O que é texto livre vai pelo `FormData` (campos
  * não controlados); a pasta, a porta (que acompanha o banco, RN-CONN-012), a senha e a cor são do diálogo.
  */
-export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange }: ConnectionFieldsProps) {
+export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [] }: ConnectionFieldsProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-4">
@@ -82,7 +86,17 @@ export function ConnectionFields({ connection, folders, errors, folderID, onFold
         </p>
       </div>
 
-      <EnvironmentPicker defaultName={connection?.environmentName ?? ""} color={color} onColorChange={onColorChange} errors={errors} />
+      {/* RN-PASTA-005: sem ambiente próprio, a conexão herda o da pasta escolhida aqui (a do campo, que pode ainda não estar gravada). */}
+      <EnvironmentPicker
+        idPrefix="cx"
+        defaultName={connection?.environmentName ?? ""}
+        color={color}
+        onColorChange={onColorChange}
+        errors={errors}
+        hint={copy.environment.connectionHint}
+        inherited={environmentLookup(folders).inheritedIn(folderID === "" ? null : folderID)}
+        environments={environments}
+      />
     </div>
   );
 }

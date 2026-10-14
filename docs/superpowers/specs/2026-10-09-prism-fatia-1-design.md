@@ -466,7 +466,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET .../schemas/{schema}/views/{view}/definition` | 200 `{ definition }` (RN-CAT-006) | as mesmas |
 | `GET .../schemas/{schema}/diagram` | 200 `{ tables, foreignKeys }` (RN-CAT-008) | as mesmas |
 | `GET api/user/database-sessions/{id}/properties` | 200 lista de `{ name, value }` (RN-CAT-010) | as mesmas |
-| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize? }` | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` |
+| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem) |
 | `POST .../queries/next` | 200 página | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_CURSOR`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/count` | 200 `{ total }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_QUERY_TO_COUNT`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
@@ -1221,7 +1221,8 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   seleção atravessa a rolagem e o "carregar mais", e é esquecida numa nova execução.
 - **RN-GRADE-002.** Copiar. Ctrl+C copia a seleção como texto: células separadas por tabulação
   e linhas por quebra de linha (o que uma planilha cola); uma célula só é copiada como o valor
-  puro. Nulo vai vazio. Se alguma célula copiada estava cortada (RN-SQL-011), a tela avisa.
+  puro. Nulo vai vazio. A célula que chegou cortada (RN-SQL-011) é copiada com o valor completo
+  (RN-SQL-017); a tela avisa só quando algum valor não pôde vir inteiro.
 - **RN-GRADE-003.** Copiar avançado (Ctrl+Shift+C, como no DBeaver): um diálogo escolhe o que
   copiar (a seleção, as linhas inteiras da seleção ou todas as carregadas) e como: texto
   delimitado (delimitador, cabeçalho, número da linha, aspas, como escrever o nulo), JSON,
@@ -1865,6 +1866,11 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 - **RN-ABAS-005.** Só o processo principal cria janelas e passa abas entre elas; a tela pede pelo
   preload, por canais com o conteúdo validado (RN-SHELL-001), e nenhuma janela fala com outra
   diretamente.
+- **RN-ABAS-008.** A aba de tabela mostra na barra só o nome da tabela enquanto as tabelas abertas na
+  janela são todas de um esquema só (pedido de 2026-10-14). Com tabelas de mais de um esquema abertas
+  (o mesmo esquema noutra conexão ou noutro banco conta como outro), todas mostram `esquema.tabela`.
+  Com tabelas de mais de um banco, a de um banco que não é o da conexão mostra também o banco. O nome
+  inteiro fica na dica da aba e na lista de abas.
 
 ### Scripts salvos
 
@@ -1975,10 +1981,17 @@ fechada, assim, ao reabrir já retorna as queries feitas".
     estavam.
   - Voltam desconectadas: nada conecta nem executa sozinho.
   - O resultado, o cursor e as alterações não salvas da grade não voltam.
-  - A aba cuja conexão foi excluída volta sem conexão, como um script sem conexão.
+  - A aba de consulta cuja conexão foi excluída volta sem conexão, como um script sem conexão. A aba
+    de tabela cuja conexão foi excluída não volta, e a entrada avisa.
   - O texto de cada aba vai até 1 MB (RN-SCRIPT-004). O que passa disso não é gravado, e a aba volta
     vazia, com o aviso.
   - Fechar uma aba a tira do que volta.
+
+- **RN-ABAS-007.** Fechar o app (a última janela) pergunta só pelo que não volta: as alterações
+  não salvas da grade (RN-EDIT-007). O texto das abas de consulta e os scripts com mudança não
+  salva voltam na próxima entrada (RN-ABAS-006), então não há pergunta por eles. Fechar uma aba,
+  várias abas ou uma janela que não é a última pergunta como antes, porque o que fecha não volta,
+  e a pergunta diz isso.
 
 | Rota | Sucesso | Erros |
 | --- | --- | --- |
@@ -2010,3 +2023,141 @@ estável.
     for negada, nada é instalado, o Prism abre de novo na versão que estava e avisa.
 - **RN-INSTALA-004.** O instalador silencioso aceita escolher o modo pela linha de comando, para
   quem instala em várias máquinas: `/S /allusers` ou `/S /currentuser`.
+### Valor completo das células cortadas
+
+Defeito relatado pelo dono em 2026-10-13: copiar uma célula `CLOB` do Informix (um JSON longo) com
+Ctrl+C ou "Copiar valor" levou o texto cortado. Num cliente de banco a cópia tem de ser o valor
+inteiro.
+
+- **RN-SQL-017.** A grade continua mostrando o valor cortado (RN-SQL-011). Copiar (Ctrl+C,
+  "Copiar valor", copiar avançado) e exportar levam o valor completo, como veio do banco.
+  - A API guarda, em memória e só no processo dela, o valor completo de cada célula que cortou,
+    nas páginas que já entregou do resultado atual. Nunca grava em disco, nunca no log.
+  - Ela guarda até 256 MB por sessão. Passando disso, as células seguintes ficam sem valor
+    completo, e a página diz quais.
+  - Larga tudo quando a aba executa outro comando, quando o resultado é descartado e quando a
+    sessão fecha.
+  - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram.
+  - O texto vai inteiro. O binário vai como a grade o escreve (hexadecimal), inteiro.
+
+| Rota | Sucesso | Erros |
+| --- | --- | --- |
+| `POST api/user/database-sessions/{id}/results/{resultID}/cells` `{ cells: [{ row, column }] }` (até 10.000 células por pedido) | 200 `{ values: [{ row, column, value }] }`, na ordem pedida; `value` nulo quando a célula não tem valor completo | 404 `DATABASE_SESSION_NOT_FOUND`, `RESULT_NOT_FOUND` (outro comando já rodou); 422 `CELLS_INVALID` (lista vazia, acima do limite, linha ou coluna fora do resultado) |
+
+O log dessa rota registra só a contagem de células, nunca o valor.
+
+### Ambiente da pasta e o seletor de cor
+
+Pedidos do dono em 2026-10-13: "as pastas terem seus ambientes também, por exemplo uma pasta só de
+production, outra só de QAS, outra de develop"; e o seletor de "Outra cor" abria ao clicar em
+qualquer ponto da linha dele, e deve virar uma bolinha ao lado das outras, com o ícone de
+conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções herdadas continuam
+lá.
+
+- **RN-PASTA-005.** A pasta pode ter um ambiente, com nome e cor, nas mesmas regras do ambiente da
+  conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
+  ambiente: pasta ou conexão só com cor herda o de cima, e a subpasta sem ambiente não mostra o da
+  pasta de cima.
+  - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
+    a mesma do formulário da conexão.
+  - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
+  - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
+    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
+    status). O ambiente próprio da conexão sempre ganha.
+  - Mover a conexão ou a pasta muda o que ela herda. O formulário da conexão sem ambiente próprio
+    diz qual ela herda e de qual pasta.
+  - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
+    `environmentName` e `environmentColor`, opcionais, com as recusas do ambiente da conexão em
+    `FOLDER_NAME_INVALID` ou num código próprio, como a conexão já faz.
+- **RN-CONN-017.** O seletor de cor do ambiente (da conexão e da pasta) é uma fileira de bolinhas.
+  - A última bolinha é "Outra cor", com o ícone de conta-gotas. Só ela abre o seletor de cor do
+    sistema; clicar em outro ponto da fileira ou da seção não abre nada.
+  - Com uma cor escolhida por ela, a bolinha fica com essa cor, a marca de escolhida das outras e o
+    conta-gotas ainda à vista, em contraste. O código `#RRGGBB` aparece na dica e no nome acessível.
+  - A linha "Outra cor #RRGGBB" de baixo sai.
+  - Pelo teclado: cada bolinha é um botão, e Enter ou Espaço na última abre o seletor.
+
+### Filtrar como no DBeaver, e o autocompletar do filtro
+
+Pedidos do dono em 2026-10-14: "adiciona os filtros do DBeaver exatamente como ele faz, atalho em
+F11, exibe os possíveis filtros pra coluna, isso tanto no resultado de um script SQL quanto nos
+registros"; e de um colega: "o filtro na tabela não recomenda as colunas". Substitui a RN-GRADE-005,
+que valia só nos Registros e nunca chegou à tela.
+
+- **RN-GRADE-013.** O menu de contexto da grade ganha "Filtrar" (F11), nos Registros e no
+  resultado da aba de consulta. F11 abre o submenu na célula ativa, e Ctrl+F11 abre direto
+  "Filtrar por valor…". Os itens do submenu:
+  - "Filtrar por valor…" (Ctrl+F11): um diálogo com os valores distintos da coluna nas linhas já
+    carregadas, cada um com quantas vezes aparece, em ordem de quantidade, com busca e caixas de
+    marcar. Confirmar monta `coluna IN (…)` (`=` com um valor só), e o nulo marcado entra como
+    `coluna IS NULL`, junto por `OR`.
+  - "Valor da célula": `coluna = valor`, `coluna <> valor`, `coluna > valor` e `coluna < valor`;
+    em coluna de texto, também `coluna LIKE '%valor%'`; e "É nulo" e "Não é nulo".
+  - "Personalizado": `coluna = …`, `<> …`, `> …` e `< …`, que pedem o valor num campo pequeno, sobre
+    a grade.
+  - "Remover todos os filtros e ordenações".
+
+  O valor vira literal pela RN-TABELA-007, e o rótulo mostra a condição como ela vai entrar. A
+  célula cortada ou binária só oferece as opções de nulo e o "Personalizado". A condição entra no
+  campo de filtro, junta por `AND` e entre parênteses ao que já estava (o `mergeCondition` de
+  `_lib/grid-export`), e é executada. Quando não dá para juntar com segurança, o item fica
+  desabilitado, com o motivo.
+- **RN-GRADE-011.** O resultado da aba de consulta ganha o campo de filtro dos Registros, acima da
+  grade, com o mesmo texto de ajuda ("Insira uma expressão SQL para filtrar os resultados (use
+  Ctrl+Espaço)").
+  - O texto do editor não muda. Ao aplicar, a aba executa de novo o mesmo comando com o filtro, e
+    a API junta o filtro ao comando: a condição entra no `WHERE` por `AND`, e a ordem troca o
+    `ORDER BY` do comando.
+  - Quando o comando não é um `SELECT` só que a API saiba ler, ela o embrulha
+    (`SELECT * FROM (<comando>) … WHERE …`). Nesse caso, o resultado fica só leitura e diz por
+    quê.
+  - Executar o comando do editor de novo limpa o filtro.
+  - Rota: `POST api/user/database-sessions/{id}/queries` ganha `filter`, opcional: o texto do campo
+    (condição, ordem ou as duas, como na RN-TABELA-010).
+  - A resposta diz como o filtro entrou, em `filterApplied`: `merged` ou `wrapped`.
+  - O filtro com terminador de comando, com comentário aberto ou com aspas abertas é recusado com
+    422 `FILTER_INVALID`.
+- **RN-TABELA-011.** O campo de filtro (dos Registros e do resultado) completa os nomes das colunas
+  e as palavras do filtro: `AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, `LIKE`, `IN`, `BETWEEN`,
+  `ORDER BY`, `ASC` e `DESC`.
+  - Ao digitar, segue a chave do autocompletar do editor (RN-CONFIG-004). Com Ctrl+Espaço,
+    completa sempre.
+  - Nos Registros, as colunas são as da tabela. No resultado, as do resultado.
+  - O nome é escrito como o banco pede (com aspas, quando precisa).
+- **RN-GRADE-012.** F5 atualiza, como no DBeaver (pedido de 2026-10-14: "F5 não atualiza os dados").
+  - Nos Registros, F5 lê a tabela de novo, com o filtro e a ordem do campo: é o "Atualizar".
+  - Na aba de consulta, F5 executa de novo o comando do resultado, com o filtro: é o "Executar de
+    novo".
+  - Na Estrutura e no Diagrama, F5 recarrega a vista.
+  - No navegador, F5 atualiza o nó escolhido, como o "Atualizar" do menu dele.
+  - Com alterações não salvas na grade, F5 pergunta antes, como executar outro comando. Com um
+    comando em andamento, não faz nada.
+  - Vale com o foco em qualquer ponto da aba, menos no campo de edição de uma célula.
+  - O menu da grade mostra "Atualizar" (F5).
+  - F5 e Ctrl+R nunca recarregam a janela do app.
+- **Fica para depois:** "Localizar e Substituir" na grade, salvar o filtro como padrão da tabela,
+  voltar ao filtro padrão e o diálogo "Personalizar filtros…".
+
+### Editar pasta, ambientes reaproveitados e o filtro por ambiente
+
+Pedido do dono em 2026-10-14: "não dá pra editar pasta: queria pôr o ambiente numa pasta que já
+existia e não tem a opção no botão direito"; "depois de criar o ambiente, salve para que ele possa
+ser reutilizado; assim dá pra agrupar tudo e até criar um filtro no navegador que busca só pelo
+ambiente".
+
+- **RN-PASTA-006.** O "Renomear" do menu da pasta passa a se chamar "Editar pasta…" (F2). O diálogo
+  dele se chama "Editar pasta" e tem o nome e a seção Ambiente (RN-PASTA-005).
+- **RN-AMB-001.** Os ambientes do usuário são os que as pastas e as conexões dele já usam: cada nome
+  distinto (sem diferenciar maiúsculas), com a cor da pasta ou conexão alterada por último. Nada é
+  gravado à parte; o ambiente some da lista quando ninguém mais o usa.
+  - A seção Ambiente (da conexão e da pasta) mostra, acima do campo do nome, os ambientes do
+    usuário como etiquetas coloridas. Escolher uma preenche o nome e a cor, que continuam
+    editáveis.
+  - O campo do nome também completa com eles ao digitar.
+- **RN-NAV-010.** O navegador ganha, ao lado do campo de filtro, um seletor de ambiente: "Todos os
+  ambientes" (o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+  - Com um ambiente escolhido, a árvore mostra só as conexões cujo ambiente (próprio ou herdado da
+    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas.
+  - Ele se combina com o campo de filtro de objetos.
+  - A escolha vale enquanto a janela está aberta.
+  - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".

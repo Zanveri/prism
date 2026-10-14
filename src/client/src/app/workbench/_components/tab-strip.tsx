@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
 
+import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
-import { CheckIcon, ChevronIcon, CloseIcon, ContextMenu, DocumentIcon, EnvironmentPill, TableIcon, type ContextMenuItem } from "@/components/ui";
+import type { ShownEnvironment } from "@/app/connections/_lib/environment";
+import { CheckIcon, ChevronIcon, CloseIcon, ContextMenu, DocumentIcon, TableIcon, type ContextMenuItem } from "@/components/ui";
 import { listOtherWindows } from "@/lib/api/bridge";
 import { cn } from "@/lib/utils/cn";
 
@@ -11,6 +13,7 @@ import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { dropIndex, isOutsideWindow, readTabDrag, tabDragType, writeTabDrag } from "../_lib/tab-order";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { closeShortcutLabel, moveMenu, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabTitleOf, wheelScroll, type CloseScope } from "../_lib/tab-strip";
+import { stripTitles } from "../_lib/tab-titles";
 import type { QueryTab } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -27,6 +30,8 @@ type TabStripProps = {
   tabs: QueryTab[];
   activeTabId: string | null;
   connectionOf: (connectionId: string | null) => Connection | undefined;
+  /** O ambiente que a conexão da aba mostra (RN-CONN-015 e RN-PASTA-005): o próprio, ou o herdado da pasta. */
+  environmentOf: (connectionId: string | null) => ShownEnvironment | null;
   onSelect: (tabId: string) => void;
   /** Fecha o que o fechamento pede a partir da aba dada (`tabsToClose`). */
   onClose: (scope: CloseScope, tabId: string) => void;
@@ -52,10 +57,12 @@ const stripButton = "flex h-10 w-7 flex-none cursor-pointer items-center justify
  * Os botões das pontas acendem por atributos (`data-left` e `data-right` da moldura) e não por estado: rolar não redesenha a faixa.
  * Os botões de rolar e o da lista são para o mouse; o teclado tem as setas, que trazem a aba à vista, e a tecla de menu.
  */
-export function TabStrip({ tabs, activeTabId, connectionOf, onSelect, onClose, windowId, onReorder, onMove, onReceive }: TabStripProps) {
+export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSelect, onClose, windowId, onReorder, onMove, onReceive }: TabStripProps) {
   const frame = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<StripMenu | null>(null);
+  // RN-ABAS-008: o nome curto na barra; o inteiro fica na dica.
+  const titles = stripTitles(tabs);
   // As outras janelas, pedidas ao abrir o menu de uma aba ("Mover para a janela…", RN-ABAS-003).
   const [otherWindows, setOtherWindows] = useState<WindowEntry[]>([]);
   // Onde a aba arrastada entraria, enquanto ela passa por cima da faixa (RN-ABAS-001): a marca de soltar.
@@ -254,7 +261,6 @@ export function TabStrip({ tabs, activeTabId, connectionOf, onSelect, onClose, w
       >
         {tabs.map((tab, index) => {
           const selected = tab.id === activeTabId;
-          const connection = connectionOf(tab.connectionId);
           const label = tabTitleOf(tab);
 
           return (
@@ -295,7 +301,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, onSelect, onClose, w
                 className="flex h-10 cursor-pointer items-center gap-2 pr-1 pl-3.5"
               >
                 {tab.table ? <TableIcon /> : <DocumentIcon />}
-                <span className="max-w-[240px] truncate">{tab.title}</span>
+                <span className="max-w-[240px] truncate">{titles.get(tab.id) ?? tab.title}</span>
                 {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
                 {label.unsaved ? (
                   <>
@@ -303,7 +309,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, onSelect, onClose, w
                     <span className="sr-only">{scriptsCopy.tab.unsaved}</span>
                   </>
                 ) : null}
-                {connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} /> : null}
+                <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} />
               </button>
               <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="mr-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-subtle transition-colors hover:bg-selected hover:text-ink">
                 <CloseIcon />
