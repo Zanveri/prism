@@ -273,7 +273,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   que falha várias vezes seguidas avisa só na primeira (`driversErrorMeta`) e para na terceira; (3) "Testar
   conexão" aceita também `DRIVER_NOT_INSTALLED` por `allowRefusal` (`runConnectionTest`), além do que já aceitava.
 - **Avisos do editor** (`use-query-runner.ts`, frases em `workbench.copy.ts`): sucesso para comando sem linhas e para o que
-  grava e devolve linhas (RN-SQL-013); atenção para cursor fechado, comando cancelado, valores cortados (uma vez por resultado), sessão
+  grava e devolve linhas (RN-SQL-013); atenção para cursor fechado, comando cancelado, valores cortados (uma vez por resultado, e nunca na
+  execução da atualização automática, RN-GRADE-014), sessão
   reaberta, seleção com mais de um comando e Ctrl+Enter sem comando para enviar. `SELECT` com linhas não gera aviso. O resto
   (falha ao abrir a sessão, "Contar total" recusado, API fora do ar) é o aviso central, com o `title` e o `detail` da API.
 
@@ -426,7 +427,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **Comando que grava e devolve linhas** (RN-SQL-013): a página traz `totalRows`. O resultado mostra as linhas recebidas e
   "200 de N linhas devolvidas · comando concluído", sem "Carregar mais" (não há cursor) e sem "Contar total".
 - **"Contar total" só aparece quando há o que contar**: com linhas que a tela não leu (`hasMore`, com o cursor aberto ou
-  já fechado). No resultado que veio inteiro, o total é o número do resumo, e a API não é chamada.
+  já fechado). No resultado que veio inteiro, o total é o número do resumo, e a API não é chamada. **O total contado se conta de novo**
+  (RN-SQL-006, issue #10): ver "Contar de novo e atualizar automaticamente", abaixo.
 - **O texto de SQL vive no editor** (CodeMirror 6, `sql-editor.tsx`), e não no estado do React. O provedor o recebe por
   `updateTab(tabId, { sql })` 400 ms depois da última tecla, quando o editor perde o foco e quando é desmontado (sair do cofre; ir a
   outra tela não o desmonta): nunca a cada tecla, porque cada mudança no provedor redesenha o navegador e refaz a poda. `tab.sql` só
@@ -1233,6 +1235,105 @@ a RN-GRADE-011 e o F5 a RN-GRADE-012.
   resultado da aba de consulta só foi conferido com a API simulada (`use-query-runner.filter.test.ts` e `query-tab.test.ts`): a parte da API é de outra
   tarefa; na tela, o campo aparece acima da grade do resultado.
 
+## Contar de novo e atualizar automaticamente (RN-SQL-006 e RN-GRADE-014)
+
+Seção 29 da especificação (issues #10 e #11), com as correções da revisão de 2026-10-15. Vale nas duas grades, os Registros e o resultado da aba de
+consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRecordEdits`).
+
+- **Contar de novo.** O executor não recusa mais a contagem com o total na tela (conta de novo também com as linhas todas carregadas), e a contagem que
+  falha ou é cancelada deixa o total de antes (`patchRows` sem `total`). Na barra, "Contar total" e "Contar de novo" são **UM botão** (`CountButton`, em
+  `result-panel.tsx`), sempre depois do total, no mesmo lugar dos filhos com ou sem ele: clicado, ele continua na página e com o foco. Antes ele virava o
+  `<span>` do total, o foco caía no `body`, fora da aba, e o F5 da aba parava de valer. Ocupado (contando, carregando mais) ele usa `aria-disabled`, e não
+  `disabled`: o botão desabilitado perde o foco. Enquanto conta de novo, o total de antes fica, em `text-muted`, com "contando de novo…". Enquanto outro
+  comando da pessoa roda sobre as linhas na tela, o resumo, o total e o botão **ficam** (o botão ocupado pelo `busy` da área), com "Executando…" depois:
+  antes eles davam lugar a "Executando…", e o F5 seguinte achava o foco no `body`. Quando o botão sai da página com o foco (o resultado novo cabe numa
+  página), a limpeza da ref dele (React 19) avisa `onFocusLost`, e a área leva o foco para a grade ou, sem ela, para a própria `<section>` (`tabIndex={-1}`,
+  num `useLayoutEffect`). O `result-panel.count.test.ts` confere o tipo e a posição do botão nos estados (é o que o React compara para reaproveitar o
+  elemento) e o foco que volta; a runtime de ganchos (`lib/testing/react-hooks.ts`) trata `useLayoutEffect` como `useEffect`.
+- **O relógio é do executor** (`runner.autoRefresh`, montado por `createAutoRefresh` em `_lib/auto-refresh.ts`, sem React, com os temporizadores e o relógio
+  injetáveis e com teste de temporizadores falsos). Por ser do executor, ele sobrevive a trocar de aba, de vista e de tela, e o que tira o executor de cena
+  o desliga sem mais nada: `release()` (desconectar) e `retire()` (fechar a aba, trocar de banco, ir para outra janela, o bloqueio, sair do cofre) chamam
+  `halt()`. Ele **observa** o executor (`subscribe`), e não o contrário: o fim de qualquer ocupação da aba (a execução automática, o F5, "Carregar mais",
+  "Contar total") recomeça o tempo, e o fim de uma EXECUÇÃO diz se ela trouxe um resultado de leitura novo (`outcomeOf`: o mesmo objeto de linhas de volta é
+  "não rodou"; erro, cancelado, gravou). Sem leitura nova, ele para com o motivo (`stopped`), que a barra mostra numa nota curta até a próxima execução da
+  pessoa (`ranByPerson`) ou até ligar de novo. A próxima execução só é marcada quando a anterior termina: nunca duas ao mesmo tempo.
+- **A sessão que cai** (`DATABASE_SESSION_NOT_FOUND` no "Carregar mais", no "Contar total" ou na própria execução automática) a desliga com a nota "a sessão
+  com o banco caiu" (`stopped: "disconnected"`): quem chama `lost()` é `sessionLost()`, só onde a sessão FICA caída, e não `setSession(null)`. A execução
+  automática não reabre a sessão (`execute(…, reopen: false)`: a recusa volta calada, e as linhas de antes ficam), e o relógio confere `connected()` antes de
+  executar. O comando da pessoa continua reabrindo uma vez: o mesmo comando (o F5) que reabre e executa a mantém ligada, e a sessão que não reabre a desliga
+  com a nota.
+- **Só liga sobre uma leitura** (`autoRefreshBlocker`): o motivo sai do resultado que está na tela, sem ler o SQL de novo: `totalRows` (o comando que gravou e
+  devolveu linhas, RN-SQL-013, que no PostgreSQL é o banco quem decide pela transação só de leitura) e as linhas afetadas são "grava"; sem linhas, a aba
+  ocupada e a aba sem sessão (nada reconecta sozinho, RN-SESSAO-004) também recusam. Ligada, nada a impede de trocar o intervalo ou desligar.
+- **O comando da pessoa**: `run` avisa o relógio antes de enviar (`ranByPerson`, só depois das recusas da tela: dois comandos na seleção não a desligam).
+  Outro comando (`sameCommand`: outro texto ou outro filtro do resultado) a desliga, sem nota; o mesmo (F5, "Atualizar", "Executar de novo", o "Atualizar"
+  dos Registros depois do Salvar) a mantém. `runWith(target, kind)` tem três tipos: `person` (`run`: o editor, os Registros, o filtro do resultado),
+  `again` (`rerun`, o F5: o comando das linhas na tela) e `auto` (o estado `running` leva `auto: true`). Só `person` zera `editedSinceRun`: o F5 e a
+  execução automática repetem o comando com o lugar no texto de quando ele foi enviado, e o erro deles não marca o texto que a pessoa já mudou.
+- **A execução automática não toma a aba da pessoa.** Há dois "ocupados": `isBusyState` (tudo, inclusive ela: o relógio e o executor, que mandam um comando
+  por vez na sessão) e `isPersonBusy` (sem ela: a tela e o bloqueio por inatividade). Tudo o que a pessoa vê e aciona usa `isPersonBusy`: a barra do editor
+  ("Executar" não vira "Cancelar"), o seletor de banco e `switchDatabase`, o rodapé dos Registros ("Atualizar" e "Exportar CSV"), o campo de filtro, a ordem
+  pelo cabeçalho, o F5 das duas abas, os planos dos Registros (`table-view.ts`; o `isBusy` de `result-paging.ts` saiu) e `applyResultFilter`. O que a
+  pessoa pede enquanto ela roda é atendido: o comando da pessoa (`run`, `rerun`) **a abandona** (`abandonAuto`: `epoch++`, então a resposta dela não muda a
+  tela nem avisa; `yielded()` no relógio, que não conta o desfecho dela; e o cancelamento à API, calado), mostra o comando da pessoa rodando desde já (o
+  resultado de antes com `cursorClosed`, porque o banco executou a automática) e só o envia quando a resposta dela e a do cancelamento chegaram
+  (`autoBusy`), para o cancelamento não o alcançar; Cancelar nesse meio-tempo não envia nada. **Desligar** (o X, "Desligar") com ela rodando também a
+  abandona (`stopAuto`, o `stop` que o executor entrega): o resultado de antes volta na hora, com `cursorClosed`, e o próximo comando, da pessoa ou da
+  atualização ligada de novo, espera `autoBusy`; antes ela seguia sem nada na tela dizer, e o resultado ou o erro chegavam depois de desligada.
+  "Carregar mais", "Contar total" e "Exportar CSV" esperam por
+  ela (`afterAuto`, `autoRunSettled`) e seguem sobre o resultado novo (o de antes já não está na API). A edição da célula não começa: `cellAccess` recebe
+  `busy: "refresh"`, com o motivo "a atualização automática está lendo as linhas de novo" na faixa, e o alvo não é perguntado à API por um resultado que vai
+  mudar; o resto do menu ("Atualizar", "Filtrar") segue `isPersonBusy`. A aba que vai para outra janela passa por `handOffTab` (`_lib/tab-handoff.ts`):
+  a pausa `moving` desde o começo, a espera da execução em andamento, e a pausa tirada no fim (a aba que foi é solta, e isso a desliga).
+- **O que a execução automática não faz**: não esmaece a grade nem diz "Executando…" (o `running` do `ResultPanel` exclui `auto`); não repete o aviso de
+  valores cortados (`truncationWarned` só é zerado pelo comando da pessoa: o "Carregar mais" depois dela também não avisa de novo o resultado que já avisou);
+  com as mesmas colunas, fica com o `id` de antes (a chave da grade: a grade não é refeita, e a rolagem fica); ligada, a grade não busca a página seguinte
+  sozinha (`autoLoadMore` desligado pela aba enquanto o relógio está ligado: a rolagem que ficou no fim pediria a seguinte a cada intervalo); e **não segura
+  o bloqueio por inatividade** (`isPersonBusy`, que `anyRunnerBusy` usa): sem isso, uma consulta a cada 5 s recomeçaria a contagem do bloqueio a cada
+  execução, porque o tempo conta do fim do último comando. O que conta como atividade continua sendo só tecla, ponteiro e roda de verdade (`watchActivity`).
+- **As pausas** (`pause("hidden" | "editing" | "moving", on)`): `useAutoRefresh` (`_lib/use-auto-refresh.ts`) põe a de fora de vista com a aba escondida e com a vista
+  desmontada (a aba de consulta lê `useWorkbenchOnScreen` ela mesma, para não mexer em `workbench-tabs.tsx`; a de tabela recebe `visible`); `useRecordEdits`
+  põe a da edição com alteração não salva, célula aberta, menu da célula, "Filtrar por valor…" ou o campo do "Personalizado" abertos; `handOffTab` põe a da
+  ida para outra janela. Ao sair da pausa, executa na hora se o prazo passou. **A pausa da edição vale desde o começo da ação**: o duplo clique, o menu, a
+  linha nova, "Excluir linha" e o "Colar" (com a leitura da área de transferência) perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
+  saísse nesse meio-tempo trocava as linhas e a ação caía em OUTRA linha do banco. `hold()` põe a pausa na hora e a solta por um estado (`released`), numa
+  renderização em que o campo ou o menu já contam, sem um instante livre; depois da pergunta, `moved(from)` (a última renderização e o executor lido na
+  hora) descarta a ação se o resultado mudou; `ensureTarget` não põe o alvo de um resultado que saiu no `latest`; e o menu é do resultado em que abriu
+  (`menuState.resultId`, como o campo): a execução que já rodava quando ele abriu e troca as linhas o fecha, e a escolha sobre a célula não age. A pausa da
+  edição sai do executor de antes num efeito próprio, ao desmontar a vista ou trocar o executor. O `records-view.test.ts` tem a pergunta do alvo presa
+  (`slowTarget`) e o resultado trocado no meio.
+- **A tela**: o submenu é `autoRefreshMenuItem` (`_lib/auto-refresh-menu.ts`, com os intervalos em `autoRefreshGroups`, os mesmos do menu da barra), logo
+  depois do "Atualizar" (F5) em `cellMenu`. O intervalo em uso vem marcado: o `ContextMenu` ganhou `checked` (`menuitemradio` com `aria-checked` e a marca no
+  lugar do ícone; as setas e o foco acham os dois papéis pelo `itemSelector`, por `firstItemOf` e `moveFocus`, exportados para o teste sem DOM). O controle é `AutoRefreshControl` (`_components/auto-refresh-control.tsx`),
+  ao lado de "Atualizar": nos Registros, no rodapé, logo depois do botão (o menu abre para cima, `opensUp`); na aba de consulta, que não tem o botão, na
+  barra, antes do zoom (fica também com a área recolhida). O botão do relógio (`TimerIcon`) está **sempre** lá: desabilitado por `aria-disabled` com o
+  motivo no nome e na dica (depois de um DDL ou de um UPDATE, "o comando grava no banco"; sem resultado, "não há linhas"), ou, ligada, "Atualiza a cada 10 s
+  · última às 14:32:05" (`onText`) com o X. **O botão do relógio é o mesmo elemento ligada ou não** (`data-auto-refresh-opener`): escolher um intervalo devolve o foco a ele, e o X,
+  que sai da página, passa o foco a ele: pelo clique e, quando ela para sozinha com o foco no X (o erro depois de um F5 dado no X), pela limpeza da ref
+  (`keepFocusInBar`, no módulo para ser estável, o mesmo cuidado do `CountButton`). Nada ali é região viva. O "Personalizado…" é `AutoRefreshDialog` (só desenha; quem confere o texto é
+  `customInterval`, pelo `submitCustom` do gancho). Os textos estão em `_lib/auto-refresh.copy.ts`.
+- **O que não foi feito**: a marca na faixa de abas da aba com a atualização ligada (fica para depois na seção 29), e ela não viaja com a aba para outra
+  janela (o executor de lá nasce com ela desligada).
+- **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55431): `select * from loja.fila` com 500
+  linhas; "Contar total" deu 500 e o foco ficou no botão, agora "Contar de novo"; 12 linhas inseridas pelo `psql` e o clique (no mesmo elemento) deram 512.
+  Na barra, o relógio abriu o menu com os seis `menuitemradio`; "A cada 5 s" ligou, o foco voltou ao relógio, e a linha inserida pelo `psql` apareceu sozinha
+  ("Atualiza a cada 5 s · última às …"). O menu da célula mostrou "Atualizar automaticamente" depois de "Atualizar" (F5), com "A cada 5 s" marcado, e a
+  barra disse "em pausa" com o menu aberto. A tabela renomeada no `psql` deu o erro do banco uma vez, com a nota "A atualização automática parou: o comando
+  deu erro." A vista Registros usa a mesma barra e o mesmo menu, e foi conferida só pelos testes (`records-view.test.ts`). Depois das correções da revisão
+  (mesmo arranjo, porta 55461, `CDP` por um roteiro de `Input.*` e `Runtime.evaluate`): com uma consulta que dorme 2 s (`(select pg_sleep(2))`) e "A cada
+  5 s", durante a execução automática o botão seguiu "Executar" e a grade não esmaeceu; Ctrl+Enter com `select 42` nesse meio-tempo executou na hora (a
+  automática foi cancelada, sem aviso), e a atualização automática desligou sem nota; depois de um `UPDATE` o relógio ficou na barra, desabilitado, com "o
+  comando grava no banco…"; nos Registros de `loja.fila` o relógio ficou no rodapé, entre "Atualizar" e "Exportar CSV", o menu abriu para cima, e ligada
+  ele disse "Atualiza a cada 5 s · última às …" ali (com o texto longo, o rodapé quebra em duas linhas a 1400 px). Depois da segunda revisão (mesmo arranjo,
+  porta 55471; o usuário criado pela tela e a conexão por `fetch` à API com `window.prism.getApiConfig()`, que só aparece no navegador depois de Sair e
+  Entrar): com "A cada 5 s" sobre uma consulta que dorme 1,5 s, o X durante "atualizando…" voltou na hora ao resultado de antes, com "O cursor foi fechado"
+  e "Executar de novo", sem aviso depois, e o relógio habilitado; com o foco no X, a tabela renomeada no `psql` e F5, o comando deu erro, ela parou com a
+  nota, e o foco ficou no relógio, de onde o F5 seguinte (com linhas na tela) executou. A corrida do alvo da edição e a sessão reaberta pelo F5 foram
+  conferidas só pelos testes. **Para um PostgreSQL sem
+  Docker**: o `initdb` e o `pg_ctl` rodam como `postgres` (`runuser -u postgres --`), que não atravessa a pasta da sessão (é do root, 700): o cluster vai numa
+  pasta do `postgres` (`/var/lib/postgresql/<nome>`), com porta e soquete próprios, e sai no fim. Encerre só os PID que você iniciou: um `pkill -f` com o
+  caminho da árvore mata também o shell que o roda, e outra frente pode ter um Xvfb e um `pnpm dev` de pé ao lado.
+
 ## Configurações (`src/app/settings`)
 
 RN-CONFIG-001. A rota é `/settings` (`pathsConfig.settings`), sob o `WorkbenchProvider` como as outras telas de dentro: abrir e
@@ -1352,7 +1453,8 @@ fechar não apaga as abas.
 - **Resultados** (RN-CONFIG-005; `results-section.tsx`): o texto do valor nulo na grade (de 1 a 12 caracteres, que não sejam só espaços nem
   tenham caractere de controle ou de direção de texto) e "buscar mais linhas ao rolar até o fim" (`autoLoadMore`, desligado de saída).
   Com ele ligado a grade pede a página seguinte sozinha (`autoLoadArmed`, em `result-paging.ts`): uma por vez, com linhas na tela, mais a
-  ler e nada em andamento (página, contagem, comando ou cancelamento), e o cursor fechado é o fim. "Linhas por busca" depende da API
+  ler e nada em andamento (página, contagem, comando ou cancelamento), e o cursor fechado é o fim; com a atualização automática do resultado
+  ligada, a aba o desliga (RN-GRADE-014). "Linhas por busca" depende da API
   (RN-SQL-016) e é "em breve". Os campos de texto e de número de Configurações usam `useDraft`: o texto válido vale na hora, sem botão de
   salvar; o inválido não muda nada, mostra o erro depois de parado (600 ms) e, ao sair do campo ou no primeiro Esc, volta ao valor que vale.
 - **Segurança** (RN-SEG-001; `security-section.tsx`): liga e desliga o bloqueio por inatividade e escolhe os minutos (de 1 a 240); com ele
@@ -1365,7 +1467,8 @@ fechar não apaga as abas.
 
 Seção 19 da especificação: **é ela que manda**, e o que segue diz onde ficam as peças e o que não é óbvio. Sem tecla nem ponteiro na janela
 por 10 minutos (1 a 240; pode ser desligado: `security.lockEnabled` e `security.lockAfterMinutes`, nas preferências) e sem comando em
-andamento em nenhuma aba, o Prism avisa 60 s antes (30 s com 1 minuto) e bloqueia: a API fecha o cofre, e a tela pede a senha do MESMO
+andamento em nenhuma aba (a execução da atualização automática não conta: `isPersonBusy`, RN-GRADE-014), o Prism avisa 60 s antes (30 s com 1
+minuto) e bloqueia: a API fecha o cofre, e a tela pede a senha do MESMO
 usuário. Desbloquear devolve as abas e o texto de SQL; os resultados são descartados; as outras telas de dentro do cofre voltam ao estado
 inicial; "Sair" encerra de verdade.
 
