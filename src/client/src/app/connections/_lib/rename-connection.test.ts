@@ -3,17 +3,24 @@ import { describe, expect, it } from "vitest";
 import type { ApiError } from "@/lib/api/prism-api";
 
 import { connectionsCopy } from "./connections.copy";
-import { editConnectionSchema, renameConnectionSchema, type Connection } from "./connections.schema";
+import { editConnectionSchema, newVerification, renameConnectionSchema, unprotected, verificationOf, type Connection } from "./connections.schema";
 import { renamedConnectionInput, renameRefusalFields } from "./rename-connection";
 
 const now = "2026-10-13T12:00:00Z";
-const mes: Connection = { id: "c1", folderID: "f1", name: "MES Produção", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+const mes: Connection = { id: "c1", folderID: "f1", name: "MES Produção", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 
 const refusal = (code: string, errors: Record<string, string[]> | null = null): ApiError => ({ status: code === "CONNECTION_ALREADY_EXISTS" ? 409 : 422, code, title: `Título de ${code}`, detail: null, errors, extensions: {} });
 
+// RN-PROT-001, 002 e RN-VERIF-001: a conexão com as proteções próprias e a verificação fora do padrão.
+const protegida: Connection = { ...mes, confirmCommands: "all", readOnly: true, verificationEnabled: true, verificationInterval: 5, verificationQuery: "SELECT 1", protections: { readOnly: true, readOnlyFolderID: null, confirmCommands: "all", confirmCommandsFolderID: null } };
+
 describe("renamedConnectionInput: renomear uma conexão pelo navegador (RN-NAV-009)", () => {
   it("leva a conexão como está, na mesma pasta, só com o nome novo, e a senha nula (a API mantém a gravada, RN-CONN-004)", () => {
-    expect(renamedConnectionInput(mes, "MES Novo")).toEqual({ name: "MES Novo", folderID: "f1", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", password: null, environmentName: "Produção", environmentColor: "#FF8A7A" });
+    expect(renamedConnectionInput(mes, "MES Novo")).toEqual({ name: "MES Novo", folderID: "f1", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", password: null, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification });
+  });
+
+  it("renomear não tira as proteções nem muda a verificação (RN-PROT-003, RN-VERIF-001): sem elas a API pediria a senha e voltaria tudo ao padrão", () => {
+    expect(renamedConnectionInput(protegida, "MES Novo")).toMatchObject({ name: "MES Novo", confirmCommands: "all", readOnly: true, verificationEnabled: true, verificationInterval: 5, verificationQuery: "SELECT 1" });
   });
 
   it("na raiz, a pasta continua nula", () => {
@@ -21,9 +28,9 @@ describe("renamedConnectionInput: renomear uma conexão pelo navegador (RN-NAV-0
   });
 
   it("é o mesmo pedido que o formulário mandaria mudando só o nome (o mesmo PATCH, que leva tudo por inteiro)", () => {
-    const fromForm = editConnectionSchema.parse({ engine: "3", name: "MES Novo", folderID: "f1", host: mes.host, port: String(mes.port), database: mes.database, userName: mes.userName, password: "", environmentName: "Produção", environmentColor: "#FF8A7A" });
+    const fromForm = { ...editConnectionSchema.parse({ engine: "3", name: "MES Novo", folderID: "f1", host: protegida.host, port: String(protegida.port), database: protegida.database, userName: protegida.userName, password: "", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: "all", readOnly: "true" }), ...verificationOf(protegida) };
 
-    expect(renamedConnectionInput(mes, "MES Novo")).toEqual(fromForm);
+    expect(renamedConnectionInput(protegida, "MES Novo")).toEqual(fromForm);
   });
 });
 

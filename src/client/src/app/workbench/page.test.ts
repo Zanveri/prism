@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { pathsConfig } from "@/config/paths.config";
@@ -20,7 +20,7 @@ vi.mock("./_components/status-bar", () => ({ StatusBar: () => createElement("foo
 vi.mock("./_lib/workbench-state", () => ({ useWorkbench: () => ({ tabs: [], activeTabId: null }) }));
 
 const now = "2026-10-15T12:00:00Z";
-const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 
 function render() {
   const client = new QueryClient();

@@ -5,8 +5,10 @@ import { buildConnectionTree, folderOptions } from "../_lib/connection-tree";
 import { connectionsCopy } from "../_lib/connections.copy";
 import type { Connection, Folder } from "../_lib/connections.schema";
 import { environmentLookup } from "../_lib/environment";
+import { inheritedProtections, type ConfirmationChoice } from "../_lib/protections";
 import type { UserEnvironment } from "../_lib/user-environments";
 import { EnvironmentPicker } from "./environment-picker";
+import { ProtectionsSection } from "./protections-section";
 
 const copy = connectionsCopy.form;
 const monoClassName = "font-mono text-sm";
@@ -29,14 +31,21 @@ type ConnectionFieldsProps = {
   onColorChange: (color: string | null) => void;
   /** Os ambientes do usuário (RN-AMB-001), que a seção Ambiente oferece para reaproveitar. */
   environments?: readonly UserEnvironment[];
+  /** RN-PROT-001 e 002: as proteções PRÓPRIAS da conexão, estado do diálogo (o somente leitura que muda pede a senha ao salvar, RN-PROT-003). */
+  confirm: ConfirmationChoice;
+  onConfirmChange: (confirm: ConfirmationChoice) => void;
+  readOnly: boolean;
+  onReadOnlyChange: (readOnly: boolean) => void;
 };
 
 /**
  * Os campos da conexão (RN-CONN-010), os mesmos da tela de Conexões de antes, no passo das configurações do diálogo: nome, pasta, host,
- * porta, banco, usuário, senha (com o olho e o aviso de que ela fica cifrada) e o ambiente. O que é texto livre vai pelo `FormData` (campos
- * não controlados); a pasta, a porta (que acompanha o banco, RN-CONN-012), a senha e a cor são do diálogo.
+ * porta, banco, usuário, senha (com o olho e o aviso de que ela fica cifrada), o ambiente e as proteções. O que é texto livre vai pelo `FormData` (campos
+ * não controlados); a pasta, a porta (que acompanha o banco, RN-CONN-012), a senha, a cor e as proteções são do diálogo.
  */
-export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [] }: ConnectionFieldsProps) {
+export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange }: ConnectionFieldsProps) {
+  const folder = folderID === "" ? null : folderID;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(240px,100%),1fr))] gap-4">
@@ -94,9 +103,12 @@ export function ConnectionFields({ connection, folders, errors, folderID, onFold
         onColorChange={onColorChange}
         errors={errors}
         hint={copy.environment.connectionHint}
-        inherited={environmentLookup(folders).inheritedIn(folderID === "" ? null : folderID)}
+        inherited={environmentLookup(folders).inheritedIn(folder)}
         environments={environments}
       />
+
+      {/* RN-PROT-004: o que a pasta escolhida no campo impõe (antes de gravar, como o ambiente herdado), marcado e desabilitado. */}
+      <ProtectionsSection idPrefix="cx" subject="connection" confirm={confirm} onConfirmChange={onConfirmChange} readOnly={readOnly} onReadOnlyChange={onReadOnlyChange} inherited={inheritedProtections(folders, folder)} errors={errors} />
     </div>
   );
 }

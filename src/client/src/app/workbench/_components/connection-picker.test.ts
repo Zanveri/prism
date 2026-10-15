@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 import { environmentLookup } from "@/app/connections/_lib/environment";
 import { EngineTag } from "@/components/ui";
 import { elementsOf } from "@/lib/testing/react-tree";
@@ -14,12 +14,12 @@ import { ConnectionButtonView, ConnectionListView } from "./connection-picker";
 const copy = workbenchCopy.editor.connection;
 
 function connection(id: string, name: string, over: Partial<Connection> = {}): Connection {
-  return { id, folderID: null, name, engine: 3, host: "ifx.zanveri.local", port: 9089, database: "erp", userName: "informix", hasPassword: true, environmentName: null, environmentColor: null, createdAt: "", updatedAt: "", ...over };
+  return { id, folderID: null, name, engine: 3, host: "ifx.zanveri.local", port: 9089, database: "erp", userName: "informix", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: "", updatedAt: "", ...over };
 }
 
 const erp = connection("c1", "ERP Produção", { folderID: "f1", environmentName: "Produção", environmentColor: "#FF8A7A" });
 const mes = connection("c2", "MES", { engine: 1, host: "pg.zanveri.local", port: 5432, userName: "mes" });
-const folders = [{ id: "f1", parentID: null, name: "Clientes", environmentName: null, environmentColor: null, color: null, createdAt: "", updatedAt: "" }];
+const folders = [{ id: "f1", parentID: null, name: "Clientes", environmentName: null, environmentColor: null, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: "", updatedAt: "" }];
 const environments = environmentLookup(folders);
 const shortcut = { label: "Ctrl+9", aria: "Control+9" };
 

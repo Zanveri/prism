@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { elementsOf } from "@/lib/testing/react-tree";
 
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 
 import { navKey, objectNodes, type NavNode } from "../_lib/navigator-model";
 import { NavigatorRow, type NavigatorRowProps } from "./navigator-row";
@@ -186,7 +186,7 @@ describe("o botão direito na linha (RN-MENU-001)", () => {
 
 describe("a dica da linha da conexão (o que a lista da tela de Conexões mostrava, RN-NAV-003)", () => {
   const now = "2026-10-12T12:00:00Z";
-  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
   const node: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 0, hasChildren: true };
 
   it("o nome e, embaixo, o banco e o endereço (host:porta / banco), que a lista de Conexões trazia em cada conexão e a árvore não mostra", () => {
@@ -200,8 +200,8 @@ describe("a dica da linha da conexão (o que a lista da tela de Conexões mostra
 
 describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () => {
   const now = "2026-10-13T12:00:00Z";
-  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
-  const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 1, hasChildren: true };
   const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
   const pill = (markup: string) => /<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/.exec(markup)?.[0];
@@ -259,7 +259,7 @@ describe("a cor da pasta no ícone dela (RN-PASTA-007)", () => {
 
 describe("a densidade do navegador na linha (RN-NAV-011)", () => {
   const now = "2026-10-15T12:00:00Z";
-  const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 0, hasChildren: true };
   const [table] = objectNodes("c1", "public", "tables", [{ name: "pedido", kind: "table" }]);
   const loading: NavNode = { key: "k#loading", kind: "loading", label: "Carregando…", depth: 2, hasChildren: false };

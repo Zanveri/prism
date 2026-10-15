@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { buildConnectionTree, folderOptions, type TreeNode } from "./connection-tree";
-import type { Connection, Folder } from "./connections.schema";
+import { newVerification, unprotected, type Connection, type Folder } from "./connections.schema";
 
 const now = "2026-10-09T12:00:00Z";
 
 function folder(id: string, name: string, parentID: string | null = null): Folder {
-  return { id, parentID, name, environmentName: null, environmentColor: null, color: null, createdAt: now, updatedAt: now };
+  return { id, parentID, name, environmentName: null, environmentColor: null, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 }
 
 function connection(id: string, name: string, folderID: string | null = null): Connection {
-  return { id, folderID, name, engine: 1, host: "srv", port: 5432, database: "db", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+  return { id, folderID, name, engine: 1, host: "srv", port: 5432, database: "db", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 }
 
 /** O nome de cada nó, com a profundidade, na ordem em que a tela os desenha. */

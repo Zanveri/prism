@@ -5,16 +5,18 @@ import { useDriverActions } from "@/app/drivers/_components/driver-actions";
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import { Button, ConfirmDialog, Dialog, FieldError, FormMessage, useToast, type Engine } from "@/components/ui";
-import { allowRefusal, type ApiError } from "@/lib/api/prism-api";
+import { allowRefusal, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type FieldErrors } from "@/lib/utils/form";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import { createConnectionSchema, editConnectionSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
+import { createConnectionSchema, editConnectionSchema, engineOption, newVerification, verificationOf, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
 import { connectionsQuery, createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
 import { choiceOf, engineChoices } from "../_lib/engine-choices";
 import { environmentLookup } from "../_lib/environment";
 import { hasChanges, snapshotOf, type FormSnapshot } from "../_lib/form-leave";
+import { confirmationChoiceOf, type ConfirmationChoice } from "../_lib/protections";
 import { userEnvironments } from "../_lib/user-environments";
+import { passwordAsked, readOnlyChange } from "../_lib/user-password";
 import { ConnectionFields } from "./connection-fields";
 import { DeleteConnectionDialog } from "./delete-connection-dialog";
 import { DriverNotice } from "./driver-notice";
@@ -22,6 +24,7 @@ import { EngineGrid, EngineSummary } from "./engine-grid";
 import { RevealPasswordDialog } from "./reveal-password-dialog";
 import { ShownEnvironmentPill } from "./shown-environment-pill";
 import { TestFailure, type TestFailureState } from "./test-failure";
+import { UserPasswordDialog } from "./user-password-dialog";
 
 const copy = connectionsCopy.form;
 const formID = "connection-dialog-form";
@@ -78,6 +81,11 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
   const [port, setPort] = useState(connection === null ? "" : String(connection.port));
   const [folderID, setFolderID] = useState(connection?.folderID ?? (request.mode === "new" ? request.folderID : null) ?? "");
   const [color, setColor] = useState<string | null>(connection?.environmentColor ?? null);
+  // RN-PROT-001 e 002: as proteções PRÓPRIAS; as herdadas da pasta escolhida aparecem na seção, e não são gravadas aqui.
+  const [confirm, setConfirm] = useState<ConfirmationChoice>(confirmationChoiceOf(connection?.confirmCommands ?? null));
+  const [readOnly, setReadOnly] = useState(connection?.readOnly ?? false);
+  // RN-PROT-003: a gravação que espera a senha do usuário (o somente leitura que muda, ou a API que a pediu), com a frase do que muda.
+  const [asking, setAsking] = useState<{ input: ConnectionInput; change: string } | null>(null);
   const [password, setPassword] = useState("");
   const [passwordShown, setPasswordShown] = useState(false);
   const [revealing, setRevealing] = useState(false);
@@ -107,19 +115,30 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
     if (formRef.current) focusFirstField(formRef.current, fields);
   }
 
+  /** O fim de uma gravação, com ou sem a senha do usuário: gravou, ou o 422 dos campos vai a eles. */
+  async function settled(result: ApiResult<Connection>) {
+    if (!result.ok) {
+      showInvalid(result.error);
+      return;
+    }
+
+    toast.success(connection ? connectionsCopy.toasts.connectionUpdated : connectionsCopy.toasts.connectionCreated);
+    await invalidateLists(queryClient);
+    onSaved(result.data);
+  }
+
   const save = useMutation({
     // A mutação guarda o que recebeu em `variables`: sem `gcTime` ela deixaria a senha no cache.
     gcTime: 0,
-    mutationFn: async (input: ConnectionInput) => allowRefusal(await (connection ? updateConnection(connection.id, input) : createConnection(input)), "CONNECTION_INVALID"),
-    onSuccess: async (result) => {
-      if (!result.ok) {
-        showInvalid(result.error);
+    mutationFn: async (input: ConnectionInput) => allowRefusal(await (connection ? updateConnection(connection.id, input) : createConnection(input)), "CONNECTION_INVALID", "USER_PASSWORD_REQUIRED"),
+    onSuccess: async (result, input) => {
+      // RN-PROT-003: a API pediu a senha que a tela não previu (a pasta escolhida tira o somente leitura herdado): grava de novo com ela.
+      const change = connection ? passwordAsked(result, connection.name) : null;
+      if (change !== null) {
+        setAsking({ input, change });
         return;
       }
-
-      toast.success(connection ? connectionsCopy.toasts.connectionUpdated : connectionsCopy.toasts.connectionCreated);
-      await invalidateLists(queryClient);
-      onSaved(result.data);
+      await settled(result);
     },
     onError: () => void invalidateLists(queryClient),
   });
@@ -180,22 +199,29 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
     setRevealing(false);
   }
 
-  /** Lê e valida o formulário (o mesmo para gravar e para testar); nulo, com os erros nos campos, se algo foi recusado. */
+  /**
+   * Lê e valida o formulário (o mesmo para gravar e para testar); nulo, com os erros nos campos, se algo foi recusado. A verificação periódica (RN-VERIF-001)
+   * ainda não está no formulário e vai como a conexão a tem (na nova, o padrão): o `PATCH` grava a conexão por inteiro.
+   */
   function readForm(form: HTMLFormElement): ConnectionInput | null {
     setRefusal(null);
     setTestFailure(null);
 
     const parsed = connection ? parseForm(form, editConnectionSchema) : parseForm(form, createConnectionSchema);
     setErrors(parsed.ok ? {} : parsed.errors);
-    return parsed.ok ? parsed.data : null;
+    return parsed.ok ? { ...parsed.data, ...(connection ? verificationOf(connection) : newVerification) } : null;
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (save.isPending || test.isPending) return;
+    if (save.isPending || test.isPending || asking !== null) return;
 
     const input = readForm(event.currentTarget);
-    if (input) save.mutate(input);
+    if (input === null) return;
+    // RN-PROT-003: marcar ou desmarcar "Somente leitura" numa conexão que já existe pede a senha do usuário antes de gravar.
+    const change = connection ? readOnlyChange(connection.name, connection.readOnly, input.readOnly) : null;
+    if (change !== null) setAsking({ input, change });
+    else save.mutate(input);
   }
 
   function handleTest() {
@@ -286,6 +312,10 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
               color={color}
               onColorChange={setColor}
               environments={environments}
+              confirm={confirm}
+              onConfirmChange={setConfirm}
+              readOnly={readOnly}
+              onReadOnlyChange={setReadOnly}
             />
             {refusal === null ? null : <FormMessage tone="error">{refusal}</FormMessage>}
           </form>
@@ -301,6 +331,20 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
 
       {/* Fora do `<form>` e do diálogo: o evento de um diálogo sobe pela árvore do React, e o `submit` dele não pode chegar ao formulário. */}
       {revealing && connection ? <RevealPasswordDialog connection={connection} onRevealed={handleRevealed} onClose={() => setRevealing(false)} /> : null}
+
+      {asking && connection ? (
+        <UserPasswordDialog
+          change={asking.change}
+          send={(userPassword) => updateConnection(connection.id, asking.input, userPassword)}
+          refusals={["CONNECTION_INVALID"]}
+          onDone={(result) => {
+            setAsking(null);
+            if (result === null) void invalidateLists(queryClient);
+            else void settled(result);
+          }}
+          onClose={() => setAsking(null)}
+        />
+      ) : null}
 
       {confirmingDelete && connection ? <DeleteConnectionDialog connection={connection} openTabs={openTabs(connection.id)} onClose={() => setConfirmingDelete(false)} onDeleted={onClose} /> : null}
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 
 import { choiceKeyTarget, connectionChoices, connectionShortcut, connectionShortcutLabel, folderPathOf, withConnection } from "./tab-connection";
 import type { QueryTab } from "./workbench-model";
@@ -13,7 +13,7 @@ const folders = [
 ];
 
 function connection(id: string, name: string, over: Partial<Connection> = {}): Connection {
-  return { id, folderID: null, name, engine: 3, host: `${id}.zanveri.local`, port: 9089, database: "erp", userName: "informix", hasPassword: true, environmentName: null, environmentColor: null, createdAt: "", updatedAt: "", ...over };
+  return { id, folderID: null, name, engine: 3, host: `${id}.zanveri.local`, port: 9089, database: "erp", userName: "informix", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: "", updatedAt: "", ...over };
 }
 
 const connections = [
