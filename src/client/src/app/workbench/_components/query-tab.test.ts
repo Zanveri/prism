@@ -1387,3 +1387,29 @@ describe("QueryTabPanel: o aviso antes de executar, na conexão que confirma (RN
     expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledOnce();
   });
 });
+
+describe("QueryTabPanel: a grade de uma conexão somente leitura não se edita (RN-PROT-002 e RN-EDIT-002)", () => {
+  it("a página da conexão somente leitura já diz por quê: a faixa mostra o motivo, e “Editar célula” fica desabilitado com ele, sem perguntar o alvo", async () => {
+    const view = mount(fakeRunner(rowsState({ readOnly: "a conexão é somente leitura" })));
+
+    expect(view.show().banner?.props.readOnly).toBe("Somente leitura: a conexão é somente leitura.");
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems);
+
+    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: "Somente leitura: a conexão é somente leitura." });
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("a conexão que passou a ser somente leitura depois do resultado (a API recusa o alvo com CONNECTION_READ_ONLY) fica só leitura, com o mesmo motivo", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: false, error: { status: 422, code: "CONNECTION_READ_ONLY", title: "Conexão somente leitura.", detail: "A conexão é somente leitura: nada se grava nela, e a edição de registros não vale. Nada foi enviado ao banco.", errors: null, extensions: {} } });
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems);
+
+    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.connectionReadOnly) });
+    expect(view.show().banner?.props.readOnly).toBe(copy.readOnly(copy.reasons.connectionReadOnly));
+  });
+});

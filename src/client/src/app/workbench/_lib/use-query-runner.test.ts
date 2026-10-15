@@ -1900,3 +1900,41 @@ describe("o resultado depois de um Salvar da edição na aba de consulta (RN-EDI
     await running;
   });
 });
+
+describe("a recusa do somente leitura (RN-PROT-002)", () => {
+  const refusal = "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco.";
+
+  it("com linhas na tela, elas e o cursor ficam (nada foi ao banco), e a frase da API vai no aviso de erro, sem o aviso central", async () => {
+    const { api, toast, runner, result } = await withResult();
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "delete from t", offset: 0 });
+
+    expect(runner.getState()).toBe(result);
+    expect(result).toMatchObject({ cursorClosed: false });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de CONNECTION_READ_ONLY", refusal);
+  });
+
+  it("com o cursor aberto, a recusa não o fecha: “Carregar mais” continua lendo", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { hasMore: true }));
+    await runner.run({ sql: "select * from t", offset: 0 });
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "update t set a = 1", offset: 0 });
+
+    expect(runner.getState()).toMatchObject({ status: "rows", hasMore: true, cursorClosed: false });
+  });
+
+  it("sem resultado na tela, a frase da API vai à área de resultado, com o aviso curto", async () => {
+    const { api, toast, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "delete from t", offset: 0 });
+
+    expect(runner.getState()).toEqual({ status: "error", source: "api", title: "Título de CONNECTION_READ_ONLY", message: refusal, sqlState: null, errorAt: null });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(copy.commandFailed);
+  });
+});

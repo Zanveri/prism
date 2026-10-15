@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { ReadOnlyMark } from "@/app/connections/_components/read-only-mark";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 import { environmentLookup } from "@/app/connections/_lib/environment";
@@ -137,5 +138,28 @@ describe("ConnectionListView: a lista que troca a conexão da aba (RN-ARVORE-008
   it("sem conexão cadastrada diz para criar uma; com a busca sem achar, diz que nada combina", () => {
     expect(view({ choices: [], total: 0 }).texts).toContain(copy.empty);
     expect(view({ choices: [], query: " zzz " }).texts).toContain(copy.noMatch("zzz"));
+  });
+});
+
+describe("o cadeado da conexão somente leitura no botão e na lista (RN-PROT-002)", () => {
+  it("o botão mostra o cadeado depois do ambiente, com a dica de onde ele vem, e o nome acessível diz que ela é somente leitura", () => {
+    const props = { connection: erp, environment: environments.connection(erp), readOnly: "Somente leitura, herdado da pasta Clientes", shortcut, open: false, panelId: "lista", onToggle: vi.fn() };
+    const tree = ConnectionButtonView(props);
+    const found = elementsOf(tree);
+
+    expect(found.find((element) => element.type === ReadOnlyMark)?.props.hint).toBe("Somente leitura, herdado da pasta Clientes");
+    expect(tree.props["aria-label"]).toBe("IFX ERP Produção Produção, somente leitura, herdado da pasta Clientes, conexão desta aba");
+  });
+
+  it("a lista marca só as conexões somente leitura, com a dica de cada uma", () => {
+    const choices = connectionChoices([erp, mes], folders, new Set());
+    const found = elementsOf(ConnectionListView({ id: "lista", query: "", choices, total: 2, active: 0, current: "c1", environments, readOnlyOf: (connection) => (connection.id === "c2" ? "Somente leitura" : null), busy: false, onQuery: vi.fn(), onKeyDown: vi.fn(), onActive: vi.fn(), onChoose: vi.fn(), onReveal: vi.fn() }));
+
+    expect(found.filter((element) => element.type === ReadOnlyMark).map((element) => element.props.hint)).toEqual([null, "Somente leitura"]);
+  });
+
+  it("o cadeado desenha a dica no title e no nome acessível; sem dica, nada", () => {
+    expect(ReadOnlyMark({ hint: "Somente leitura" })?.props).toMatchObject({ role: "img", "aria-label": "Somente leitura", title: "Somente leitura" });
+    expect(ReadOnlyMark({ hint: null })).toBeNull();
   });
 });

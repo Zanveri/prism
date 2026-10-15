@@ -44,3 +44,20 @@ describe("StatusBar: o banco da aba ativa (RN-ARVORE-007)", () => {
     expect(placeText()).toContain(copy.place("MES Produção", "vendas"));
   });
 });
+
+describe("StatusBar: o cadeado da conexão somente leitura (RN-PROT-002)", () => {
+  it("a conexão somente leitura mostra “Somente leitura”, com a dica de onde vem; a outra, nada", () => {
+    rt.tabs = [{ id: "q1", title: "consulta-1.sql", connectionId: "c1", sessionId: null, sql: "" }];
+    rt.activeTabId = "q1";
+    const mark = () => elementsOf(StatusBar()).find((element) => typeof element.props.title === "string" && elementsOf(element.props.children as never).some((child) => child.props.children === copy.readOnly));
+
+    expect(mark()).toBeUndefined();
+
+    rt.protections = { readOnly: true, readOnlyFolderID: "f1", confirmCommands: null, confirmCommandsFolderID: null };
+    rt.folders = [{ id: "f1", name: "Fábrica" }];
+    expect(mark()?.props.title).toBe("Somente leitura, herdado da pasta Fábrica");
+
+    rt.protections = { readOnly: true, readOnlyFolderID: null, confirmCommands: null, confirmCommandsFolderID: null };
+    expect(mark()?.props.title).toBe("Somente leitura");
+  });
+});

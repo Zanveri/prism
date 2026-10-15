@@ -302,3 +302,17 @@ describe("a densidade do navegador na linha (RN-NAV-011)", () => {
     expect(rowClass(render(error(), { density: "compact" })).some((name) => name.startsWith("h-"))).toBe(false);
   });
 });
+
+describe("o cadeado da conexão somente leitura na árvore (RN-PROT-002)", () => {
+  const now = "2026-10-15T12:00:00Z";
+  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: true, ...newVerification, protections: { ...unprotected, readOnly: true }, createdAt: now, updatedAt: now };
+  const node: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 0, hasChildren: true };
+
+  it("ao lado do nome, com a dica de onde vem, que o leitor de tela também lê", () => {
+    expect(render(node, { connection, status: "disconnected", readOnly: "Somente leitura, herdado da pasta Fábrica" })).toMatch(/<span role="img" aria-label="Somente leitura, herdado da pasta Fábrica" title="Somente leitura, herdado da pasta Fábrica"/);
+  });
+
+  it("a conexão que não é somente leitura não tem cadeado", () => {
+    expect(render(node, { connection, status: "disconnected" })).not.toContain("Somente leitura");
+  });
+});

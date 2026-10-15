@@ -443,3 +443,20 @@ describe("depois do script (RN-SQL-020)", () => {
     expect(script(runner).results).toEqual([]);
   });
 });
+
+describe("o script numa conexão somente leitura (RN-PROT-002 e RN-SQL-021)", () => {
+  it("o comando que não é leitura é recusado pela API, e a recusa é o erro dele: o script pergunta o que fazer", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page([["1"]]));
+    api.on(queries, problem(422, "CONNECTION_READ_ONLY", { detail: "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco." }));
+
+    const done = runner.runScript(commands("select 1", "delete from t", "select 2"));
+    await settle();
+
+    expect(script(runner)).toMatchObject({ phase: "paused", current: 1 });
+    expect(entryAt(script(runner), 1).error).toEqual({ title: "Título de CONNECTION_READ_ONLY", message: "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco.", sqlState: null });
+    runner.script.decide("stop");
+    await done;
+  });
+});
