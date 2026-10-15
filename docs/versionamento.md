@@ -119,15 +119,21 @@ no próprio repositório, o [`cliff.toml`](../cliff.toml).
   conferência na `main`**, para o texto escrito não ser trocado, sem ninguém ver, pelo do `git-cliff`.
 - **As notas de um beta** são geradas pelo `git-cliff` na hora, com os commits desde a tag de versão anterior (no primeiro beta, o
   histórico inteiro), seguidas das somas, e **não** são gravadas no `CHANGELOG.md`: um commit a cada merge encheria o histórico.
+  Um beta só de documentação, testes ou pipeline sai com a frase "Nenhuma mudança que apareça para quem usa o Prism".
+- **As notas são para quem usa o Prism** (decisão do dono em 2026-10-15): elas aparecem na página da release e na tela do app que
+  oferece a atualização. O `git-cliff` só põe nelas o que o usuário percebe, cada item com a descrição do commit, sem o escopo
+  (`client:`, `api:`) e sem as referências à especificação (`(RN-…)`, `(seção N)`). A seção de uma estável escrita à mão segue a
+  mesma ideia: curta, na língua de quem usa, sem nome de rota, de arquivo, de regra nem de componente.
 - **A seção da `0.1.0` é escrita à mão**: as mensagens de commit anteriores a ela falam de tarefas internas e não servem de changelog,
   e por isso vale escrevê-la e fechá-la antes de lançar a `0.1.0`. Até lá, ela fica sob "Não lançado".
 - **Quem quiser a seção de uma versão no arquivo** (e não só nas notas da release) pede ao `git-cliff` que a gere e a acrescente no topo,
   sem reescrever o resto (`--prepend`, passo 3 da seção 5), com os commits desde a estável anterior.
-- Os tipos dos commits viram as categorias do Keep a Changelog em português: `feat` em Adicionado; `perf` e `refactor` em
-  Alterado; `fix` em Corrigido; os commits de escopo `security` (`fix(security): ...`) em Segurança; `docs` em Documentação;
-  `build` e `ci` em Empacotamento e pipeline; `test` e `chore` em Testes e manutenção. Um `!` depois do tipo leva o commit à
-  primeira categoria, "Mudanças que quebram o contrato". O tipo `release` não aparece. Descontinuado e Removido não têm tipo
-  de commit: acrescente-os à mão na seção, quando houver.
+- Os tipos dos commits viram as categorias do Keep a Changelog em português: `feat` em Adicionado; `perf` em Alterado; `fix` em
+  Corrigido; os commits de escopo `security` (`fix(security): ...`) em Segurança. Um `!` depois do tipo leva o commit à primeira
+  categoria, "Mudanças que quebram o contrato", qualquer que seja o tipo. **Não entram**: `docs`, `build`, `ci`, `test`, `chore`,
+  `refactor` e os escopos `ci`, `build`, `spec` e `deps`, que não mudam o que o usuário vê, e `feat(api)`, porque a API local só
+  conversa com o próprio app (o que o usuário vê de uma funcionalidade nova vem no commit da interface); uma correção da API entra.
+  O tipo `release` não aparece. Descontinuado e Removido não têm tipo de commit: acrescente-os à mão na seção, quando houver.
 - Só as tags `vX.Y.Z` contam como versão para o `git-cliff`; as de beta não viram seção.
 - O cabeçalho do `cliff.toml` (o título, o parágrafo de abertura e a linha "Não lançado") tem de ser, byte a byte, o começo do
   `CHANGELOG.md`: o `--prepend` o tira do arquivo e o escreve de novo. O `.gitattributes` força fim de linha LF no arquivo, em
@@ -171,7 +177,8 @@ senão, o `git-cliff` com o histórico inteiro, que fala de tarefas internas: fe
    correção, o terceiro. O `git cliff --bumped-version` sugere o número a partir dos tipos dos commits, mas os mantenedores decidem.
    O patch + 1 vem sozinho; **para outro número, mude o campo** num pull request para a `develop` antes de seguir.
 
-3. **(Opcional) Escreva a seção do changelog**, se quiser notas curadas em vez das geradas na hora pelo `git-cliff`, num ramo de
+3. **(Recomendado) Escreva a seção do changelog**, para as notas serem curtas e na língua de quem usa em vez das geradas na hora
+   pelo `git-cliff` (que repetem as mensagens dos commits, uma por linha), num ramo de
    trabalho a partir da `develop` atualizada (`git switch -c chore/release-X.Y.Z origin/develop`), e abra um pull request para a
    `develop` com o título `release: vX.Y.Z`. Ele altera **só o `CHANGELOG.md`**, e o título da seção é exatamente
    `## [X.Y.Z] - AAAA-MM-DD`, com a versão da vez. Sem este passo, vá ao 5.
