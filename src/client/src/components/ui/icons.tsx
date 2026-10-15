@@ -69,6 +69,15 @@ export function PlusIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** O menos, par do `PlusIcon` (diminuir o zoom do programa, RN-ZOOM-001). */
+export function MinusIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M3 8h10" />
+    </Icon>
+  );
+}
+
 export function EyeIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

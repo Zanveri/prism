@@ -26,6 +26,7 @@ export {
   IndexIcon,
   LockIcon,
   LockOpenIcon,
+  MinusIcon,
   PackageIcon,
   PencilIcon,
   PlayIcon,
