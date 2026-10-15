@@ -3,10 +3,11 @@ import { queryOptions } from "@tanstack/react-query";
 import { allowRefusal, apiRequest, unwrap, userActionDeadlineMs, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
-import { scriptSchema, scriptSummariesSchema, scriptSummarySchema, type Script, type ScriptInput, type ScriptSummary } from "./scripts.schema";
+import { editedScriptInput, type ScriptAppearance } from "./saved-scripts";
+import { scriptSchema, scriptSummariesSchema, scriptSummarySchema, type Script, type ScriptInput, type ScriptPlaceInput, type ScriptSummary } from "./scripts.schema";
 
 /**
- * As rotas dos scripts salvos (seção 23: RN-SCRIPT-001 a 004). As recusas que o diálogo de salvar e o de renomear mostram no próprio lugar voltam como valor
+ * As rotas dos scripts salvos (seção 23: RN-SCRIPT-001 a 004; e o genérico, RN-SCRIPT-005). As recusas que o diálogo de salvar e o de renomear mostram no próprio lugar voltam como valor
  * (`allowRefusal`); as outras lançam e viram o aviso central (RN-AVISO-004). Salvar, renomear e excluir deixam um botão em "…ando…", e por isso têm o prazo
  * das ações da pessoa (`userActionDeadlineMs`).
  */
@@ -33,16 +34,32 @@ export async function createScriptOrRefuse(input: ScriptInput, signal: AbortSign
 }
 
 /**
- * RN-SCRIPT-001: o Ctrl+S de um script que já existe grava o SQL e o lugar da aba por cima. O 404 volta como valor: outra janela excluiu o script, e a tela
- * pede um nome, como na primeira vez.
+ * RN-SCRIPT-001: o Ctrl+S de um script que já existe grava o SQL e o lugar da aba por cima; o do script genérico grava o SQL e o mantém genérico
+ * (RN-SCRIPT-005). O 404 volta como valor: outra janela excluiu o script, e a tela pede um nome, como na primeira vez.
  */
-export async function overwriteScriptOrRefuse(input: Omit<ScriptInput, "name"> & { id: string }, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
+export async function overwriteScriptOrRefuse(input: { id: string; sql: string } & ScriptPlaceInput, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
   return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: input, schema: scriptSummarySchema, signal }), "SCRIPT_NOT_FOUND", "SCRIPT_TOO_LARGE");
+}
+
+/**
+ * RN-SCRIPT-005: "Tornar genérico" (`generic`) e "Vincular à conexão da aba" (a conexão e o banco da aba) no menu do script: só o lugar muda, e o nome e o SQL
+ * ficam. Toda recusa (o script que outra janela excluiu, o cofre fechado) vai ao aviso central.
+ */
+export function changeScriptPlace(id: string, place: ScriptPlaceInput, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
+  return apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: { id, ...place }, schema: scriptSummarySchema, signal });
 }
 
 /** RN-SCRIPT-003: renomear manda só o nome; o SQL e o lugar ficam. */
 export async function renameScriptOrRefuse(id: string, name: string, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
   return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: { id, name }, schema: scriptSummarySchema, signal }), ...nameRefusals);
+}
+
+/**
+ * RN-SCRIPT-006: o "Editar script…" grava o nome, o ícone e a cor (`editedScriptInput`); o SQL e o lugar ficam. As recusas do nome e a do ícone ou da cor
+ * (`SCRIPT_ICON_INVALID`) voltam como valor, para o diálogo as mostrar no lugar; o resto vai ao aviso central.
+ */
+export async function editScriptOrRefuse(id: string, edited: ScriptAppearance, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
+  return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: editedScriptInput(id, edited), schema: scriptSummarySchema, signal }), ...nameRefusals, "SCRIPT_ICON_INVALID");
 }
 
 export function deleteScript(id: string, signal: AbortSignal = deadline()): Promise<ApiResult<void>> {

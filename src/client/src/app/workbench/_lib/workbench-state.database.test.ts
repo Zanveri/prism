@@ -166,8 +166,8 @@ describe("WorkbenchProvider.switchDatabase: a aba de consulta passa a outro banc
   });
 
   it("a aba de um script fica com mudança não salva enquanto o banco não é o salvo, e o ponto apaga ao voltar a ele (RN-SCRIPT-001)", () => {
-    const script: Script = { id: "s1", name: "Fechamento", connectionID: "c1", database: "mes2", sql: "select 1", updatedAt: "2026-10-13T00:00:00Z" };
-    render().openScriptTab(script, { connectionId: "c1", database: "mes2" });
+    const script: Script = { id: "s1", name: "Fechamento", connectionID: "c1", database: "mes2", icon: null, color: null, sql: "select 1", updatedAt: "2026-10-13T00:00:00Z" };
+    render().openScriptTab(script, { connectionId: "c1", database: "mes2", saved: { savedConnectionId: "c1", savedDatabase: "mes2" } });
     let value = render();
     const tab = value.tabs[0];
     expect(tab.script?.dirty).toBe(false);
@@ -186,7 +186,7 @@ describe("WorkbenchProvider.switchDatabase: a aba de consulta passa a outro banc
     let value = render();
     const tab = value.tabs[0];
 
-    value.setTabScript(tab.id, { id: "s1", name: "Fechamento" }, "select 1", "vendas");
+    value.setTabScript(tab.id, { id: "s1", name: "Fechamento" }, "select 1", { savedConnectionId: "c1", savedDatabase: "vendas" });
     value = render();
     expect(value.tabs[0].script?.dirty).toBe(false);
 

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createScriptOrRefuse, deleteScript, getScript, listScripts, renameScriptOrRefuse, overwriteScriptOrRefuse } from "./scripts.service";
+import { changeScriptPlace, createScriptOrRefuse, deleteScript, editScriptOrRefuse, getScript, listScripts, renameScriptOrRefuse, overwriteScriptOrRefuse } from "./scripts.service";
 
 const base = "http://127.0.0.1:51234";
 const bridge = { getApiConfig: async () => ({ baseUrl: base, token: "token-de-teste" }), onApiExit: () => () => {}, restartApi: async () => {} };
 
 const id = "0199c3a0-0000-7000-8000-000000000001";
 const connectionID = "0199c3a0-0000-7000-8000-000000000002";
-const summary = { id, name: "Fechamento", connectionID, database: "vendas", updatedAt: "2026-10-13T12:00:00Z" };
+const summary = { id, name: "Fechamento", connectionID, database: "vendas", icon: null, color: null, updatedAt: "2026-10-13T12:00:00Z" };
 
 function fetchAnswers(response: Response) {
   const fake = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => response);
@@ -64,6 +64,39 @@ describe("as rotas dos scripts (seção 23)", () => {
     expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, name: "Novo nome" } });
   });
 
+  it("o Ctrl+S do script genérico manda o SQL e o genérico, sem conexão nem banco (RN-SCRIPT-005)", async () => {
+    const fake = fetchAnswers(json({ ...summary, connectionID: null, database: null }));
+    await overwriteScriptOrRefuse({ id, sql: "SELECT 2", generic: true });
+
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, sql: "SELECT 2", generic: true } });
+  });
+
+  it("tornar genérico manda só o genérico; vincular manda a conexão e o banco da aba (RN-SCRIPT-005)", async () => {
+    let fake = fetchAnswers(json({ ...summary, connectionID: null, database: null }));
+    expect(await changeScriptPlace(id, { generic: true })).toMatchObject({ ok: true, data: { connectionID: null } });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, generic: true } });
+
+    fake = fetchAnswers(json(summary));
+    await changeScriptPlace(id, { connectionID, database: null });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, connectionID, database: null } });
+  });
+
+  it("o Editar script… manda o nome, o ícone e a cor; o padrão vai como document e sem cor como vazio (RN-SCRIPT-006)", async () => {
+    let fake = fetchAnswers(json({ ...summary, icon: "chart", color: "#F2B644" }));
+    expect(await editScriptOrRefuse(id, { name: "  Fechamento   mensal ", icon: "chart", color: "#F2B644" })).toMatchObject({ ok: true, data: { icon: "chart", color: "#F2B644" } });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, name: "Fechamento mensal", icon: "chart", color: "#F2B644" } });
+
+    fake = fetchAnswers(json(summary));
+    await editScriptOrRefuse(id, { name: "Fechamento", icon: "document", color: null });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, name: "Fechamento", icon: "document", color: "" } });
+  });
+
+  it("a lista com um ícone que esta versão não conhece não é recusada: o ícone é texto, e a tela mostra o padrão", async () => {
+    fetchAnswers(json([{ ...summary, icon: "foguete", color: "#7DB2FF" }]));
+
+    expect(await listScripts()).toMatchObject({ ok: true, data: [{ icon: "foguete", color: "#7DB2FF" }] });
+  });
+
   it("excluir é o DELETE do item, e o 204 é sucesso", async () => {
     const fake = fetchAnswers(new Response(null, { status: 204 }));
 
@@ -81,6 +114,14 @@ describe("as rotas dos scripts (seção 23)", () => {
     expect(await createScriptOrRefuse({ name: "a", sql: "", connectionID: null, database: null })).toMatchObject({ ok: false, error: { code } });
     fetchAnswers(refusal(status, code));
     expect(await renameScriptOrRefuse(id, "a")).toMatchObject({ ok: false, error: { code } });
+    fetchAnswers(refusal(status, code));
+    expect(await editScriptOrRefuse(id, { name: "a", icon: "document", color: null })).toMatchObject({ ok: false, error: { code } });
+  });
+
+  it("no Editar script…, o 422 SCRIPT_ICON_INVALID também volta como valor, para o diálogo (RN-SCRIPT-006)", async () => {
+    fetchAnswers(refusal(422, "SCRIPT_ICON_INVALID"));
+
+    expect(await editScriptOrRefuse(id, { name: "a", icon: "star", color: "#7DB2FF" })).toMatchObject({ ok: false, error: { code: "SCRIPT_ICON_INVALID" } });
   });
 
   it("gravar por cima de um script que outra janela excluiu volta como valor (a tela pede o nome de novo); o resto lança e vai ao aviso central", async () => {

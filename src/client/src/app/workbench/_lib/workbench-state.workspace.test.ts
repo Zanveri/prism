@@ -18,7 +18,7 @@ const rt = await vi.hoisted(async () => {
   const bridge = { claim: vi.fn(async () => true), report: vi.fn(), withdraw: vi.fn() };
   const api = { workspace: vi.fn(), script: vi.fn() };
   const connections = [{ id: "0199dd00-0000-7000-8000-000000000001" }];
-  const scripts = [{ id: "0199dd00-0000-7000-8000-0000000000a1", name: "Relatório", connectionID: null, database: null, updatedAt: "" }];
+  const scripts = [{ id: "0199dd00-0000-7000-8000-0000000000a1", name: "Relatório", connectionID: null, database: null, icon: null, color: null, updatedAt: "" }];
   const queryClient = { removeQueries: vi.fn(), getQueryData: vi.fn(), fetchQuery: vi.fn(async ({ queryKey }: { queryKey: unknown[] }) => (queryKey[0] === "scripts" ? scripts : connections)) };
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
 
@@ -83,7 +83,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   rt.bridge.claim.mockResolvedValue(true);
   rt.api.workspace.mockResolvedValue({ ok: true, data: saved });
-  rt.api.script.mockResolvedValue({ ok: true, data: { id: s1, name: "Relatório", connectionID: null, database: null, sql: "SELECT 'salvo'", updatedAt: "" } });
+  rt.api.script.mockResolvedValue({ ok: true, data: { id: s1, name: "Relatório", connectionID: null, database: null, icon: null, color: null, sql: "SELECT 'salvo'", updatedAt: "" } });
 });
 
 afterEach(() => {
@@ -102,7 +102,8 @@ describe("WorkbenchProvider: as abas que voltam na próxima entrada (RN-ABAS-006
       ["consulta-1.sql", null, null, "SELECT 'órfã'"],
       ["consulta-2.sql", c1, null, ""],
     ]);
-    expect(value.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 'salvo'", dirty: true });
+    // O script da lista não tem conexão: é genérico (RN-SCRIPT-005), e a aba volta lembrando isso.
+    expect(value.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 'salvo'", generic: true, dirty: true });
     expect(value.activeTabId).toBe(value.tabs[1].id);
     expect(value.restoredTableConnections).toEqual(new Set([c1]));
     // Cada aba tem o executor dela, e nenhum executou nada (os executores de mentira nem sabem executar).
