@@ -86,7 +86,7 @@ internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger lo
         if (file.IsFailure)
             return file.Error;
 
-        if (IsWellFormed(file.Value))
+        if (IsWellFormed(file.Value) && file.Value.Version == format.Value)
             return Maybe.From(file.Value);
 
         _logger.Warning("O arquivo do cofre não tem o formato esperado; usuário {User}.", Pseudonym(userName));
@@ -123,7 +123,7 @@ internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger lo
         if (file.IsFailure)
             return file.Error;
 
-        if (IsWellFormed(file.Value))
+        if (IsWellFormed(file.Value) && file.Value.Version == format.Value)
             return Maybe.From(file.Value);
 
         _logger.Warning("O .bak do cofre não tem o formato esperado; usuário {User}.", Pseudonym(userName));
@@ -141,8 +141,9 @@ internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger lo
             return EVaultFileError.Unavailable;
         }
 
-        // O que a leitura recusaria não vai para o disco: o cofre nasceria ilegível, e a pessoa só descobriria na entrada seguinte.
-        if (!IsWellFormed(file))
+        // O que a leitura recusaria não vai para o disco: o cofre nasceria ilegível, e a pessoa só descobriria na entrada seguinte. E só o formato
+        // atual é gravado (RN-VERSAO-005): o anterior só se lê, para ser migrado ao abrir.
+        if (!IsWellFormed(file) || file.Version != VaultCrypto.Version)
         {
             _logger.Warning("O cofre a gravar não tem o formato que a leitura aceita e nada foi gravado; usuário {User}.", Pseudonym(userName));
 
@@ -204,7 +205,8 @@ internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger lo
     /// <summary>
     /// RN-VERSAO-005: o número do formato, lido só do campo `version` (sem diferenciar maiúsculas, como o resto do arquivo), para que um formato
     /// futuro de outra forma ainda seja reconhecido como mais novo. O que não é um número inteiro (ausente, texto, decimal, nulo) vale 0: não
-    /// é mais novo, e segue para a leitura completa, que o recusa como arquivo corrompido. JSON quebrado lança, e o `Send` o devolve como `Corrupt`.
+    /// é mais novo, e segue para a leitura completa, que o recusa como arquivo corrompido: ela confere que o formato lido é este número (a leitura do
+    /// `JsonSerializerDefaults.Web` aceita o número em texto, e `"2"` passaria por um cofre do formato 2). JSON quebrado lança, e o `Send` o devolve como `Corrupt`.
     /// </summary>
     private static long ReadFormat(byte[] bytes)
     {
@@ -243,12 +245,12 @@ internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger lo
 
     /// <summary>
     /// O System.Text.Json não recusa campo faltando (entrega nulo) nem confere tamanho: é aqui que
-    /// "campo faltando" e "parâmetro absurdo" viram arquivo corrompido, antes de qualquer derivação. Só o
-    /// formato atual é lido aqui (RN-VERSAO-005): quando existir um formato anterior ele passa a ser aceito
-    /// neste método, e a migração entra em `VaultService.Unlock` (o ponto único, comentado lá).
+    /// "campo faltando" e "parâmetro absurdo" viram arquivo corrompido, antes de qualquer derivação. O
+    /// formato atual e os anteriores que ainda se leem (RN-VERSAO-005): o cabeçalho é o mesmo nos dois, e o
+    /// anterior é migrado em `VaultService.Unlock`, ao abrir. A gravação só aceita o atual (`Write`).
     /// </summary>
     private static bool IsWellFormed([NotNullWhen(true)] VaultFile? file)
-        => file is { Version: VaultCrypto.Version } && IsWellFormed(file.Kdf) && IsSealedBox(file.WrappedKey) && file.WrappedKey.Ciphertext.Length == VaultCrypto.KeySize && IsSealedBox(file.Payload);
+        => file is { Version: >= VaultCrypto.OldestVersion and <= VaultCrypto.Version } && IsWellFormed(file.Kdf) && IsSealedBox(file.WrappedKey) && file.WrappedKey.Ciphertext.Length == VaultCrypto.KeySize && IsSealedBox(file.Payload);
 
     private static bool IsWellFormed(VaultKdf? kdf)
         => kdf is { Algorithm: VaultCrypto.Algorithm, MemoryKiB: <= MaxMemoryKiB, Iterations: >= 1 and <= MaxIterations, Parallelism: >= 1 and <= MaxParallelism, Salt.Length: VaultCrypto.SaltSize } && kdf.MemoryKiB >= MinMemoryKiBPerLane * kdf.Parallelism;

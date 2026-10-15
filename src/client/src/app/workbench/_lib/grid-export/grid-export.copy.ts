@@ -1,5 +1,5 @@
 /**
- * Os textos dos formatos de exportação, dos comandos SQL gerados e do filtro pelo valor (RN-GRADE-002 a 007), num lugar só. Os comentários
+ * Os textos dos formatos de exportação, e dos comandos SQL gerados (RN-GRADE-002 a 007; os do "Filtrar" estão em `grid-filter.copy.ts`), num lugar só. Os comentários
  * do SQL são frases FIXAS: nenhum dado do banco (nome de coluna, valor) entra num comentário, porque uma quebra de linha dentro de um
  * comentário `--` o encerra e o que vem depois passa a ser código.
  */
@@ -32,7 +32,4 @@ export const gridExportCopy = {
       literal: "Linhas da grade não geradas, com um valor que não cabe num literal (caractere de controle que não seja quebra de linha, retorno de carro nem tabulação; no Informix, também data e hora com mais de cinco casas de segundo ou lógico que não seja true nem false)",
     },
   },
-
-  /** O menu "Filtrar" de uma célula (RN-GRADE-005): o rótulo é o texto base, seguido do valor encurtado quando há valor. */
-  filter: { eq: "Igual a", ne: "Diferente de", gt: "Maior que", lt: "Menor que", like: "Contém", isNull: "É nulo", isNotNull: "Não é nulo" },
 };

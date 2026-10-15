@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import type { GridZoom } from "@/app/settings/_lib/preferences";
 
 import type { ColumnLink } from "../_lib/foreign-key-links";
+import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { recall, remember } from "../_lib/tab-memory";
@@ -107,6 +108,15 @@ type ResultPanelProps = {
    * lembradas por ele (`tab-memory.ts`) e voltam com a vista. A área da aba de consulta não desmonta com a aba aberta, e as guarda só no próprio estado.
    */
   tabId?: string;
+  /** RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros e na aba de consulta). */
+  editing?: GridEditing;
+  /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
+  banner?: ReactNode;
+  /**
+   * RN-GRADE-011: o campo de filtro do resultado da aba de consulta, no topo do corpo da área (acima da faixa e da grade). Fica também com o erro do comando
+   * filtrado na tela, para a pessoa corrigir o filtro; recolhida a área, recolhe com ela.
+   */
+  filter?: ReactNode;
 };
 
 /**
@@ -114,7 +124,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter }: ResultPanelProps) {
   const running = state.status === "running";
   // O que está na tela: o estado ou, enquanto um comando novo roda, o resultado que já estava lá
   // (linhas, linhas afetadas ou um erro de SQL). Só a API aceitar o comando novo o substitui;
@@ -186,6 +196,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
 
       {/* Recolhida, `inert` tira o corpo da ordem do Tab e da leitura de tela sem desmontá-lo. */}
       <div inert={collapsed} className={cn("flex min-h-0 flex-1 flex-col", collapsed && "h-0 flex-none overflow-hidden")}>
+        {filter ?? null}
         {shown === null ? (
           // `flex-1`: na vista Registros o rodapé (com "Cancelar") fica no fim da área, e não colado à frase.
           <p role="status" className="flex-1 p-4 text-muted">
@@ -193,6 +204,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           </p>
         ) : rows !== null ? (
           <>
+            {banner ?? null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
             <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
               <ResultGrid
@@ -200,6 +212,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 columns={rows.columns}
                 rows={rows.rows}
                 truncated={rows.truncated}
+                generated={rows.generated}
                 nullText={nullText}
                 onReachEnd={autoLoad ? onLoadMore : undefined}
                 sort={records?.sort}
@@ -212,6 +225,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
                 onZoom={zoomTo}
+                editing={editing}
               />
             </div>
 

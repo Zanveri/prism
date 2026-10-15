@@ -142,7 +142,7 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var wrappedKey = VaultCrypto.Seal(passwordKey, key, associatedData);
         CryptographicOperations.ZeroMemory(passwordKey);
 
-        var document = new VaultDocument(userName, [], []);
+        var document = new VaultDocument(userName, [], [], [], VaultWorkspaceRecord.Empty);
         var file = new VaultFile(VaultCrypto.Version, kdf, wrappedKey, Seal(key, document, associatedData));
 
         if (client.Write(userName, file, cancellationToken).IsFailure)
@@ -187,14 +187,22 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var file = read.Value.Value;
         var associatedData = VaultCrypto.AssociatedData(file.Version, file.Kdf);
 
-        var key = OpenKey(file, password, associatedData);
+        // A chave derivada da senha fica até o fim da entrada, e não só até abrir a chave do cofre: a migração de um formato antigo (abaixo) embrulha a
+        // chave do cofre de novo, com o cabeçalho do formato atual. Ela é zerada em todos os caminhos.
+        var passwordKey = deriveKey(password, file.Kdf);
+        var key = client.Open(passwordKey, file.WrappedKey, associatedData);
         if (key.IsFailure)
+        {
+            CryptographicOperations.ZeroMemory(passwordKey);
+
             return EVaultError.InvalidCredentials;
+        }
 
         // RN-COFRE-003: a tag e o cabeçalho autenticado fazem o conteúdo adulterado não abrir.
         var plaintext = client.Open(key.Value, file.Payload, associatedData);
         if (plaintext.IsFailure)
         {
+            CryptographicOperations.ZeroMemory(passwordKey);
             CryptographicOperations.ZeroMemory(key.Value);
 
             return EVaultError.InvalidCredentials;
@@ -204,16 +212,43 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var document = JsonSerializer.Deserialize<VaultDocument>(plaintext.Value)!;
         CryptographicOperations.ZeroMemory(plaintext.Value);
 
-        // RN-VERSAO-005 (ponto único da migração): um cofre de formato mais antigo seria migrado aqui, ao abrir, regravando-o no formato atual
-        // pelo `Write` do client, que já guarda a versão anterior no `.bak`. Hoje só existe o formato 1 e não há o que migrar. Quando existir um
-        // formato anterior, o `IsWellFormed` do client passa a aceitá-lo e a migração entra neste ponto, com um teste que abre um cofre gravado
-        // no formato antigo (o exemplo do formato 1 em `Vault/Samples` acusa a mudança de formato que vier sem migração).
+        // RN-VERSAO-005: o cofre de formato mais antigo é migrado ao abrir. Sem migração, a cura do `.bak` roda como sempre; com ela, não: a gravação
+        // da migração acabou de pôr no `.bak` o arquivo de antes, que é o que a regra manda guardar.
+        var migrated = file.Version < VaultCrypto.Version;
+        if (migrated)
+            (file, document) = Migrate(userName, file, passwordKey, key.Value, document, cancellationToken);
+
+        CryptographicOperations.ZeroMemory(passwordKey);
 
         Open(new OpenVault(userName, key.Value, file, document));
 
-        HealBackup(userName, file, cancellationToken);
+        if (!migrated)
+            HealBackup(userName, file, cancellationToken);
 
         return UnitResult.Success<EVaultError>();
+    }
+
+    /// <summary>
+    /// RN-VERSAO-005, RN-SCRIPT-002 e RN-ABAS-006: a migração de um cofre de formato mais antigo, ao abrir, com o semáforo tomado e a senha já conferida. O
+    /// documento passa pelo <see cref="VaultMigration.Upgrade"/> (do 1 para o 2, a lista de scripts vazia; do 2 para o 3, a área de trabalho vazia), e o arquivo
+    /// é regravado no formato atual: a mesma senha, o mesmo sal e os mesmos parâmetros, e a mesma chave do cofre, embrulhada de novo e com o conteúdo cifrado de novo, porque o número do formato faz parte do dado autenticado
+    /// das duas cifras (RN-COFRE-003 e 004). A gravação é a de sempre (RN-COFRE-005): atômica, e o arquivo de antes vai para o `.bak`.
+    ///
+    /// A falha do disco não impede a entrada, que não precisa gravar nada: o cofre abre com o arquivo migrado na memória, e a primeira gravação seguinte o escreve
+    /// inteiro (o `Save` grava o arquivo da memória, no formato atual); sem gravação no meio, a entrada seguinte migra de novo. O aviso leva só a classe da falha,
+    /// sem senha, sem nome de usuário e sem exceção (RN-LOG-001).
+    /// </summary>
+    private (VaultFile File, VaultDocument Document) Migrate(string userName, VaultFile file, byte[] passwordKey, byte[] key, VaultDocument document, CancellationToken cancellationToken)
+    {
+        var associatedData = VaultCrypto.AssociatedData(VaultCrypto.Version, file.Kdf);
+        var upgraded = VaultMigration.Upgrade(document, file.Version);
+        var migrated = new VaultFile(VaultCrypto.Version, file.Kdf, VaultCrypto.Seal(passwordKey, key, associatedData), Seal(key, upgraded, associatedData));
+
+        var written = client.Write(userName, migrated, cancellationToken);
+        if (written.IsFailure)
+            _logger.Warning("O cofre do formato {Format} não pôde ser regravado no formato {CurrentFormat} na entrada ({Failure:l}); a próxima gravação o regrava.", file.Version, VaultCrypto.Version, written.Error.ToString());
+
+        return (migrated, upgraded);
     }
 
     /// <summary>
@@ -236,9 +271,13 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
             _logger.Warning("A cópia de segurança do cofre não pôde ser refeita na entrada ({Failure:l}); a próxima entrada tenta de novo.", rewritten.Error.ToString());
     }
 
-    /// <summary>O mesmo embrulho é o mesmo sal da derivação e a mesma chave embrulhada (nonce, conteúdo cifrado e tag): é a mesma senha. Dado público do cabeçalho, sem comparação em tempo constante.</summary>
+    /// <summary>
+    /// O mesmo embrulho é o mesmo sal da derivação e a mesma chave embrulhada (nonce, conteúdo cifrado e tag): é a mesma senha. Dado público do cabeçalho, sem
+    /// comparação em tempo constante. O `.bak` de formato anterior com o mesmo sal é o arquivo de antes da migração (RN-VERSAO-005): a migração embrulha a chave
+    /// de novo, com o cabeçalho do formato atual, mas a senha e o sal são os mesmos (a troca de senha sempre sorteia outro sal), e ele fica onde está.
+    /// </summary>
     private static bool HasTheSameWrapping(VaultFile backup, VaultFile file)
-        => backup.Kdf.Salt.AsSpan().SequenceEqual(file.Kdf.Salt) && backup.WrappedKey.Nonce.AsSpan().SequenceEqual(file.WrappedKey.Nonce) && backup.WrappedKey.Ciphertext.AsSpan().SequenceEqual(file.WrappedKey.Ciphertext) && backup.WrappedKey.Tag.AsSpan().SequenceEqual(file.WrappedKey.Tag);
+        => backup.Kdf.Salt.AsSpan().SequenceEqual(file.Kdf.Salt) && (backup.Version < file.Version || (backup.WrappedKey.Nonce.AsSpan().SequenceEqual(file.WrappedKey.Nonce) && backup.WrappedKey.Ciphertext.AsSpan().SequenceEqual(file.WrappedKey.Ciphertext) && backup.WrappedKey.Tag.AsSpan().SequenceEqual(file.WrappedKey.Tag)));
 
     /// <summary>
     /// Com o semáforo tomado, a conferência e o documento são do mesmo cofre: o `_open` não troca entre uma coisa e outra. É por

@@ -1,12 +1,16 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
+import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
-import { EngineTag, EnvironmentPill } from "@/components/ui";
+import type { ShownEnvironment } from "@/app/connections/_lib/environment";
+import { EngineTag } from "@/components/ui";
 
+import { inDatabase } from "../../_lib/navigator-model";
+import { createRefreshSlot, refreshFromKey } from "../../_lib/tab-refresh";
 import type { TableRef } from "../../_lib/table-diagram";
 import { tableViews, viewOf } from "../../_lib/table-view";
 import type { QueryRunner } from "../../_lib/use-query-runner";
-import type { QueryTab, TableTarget, TableView } from "../../_lib/workbench-model";
+import type { TableTab, TableTarget, TableView } from "../../_lib/workbench-model";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { DiagramView } from "./diagram-view";
 import { DisconnectedView } from "./disconnected-view";
@@ -17,20 +21,22 @@ import { tableViewPanelId, tableViewTabId, TableViewTabs } from "./table-view-ta
 const copy = workbenchCopy.tableTab;
 
 type TableTabPanelProps = {
-  tab: QueryTab;
+  tab: TableTab;
   /** A tabela da aba (RN-TABELA-001): o `table` dela, que quem monta o painel já conferiu que existe. */
   table: TableTarget;
   /** O que a aba executa e mostra; os registros vêm dele, como numa consulta. */
   runner: QueryRunner;
   /** A conexão da aba; `undefined` enquanto a lista não chega. */
   connection: Connection | undefined;
+  /** O ambiente que a conexão mostra (RN-PASTA-005): o próprio, ou o herdado da pasta. É o mesmo objeto enquanto nada muda (`environmentLookup`). */
+  environment: ShownEnvironment | null;
   /** A aba está À VISTA: é a ativa e a área de trabalho é a tela mostrada. A escondida não fala com o banco (RN-SEG-001). */
   visible: boolean;
   /** A pessoa desconectou a conexão e ainda não a reconectou: nada reconecta sozinho (`connection-intent.ts`). */
   disconnected: boolean;
   onView: (tabId: string, view: TableView) => void;
   /** Abre a aba de outra tabela da mesma conexão: o duplo clique numa vizinha do diagrama e o valor de uma chave estrangeira (RN-TABELA-007, na vista Registros). */
-  onOpenTable: (connectionId: string, table: TableRef & { view?: TableView }) => void;
+  onOpenTable: (connectionId: string, table: TableRef & { view?: TableView; database?: string }) => void;
 };
 
 /**
@@ -42,7 +48,7 @@ type TableTabPanelProps = {
  * Nada reconecta sozinho: com a conexão desconectada pela pessoa, a Estrutura e o Diagrama mostram o aviso com "Conectar", e os
  * Registros esperam o "Atualizar". E a aba escondida (`visible` falso) não busca nada até ser aberta.
  */
-export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, connection, visible, disconnected, onView, onOpenTable }: TableTabPanelProps) {
+export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, connection, environment, visible, disconnected, onView, onOpenTable }: TableTabPanelProps) {
   const { schema, name } = table;
   const view = viewOf(table.view);
   const hasViews = tableViews.length > 1;
@@ -57,21 +63,27 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
     wasDisconnected.current = disconnected;
   }, [disconnected]);
 
+  // RN-GRADE-012: F5 com o foco em qualquer ponto da aba chama o "Atualizar" da vista à vista, que o deixa aqui (`useRefreshSlot`).
+  const [refreshSlot] = useState(createRefreshSlot);
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    refreshFromKey(event, refreshSlot);
+  }
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col text-sm">
+    <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
       <header className="flex flex-none flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-panel px-3 py-1.5">
         {connection ? <EngineTag engine={connection.engine} /> : null}
         <h2 className="font-mono text-[15px] leading-[22px] font-semibold text-ink">{name}</h2>
-        {connection ? <span className="text-xs text-muted">{copy.location(connection.name, connection.database, schema)}</span> : null}
-        {connection ? <EnvironmentPill name={connection.environmentName} color={connection.environmentColor} /> : null}
+        {connection ? <span className="text-xs text-muted">{copy.location(connection.name, tab.database ?? connection.database, schema)}</span> : null}
+        {connection ? <ShownEnvironmentPill environment={environment} /> : null}
         <TableViewTabs tabId={tab.id} view={view} onChange={(next) => onView(tab.id, next)} />
       </header>
 
       <div ref={panel} tabIndex={-1} role={hasViews ? "tabpanel" : undefined} id={tableViewPanelId(tab.id)} aria-labelledby={hasViews ? tableViewTabId(tab.id, view) : undefined} className="flex min-h-0 flex-1 flex-col">
-        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, ref)} /> : null}
-        {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} /> : null}
-        {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} /> : null}
-        {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, ref)} memoryKey={tab.id} /> : null}
+        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} refreshSlot={refreshSlot} /> : null}
+        {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} database={tab.database} /> : null}
+        {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} database={tab.database} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} refreshSlot={refreshSlot} /> : null}
+        {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} memoryKey={tab.id} refreshSlot={refreshSlot} /> : null}
       </div>
     </div>
   );

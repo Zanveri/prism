@@ -12,16 +12,17 @@ import { workbenchCopy } from "../../_lib/workbench.copy";
  * `table-structure.service.ts`) são a mesma ação: refazer as listas, e abrir outra sessão da árvore se a API já não
  * conhece a que elas usavam (RN-AVISO-003). `refreshStructure` faz isso; aqui só se avisa.
  */
-export function useStructureActions(connectionId: string) {
+/** `database`: o outro banco do servidor da aba (RN-ARVORE-006), cuja sessão da árvore as listas usam. */
+export function useStructureActions(connectionId: string, database?: string) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const refresh = useCallback(
     async (tables: readonly TableRef[]) => {
-      const { sessionReopened } = await refreshStructure(queryClient, connectionId, tables);
+      const { sessionReopened } = await refreshStructure(queryClient, connectionId, tables, database);
       if (sessionReopened) toast.warning(workbenchCopy.toasts.sessionReopened);
     },
-    [queryClient, toast, connectionId],
+    [queryClient, toast, connectionId, database],
   );
 
   return { refresh };

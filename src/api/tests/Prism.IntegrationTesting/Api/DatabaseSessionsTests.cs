@@ -346,6 +346,66 @@ public sealed class DatabaseSessionsTests
         Assert.That(properties.Select(property => property.EnumerateObject().Select(field => field.Name)), Is.All.EqualTo(new[] { "name", "value" }));
     }
 
+    /// <summary>
+    /// RN-ARVORE-006: a lista dos bancos do servidor, no contrato `{ name, isCurrent }`, com o da sessão primeiro; e outro banco da
+    /// lista abre com as credenciais da conexão e o nome dele no lugar do banco dela.
+    /// </summary>
+    [Test]
+    public async Task Databases_ListTheServerOnes_AndAnotherOneOpensWithTheConnectionCredentials()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+        var sessionID = await host.Client.OpenSessionAsync(connectionID);
+
+        var databases = await GetListAsync(host, Url(sessionID, "/databases"));
+        var openedResponse = await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = "postgres" });
+        var opened = await ReadJsonAsync(openedResponse);
+        await TestContext.Out.WriteLineAsync($"databases -> {JsonSerializer.Serialize(databases)}\nPOST database-sessions (database postgres) -> {(int)openedResponse.StatusCode} {opened}");
+        Assert.That(openedResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created), opened.ToString());
+        var otherID = opened.GetProperty("id").GetGuid();
+        var fromOther = await GetListAsync(host, Url(otherID, "/databases"));
+        var current = await host.Client.ExecuteAsync(otherID, "SELECT current_database()");
+
+        Assert.That(databases.Select(database => database.EnumerateObject().Select(property => property.Name)), Is.All.EqualTo(new[] { "name", "isCurrent" }));
+        Assert.That((databases[0].GetProperty("name").GetString(), databases[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((_settings.Database, true)));
+        Assert.That(databases.Skip(1).Select(database => database.GetProperty("isCurrent").GetBoolean()), Is.All.False);
+        Assert.That(databases.Select(database => database.GetProperty("name").GetString()), Does.Contain("postgres").And.Not.Contain("template0").And.Not.Contain("template1"));
+        Assert.That(opened.GetProperty("database").GetString(), Is.EqualTo("postgres"));
+        Assert.That(opened.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
+        Assert.That((fromOther[0].GetProperty("name").GetString(), fromOther[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo(("postgres", true)));
+        Assert.That(current.GetProperty("rows")[0][0].GetString(), Is.EqualTo("postgres"));
+    }
+
+    /// <summary>Seção 6: o nome de outro banco vazio, com mais de 128 caracteres ou com caractere de controle é recusado antes de conectar.</summary>
+    [Test]
+    public async Task Open_DatabaseNameInvalid_Returns422DatabaseNameInvalid()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+
+        foreach (var database in new[] { string.Empty, "   ", new string('a', 129), "prism\u0001", "pri\nsm" })
+        {
+            var body = await AssertProblemAsync(await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database }), HttpStatusCode.UnprocessableEntity, "DATABASE_NAME_INVALID");
+            Assert.That(body.GetProperty("errors").EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "Database" }), body.ToString());
+        }
+    }
+
+    /// <summary>RN-SESSAO-003: um banco que não existe no servidor responde 422 com a mensagem do banco.</summary>
+    [Test]
+    public async Task Open_DatabaseThatDoesNotExist_Returns422DatabaseConnectionFailed()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(_settings);
+        var missing = $"nao_existe_{Guid.NewGuid():N}"[..24];
+
+        var body = await AssertProblemAsync(await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = missing }), HttpStatusCode.UnprocessableEntity, "DATABASE_CONNECTION_FAILED");
+
+        Assert.That(body.GetProperty("detail").GetString(), Does.Contain(missing));
+    }
+
     [Test]
     public async Task Catalog_UnknownSession_Returns404DatabaseSessionNotFound()
     {
@@ -353,7 +413,7 @@ public sealed class DatabaseSessionsTests
         await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
         var unknown = Guid.CreateVersion7();
 
-        foreach (var path in new[] { Url(unknown, "/schemas"), Url(unknown, "/schemas/loja/objects?kind=tables"), TableUrl(unknown, "loja", "pedido", "columns"), TableUrl(unknown, "loja", "pedido", "indexes"), TableUrl(unknown, "loja", "pedido", "foreign-keys"), TableUrl(unknown, "loja", "cliente", "referenced-by"), TableUrl(unknown, "loja", "pedido", "checks"), Url(unknown, "/schemas/loja/views/pedido_resumo/definition"), Url(unknown, "/schemas/loja/diagram"), Url(unknown, "/properties") })
+        foreach (var path in new[] { Url(unknown, "/schemas"), Url(unknown, "/schemas/loja/objects?kind=tables"), TableUrl(unknown, "loja", "pedido", "columns"), TableUrl(unknown, "loja", "pedido", "indexes"), TableUrl(unknown, "loja", "pedido", "foreign-keys"), TableUrl(unknown, "loja", "cliente", "referenced-by"), TableUrl(unknown, "loja", "pedido", "checks"), Url(unknown, "/schemas/loja/views/pedido_resumo/definition"), Url(unknown, "/schemas/loja/diagram"), Url(unknown, "/properties"), Url(unknown, "/databases") })
             await AssertProblemAsync(await host.Client.GetAsync(path), HttpStatusCode.NotFound, "DATABASE_SESSION_NOT_FOUND");
     }
 
@@ -684,6 +744,86 @@ public sealed class DatabaseSessionsTests
         var withNullBody = await ReadJsonAsync(withNull);
         Assert.That(withNull.StatusCode, Is.EqualTo(HttpStatusCode.OK), withNullBody.ToString());
         Assert.That(withNullBody.GetProperty("rows").GetArrayLength(), Is.EqualTo(200));
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: `filter` entra no comando: a condição no `WHERE` dele e a ordem no lugar do `ORDER BY`, e a página diz
+    /// `filterApplied: "merged"`, com a edição como sem o filtro. A união vai por fora (`"wrapped"`), só leitura e com o motivo. Sem
+    /// filtro (ausente, nulo, vazio ou só de espaços), `filterApplied` é nulo.
+    /// </summary>
+    [Test]
+    public async Task Query_WithFilter_Returns200_WithTheFilteredRows_AndHowTheFilterWentIn()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+
+        var merged = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido WHERE numero <= 1010 ORDER BY numero", filter = "numero > 1005 ORDER BY numero DESC" });
+        var mergedBody = await ReadJsonAsync(merged);
+        Assert.That(merged.StatusCode, Is.EqualTo(HttpStatusCode.OK), mergedBody.ToString());
+        Assert.That(mergedBody.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1010", "1009", "1008", "1007", "1006" }));
+        Assert.That(mergedBody.GetProperty("filterApplied").GetString(), Is.EqualTo("merged"));
+        Assert.That(mergedBody.GetProperty("editable").GetProperty("known").GetBoolean(), Is.False);
+
+        var wrapped = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido UNION SELECT numero FROM loja.pedido", filter = "numero < 1004 ORDER BY numero DESC" });
+        var wrappedBody = await ReadJsonAsync(wrapped);
+        Assert.That(wrapped.StatusCode, Is.EqualTo(HttpStatusCode.OK), wrappedBody.ToString());
+        Assert.That(wrappedBody.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1003", "1002", "1001" }));
+        Assert.That(wrappedBody.GetProperty("filterApplied").GetString(), Is.EqualTo("wrapped"));
+        Assert.That((wrappedBody.GetProperty("editable").GetProperty("known").GetBoolean(), wrappedBody.GetProperty("editable").GetProperty("reason").GetString()), Is.EqualTo((true, "união de consultas")));
+
+        foreach (var body in new object[] { new { sql = "SELECT numero FROM loja.pedido ORDER BY numero" }, new { sql = "SELECT numero FROM loja.pedido ORDER BY numero", filter = (string?)null }, new { sql = "SELECT numero FROM loja.pedido ORDER BY numero", filter = "  " } })
+        {
+            var plain = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), body);
+            var plainBody = await ReadJsonAsync(plain);
+            Assert.That(plain.StatusCode, Is.EqualTo(HttpStatusCode.OK), plainBody.ToString());
+            Assert.That(plainBody.GetProperty("rows")[0][0].GetString(), Is.EqualTo("1001"));
+            Assert.That(plainBody.GetProperty("filterApplied").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        }
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: o filtro com `;`, com aspas ou comentário sem fechar (o `$marca$` do PostgreSQL também), que termina em comentário,
+    /// com parênteses sem par ou com mais de um `ORDER BY` é 422 `FILTER_INVALID` no campo, pelo mesmo caminho do SQL vazio, e nada vai
+    /// ao banco: o resultado de antes continua o da sessão.
+    /// </summary>
+    [Test]
+    public async Task Query_InvalidFilter_Returns422FilterInvalidOnTheField()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+        var before = await ReadJsonAsync(await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido ORDER BY numero", pageSize = 50 }));
+
+        foreach (var filter in new[] { "numero = 1; DELETE FROM loja.pedido", "observacao = 'x", "numero = $$x", "numero = 1 /* x", "numero = 1 -- x", "(numero = 1", "numero = 1 ORDER BY numero ORDER BY id" })
+        {
+            var response = await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT * FROM loja.pedido", filter });
+            var body = await AssertProblemAsync(response, HttpStatusCode.UnprocessableEntity, "FILTER_INVALID");
+            Assert.That(body.GetProperty("errorCodes").GetProperty("Filter")[0].GetString(), Is.EqualTo("FILTER_INVALID"), filter);
+            Assert.That(body.GetProperty("errors").GetProperty("Filter")[0].GetString(), Does.StartWith("O filtro "), filter);
+            Assert.That(body.GetProperty("errorCodes").TryGetProperty("Sql", out _), Is.False, filter);
+        }
+
+        var next = await host.Client.PostAsync(Url(sessionID, "/queries/next"), null);
+        var nextBody = await ReadJsonAsync(next);
+        Assert.That(next.StatusCode, Is.EqualTo(HttpStatusCode.OK), nextBody.ToString());
+        Assert.That(nextBody.GetProperty("resultID").GetString(), Is.EqualTo(before.GetProperty("resultID").GetString()));
+        Assert.That(nextBody.GetProperty("rows")[0][0].GetString(), Is.EqualTo("1051"));
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: com filtro, o envio de mais de um comando é 422 `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (não se sabe a qual iria), e a
+    /// recusa do banco vem sem a posição do erro, que seria a do comando montado.
+    /// </summary>
+    [Test]
+    public async Task Query_WithFilter_RefusesSeveralStatements_AndTheErrorHasNoPosition()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var sessionID = await StartSessionAsync(host);
+
+        await AssertProblemAsync(await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT 1; SELECT 2", filter = "a = 1" }), HttpStatusCode.UnprocessableEntity, "MULTIPLE_STATEMENTS_NOT_SUPPORTED");
+
+        var failed = await AssertProblemAsync(await host.Client.PostAsJsonAsync(Url(sessionID, "/queries"), new { sql = "SELECT numero FROM loja.pedido", filter = "nao_existe = 1" }), HttpStatusCode.UnprocessableEntity, "SQL_EXECUTION_FAILED");
+        Assert.That(failed.GetProperty("sqlState").GetString(), Is.EqualTo("42703"));
+        Assert.That(failed.TryGetProperty("position", out _), Is.False);
     }
 
     [Test]

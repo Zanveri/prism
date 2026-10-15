@@ -20,7 +20,7 @@ public sealed class GetFoldersHandlerTests
         var beta = VaultFakers.CreateFolder(name: "beta");
         var alfa = VaultFakers.CreateFolder(name: "Alfa");
         var delta = VaultFakers.CreateFolder(parentID: beta.ID, name: "Delta");
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [beta, delta, alfa], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [beta, delta, alfa], [], [], VaultWorkspaceRecord.Empty)));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act
@@ -42,7 +42,7 @@ public sealed class GetFoldersHandlerTests
     public async Task Handle_ShouldBeOK_Empty()
     {
         //Arrange
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [])));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], VaultWorkspaceRecord.Empty)));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act

@@ -1,23 +1,29 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { DeleteConnectionDialog } from "@/app/connections/_components/delete-connection-dialog";
 import { MoveConnectionDialog } from "@/app/connections/_components/move-connection-dialog";
+import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
+import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
-import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
-import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
-import { ApiRequestError } from "@/lib/api/prism-api";
+import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
+import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
+import { userEnvironments } from "@/app/connections/_lib/user-environments";
+import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
 import { connectionReveal } from "../_lib/connection-intent";
-import { databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefix, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
-import { backgroundMenu, ignoresContextMenu, menuFor, type MenuAction } from "../_lib/navigator-menu";
-import { childrenKey, databaseNodes, flattenVisible, isFocusable, navKey, ownerConnectionId, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
+import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
+import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
-import { selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { refreshKey } from "../_lib/grid-editing";
 import { measureRendered, observeRenderedOffset } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
@@ -26,6 +32,7 @@ import { useWorkbench } from "../_lib/workbench-state";
 import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
+import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
 import { NavigatorRow, rowHeight, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
@@ -51,7 +58,7 @@ function statusOf(treeSession: UseQueryResult, connected: boolean): ConnectionSt
   return treeSession.isError ? "failed" : "disconnected";
 }
 
-const isFetched = (path: NavPath): path is FetchedPath => path.type === "database" || path.type === "objects" || path.type === "tableLevel";
+const isFetched = (path: NavPath): path is FetchedPath => path.type === "connection" || path.type === "database" || path.type === "objects" || path.type === "tableLevel";
 
 const noKeys: ReadonlySet<string> = new Set();
 
@@ -62,6 +69,8 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   newQuery: <DocumentIcon />,
   refresh: <RefreshIcon />,
   editConnection: <PencilIcon />,
+  renameConnection: <PencilIcon />,
+  duplicateConnection: <DuplicateIcon />,
   moveConnection: <FolderMoveIcon />,
   deleteConnection: <TrashIcon />,
   newConnection: <PlusIcon />,
@@ -76,10 +85,13 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
 };
 
 /** A ação do menu sobre uma pasta que existe e o modo do diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). */
-const folderActionTypes = { renameFolder: "rename", moveFolder: "move", deleteFolder: "delete" } as const;
+const folderActionTypes = { renameFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
 
-/** A ação de conexão que o menu pediu (RN-NAV-003): mover de pasta ou excluir, cada uma com o diálogo dela. */
-type ConnectionAction = { type: "move" | "delete"; connection: Connection };
+/** A ação de conexão que o menu pediu (RN-NAV-003 e 009): renomear, mover de pasta ou excluir, cada uma com o diálogo dela. */
+type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connection };
+
+/** O diálogo de cada ação de conexão do menu que tem diálogo. */
+const connectionActionTypes = { renameConnection: "rename", moveConnection: "move", deleteConnection: "delete" } as const;
 
 type NavigatorProps = {
   /** "Nova conexão" (RN-NAV-002 e 003): na pasta dada, ou na raiz (`null`). */
@@ -103,16 +115,18 @@ function folderIdOf(node: NavNode): string | null {
 }
 
 /**
- * O navegador de bancos (RN-ARVORE-001 a 005): pastas e conexões salvas e, abaixo de cada conexão
- * aberta, o banco, os esquemas, as listas e as colunas, índices e chaves estrangeiras de uma tabela.
+ * O navegador de bancos (RN-ARVORE-001 a 006): pastas e conexões salvas e, abaixo de cada conexão
+ * aberta, os bancos do servidor, os esquemas, as listas e as colunas, índices e chaves estrangeiras de uma tabela.
  *
  * Quem busca os níveis é este componente, de uma vez só (`useQueries`), a partir das chaves dos nós
  * abertos: a lista é virtualizada, e uma linha fora da janela não existe para buscar nada. Cada
- * nível fica guardado até o "Atualizar" daquele nó (RN-ARVORE-002). A sessão com o banco é aberta
- * por um nível só, o da conexão (RN-SESSAO-001), e os níveis de baixo esperam por ela.
+ * nível fica guardado até o "Atualizar" daquele nó (RN-ARVORE-002). A sessão com o banco da conexão é
+ * aberta pelo nó da conexão (RN-SESSAO-001), e a lista dos bancos do servidor vem por ela; outro banco
+ * abre a sessão dele quando o nó dele abre, e o que está abaixo dele usa essa sessão (RN-ARVORE-006).
  *
  * Tudo o que a tela de Conexões fazia mora aqui (RN-NAV-003): criar, renomear, mover e excluir pasta; criar, editar, mover e excluir
- * conexão, pela barra de ações e pelo menu de contexto. O formulário de conexão é uma página à parte (RN-NAV-004), e a conexão que ele
+ * conexão, pela barra de ações e pelo menu de contexto. O F2 renomeia a pasta e a conexão (RN-NAV-009), e o menu da conexão também a duplica
+ * (RN-CONN-016): a cópia aparece escolhida, pelo mesmo `connectionReveal` do formulário. O formulário de conexão é uma página à parte (RN-NAV-004), e a conexão que ele
  * acabou de salvar aparece aqui à vista e escolhida (`connectionReveal`); `onRevealed` avisa quem mostra o navegador, para ele aparecer se
  * estava escondido. O formulário é um diálogo sobre a área de trabalho (RN-NAV-004), e quem o abre é a página: o navegador só pede
  * (`onNewConnection`, na pasta onde a conexão nasce; `onEditConnection`).
@@ -135,6 +149,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; keys: ReadonlySet<string> }>({ query: "", keys: noKeys });
   const searchInput = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  // RN-NAV-010: o seletor de ambiente. É estado daqui: a área de trabalho fica montada enquanto o cofre está aberto, então a escolha vale enquanto a
+  // janela está aberta, e sair do cofre a apaga, como o resto.
+  const [environmentChoice, setEnvironmentChoice] = useState<EnvironmentChoice>(allEnvironments);
   // O filtro roda sobre o texto adiado: a digitação não espera a lista de milhares de linhas.
   const searchText = useDeferredValue(query);
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
@@ -143,8 +160,16 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [reveal, setReveal] = useState<{ key: string; seq: number } | null>(null);
 
   const connectionList = useMemo(() => connections.data ?? [], [connections.data]);
-  const tree = useMemo(() => treeNodes(buildConnectionTree(folders.data ?? [], connectionList)), [folders.data, connectionList]);
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
+  // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
+  const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-NAV-010: os ambientes do usuário no seletor (RN-AMB-001), e a árvore só com as conexões do escolhido e as pastas no caminho até elas. A busca
+  // filtra depois, sobre esta árvore. O ambiente que ninguém mais usa sai da lista, e a escolha dele volta a "Todos" (ajuste durante a renderização,
+  // só com as duas listas já na tela).
+  const savedEnvironments = useMemo(() => userEnvironments(folders.data ?? [], connectionList), [folders.data, connectionList]);
+  if (folders.data !== undefined && connections.data !== undefined && !choiceAvailable(environmentChoice, savedEnvironments)) setEnvironmentChoice(allEnvironments);
+  const shown = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
+  const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
 
   const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
@@ -155,6 +180,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
   const paths = [...expanded].map(parseNavKey);
   const fetchedPaths = paths.filter(isFetched);
+  // Tudo espera a sessão da conexão: sem ela não há lista dos bancos, e a conexão não está de pé para abrir a de outro banco.
   const fetched = useQueries({ queries: fetchedPaths.map((path) => treeQuery(path, queryClient, sessionById.get(path.connectionId)?.isSuccess === true)) });
 
   const levels = new Map(tree.levels);
@@ -162,17 +188,16 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     const key = navKey(path);
     const set = (state: LevelState | undefined) => state && levels.set(childrenKey({ key }), state);
 
-    if (path.type === "connection") {
-      const session = sessionById.get(path.connectionId);
-      set(session && levelOf(session, (data) => databaseNodes(path.connectionId, data.database)));
-    } else if (path.type === "schema") {
-      set({ status: "loaded", children: schemaGroupNodes(path.connectionId, path.schema) });
+    if (path.type === "schema") {
+      set({ status: "loaded", children: schemaGroupNodes(path.connectionId, path.schema, path.database) });
     } else if (path.type === "table") {
-      set({ status: "loaded", children: tableGroupNodes(path.connectionId, path.schema, path.table) });
+      set({ status: "loaded", children: tableGroupNodes(path.connectionId, path.schema, path.table, path.database) });
     }
   }
   fetchedPaths.forEach((path, index) => {
-    const state = levelOf(fetched[index], (nodes) => nodes);
+    // A conexão cuja sessão não abriu mostra no próprio nó a falha dela, com "Tentar de novo" (RN-ARVORE-005); aberta, mostra a lista dos bancos.
+    const session = path.type === "connection" ? sessionById.get(path.connectionId) : undefined;
+    const state = session?.isError ? levelOf(session, () => []) : levelOf(fetched[index], (nodes) => nodes);
     if (state) levels.set(childrenKey({ key: navKey(path) }), state);
   });
 
@@ -182,7 +207,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   // se refaz quando muda o texto, o que a pessoa recolheu, a árvore ou o cache (`cachedTree` devolve o mesmo objeto enquanto nada dele mudou).
   const cache = searching ? cachedTree(queryClient) : null;
   const collapsedKeys = searchCollapsed.query === searchText ? searchCollapsed.keys : noKeys;
-  const search = useMemo(() => (cache === null ? null : searchTree(tree.roots, loadedLevels(tree.levels, cache.sessions, cache.cached), searchText, collapsedKeys)), [cache, tree, searchText, collapsedKeys]);
+  const search = useMemo(() => (cache === null ? null : searchTree(tree.roots, loadedLevels(tree.levels, cache.cached), searchText, collapsedKeys)), [cache, tree, searchText, collapsedKeys]);
   const rows = search === null ? flattenVisible(tree.roots, open, levels) : search.rows;
 
   // Salvar no formulário volta à área de trabalho com a conexão à vista e escolhida (RN-NAV-004): com a área de trabalho de novo na tela e a
@@ -195,6 +220,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     setSelectedKey(plan.key);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
+    // O filtro de ambiente que a esconde também sai (RN-NAV-010): a conexão salva ou duplicada sem o ambiente escolhido tem de aparecer.
+    if (!shown.connections.includes(revealTarget)) setEnvironmentChoice(allEnvironments);
   }
 
   const announcedReveal = useRef(0);
@@ -216,7 +243,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
     const opening = !open.has(node.key);
     setNodeOpen(node.key, opening);
-    // O banco conectado abre junto com a conexão: é o único filho dela, e pedir um segundo clique não diz nada.
+    // O banco da conexão abre junto com ela: é o que a conexão diz que se quer ver, e os outros bancos do servidor ficam fechados ao lado dele.
     const path = parseNavKey(node.key);
     if (opening && path.type === "connection") setNodeOpen(navKey({ type: "database", connectionId: path.connectionId }), true);
   }
@@ -237,29 +264,51 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   /** A pasta fica aberta: o que acaba de ser criado dentro dela tem de aparecer (como a tela de Conexões fazia). */
   const expandFolder = (folderId: string) => setCollapsedFolders((current) => new Set([...current].filter((key) => key !== navKey({ type: "folder", id: folderId }))));
 
-  /** A sessão caiu e a API já não a conhece: abre outra para a conexão, no lugar de repetir com o id morto (RN-AVISO-003). */
-  async function reopen(connectionId: string) {
-    if (await reopenDatabaseSession(queryClient, connectionId)) toast.warning(workbenchCopy.toasts.sessionReopened);
+  /**
+   * "Duplicar conexão" (RN-CONN-016): a cópia nasce na mesma pasta, desconectada, e aparece escolhida, com as pastas acima dela abertas e o foco nela
+   * (`connectionReveal`, depois de a lista já trazê-la); nada abre sozinho. A recusa (a conexão sumiu, o cofre fechou) vai ao aviso central, e a lista
+   * se atualiza, porque o motivo pode ser ela estar velha.
+   */
+  const duplicate = useMutation({
+    mutationFn: async (connectionId: string) => unwrap(await duplicateConnection(connectionId)),
+    onSuccess: async (copy) => {
+      toast.success(connectionsCopy.toasts.connectionDuplicated);
+      await invalidateLists(queryClient);
+      connectionReveal.request(copy.id);
+    },
+    onError: () => void invalidateLists(queryClient),
+  });
+
+  /** A sessão caiu e a API já não a conhece: abre outra para aquele banco da conexão, no lugar de repetir com o id morto (RN-AVISO-003). */
+  async function reopen(connectionId: string, database: string | undefined) {
+    if (await reopenDatabaseSession(queryClient, connectionId, database)) toast.warning(workbenchCopy.toasts.sessionReopened);
   }
 
-  const lostSessionUnder = (prefix: readonly unknown[]) => queryClient.getQueryCache().findAll({ queryKey: prefix }).some((query) => isSessionLost(query.state.error));
+  /** Os bancos cujas sessões caíram, pelos níveis guardados sob estes prefixos que responderam "sessão não encontrada". */
+  const lostSessionsUnder = (prefixes: readonly (readonly unknown[])[]) =>
+    new Set(prefixes.flatMap((queryKey) => queryClient.getQueryCache().findAll({ queryKey }).filter((query) => isSessionLost(query.state.error)).map((query) => databaseOfKey(query.queryKey))));
 
   /** Busca de novo o nível que falhou, sem esperar o nó fechar e abrir. */
   function retry(node: NavNode) {
     const path = parseNavKey(node.retryKey ?? node.key);
-    if (path.type === "connection") void queryClient.refetchQueries({ queryKey: databaseSessionKey(path.connectionId), exact: true });
-    else if (isFetched(path) && lostSessionUnder(treeKey(path))) void reopen(path.connectionId);
-    else if (isFetched(path)) void queryClient.refetchQueries({ queryKey: treeKey(path), exact: true });
+    if (!isFetched(path)) return;
+
+    const lost = lostSessionsUnder([treeKey(path)]);
+    if (path.type === "connection" && sessionById.get(path.connectionId)?.isError) void queryClient.refetchQueries({ queryKey: databaseSessionKey(path.connectionId), exact: true });
+    else if (lost.size > 0) for (const database of lost) void reopen(path.connectionId, database);
+    else void queryClient.refetchQueries({ queryKey: treeKey(path), exact: true });
   }
 
-  /** "Atualizar": o que está abaixo do nó, nunca a sessão (`treePrefix`) — salvo a que caiu, que se abre de novo. */
+  /** "Atualizar": o que está abaixo do nó, nunca a sessão (`treePrefixes`) — salvo a que caiu, que se abre de novo. Na conexão, a lista dos bancos vem de novo. */
   function refresh(node: NavNode) {
     const path = parseNavKey(node.key);
-    const prefix = treePrefix(path);
-    if (prefix === null || path.type === "folder") return;
+    const prefixes = treePrefixes(path);
+    if (prefixes.length === 0 || path.type === "folder") return;
 
-    if (lostSessionUnder(prefix)) void reopen(path.connectionId);
-    else void queryClient.invalidateQueries({ queryKey: prefix });
+    // O banco cuja sessão caiu abre outra (e os níveis dele recomeçam com ela); o resto do que está abaixo do nó busca de novo.
+    const lost = lostSessionsUnder(prefixes);
+    for (const database of lost) void reopen(path.connectionId, database);
+    for (const queryKey of prefixes) void queryClient.invalidateQueries({ queryKey, predicate: (query) => !lost.has(databaseOfKey(query.queryKey)) });
   }
 
   /** Na tela filtrada, abrir e fechar é só do que se vê: recolher um ancestral não mexe nos nós abertos da árvore (`expanded`). */
@@ -277,6 +326,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       event.preventDefault();
       searchInput.current?.focus();
       searchInput.current?.select();
+    } else if (!event.defaultPrevented && refreshKey(event)) {
+      // RN-GRADE-012: F5 é o "Atualizar" do nó escolhido, quando ele se aplica (o mesmo da barra e do menu).
+      event.preventDefault();
+      if (refreshesSelection(toolbar)) runToolbarAction("refresh");
     }
   }
 
@@ -344,9 +397,12 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       case "disconnect":
         if (connectionId !== null) disconnect(connectionId);
         return;
-      case "newQuery":
-        if (connectionId !== null) openQueryTab(connectionId);
+      case "newQuery": {
+        // A consulta nova é do banco da linha (RN-ARVORE-006): a de um esquema de outro banco do servidor roda na sessão dele.
+        const owner = databaseRefOf(node);
+        if (owner !== null) openQueryTab(owner.connectionId, undefined, owner.database);
         return;
+      }
       case "refresh":
         refresh(node);
         return;
@@ -354,19 +410,23 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       case "editConnection":
         if (connectionId !== null) onEditConnection(connectionId);
         return;
+      case "renameConnection":
       case "moveConnection":
       case "deleteConnection": {
         const connection = connectionId === null ? undefined : connectionById.get(connectionId);
-        if (connection !== undefined) setConnectionAction({ type: action.type === "moveConnection" ? "move" : "delete", connection });
+        if (connection !== undefined) setConnectionAction({ type: connectionActionTypes[action.type], connection });
         return;
       }
+      case "duplicateConnection":
+        if (connectionId !== null && !duplicate.isPending) duplicate.mutate(connectionId);
+        return;
       case "openTable":
-        if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, view: action.view });
+        if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, view: action.view, ...inDatabase(target.database) });
         return;
       // O SELECT vai para uma consulta nova, no editor, sem executar; a citação dos nomes por banco é do `selectAllSql`.
       case "generateSelect": {
         const engine = target === null ? undefined : connectionById.get(target.connectionId)?.engine;
-        if (target !== null && engine !== undefined) openQueryTab(target.connectionId, selectAllSql(engine, target.schema, target.name));
+        if (target !== null && engine !== undefined) openQueryTab(target.connectionId, selectAllSql(engine, target.schema, target.name), target.database);
         return;
       }
       case "copy":
@@ -480,8 +540,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       );
     }
 
-    // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página).
-    if (tree.roots.length === 0) {
+    // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página). A árvore vazia pelo
+    // filtro de ambiente não é o primeiro uso: há o que mostrar, só não nesse ambiente.
+    const filtering = environmentChoice.type !== "all";
+    if (tree.roots.length === 0 && (!filtering || (connectionList.length === 0 && (folders.data ?? []).length === 0))) {
       return (
         <div className="flex flex-col gap-1 px-3 py-2">
           <p className="font-semibold text-ink">{copy.empty.title}</p>
@@ -492,9 +554,17 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
     return (
       <>
-        <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
+        {/* RN-NAV-010: o seletor de ambiente ao lado do campo de busca; no navegador estreito ele desce para a linha de baixo. */}
+        <div className="mx-2 mb-2 flex flex-none flex-wrap gap-1.5">
+          <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
+          <NavigatorEnvironmentFilter environments={savedEnvironments} value={environmentChoice} onChange={setEnvironmentChoice} />
+        </div>
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
-        {search === null ? null : search.rows.length === 0 ? (
+        {filtering && tree.roots.length === 0 ? (
+          <p role="status" className="px-3 py-2 text-muted">
+            {environmentChoice.type === "environment" ? navigatorCopy.environmentFilter.nothingIn(savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : navigatorCopy.environmentFilter.nothingWithout}
+          </p>
+        ) : search === null ? null : search.rows.length === 0 ? (
           <div role="status" className="flex flex-col gap-1 px-3 py-2">
             <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
             <p className="text-xs text-muted">{copy.search.onlyLoaded}</p>
@@ -514,23 +584,25 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           onSelect={setSelectedKey}
           reveal={reveal}
           connectionById={connectionById}
+          environments={environments}
           statuses={statuses}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
           onRetry={retry}
           onRefresh={refresh}
           onNewQuery={(node) => {
-            const connectionId = ownerConnectionId(node);
-            if (connectionId !== null) openQueryTab(connectionId);
+            const owner = databaseRefOf(node);
+            if (owner !== null) openQueryTab(owner.connectionId, undefined, owner.database);
           }}
           onOpenTable={(node) => {
             const target = tableTargetOf(node);
-            if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name });
+            if (target !== null) openTableTab(target.connectionId, { schema: target.schema, name: target.name, ...inDatabase(target.database) });
           }}
           onDisconnect={(node) => {
             const connectionId = ownerConnectionId(node);
             if (connectionId !== null) disconnect(connectionId);
           }}
+          onKeyAction={runMenuAction}
           onContextMenu={openMenu}
         />
       </>
@@ -554,6 +626,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         />
       )}
       {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
+      {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog
@@ -571,6 +644,7 @@ type NavigatorListProps = {
   rows: NavNode[];
   open: ReadonlySet<string>;
   connectionById: ReadonlyMap<string, Connection>;
+  environments: EnvironmentLookup;
   statuses: ReadonlyMap<string, ConnectionStatus>;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
@@ -579,6 +653,8 @@ type NavigatorListProps = {
   onNewQuery: (node: NavNode) => void;
   onOpenTable: (node: NavNode) => void;
   onDisconnect: (node: NavNode) => void;
+  /** A ação do menu que uma tecla na linha pede (`keyActionFor`: o F2 do Renomear, RN-NAV-009), executada como se viesse do menu. */
+  onKeyAction: (node: NavNode, action: MenuAction) => void;
   /** O menu de contexto da linha, aberto pelo mouse (`menu`) ou pelo teclado (`first`, com o foco já no primeiro item). Devolve se o menu vai abrir. */
   onContextMenu: (node: NavNode | null, point: { x: number; y: number }, initialFocus: "first" | "menu") => boolean;
   /** Só na árvore filtrada: onde o termo casou em cada linha, para o destaque. */
@@ -597,10 +673,10 @@ type NavigatorListProps = {
 /**
  * A lista virtualizada (RN-ARVORE: milhares de tabelas): só as linhas à vista existem no DOM. Fica
  * num componente à parte para a rolagem, que re-renderiza quem usa o virtualizador, não refaça a
- * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha; só uma linha
+ * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -656,6 +732,17 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
     scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`)?.focus();
   }
 
+  /** Põe o foco na linha pedida, rolando até ela antes quando ela está fora das desenhadas. */
+  function focusRow(target: number | null) {
+    if (target === null) return;
+    const focus = () => scrollRef.current?.querySelector<HTMLElement>(`[data-index="${target}"] [data-row-toggle]`)?.focus();
+    if (scrollRef.current?.querySelector(`[data-index="${target}"]`)) focus();
+    else {
+      virtualizer.scrollToIndex(target, { align: "auto" });
+      requestAnimationFrame(focus);
+    }
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLElement>, node: NavNode, index: number) {
     if (event.key === "ArrowDown") move(event, index, 1);
     else if (event.key === "ArrowUp") move(event, index, -1);
@@ -673,9 +760,17 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
       event.preventDefault();
       if (!open.has(node.key)) onToggle(node);
       else move(event, index, 1);
-    } else if (event.key === "ArrowLeft" && node.hasChildren && open.has(node.key)) {
+    } else if (event.key === "ArrowLeft") {
+      // Num nó aberto, fecha; num nó fechado ou numa folha, leva ao pai (o padrão das árvores), e a próxima seta fecha ele.
       event.preventDefault();
-      onToggle(node);
+      if (node.hasChildren && open.has(node.key)) onToggle(node);
+      else focusRow(parentRowIndex(rows, index));
+    } else {
+      // O F2 na pasta e na conexão abre o "Renomear" dela (RN-NAV-009), o mesmo item que o menu mostra com o atalho.
+      const action = keyActionFor(node, event);
+      if (action === null) return;
+      event.preventDefault();
+      onKeyAction(node, action);
     }
   }
 
@@ -704,6 +799,8 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
           // Só a linha da conexão recebe a conexão salva (a etiqueta do banco, o ambiente e as ações); as outras linhas têm dono, mas não a recebem.
           const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
           const connection = connectionId === null ? undefined : connectionById.get(connectionId);
+          const folderId = node.kind === "folder" ? folderIdOf(node) : null;
+          const environment = folderId !== null ? environments.folder(folderId) : connection ? environments.connection(connection) : null;
 
           return (
             <div
@@ -723,6 +820,7 @@ function NavigatorList({ rows, open, connectionById, statuses, disconnecting, on
                 tabbable={node.key === tabbable}
                 selected={node.key === selectedKey}
                 connection={connection}
+                environment={environment}
                 status={connection ? statuses.get(connection.id) : undefined}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}

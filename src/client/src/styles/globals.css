@@ -60,6 +60,12 @@
   --color-syntax-number: light-dark(#8a5200, #f2b644);
   --color-syntax-comment: light-dark(#5f6875, #8e99a8);
 
+  /*
+   * O azul de link (RN-LINK-001: o nome de uma tabela no editor com o Ctrl apertado). O canvas não o desenha: nos dois temas do Prism é o azul do PostgreSQL, e
+   * cada um dos outros quatro traz o da paleta dele. Vale sobre o fundo do editor, as superfícies e a seleção, e o teste de contraste confere todas.
+   */
+  --color-link: light-dark(#1d5fd1, #7db2ff);
+
   /* Erro e o que não tem volta. */
   --color-danger: light-dark(#b32a1a, #ff8a7a);
   /* RN-AVISO-001: o sucesso tem o mesmo verde do Db2; o canvas não traz outro. */
@@ -68,8 +74,14 @@
   /* O véu atrás de um diálogo. */
   --color-scrim: light-dark(rgb(20 24 29 / 0.45), rgb(6 8 10 / 0.72));
 
-  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  /*
+   * As fontes (RN-CONFIG-008). A da interface (`--font-sans`) e a do editor SQL (`--font-editor`) são as que o usuário escolhe em Configurações ›
+   * Aparência: o `FontSync` põe a escolhida no <html>, entre aspas, com a do app atrás (`fonts.ts`). A reserva da interface é uma variável à
+   * parte, porque a escolha troca a `--font-sans`; a do editor é a mono do app, que a grade e o resto do código usam e que não muda.
+   */
+  --font-sans: var(--font-app-sans);
   --font-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --font-editor: var(--font-mono);
 
   /*
    * A escala de texto do canvas, nos nomes da escala padrão: 12/18 nas legendas, 13/20 na área
@@ -157,6 +169,7 @@
     --color-syntax-string: #e6db74;
     --color-syntax-number: #b48aff;
     --color-syntax-comment: #a6a28c;
+    --color-link: #66d9ef;
   }
 
   :root[data-theme="dracula"] {
@@ -176,6 +189,7 @@
     --color-syntax-string: #f1fa8c;
     --color-syntax-number: #bd93f9;
     --color-syntax-comment: #9aa5ce;
+    --color-link: #8be9fd;
   }
 
   :root[data-theme="nord"] {
@@ -196,6 +210,7 @@
     --color-syntax-string: #a3be8c;
     --color-syntax-number: #c5a7bf;
     --color-syntax-comment: #a5b0c4;
+    --color-link: #88c0d0;
   }
 
   :root[data-theme="github-light"] {
@@ -215,12 +230,35 @@
     --color-syntax-string: #0a3069;
     --color-syntax-number: #0550ae;
     --color-syntax-comment: #59636e;
+    /* O azul de link do GitHub (#0969da), escurecido o mínimo: sobre a linha selecionada ele dava 4,4:1. */
+    --color-link: #0967d7;
+  }
+
+  /* A pilha da interface que vem com o app: a reserva da escolhida (RN-CONFIG-008). Fora do `@theme`, para não virar classe. */
+  :root {
+    --font-app-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   }
 
   html,
   body,
   #root {
     height: 100%;
+  }
+
+  /*
+   * A raiz não rola nunca: o app é uma janela, não uma página. Só as áreas de dentro rolam (a árvore, o editor, a grade, as listas, e cada tela que
+   * precisa rolar numa janela baixa tem a própria área: o login, as Configurações, o primeiro uso). `clip`, e não `hidden`: com `hidden` o
+   * `scrollIntoView`, o `focus()` e a roda do mouse que sobra de uma área de dentro ainda rolam o documento que passou da janela.
+   * No `html` o `clip` vai para a janela como `hidden` (é a regra do CSS para a raiz), então quem corta de fato é o `body`; e o `position: relative`
+   * faz dele o bloco de quem é `absolute` sem ancestral posicionado, que senão escaparia do corte e daria à janela o que rolar.
+   */
+  html,
+  body {
+    overflow: clip;
+  }
+
+  body {
+    position: relative;
   }
 
   body {
@@ -269,6 +307,7 @@
     --color-syntax-string: #5ed3a3;
     --color-syntax-number: #f2b644;
     --color-syntax-comment: #8e99a8;
+    --color-link: #7db2ff;
     --color-scrim: rgb(6 8 10 / 0.72);
     background-color: var(--color-background);
     color: var(--color-ink);

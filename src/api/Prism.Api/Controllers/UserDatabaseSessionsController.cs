@@ -1,11 +1,15 @@
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Prism.Application.DatabaseSessions.Features.ApplyEdits;
 using Prism.Application.DatabaseSessions.Features.CancelQuery;
 using Prism.Application.DatabaseSessions.Features.CloseDatabaseSession;
 using Prism.Application.DatabaseSessions.Features.CountQuery;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
+using Prism.Application.DatabaseSessions.Features.GetDatabases;
+using Prism.Application.DatabaseSessions.Features.GetEditTarget;
+using Prism.Application.DatabaseSessions.Features.GetResultCells;
 using Prism.Application.DatabaseSessions.Features.GetDatabaseProperties;
 using Prism.Application.DatabaseSessions.Features.GetSchemaDiagram;
 using Prism.Application.DatabaseSessions.Features.GetSchemaObjects;
@@ -17,6 +21,7 @@ using Prism.Application.DatabaseSessions.Features.GetTableIndexes;
 using Prism.Application.DatabaseSessions.Features.GetTableReferencedBy;
 using Prism.Application.DatabaseSessions.Features.GetViewDefinition;
 using Prism.Application.DatabaseSessions.Features.OpenDatabaseSession;
+using Prism.Application.DatabaseSessions.Features.PreviewEdits;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
 
@@ -32,7 +37,7 @@ namespace Prism.Api.Controllers;
 [Route("api/user/database-sessions")]
 public sealed class UserDatabaseSessionsController(IMediator mediator) : ControllerBase, IActionFilter
 {
-    /// <summary>O corpo leva `connectionID`. O `Location` aponta para a sessão, que se fecha por essa rota.</summary>
+    /// <summary>O corpo leva `connectionID` e, para outro banco do mesmo servidor, `database` (RN-ARVORE-006). O `Location` aponta para a sessão, que se fecha por essa rota.</summary>
     [HttpPost]
     public async Task<IActionResult> OpenDatabaseSession([FromBody] OpenDatabaseSessionCommand command, CancellationToken cancellationToken)
     {
@@ -51,6 +56,17 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
             return result.ToIActionResult();
 
         return NoContent();
+    }
+
+    /// <summary>RN-ARVORE-006: os bancos do servidor da sessão, com o dela primeiro.</summary>
+    [HttpGet("{id:guid}/databases")]
+    public async Task<IActionResult> GetDatabases(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new GetDatabasesCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
     }
 
     [HttpGet("{id:guid}/schemas")]
@@ -184,6 +200,53 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
     public async Task<IActionResult> CountQuery(Guid id, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(new CountQueryCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-002, 003 e 010: o corpo leva `resultID` e, se a tela tiver, `catalogSessionID` (a sessão da árvore da mesma conexão).</summary>
+    [HttpPost("{id:guid}/queries/edit-target")]
+    public async Task<IActionResult> GetEditTarget(Guid id, [FromBody] GetEditTargetCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-005 e 012: o "Salvar". O corpo leva `resultID` e `changes`; a resposta é `{ applied }`.</summary>
+    [HttpPost("{id:guid}/queries/edits")]
+    public async Task<IActionResult> ApplyEdits(Guid id, [FromBody] ApplyEditsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-008: o "Ver SQL" das mesmas alterações, sem executar nada.</summary>
+    [HttpPost("{id:guid}/queries/edits/preview")]
+    public async Task<IActionResult> PreviewEdits(Guid id, [FromBody] PreviewEditsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-SQL-017: o valor completo das células que chegaram cortadas, para copiar e exportar. O corpo leva `cells` (até 10.000), cada uma
+    /// pela linha no resultado inteiro e pela coluna; a resposta, `{ values }` na ordem pedida.
+    /// </summary>
+    [HttpPost("{id:guid}/results/{resultID:guid}/cells")]
+    public async Task<IActionResult> GetResultCells(Guid id, Guid resultID, [FromBody] GetResultCellsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id, ResultID = resultID }, cancellationToken);
         if (result.IsFailure)
             return result.ToIActionResult();
 

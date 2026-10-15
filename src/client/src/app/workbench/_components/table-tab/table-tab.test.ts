@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { forgetExcept, remember } from "../../_lib/tab-memory";
 import type { QueryRunner } from "../../_lib/use-query-runner";
-import type { QueryTab, TableView } from "../../_lib/workbench-model";
+import type { TableTab, TableView } from "../../_lib/workbench-model";
 import { TableTabPanel } from "./table-tab";
 
 const noop = () => {};
@@ -15,10 +15,10 @@ vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOr
 
 function render(view: TableView, over: { disconnected: boolean; visible?: boolean }) {
   const table = { schema: "producao", name: "apontamento", view };
-  const tab: QueryTab = { id: "t1", title: "producao.apontamento", connectionId: "c-1", sessionId: null, sql: "", table };
+  const tab: TableTab = { id: "t1", title: "producao.apontamento", connectionId: "c-1", sessionId: null, sql: "", table };
   // Só as vistas Estrutura e Diagrama: os Registros leem o executor, que o React só lê no navegador.
   const runner = {} as QueryRunner;
-  const panel = createElement(TableTabPanel, { tab, table, runner, connection: undefined, visible: over.visible ?? true, disconnected: over.disconnected, onView: noop, onOpenTable: noop });
+  const panel = createElement(TableTabPanel, { tab, table, runner, connection: undefined, environment: null, visible: over.visible ?? true, disconnected: over.disconnected, onView: noop, onOpenTable: noop });
 
   return renderToStaticMarkup(createElement(QueryClientProvider, { client: new QueryClient() }, panel));
 }

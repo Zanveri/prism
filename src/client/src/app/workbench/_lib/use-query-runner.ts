@@ -10,7 +10,9 @@ import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/
 
 import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
-import { sqlErrorDetails, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
+import { scriptsCopy } from "./scripts.copy";
+import { gridFilterCopy } from "./grid-filter.copy";
+import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
 import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
 import { workbenchCopy } from "./workbench.copy";
@@ -54,7 +56,19 @@ const codes =
  * marcar a posição do erro (RN-SQL-009); e o banco da aba, que diz como separar os comandos
  * (RN-SQL-002). Sem o banco, vale o PostgreSQL.
  */
-export type RunTarget = { sql: string; offset: number; engine?: Engine };
+export type RunTarget = {
+  sql: string;
+  offset: number;
+  engine?: Engine;
+  /**
+   * RN-GRADE-011: o texto do campo de filtro do resultado (a condição, a ordem ou as duas), que a API junta ao comando. O texto do editor não muda, e
+   * "Executar de novo" repete o comando COM o filtro, porque ele viaja aqui. Sem filtro, o campo não existe.
+   */
+  filter?: string;
+};
+
+/** RN-GRADE-011: a API recusou o filtro do resultado (422 `FILTER_INVALID`), sem executar nada; a frase vai ao campo, como veio. */
+export type FilterRefusal = { code: "FILTER_INVALID"; message: string };
 
 export type RowsState = {
   status: "rows";
@@ -86,6 +100,16 @@ export type RowsState = {
   /** Só existe depois de "Contar total" (RN-SQL-006). */
   total: number | null;
   counting: boolean;
+  /** RN-EDIT-002: o resultado da API a que estas linhas pertencem; é por ele que a edição dos Registros pergunta e grava. */
+  resultId?: string | null;
+  /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando a página já o trouxe. */
+  readOnly?: string | null;
+  /** RN-EDIT-009: as colunas de cada linha nova salva na aba de consulta que o banco preencheu, e cujo valor a tela não sabe. */
+  generated?: ReadonlyMap<number, ReadonlySet<number>>;
+  /** RN-SQL-017: depois de um Salvar da aba de consulta, a linha do resultado na API de cada linha da grade (`SavedResult.sourceRows`). */
+  sourceRows?: readonly (number | null)[];
+  /** RN-GRADE-011: como o filtro do resultado entrou no comando (`merged` ou `wrapped`); nulo sem filtro. */
+  filterApplied?: FilterApplied | null;
 };
 
 export type AffectedState = { status: "affected"; rowsAffected: number; elapsedMs: number };
@@ -164,7 +188,8 @@ export function isBusyState(state: RunnerState): boolean {
 export type QueryRunner = {
   subscribe: (listener: () => void) => () => void;
   getState: () => RunnerState;
-  run: (target: RunTarget) => Promise<void>;
+  /** Devolve a recusa do filtro do resultado (`FILTER_INVALID`), quando é ela; o resto vai à área de resultado e aos avisos, como sempre. */
+  run: (target: RunTarget) => Promise<FilterRefusal | void>;
   /** Executa de novo o comando das linhas que estão na tela, e nunca outro: é o que o aviso de cursor fechado oferece. */
   rerun: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -175,6 +200,14 @@ export type QueryRunner = {
    * na tela, e o erro do comando que ainda roda chega sem posição.
    */
   textEdited: () => void;
+  /** A sessão da aba na API, ou nula antes da primeira execução e depois de solta: a edição das células grava nela (seção 22). */
+  sessionOf: () => string | null;
+  /**
+   * RN-EDIT-009: um Salvar da edição gravou tudo no resultado `resultId`, e a grade fica com o que foi salvo, sem executar de novo (a aba de
+   * consulta). Salvar é um comando na sessão: o cursor que estava aberto fechou, e "carregar mais" dá lugar a "executar de novo". Com outro
+   * resultado na tela, ou um comando em andamento, nada muda.
+   */
+  keepSaved: (resultId: string, saved: { rows: QueryRow[]; truncated: ReadonlyMap<number, ReadonlySet<number>>; generated: ReadonlyMap<number, ReadonlySet<number>>; sourceRows?: readonly (number | null)[] }) => void;
   /**
    * Solta a aba da sessão dela (fechar a aba, desconectar, conexão excluída) e devolve o que há
    * para encerrar na API. O que estava a caminho chega e não muda mais nada.
@@ -191,11 +224,19 @@ export type QueryRunner = {
 };
 
 type QueryRunnerOptions = {
-  connectionId: string;
+  /** Nulo na aba de um script cuja conexão não existe mais (RN-SCRIPT-003): ela não executa nada até a pessoa escolher uma, e quem escolhe troca o executor. */
+  connectionId: string | null;
+  /** RN-ARVORE-006: outro banco do servidor da conexão, de onde a aba foi aberta; sem ele, o banco da conexão. */
+  database?: string;
   queryClient: QueryClient;
   toast: ReturnType<typeof useToast>;
   /** A sessão da aba mudou: aberta na primeira execução, trocada quando cai, nula quando a API já não a tem. */
   onSession: (sessionId: string | null) => void;
+  /**
+   * RN-ABAS-002: a aba chegou de outra janela, com o resultado que estava na tela (parado: a aba ocupada não muda de janela) e a sessão que já tinha,
+   * com o cursor aberto nela. Nada é executado: "Carregar mais" continua de onde parou.
+   */
+  initial?: { state: RunnerState; sessionId: string | null };
 };
 
 function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells: [number, number][], rowOffset: number): ReadonlyMap<number, ReadonlySet<number>> {
@@ -222,11 +263,11 @@ function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells:
  * de transação recusado antes de executar, API fora do ar, resposta inválida) deixa o resultado e o
  * cursor dele como estavam, e avisa.
  */
-export function createQueryRunner({ connectionId, queryClient, toast, onSession }: QueryRunnerOptions): QueryRunner {
-  let state: RunnerState = { status: "idle" };
+export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial }: QueryRunnerOptions): QueryRunner {
+  let state: RunnerState = initial?.state ?? { status: "idle" };
   const listeners = new Set<() => void>();
 
-  let sessionId: string | null = null;
+  let sessionId: string | null = initial?.sessionId ?? null;
   /** Cresce quando a aba é solta: a resposta que chegar depois não acha mais quem a esperava. */
   let epoch = 0;
   /** `retire()` foi chamado: o executor saiu de cena e não executa mais nada. */
@@ -245,13 +286,15 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
     refusedWhenRetired.add(operation);
     console.warn(`[prism] o executor de uma aba que já saiu de cena (bloqueio, aba fechada ou conexão removida) recusou "${operation}": o painel segurou o executor velho, e nada foi enviado ao banco.`);
   }
-  let resultId = 0;
+  // A chave da grade continua a contar do resultado que veio com a aba.
+  let resultId = state.status === "rows" ? state.id : 0;
   /**
    * O usuário pediu o cancelamento do que está em andamento: o comando que ainda não foi enviado não sai, e não se pede duas vezes. O
    * desfecho do comando não é decidido por isto, e sim pelo `outcome` da API (RN-SQL-010, Ruling 135).
    */
   let cancelRequested = false;
-  let truncationWarned = false;
+  // O aviso das células cortadas já saiu na janela de onde a aba veio.
+  let truncationWarned = state.status === "rows" && state.truncated.size > 0;
   /** O texto mudou depois de o comando ser enviado: a posição que o banco apontar já não é a do texto na tela. */
   let editedSinceRun = false;
   /** Os erros inesperados que o aviso central já mostrou: a rede de segurança não avisa de novo. */
@@ -328,12 +371,12 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
    * conhece a sessão (ela caiu), abre outra e repete uma vez (seção 7). `null` quando não há o que
    * mostrar: a aba foi solta, ou o comando foi cancelado antes de ser enviado.
    */
-  async function execute(sql: string, started: number): Promise<ApiResult<QueryResult> | null> {
+  async function execute(connection: string, sql: string, started: number, filter?: string): Promise<ApiResult<QueryResult> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
       if (id === null) {
-        const opened = await call(() => openDatabaseSession(connectionId));
+        const opened = await call(() => openDatabaseSession(connection, database));
         if (started !== epoch) {
           // A aba foi solta enquanto a sessão abria: ninguém mais a usaria nem a fecharia.
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);
@@ -352,8 +395,8 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
 
       const session = id;
       const result = await call(
-        () => executeQuery(session, sql),
-        codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
+        () => executeQuery(session, sql, filter),
+        codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
       );
       if (started !== epoch) return null;
       if (result.ok || result.error.code !== "DATABASE_SESSION_NOT_FOUND") return result;
@@ -394,7 +437,9 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
       const { sqlState, position } = sqlErrorDetails(error.extensions);
       if (outcome === null) toast.error(copy.commandFailed);
       else toast.warning(outcomeCopy[outcome]);
-      return { status: "error", source: "database", title: resultCopy.errorTitle, message, sqlState, errorAt: position === null || editedSinceRun ? null : target.offset + utf16IndexOf(target.sql, position) };
+      // RN-GRADE-011: com o filtro do resultado, o banco executou o comando que a API montou, e a posição é dele, e não do texto do editor.
+      const marked = position === null || editedSinceRun || target.filter !== undefined ? null : target.offset + utf16IndexOf(target.sql, position);
+      return { status: "error", source: "database", title: resultCopy.errorTitle, message, sqlState, errorAt: marked };
     }
 
     if (error.code === "TRANSACTION_CONTROL_NOT_SUPPORTED") {
@@ -442,8 +487,9 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
     else patchRows({ cancelling });
   }
 
-  const run = (target: RunTarget) =>
-    guarded(async () => {
+  const run = async (target: RunTarget): Promise<FilterRefusal | void> => {
+    let refusal: FilterRefusal | undefined;
+    await guarded(async () => {
       if (retired) return refuse("run");
       if (isBusy()) return;
 
@@ -461,13 +507,26 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
         return;
       }
 
+      // RN-SCRIPT-003: sem conexão não há sessão a abrir. A aba pede uma conexão; nada foi enviado.
+      if (connectionId === null) {
+        if (previous === null) set({ status: "notice", message: scriptsCopy.toasts.noConnection });
+        toast.warning(scriptsCopy.toasts.noConnection);
+        return;
+      }
+
       const started = epoch;
       cancelRequested = false;
       editedSinceRun = false;
       set({ status: "running", cancelling: false, previous });
 
-      const result = await execute(target.sql, started);
+      const result = await execute(connectionId, target.sql, started, target.filter);
       if (result === null) return;
+      // RN-GRADE-011: a API recusou o filtro antes de executar: o resultado e o cursor de antes ficam como estavam, e a frase vai ao campo de filtro.
+      if (!result.ok && result.error.code === "FILTER_INVALID" && target.filter !== undefined) {
+        refusal = { code: "FILTER_INVALID", message: result.error.detail ?? result.error.title };
+        settle();
+        return;
+      }
       // O que está na tela agora, e não o de quando o comando começou: uma edição no meio já tirou a posição de um erro.
       if (!result.ok) return set(failed(result.error, target, state.status === "running" ? state.previous : null));
 
@@ -496,11 +555,17 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
         cursorClosed: false,
         total: null,
         counting: false,
+        resultId: data.resultId ?? null,
+        // RN-GRADE-011: o resultado embrulhado pelo filtro é só leitura, e diz por quê (a API pode já dizer; senão, a frase da tela).
+        readOnly: data.readOnly ?? (data.filterApplied === "wrapped" ? gridFilterCopy.result.wrapped : null),
+        filterApplied: data.filterApplied ?? null,
       });
       // RN-SQL-013 e RN-AVISO-002: o comando gravou e está confirmado; as linhas são o que ele devolveu.
       if (data.totalRows !== null) toast.success(copy.commandCompleted(data.totalRows));
       warnTruncated(data);
     });
+    return refusal;
+  };
 
   const loadMore = () =>
     guarded(async () => {
@@ -629,6 +694,11 @@ export function createQueryRunner({ connectionId, queryClient, toast, onSession 
       if (state.status === "error" && state.errorAt !== null) set({ ...state, errorAt: null });
       // O erro que está na tela enquanto outro comando roda também perde a posição: ela não pode voltar, velha, se ele for restaurado.
       else if (state.status === "running" && state.previous?.status === "error" && state.previous.errorAt !== null) set({ ...state, previous: { ...state.previous, errorAt: null } });
+    },
+    sessionOf: () => sessionId,
+    keepSaved: (savedIn, { rows, truncated, generated, sourceRows }) => {
+      if (state.status !== "rows" || state.resultId !== savedIn || isBusy()) return;
+      set({ ...state, rows, truncated, generated, ...(sourceRows === undefined ? {} : { sourceRows }), cursorClosed: state.cursorClosed || state.hasMore });
     },
     release,
     retire,

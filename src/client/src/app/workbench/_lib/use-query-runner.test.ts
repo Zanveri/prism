@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/query-client";
 
 import { queryOutcomeCopy } from "./query-outcome.copy";
+import { scriptsCopy } from "./scripts.copy";
 import { countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { createQueryRunner, isBusyState, type RunnerState } from "./use-query-runner";
 import { workbenchCopy } from "./workbench.copy";
@@ -107,7 +108,36 @@ async function withResult() {
 beforeEach(() => vi.stubGlobal("window", { prism: bridge }));
 afterEach(() => vi.unstubAllGlobals());
 
+describe("a aba sem conexão (RN-SCRIPT-003)", () => {
+  it("não abre sessão nem chama a API: avisa, e sem resultado na tela a área diz por quê", async () => {
+    const api = fakeApi();
+    const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+    const runner = createQueryRunner({ connectionId: null, queryClient: createQueryClient(toast), toast, onSession: vi.fn() });
+
+    await runner.run({ sql: "select 1", offset: 0 });
+
+    expect(api.calls).toEqual([]);
+    expect(toast.warning).toHaveBeenCalledWith(scriptsCopy.toasts.noConnection);
+    expect(runner.getState()).toEqual({ status: "notice", message: scriptsCopy.toasts.noConnection });
+  });
+});
+
 describe("executar", () => {
+  it("a aba aberta a partir de outro banco do servidor abre a sessão dele e executa nela (RN-ARVORE-006)", async () => {
+    const api = fakeApi();
+    const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+    const runner = createQueryRunner({ connectionId: "c1", database: "arquivo", queryClient: createQueryClient(toast), toast, onSession: vi.fn() });
+    api.on(`POST ${sessions}`, session("s-arquivo"));
+    api.on(`POST ${sessions}/s-arquivo/queries`, page([["1", "a"]]));
+
+    await runner.run({ sql: "select 1", offset: 0 });
+
+    expect(api.calls).toEqual([
+      { method: "POST", path: sessions, body: { connectionID: "c1", database: "arquivo" } },
+      { method: "POST", path: `${sessions}/s-arquivo/queries`, body: { sql: "select 1" } },
+    ]);
+  });
+
   it("a primeira execução abre a sessão da aba e executa nela; a segunda usa a mesma (RN-SESSAO-001)", async () => {
     const { api, toast, onSession, runner } = setup();
     api.on(`POST ${sessions}`, session("s1"));
@@ -307,7 +337,7 @@ describe("\"executar de novo\" executa o comando do resultado que está na tela,
   type Context = Awaited<ReturnType<typeof withResult>>;
 
   /** Cada caso tenta um comando que grava (`delete from t`) e é recusado antes de a API aceitar; as linhas do `select` ficam na tela. */
-  const refusals: [string, (context: Context) => Promise<void>][] = [
+  const refusals: [string, (context: Context) => Promise<unknown>][] = [
     ["seleção com mais de um comando", async ({ runner }) => runner.run({ sql: "delete from t; delete from u", offset: 0 })],
     [
       "SESSION_BUSY",
@@ -374,6 +404,29 @@ describe("\"executar de novo\" executa o comando do resultado que está na tela,
     await runner.rerun();
 
     expect(api.calls.at(-1)).toEqual({ method: "POST", path: `${sessions}/s1/queries`, body: { sql: "select * from t" } });
+  });
+
+  it("a aba que chegou de outra janela (RN-ABAS-002) mostra o resultado que trouxe, sem executar, e \"Carregar mais\" continua no cursor da sessão dela", async () => {
+    const { result } = await withResult();
+    const api = fakeApi();
+    const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+    const onSession = vi.fn<(sessionId: string | null) => void>();
+    const runner = createQueryRunner({ connectionId: "c1", queryClient: createQueryClient(toast), toast, onSession, initial: { state: result, sessionId: "s1" } });
+
+    expect(runner.getState()).toBe(result);
+    expect(runner.sessionOf()).toBe("s1");
+    expect(api.calls).toEqual([]);
+
+    api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
+    await runner.loadMore();
+    expect(api.routes()).toEqual([`POST ${sessions}/s1/queries/next`]);
+    expect(runner.getState()).toMatchObject({ status: "rows", id: result.id, rows: [["1", "a"], ["2", "b"], ["3", "c"]] });
+
+    // O comando seguinte é outro resultado (outra chave de grade), na mesma sessão: nenhuma sessão nova é aberta.
+    api.on(`POST ${sessions}/s1/queries`, page([["9", "z"]]));
+    await runner.run({ sql: "select 9", offset: 0 });
+    expect(runner.getState()).toMatchObject({ status: "rows", id: result.id + 1 });
+    expect(onSession).not.toHaveBeenCalled();
   });
 
   it("o comando recusado nunca é o que \"executar de novo\" envia, mesmo com o cursor fechado depois", async () => {
@@ -664,7 +717,7 @@ describe("linhas afetadas e erro de SQL também são resultado na tela", () => {
 
   type Context = Awaited<ReturnType<typeof withAffected>>;
 
-  const refusals: [string, (context: Context) => Promise<void>][] = [
+  const refusals: [string, (context: Context) => Promise<unknown>][] = [
     ["seleção com mais de um comando", async ({ runner }) => runner.run({ sql: "select 1; select 2", offset: 0 })],
     [
       "controle de transação",
@@ -1695,5 +1748,80 @@ describe("retire: o executor aposentado que recusa avisa no registro, para a reg
 
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe("o resultado da página e a sessão da aba, para a edição dos Registros (seção 22)", () => {
+  it("as linhas levam o resultado e o motivo de só leitura que a página trouxe, e a sessão da aba fica legível", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { resultID: "r1", editable: { known: true, reason: "DISTINCT" } }));
+
+    expect(runner.sessionOf()).toBeNull();
+    await runner.run({ sql: "select distinct 1", offset: 0 });
+
+    expect(runner.getState()).toMatchObject({ status: "rows", resultId: "r1", readOnly: "DISTINCT" });
+    expect(runner.sessionOf()).toBe("s1");
+  });
+
+  it("carregar mais é o mesmo resultado: o resultado das linhas não muda", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { resultID: "r1", editable: { known: false, reason: null } }));
+    api.on(`POST ${sessions}/s1/queries/next`, page([["2", "b"]], { hasMore: false, resultID: "r1", editable: { known: false, reason: null } }));
+
+    await runner.run({ sql: "select 1", offset: 0 });
+    await runner.loadMore();
+
+    expect(runner.getState()).toMatchObject({ status: "rows", resultId: "r1", readOnly: null, rows: [["1", "a"], ["2", "b"]] });
+  });
+});
+
+describe("o resultado depois de um Salvar da edição na aba de consulta (RN-EDIT-009)", () => {
+  /** A aba com o resultado `r1` na tela; `hasMore` diz se o cursor ficou aberto. */
+  async function withEditable(hasMore: boolean) {
+    const context = setup();
+    context.api.on(`POST ${sessions}`, session("s1"));
+    context.api.on(`POST ${sessions}/s1/queries`, page([["1", "a"], ["2", "b"]], { hasMore, resultID: "r1", editable: { known: false, reason: null } }));
+    await context.runner.run({ sql: "select * from t", offset: 0 });
+    const before = context.runner.getState();
+    if (before.status !== "rows") throw new Error("esperava linhas");
+    return { ...context, before };
+  }
+
+  const saved = { rows: [["1", "x"], ["3", null]], truncated: new Map<number, ReadonlySet<number>>(), generated: new Map([[1, new Set([1])]]) };
+
+  it("as linhas salvas tomam o lugar das lidas sem executar nada, a grade é a mesma, e o cursor que estava aberto fechou: a área oferece executar de novo", async () => {
+    const { api, runner, before } = await withEditable(true);
+    const sent = api.calls.length;
+
+    runner.keepSaved("r1", saved);
+
+    expect(runner.getState()).toMatchObject({ status: "rows", id: before.id, resultId: "r1", rows: saved.rows, generated: saved.generated, hasMore: true, cursorClosed: true });
+    expect(api.calls).toHaveLength(sent);
+  });
+
+  it("com todas as linhas já na tela não havia cursor aberto: nada muda além das linhas", async () => {
+    const { runner } = await withEditable(false);
+
+    runner.keepSaved("r1", saved);
+
+    expect(runner.getState()).toMatchObject({ status: "rows", rows: saved.rows, hasMore: false, cursorClosed: false });
+  });
+
+  it("outro resultado na tela (outro comando executou enquanto salvava), ou um comando em andamento: as linhas salvas não entram", async () => {
+    const { api, runner, before } = await withEditable(true);
+
+    runner.keepSaved("r0", saved);
+    expect(runner.getState()).toBe(before);
+
+    const reply = deferred<Response>();
+    api.on(`POST ${sessions}/s1/queries`, reply.promise);
+    const running = runner.run({ sql: "select 2", offset: 0 });
+    runner.keepSaved("r1", saved);
+    expect(runner.getState()).toMatchObject({ status: "running", previous: before });
+
+    reply.resolve(page([["9", "z"]], { resultID: "r2" }));
+    await running;
   });
 });

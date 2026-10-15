@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import { parseNavKey } from "./navigator-model";
+import type { ScriptRef } from "./saved-scripts";
 
 /** As vistas da aba de uma tabela: os registros, a estrutura (colunas, chaves estrangeiras e índices) e o diagrama. */
 export type TableView = "data" | "structure" | "diagram";
@@ -11,16 +12,28 @@ export type TableTarget = { schema: string; name: string; view: TableView };
 /**
  * Uma aba. `sessionId` é a sessão da aba (RN-SESSAO-001), aberta na primeira execução; `sql`, o texto do editor.
  * Com `table`, é a aba de uma tabela, aberta pelo navegador (RN-TABELA-001): tem a sessão dela como qualquer aba, e os
- * registros vêm do mesmo executor.
+ * registros vêm do mesmo executor. Com `database`, foi aberta a partir de outro banco do servidor da conexão (RN-ARVORE-006):
+ * a sessão dela, a Estrutura e o Diagrama são desse banco.
+ *
+ * Com `script`, a aba de consulta é um script salvo (RN-SCRIPT-001 a 003): o título é o nome dele, e o ponto da faixa diz que o texto mudou desde a última
+ * gravação. `connectionId` nulo é a aba de um script cuja conexão não existe mais (RN-SCRIPT-003): ela abre sem conexão e pede uma antes de executar. Só a
+ * aba de consulta fica sem conexão; a de uma tabela sempre tem a dela.
  */
-export type QueryTab = { id: string; title: string; connectionId: string; sessionId: string | null; sql: string; table?: TableTarget };
+export type QueryTab = { id: string; title: string; connectionId: string | null; database?: string; sessionId: string | null; sql: string; table?: TableTarget; script?: ScriptRef };
+
+/** A aba de uma tabela: sempre tem a conexão dela (só a aba de consulta de um script fica sem conexão, RN-SCRIPT-003). */
+export type TableTab = QueryTab & { table: TableTarget; connectionId: string };
+
+export function isTableTab(tab: QueryTab): tab is TableTab {
+  return tab.table !== undefined && tab.connectionId !== null;
+}
 
 /**
  * A definição única de "conectada", para o ponto e o "Desconectar" do navegador e para a barra de
  * status: a conexão tem sessão aberta na API, seja a da árvore, seja a de alguma aba (RN-SESSAO-001).
  * Com a árvore fechada e uma aba que já executou, ainda há sessão para desconectar.
  */
-export function isConnected(connectionId: string, tabs: QueryTab[], treeSessionOpen: boolean): boolean {
+export function isConnected(connectionId: string | null, tabs: QueryTab[], treeSessionOpen: boolean): boolean {
   return treeSessionOpen || tabs.some((tab) => tab.connectionId === connectionId && tab.sessionId !== null);
 }
 
@@ -50,7 +63,8 @@ export function nextActiveTab(tabs: QueryTab[], activeTabId: string | null, rema
 export function pruneWorkbench(snapshot: WorkbenchSnapshot, existing: ReadonlySet<string> | null): WorkbenchSnapshot | null {
   if (existing === null) return null;
 
-  const tabs = snapshot.tabs.filter((tab) => existing.has(tab.connectionId));
+  // A aba sem conexão (o script cuja conexão sumiu, RN-SCRIPT-003) não aponta para conexão nenhuma, e fica.
+  const tabs = snapshot.tabs.filter((tab) => tab.connectionId === null || existing.has(tab.connectionId));
   // Os nós abertos guardam só caminhos de conexão, nunca de pasta (`setNodeOpen` só recebe esses).
   const expanded = [...snapshot.expanded].filter((key) => {
     const path = parseNavKey(key);

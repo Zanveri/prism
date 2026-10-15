@@ -249,6 +249,17 @@ public sealed class Db2CatalogTests : CatalogContractTests
         }));
     }
 
+    /// <summary>RN-ARVORE-006: o Db2 conecta num banco só por vez e não tem SQL que liste os outros da instância: a lista é o banco da sessão, como o servidor o chama.</summary>
+    [Test]
+    public async Task Databases_ListOnlyTheCurrentOne()
+    {
+        await using var connection = await OpenAsync();
+
+        var databases = Value(await connection.GetDatabasesAsync(CancellationToken.None));
+
+        Assert.That(databases, Is.EqualTo(new[] { new DatabaseInfo(Settings.Database.ToUpperInvariant(), true) }));
+    }
+
     /// <summary>RN-CAT-010: a página de código, o conjunto de caracteres, o território e a ordenação do banco, da configuração dele.</summary>
     [Test]
     public async Task Properties_ReportTheCodePageAndTheTerritory()

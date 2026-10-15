@@ -33,6 +33,9 @@ public abstract class IbmDatabaseSessionsTests
 
     protected abstract Task<ConnectionSettings> StartDatabaseAsync();
 
+    /// <summary>RN-GRADE-011: um filtro que só este banco recusa, pelas aspas ou pelos comentários dele; nulo onde não há.</summary>
+    protected virtual string? InvalidFilterOfThisDatabase => null;
+
     [OneTimeSetUp]
     public async Task StartAsync()
         => _settings = await StartDatabaseAsync();
@@ -41,7 +44,7 @@ public abstract class IbmDatabaseSessionsTests
     /// A API parte com a pasta de drivers em que o gerenciador instalou o driver da IBM (<see cref="IbmDriverSingleton"/>): sem ele,
     /// abrir sessão nestes bancos responderia 422 `DRIVER_NOT_INSTALLED` (RN-DRIVER-006).
     /// </summary>
-    private static async Task<ApiHost> StartHostAsync()
+    protected static async Task<ApiHost> StartHostAsync()
     {
         var drivers = await IbmDriverSingleton.GetDirectoryAsync();
 
@@ -77,6 +80,8 @@ public abstract class IbmDatabaseSessionsTests
         var opened = await StepAsync("POST database-sessions", await client.OpenSessionRawAsync(connectionID), HttpStatusCode.Created);
         var session = $"{PrismCalls.SessionsPath}/{opened.GetProperty("id").GetGuid()}";
 
+        // RN-ARVORE-006: os bancos do servidor, com o da sessão primeiro.
+        var databases = await StepAsync("GET databases", await client.GetAsync($"{session}/databases"), HttpStatusCode.OK);
         var schemas = await StepAsync("GET schemas", await client.GetAsync($"{session}/schemas"), HttpStatusCode.OK);
         var tables = await StepAsync("GET objects?kind=tables", await client.GetAsync($"{session}/schemas/{schema}/objects?kind=tables"), HttpStatusCode.OK);
         var views = await StepAsync("GET objects?kind=views", await client.GetAsync($"{session}/schemas/{schema}/objects?kind=views"), HttpStatusCode.OK);
@@ -102,6 +107,13 @@ public abstract class IbmDatabaseSessionsTests
         var smallNext = await StepAsync("POST queries/next (pageSize 50)", await client.PostAsync($"{session}/queries/next", null), HttpStatusCode.OK);
         var outOfRange = await StepAsync("POST queries (pageSize 1001)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido", pageSize = 1001 }), HttpStatusCode.UnprocessableEntity);
 
+        // RN-GRADE-011: o filtro junto ao comando, por fora da união, e as recusas, com as aspas e os comentários deste banco.
+        var merged = await StepAsync("POST queries (filtro junto)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido WHERE numero <= 1010 ORDER BY numero", filter = "numero > 1005 ORDER BY numero DESC" }), HttpStatusCode.OK);
+        var wrapped = await StepAsync("POST queries (filtro por fora)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido UNION SELECT numero FROM loja.pedido", filter = "numero < 1004 ORDER BY numero DESC" }), HttpStatusCode.OK);
+        var invalidFilter = await StepAsync("POST queries (filtro com ;)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido", filter = "numero = 1; DELETE FROM loja.pedido" }), HttpStatusCode.UnprocessableEntity);
+        if (InvalidFilterOfThisDatabase is { } ofThisDatabase)
+            Assert.That((await StepAsync("POST queries (filtro com o comentário deste banco aberto)", await client.PostAsJsonAsync($"{session}/queries", new { sql = "SELECT numero FROM loja.pedido", filter = ofThisDatabase }), HttpStatusCode.UnprocessableEntity)).GetProperty("type").GetString(), Is.EqualTo("FILTER_INVALID"));
+
         // RN-SQL-008, 009, 003 e 001.
         var updated = await StepAsync("POST queries (UPDATE)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "UPDATE loja.cliente SET nome = nome WHERE id <= 4"), HttpStatusCode.OK);
         var syntax = await StepAsync("POST queries (erro de sintaxe)", await client.ExecuteRawAsync(opened.GetProperty("id").GetGuid(), "SELEC 1"), HttpStatusCode.UnprocessableEntity);
@@ -121,6 +133,9 @@ public abstract class IbmDatabaseSessionsTests
         Assert.That(opened.GetProperty("engine").GetInt32(), Is.EqualTo((int)_settings.Engine));
         Assert.That(opened.GetProperty("database").GetString(), Is.EqualTo(_settings.Database));
         Assert.That(opened.GetProperty("serverVersion").GetString(), Is.Not.Empty);
+        Assert.That(databases[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "name", "isCurrent" }));
+        Assert.That((databases[0].GetProperty("name").GetString(), databases[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((Name(_settings.Database), true)));
+        Assert.That(databases.EnumerateArray().Skip(1).Select(item => item.GetProperty("isCurrent").GetBoolean()), Is.All.False);
         Assert.That(Names(schemas), Has.Member(Name("loja")));
         var loja = schemas.EnumerateArray().Single(item => item.GetProperty("name").GetString() == Name("loja"));
         Assert.That((loja.GetProperty("tables").GetInt32(), loja.GetProperty("views").GetInt32(), loja.GetProperty("routines").GetInt32()), Is.EqualTo((3, 1, 1)));
@@ -155,6 +170,11 @@ public abstract class IbmDatabaseSessionsTests
         Assert.That(smallNext.GetProperty("rows").GetArrayLength(), Is.EqualTo(50));
         Assert.That(smallNext.GetProperty("rows")[0][0].GetString(), Is.EqualTo("1051"));
         Assert.That(outOfRange.GetProperty("type").GetString(), Is.EqualTo("QUERY_INVALID"));
+        Assert.That(merged.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1010", "1009", "1008", "1007", "1006" }));
+        Assert.That(merged.GetProperty("filterApplied").GetString(), Is.EqualTo("merged"));
+        Assert.That(wrapped.GetProperty("rows").EnumerateArray().Select(row => row[0].GetString()), Is.EqualTo(new[] { "1003", "1002", "1001" }));
+        Assert.That((wrapped.GetProperty("filterApplied").GetString(), wrapped.GetProperty("editable").GetProperty("reason").GetString()), Is.EqualTo(("wrapped", "união de consultas")));
+        Assert.That(invalidFilter.GetProperty("errorCodes").GetProperty("Filter")[0].GetString(), Is.EqualTo("FILTER_INVALID"));
         Assert.That(updated.GetProperty("rowsAffected").GetInt64(), Is.EqualTo(4));
         Assert.That(syntax.GetProperty("type").GetString(), Is.EqualTo("SQL_EXECUTION_FAILED"));
         Assert.That(syntax.GetProperty("sqlState").GetString(), Is.EqualTo(SyntaxErrorSqlState));
@@ -204,9 +224,45 @@ public sealed class InformixDatabaseSessionsTests : IbmDatabaseSessionsTests
 
     protected override string DefaultForeignKeyRule => "restrict";
 
+    /// <summary>A chave abre comentário só no Informix: no PostgreSQL o mesmo filtro chega ao banco.</summary>
+    protected override string? InvalidFilterOfThisDatabase => "numero = 1 { o resto";
+
     protected override string Name(string name)
         => name.ToLowerInvariant();
 
     protected override Task<ConnectionSettings> StartDatabaseAsync()
         => InformixSingleton.GetSettingsAsync();
+
+    /// <summary>
+    /// RN-ARVORE-006: a lista traz os bancos do servidor (`sysmaster:sysdatabases`), e outro deles abre com as credenciais da conexão e o
+    /// nome dele no lugar do banco dela: a sessão nova responde pelo banco sem log da carga, e a lista dela o põe primeiro.
+    /// </summary>
+    [Test]
+    public async Task Open_AnotherDatabaseOfTheServer_Returns201AndServesThatDatabase()
+    {
+        var settings = await InformixSingleton.GetSettingsAsync();
+        await using var host = await StartHostAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+        var connectionID = await host.Client.CreateConnectionAsync(settings);
+        var main = (await (await host.Client.OpenSessionRawAsync(connectionID)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var listed = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{main}/databases")).Content.ReadFromJsonAsync<JsonElement>();
+        var openedResponse = await host.Client.PostAsJsonAsync(PrismCalls.SessionsPath, new { connectionID, database = InformixSingleton.UnloggedDatabase });
+        var opened = await openedResponse.Content.ReadFromJsonAsync<JsonElement>();
+        await TestContext.Out.WriteLineAsync($"GET databases -> {listed}\nPOST database-sessions (database {InformixSingleton.UnloggedDatabase}) -> {(int)openedResponse.StatusCode} {opened}");
+        Assert.That(openedResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created), opened.ToString());
+        var other = opened.GetProperty("id").GetGuid();
+        var fromOther = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/databases")).Content.ReadFromJsonAsync<JsonElement>();
+        var properties = await (await host.Client.GetAsync($"{PrismCalls.SessionsPath}/{other}/properties")).Content.ReadFromJsonAsync<JsonElement>();
+
+        var names = listed.EnumerateArray().Select(item => item.GetProperty("name").GetString()).ToList();
+        Assert.That(names[0], Is.EqualTo(settings.Database));
+        Assert.That(names, Is.SupersetOf(new[] { InformixSingleton.UnloggedDatabase, InformixSingleton.Utf8Database, "sysmaster" }));
+        Assert.That(names.Skip(1), Is.Ordered.Using((IComparer<string?>)StringComparer.Ordinal));
+        Assert.That(names, Is.All.Not.EndWith(" "));
+        Assert.That(opened.GetProperty("database").GetString(), Is.EqualTo(InformixSingleton.UnloggedDatabase));
+        Assert.That((fromOther[0].GetProperty("name").GetString(), fromOther[0].GetProperty("isCurrent").GetBoolean()), Is.EqualTo((InformixSingleton.UnloggedDatabase, true)));
+        Assert.That(fromOther.EnumerateArray().Count(item => item.GetProperty("isCurrent").GetBoolean()), Is.EqualTo(1));
+        Assert.That(properties[0].GetProperty("value").GetString(), Is.EqualTo("noLogging"));
+    }
 }

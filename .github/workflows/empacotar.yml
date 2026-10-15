@@ -1,5 +1,6 @@
 # Empacotar (RN-ABERTO-006 e RN-GITHUB-005): a API publicada para as quatro plataformas, num job Linux, e o pacote de cada
-# plataforma no runner dela: Windows x64 (instalador e zip), Linux x64 (AppImage, deb, rpm e tar.gz, no contêiner do
+# plataforma no runner dela: Windows x64 (instalador e zip, e o instalador conferido de verdade, instalando e desinstalando em
+# silêncio nos dois modos: check-windows-installer.sh), Linux x64 (AppImage, deb, rpm e tar.gz, no contêiner do
 # electron-builder fixado por digest) e macOS (dmg e zip, Apple Silicon e Intel, os dois no runner de macOS Apple Silicon, porque o
 # dmg só se gera no macOS). Toda execução empacota, lance ou não; quem publica é o workflow lancar.
 #
@@ -119,6 +120,8 @@ jobs:
           PRISM_UPDATE_REPOSITORY: ${{ github.repository }}
           PRISM_HOMEPAGE: ${{ github.server_url }}/${{ github.repository }}
         run: bash scripts/ci/package-desktop.sh win
+      - name: Conferir o instalador nos dois modos
+        run: bash scripts/ci/check-windows-installer.sh
       - name: Guardar os pacotes
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -176,7 +179,7 @@ jobs:
   macos:
     name: Pacote de macOS (${{ matrix.arquitetura }})
     needs: api
-    runs-on: macos-26
+    runs-on: macos-15
     timeout-minutes: 45
     permissions:
       contents: read

@@ -1,3 +1,4 @@
+using Prism.Application.Common.Environments;
 using Prism.Core.Extensions;
 using Prism.Infrastructure.Databases.Models;
 
@@ -42,7 +43,7 @@ internal sealed class Connection
     }
 
     public static Connection Create(Guid? folderID, string name, EDatabaseEngine engine, string host, int port, string database, string userName, string password, string? environmentName, string? environmentColor, DateTime createdAt)
-        => new(Guid.CreateVersion7(), folderID, name.NormalizeName(), engine, host.Trim(), port, database.Trim(), userName.Trim(), password, NormalizeEnvironmentName(environmentName), NormalizeEnvironmentColor(environmentColor), createdAt, createdAt);
+        => new(Guid.CreateVersion7(), folderID, name.NormalizeName(), engine, host.Trim(), port, database.Trim(), userName.Trim(), password, EnvironmentRules.NormalizeName(environmentName), EnvironmentRules.NormalizeColor(environmentColor), createdAt, createdAt);
 
     /// <summary>
     /// A conexão como o cofre a guarda, para o handler que altera: o cofre não tem SQL que materialize o construtor
@@ -65,15 +66,15 @@ internal sealed class Connection
         Database = database.Trim();
         UserName = userName.Trim();
         Password = password ?? Password;
-        EnvironmentName = NormalizeEnvironmentName(environmentName);
-        EnvironmentColor = NormalizeEnvironmentColor(environmentColor);
+        EnvironmentName = EnvironmentRules.NormalizeName(environmentName);
+        EnvironmentColor = EnvironmentRules.NormalizeColor(environmentColor);
         UpdatedAt = updatedAt;
     }
 
-    /// <summary>O ambiente é opcional: em branco é "sem ambiente", e não um nome vazio.</summary>
-    private static string? NormalizeEnvironmentName(string? environmentName)
-        => string.IsNullOrWhiteSpace(environmentName) ? null : environmentName.NormalizeName();
-
-    private static string? NormalizeEnvironmentColor(string? environmentColor)
-        => string.IsNullOrWhiteSpace(environmentColor) ? null : environmentColor.Trim();
+    /// <summary>
+    /// RN-CONN-016: a cópia desta conexão, com ID novo, o nome dado e as duas datas de agora, e todo o resto igual, a senha inclusive. Quem
+    /// escolhe o nome (`ConnectionRules.CopyName`, livre na pasta) é o repository, dentro da gravação; o nome chega pronto e não é normalizado de novo.
+    /// </summary>
+    public Connection Duplicate(string name, DateTime createdAt)
+        => new(Guid.CreateVersion7(), FolderID, name, Engine, Host, Port, Database, UserName, Password, EnvironmentName, EnvironmentColor, createdAt, createdAt);
 }

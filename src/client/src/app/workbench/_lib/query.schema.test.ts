@@ -11,7 +11,7 @@ describe("queryResultSchema (seção 6: página de resultado)", () => {
   it("página com linhas", () => {
     const parsed = queryResultSchema.parse({ columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], rowsAffected: null });
 
-    expect(parsed).toEqual({ kind: "rows", columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], totalRows: null });
+    expect(parsed).toEqual({ kind: "rows", columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], totalRows: null, resultId: null, readOnly: null, filterApplied: null });
   });
 
   it("totalRows presente: o comando gravou, foi até o fim e esse é o total que devolveu (RN-SQL-013)", () => {
@@ -98,5 +98,22 @@ describe("sqlErrorDetails (RN-SQL-009: os campos extras do 422 SQL_EXECUTION_FAI
     expect(sqlErrorDetails({ sqlState: 42601, position: "15" })).toEqual({ sqlState: null, position: null });
     expect(sqlErrorDetails({ position: 0 })).toEqual({ sqlState: null, position: null });
     expect(sqlErrorDetails({})).toEqual({ sqlState: null, position: null });
+  });
+});
+
+describe("o resultado e a edição dele na página (seção 22, RN-EDIT-002)", () => {
+  const page = { columns: [{ name: "id", type: "integer", kind: "number" }], rows: [["1"]], hasMore: false, elapsedMs: 1, truncatedCells: [] };
+
+  it("a página traz o resultado a que pertence e, quando já se sabe, o motivo de o resultado inteiro ser só leitura", () => {
+    expect(queryResultSchema.parse({ ...page, resultID: "r1", editable: { known: false, reason: null } })).toMatchObject({ resultId: "r1", readOnly: null });
+    expect(queryResultSchema.parse({ ...page, resultID: "r2", editable: { known: true, reason: "união de consultas" } })).toMatchObject({ resultId: "r2", readOnly: "união de consultas" });
+  });
+
+  it("sem os campos (uma API anterior), não há resultado a editar nem motivo", () => {
+    expect(queryResultSchema.parse(page)).toMatchObject({ resultId: null, readOnly: null });
+  });
+
+  it("um campo fora do formato não recusa a página, que o banco já entregou: só não há o que editar", () => {
+    expect(queryResultSchema.parse({ ...page, resultID: 42, editable: "sim" })).toMatchObject({ resultId: null, readOnly: null });
   });
 });

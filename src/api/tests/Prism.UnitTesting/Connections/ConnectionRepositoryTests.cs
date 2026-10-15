@@ -24,7 +24,7 @@ public sealed class ConnectionRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord>? folders = null, IReadOnlyList<VaultConnectionRecord>? connections = null)
-        => new("marina.costa", folders ?? [], connections ?? []);
+        => new("marina.costa", folders ?? [], connections ?? [], [], VaultWorkspaceRecord.Empty);
 
     private static VaultConnectionRecord ToRecord(Connection connection)
         => new(connection.ID, connection.FolderID, connection.Name, connection.Engine, connection.Host, connection.Port, connection.Database, connection.UserName, connection.Password, connection.EnvironmentName, connection.EnvironmentColor, connection.CreatedAt, connection.UpdatedAt);
@@ -597,6 +597,148 @@ public sealed class ConnectionRepositoryTests
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("VAULT_LOCKED", result.Error.Type);
+        VerifySavedOnce(cancellationToken);
+    }
+
+    /// <summary>
+    /// RN-CONN-016: a cópia sai do registro do documento que a função recebe (o mais recente), com todos os campos e a senha, na mesma
+    /// pasta, e entra no fim da lista; nada mais muda. A senha é copiada aqui dentro, de registro para registro, e não passa por quem chamou.
+    /// </summary>
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "OK acrescenta a cópia com todos os campos e a senha, na mesma pasta, sem mexer no resto")]
+    public async Task Duplicate_ShouldBeOK()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = VaultFakers.CreateFolder();
+        var other = VaultFakers.CreateConnection(folderID: folder.ID);
+        var source = VaultFakers.CreateConnection(folderID: folder.ID, name: "MES", password: "segredo-do-banco") with { EnvironmentName = "Produção", EnvironmentColor = "#FF0000" };
+        var current = Document([folder], [other, source]);
+        var createdAt = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
+        var repository = CreateRepository(current);
+
+        //Act
+        var result = await repository.Duplicate(source.ID, createdAt, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(_saved);
+        Assert.Equal(3, _saved.Connections.Count);
+        Assert.Equal(other, _saved.Connections[0]);
+        Assert.Equal(source, _saved.Connections[1]);
+        var copy = _saved.Connections[2];
+        Assert.NotEqual(source.ID, copy.ID);
+        Assert.Equal(source with { ID = copy.ID, Name = "MES (cópia)", CreatedAt = createdAt, UpdatedAt = createdAt }, copy);
+        Assert.Equal("segredo-do-banco", copy.Password);
+        Assert.Equal(ToRecord(result.Value), copy);
+        Assert.Same(current.Folders, _saved.Folders);
+        Assert.Same(current.Scripts, _saved.Scripts);
+        VerifySavedOnce(cancellationToken);
+    }
+
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "OK na raiz, a cópia fica na raiz")]
+    public async Task Duplicate_ShouldBeOK_InTheRoot()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var source = VaultFakers.CreateConnection(folderID: null, name: "Local");
+        var repository = CreateRepository(Document(connections: [source]));
+
+        //Act
+        var result = await repository.Duplicate(source.ID, DateTime.UtcNow, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.Value.FolderID);
+        Assert.Equal("Local (cópia)", result.Value.Name);
+        Assert.Null(_saved!.Connections[1].FolderID);
+    }
+
+    /// <summary>
+    /// RN-CONN-011 e 016: o número da cópia é decidido contra o documento que a função recebe, com o que outra requisição gravou depois da
+    /// leitura de quem pediu, e sem diferenciar maiúsculas. O mesmo nome em outra pasta não conta.
+    /// </summary>
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "OK com (cópia) já na pasta, sem diferenciar maiúsculas, a cópia é (cópia 2); o nome em outra pasta não conta")]
+    public async Task Duplicate_ShouldNumberTheCopy_AgainstTheDocumentFolder()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = VaultFakers.CreateFolder();
+        var otherFolder = VaultFakers.CreateFolder();
+        var source = VaultFakers.CreateConnection(folderID: folder.ID, name: "MES");
+        var current = Document([folder, otherFolder], [source, VaultFakers.CreateConnection(folderID: folder.ID, name: "mes (CÓPIA)"), VaultFakers.CreateConnection(folderID: otherFolder.ID, name: "MES (cópia 2)"), VaultFakers.CreateConnection(folderID: null, name: "MES (cópia 2)")]);
+        var repository = CreateRepository(current);
+
+        //Act
+        var result = await repository.Duplicate(source.ID, DateTime.UtcNow, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("MES (cópia 2)", result.Value.Name);
+        Assert.Equal(folder.ID, result.Value.FolderID);
+        Assert.Equal("MES (cópia 2)", _saved!.Connections[^1].Name);
+    }
+
+    /// <summary>A conexão foi excluída entre o clique e a gravação: quem diz que ela não existe é a função, e o documento volta como entrou.</summary>
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "Erro a conexão não está no documento, e o documento fica como estava")]
+    public async Task Duplicate_ShouldBeError_WhenTheConnectionDoesNotExist()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var id = Guid.CreateVersion7();
+        var current = Document(connections: [VaultFakers.CreateConnection()]);
+        var repository = CreateRepository(current);
+
+        //Act
+        var result = await repository.Duplicate(id, DateTime.UtcNow, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("CONNECTION_NOT_FOUND", result.Error.Type);
+        Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
+        Assert.Contains(id.ToString(), result.Error.Detail);
+        Assert.Same(current, _saved);
+        VerifySavedOnce(cancellationToken);
+    }
+
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "Erro cofre fechado")]
+    public async Task Duplicate_ShouldBeError_WhenTheVaultIsLocked()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var source = VaultFakers.CreateConnection();
+        var repository = CreateRepository(Document(connections: [source]), EVaultError.Locked);
+
+        //Act
+        var result = await repository.Duplicate(source.ID, DateTime.UtcNow, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("VAULT_LOCKED", result.Error.Type);
+        Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
+        VerifySavedOnce(cancellationToken);
+    }
+
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "Erro disco indisponível")]
+    public async Task Duplicate_ShouldBeError_WhenTheDiskFails()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var source = VaultFakers.CreateConnection();
+        var repository = CreateRepository(Document(connections: [source]), EVaultError.Unavailable);
+
+        //Act
+        var result = await repository.Duplicate(source.ID, DateTime.UtcNow, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("VAULT_UNAVAILABLE", result.Error.Type);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, result.Error.StatusCode);
         VerifySavedOnce(cancellationToken);
     }
 }

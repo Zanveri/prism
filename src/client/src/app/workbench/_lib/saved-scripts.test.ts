@@ -1,0 +1,177 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  copyName,
+  exceedsScriptLimit,
+  isScriptDirty,
+  maxScriptBytes,
+  normalizeScriptName,
+  refusalProblem,
+  saveShortcut,
+  scriptKeyTarget,
+  scriptMenu,
+  scriptRowKey,
+  scriptNameProblem,
+  scriptPlace,
+  scriptsToAsk,
+  suggestScriptName,
+  withEditedSql,
+} from "./saved-scripts";
+
+const scripts = (...names: string[]) => names.map((name, index) => ({ id: `s${index + 1}`, name }));
+
+describe("o nome do script (RN-SCRIPT-004, as regras da API)", () => {
+  it("é gravado sem espaço nas pontas, sem espaço repetido e na forma composta do Unicode", () => {
+    expect(normalizeScriptName("  Fechamento   do mês ")).toBe("Fechamento do mês");
+    expect(normalizeScriptName("Fábrica")).toBe("Fábrica");
+  });
+
+  it("vazio, só espaços, com mais de 200 caracteres ou com caractere de controle é recusado", () => {
+    expect(scriptNameProblem("", [])).toBe("empty");
+    expect(scriptNameProblem("   ", [])).toBe("empty");
+    expect(scriptNameProblem("a".repeat(201), [])).toBe("tooLong");
+    expect(scriptNameProblem(` ${"a".repeat(200)} `, [])).toBeNull();
+    for (const name of ["Fecha\tmento", "Fecha\nmento", "Fecha\rmento", "a\u0001", "\u007fa", "a\u0085"]) expect(scriptNameProblem(name, []), JSON.stringify(name)).toBe("control");
+  });
+
+  it("o nome de outro script, com outras maiúsculas e espaços, já existe; o do próprio script, não", () => {
+    expect(scriptNameProblem(" fechamento  do MÊS ", scripts("Fechamento do mês"))).toBe("taken");
+    expect(scriptNameProblem("FECHAMENTO DO MÊS", scripts("Fechamento do mês"), "s1")).toBeNull();
+    expect(scriptNameProblem("Relatório", scripts("Fechamento do mês"))).toBeNull();
+  });
+});
+
+describe("a sugestão de nome", () => {
+  it("é o primeiro \"Script N\" livre, sem diferenciar maiúsculas", () => {
+    expect(suggestScriptName([])).toBe("Script 1");
+    expect(suggestScriptName(scripts("Script 1", "script 2", "Script 4"))).toBe("Script 3");
+  });
+
+  it("o \"Salvar como\" sugere o nome com o primeiro número livre entre parênteses, sem passar de 200 caracteres", () => {
+    expect(copyName("Fechamento", scripts("Fechamento"))).toBe("Fechamento (2)");
+    expect(copyName("Fechamento", scripts("Fechamento", "fechamento (2)"))).toBe("Fechamento (3)");
+    const long = copyName("a".repeat(200), scripts("a".repeat(200)));
+    expect(long).toHaveLength(200);
+    expect(long.endsWith(" (2)")).toBe(true);
+  });
+});
+
+describe("o tamanho do SQL (até 1 MB, em bytes de UTF-8, como a API conta)", () => {
+  it("1 MB exato cabe, um byte a mais não; o acento conta dois bytes", () => {
+    expect(maxScriptBytes).toBe(1024 * 1024);
+    expect(exceedsScriptLimit("x".repeat(maxScriptBytes))).toBe(false);
+    expect(exceedsScriptLimit("x".repeat(maxScriptBytes + 1))).toBe(true);
+    expect(exceedsScriptLimit("é".repeat(maxScriptBytes / 2 + 1))).toBe(true);
+  });
+});
+
+describe("a mudança não salva (RN-SCRIPT-001)", () => {
+  it("é o texto diferente do que foi salvo", () => {
+    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1")).toBe(false);
+    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1 ")).toBe(true);
+  });
+
+  it("o texto novo da aba recalcula o ponto: desfazer até o salvo o apaga", () => {
+    const tab = { id: "t1", sql: "SELECT 1", script: { id: "s1", name: "a", savedSql: "SELECT 1", dirty: true } };
+    expect(withEditedSql(tab, "SELECT 1").script?.dirty).toBe(false);
+    expect(withEditedSql(tab, "SELECT 2").script?.dirty).toBe(true);
+    expect(withEditedSql({ id: "t2", sql: "" }, "SELECT 2")).toEqual({ id: "t2", sql: "SELECT 2" });
+  });
+
+  it("é também o banco da aba diferente do banco em que foi salvo (RN-ARVORE-007); sem banco, é o da conexão", () => {
+    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1", "vendas")).toBe(true);
+    expect(isScriptDirty({ savedSql: "SELECT 1", savedDatabase: "vendas" }, "SELECT 1", "vendas")).toBe(false);
+    expect(isScriptDirty({ savedSql: "SELECT 1", savedDatabase: "vendas" }, "SELECT 1")).toBe(true);
+  });
+
+  it("com a aba noutro banco, desfazer o texto até o salvo não apaga o ponto", () => {
+    const tab = { id: "t1", sql: "SELECT 2", database: "vendas", script: { id: "s1", name: "a", savedSql: "SELECT 1", dirty: true } };
+    expect(withEditedSql(tab, "SELECT 1").script?.dirty).toBe(true);
+    expect(withEditedSql({ ...tab, script: { ...tab.script, savedDatabase: "vendas" } }, "SELECT 1").script?.dirty).toBe(false);
+  });
+
+  it("fechar pergunta só pelas abas que são scripts com mudança, na ordem da faixa", () => {
+    const tabs = [
+      { id: "t1", script: { id: "s1", name: "a", savedSql: "", dirty: true } },
+      { id: "t2" },
+      { id: "t3", script: { id: "s3", name: "c", savedSql: "", dirty: false } },
+      { id: "t4", script: { id: "s4", name: "d", savedSql: "", dirty: true } },
+    ];
+    expect(scriptsToAsk(["t4", "t2", "t3", "t1"], tabs).map((tab) => tab.id)).toEqual(["t1", "t4"]);
+    expect(scriptsToAsk(["t2", "t3"], tabs)).toEqual([]);
+  });
+});
+
+describe("onde o script abre (RN-SCRIPT-003)", () => {
+  const connections = new Set(["c1", "c2"]);
+
+  it("na conexão e no banco em que foi salvo, se a conexão ainda existe", () => {
+    expect(scriptPlace({ connectionID: "c1", database: "vendas" }, connections)).toEqual({ connectionId: "c1", database: "vendas", missing: false });
+    expect(scriptPlace({ connectionID: "c2", database: null }, connections)).toEqual({ connectionId: "c2", database: undefined, missing: false });
+  });
+
+  it("sem conexão quando a dele não existe mais, ou quando nunca teve; só a que sumiu é \"não existe mais\"", () => {
+    expect(scriptPlace({ connectionID: "c9", database: "vendas" }, connections)).toEqual({ connectionId: null, database: undefined, missing: true });
+    expect(scriptPlace({ connectionID: null, database: null }, connections)).toEqual({ connectionId: null, database: undefined, missing: false });
+  });
+
+  it("com a lista de conexões ainda sem chegar, não decide: abre na dele", () => {
+    expect(scriptPlace({ connectionID: "c9", database: null }, null)).toEqual({ connectionId: "c9", database: undefined, missing: false });
+  });
+});
+
+describe("o teclado da lista de scripts", () => {
+  it("as setas andam sem dar a volta, Home e End vão às pontas, e o resto não é da lista", () => {
+    expect(scriptKeyTarget("ArrowDown", 0, 3)).toBe(1);
+    expect(scriptKeyTarget("ArrowDown", 2, 3)).toBe(2);
+    expect(scriptKeyTarget("ArrowUp", 0, 3)).toBe(0);
+    expect(scriptKeyTarget("Home", 2, 3)).toBe(0);
+    expect(scriptKeyTarget("End", 0, 3)).toBe(2);
+    expect(scriptKeyTarget("a", 1, 3)).toBeNull();
+    expect(scriptKeyTarget("ArrowDown", 0, 0)).toBeNull();
+  });
+});
+
+describe("Ctrl+S e Ctrl+Shift+S (RN-SCRIPT-001)", () => {
+  const key = (over: Partial<{ key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "s", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...over });
+
+  it("Ctrl+S salva, Ctrl+Shift+S é o \"Salvar como\", e o Cmd do macOS vale o Ctrl", () => {
+    expect(saveShortcut(key({ ctrlKey: true }))).toBe("save");
+    expect(saveShortcut(key({ metaKey: true }))).toBe("save");
+    expect(saveShortcut(key({ ctrlKey: true, shiftKey: true, key: "S" }))).toBe("saveAs");
+  });
+
+  it("sem o Ctrl, com o Alt ou com outra tecla, não é o atalho", () => {
+    expect(saveShortcut(key({}))).toBeNull();
+    expect(saveShortcut(key({ ctrlKey: true, altKey: true }))).toBeNull();
+    expect(saveShortcut(key({ ctrlKey: true, key: "d" }))).toBeNull();
+  });
+});
+
+describe("a recusa da API, no campo do nome", () => {
+  it("o nome repetido é \"já existe\", o SQL grande demais é o tamanho, e o nome inválido diz o problema do nome que foi enviado", () => {
+    expect(refusalProblem("SCRIPT_ALREADY_EXISTS", "a")).toBe("taken");
+    expect(refusalProblem("SCRIPT_TOO_LARGE", "a")).toBe("tooLarge");
+    expect(refusalProblem("SCRIPT_NAME_INVALID", "a\tb")).toBe("control");
+    expect(refusalProblem("SCRIPT_NAME_INVALID", "a")).toBe("empty");
+    expect(refusalProblem("OUTRO", "a")).toBeNull();
+  });
+});
+
+describe("o menu de um script e as teclas da linha (RN-SCRIPT-003)", () => {
+  it("abrir primeiro; renomear e copiar o SQL; excluir à parte, por último", () => {
+    expect(scriptMenu().map((group) => group.map((item) => item.action))).toEqual([["open"], ["rename", "copySql"], ["delete"]]);
+  });
+
+  it("Enter abre, F2 renomeia, Delete exclui, Shift+F10 e a tecla de menu abrem o menu; o resto não é da linha", () => {
+    const key = (over: Partial<{ key: string; shiftKey: boolean }>) => ({ key: "", shiftKey: false, ...over });
+
+    expect(scriptRowKey(key({ key: "Enter" }))).toBe("open");
+    expect(scriptRowKey(key({ key: "F2" }))).toBe("rename");
+    expect(scriptRowKey(key({ key: "Delete" }))).toBe("delete");
+    expect(scriptRowKey(key({ key: "F10", shiftKey: true }))).toBe("menu");
+    expect(scriptRowKey(key({ key: "ContextMenu" }))).toBe("menu");
+    expect(scriptRowKey(key({ key: "F10" }))).toBeNull();
+    expect(scriptRowKey(key({ key: "a" }))).toBeNull();
+  });
+});

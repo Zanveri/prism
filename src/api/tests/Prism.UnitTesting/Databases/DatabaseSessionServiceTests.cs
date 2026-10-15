@@ -91,6 +91,31 @@ public sealed class DatabaseSessionServiceTests
         Assert.False(afterClosing);
     }
 
+    /// <summary>RN-ARVORE-006 e RN-SESSAO-002: a lista dos bancos é consulta de catálogo e espera a vez, sem `SessionBusy`, como os esquemas.</summary>
+    [Trait("DatabaseSessionService", "GetDatabasesAsync")]
+    [Fact(DisplayName = "OK a lista dos bancos espera a vez da sessão e depois responde o que a conexão listou")]
+    public async Task GetDatabasesAsync_ShouldWaitForTheTurn()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        var idle = await service.GetDatabasesAsync(session.ID, CancellationToken.None);
+        using var gaveUp = new CancellationTokenSource();
+        _ = service.ExecuteAsync(session.ID, "SELECT 1", CancellationToken.None);
+
+        //Act
+        var waiting = service.GetDatabasesAsync(session.ID, gaveUp.Token);
+        var completedWhileBusy = waiting.IsCompleted;
+        await gaveUp.CancelAsync();
+        var afterGivingUp = await waiting;
+
+        //Assert
+        Assert.True(idle.IsSuccess);
+        Assert.Equal([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)], idle.Value);
+        Assert.False(completedWhileBusy);
+        Assert.Equal(EDatabaseFailure.ExecutionFailed, afterGivingUp.Error.Kind);
+    }
+
     /// <summary>RN-SQL-010: sem comando em andamento na sessão não há o que interromper, e o cancelamento nem chega à conexão.</summary>
     [Trait("DatabaseSessionService", "Cancel")]
     [Fact(DisplayName = "OK cancelar só chega à conexão quando há comando em andamento")]
@@ -133,6 +158,31 @@ public sealed class DatabaseSessionServiceTests
         var closedTooEarly = _connection.CloseCursorCalls;
         _clock.Advance(TimeSpan.FromSeconds(1));
         _clock.FireTimers();
+
+        //Assert
+        Assert.Equal(0, closedTooEarly);
+        Assert.Equal(1, _connection.CloseCursorCalls);
+    }
+
+    /// <summary>
+    /// RN-SQL-007: o temporizador do sistema pode disparar uns milissegundos antes da hora marcada pelo relógio da última leitura. O
+    /// aviso adiantado não fecha o cursor, e tem de rearmar para o que falta; sem isso, o cursor ficava aberto até a sessão fechar.
+    /// </summary>
+    [Trait("DatabaseSessionService", "FetchNextAsync")]
+    [Fact(DisplayName = "OK o temporizador que dispara adiantado rearma e fecha o cursor quando dá a hora")]
+    public async Task IdleTimer_ShouldRearm_WhenItFiresEarly()
+    {
+        //Arrange
+        var clock = new EarlyTimers(TimeSpan.FromMilliseconds(10));
+        var service = new DatabaseSessionService([new FakeClient(_connection)], _vault.Object, clock, Logger.None);
+        var session = await OpenAsync(service);
+        _connection.NextPageHasMore = true;
+        await service.FetchNextAsync(session.ID, CancellationToken.None);
+
+        //Act
+        clock.Advance(TimeSpan.FromMinutes(5) - TimeSpan.FromMilliseconds(10));
+        var closedTooEarly = _connection.CloseCursorCalls;
+        clock.Advance(TimeSpan.FromHours(1));
 
         //Assert
         Assert.Equal(0, closedTooEarly);
@@ -185,6 +235,86 @@ public sealed class DatabaseSessionServiceTests
         Assert.Equal(EDatabaseFailure.SessionNotFound, afterwards.Error.Kind);
     }
 
+    private static readonly QueryColumn[] CutColumns = [new("id", "integer", "number"), new("corpo", "text", "text")];
+
+    /// <summary>Uma página de `rows` linhas com uma célula cortada na coluna `corpo`, com o valor completo que o driver leu.</summary>
+    private static QueryPage CutPage(int rows, int cutRow, string full, bool hasMore)
+        => new(CutColumns, [.. Enumerable.Range(0, rows).Select(row => new string?[] { row.ToString(), row == cutRow ? full[..10000] : "curto" })], hasMore, 0, [[cutRow, 1]], FullValues: [FullCellValue.Text(full)]);
+
+    /// <summary>
+    /// RN-SQL-017: o registro guarda o valor completo das células cortadas de cada página que entrega do resultado, pela linha no
+    /// resultado inteiro (a página do carregar mais continua a contagem), e a página não o leva para a tela: ela só diz as que ficaram sem.
+    /// </summary>
+    [Trait("DatabaseSessionService", "GetCells")]
+    [Fact(DisplayName = "OK os valores completos voltam pela linha no resultado inteiro, também os do carregar mais, na ordem pedida")]
+    public async Task GetCells_ShouldReturnTheFullValues_OfEveryDeliveredPage()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        var first = new string('a', 10001);
+        var second = new string('b', 50000);
+        _connection.Outcomes.Enqueue(new QueryOutcome(CutPage(200, 3, first, hasMore: true), null, 0));
+        _connection.NextPage = CutPage(200, 5, second, hasMore: false);
+
+        //Act
+        var executed = await service.ExecuteAsync(session.ID, "SELECT id, corpo FROM documento", CancellationToken.None);
+        var next = await service.FetchNextAsync(session.ID, CancellationToken.None);
+        var page = executed.Value.Page!;
+        var cells = service.GetCells(session.ID, page.ResultID!.Value, [new CellPosition(205, 1), new CellPosition(3, 1), new CellPosition(4, 1)]);
+
+        //Assert
+        Assert.True(cells.IsSuccess);
+        Assert.Equal([second, first, null], cells.Value);
+        Assert.Null(page.FullValues);
+        Assert.Empty(page.CellsWithoutFullValue!);
+        Assert.Null(next.Value.FullValues);
+        Assert.Empty(next.Value.CellsWithoutFullValue!);
+        Assert.Equal(page.ResultID, next.Value.ResultID);
+    }
+
+    /// <summary>RN-SQL-017: o registro larga os valores quando a sessão executa outro comando: o resultado de antes não existe mais.</summary>
+    [Trait("DatabaseSessionService", "GetCells")]
+    [Fact(DisplayName = "NOK depois de outro comando, o resultado de antes não existe mais, e um ID que nunca foi resultado também não")]
+    public async Task GetCells_ShouldRefuse_WhenAnotherCommandRan()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(CutPage(1, 0, new string('a', 10001), hasMore: false), null, 0));
+        _connection.Outcomes.Enqueue(new QueryOutcome(null, 3, 0));
+        var resultID = (await service.ExecuteAsync(session.ID, "SELECT id, corpo FROM documento", CancellationToken.None)).Value.Page!.ResultID!.Value;
+
+        //Act
+        var unknown = service.GetCells(session.ID, Guid.NewGuid(), [new CellPosition(0, 1)]);
+        await service.ExecuteAsync(session.ID, "UPDATE documento SET corpo = 'x'", CancellationToken.None);
+        var afterTheCommand = service.GetCells(session.ID, resultID, [new CellPosition(0, 1)]);
+
+        //Assert
+        Assert.Equal(EDatabaseFailure.ResultNotFound, unknown.Error.Kind);
+        Assert.Equal(EDatabaseFailure.ResultNotFound, afterTheCommand.Error.Kind);
+    }
+
+    [Trait("DatabaseSessionService", "GetCells")]
+    [Fact(DisplayName = "NOK sessão fechada não existe, e linha além das entregues está fora do resultado")]
+    public async Task GetCells_ShouldRefuse_AClosedSession_AndARowNotDelivered()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(CutPage(200, 0, new string('a', 10001), hasMore: true), null, 0));
+        var resultID = (await service.ExecuteAsync(session.ID, "SELECT id, corpo FROM documento", CancellationToken.None)).Value.Page!.ResultID!.Value;
+
+        //Act
+        var notDelivered = service.GetCells(session.ID, resultID, [new CellPosition(200, 1)]);
+        await service.CloseAsync(session.ID);
+        var closed = service.GetCells(session.ID, resultID, [new CellPosition(0, 1)]);
+
+        //Assert
+        Assert.Equal(EDatabaseFailure.CellsInvalid, notDelivered.Error.Kind);
+        Assert.Equal(EDatabaseFailure.SessionNotFound, closed.Error.Kind);
+    }
+
     /// <summary>
     /// RN-ABERTO-006: onde a IBM não publica o driver (macOS em processador Intel), a API sobe sem os clients do Db2 e do Informix.
     /// Abrir ou testar uma conexão desses bancos responde falha de conexão, e a mensagem diz que é o Prism daquela plataforma que
@@ -209,6 +339,151 @@ public sealed class DatabaseSessionServiceTests
         Assert.True(tested.IsFailure);
         Assert.Equal(EDatabaseFailure.ConnectionFailed, tested.Error.Kind);
         Assert.Equal(message, tested.Error.Message);
+    }
+
+    /// <summary>
+    /// RN-GRADE-011: com filtro, o comando que vai à conexão é o montado, com a condição no `WHERE` e a ordem no lugar do `ORDER BY`; a
+    /// página e o "carregar mais" dizem que ele entrou junto, e a edição fica como sem o filtro (o catálogo decide).
+    /// </summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK com filtro junto, a conexão executa o comando montado e a página diz merged")]
+    public async Task Execute_WithAFilter_RunsTheMergedCommand()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: true), null, 0));
+
+        //Act
+        var executed = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido ORDER BY numero -- todos", "status = 'aberto' ORDER BY numero DESC", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var next = await service.FetchNextAsync(session.ID, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(["SELECT * FROM loja.pedido WHERE (status = 'aberto') ORDER BY numero DESC -- todos"], _connection.Executed);
+        Assert.Equal((EFilterApplied.Merged, ResultEditability.Unknown), (executed.Value.Page!.FilterApplied, executed.Value.Page.Editable));
+        Assert.Equal(EFilterApplied.Merged, next.Value.FilterApplied);
+    }
+
+    /// <summary>RN-GRADE-011: o comando com agrupamento vai por fora, e o resultado é só leitura com o motivo do próprio comando.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK com filtro por fora, a conexão executa a tabela derivada e o resultado é só leitura")]
+    public async Task Execute_WithAFilter_RunsTheWrappedCommand_ReadOnly()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: false), null, 0));
+
+        //Act
+        var executed = await service.ExecuteAsync(session.ID, "SELECT status, count(*) AS n FROM loja.pedido GROUP BY status", "n > 1", QueryPaging.DefaultPageSize, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(["SELECT * FROM (\nSELECT status, count(*) AS n FROM loja.pedido GROUP BY status\n) prism_filtro\nWHERE n > 1"], _connection.Executed);
+        Assert.Equal((EFilterApplied.Wrapped, ResultEditability.ReadOnly("agrupamento")), (executed.Value.Page!.FilterApplied, executed.Value.Page.Editable));
+    }
+
+    /// <summary>RN-GRADE-011: sem filtro (nulo ou só espaços), o comando vai como veio, e a página não fala de filtro.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK sem filtro, o comando vai como veio e a página não diz filtro")]
+    public async Task Execute_WithoutAFilter_RunsTheCommandAsIs()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: false), null, 0));
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: false), null, 0));
+
+        //Act
+        var blank = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "  ", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var without = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", CancellationToken.None);
+
+        //Assert
+        Assert.Equal(["SELECT * FROM loja.pedido", "SELECT * FROM loja.pedido"], _connection.Executed);
+        Assert.Null(blank.Value.Page!.FilterApplied);
+        Assert.Null(without.Value.Page!.FilterApplied);
+    }
+
+    /// <summary>RN-GRADE-011: o filtro que não se junta com segurança e o envio de mais de um comando são recusados sem ir à conexão.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "Erro filtro inválido e comando de mais de um envio não vão à conexão")]
+    public async Task Execute_WithAnInvalidFilter_IsRefusedWithoutRunning()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+
+        //Act
+        var invalid = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "a = 1; DELETE FROM loja.pedido", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var several = await service.ExecuteAsync(session.ID, "SELECT 1; SELECT 2", "a = 1", QueryPaging.DefaultPageSize, CancellationToken.None);
+
+        //Assert
+        Assert.Equal((EDatabaseFailure.FilterInvalid, SqlFilter.Terminator), (invalid.Error.Kind, invalid.Error.Message));
+        Assert.Equal(EDatabaseFailure.MultipleStatementsNotSupported, several.Error.Kind);
+        Assert.Empty(_connection.Executed);
+    }
+
+    /// <summary>RN-SQL-009 e RN-GRADE-011: a posição do erro é a do comando montado, que a tela não mostra, e não vai; sem filtro, vai.</summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK a falha do banco com filtro vem sem a posição do erro")]
+    public async Task Execute_WithAFilter_DropsThePositionOfTheError()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.Failure = new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "column \"x\" does not exist", "42703", 40);
+
+        //Act
+        var filtered = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "x = 1", QueryPaging.DefaultPageSize, CancellationToken.None);
+        var plain = await service.ExecuteAsync(session.ID, "SELECT x FROM loja.pedido", CancellationToken.None);
+
+        //Assert
+        Assert.Equal((EDatabaseFailure.ExecutionFailed, "column \"x\" does not exist", "42703", (int?)null), (filtered.Error.Kind, filtered.Error.Message, filtered.Error.SqlState, filtered.Error.Position));
+        Assert.Equal(40, plain.Error.Position);
+    }
+
+    /// <summary>RN-GRADE-011: a recusa do filtro sai do banco da sessão, sem tomar a vez; sem a sessão, nula (a execução responde que ela não existe).</summary>
+    [Trait("DatabaseSessionService", "FilterRefusal")]
+    [Fact(DisplayName = "OK a recusa do filtro é a do banco da sessão, e nula sem a sessão")]
+    public async Task FilterRefusal_ShouldReadTheFilterOfTheSessionsDatabase()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+
+        //Act
+        var refused = service.FilterRefusal(session.ID, "a = $$x");
+        var accepted = service.FilterRefusal(session.ID, "a = 1 ORDER BY b");
+        var unknown = service.FilterRefusal(Guid.NewGuid(), "a = $$x");
+
+        //Assert
+        Assert.Equal(SqlFilter.OpenQuote, refused);
+        Assert.Null(accepted);
+        Assert.Null(unknown);
+    }
+
+    private static QueryPage OnePage(bool hasMore)
+        => new([new QueryColumn("numero", "integer", "number")], [["1001"]], hasMore, 0, []);
+
+    /// <summary>O relógio falso cujos temporizadores disparam `early` antes da hora, como o do sistema às vezes faz.</summary>
+    private sealed class EarlyTimers(TimeSpan early) : FakeTimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+            => new Early(base.CreateTimer(callback, state, Adjust(dueTime), period), this);
+
+        private TimeSpan Adjust(TimeSpan dueTime)
+            => dueTime == Timeout.InfiniteTimeSpan || dueTime <= early ? dueTime : dueTime - early;
+
+        private sealed class Early(ITimer inner, EarlyTimers clock) : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+                => inner.Change(clock.Adjust(dueTime), period);
+
+            public void Dispose()
+                => inner.Dispose();
+
+            public ValueTask DisposeAsync()
+                => inner.DisposeAsync();
+        }
     }
 
     /// <summary>O relógio falso, com os temporizadores na mão do teste: `FireTimers` dispara todos, estejam ou não na hora.</summary>
@@ -251,7 +526,10 @@ public sealed class DatabaseSessionServiceTests
             => Task.FromResult(Result.Success<IDatabaseConnection, DatabaseFailure>(connection));
     }
 
-    /// <summary>A conexão de mentira: executar nunca volta, e carregar mais devolve uma página vazia com o `HasMore` que o teste pediu.</summary>
+    /// <summary>
+    /// A conexão de mentira: executar nunca volta (a não ser que o teste dê o desfecho), e carregar mais devolve uma página vazia com o
+    /// `HasMore` que o teste pediu (ou a página que ele deu).
+    /// </summary>
     private sealed class FakeConnection : IDatabaseConnection
     {
         private int _cancelCalls;
@@ -272,15 +550,33 @@ public sealed class DatabaseSessionServiceTests
 
         public bool NextPageHasMore { get; set; }
 
+        /// <summary>O que executar responde; sem ele, o comando nunca volta.</summary>
+        public Queue<QueryOutcome> Outcomes { get; } = new();
+
+        /// <summary>A página do carregar mais; sem ela, uma página vazia com o `HasMore` pedido.</summary>
+        public QueryPage? NextPage { get; set; }
+
+        /// <summary>Os comandos que chegaram a executar, na ordem.</summary>
+        public List<string> Executed { get; } = [];
+
+        /// <summary>A recusa do banco que executar responde, quando o teste a dá.</summary>
+        public DatabaseFailure? Failure { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
-            => new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+        {
+            Executed.Add(sql);
+            if (Failure is { } failure)
+                return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
+
+            return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+        }
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
         {
             if (ClosesItselfOnFetch)
                 IsOpen = false;
 
-            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(new QueryPage([], [], NextPageHasMore, 0, [])));
+            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(NextPage ?? new QueryPage([], [], NextPageHasMore, 0, [])));
         }
 
         public Task CloseCursorAsync()
@@ -336,6 +632,18 @@ public sealed class DatabaseSessionServiceTests
             => throw new NotSupportedException();
 
         public Task<Result<IReadOnlyList<DatabasePropertyInfo>, DatabaseFailure>> GetPropertiesAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken)
+            => Task.FromResult(Result.Success<IReadOnlyList<DatabaseInfo>, DatabaseFailure>([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)]));
+
+        public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
             => throw new NotSupportedException();
     }
 }

@@ -15,6 +15,9 @@ namespace Prism.Application.DatabaseSessions.Features.OpenDatabaseSession;
 public sealed record OpenDatabaseSessionCommand : IRequest<Result<DatabaseSessionDto, ApiErrorDto>>
 {
     public Guid ConnectionID { get; init; }
+
+    /// <summary>RN-ARVORE-006: outro banco do mesmo servidor, aberto com as credenciais da conexão. Sem ele, o banco da conexão.</summary>
+    public string? Database { get; init; }
 }
 
 internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService, IVaultService vaultService) : IRequestHandler<OpenDatabaseSessionCommand, Result<DatabaseSessionDto, ApiErrorDto>>
@@ -34,7 +37,8 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
         if (read.Value is not { } record)
             return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ConnectionID));
 
-        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, record.Database, record.UserName, record.Password);
+        // RN-ARVORE-006: o nome pedido entra só no lugar do banco; host, porta, usuário e senha são os da conexão gravada.
+        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, request.Database ?? record.Database, record.UserName, record.Password);
 
         var opened = await databaseSessionService.OpenAsync(record.ID, settings, generation, cancellationToken);
         if (opened.IsFailure)

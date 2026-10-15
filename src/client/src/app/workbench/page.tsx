@@ -9,6 +9,7 @@ import { vaultLock } from "@/lib/api/vault-lock";
 import { FirstUse } from "./_components/first-use";
 import { Navigator } from "./_components/navigator";
 import { NavigatorToggle } from "./_components/navigator-toggle";
+import { ScriptsSection } from "./_components/scripts-section";
 import { connectionReveal } from "./_lib/connection-intent";
 import { keepsDialog, type ConnectionDialogOpen } from "./_lib/connection-dialog-state";
 import { hideFocusTarget, navigatorShortcut, navigatorShortcutLabels } from "./_lib/navigator-layout";
@@ -181,6 +182,8 @@ export function WorkbenchPage() {
             onHide={() => hideNavigator("toolbar")}
             hideShortcut={shortcuts.toggle}
           />
+          {/* RN-SCRIPT-003: os scripts salvos, abaixo da árvore. */}
+          <ScriptsSection />
         </aside>
         {hidden ? null : <ResizeHandle width={width} onResize={setWidth} />}
         {firstUse ? <FirstUse onNewConnection={() => openNew(null)} /> : <WorkbenchTabs />}

@@ -16,6 +16,7 @@ namespace Prism.Application.Connections.Repositories;
 /// documento mais recente. Uma consulta feita antes não leu o cofre fechado no meio da requisição e não decide nada,
 /// então a existência da pasta e da própria conexão, e a duplicidade de nome (RN-CONN-011), são ditas só aqui, onde
 /// o cofre fechado vira 401 `VAULT_LOCKED`. A recusa devolve o documento que recebeu, e o serviço não regrava por isso.
+/// Duplicar (RN-CONN-016) também é decidido lá dentro: a conexão de origem, o nome livre da cópia e a senha copiada saem do mesmo documento.
 /// </summary>
 internal sealed class ConnectionRepository(IVaultService vaultService) : IConnectionRepository
 {
@@ -59,6 +60,31 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
             return document with { Connections = [.. document.Connections.Select(record => record.ID == connection.ID ? updated : record)] };
         }, cancellationToken);
 
+    public async Task<Result<Connection, ApiErrorDto>> Duplicate(Guid id, DateTime createdAt, CancellationToken cancellationToken)
+    {
+        Connection? copy = null;
+
+        var saved = await vaultService.SaveOrRefuse(document =>
+        {
+            var existing = document.Connections.FirstOrDefault(record => record.ID == id);
+            if (existing is null)
+                return ConnectionErrors.NotFound(id);
+
+            // RN-CONN-016: na mesma pasta, com o primeiro nome de cópia livre nela (RN-CONN-011), contra este documento: outra requisição
+            // pode ter gravado uma cópia depois do clique. A senha vai de registro para registro, sem sair do cofre.
+            var name = ConnectionRules.CopyName(existing.Name, candidate => NameIsTaken(document, existing.FolderID, null, candidate));
+            copy = ToDomain(existing).Duplicate(name, createdAt);
+
+            return document with { Connections = [.. document.Connections, ToRecord(copy)] };
+        }, cancellationToken);
+
+        if (saved.IsFailure)
+            return saved.Error;
+
+        // A gravação que deu certo rodou a função, e a função que não recusou fez a cópia.
+        return copy!;
+    }
+
     public Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken)
         => vaultService.SaveOrRefuse(document =>
         {
@@ -70,7 +96,14 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
 
     /// <summary>RN-CONN-011: o nome é único na pasta (a raiz é um lugar), sem diferenciar maiúsculas. A própria conexão não colide com o nome que já tem.</summary>
     private static bool NameIsTaken(VaultDocument document, Connection connection)
-        => document.Connections.Any(record => record.FolderID == connection.FolderID && record.ID != connection.ID && string.Equals(record.Name, connection.Name, StringComparison.OrdinalIgnoreCase));
+        => NameIsTaken(document, connection.FolderID, connection.ID, connection.Name);
+
+    /// <summary>`exceptID` é a conexão que não conta (a que está sendo alterada), ou `null` quando todas contam.</summary>
+    private static bool NameIsTaken(VaultDocument document, Guid? folderID, Guid? exceptID, string name)
+        => document.Connections.Any(record => record.FolderID == folderID && record.ID != exceptID && string.Equals(record.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static Connection ToDomain(VaultConnectionRecord record)
+        => Connection.Restore(record.ID, record.FolderID, record.Name, record.Engine, record.Host, record.Port, record.Database, record.UserName, record.Password, record.EnvironmentName, record.EnvironmentColor, record.CreatedAt, record.UpdatedAt);
 
     private static VaultConnectionRecord ToRecord(Connection connection)
         => new(connection.ID, connection.FolderID, connection.Name, connection.Engine, connection.Host, connection.Port, connection.Database, connection.UserName, connection.Password, connection.EnvironmentName, connection.EnvironmentColor, connection.CreatedAt, connection.UpdatedAt);

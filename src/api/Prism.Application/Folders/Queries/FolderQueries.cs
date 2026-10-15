@@ -27,6 +27,6 @@ internal sealed class FolderQueries(IVaultService vaultService) : IFolderQueries
     {
         var read = vaultService.Read();
 
-        return read.IsSuccess ? read.Value : new VaultDocument(string.Empty, [], []);
+        return read.IsSuccess ? read.Value : new VaultDocument(string.Empty, [], [], [], VaultWorkspaceRecord.Empty);
     }
 }

@@ -394,6 +394,13 @@ describe("a seção DDL aproximado (RN-TABELA-008)", () => {
     expect(pre).not.toContain("overflow-x-auto");
   });
 
+  it("o texto é SQL: usa a fonte do editor SQL (RN-CONFIG-008), e não a mono da grade", () => {
+    const pre = /<pre([^>]*)>/.exec(ddlSection(ready_ddl))?.[1] ?? "";
+
+    expect(pre).toMatch(/\bfont-editor\b/);
+    expect(pre).not.toContain("font-mono");
+  });
+
   it("o botão de copiar tem nome que diz o que copia, está habilitado com o DDL na mão e fica no cabeçalho da seção", () => {
     const markup = ddlSection(ready_ddl);
 

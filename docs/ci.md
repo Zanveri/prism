@@ -40,7 +40,7 @@ Os roteiros, por assunto:
 | `test-scripts.sh`, `check-workflows.sh`, `actionlint.sh` | o job `roteiros` |
 | `integration-api.sh` | o integrar |
 | `leak-guard.sh` (`leak-guard.awk`, `leak-guard.allow`), `audit-deps.sh` | o seguranca |
-| `set-build-version.sh`, `publish-api.sh`, `package-desktop.sh` (`packages.sh`, `packages.txt`) | o empacotar |
+| `set-build-version.sh`, `publish-api.sh`, `package-desktop.sh` (`packages.sh`, `packages.txt`), `check-windows-installer.sh` | o empacotar |
 | `publish-release.sh`, `release-notes.sh`, `git-cliff.sh` | o lancar |
 | `check-tools.sh` | o segundo passo das actions compostas |
 | `actions.sh` | os avisos à vista (anotação e resumo do job), que vários roteiros usam |
@@ -119,7 +119,7 @@ repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote �
 | `empacotar.yml` | `api` | API das quatro plataformas | `ubuntu-24.04` | — | `contents: read` |
 | `empacotar.yml` | `windows` | Pacote de Windows | `windows-2025` | `api` | `contents: read` |
 | `empacotar.yml` | `linux` | Pacote de Linux | `ubuntu-24.04`, no contêiner `electronuserland/builder` | `api` | `contents: read` |
-| `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-26` | `api` | `contents: read` |
+| `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-15` | `api` | `contents: read` |
 | `lancar.yml` | `publicar` | Publicar a release | `ubuntu-24.04` | — | `contents: write` |
 | `paginas.yml` | `montar` | Montar o site | `ubuntu-24.04` | — | `contents: read`, `pages: read` |
 | `paginas.yml` | `publicar` | Publicar no GitHub Pages | `ubuntu-24.04` | `montar` | `pages: write`, `id-token: write` |
@@ -213,9 +213,19 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   ([upload-artifact, "Permission Loss"](https://github.com/actions/upload-artifact#permission-loss)).
 - **`windows`**, **`linux`** e **`macos`** (`package-desktop.sh`): cada um busca a API da sua plataforma, grava a mesma versão do plano
   e roda `pnpm dist -- <plataforma>` de `src/client`. Windows no `windows-2025` (instalador `nsis` e zip); Linux no contêiner
-  `electronuserland/builder:24-05.26`, fixado por digest (AppImage, deb, rpm e tar.gz); macOS no `macos-26`, Apple Silicon, uma
+  `electronuserland/builder:24-05.26`, fixado por digest (AppImage, deb, rpm e tar.gz); macOS no `macos-15`, Apple Silicon, uma
   arquitetura por job (dmg e zip de `arm64`, e de `x64` pelo `--x64` do electron-builder), porque o dmg só se gera no macOS. O script
   confere no fim que todos os arquivos de `scripts/ci/packages.txt` saíram.
+- **O instalador do Windows, instalado de verdade** (`check-windows-installer.sh`, no job `windows`, logo depois de empacotar; seção 25
+  da especificação, RN-INSTALA-001 a 004). O runner é administrador e não mostra o pedido de permissão do Windows, então o script
+  confere os modos que a linha de comando e a instalação existente escolhem, em silêncio: `/S /currentuser` (o `Prism.exe` em
+  `%LOCALAPPDATA%\Programs` e as chaves em HKCU, nada em HKLM); o mesmo instalador de novo com `--updated /S` (continua uma
+  instalação só, na mesma pasta); `/S /allusers` com a do usuário instalada (recusado, sai com 2); a desinstalação silenciosa (a
+  `QuietUninstallString` registrada; o desinstalador do NSIS volta na hora, e o fim é esperado pelas chaves e pelo `Prism.exe`
+  sumirem); depois `/S /allusers` (o `Prism.exe` em `%ProgramFiles%` e as chaves em HKLM, nada em HKCU), `/S /currentuser` recusado,
+  `--updated /S` na de todos e a desinstalação. As chaves têm o nome do `nsis.guid` do `src/client/electron-builder.yml`. O pedido de
+  permissão (aceito ou negado) e a atualização de dentro do app (`--force-run`, que abre o Prism) não são exercitados: só uma pessoa os
+  responde. `check-windows-installer.test.sh` testa o script no Linux, com um `reg.exe` e um instalador de mentira.
 - **A origem das atualizações** (RN-ATUALIZA-001 e RN-GITHUB-005). O passo de empacotar recebe `PRISM_UPDATE_API`
   (`github.api_url`), `PRISM_UPDATE_SITE` (`github.server_url`), `PRISM_UPDATE_REPOSITORY` (`github.repository`) e `PRISM_HOMEPAGE`
   (`github.server_url/github.repository`), **do contexto do próprio workflow**, nunca de uma variável (`vars.`) ou de um segredo que
@@ -398,7 +408,7 @@ runner próprio ligado ao repositório (RN-ABERTO-007). Os rótulos existem hoje
 | --- | --- |
 | `ubuntu-24.04` | o Ubuntu LTS que é o `ubuntu-latest` de hoje; das imagens de Linux x64 em uso geral (22.04, 24.04 e 26.04), é a que tem a frente mais longa sem ser a mais nova. Tem Docker, `gh`, `jq`, Ruby e o Bash 5 |
 | `windows-2025` | o Windows Server mais novo (o `windows-latest` de hoje); o `windows-2022` é o próximo a sair |
-| `macos-26` | o macOS Apple Silicon mais novo (o `macos-latest` de hoje). O `macos-14` já está marcado como **deprecated** no README das imagens, e o `macos-15` é o próximo da fila |
+| `macos-15` | o macOS Apple Silicon anterior ao `macos-26` (o `macos-latest` de hoje), também em uso geral. Trocado em 2026-10-13: por quatro execuções seguidas o GitHub não achou máquina `macos-26` ("The job was not acquired by Runner of type hosted"), e sem o pacote de macOS a release não sai. Volta para o `macos-26` quando o `macos-15` entrar em descontinuação |
 
 A política das imagens: no máximo duas em uso geral e uma em teste por sistema, e a mais velha entra em descontinuação quando a nova
 sai do teste, com um anúncio e uma data ([actions/runner-images](https://github.com/actions/runner-images), "Image Deprecation
@@ -547,7 +557,8 @@ Um pull request qualquer (de um ramo `chore/…`) para a `develop`, e o merge. O
 (o pull request **não** pode ter rodado nada; o merge roda uma execução); a fila do `concurrency`; os workflows reutilizáveis com as
 permissões e o segredo; as actions compostas no Linux, no Windows e no macOS; o actionlint baixado; os testes de integração com o Db2 e
 o Informix no runner; o leak-guard em modo privado (avisos à vista com os achados de hoje); o contêiner do electron-builder; os pacotes
-de Windows e de macOS gerados de verdade; os artefatos entre os jobs; e o lançamento inteiro: o rascunho, os onze anexos, a publicação
+de Windows e de macOS gerados de verdade; o instalador do Windows instalado e desinstalado nos dois modos (`check-windows-installer.sh`);
+os artefatos entre os jobs; e o lançamento inteiro: o rascunho, os onze anexos, a publicação
 pelo `GITHUB_TOKEN` e a tag. Com a versão `0.1.0` no `package.json` e nenhuma tag, ele publica **`v0.1.0-beta.1`**, pré-lançamento,
 com as notas do `git-cliff` do histórico inteiro (é o primeiro). Confira: a página de releases; `git ls-remote --tags <ensaio>`; o
 "Immutable" da release; o `SHA256SUMS` contra um pacote baixado (`sha256sum`); e o resumo da execução (os avisos à vista). Um segundo
@@ -602,6 +613,7 @@ Cada passo é uma chamada a um arquivo de `scripts/ci/`; rode o arquivo. Para co
 | auditorias | `bash scripts/ci/audit-deps.sh client` e `… api` | Node com `corepack`, SDK do .NET, rede |
 | `api` (empacotar) | `bash scripts/ci/publish-api.sh` (com `PRISM_API_RIDS=linux-x64` para uma só) | SDK do .NET 10 e Node |
 | pacotes | `PRISM_HOMEPAGE=https://… bash scripts/ci/package-desktop.sh linux` (ou `win`, `mac arm64`, `mac x64`) | o resultado do `publish-api.sh`; **apaga** `src/client/release` e `src/client/resources/api` |
+| o instalador do Windows | `bash scripts/ci/check-windows-installer.sh` (ou `… <instalador>.exe`), no Git Bash, num Windows sem o Prism instalado e como administrador | o resultado do `package-desktop.sh win`; **instala e desinstala** o Prism nos dois modos: rode numa máquina descartável |
 | as notas | `bash scripts/ci/release-notes.sh --sums <arquivo> 0.1.0`, ou `… --beta --since v0.1.0-beta.1 0.1.0-beta.2` | o `CHANGELOG.md`; no beta, o Docker (`git-cliff.sh`) |
 | `publicar` | só na pipeline (escreve no GitHub). O ensaio dele, com um `gh` de mentira, é `bash scripts/ci/release.test.sh` | bash, git, jq, python3 |
 | `paginas` | só na pipeline (publica no GitHub Pages). Para ver o site antes: `python3 -m http.server --directory site 8000` e abrir `http://127.0.0.1:8000/` | python3 (o site é HTML e CSS estáticos: não há build) |

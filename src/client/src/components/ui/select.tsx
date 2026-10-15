@@ -1,10 +1,14 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { controlClassName } from "@/components/ui/field";
 import { cn } from "@/lib/utils/cn";
 
-export type SelectOption = { value: string; label: string };
+/**
+ * Uma opção. `content` desenha a opção no lugar do rótulo, na lista e no controle fechado (a etiqueta colorida de um ambiente, RN-NAV-010); o rótulo
+ * continua sendo o nome dela na busca pela inicial, e o que o `content` mostra tem de dizer o mesmo para o leitor de tela.
+ */
+export type SelectOption = { value: string; label: string; content?: ReactNode };
 
 type SelectProps = {
   id?: string;
@@ -19,6 +23,10 @@ type SelectProps = {
   invalid?: boolean;
   /** Rótulo acessível quando o controle não tem um `<label htmlFor>`. */
   "aria-label"?: string;
+  /** O texto que explica o controle (o motivo de ele estar desabilitado, por exemplo). */
+  "aria-describedby"?: string;
+  /** A lista abriu: quem só busca as opções quando a pessoa as quer (a lista dos bancos da aba) as pede aqui. Elas podem chegar com a lista aberta. */
+  onOpen?: () => void;
   className?: string;
 };
 
@@ -44,7 +52,7 @@ function normalizeSearch(value: string) {
  * `position: fixed` em `document.body`, para o `overflow-hidden` de um painel não a recortar.
  * Teclado como o de um `<select>`: setas, Home, End, Enter, espaço, Esc e a inicial da opção.
  */
-export function Select({ id, name, value, onChange, options, placeholder, disabled = false, invalid = false, "aria-label": ariaLabel, className }: SelectProps) {
+export function Select({ id, name, value, onChange, options, placeholder, disabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, className }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
@@ -61,6 +69,14 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   const items: SelectOption[] = placeholder === undefined ? options : [{ value: "", label: placeholder }, ...options];
   const selectedIndex = items.findIndex((item) => item.value === value);
   const selected = selectedIndex >= 0 ? items[selectedIndex] : undefined;
+
+  // As opções que chegam com a lista aberta mudam a posição da escolhida: o destaque que estava nela vai junto, e o Enter não escolhe outra por engano.
+  // Ajuste durante a renderização, como o React recomenda para o estado que segue uma propriedade.
+  const [shownSelected, setShownSelected] = useState(selectedIndex);
+  if (shownSelected !== selectedIndex) {
+    setShownSelected(selectedIndex);
+    if (open && activeIndex === shownSelected) setActiveIndex(selectedIndex);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -117,6 +133,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   function openAt(index: number) {
     setActiveIndex(index);
     setOpen(true);
+    onOpen?.();
   }
 
   function choose(index: number) {
@@ -203,6 +220,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         role="combobox"
         disabled={disabled}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
@@ -213,7 +231,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         // `h-auto`: um rótulo comprido quebra a linha em vez de ser cortado.
         className={cn(controlClassName, "flex h-auto min-h-10 cursor-pointer items-center justify-between gap-2 py-2 text-left", open && "border-accent", className)}
       >
-        <span className={cn("min-w-0 flex-1 break-words", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected?.label ?? placeholder ?? ""}</span>
+        <span className={cn("min-w-0 flex-1 break-words", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected === undefined ? (placeholder ?? "") : (selected.content ?? selected.label)}</span>
         <span aria-hidden className="flex-none text-xs text-subtle">▾</span>
       </button>
 
@@ -234,7 +252,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
                     onClick={() => choose(index)}
                     className={cn("cursor-pointer rounded-sm px-2.5 py-2 break-words", index === activeIndex ? "bg-selected" : "bg-transparent", isSelected ? "font-semibold text-ink" : item.value === "" ? "text-subtle" : "text-body")}
                   >
-                    {item.label}
+                    {item.content ?? item.label}
                   </div>
                 );
               })}

@@ -1201,4 +1201,106 @@ describe("o atualizador", () => {
       expect(quit).not.toHaveBeenCalled();
     });
   });
+
+  describe("a instalação para todos os usuários (seção 25, RN-INSTALA-003)", () => {
+    const attemptFile = () => join(dir, "update-attempt.json");
+
+    it("a oferta diz se a instalação é para todos: o Windows vai pedir a permissão de administrador, e a tela avisa antes", async () => {
+      const installedForAllUsers = vi.fn(async () => true);
+      const subject = updater(world(), { installedForAllUsers });
+      await subject.check();
+
+      expect(subject.state()).toMatchObject({ status: "available", format: "nsis", forAllUsers: true });
+    });
+
+    it("só do usuário, ou sem resposta do registro: a oferta é a de sempre, sem permissão de administrador", async () => {
+      const user = updater(world(), { installedForAllUsers: async () => false });
+      await user.check();
+      expect(user.state()).toMatchObject({ status: "available", forAllUsers: false });
+
+      const failing = updater(world(), { installedForAllUsers: () => Promise.reject(new Error("reg.exe falhou")) });
+      await failing.check();
+      expect(failing.state()).toMatchObject({ status: "available", forAllUsers: false });
+
+      const unknown = updater(world());
+      await unknown.check();
+      expect(unknown.state()).toMatchObject({ status: "available", forAllUsers: false });
+    });
+
+    it("o registro é lido uma vez por abertura, e só na instalação feita pelo instalador do Windows", async () => {
+      const installedForAllUsers = vi.fn(async () => true);
+      const subject = updater(world(), { installedForAllUsers });
+      await subject.check();
+      await subject.check();
+      expect(installedForAllUsers).toHaveBeenCalledTimes(1);
+
+      const portable = vi.fn(async () => true);
+      const zip = updater(world({ file: "Prism-0.3.0-win-x64.zip" }), { facts: { ...windows, nsisInstalled: false }, installedForAllUsers: portable });
+      await zip.check();
+      expect(zip.state()).toMatchObject({ status: "available", format: "zip", forAllUsers: false });
+
+      const linux = vi.fn(async () => true);
+      const deb_ = updater(world({ file: deb }), { facts: debian, installedForAllUsers: linux });
+      await deb_.check();
+      expect(deb_.state()).toMatchObject({ status: "available", format: "deb", forAllUsers: false });
+      expect(portable).not.toHaveBeenCalled();
+      expect(linux).not.toHaveBeenCalled();
+    });
+
+    it("antes de rodar o instalador, anota de que versão para qual: a abertura seguinte sabe se a atualização aconteceu", async () => {
+      let seenBySpawn: unknown = null;
+      spawn.mockImplementation(() => {
+        seenBySpawn = JSON.parse(readFileSync(attemptFile(), "utf8"));
+        queueMicrotask(() => child.emit("spawn"));
+        return child;
+      });
+      const subject = updater(world(), { installedForAllUsers: async () => true });
+      await subject.check();
+      await subject.download("0.3.0");
+      await subject.install("0.3.0");
+
+      expect(seenBySpawn).toEqual({ from: "0.1.0", to: "0.3.0", forAllUsers: true });
+      expect(quit).toHaveBeenCalledTimes(1);
+    });
+
+    it("o instalador não inicia: a anotação sai, e a próxima abertura não avisa de nada", async () => {
+      spawn.mockImplementation(() => {
+        queueMicrotask(() => child.emit("error", new Error("spawn EACCES")));
+        return child;
+      });
+      const subject = updater(world());
+      await subject.check();
+      await subject.download("0.3.0");
+
+      await expect(subject.install("0.3.0")).resolves.toMatchObject({ status: "failed" });
+      expect(existsSync(attemptFile())).toBe(false);
+    });
+
+    it("Linux e macOS não rodam instalador nenhum: nada é anotado", async () => {
+      const subject = updater(world({ file: deb }), { facts: debian });
+      await subject.check();
+      await subject.download("0.3.0");
+      await subject.install("0.3.0");
+
+      expect(existsSync(attemptFile())).toBe(false);
+    });
+
+    it("abriu de novo na versão de antes (a permissão foi negada, ou o instalador não terminou): avisa uma vez, com a versão que não entrou", () => {
+      writeFileSync(attemptFile(), JSON.stringify({ from: "0.1.0", to: "0.3.0", forAllUsers: true }));
+      const subject = updater(world());
+
+      expect(subject.takeNotice()).toEqual({ version: "0.3.0", current: "0.1.0", forAllUsers: true });
+      expect(subject.takeNotice()).toBeNull();
+      expect(existsSync(attemptFile())).toBe(false);
+      expect(logs).toContain("atualização: a versão 0.3.0 não foi instalada; o Prism abriu de novo na 0.1.0");
+    });
+
+    it("abriu na versão nova: não há aviso", () => {
+      writeFileSync(attemptFile(), JSON.stringify({ from: "0.0.9", to: "0.1.0", forAllUsers: false }));
+      const subject = updater(world());
+
+      expect(subject.takeNotice()).toBeNull();
+      expect(existsSync(attemptFile())).toBe(false);
+    });
+  });
 });

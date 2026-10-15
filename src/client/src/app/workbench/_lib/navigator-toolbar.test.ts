@@ -5,15 +5,15 @@ import type { Connection, Folder } from "@/app/connections/_lib/connections.sche
 
 import type { MenuState } from "./navigator-menu";
 import { columnNodes, databaseNodes, flattenVisible, foreignKeyNodes, indexNodes, navKey, objectNodes, schemaNodes, tableGroupNodes, treeNodes, type NavNode, type TableLevelPath } from "./navigator-model";
-import { isRefreshable, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarButton, type ToolbarSelection } from "./navigator-toolbar";
+import { isRefreshable, refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarButton, type ToolbarSelection } from "./navigator-toolbar";
 
 const now = "2026-10-12T12:00:00Z";
-const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", createdAt: now, updatedAt: now };
+const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
 const mes: Connection = { id: "c1", folderID: "f1", name: "MES Produção", engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
 const { roots } = treeNodes(buildConnectionTree([folder], [mes]));
 const [folderNode] = roots;
 const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 1, hasChildren: true };
-const [databaseNode] = databaseNodes("c1", "mes");
+const [databaseNode] = databaseNodes("c1", [{ name: "mes", isCurrent: true }]);
 const [schemaNode] = schemaNodes("c1", [{ name: "vendas", isSystem: false }]);
 const [table] = objectNodes("c1", "vendas", "tables", [{ name: "pedido", kind: "table" }]);
 const [view] = objectNodes("c1", "vendas", "views", [{ name: "v_pedido", kind: "view" }]);
@@ -177,8 +177,8 @@ describe("targetFolderId: onde Nova pasta e Nova conexão criam", () => {
   });
 
   it("na raiz: sem nada escolhido, ou com um item de uma conexão que está na raiz (ou que saiu da lista)", () => {
-    const [atRoot] = databaseNodes("c2", "outro");
-    const [gone] = databaseNodes("c404", "sumiu");
+    const [atRoot] = databaseNodes("c2", [{ name: "outro", isCurrent: true }]);
+    const [gone] = databaseNodes("c404", [{ name: "sumiu", isCurrent: true }]);
 
     expect(targetFolderId(null, connections)).toBeNull();
     expect(targetFolderId(atRoot, connections)).toBeNull();
@@ -198,5 +198,15 @@ describe("isRefreshable: onde 'Atualizar' tem o que buscar de novo", () => {
 
   it("a pasta, as folhas e as linhas de aviso, nunca", () => {
     for (const node of [folderNode, view, routine, column, index, foreignKey, loadingRow, errorRow]) expect(isRefreshable(node, true)).toBe(false);
+  });
+});
+
+describe("refreshesSelection: F5 no navegador é o Atualizar do nó escolhido (RN-GRADE-012)", () => {
+  const button = (id: ToolbarButton["id"], disabled: boolean): ToolbarButton => ({ id, label: id, title: id, disabled });
+
+  it("só quando o Atualizar da barra se aplica ao nó escolhido", () => {
+    expect(refreshesSelection([button("connect", false), button("refresh", false)])).toBe(true);
+    expect(refreshesSelection([button("connect", false), button("refresh", true)])).toBe(false);
+    expect(refreshesSelection([])).toBe(false);
   });
 });

@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useToast, type Engine } from "@/components/ui";
 
+import { inDatabase } from "../../_lib/navigator-model";
 import { objectKindOf } from "../../_lib/object-kind";
 import { firstSection, type StructureSection } from "../../_lib/structure-sections";
+import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import { recall, remember } from "../../_lib/tab-memory";
 import { ddlState } from "../../_lib/table-ddl";
 import { levelView, structureColumns, structureForeignKeys, structureIndexes } from "../../_lib/table-structure";
@@ -18,6 +20,8 @@ type StructureViewProps = {
   /** O id da aba: a seção da lista lateral fica lembrada por ele (`tab-memory.ts`) e sobrevive a trocar de vista e ao bloqueio por inatividade. */
   tabId: string;
   connectionId: string;
+  /** RN-ARVORE-006: o outro banco do servidor da aba; sem ele, o banco da conexão. */
+  database?: string;
   /** O banco da conexão: o DDL aproximado depende dele (o Informix escreve o nome da restrição depois da definição). */
   engine: Engine | undefined;
   schema: string;
@@ -26,6 +30,8 @@ type StructureViewProps = {
   visible: boolean;
   /** "Ver no diagrama", do canvas: leva à outra vista da mesma aba. */
   onOpenDiagram: () => void;
+  /** RN-GRADE-012: onde a vista deixa o "Atualizar" para o F5 da aba. */
+  refreshSlot?: RefreshSlot;
 };
 
 /**
@@ -41,21 +47,24 @@ type StructureViewProps = {
  * O tipo do objeto (tabela ou visão) a aba não carrega: vem do cache da árvore da conexão, dos grupos "Tabelas" e "Visões" do esquema, que ela só lê
  * (`enabled: false`: nenhuma consulta é disparada por aqui). Uma visão não tem DDL aproximado, e sem saber o tipo o texto diz que pode ser uma visão.
  */
-export function StructureView({ tabId, connectionId, engine, schema, name, visible, onOpenDiagram }: StructureViewProps) {
+export function StructureView({ tabId, connectionId, database, engine, schema, name, visible, onOpenDiagram, refreshSlot }: StructureViewProps) {
   const [section, setSection] = useState<StructureSection>(() => recall(tabId, "structure") ?? firstSection);
   useEffect(() => remember(tabId, "structure", section), [tabId, section]);
 
   const queryClient = useQueryClient();
-  const { refresh } = useStructureActions(connectionId);
-  const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible));
-  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible));
-  const indexes = useQuery(indexesQuery(connectionId, schema, name, queryClient, visible));
+  const { refresh } = useStructureActions(connectionId, database);
+  const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible, database));
+  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible, database));
+  const indexes = useQuery(indexesQuery(connectionId, schema, name, queryClient, visible, database));
   const table = [{ schema, name }];
   const toast = useToast();
+  // RN-GRADE-012: F5 recarrega a vista, como o "Atualizar" dela.
+  const refreshByKey = useCallback(() => void refresh([{ schema, name }]), [refresh, schema, name]);
+  useRefreshSlot(refreshSlot, refreshByKey);
 
   // Tabela ou visão, pelo que a árvore já carregou. Só lê o cache: `enabled: false` nunca busca, e a árvore que abrir o grupo depois o preenche.
-  const tables = useQuery(treeQuery({ type: "objects", connectionId, schema, objects: "tables" }, queryClient, false));
-  const views = useQuery(treeQuery({ type: "objects", connectionId, schema, objects: "views" }, queryClient, false));
+  const tables = useQuery(treeQuery({ type: "objects", connectionId, ...inDatabase(database), schema, objects: "tables" }, queryClient, false));
+  const views = useQuery(treeQuery({ type: "objects", connectionId, ...inDatabase(database), schema, objects: "views" }, queryClient, false));
   const kind = objectKindOf(name, { tables: tables.data, views: views.data });
 
   // RN-TABELA-008: só com as três listas na mão (uma que falhou, ou que ainda carrega, deixa o DDL de fora e a seção diz por quê); uma visão não tem.

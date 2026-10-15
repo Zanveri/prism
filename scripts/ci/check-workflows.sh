@@ -27,7 +27,7 @@ cd "$root"
 command -v ruby > /dev/null || { echo "check-workflows: falta o ruby (o YAML é lido pela biblioteca padrão dele)." >&2; exit 2; }
 command -v jq > /dev/null || { echo "check-workflows: falta o jq." >&2; exit 2; }
 
-runners='["ubuntu-24.04", "windows-2025", "macos-26"]'
+runners='["ubuntu-24.04", "windows-2025", "macos-15"]'
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 problems=$tmp/problemas

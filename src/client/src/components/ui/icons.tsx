@@ -78,6 +78,17 @@ export function EyeIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** O conta-gotas de "Outra cor" no seletor do ambiente (RN-CONN-017): o bulbo em cima, à direita, o colar e o tubo até a ponta. */
+export function EyedropperIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M9 4.5l2.25-2.25a1.77 1.77 0 0 1 2.5 2.5L11.5 7" />
+      <path d="M8 3.5l4.5 4.5" />
+      <path d="M9.5 5L4 10.5l-1 2.5 2.5-1L11 6.5" />
+    </Icon>
+  );
+}
+
 export function EyeOffIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>
@@ -227,6 +238,16 @@ export function DocumentIcon(props: ComponentProps<"svg">) {
     <Icon {...props}>
       <path d="M4 2h5.5L12 4.5V14H4z" />
       <path d="M9.5 2v2.5H12" />
+    </Icon>
+  );
+}
+
+/** Duas folhas, uma sobre a outra: "Duplicar conexão" (RN-CONN-016). */
+export function DuplicateIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 5.5h7.5V14H5.5z" />
+      <path d="M3 10.5V2h7.5" />
     </Icon>
   );
 }

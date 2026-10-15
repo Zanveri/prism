@@ -1,5 +1,6 @@
 using Bogus;
 using Prism.Infrastructure.Databases.Models;
+using Prism.Infrastructure.Vault.Clients;
 using Prism.Infrastructure.Vault.Models;
 
 namespace Prism.TestingCore.Fakers.Vault;
@@ -22,7 +23,7 @@ public static class VaultFakers
     {
         var faker = new Faker();
 
-        return new VaultFile(1, CreateKdf(), new VaultSealedBox(faker.Random.Bytes(12), faker.Random.Bytes(32), faker.Random.Bytes(16)), new VaultSealedBox(faker.Random.Bytes(12), faker.Random.Bytes(faker.Random.Int(min: 1, max: 512)), faker.Random.Bytes(16)));
+        return new VaultFile(VaultCrypto.Version, CreateKdf(), new VaultSealedBox(faker.Random.Bytes(12), faker.Random.Bytes(32), faker.Random.Bytes(16)), new VaultSealedBox(faker.Random.Bytes(12), faker.Random.Bytes(faker.Random.Int(min: 1, max: 512)), faker.Random.Bytes(16)));
     }
 
     public static VaultFolderRecord CreateFolder(Guid? iD = null, Guid? parentID = null, string? name = null)
@@ -32,6 +33,26 @@ public static class VaultFakers
 
         return new VaultFolderRecord(iD ?? Guid.CreateVersion7(), parentID, name ?? faker.Random.String2(length: 12), createdAt, createdAt);
     }
+
+    /// <summary>Um script salvo (RN-SCRIPT-001 a 004), com o SQL sorteado quando o teste não fixa um; sem conexão quando o teste não dá uma.</summary>
+    public static VaultScriptRecord CreateScript(string? name = null, string? sql = null, Guid? connectionID = null, string? database = null, Guid? iD = null)
+    {
+        var faker = new Faker("pt_BR");
+        var createdAt = faker.Date.Recent().ToUniversalTime();
+
+        return new VaultScriptRecord(iD ?? Guid.CreateVersion7(), name ?? faker.Random.String2(length: 12), sql ?? $"SELECT {faker.Random.Int(min: 1, max: 9999)}", connectionID, database, createdAt, createdAt);
+    }
+
+    /// <summary>Uma aba de consulta da área de trabalho gravada (RN-ABAS-006), com o texto sorteado quando o teste não fixa um.</summary>
+    public static VaultWorkspaceTabRecord CreateQueryTab(Guid? connectionID = null, string? database = null, string? sql = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false)
+        => new("query", connectionID, database, sql ?? $"SELECT {new Faker().Random.Int(min: 1, max: 9999)}", scriptID, dirty, sqlTooLarge, null, null, null);
+
+    /// <summary>Uma aba de tabela da área de trabalho gravada (RN-ABAS-006): sempre com a conexão dela.</summary>
+    public static VaultWorkspaceTabRecord CreateTableTab(Guid? connectionID = null, string? database = null, string schema = "loja", string table = "clientes", string view = "data")
+        => new("table", connectionID ?? Guid.CreateVersion7(), database, null, null, false, false, schema, table, view);
+
+    public static VaultWorkspaceRecord CreateWorkspace(int? activeIndex, params VaultWorkspaceTabRecord[] tabs)
+        => new(tabs, activeIndex);
 
     public static VaultConnectionRecord CreateConnection(Guid? folderID = null, string? name = null, string? host = null, string? userName = null, string? password = null, Guid? iD = null, EDatabaseEngine? engine = null)
     {

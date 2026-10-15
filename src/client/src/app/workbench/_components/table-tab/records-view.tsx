@@ -7,16 +7,23 @@ import { useToast, type Engine } from "@/components/ui";
 import { csvExportOf } from "../../_lib/csv";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
+import { allCutCells, noFullValues, withFullValues, type FullValues } from "../../_lib/full-values";
+import { inDatabase } from "../../_lib/navigator-model";
 import { isBusy } from "../../_lib/result-paging";
 import { saveText } from "../../_lib/save-file";
 import { recall, remember } from "../../_lib/tab-memory";
+import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import type { TableRef } from "../../_lib/table-diagram";
 import { recordsSql, sortOf, sqlLiteral } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
-import { clearRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
+import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
 import { useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
+import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../../_lib/use-record-edits";
+import { EditsBanner } from "../edits-banner";
+import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
+import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
 import { RecordsFilter } from "./records-filter";
 
 type RecordsViewProps = {
@@ -28,6 +35,8 @@ type RecordsViewProps = {
   engine: Engine | undefined;
   /** A conexão da aba: as chaves estrangeiras da tabela e a passagem do filtro para outra aba são dela (RN-TABELA-007). */
   connectionId: string;
+  /** RN-ARVORE-006: o outro banco do servidor da aba; as chaves estrangeiras e a passagem do filtro são dele. */
+  database?: string;
   schema: string;
   name: string;
   /** A aba tem sessão aberta: sem ela não há sobre o que contar. */
@@ -38,6 +47,8 @@ type RecordsViewProps = {
   disconnected: boolean;
   /** Abre, ou traz à frente, a aba de outra tabela da mesma conexão: o clique no valor de uma chave estrangeira. */
   onOpenTable: (table: TableRef & { view?: TableView }) => void;
+  /** RN-GRADE-012: onde a vista deixa o "Atualizar" para o F5 da aba. */
+  refreshSlot?: RefreshSlot;
 };
 
 /**
@@ -67,7 +78,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, schema, name, connected, visible, disconnected, onOpenTable }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -102,17 +113,67 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
     [runner, engine, schema, name, execute],
   );
 
-  const refresh = useCallback(() => run(filter), [run, filter]);
+  // RN-EDIT-001 a 012: a edição das células. As ações que executam de novo (atualizar, filtrar, ordenar, limpar) perguntam antes com
+  // alterações não salvas (`guard`, RN-EDIT-007); depois de um Salvar que gravou tudo, os registros são lidos de novo, sem perguntar.
+  const reload = useCallback(() => run(filter), [run, filter]);
+  const reloadAfterSave = useCallback(({ reread }: SavedEdits) => {
+    if (reread) reload();
+  }, [reload]);
 
-  /** "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. */
+  // RN-GRADE-013: o "Filtrar" do menu da célula junta a condição ao texto do campo (lido na hora da escolha) e o envia como o "Aplicar", com a
+  // pergunta das alterações não salvas antes (RN-EDIT-007); "Remover todos os filtros e ordenações" é o "Limpar". As funções leem o que muda por uma ref.
+  const fieldNow = useRef({ draft, filter, engine });
+  useEffect(() => {
+    fieldNow.current = { draft, filter, engine };
+  });
+  const guardRef = useRef<(proceed: () => void) => void>((proceed) => proceed());
+  const filterSource = useMemo<GridFilterSource>(
+    () => ({
+      engine,
+      field: () => fieldNow.current.draft,
+      removable: () => canClear(fieldNow.current.draft, fieldNow.current.filter),
+      apply: (text) => {
+        if (engine !== undefined) guardRef.current(() => filterRecords({ engine, schema, name }, text, runner.getState(), { setDraft, setProblem, setFilter, execute }));
+      },
+      clear: () => guardRef.current(() => clearRecords({ engine: fieldNow.current.engine, schema, name }, fieldNow.current.filter, runner.getState(), { setDraft, setProblem, setFilter, execute })),
+    }),
+    [engine, schema, name, runner, execute],
+  );
+  const refreshRef = useRef<() => void>(() => {});
+  const menuRefresh = useCallback(() => refreshRef.current(), []);
+
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh });
+  const { guard } = edits;
+  const refresh = useCallback(() => guard(reload), [guard, reload]);
+  useEffect(() => {
+    guardRef.current = guard;
+    refreshRef.current = refresh;
+  });
+  // RN-GRADE-012: F5 é o "Atualizar", com o filtro e a ordem em vigor e a pergunta das alterações não salvas; com algo em andamento, nada.
+  const refreshByKey = useCallback(() => {
+    if (!isBusy(runner.getState())) refresh();
+  }, [runner, refresh]);
+  useRefreshSlot(refreshSlot, refreshByKey);
+
+  /**
+   * "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. RN-SQL-017: a célula
+   * cortada sai com o valor completo, pedido antes à API (sem célula cortada, nada é pedido e o arquivo sai na hora); cancelada a busca, nada é gravado.
+   */
+  const { completeValues } = edits;
   const exportCsv = useCallback(() => {
     const current = runner.getState();
     if (current.status !== "rows") return;
 
-    const { fileName, text, notice } = csvExportOf(current, schema, name);
-    saveText(fileName, text, "text/csv;charset=utf-8");
-    toast[notice.tone](notice.text);
-  }, [runner, schema, name, toast]);
+    const write = (full: FullValues) => {
+      const { fileName, text, notice } = csvExportOf(withFullValues(current, full), schema, name);
+      saveText(fileName, text, "text/csv;charset=utf-8");
+      toast[notice.tone](notice.text);
+    };
+    if (current.truncated.size === 0) return write(noFullValues);
+    void completeValues(allCutCells(current.truncated), current).then((full) => {
+      if (full !== null) write(full);
+    });
+  }, [runner, schema, name, toast, completeValues]);
 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
@@ -120,7 +181,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
   // As chaves estrangeiras da tabela: o catálogo que a Estrutura e o Diagrama também usam (mesma consulta, mesmo cache). Só com linhas na tela, a vista
   // à frente e a conexão de pé: nada se busca por conta de uma aba escondida ou de uma conexão que a pessoa desconectou.
   const shown = state.status === "rows" ? state : null;
-  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible && !disconnected && shown !== null));
+  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible && !disconnected && shown !== null, database));
   const resultColumns = shown?.columns;
   // Com a conexão desconectada nenhum valor é link (`recordLinks`): o catálogo das chaves pode seguir em cache, mas seguir a chave não enviaria nada.
   const links = useMemo(() => recordLinks(resultColumns, foreignKeys.data, disconnected), [resultColumns, foreignKeys.data, disconnected]);
@@ -132,11 +193,15 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
   const onScreen = state.status === "running" ? state.previous : state;
   const gridColumns = onScreen?.status === "rows" ? onScreen.columns : null;
   const sort = useMemo(() => (gridColumns === null ? null : sortOf(filter, gridColumns, engine)), [filter, gridColumns, engine]);
+  // RN-TABELA-011: o campo completa as colunas da tabela, que são as da grade (`SELECT *`). Um filtro errado deixa a área com o erro e sem grade: as colunas
+  // que o campo sugere continuam as da última grade, para a pessoa corrigir o filtro.
+  const [seenColumns, setSeenColumns] = useState<readonly { name: string; type: string }[]>([]);
+  if (gridColumns !== null && gridColumns !== seenColumns) setSeenColumns(gridColumns);
 
   // O clique tem identidade fixa (a linha da grade é memorizada) e lê o que muda por uma ref atualizada depois de cada renderização.
-  const latest = useRef({ engine, links, connectionId, onOpenTable });
+  const latest = useRef({ engine, links, connectionId, database, onOpenTable });
   useEffect(() => {
-    latest.current = { engine, links, connectionId, onOpenTable };
+    latest.current = { engine, links, connectionId, database, onOpenTable };
   });
   const follow = useCallback(
     (columnIndex: number, value: string) => {
@@ -149,7 +214,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
       if (request === null) return;
 
       // O pedido sai antes de a aba abrir: a vista de lá, ainda por montar, ou já montada e escondida, o encontra à espera.
-      filterHandoff.request(current.connectionId, request.table, request.where);
+      filterHandoff.request(current.connectionId, { ...request.table, ...inDatabase(current.database) }, request.where);
       current.onOpenTable({ ...request.table, view: "data" });
     },
     [runner],
@@ -158,9 +223,11 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
   // O filtro que outra aba pediu para esta tabela (RN-TABELA-007), levado ao campo quando esta vista está à vista, a aba não tem nada em andamento e a conexão
   // está de pé (`takeHandoff`, em `table-view.ts`). O ajuste é na renderização, e não num efeito: o campo e o comando já saem com ele, e a primeira carga de uma
   // aba nova (abaixo) executa com ele.
-  const requested = useSyncExternalStore(filterHandoff.subscribe, () => filterHandoff.peek(connectionId, { schema, name }));
+  const requested = useSyncExternalStore(filterHandoff.subscribe, () => filterHandoff.peek(connectionId, { ...inDatabase(database), schema, name }));
   const [applied, setApplied] = useState<number | null>(null);
-  takeHandoff(requested, applied, { visible, disconnected, state, filter, engine }, { setApplied, setDraft, setProblem, setFilter });
+  takeHandoff(requested, applied, { visible, disconnected, state, filter, engine, unsaved: edits.pending > 0 }, { setApplied, setDraft, setProblem, setFilter });
+  // RN-EDIT-007: o filtro que chegou por uma chave estrangeira espera a resposta da pergunta; Cancelar o deixa para lá.
+  const handoffWaits = requested !== null && requested.id !== applied && visible && !disconnected && edits.pending > 0;
 
   useEffect(() => {
     // `idle` é "nunca executou"; `running` (o segundo efeito do StrictMode, uma abertura em curso) não repete.
@@ -169,25 +236,27 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
 
   // O pedido levado ao campo sai da passagem e, com resultado na tela, a consulta se refaz com ele (`settleHandoff`).
   useEffect(() => {
-    settleHandoff(requested, applied, runner.getState(), { clear: (id) => filterHandoff.clear(connectionId, { schema, name }, id), execute: () => execute(filter) });
-  }, [requested, applied, connectionId, schema, name, runner, execute, filter]);
+    settleHandoff(requested, applied, runner.getState(), { clear: (id) => filterHandoff.clear(connectionId, { ...inDatabase(database), schema, name }, id), execute: () => execute(filter) });
+  }, [requested, applied, connectionId, database, schema, name, runner, execute, filter]);
 
   const notice = idleNotice(state, { engine, disconnected });
 
   /** "Aplicar filtro": o texto do campo, inteiro. O aviso de antes sai, e `runRecords` o põe de volta se o texto tem mais de um comando. */
   function apply() {
-    setProblem(null);
-    run(draft);
+    guard(() => {
+      setProblem(null);
+      run(draft);
+    });
   }
 
   /** O clique no cabeçalho escreve, troca ou tira o `ORDER BY` no texto do campo e o envia (`sortRecords`, RN-TABELA-010). */
   function sortBy(column: string) {
-    if (engine !== undefined && gridColumns !== null) sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute });
+    if (engine !== undefined && gridColumns !== null) guard(() => sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
 
   /** "Limpar" tira a condição e a ordem de uma vez (`clearRecords`, RN-TABELA-010). */
   function clear() {
-    clearRecords({ engine, schema, name }, filter, runner.getState(), { setDraft, setProblem, setFilter, execute });
+    guard(() => clearRecords({ engine, schema, name }, filter, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
 
   return (
@@ -204,6 +273,9 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
         command={engine === undefined ? null : recordsSql(engine, schema, name, filter)}
         onApply={apply}
         onClear={clear}
+        engine={engine}
+        columns={gridColumns ?? seenColumns}
+        autocomplete={preferences.editor.autocomplete}
       />
       <ResultPanel
         state={state}
@@ -224,12 +296,26 @@ export function RecordsView({ tabId, runner, engine, connectionId, schema, name,
           waiting: notice.waiting,
           disconnected: notice.disconnected,
         }}
+        editing={edits.editing}
+        banner={<EditsBanner {...edits.banner} />}
         nullText={preferences.results.nullText}
         autoLoadMore={preferences.results.autoLoadMore}
         onLoadMore={loadMore}
         onCount={() => void runner.countTotal()}
         onRerun={refresh}
       />
+      {resultEditDialogs(edits)}
+      {edits.question === null && handoffWaits ? (
+        <UnsavedEditsDialog
+          count={edits.pending}
+          canSave
+          saving={edits.banner.saving}
+          // Salvo ou descartado, a pendência zera, e o pedido é levado ao campo na renderização seguinte (`takeHandoff`).
+          onSave={edits.saveOnly}
+          onDiscard={edits.discard}
+          onCancel={() => filterHandoff.clear(connectionId, { ...inDatabase(database), schema, name }, requested.id)}
+        />
+      ) : null}
     </div>
   );
 }

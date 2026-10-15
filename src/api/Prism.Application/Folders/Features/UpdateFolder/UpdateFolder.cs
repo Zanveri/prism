@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Common.Environments;
 using Prism.Application.Folders.Models;
 using Prism.Application.Folders.Models.Dtos;
 using Prism.Application.Folders.Queries;
@@ -10,14 +11,17 @@ using Prism.Core.Mediator;
 namespace Prism.Application.Folders.Features.UpdateFolder;
 
 /// <summary>
-/// Renomear e mover são a mesma rota, e o `PATCH` grava os dois campos: `ParentID` nulo move a pasta
-/// para a raiz, e quem só renomeia manda a pasta pai que ela já tem.
+/// Renomear, mover e trocar o ambiente são a mesma rota, e o `PATCH` grava a pasta por inteiro: `ParentID` nulo move a
+/// pasta para a raiz, o ambiente ausente a deixa sem ambiente (RN-PASTA-005, como no `PATCH` da conexão), e quem só
+/// renomeia ou só move manda o que ela já tem.
 /// </summary>
 public sealed record UpdateFolderCommand : IRequest<Result<FolderDto, ApiErrorDto>>
 {
     public Guid ID { get; init; }
     public string Name { get; init; } = string.Empty;
     public Guid? ParentID { get; init; }
+    public string? EnvironmentName { get; init; }
+    public string? EnvironmentColor { get; init; }
 }
 
 internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderRepository folderRepository, TimeProvider timeProvider) : IRequestHandler<UpdateFolderCommand, Result<FolderDto, ApiErrorDto>>
@@ -38,9 +42,10 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
             return Result.Failure<FolderDto, ApiErrorDto>(FolderErrors.Cycle());
 
         var name = request.Name.NormalizeName();
+        var environmentChanged = EnvironmentRules.NormalizeName(request.EnvironmentName) != folder.EnvironmentName || EnvironmentRules.NormalizeColor(request.EnvironmentColor) != folder.EnvironmentColor;
 
         // Nada mudou depois da normalização (a tela salva sem editar): carimbar UpdatedAt e regravar o cofre fingiria uma alteração que não houve.
-        if (!parentChanged && name == folder.Name)
+        if (!parentChanged && name == folder.Name && !environmentChanged)
             return Result.Success<FolderDto, ApiErrorDto>(FolderMappings.ToDto(folder));
 
         // RN-PASTA-002, só quando a chave (nome sem diferenciar maiúsculas, pasta pai) mudou: com ela igual
@@ -52,6 +57,7 @@ internal sealed class UpdateFolderHandler(IFolderQueries folderQueries, IFolderR
         var now = timeProvider.GetUtcNow().UtcDateTime;
         folder.Rename(name, now);
         folder.MoveTo(request.ParentID, now);
+        folder.ChangeEnvironment(request.EnvironmentName, request.EnvironmentColor, now);
 
         var updated = await folderRepository.Update(folder, cancellationToken);
         if (updated.IsFailure)

@@ -28,6 +28,13 @@ internal interface IConnectionRepository
     /// </summary>
     Task<UnitResult<ApiErrorDto>> Update(Connection connection, string? password, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-CONN-016: grava a cópia da conexão `id` na mesma pasta, com todos os campos e a senha, o nome "&lt;nome&gt; (cópia)" (ou "(cópia 2)"…, o
+    /// primeiro livre na pasta) e as duas datas em `createdAt`, e devolve a cópia. A origem, o nome e a senha saem do documento mais recente, dentro
+    /// da gravação. Falha com 404 `CONNECTION_NOT_FOUND` quando a conexão não existe, ou 401 `VAULT_LOCKED`.
+    /// </summary>
+    Task<Result<Connection, ApiErrorDto>> Duplicate(Guid id, DateTime createdAt, CancellationToken cancellationToken);
+
     /// <summary>Falha com 404 `CONNECTION_NOT_FOUND` quando a conexão não existe.</summary>
     Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken);
 }

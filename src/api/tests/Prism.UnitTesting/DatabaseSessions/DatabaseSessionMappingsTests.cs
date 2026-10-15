@@ -31,4 +31,22 @@ public sealed class DatabaseSessionMappingsTests
         //Assert
         Assert.Equal(new DatabaseSessionDto { ID = info.ID, ConnectionID = info.ConnectionID, Engine = EDatabaseEngine.Informix, Database = "producao", ServerVersion = "14.10.FC9" }, dto);
     }
+
+    /// <summary>RN-GRADE-011: a página diz como o filtro entrou, em texto; sem filtro, nulo.</summary>
+    [Trait("DatabaseSessionMappings", "ToDto")]
+    [Theory(DisplayName = "OK o filtro da página vai como merged, wrapped ou nulo")]
+    [InlineData(EFilterApplied.Merged, "merged")]
+    [InlineData(EFilterApplied.Wrapped, "wrapped")]
+    [InlineData(null, null)]
+    public void ToDto_FromQueryPage_ShouldWriteHowTheFilterWentIn(EFilterApplied? applied, string? text)
+    {
+        //Arrange
+        var page = new QueryPage([new QueryColumn("id", "integer", "number")], [["1"]], false, 3, [], FilterApplied: applied);
+
+        //Act
+        var dto = page.ToDto();
+
+        //Assert
+        Assert.Equal(text, dto.FilterApplied);
+    }
 }

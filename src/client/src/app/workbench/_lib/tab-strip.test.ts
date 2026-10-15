@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { closeConfirmation, closeConfirmationText, closeShortcutLabel, isCloseShortcut, mergeCloseQueue, nextToClose, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabsToClose, wheelScroll } from "./tab-strip";
+import { closeAsks, closeConfirmation, closeConfirmationText, closeShortcutLabel, isCloseShortcut, mergeCloseQueue, moveMenu, nextToClose, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabsToClose, tabTitleOf, wheelScroll } from "./tab-strip";
 
 const tabs = ["a", "b", "c", "d", "e"].map((id) => ({ id }));
 
@@ -250,6 +250,14 @@ describe("closeConfirmation: uma pergunta só, e só quando fechar perde SQL dig
     expect(closeConfirmation("right", tabs, "b")).toEqual({ total: 3, withSql: 1 });
   });
 
+  // RN-SCRIPT-001: o texto de um script está salvo; o que mudou desde a gravação já foi perguntado antes (Salvar ou Descartar), na pergunta do script.
+  it("a aba de um script não conta como SQL que se perde", () => {
+    const script = (id: string) => ({ id, sql: "select 3", script: { id: `s-${id}`, name: id, savedSql: "select 3", dirty: false } });
+
+    expect(closeConfirmation("all", [query("a"), script("b")], "a")).toBeNull();
+    expect(closeConfirmation("all", [query("a", "select 1"), script("b")], "a")).toEqual({ total: 2, withSql: 1 });
+  });
+
   it("sem SQL digitado nas que fecham (vazias, só espaço, ou abas de tabela), não pergunta", () => {
     const tabs = [query("a", "select 1"), query("b", "  \n\t "), query("c"), table("d")];
 
@@ -266,8 +274,42 @@ describe("closeConfirmation: uma pergunta só, e só quando fechar perde SQL dig
     expect(closeConfirmation("all", [query("a", "select 1")], "x")).toBeNull();
   });
 
-  it("o texto da pergunta diz quantas abas fecham e quantas consultas com SQL digitado perdem o texto", () => {
-    expect(closeConfirmationText(5, 2)).toEqual({ title: "Fechar 5 abas?", description: "Entre elas, 2 consultas com SQL digitado: o texto não é guardado em lugar nenhum.", confirm: "Fechar" });
-    expect(closeConfirmationText(1, 1)).toEqual({ title: "Fechar 1 aba?", description: "Entre elas, 1 consulta com SQL digitado: o texto não é guardado em lugar nenhum.", confirm: "Fechar" });
+  it("o texto da pergunta diz quantas abas fecham, quantas consultas com SQL digitado há entre elas, e que o que fecha não volta na próxima entrada (RN-ABAS-007)", () => {
+    expect(closeConfirmationText(5, 2)).toEqual({ title: "Fechar 5 abas?", description: "Entre elas, 2 consultas com SQL digitado: o que fecha não volta na próxima entrada.", confirm: "Fechar" });
+    expect(closeConfirmationText(1, 1)).toEqual({ title: "Fechar 1 aba?", description: "Entre elas, 1 consulta com SQL digitado: o que fecha não volta na próxima entrada.", confirm: "Fechar" });
+  });
+});
+
+describe("closeAsks: o que o fechamento pergunta depois das alterações não salvas da grade (RN-ABAS-007)", () => {
+  it("fechar o app (a última janela) não pergunta pelos scripts com mudança não salva nem pelo SQL digitado: eles voltam na próxima entrada", () => {
+    expect(closeAsks({ closesTheApp: true })).toEqual({ scripts: false, sql: false });
+  });
+
+  it("fechar abas, ou uma janela que não é a última, pergunta como antes: o que fecha não volta", () => {
+    expect(closeAsks({ closesTheApp: false })).toEqual({ scripts: true, sql: true });
+  });
+});
+
+describe("moveMenu: levar a aba para outra janela (RN-ABAS-002 e 003)", () => {
+  it("'Mover para nova janela' sempre; 'Mover para a janela…' apagado sem outra janela aberta", () => {
+    expect(moveMenu(0, true)).toEqual([
+      { action: "newWindow", label: "Mover para nova janela", disabled: false },
+      { action: "toWindow", label: "Mover para a janela…", disabled: true },
+    ]);
+    expect(moveMenu(2, true)[1].disabled).toBe(false);
+  });
+
+  it("fora do Electron não há para onde levar: o grupo não aparece", () => {
+    expect(moveMenu(3, false)).toEqual([]);
+  });
+});
+
+describe("tabTitleOf: o que a aba diz de si (RN-SCRIPT-001)", () => {
+  it("a aba de um script com mudança não salva diz isso no título e no nome acessível; a salva e a consulta comum, só o título", () => {
+    const script = { id: "s1", name: "Fechamento", savedSql: "", dirty: true };
+
+    expect(tabTitleOf({ title: "Fechamento", script })).toEqual({ title: "Fechamento", label: "Fechamento (alterações não salvas)", unsaved: true });
+    expect(tabTitleOf({ title: "Fechamento", script: { ...script, dirty: false } })).toEqual({ title: "Fechamento", label: "Fechamento", unsaved: false });
+    expect(tabTitleOf({ title: "consulta-1.sql" })).toEqual({ title: "consulta-1.sql", label: "consulta-1.sql", unsaved: false });
   });
 });

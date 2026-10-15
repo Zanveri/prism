@@ -73,3 +73,14 @@ describe("tela de login: as atualizações (RN-ATUALIZA-002)", () => {
     expect(renderSignIn()).toMatch(/<span[^>]*\bdata-app-version\b[^>]*>versão 0\.1\.0<\/span><button[^>]*\bdata-check-updates\b[^>]*>Verificar atualizações<\/button>/);
   });
 });
+
+describe("tela de login: a própria área de rolagem", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // A raiz do app não rola (`overflow: clip` no `html` e no `body`): numa janela baixa, quem deixa chegar ao botão de entrar é a área da tela.
+  it("rola por dentro, e o conteúdo tem pelo menos a altura da janela", () => {
+    vi.stubGlobal("window", { prism: bridge("0.1.0") });
+
+    expect(renderSignIn()).toMatch(/^<div class="h-full overflow-y-auto"><div class="flex min-h-full /);
+  });
+});

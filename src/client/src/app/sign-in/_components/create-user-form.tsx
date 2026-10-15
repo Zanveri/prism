@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 
 import { Button, TextField, useToast } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
+import { sharePeerEvent } from "@/lib/api/bridge";
 import { allowRefusal, type ApiError } from "@/lib/api/prism-api";
 import { focusFirstField, parseForm, type FieldErrors } from "@/lib/utils/form";
 
@@ -35,8 +36,9 @@ export function CreateUserForm({ onSignIn }: { onSignIn: () => void }) {
     onSuccess: (result) => {
       if (result.ok) {
         toast.success(copy.created);
-        // RN-COFRE-007: criar entra, e entrar fecha o cofre de quem estava antes.
+        // RN-COFRE-007: criar entra, e entrar fecha o cofre de quem estava antes. RN-ABAS-004: o login libera as outras janelas.
         queryClient.clear();
+        sharePeerEvent("signIn");
         void navigate(pathsConfig.workbench, { replace: true });
         return;
       }

@@ -1,4 +1,5 @@
 using Bogus;
+using Prism.Infrastructure.Vault.Clients;
 using Prism.Infrastructure.Vault.Models;
 using Prism.Infrastructure.Vault.Services;
 using Prism.TestingCore.Fakers.Vault;
@@ -160,7 +161,7 @@ public sealed partial class VaultServiceTests
     [Fact(DisplayName = "OK um .bak ilegível ou de formato mais novo não é tocado pela cura")]
     public async Task Unlock_WhenTheBakIsUnreadableOrNewer_LeavesItAlone()
     {
-        foreach (var damage in new Action<string>[] { path => File.WriteAllText(path, "isto não é um cofre"), path => Tamper(node => node["version"] = 2, path), path => Tamper(node => node["kdf"]!["salt"] = "curto", path) })
+        foreach (var damage in new Action<string>[] { path => File.WriteAllText(path, "isto não é um cofre"), path => Tamper(node => node["version"] = VaultCrypto.Version + 1, path), path => Tamper(node => node["kdf"]!["salt"] = "curto", path) })
         {
             //Arrange
             var (service, client, newPassword) = await CreateTheWindowAsync();

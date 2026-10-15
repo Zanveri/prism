@@ -4,6 +4,7 @@ import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui";
 
 import { layoutDiagram, referencedTables, type TableRef } from "../../_lib/table-diagram";
+import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import { recall, remember, type DiagramMemory } from "../../_lib/tab-memory";
 import { levelView } from "../../_lib/table-structure";
 import { columnsQuery, foreignKeysQuery } from "../../_lib/table-structure.service";
@@ -15,6 +16,8 @@ const copy = workbenchCopy.tableTab;
 
 type DiagramViewProps = {
   connectionId: string;
+  /** RN-ARVORE-006: o outro banco do servidor da aba; sem ele, o banco da conexão. */
+  database?: string;
   schema: string;
   name: string;
   /** A aba está À VISTA: a escondida não busca nada até ser aberta (RN-SEG-001). */
@@ -23,6 +26,8 @@ type DiagramViewProps = {
   onOpenTable: (table: TableRef) => void;
   /** Quem guarda o zoom e a rolagem do diagrama desta aba: o id dela (`tab-memory.ts`). */
   memoryKey: string;
+  /** RN-GRADE-012: onde a vista deixa o "Atualizar" para o F5 da aba. */
+  refreshSlot?: RefreshSlot;
 };
 
 /**
@@ -32,15 +37,15 @@ type DiagramViewProps = {
  * desenho só aparece quando todas chegaram, para as caixas não crescerem por baixo do usuário; a vizinha
  * cujas colunas falharam aparece só com o nome (o aviso central diz o que houve).
  */
-export function DiagramView({ connectionId, schema, name, visible, onOpenTable, memoryKey }: DiagramViewProps) {
+export function DiagramView({ connectionId, database, schema, name, visible, onOpenTable, memoryKey, refreshSlot }: DiagramViewProps) {
   const queryClient = useQueryClient();
-  const { refresh } = useStructureActions(connectionId);
-  const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible));
-  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible));
+  const { refresh } = useStructureActions(connectionId, database);
+  const columns = useQuery(columnsQuery(connectionId, schema, name, queryClient, visible, database));
+  const foreignKeys = useQuery(foreignKeysQuery(connectionId, schema, name, queryClient, visible, database));
 
   const neighbors = useMemo(() => (foreignKeys.data === undefined ? null : referencedTables({ schema, name }, foreignKeys.data)), [foreignKeys.data, schema, name]);
   const loaded = useQueries({
-    queries: (neighbors?.tables ?? []).map((table) => columnsQuery(connectionId, table.schema, table.name, queryClient, visible)),
+    queries: (neighbors?.tables ?? []).map((table) => columnsQuery(connectionId, table.schema, table.name, queryClient, visible, database)),
     // Um objeto só, com a mesma forma enquanto os dados não mudam: o desenho não é refeito a cada renderização.
     combine: (results) => ({ columns: results.map((result) => result.data ?? null), pending: results.some((result) => result.data === undefined && !result.isError) }),
   });
@@ -56,6 +61,9 @@ export function DiagramView({ connectionId, schema, name, visible, onOpenTable, 
   }, [columns.data, foreignKeys.data, neighbors, loaded, schema, name]);
 
   const rememberView = useCallback((view: DiagramMemory) => remember(memoryKey, "diagram", view), [memoryKey]);
+  // RN-GRADE-012: F5 recarrega a vista (a tabela e as vizinhas), como o "Atualizar" dela.
+  const refreshByKey = useCallback(() => void refresh([{ schema, name }, ...(neighbors?.tables ?? [])]), [refresh, schema, name, neighbors]);
+  useRefreshSlot(refreshSlot, refreshByKey);
 
   const failed = levelView(columns).kind === "error" ? levelView(columns) : levelView(foreignKeys);
   const everyone: TableRef[] = [{ schema, name }, ...(neighbors?.tables ?? [])];

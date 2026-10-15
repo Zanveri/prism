@@ -65,6 +65,10 @@ public sealed class ConnectionsTests
     private static Task<HttpResponseMessage> RevealAsync(ApiHost host, Guid id, string password)
         => host.Client.PostAsJsonAsync($"{ConnectionsPath}/{id}/password/reveal", new { password });
 
+    /// <summary>"Duplicar conexão" (RN-CONN-016): a tela não manda corpo, só o ID na rota.</summary>
+    private static Task<HttpResponseMessage> DuplicateAsync(ApiHost host, Guid id)
+        => host.Client.PostAsync($"{ConnectionsPath}/{id}/duplicate", null);
+
     private static async Task<List<JsonElement>> ListConnectionsAsync(ApiHost host)
     {
         var response = await host.Client.GetAsync(ConnectionsPath);
@@ -823,6 +827,73 @@ public sealed class ConnectionsTests
         }
     }
 
+    /// <summary>
+    /// RN-CONN-016: a cópia nasce na mesma pasta, com todos os campos e a senha gravada, e o nome "(cópia)". A resposta é a do detalhe
+    /// (`GET api/user/connections/{id}`), sem a senha (RN-CONN-001); a senha copiada é provada pela revelação da cópia, e não pela resposta.
+    /// </summary>
+    [Test]
+    public async Task Duplicate_Returns201_WithTheCopyInTheSameFolder_AndTheStoredPassword()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var userPassword = UserFakers.RandomPassword();
+        await host.CreateUserAsync("marina.costa", userPassword);
+        var folderID = await CreateFolderAsync(host, "Fábrica");
+        var source = await CreateConnectionAsync(host, Body(folderID: folderID, name: "MES Produção", engine: 3, host: "ifx.local", port: 9089, environmentName: "Produção", environmentColor: "#FF8800"));
+
+        var response = await DuplicateAsync(host, IdOf(source));
+
+        var raw = await response.Content.ReadAsStringAsync();
+        var copy = JsonDocument.Parse(raw).RootElement;
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That(raw, Does.Not.Contain(DatabasePassword));
+        Assert.That(IdOf(copy), Is.Not.EqualTo(IdOf(source)));
+        Assert.That(response.Headers.Location?.ToString(), Is.EqualTo($"{ConnectionsPath}/{IdOf(copy)}"));
+        Assert.That(copy.GetProperty("name").GetString(), Is.EqualTo("MES Produção (cópia)"));
+        foreach (var field in new[] { "folderID", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor" })
+            Assert.That(copy.GetProperty(field).GetRawText(), Is.EqualTo(source.GetProperty(field).GetRawText()), field);
+        Assert.That(copy.GetProperty("createdAt").GetDateTime(), Is.EqualTo(copy.GetProperty("updatedAt").GetDateTime()));
+        Assert.That(copy.GetProperty("createdAt").GetDateTime(), Is.GreaterThanOrEqualTo(source.GetProperty("createdAt").GetDateTime()));
+
+        var detail = await host.Client.GetAsync($"{ConnectionsPath}/{IdOf(copy)}");
+        Assert.That(detail.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(JsonDocument.Parse(await detail.Content.ReadAsStringAsync()).RootElement.GetRawText(), Is.EqualTo(copy.GetRawText()));
+
+        var revealed = await RevealAsync(host, IdOf(copy), userPassword);
+        Assert.That(revealed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await ReadJsonAsync(revealed)).GetProperty("password").GetString(), Is.EqualTo(DatabasePassword));
+        Assert.That(await ListConnectionsAsync(host), Has.Count.EqualTo(2));
+    }
+
+    /// <summary>RN-CONN-016: com "(cópia)" tomado, vem "(cópia 2)"; a cópia de uma cópia é "&lt;nome da cópia&gt; (cópia)".</summary>
+    [Test]
+    public async Task Duplicate_Twice_NumbersTheSecondCopy()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+        var source = await CreateConnectionAsync(host, Body(name: "MES"));
+
+        var first = await ReadJsonAsync(await DuplicateAsync(host, IdOf(source)));
+        var second = await ReadJsonAsync(await DuplicateAsync(host, IdOf(source)));
+        var ofTheCopy = await ReadJsonAsync(await DuplicateAsync(host, IdOf(first)));
+
+        Assert.That(first.GetProperty("name").GetString(), Is.EqualTo("MES (cópia)"));
+        Assert.That(second.GetProperty("name").GetString(), Is.EqualTo("MES (cópia 2)"));
+        Assert.That(ofTheCopy.GetProperty("name").GetString(), Is.EqualTo("MES (cópia) (cópia)"));
+        Assert.That(await ListConnectionsAsync(host), Has.Count.EqualTo(4));
+    }
+
+    [Test]
+    public async Task Duplicate_Unknown_Returns404ConnectionNotFound()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+
+        var response = await DuplicateAsync(host, Guid.CreateVersion7());
+
+        await AssertProblemAsync(response, HttpStatusCode.NotFound, "CONNECTION_NOT_FOUND");
+        Assert.That(await ListConnectionsAsync(host), Is.Empty);
+    }
+
     [Test]
     public async Task Routes_WhileLocked_Return401VaultLocked()
     {
@@ -835,6 +906,7 @@ public sealed class ConnectionsTests
         await AssertProblemAsync(await UpdateConnectionAsync(host, id, Body(password: null)), HttpStatusCode.Unauthorized, "VAULT_LOCKED");
         await AssertProblemAsync(await host.Client.DeleteAsync($"{ConnectionsPath}/{id}"), HttpStatusCode.Unauthorized, "VAULT_LOCKED");
         await AssertProblemAsync(await RevealAsync(host, id, "qualquer-senha"), HttpStatusCode.Unauthorized, "VAULT_LOCKED");
+        await AssertProblemAsync(await DuplicateAsync(host, id), HttpStatusCode.Unauthorized, "VAULT_LOCKED");
     }
 
     /// <summary>

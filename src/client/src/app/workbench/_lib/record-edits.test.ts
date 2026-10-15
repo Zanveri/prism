@@ -1,0 +1,267 @@
+import { describe, expect, it } from "vitest";
+
+import type { ApiError } from "@/lib/api/prism-api";
+
+import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type PendingEdits } from "./record-edits";
+import type { EditTarget } from "./record-edits.schema";
+import { recordsCopy } from "./records.copy";
+
+const copy = recordsCopy.edit;
+
+/** `loja.pedido` com a chave em `id` (coluna 0), `status` (1) e `total` (2). */
+const target: EditTarget = {
+  tables: [{ schema: "loja", name: "pedido", key: [0], editable: true, reason: null }],
+  columns: [
+    { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+    { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+    { table: 0, baseColumn: "total", editable: false, reason: "gerada pelo banco", nullable: true, generated: "always" },
+  ],
+  rowOperations: true,
+  oneAtATime: false,
+};
+
+const rows = [
+  ["1", "aberta", "10"],
+  ["2", "aberta", "20"],
+  ["3", "fechada", "30"],
+];
+
+const apiError = (code: string, extensions: Record<string, unknown> = {}, detail: string | null = null): ApiError => ({ status: 422, code, title: `Título de ${code}`, detail, errors: null, extensions });
+
+describe("as pendências da grade (RN-EDIT-004)", () => {
+  it("editar marca a célula com o valor novo; voltar ao valor lido tira a pendência", () => {
+    const edited = editCell(noEdits, 0, 1, "paga", "aberta");
+
+    expect(pendingCell(edited, 0, 1)).toEqual({ value: "paga" });
+    expect(pendingCell(edited, 0, 0)).toBeNull();
+    expect(editCell(edited, 0, 1, "aberta", "aberta")).toEqual(noEdits);
+  });
+
+  it("NULL é um valor pendente, diferente do texto vazio", () => {
+    const edited = editCell(editCell(noEdits, 0, 1, null, "aberta"), 1, 1, "", "aberta");
+
+    expect(pendingCell(edited, 0, 1)).toEqual({ value: null });
+    expect(pendingCell(edited, 1, 1)).toEqual({ value: "" });
+    expect(editCell(edited, 2, 1, null, null)).toBe(edited);
+  });
+
+  it("conta uma alteração por linha, e não por célula; a exclusão e a linha nova contam uma cada", () => {
+    let edits = editCell(editCell(noEdits, 0, 1, "paga", "aberta"), 0, 0, "10", "1");
+    edits = deleteRow(edits, 2);
+    edits = addRow(edits).edits;
+
+    expect(pendingCount(edits)).toBe(3);
+  });
+
+  it("excluir uma linha tira as edições dela; desfazer a exclusão não as devolve", () => {
+    const deleted = deleteRow(editCell(noEdits, 1, 1, "paga", "aberta"), 1);
+
+    expect(pendingCell(deleted, 1, 1)).toBeNull();
+    expect(deleted.deleted).toEqual([1]);
+    expect(undoDelete(deleted, 1)).toEqual({ ...noEdits, nextId: deleted.nextId });
+  });
+
+  it("desfazer uma célula tira só ela", () => {
+    const edits = undoCell(editCell(editCell(noEdits, 0, 1, "paga", "aberta"), 0, 0, "9", "1"), 0, 1);
+
+    expect(edits.cells).toEqual([{ row: 0, column: 0, value: "9" }]);
+  });
+
+  it("a linha nova recebe valores coluna a coluna, desfaz cada um, e sai inteira por Excluir linha", () => {
+    const { edits, id } = addRow(noEdits);
+    const filled = editNewCell(editNewCell(edits, id, 0, "7"), id, 1, null);
+
+    expect(filled.added).toEqual([{ id, values: { 0: "7", 1: null } }]);
+    expect(undoNewCell(filled, id, 1).added).toEqual([{ id, values: { 0: "7" } }]);
+    expect(removeNewRow(filled, id).added).toEqual([]);
+  });
+});
+
+describe("as alterações do Salvar (RN-EDIT-005)", () => {
+  it("primeiro as exclusões, depois as alterações, depois as linhas novas, cada grupo na ordem em que foi feito, pela chave lida", () => {
+    let edits: PendingEdits = editCell(noEdits, 2, 1, "x", "fechada");
+    const added = addRow(edits);
+    edits = editNewCell(added.edits, added.id, 0, "9");
+    edits = editCell(edits, 0, 1, "paga", "aberta");
+    edits = editCell(edits, 2, 0, "33", "3");
+    edits = deleteRow(edits, 1);
+
+    const plan = changesOf(edits, rows, target);
+
+    expect(plan.changes).toEqual([
+      { kind: "delete", table: 0, key: ["2"] },
+      { kind: "update", table: 0, key: ["3"], set: [{ column: 1, value: "x" }, { column: 0, value: "33" }] },
+      { kind: "update", table: 0, key: ["1"], set: [{ column: 1, value: "paga" }] },
+      { kind: "insert", table: 0, values: [{ column: 0, value: "9" }] },
+    ]);
+    expect(plan.origins).toEqual([{ kind: "row", row: 1 }, { kind: "row", row: 2 }, { kind: "row", row: 0 }, { kind: "new", id: added.id }]);
+  });
+
+  it("no Informix sem log, o que já foi gravado sai das pendências; a que falhou e as seguintes ficam", () => {
+    let edits = editCell(editCell(editCell(noEdits, 0, 1, "a", "aberta"), 1, 1, "b", "aberta"), 2, 1, "c", "fechada");
+    const plan = changesOf(edits, rows, target);
+    edits = withoutApplied(edits, plan.origins, 1);
+
+    expect(edits.cells.map((cell) => cell.row)).toEqual([1, 2]);
+  });
+});
+
+describe("a falha do Salvar na faixa (RN-EDIT-005 e 012)", () => {
+  const plan = changesOf(editCell(editCell(noEdits, 0, 1, "a", "aberta"), 6, 1, "b", "x"), [...rows, ["4"], ["5"], ["6"], ["7", "x", "70"]], target);
+
+  it("a recusa do banco vem como veio, com a linha que falhou", () => {
+    const failure = failureOf(apiError("SQL_EXECUTION_FAILED", { change: 1, sqlState: "23505" }, "duplicate key value violates unique constraint"), plan, false);
+
+    expect(failure).toEqual({ headline: copy.failedAt(copy.rowLabel(7)), detail: "duplicate key value violates unique constraint", origin: { kind: "row", row: 6 }, column: null, applied: 0, written: false });
+  });
+
+  it("o comando que não afetou nenhuma linha diz que a linha não existe mais", () => {
+    const failure = failureOf(apiError("EDIT_ROW_MISMATCH", { change: 0, rowsAffected: 0 }), plan, false);
+
+    expect(failure).toMatchObject({ detail: copy.noRow, origin: { kind: "row", row: 0 }, applied: 0 });
+  });
+
+  it("no banco sem log, diz quantas foram gravadas, qual falhou e quantas continuam; o que alterou várias linhas já está gravado", () => {
+    const zero = failureOf(apiError("EDIT_ROW_MISMATCH", { change: 1, rowsAffected: 0, applied: 1 }), plan, true);
+    const many = failureOf(apiError("EDIT_ROW_MISMATCH", { change: 1, rowsAffected: 3, applied: 1 }), plan, true);
+
+    expect(zero).toMatchObject({ headline: copy.partlySaved(1, copy.rowLabel(7), 1), applied: 1, written: false });
+    expect(many).toMatchObject({ detail: copy.manyRowsWritten(3), applied: 1, written: true });
+  });
+
+  it("o texto que não converte aponta a célula", () => {
+    expect(failureOf(apiError("EDIT_INVALID", { change: 0, column: 1 }, "«x» não é um número inteiro."), plan, false)).toMatchObject({ detail: "«x» não é um número inteiro.", origin: { kind: "row", row: 0 }, column: 1 });
+  });
+
+  it("a recusa que não é de uma alteração (o resultado mudou, a sessão ocupada) fica com o texto da API, sem linha", () => {
+    expect(failureOf(apiError("RESULT_CHANGED", {}, "O resultado mudou."), plan, false)).toEqual({ headline: "Título de RESULT_CHANGED", detail: "O resultado mudou.", origin: null, column: null, applied: 0, written: false });
+  });
+});
+
+describe("a grade depois de um Salvar que gravou tudo, sem executar de novo (RN-EDIT-009)", () => {
+  const result = { rows, truncated: new Map<number, ReadonlySet<number>>() };
+
+  it("as linhas lidas ficam com os valores salvos, as excluídas saem, e a linha nova entra no fim com o que foi digitado; o resto dela, o banco preencheu", () => {
+    let edits = editCell(noEdits, 2, 1, "paga", "fechada");
+    edits = deleteRow(edits, 0);
+    const added = addRow(edits);
+    edits = editNewCell(editNewCell(added.edits, added.id, 0, "4"), added.id, 1, null);
+
+    const saved = savedResultOf(result, edits, 3);
+
+    expect(saved.rows).toEqual([
+      ["2", "aberta", "20"],
+      ["3", "paga", "30"],
+      ["4", null, null],
+    ]);
+    // Só a coluna que ninguém preencheu é do banco: o NULL digitado é um valor, e a tela o sabe.
+    expect(saved.generated).toEqual(new Map([[2, new Set([2])]]));
+  });
+
+  it("as linhas que não mudaram são os mesmos objetos (a linha memorizada da grade não redesenha); sem nada pendente, a grade fica como estava", () => {
+    const saved = savedResultOf(result, editCell(noEdits, 1, 1, "paga", "aberta"), 3);
+
+    expect(saved.rows[0]).toBe(rows[0]);
+    expect(saved.rows[2]).toBe(rows[2]);
+    expect(saved.rows[1]).toEqual(["2", "paga", "20"]);
+    expect(savedResultOf(result, noEdits, 3)).toEqual({ rows, truncated: result.truncated, generated: new Map() });
+  });
+
+  it("cada linha que fica sabe a linha de onde veio no resultado da API, e a nova não tem; um segundo Salvar continua a conta (RN-SQL-017)", () => {
+    const added = addRow(deleteRow(noEdits, 0));
+    const first = savedResultOf(result, added.edits, 3);
+    const second = savedResultOf({ ...first, rows: first.rows }, deleteRow(noEdits, 0), 3);
+
+    expect(first.sourceRows).toEqual([1, 2, null]);
+    expect(second.sourceRows).toEqual([2, null]);
+  });
+
+  it("as marcas de corte e as do banco acompanham a linha quando uma de antes dela sai", () => {
+    const marked = { rows, truncated: new Map([[2, new Set([2])]]), generated: new Map([[1, new Set([2])]]) };
+
+    const saved = savedResultOf(marked, deleteRow(noEdits, 0), 3);
+
+    expect(saved.truncated).toEqual(new Map([[1, new Set([2])]]));
+    expect(saved.generated).toEqual(new Map([[0, new Set([2])]]));
+  });
+});
+
+/**
+ * `loja.pedido p JOIN loja.cliente c`: `p.id` (0, chave de pedido), `p.status` (1), `c.id` (2, chave de cliente) e `c.nome` (3). As
+ * colunas da chave não se editam numa junção; o cliente 7 aparece em duas linhas.
+ */
+const join: EditTarget = {
+  tables: [
+    { schema: "loja", name: "pedido", key: [0], editable: true, reason: null },
+    { schema: "loja", name: "cliente", key: [2], editable: true, reason: null },
+  ],
+  columns: [
+    { table: 0, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+    { table: 1, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 1, baseColumn: "nome", editable: true, reason: null, nullable: true, generated: null },
+  ],
+  rowOperations: false,
+  oneAtATime: false,
+};
+
+const joined = [
+  ["1", "aberta", "7", "Ana"],
+  ["2", "aberta", "7", "Ana"],
+  ["3", "fechada", "8", "Bia"],
+  ["4", "aberta", null, null],
+];
+
+/** Editar a célula como a tela faz numa junção: com a linha da tabela da coluna. */
+const editJoined = (edits: PendingEdits, row: number, column: number, value: string | null) => editCell(edits, row, column, value, joined[row][column], changeKeyOf(joined, join, row, column) ?? undefined);
+
+describe("as pendências numa junção (RN-EDIT-002 e 004)", () => {
+  it("a linha de uma tabela é a chave dela: a mesma em linhas diferentes da grade, nenhuma na calculada e na junção externa sem linha", () => {
+    expect(changeKeyOf(joined, join, 0, 3)).toBe(changeKeyOf(joined, join, 1, 3));
+    expect(changeKeyOf(joined, join, 0, 1)).not.toBe(changeKeyOf(joined, join, 1, 1));
+    expect(changeKeyOf(joined, join, 3, 3)).toBeNull();
+    expect(changeKeyOf(joined, { ...join, columns: [...join.columns.slice(0, 3), { ...join.columns[3], table: null }] }, 0, 3)).toBeNull();
+  });
+
+  it("a linha repetida muda em todas as linhas da grade e conta como uma alteração; editar de novo noutra linha troca a mesma pendência", () => {
+    const once = editJoined(noEdits, 0, 3, "Ana Maria");
+    const again = editJoined(once, 1, 3, "Ana Paula");
+
+    expect(pendingCount(once)).toBe(1);
+    expect(linkedCells(once, joined, join).cells.map(({ row, value }) => [row, value])).toEqual([[0, "Ana Maria"], [1, "Ana Maria"]]);
+    expect(pendingCount(again)).toBe(1);
+    expect(again.cells).toEqual([{ row: 0, column: 3, value: "Ana Paula", change: changeKeyOf(joined, join, 0, 3) }]);
+    expect(pendingCell(linkedCells(again, joined, join), 1, 3)).toEqual({ value: "Ana Paula" });
+    expect(editJoined(again, 1, 3, "Ana")).toEqual(noEdits);
+    expect(undoCell(again, 1, 3, changeKeyOf(joined, join, 1, 3) ?? undefined)).toEqual(noEdits);
+  });
+
+  it("uma linha da grade editada em duas tabelas são duas alterações, cada uma pela chave da sua tabela, na ordem da primeira edição", () => {
+    const edits = editJoined(editJoined(editJoined(noEdits, 0, 3, "Ana Maria"), 0, 1, "paga"), 2, 1, "paga");
+
+    const plan = changesOf(edits, joined, join);
+
+    expect(pendingCount(edits)).toBe(3);
+    expect(plan.changes).toEqual([
+      { kind: "update", table: 1, key: ["7"], set: [{ column: 3, value: "Ana Maria" }] },
+      { kind: "update", table: 0, key: ["1"], set: [{ column: 1, value: "paga" }] },
+      { kind: "update", table: 0, key: ["3"], set: [{ column: 1, value: "paga" }] },
+    ]);
+    expect(plan.origins.map((origin) => origin.kind === "row" && origin.row)).toEqual([0, 0, 2]);
+  });
+
+  it("no banco sem log, a alteração gravada sai sem levar a da outra tabela da mesma linha", () => {
+    const edits = editJoined(editJoined(noEdits, 0, 3, "Ana Maria"), 0, 1, "paga");
+    const plan = changesOf(edits, joined, join);
+
+    expect(withoutApplied(edits, plan.origins, 1).cells).toEqual([{ row: 0, column: 1, value: "paga", change: changeKeyOf(joined, join, 0, 1) }]);
+  });
+
+  it("depois de salvar, todas as linhas que mostram a linha da tabela ficam com o valor salvo (RN-EDIT-009)", () => {
+    const edits = editJoined(noEdits, 1, 3, "Ana Maria");
+
+    const saved = savedResultOf({ rows: joined, truncated: new Map() }, linkedCells(edits, joined, join), 4);
+
+    expect(saved.rows.map((row) => row[3])).toEqual(["Ana Maria", "Ana Maria", "Bia", null]);
+  });
+});

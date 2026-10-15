@@ -53,6 +53,31 @@ public sealed class CreateFolderHandlerTests
         _folderRepository.VerifyNoOtherCalls();
     }
 
+    /// <summary>RN-PASTA-005: o ambiente vai normalizado ao cofre e volta na resposta.</summary>
+    [Trait("CreateFolderHandler", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK cria com o ambiente normalizado")]
+    public async Task Handle_ShouldBeOK_WithEnvironment()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var command = FolderFakers.ReturnCreateFolderCommandValid(name: "Produção", environmentName: "  Produção   Sul ", environmentColor: " #FF8A7A ");
+        Folder? inserted = null;
+        _folderQueries.Setup(q => q.Exists("Produção", null, cancellationToken)).ReturnsAsync(false);
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(inserted);
+        Assert.Equal("Produção Sul", inserted.EnvironmentName);
+        Assert.Equal("#FF8A7A", inserted.EnvironmentColor);
+        Assert.Equal("Produção Sul", result.Value.EnvironmentName);
+        Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
+    }
+
     [Trait("CreateFolderHandler", "CreateFolderCommand")]
     [Fact(DisplayName = "OK cria dentro de uma pasta que existe")]
     public async Task Handle_ShouldBeOK_Child()

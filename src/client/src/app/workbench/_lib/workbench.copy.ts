@@ -20,6 +20,8 @@ export const workbenchCopy = {
     nullable: "nulo",
     primaryKey: "PK",
     unique: "único",
+    // RN-ARVORE-006: a marca do banco da conexão na lista dos bancos do servidor.
+    defaultDatabase: "padrão",
     routineKinds: { procedure: "procedimento", function: "função" },
 
     // A dica da linha de uma tabela ou visão (o canvas a põe na tabela selecionada). Abre a ABA: com ela já aberta noutra vista (a Estrutura, por exemplo), o
@@ -50,7 +52,8 @@ export const workbenchCopy = {
       copyName: "Copiar nome",
       copyQualifiedName: "Copiar nome qualificado",
       newSubfolder: "Nova subpasta",
-      renameFolder: "Renomear",
+      // RN-PASTA-006: o diálogo da pasta tem o nome e o ambiente.
+      renameFolder: "Editar pasta…",
       moveFolder: "Mover",
       deleteFolder: "Excluir",
       // RN-AVISO-002 e 003: o resultado de copiar. Quando a área de transferência recusa, o texto continua na tela para a pessoa copiar.
@@ -83,12 +86,21 @@ export const workbenchCopy = {
     closeAll: "Fechar todas",
     closeShortcut: "Ctrl+W",
     closeShortcutMac: "Cmd+W",
-    // "Fechar todas", "Fechar as outras" e "Fechar as da direita" perguntam UMA vez quando alguma aba que fecha é consulta com SQL digitado (o texto não é guardado).
+    // "Fechar todas", "Fechar as outras" e "Fechar as da direita" perguntam UMA vez quando alguma aba que fecha é consulta com SQL digitado: o que fecha não volta
+    // na próxima entrada (RN-ABAS-006 e 007).
     confirmClose: {
       title: (total: number) => `Fechar ${formatCount(total, "aba", "abas")}?`,
-      description: (withSql: number) => `Entre elas, ${formatCount(withSql, "consulta com SQL digitado", "consultas com SQL digitado")}: o texto não é guardado em lugar nenhum.`,
+      description: (withSql: number) => `Entre elas, ${formatCount(withSql, "consulta com SQL digitado", "consultas com SQL digitado")}: o que fecha não volta na próxima entrada.`,
       confirm: "Fechar",
     },
+    // RN-ABAS-001 a 003: a aba muda de lugar arrastando ou pelo teclado, e passa para outra janela pelo menu ou arrastando.
+    moveToNewWindow: "Mover para nova janela",
+    moveToWindow: "Mover para a janela…",
+    windowsLabel: "Mover para a janela",
+    windowName: (number: number, activeTitle: string | null, tabCount: number) =>
+      activeTitle === null ? `Janela ${number} — sem abas` : tabCount > 1 ? `Janela ${number} — ${activeTitle} e mais ${formatCount(tabCount - 1, "aba", "abas")}` : `Janela ${number} — ${activeTitle}`,
+    moveBusy: "Espere o comando terminar, ou cancele-o, antes de levar a aba para outra janela.",
+    moveFailed: "Não foi possível levar a aba para outra janela.",
   },
 
   editor: {
@@ -98,6 +110,15 @@ export const workbenchCopy = {
     runShortcut: "Ctrl+Enter",
     cancel: "Cancelar",
     cancelling: "Cancelando…",
+    // RN-ARVORE-007: o banco em que a aba roda, e a lista dos bancos do servidor (a mesma da árvore, RN-ARVORE-006).
+    database: {
+      label: "Banco",
+      defaultName: (name: string) => `${name} (padrão)`,
+      // Antes de a lista de conexões chegar, o banco da conexão ainda não tem nome.
+      connectionDatabase: "banco da conexão",
+      loading: "Carregando os bancos…",
+      locked: "No Db2, a conexão usa um banco só.",
+    },
   },
 
   result: {
@@ -195,7 +216,8 @@ export const workbenchCopy = {
       // sistema, que a pessoa ainda vai confirmar (ou cancelar), então nada aqui afirma que o arquivo foi gravado.
       exported: (count: number) => `Exportando ${formatCount(count, "linha", "linhas")}…`,
       exportedPartial: (count: number) => `Exportando ${formatCount(count, "linha", "linhas")}… As linhas que ainda não foram carregadas não entram no arquivo.`,
-      exportedTruncated: "Valores que chegaram cortados saem cortados no arquivo.",
+      // RN-SQL-017: o valor cortado na grade sai inteiro; este é o que a API não tinha inteiro (passou do teto, ou o resultado mudou).
+      exportedCut: (count: number) => (count === 1 ? "1 valor não pôde vir inteiro e sai cortado no arquivo." : `${formatCount(count, "valor", "valores")} não puderam vir inteiros e saem cortados no arquivo.`),
     },
     // RN-TABELA-003: as três seções da Estrutura. O canvas também mostra "Padrão", "Ao excluir" e "Método", que a API não devolve.
     structure: {
@@ -251,6 +273,8 @@ export const workbenchCopy = {
     connected: "Conectado",
     disconnected: "Desconectado",
     noTab: "Nenhuma aba ativa",
+    // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
+    place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,
   },
@@ -281,5 +305,11 @@ export const workbenchCopy = {
     // RN-AVISO-003 e RN-TABELA-007: o filtro que o clique numa chave estrangeira pediu e que a aba da tabela não chegou a enviar (estava ocupada com outro
     // comando, ou a conexão foi desconectada) até o prazo do pedido acabar. Nada foi aplicado; o caminho é clicar de novo.
     filterNotApplied: (table: string) => `O filtro pedido para ${table} não foi aplicado: a aba dela estava ocupada ou desconectada. Clique no valor de novo.`,
+    // RN-ABAS-006: o que não voltou como estava, na entrada. O texto acima de 1 MB não é gravado, e a aba volta vazia.
+    restoredEmpty: (title: string) => `O texto de ${title} passava de 1 MB e não foi guardado. A aba voltou vazia.`,
+    // RN-ABAS-006: a aba de consulta cuja conexão foi excluída volta sem conexão, como um script sem conexão (RN-SCRIPT-003).
+    restoredWithoutConnection: (count: number) => (count === 1 ? "Uma aba voltou sem conexão: a conexão dela não existe mais." : `${formatCount(count, "aba", "abas")} voltaram sem conexão: a conexão delas não existe mais.`),
+    // RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; a da conexão excluída não volta.
+    restoredTablesDropped: (count: number) => (count === 1 ? "Uma aba de tabela não voltou: a conexão dela não existe mais." : `${formatCount(count, "aba de tabela", "abas de tabela")} não voltaram: a conexão delas não existe mais.`),
   },
 } as const;

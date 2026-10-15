@@ -1,17 +1,30 @@
-import { memo, useCallback, useEffect, useId, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { connectionsQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { refreshKey } from "../_lib/grid-editing";
+import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/result-layout";
+import { saveShortcut } from "../_lib/saved-scripts";
 import { recall, remember } from "../_lib/tab-memory";
 import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
-import type { QueryTab } from "../_lib/workbench-model";
+import { canClear } from "../_lib/table-view";
+import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
+import { inDatabase } from "../_lib/navigator-model";
+import type { QueryTab, TableView } from "../_lib/workbench-model";
+import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
+import { EditsBanner } from "./edits-banner";
 import { ResultActions } from "./result-actions";
+import { resultEditDialogs } from "./result-edit-dialogs";
 import { ResultPanel } from "./result-panel";
 import { ResultSplitter } from "./result-splitter";
+import { NoConnectionBarView } from "./script-dialogs";
+import { RecordsFilter } from "./table-tab/records-filter";
 import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
 
 type QueryTabPanelProps = {
@@ -21,7 +34,26 @@ type QueryTabPanelProps = {
   engine: Engine | undefined;
   active: boolean;
   onSqlChange: (tabId: string, patch: { sql: string }) => void;
+  /** RN-SCRIPT-001: o texto mudou, sem atraso (o ponto da aba de um script acende na hora). Estável, como as outras: o painel é memorizado. */
+  onEdited: (tabId: string) => void;
+  /** RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S com o foco em qualquer lugar da aba (o editor, a barra, o resultado). */
+  onSave: (tabId: string, mode: "save" | "saveAs") => void;
+  /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu. */
+  onAssignConnection: (tabId: string, connectionId: string) => void;
+  /** RN-LINK-001: o Ctrl+clique no nome de uma tabela abre a aba dela nos Registros, na conexão e no banco desta aba. Estável. */
+  onOpenTable: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
+  /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
+  onSwitchDatabase: (tabId: string, database: string | undefined) => void;
 };
+
+/** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
+function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScript: boolean; onAssign: (tabId: string, connectionId: string) => void }) {
+  const connections = useQuery(connectionsQuery);
+  const [value, setValue] = useState("");
+  const options = (connections.data ?? []).map((connection) => ({ value: connection.id, label: connection.name }));
+
+  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={(connectionId) => onAssign(tabId, connectionId)} forScript={forScript} />;
+}
 
 /**
  * O que uma aba de consulta mostra: a barra, o editor de SQL e a área de resultado. As abas ficam
@@ -32,8 +64,12 @@ type QueryTabPanelProps = {
  * maximiza e a divisória se arrasta. Recolher e maximizar só mudam o tamanho: o editor e a grade
  * seguem montados, e ficam sem altura em vez de saírem da página. A divisão fica guardada fora do
  * componente (`tab-memory.ts`, pelo id da aba): o que desmonta e volta, e o bloqueio por inatividade, que troca o executor, a devolvem.
+ *
+ * A grade do resultado se edita como a dos Registros (seção 22, RN-EDIT-001): o mesmo campo na célula, a mesma faixa, o mesmo menu e os mesmos
+ * atalhos (`useRecordEdits`). Com alterações não salvas, executar outro comando e "Executar de novo" perguntam antes (RN-EDIT-007); o Salvar deixa
+ * a grade com o que foi salvo, sem executar de novo, e o cursor que estava aberto fecha (RN-EDIT-009).
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
@@ -58,53 +94,180 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
 
-  // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
-  // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
-  const handleRun = useCallback(
-    (target: RunTarget) => {
-      if (commandWillRun(target, isBusyState(runner.getState()))) dispatch({ type: "run" });
-      void runner.run(target);
-    },
+  // RN-EDIT-009: o Salvar que gravou tudo deixa na grade o que foi salvo, sem executar de novo (também antes de a aba ir para outra janela).
+  const keepSaved = useCallback(({ resultId, result }: SavedEdits) => runner.keepSaved(resultId, result), [runner]);
+
+  // RN-GRADE-011: o campo de filtro do resultado, o mesmo dos Registros, acima da grade. Aplicar executa de novo o comando do resultado com o texto do campo
+  // (a API o junta ao comando), e o texto do editor não muda; executar pelo editor limpa o filtro. O que se decide é de `result-filter.ts`, com teste.
+  const [filterDraft, setFilterDraft] = useState("");
+  const [filterApplied, setFilterApplied] = useState("");
+  const [filterProblem, setFilterProblem] = useState<{ message: string } | null>(null);
+  const [pinned, setPinned] = useState<RunTarget | null>(null);
+  const base = filterBaseOf(state, pinned);
+  const filterNow = useRef({ base, draft: filterDraft, applied: filterApplied });
+  useEffect(() => {
+    filterNow.current = { base, draft: filterDraft, applied: filterApplied };
+  });
+  const guardRef = useRef<(proceed: () => void) => void>((proceed) => proceed());
+  const sendFilter = useCallback(
+    (draft: string) =>
+      guardRef.current(() => {
+        const { base: target, applied } = filterNow.current;
+        void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next) });
+      }),
     [runner],
   );
+  const filterSource = useMemo<GridFilterSource>(
+    () => ({
+      engine,
+      field: () => filterNow.current.draft,
+      removable: () => canClear(filterNow.current.draft, filterNow.current.applied),
+      apply: sendFilter,
+      clear: () => sendFilter(""),
+    }),
+    [engine, sendFilter],
+  );
+  const rerunRef = useRef<() => void>(() => {});
+  const menuRerun = useCallback(() => rerunRef.current(), []);
+
+  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun });
+  const { guard } = edits;
+  useEffect(() => {
+    guardRef.current = guard;
+  });
+
+  // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
+  // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
+  // RN-EDIT-007: o comando que vai ser enviado, com alterações não salvas, espera a resposta da pergunta; o que o executor recusaria não pergunta nada.
+  const handleRun = useCallback(
+    (target: RunTarget) => {
+      const go = () => {
+        if (commandWillRun(target, isBusyState(runner.getState()))) {
+          dispatch({ type: "run" });
+          // RN-GRADE-011: o comando do editor vai sem o filtro do resultado, e o campo fica limpo.
+          clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+        }
+        void runner.run(target);
+      };
+      if (commandWillRun(target, isBusyState(runner.getState()))) guard(go);
+      else go();
+    },
+    [runner, guard],
+  );
+  const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
+  useEffect(() => {
+    rerunRef.current = handleRerun;
+  });
+
+  // RN-TABELA-011: o campo completa as colunas do resultado. Um filtro que dá erro deixa a área sem grade: as colunas continuam as da última.
+  const shownRows = shown?.status === "rows" ? shown : null;
+  const [seenColumns, setSeenColumns] = useState<readonly { name: string; type: string }[]>([]);
+  if (shownRows !== null && shownRows.columns !== seenColumns) setSeenColumns(shownRows.columns);
+
+  // RN-ARVORE-007: trocar o banco, com alterações não salvas na grade, pergunta antes, como executar outro comando (RN-EDIT-007). O resultado na tela é do
+  // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
+  const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
+
+  // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    // RN-GRADE-012: F5 executa de novo o comando do resultado, com o filtro ("Executar de novo"), com o foco em qualquer ponto da aba; com algo em
+    // andamento, nada. O campo de edição da célula não deixa a tecla subir.
+    if (!event.defaultPrevented && refreshKey(event)) {
+      event.preventDefault();
+      if (!isBusyState(runner.getState())) handleRerun();
+      return;
+    }
+    const mode = event.defaultPrevented ? null : saveShortcut(event);
+    if (mode === null) return;
+    event.preventDefault();
+    onSave(tab.id, mode);
+  }
+
+  // A edição desfaz a posição do erro (o executor) e acende o ponto da aba de um script (o provedor).
+  const handleEdited = useCallback(() => {
+    runner.textEdited();
+    onEdited(tab.id);
+  }, [runner, onEdited, tab.id]);
+
+  const connectionId = tab.connectionId;
+  const openTable = connectionId === null ? undefined : (table: { schema: string; name: string }) => onOpenTable(connectionId, { ...table, view: "data", ...inDatabase(tab.database) });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col text-sm">
-      <EditorToolbar busy={busy} cancelling={cancelling} runnable={runnable} onRun={() => editor.current?.run()} onCancel={handleCancel} />
-
-      <div ref={area} className="flex min-h-0 flex-1 flex-col">
-        {/* Maximizada, o editor fica sem altura e fora da ordem do Tab, mas montado. */}
-        <div inert={layout.mode === "maximized"} style={{ flex: flex.editor }} className={cn("min-h-0 overflow-hidden", layout.mode === "maximized" && "h-0")}>
-          <SqlEditor
-            ref={editor}
-            initialSql={tab.sql}
-            engine={engine}
-            connectionId={tab.connectionId}
-            autoFocus={active}
-            errorAt={shown?.status === "error" ? shown.errorAt : null}
-            onRun={handleRun}
-            onChange={(sql) => onSqlChange(tab.id, { sql })}
-            onRunnableChange={setRunnable}
-            onEdited={runner.textEdited}
+    <>
+      <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
+        {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} forScript={tab.script !== undefined} onAssign={onAssignConnection} /> : null}
+        <EditorToolbar
+          busy={busy}
+          cancelling={cancelling}
+          runnable={runnable}
+          onRun={() => editor.current?.run()}
+          onCancel={handleCancel}
+          database={connectionId === null ? null : <DatabasePicker connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
+        />
+  
+        <div ref={area} className="flex min-h-0 flex-1 flex-col">
+          {/* Maximizada, o editor fica sem altura e fora da ordem do Tab, mas montado. */}
+          <div inert={layout.mode === "maximized"} style={{ flex: flex.editor }} className={cn("min-h-0 overflow-hidden", layout.mode === "maximized" && "h-0")}>
+            <SqlEditor
+              ref={editor}
+              initialSql={tab.sql}
+              tabId={tab.id}
+              initialSelection={recall(tab.id, "selection") ?? null}
+              engine={engine}
+              connectionId={tab.connectionId}
+              database={tab.database}
+              autoFocus={active}
+              errorAt={shown?.status === "error" ? shown.errorAt : null}
+              onRun={handleRun}
+              onChange={(sql) => onSqlChange(tab.id, { sql })}
+              onRunnableChange={setRunnable}
+              onEdited={handleEdited}
+              onOpenTable={openTable}
+            />
+          </div>
+  
+          {layout.mode === "split" ? <ResultSplitter area={area} controls={resultId} resultPercent={layout.resultPercent} dispatch={dispatch} /> : null}
+  
+          <ResultPanel
+            id={resultId}
+            state={state}
+            connected={tab.sessionId !== null}
+            collapsed={layout.mode === "collapsed"}
+            style={{ flex: flex.result }}
+            actions={<ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} />}
+            nullText={preferences.results.nullText}
+            autoLoadMore={preferences.results.autoLoadMore}
+            onLoadMore={loadMore}
+            onCount={() => void runner.countTotal()}
+            onRerun={handleRerun}
+            editing={edits.editing}
+            banner={<EditsBanner {...edits.banner} />}
+            filter={
+              base === null ? undefined : (
+                <RecordsFilter
+                  subject="result"
+                  draft={filterDraft}
+                  onDraft={(text) => {
+                    setFilterDraft(text);
+                    setFilterProblem(null);
+                  }}
+                  applied={filterApplied}
+                  problem={filterProblem}
+                  busy={busy}
+                  command={null}
+                  onApply={() => sendFilter(filterDraft)}
+                  onClear={() => sendFilter("")}
+                  engine={engine}
+                  columns={shownRows?.columns ?? seenColumns}
+                  autocomplete={preferences.editor.autocomplete}
+                />
+              )
+            }
           />
         </div>
-
-        {layout.mode === "split" ? <ResultSplitter area={area} controls={resultId} resultPercent={layout.resultPercent} dispatch={dispatch} /> : null}
-
-        <ResultPanel
-          id={resultId}
-          state={state}
-          connected={tab.sessionId !== null}
-          collapsed={layout.mode === "collapsed"}
-          style={{ flex: flex.result }}
-          actions={<ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} />}
-          nullText={preferences.results.nullText}
-          autoLoadMore={preferences.results.autoLoadMore}
-          onLoadMore={loadMore}
-          onCount={() => void runner.countTotal()}
-          onRerun={() => void runner.rerun()}
-        />
       </div>
-    </div>
+      {/* Fora da caixa que trata o Ctrl+S do script: os diálogos e o menu vão por portal, e o teclado deles subiria até ela pela árvore do React. */}
+      {resultEditDialogs(edits)}
+    </>
   );
 });

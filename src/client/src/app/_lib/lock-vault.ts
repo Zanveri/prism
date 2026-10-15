@@ -19,6 +19,8 @@ export type LockVaultDeps = {
   closePortals: () => void;
   /** Solta o que dependia do cofre aberto na área de trabalho (`discardForLock`), mantendo as abas e o texto. */
   discard: () => void;
+  /** RN-ABAS-006: grava as abas de todas as janelas antes de o cofre fechar (com prazo; `workspaceSync.flush`). */
+  saveWorkspace: () => Promise<void>;
   /** Uma tentativa de fechar o cofre na API, com prazo. `true` se fechou, ou se já estava fechado. */
   closeVault: () => Promise<boolean>;
   /** Ainda bloqueado? A repetição para quando a pessoa saiu (o "Sair" já fecha o cofre). */
@@ -53,7 +55,8 @@ function runStep(step: () => void, onError: (error: unknown) => void): void {
  * 1. arma a barreira dos pedidos e a tela de bloqueio. PRIMEIRO: armá-la depois deixaria um 401 mandar ao login e perder as abas. Se
  *    isto lança, a tela não está bloqueada e NADA mais roda (fechar o cofre por baixo de uma tela desbloqueada leva ao login);
  * 2. fecha o que está aberto por portal e descarta o que dependia do cofre. Cada passo é isolado: um que lança não impede o outro;
- * 3. fecha o cofre na API, e não depende de os passos de tela darem certo. Cada tentativa tem prazo, e enquanto o cofre não fecha e a
+ * 3. grava as abas (RN-ABAS-006: antes de o cofre fechar), uma vez, sem que a falha da gravação impeça o resto;
+ * 4. fecha o cofre na API, e não depende de os passos de tela darem certo. Cada tentativa tem prazo, e enquanto o cofre não fecha e a
  *    janela segue bloqueada ele repete com recuo; a tela diz onde está (`report`). Devolve onde terminou: `closed`, `gaveUp` (as tentativas
  *    acabaram, o cofre pode estar aberto na API) ou `left` (a pessoa saiu no meio, e o "Sair" fechou o cofre).
  */
@@ -63,6 +66,12 @@ export async function lockVault(deps: LockVaultDeps): Promise<"closed" | "gaveUp
 
   runStep(deps.closePortals, deps.onError);
   runStep(deps.discard, deps.onError);
+
+  try {
+    await deps.saveWorkspace();
+  } catch (error) {
+    deps.onError(error);
+  }
 
   for (let attempt = 0; ; attempt++) {
     let closed = false;
@@ -138,6 +147,7 @@ export function createLockVaultDeps({
   root,
   signOut,
   discard,
+  saveWorkspace = async () => {},
   report,
   onError,
   signalFor = (ms) => AbortSignal.timeout(ms),
@@ -147,6 +157,8 @@ export function createLockVaultDeps({
   root: Pick<ParentNode, "querySelectorAll">;
   signOut: (signal: AbortSignal) => Promise<ApiResult<void>>;
   discard: () => void;
+  /** A gravação das abas (RN-ABAS-006). Sem ela, nada é gravado: a janela que bloqueia porque outra bloqueou deixa a gravação para a que bloqueou. */
+  saveWorkspace?: () => Promise<void>;
   report: (state: CloseState) => void;
   onError: (error: unknown) => void;
   /** O sinal que cancela a tentativa depois do prazo. */
@@ -157,6 +169,7 @@ export function createLockVaultDeps({
     arm: () => lock.lock(),
     closePortals: () => closeOpenPortals(root),
     discard,
+    saveWorkspace,
     // Fechou, ou já estava fechado por outro motivo (401 `VAULT_LOCKED`): o cofre está fechado do mesmo jeito.
     closeVault: async () => {
       const result = await signOut(signalFor(closeDeadlineMs));

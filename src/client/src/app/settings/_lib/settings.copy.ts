@@ -25,7 +25,8 @@ export const settingsCopy = {
   },
 
   appearance: {
-    title: "Aparência: tema",
+    // RN-CONFIG-008: a seção do canvas era só o tema; com as fontes, o título é o da seção.
+    title: "Aparência",
     themeGroup: "Tema",
     themes: {
       dark: { name: "Prism Escuro", kind: "escuro" },
@@ -38,15 +39,29 @@ export const settingsCopy = {
     preview: "Prévia",
     followSystem: "Seguir o modo claro ou escuro do sistema",
     note: "O tema vale para toda a interface: editor, grades, painéis e barras de rolagem. Seguindo o sistema, vale o Prism Escuro ou o Prism Claro.",
+    // RN-CONFIG-008: a fonte do app é o padrão; as outras são as instaladas neste computador.
+    fonts: {
+      ui: "Fonte da interface",
+      editor: "Fonte do editor SQL",
+      uiHint: "Vale para todo o texto do Prism fora do código.",
+      editorHint: "Vale para o editor SQL, o filtro dos Registros e o “Ver SQL”. A grade continua na fonte mono do Prism.",
+      appFont: "do Prism",
+      groups: { monospace: "Monoespaçadas", other: "Outras fontes" },
+      loading: "Lendo as fontes deste computador…",
+      noMatch: "Nenhuma fonte com esse nome.",
+      unreadable: "Não deu para ler as fontes deste computador. Digite o nome de uma fonte instalada e tecle Enter.",
+      invalidName: "Esse nome não serve. Tire as aspas, o ponto e vírgula, as chaves e a barra invertida.",
+      notInstalled: "Esta fonte não está instalada neste computador. Até ela voltar, vale a do Prism.",
+      editorPreview: "Prévia do editor",
+    },
   },
 
   editor: {
     title: "Editor SQL",
-    fontFamily: "Fonte do editor",
     fontSize: "Tamanho da fonte",
     tabSize: "Tamanho da tabulação",
-    // Só a IBM Plex Mono vai dentro do app (a política de conteúdo não deixa carregar fonte de fora): as outras são as do sistema.
-    fontNote: "Só a IBM Plex Mono vai dentro do Prism. As outras valem se estiverem instaladas neste computador; sem elas, o editor usa a IBM Plex Mono.",
+    // RN-CONFIG-008: a fonte do editor foi para Aparência, ao lado da fonte da interface.
+    fontNote: "A fonte do editor fica em Aparência, ao lado da fonte da interface.",
     preview: "Prévia do editor",
     // RN-CONFIG-004: os dois rótulos são os do canvas; as dicas dizem o que o editor faz de fato.
     autocomplete: "Autocompletar ao digitar",

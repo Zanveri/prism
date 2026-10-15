@@ -1,4 +1,5 @@
 using FluentValidation;
+using Prism.Application.Common.Environments;
 using Prism.Application.Connections.Models;
 
 namespace Prism.Application.Connections.Features.UpdateConnection;
@@ -17,7 +18,7 @@ public sealed class UpdateConnectionValidator : AbstractValidator<UpdateConnecti
 
         // RN-CONN-004: nula mantém a senha gravada. Enviada, é uma senha nova e tem de ter conteúdo: o texto vazio não é "omitida", e deixaria a conexão sem senha.
         RuleFor(request => request.Password).Must(password => password is null || password.Length > 0).WithMessage("Informe a nova senha do banco, ou deixe em branco para manter a atual.").WithErrorCode("CONNECTION_INVALID");
-        RuleFor(request => request.EnvironmentName).Must(ConnectionRules.EnvironmentNameIsValid).WithMessage("O ambiente pode ter no máximo 30 caracteres.").WithErrorCode("CONNECTION_INVALID");
-        RuleFor(request => request.EnvironmentColor).Must(ConnectionRules.EnvironmentColorIsValid).WithMessage("Use uma cor no formato #RRGGBB.").WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.EnvironmentName).MustBeAnEnvironmentName().WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.EnvironmentColor).MustBeAnEnvironmentColor().WithErrorCode("CONNECTION_INVALID");
     }
 }

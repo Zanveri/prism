@@ -7,6 +7,7 @@ using Serilog.Core;
 using Serilog.Events;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 
 namespace Prism.IntegrationTesting.Infrastructure.Databases;
 
@@ -349,6 +350,44 @@ public sealed class InformixClientTests : IbmClientContractTests
         Assert.That(page.Rows[0].Take(11), Is.EqualTo(new[] { "123456789012345678901234567.1234", "-1234567.50", "2026-10-09 13:05:07.123450", "2026-10-09 13:05:07.000000", "13:05:00", "2026-10-09", "9223372036854775807", "0.1", "1", null, "São Paulo ação ç ã é ü" }));
         Assert.That(page.Rows[0][11], Is.EqualTo(new string('x', 10000)));
         Assert.That(page.TruncatedCells, Is.EqualTo(new[] { new[] { 0, 11 } }));
+    }
+
+    /// <summary>Um texto em Latin-1 (o do banco do contêiner) com acentos, aspas e números, sem `|`, barra invertida nem quebra de linha (o `LOAD` os leria).</summary>
+    private static string LatinText(int length, char mark)
+    {
+        var text = new StringBuilder();
+        for (var index = 0; text.Length < length; index++)
+            text.Append($"{{\"{mark}{index}\":\"Ação nº {index} em São Paulo, 'aspas' ç ã é ü ½\"}},");
+
+        return text.ToString(0, length);
+    }
+
+    /// <summary>
+    /// RN-SQL-017, pelo driver de verdade: o `CLOB` e o `TEXT` de 50.000 caracteres e o `LVARCHAR` de 30.000 chegam inteiros ao leitor
+    /// (o driver não corta nada), a grade recebe os 10.000 primeiros, e a página leva o valor completo de cada um, igual, byte por byte,
+    /// ao que foi gravado. Quem grava é o `dbaccess` do contêiner: o `TEXT` só entra por parâmetro ou pelo `LOAD`, e o `CLOB` acima dos
+    /// 32 KB de um literal, pelo `FILETOCLOB`.
+    /// </summary>
+    [Test]
+    public async Task Execute_LongClobTextAndLvarchar_CarryTheWholeValue()
+    {
+        var table = $"longos_{Guid.NewGuid():N}";
+        var (clob, text, lvarchar) = (LatinText(50000, 'c'), LatinText(50000, 't'), LatinText(30000, 'l'));
+        await InformixSingleton.RunScriptAsync(
+            $"CREATE TABLE loja.{table} (id INTEGER, c CLOB, t TEXT, l LVARCHAR(32000));\nLOAD FROM '/tmp/{table}.unl' INSERT INTO loja.{table} (id, t, l);\nUPDATE loja.{table} SET c = FILETOCLOB('/tmp/{table}.txt', 'server') WHERE id = 1;",
+            new Dictionary<string, byte[]> { [$"/tmp/{table}.unl"] = Encoding.Latin1.GetBytes($"1|{text}|{lvarchar}|\n"), [$"/tmp/{table}.txt"] = Encoding.Latin1.GetBytes(clob) });
+        await using var connection = await OpenAsync();
+
+        var page = await ExecutePageAsync(connection, $"SELECT id, c, t, l FROM loja.{table}");
+        var dropped = await connection.ExecuteAsync($"DROP TABLE loja.{table}", CancellationToken.None);
+
+        Assert.That(dropped.IsSuccess, Is.True, dropped.IsFailure ? dropped.Error.Message : null);
+        Assert.That(page.Columns.Select(column => column.Kind), Is.EqualTo(new[] { "number", "text", "text", "text" }));
+        Assert.That(page.Rows[0][1..], Is.EqualTo(new[] { clob[..10000], text[..10000], lvarchar[..10000] }));
+        Assert.That(page.TruncatedCells, Is.EqualTo(new[] { new[] { 0, 1 }, new[] { 0, 2 }, new[] { 0, 3 } }));
+        var full = page.FullValues!.Select(value => value.Write()).ToArray();
+        Assert.That(full.Select(Encoding.Latin1.GetBytes), Is.EqualTo(new[] { clob, text, lvarchar }.Select(Encoding.Latin1.GetBytes)));
+        Assert.That(full, Is.EqualTo(new[] { clob, text, lvarchar }));
     }
 
     /// <summary>

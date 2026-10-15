@@ -112,6 +112,42 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
                                                   AND systables.tabname = ?
                                                 ORDER BY sysindexes.idxname, slots.slot";
 
+    /// <summary>
+    /// RN-EDIT-003 e 012: a tabela sem dono é a que o banco resolveria, a do usuário da sessão antes das outras (num banco que não é ANSI
+    /// o nome é único no banco inteiro). `T` é tabela e `V` visão; o sinônimo (`S`, `P`) não é uma tabela. O banco sem log de transação
+    /// (`is_logging` zero no `sysmaster`) grava uma alteração por vez.
+    /// </summary>
+    protected override (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table)
+        => ($@"SELECT FIRST 1 TRIM(systables.owner),
+                      TRIM(systables.tabname),
+                      CASE systables.tabtype WHEN 'T' THEN 'table' WHEN 'V' THEN 'view' ELSE 'other' END,
+                      systables.tabid,
+                      (SELECT CASE WHEN is_logging = 0 THEN 1 ELSE 0 END FROM sysmaster:sysdatabases WHERE name = DBINFO('dbname')),
+                      CASE WHEN systables.owner = USER THEN 0 ELSE 1 END AS preference
+                 FROM systables
+                WHERE systables.tabname = ?{(table.Schema is null ? string.Empty : " AND systables.owner = ?")}
+                ORDER BY 6", table.Schema is null ? [table.Name] : [table.Name, table.Schema]);
+
+    /// <summary>RN-EDIT-002: os índices únicos (`U`), que são também os da chave primária (a restrição `P`) e das restrições únicas, com as colunas na ordem do índice.</summary>
+    protected override string EditKeysSql => $@"SELECT sysindexes.idxname,
+                                                      CASE WHEN EXISTS (SELECT 1
+                                                                          FROM sysconstraints
+                                                                         WHERE sysconstraints.tabid = sysindexes.tabid
+                                                                           AND sysconstraints.idxname = sysindexes.idxname
+                                                                           AND sysconstraints.constrtype = 'P') THEN 1 ELSE 0 END AS is_primary,
+                                                      syscolumns.colname,
+                                                      slots.slot
+                                                 FROM systables
+                                                 JOIN sysindexes ON sysindexes.tabid = systables.tabid
+                                                 JOIN ({Positions}) AS slots ON slots.slot <= 16
+                                                 JOIN syscolumns ON syscolumns.tabid = sysindexes.tabid AND syscolumns.colno = ABS({Part("sysindexes")})
+                                                WHERE systables.owner = ?
+                                                  AND systables.tabname = ?
+                                                  AND sysindexes.idxtype = 'U'
+                                                ORDER BY 2 DESC, 1, 4";
+
+    protected override string LockTimeoutSql => "SET LOCK MODE TO WAIT 5";
+
     protected override string ForeignKeysSql => ForeignKeyColumnsSql("child_table.owner = ? AND child_table.tabname = ?");
 
     /// <summary>RN-CAT-004: as chaves que apontam para a tabela, também a dela mesma.</summary>
@@ -157,6 +193,14 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>RN-CAT-008: só tabela tem chave estrangeira, e o dono basta.</summary>
     protected override string DiagramForeignKeysSql => ForeignKeyColumnsSql("child_table.owner = ?");
+
+    /// <summary>
+    /// RN-ARVORE-006: os bancos do servidor, de `sysmaster:sysdatabases`. O nome é `CHAR` e vem completado com espaços (`TRIM`); o da
+    /// sessão é o de `DBINFO('dbname')`, que a comparação de `CHAR` acha sem os espaços.
+    /// </summary>
+    protected override string DatabasesSql => @"SELECT TRIM(name) AS database_name, CASE WHEN name = DBINFO('dbname') THEN 1 ELSE 0 END AS is_current
+                                                  FROM sysmaster:sysdatabases
+                                                 ORDER BY 1";
 
     /// <summary>
     /// RN-CAT-010: o que o `sysmaster` diz do banco conectado (`DBINFO('dbname')`), que toda conta pode ler. O modo de log decide se há

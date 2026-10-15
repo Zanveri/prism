@@ -61,7 +61,7 @@ function Harness(options: Parameters<typeof useIdleLock>[0]) {
 }
 
 /** Renderiza o gancho e roda o efeito que ele registrou, como o React faria ao montar. */
-function mount(options: { enabled?: boolean; minutes?: number; isBusy?: () => boolean } = {}) {
+function mount(options: { enabled?: boolean; minutes?: number; isBusy?: () => boolean; peers?: Parameters<typeof useIdleLock>[0]["peers"] } = {}) {
   const onLock = vi.fn();
   const returned = Harness({ enabled: true, minutes: 1, isBusy: () => false, onLock, ...options });
   const registered = hooks.effects.at(-1);
@@ -176,5 +176,70 @@ describe("useIdleLock: ligado", () => {
     expect(fakeWindow.listening() + fakeDocument.listening()).toBe(0);
     vi.advanceTimersByTime(120_000);
     expect(onLock).not.toHaveBeenCalled();
+  });
+});
+
+describe("useIdleLock: as outras janelas (RN-ABAS-004)", () => {
+  function peers() {
+    const listeners = new Set<() => void>();
+    return {
+      share: vi.fn(),
+      subscribe: vi.fn((listener: () => void) => {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
+      }),
+      activity: () => listeners.forEach((listener) => listener()),
+      listening: () => listeners.size,
+    };
+  }
+
+  it("a atividade de outra janela recomeça a contagem desta: o aviso some, e o bloqueio fica para um prazo inteiro depois dela", () => {
+    const other = peers();
+    const { onLock } = mount({ minutes: 1, peers: other });
+
+    vi.advanceTimersByTime(40_000);
+    expect(warnedWith()).toBe(20);
+
+    other.activity();
+    expect(warnedWith()).toBeNull();
+    vi.advanceTimersByTime(59_000);
+    expect(onLock).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(onLock).toHaveBeenCalledOnce();
+  });
+
+  it("a atividade daqui vai às outras janelas no máximo uma vez por segundo", () => {
+    const other = peers();
+    mount({ peers: other });
+
+    fakeWindow.fire("keydown");
+    fakeWindow.fire("keydown");
+    expect(other.share).toHaveBeenCalledOnce();
+
+    vi.advanceTimersByTime(1000);
+    fakeWindow.fire("pointerdown");
+    expect(other.share).toHaveBeenCalledTimes(2);
+  });
+
+  it("o comando em andamento aqui segura as outras janelas: a cada conferência ele conta como atividade para elas", () => {
+    const other = peers();
+    let busy = true;
+    mount({ isBusy: () => busy, peers: other });
+
+    vi.advanceTimersByTime(5000);
+    expect(other.share).toHaveBeenCalledTimes(5);
+
+    busy = false;
+    vi.advanceTimersByTime(5000);
+    expect(other.share).toHaveBeenCalledTimes(5);
+  });
+
+  it("desligar solta o ouvinte das outras janelas", () => {
+    const other = peers();
+    const { cleanup } = mount({ peers: other });
+    expect(other.listening()).toBe(1);
+
+    cleanup?.();
+    expect(other.listening()).toBe(0);
   });
 });

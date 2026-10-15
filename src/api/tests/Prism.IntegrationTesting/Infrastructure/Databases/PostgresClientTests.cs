@@ -962,6 +962,8 @@ public sealed class PostgresClientTests : DatabaseClientContractTests
         Assert.That(page.Rows[0][10], Is.EqualTo("0x" + new string('0', 64)));
         Assert.That(page.Rows[1][9], Is.EqualTo(new string('y', 10000)));
         Assert.That(page.TruncatedCells, Is.EqualTo(new[] { new[] { 0, 9 }, new[] { 0, 10 }, new[] { 1, 9 } }));
+        // RN-SQL-017: o valor completo de cada cortada, na ordem das marcas, com o binário inteiro.
+        Assert.That(page.FullValues!.Select(value => value.Write()), Is.EqualTo(new[] { new string('x', 20000), "0x" + new string('0', 200), new string('y', 10001) }));
     }
 
     /// <summary>

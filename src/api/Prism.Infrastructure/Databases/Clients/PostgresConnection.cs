@@ -1,4 +1,5 @@
 using Npgsql;
+using NpgsqlTypes;
 using Prism.Infrastructure.Databases.Models;
 using System.Data.Common;
 using ILogger = Serilog.ILogger;
@@ -189,6 +190,17 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                                   ORDER BY property.position"];
 
 
+    /// <summary>
+    /// RN-ARVORE-006: os de `pg_database` que aceitam conexão, sem os de modelo e só os em que a conta tem `CONNECT` (superusuário tem
+    /// em todos). O `name` ordena byte a byte, pela colação `C` do tipo.
+    /// </summary>
+    protected override string DatabasesSql => @"SELECT pg_database.datname, pg_database.datname = pg_catalog.current_database()
+                                                  FROM pg_catalog.pg_database
+                                                 WHERE pg_database.datallowconn
+                                                   AND NOT pg_database.datistemplate
+                                                   AND pg_catalog.has_database_privilege(pg_database.oid, 'CONNECT')
+                                                 ORDER BY pg_database.datname";
+
     protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
 
     /// <summary>`TABLE`, `SHOW` e `EXPLAIN` também devolvem linhas sem gravar; um `EXPLAIN ANALYZE` de um comando que grava é recusado na tentativa, como o próprio comando.</summary>
@@ -242,6 +254,68 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     protected override void ConfigureUserCommand(DbCommand command)
         => ((NpgsqlCommand)command).AllResultTypesAreUnknown = true;
 
+    /// <summary>
+    /// RN-EDIT-003: o banco diz, na descrição das linhas, de que tabela (`TableOID`) e de que coluna dela (o número, `attnum`) vem cada
+    /// coluna do resultado, e zero na calculada. Sem `CommandBehavior.KeyInfo` o driver lê isso da própria resposta, sem consultar o
+    /// catálogo (com ele, abriria outra conexão para buscar o resto).
+    /// </summary>
+    protected override IReadOnlyList<ColumnOrigin?> ColumnOrigins(DbDataReader reader)
+        => [.. ((NpgsqlDataReader)reader).GetColumnSchema().Select(column => column.TableOID == 0 ? null : new ColumnOrigin(column.TableOID, column.ColumnAttributeNumber ?? 0))];
+
+    /// <summary>
+    /// RN-EDIT-006: quem converte é o banco. O texto vai num parâmetro sem tipo, e o servidor o lê pelo tipo da coluna, como leria um
+    /// literal escrito na sessão (com o formato de data e o fuso dela).
+    /// </summary>
+    protected override void BindEditParameter(DbParameter parameter, EditParameter value)
+    {
+        ((NpgsqlParameter)parameter).NpgsqlDbType = NpgsqlDbType.Unknown;
+        parameter.Value = value.Value ?? DBNull.Value;
+    }
+
+    /// <summary>
+    /// RN-EDIT-003: a tabela pelo nome entre aspas, como o banco o resolve (`to_regclass`, que usa o caminho de busca quando não há
+    /// esquema). A tabela comum e a particionada se editam; a visão, a materializada e a estrangeira, não.
+    /// </summary>
+    protected override (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table)
+        => ($"{EditRelationSql} WHERE pg_class.oid = pg_catalog.to_regclass($1)", [table.Written]);
+
+    /// <summary>RN-EDIT-003: a tabela pelo identificador que a resposta do comando dá a ela (o `TableOID` da descrição das colunas).</summary>
+    protected override (string Sql, IReadOnlyList<object> Parameters)? EditRelationByIdQuery(long id)
+        => ($"{EditRelationSql} WHERE pg_class.oid::bigint = $1", [id]);
+
+    private const string EditRelationSql = @"SELECT pg_namespace.nspname,
+                     pg_class.relname,
+                     CASE WHEN pg_class.relkind IN ('r', 'p') THEN 'table'
+                          WHEN pg_class.relkind = 'v' THEN 'view'
+                          WHEN pg_class.relkind = 'm' THEN 'materializedView'
+                          WHEN pg_class.relkind = 'f' THEN 'foreign'
+                          ELSE 'other'
+                      END,
+                     pg_class.oid::bigint,
+                     FALSE
+                FROM pg_catalog.pg_class
+                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace";
+
+    /// <summary>RN-EDIT-002: os índices únicos válidos, sem condição (`indpred`) e sem expressão (`indexprs`); a chave primária e as restrições únicas são índices assim.</summary>
+    protected override string EditKeysSql => @"SELECT index_class.relname,
+                                                     pg_index.indisprimary,
+                                                     pg_attribute.attname
+                                                FROM pg_catalog.pg_index
+                                                JOIN pg_catalog.pg_class AS table_class ON table_class.oid = pg_index.indrelid
+                                                JOIN pg_catalog.pg_namespace ON pg_namespace.oid = table_class.relnamespace
+                                                JOIN pg_catalog.pg_class AS index_class ON index_class.oid = pg_index.indexrelid
+                                               CROSS JOIN LATERAL generate_series(1, pg_index.indnkeyatts) AS key_position (ordinal)
+                                                JOIN pg_catalog.pg_attribute ON pg_attribute.attrelid = table_class.oid AND pg_attribute.attnum = pg_index.indkey[key_position.ordinal - 1]
+                                               WHERE pg_namespace.nspname = $1
+                                                 AND table_class.relname = $2
+                                                 AND pg_index.indisunique
+                                                 AND pg_index.indisvalid
+                                                 AND pg_index.indpred IS NULL
+                                                 AND pg_index.indexprs IS NULL
+                                               ORDER BY pg_index.indisprimary DESC, index_class.relname, key_position.ordinal";
+
+    protected override string LockTimeoutSql => "SET lock_timeout = '5s'";
+
     /// <summary>O nome vem com o modificador (`numeric(12,2)`, `timestamp(3) without time zone`), que sai antes da consulta à tabela.</summary>
     protected override string ColumnKind(DbDataReader reader, int ordinal)
     {
@@ -254,15 +328,15 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>
     /// O servidor escreve booleano como `t` e `f` e binário como `\x` e os dígitos hexadecimais: os dois voltam ao valor, para sair como
-    /// nos outros bancos (`true`, `0x…` cortado). Do binário só se converte o que cabe na tela e um byte a mais, que é o que marca o corte.
-    /// O resto é o texto do servidor, que segue como veio.
+    /// nos outros bancos (`true`, `0x…` cortado). O binário é convertido inteiro: o corte é só da grade, e copiar e exportar levam os bytes
+    /// todos (RN-SQL-017). O resto é o texto do servidor, que segue como veio.
     /// </summary>
     protected override object ReadCell(DbDataReader reader, int ordinal, string kind)
         => (kind, reader.GetValue(ordinal)) switch
         {
             ("boolean", "t") => true,
             ("boolean", "f") => false,
-            ("binary", string hex) when hex.StartsWith(@"\x", StringComparison.Ordinal) => Convert.FromHexString(hex.AsSpan(2, Math.Min(hex.Length - 2, 2 * (CellFormatter.MaxBinaryBytes + 1)))),
+            ("binary", string hex) when hex.StartsWith(@"\x", StringComparison.Ordinal) => Convert.FromHexString(hex.AsSpan(2)),
             var (_, value) => value
         };
 

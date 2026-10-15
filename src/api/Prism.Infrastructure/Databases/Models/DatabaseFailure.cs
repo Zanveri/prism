@@ -19,7 +19,31 @@ public enum EDatabaseFailure
     MultipleStatementsNotSupported,
 
     /// <summary>RN-DRIVER-006: o driver do banco é baixado pelo usuário e não está instalado (ou foi instalado e ainda espera o reinício da API).</summary>
-    DriverNotInstalled
+    DriverNotInstalled,
+
+    /// <summary>RN-EDIT-002: o resultado pedido não é mais o da sessão (outro comando rodou), ou a tabela dele mudou no catálogo desde a consulta.</summary>
+    ResultChanged,
+
+    /// <summary>RN-EDIT-002: o resultado inteiro é só leitura; o motivo vai em `Reason`.</summary>
+    ResultNotEditable,
+
+    /// <summary>RN-EDIT-002 e 006: uma alteração que não se aplica ao resultado, ou um texto que não converte para o tipo da coluna; nada foi ao banco.</summary>
+    EditInvalid,
+
+    /// <summary>RN-EDIT-005: um comando do "Salvar" afetou zero linhas ou mais de uma; o "Salvar" foi desfeito (menos no Informix sem log, RN-EDIT-012).</summary>
+    EditRowMismatch,
+
+    /// <summary>RN-SQL-017: o resultado de que se pedem os valores completos não é mais o da sessão (outro comando rodou), ou nunca foi.</summary>
+    ResultNotFound,
+
+    /// <summary>RN-SQL-017: uma célula pedida está fora do resultado (linha que ainda não foi entregue, coluna que ele não tem).</summary>
+    CellsInvalid,
+
+    /// <summary>
+    /// RN-GRADE-011: o filtro do resultado não se junta ao comando com segurança (`;`, aspas ou comentário sem fechar, comentário no fim,
+    /// parênteses sem par, mais de um `ORDER BY`); nada foi ao banco. Pela rota, quem recusa antes é o validator, com o mesmo código.
+    /// </summary>
+    FilterInvalid
 }
 
 /// <summary>
@@ -49,5 +73,9 @@ public enum ECancelOutcome
 /// do cancelamento (<see cref="ECancelOutcome"/>), e só vai para a tela em `ExecutionFailed`. `Executed` só vale em
 /// `TransactionControlNotSupported`: o comando rodou e o Prism desfez a transação que ele deixou aberta; sem ele, o comando foi
 /// recusado antes de executar (RN-SESSAO-005).
+///
+/// Na edição (RN-EDIT-005 e 012): `Reason` é o motivo de o resultado ser só leitura; `Change` é a posição, no pedido, da alteração que
+/// falhou, e `Column` a da coluna do resultado; `RowsAffected` é quantas linhas o comando dela afetou; `Applied` só vem no banco sem log
+/// de transação, e diz quantas alterações já estavam gravadas, na ordem de execução, antes da que falhou.
 /// </summary>
-public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false);
+public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null);

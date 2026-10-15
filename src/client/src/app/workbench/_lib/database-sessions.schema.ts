@@ -18,6 +18,13 @@ export const databaseSessionSchema = z.object({
 
 export type DatabaseSession = z.infer<typeof databaseSessionSchema>;
 
+/** RN-ARVORE-006: um banco do servidor a que a conta pode se conectar; `isCurrent` é o da sessão que listou (o da conexão). */
+export const serverDatabaseSchema = z.object({ name: z.string(), isCurrent: z.boolean() });
+
+export type ServerDatabase = z.infer<typeof serverDatabaseSchema>;
+
+export const serverDatabasesSchema = z.array(serverDatabaseSchema);
+
 /** Um esquema do banco. No Informix, "esquema" é o dono do objeto (RN-ARVORE-004). */
 export const databaseSchemaSchema = z.object({ name: z.string(), isSystem: z.boolean() });
 

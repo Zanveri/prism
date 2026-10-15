@@ -283,6 +283,32 @@ public sealed class InformixCatalogTests : CatalogContractTests
         }));
     }
 
+    /// <summary>
+    /// RN-ARVORE-006: os bancos de `sysmaster:sysdatabases`, por nome e sem os espaços do fim (a coluna é `CHAR`), com o da sessão
+    /// primeiro, conectado a dois bancos da carga.
+    /// </summary>
+    [Test]
+    public async Task Databases_ListTheServerOnesByName_WithTheCurrentFirst()
+    {
+        IReadOnlyList<DatabaseInfo> fromMain, fromUnlogged;
+        await using (var connection = await OpenAsync())
+            fromMain = Value(await connection.GetDatabasesAsync(CancellationToken.None));
+
+        await using (var connection = await OpenAsync(Settings with { Database = InformixSingleton.UnloggedDatabase }))
+            fromUnlogged = Value(await connection.GetDatabasesAsync(CancellationToken.None));
+
+        await TestContext.Out.WriteLineAsync(string.Join("; ", fromMain.Select(database => $"{database.Name}{(database.IsCurrent ? " (atual)" : "")}")));
+
+        var names = fromMain.Select(database => database.Name).ToList();
+        Assert.That(fromMain[0], Is.EqualTo(new DatabaseInfo(Settings.Database, true)));
+        Assert.That(fromMain.Skip(1).Select(database => database.IsCurrent), Is.All.False);
+        Assert.That(names.Skip(1), Is.Ordered.Using((IComparer<string>)StringComparer.Ordinal));
+        Assert.That(names, Is.SupersetOf(new[] { InformixSingleton.UnloggedDatabase, InformixSingleton.Utf8Database, "sysmaster" }));
+        Assert.That(names, Has.None.EndsWith(" "));
+        Assert.That(fromUnlogged[0], Is.EqualTo(new DatabaseInfo(InformixSingleton.UnloggedDatabase, true)));
+        Assert.That(fromUnlogged.Select(database => database.Name), Is.EquivalentTo(names));
+    }
+
     /// <summary>RN-CAT-010: o modo de log (que decide se há transação), a localidade, o dono e o espaço do banco conectado, nos três bancos da carga.</summary>
     [Test]
     public async Task Properties_ReportTheLoggingModeAndTheLocale()

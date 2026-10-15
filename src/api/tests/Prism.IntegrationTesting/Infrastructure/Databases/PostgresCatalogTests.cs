@@ -250,6 +250,51 @@ public sealed class PostgresCatalogTests : CatalogContractTests
         }));
     }
 
+    /// <summary>
+    /// RN-ARVORE-006: os bancos que aceitam conexão, sem os de modelo e só os em que a conta tem `CONNECT`, por nome, com o da sessão
+    /// primeiro. A conta do contêiner é superusuária e tem `CONNECT` em todos; um papel comum, criado aqui, não vê o banco de que o
+    /// `CONNECT` foi tirado de `PUBLIC`.
+    /// </summary>
+    [Test]
+    public async Task Databases_ListTheConnectableOnesByName_WithTheCurrentFirst()
+    {
+        var prefix = $"arvore_{Guid.NewGuid():N}"[..20];
+        var reader = $"{prefix}_leitor";
+        var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+        string[] created = [$"{prefix}_b", $"{prefix}_a", $"{prefix}_modelo", $"{prefix}_fechado", $"{prefix}_restrito"];
+        await using (var admin = await OpenAsync())
+            await RunAsync(admin, $"CREATE DATABASE {prefix}_b", $"CREATE DATABASE {prefix}_a", $"CREATE DATABASE {prefix}_modelo IS_TEMPLATE true", $"CREATE DATABASE {prefix}_fechado ALLOW_CONNECTIONS false",
+                $"CREATE DATABASE {prefix}_restrito", $"REVOKE CONNECT ON DATABASE {prefix}_restrito FROM PUBLIC", $"CREATE ROLE {reader} LOGIN PASSWORD '{password}'");
+
+        try
+        {
+            IReadOnlyList<DatabaseInfo> databases, readerDatabases;
+            await using (var connection = await OpenAsync())
+                databases = Value(await connection.GetDatabasesAsync(CancellationToken.None));
+
+            await using (var asReader = await OpenAsync(Settings with { UserName = reader, Password = password }))
+                readerDatabases = Value(await asReader.GetDatabasesAsync(CancellationToken.None));
+
+            await TestContext.Out.WriteLineAsync(string.Join("; ", databases.Select(database => $"{database.Name}{(database.IsCurrent ? " (atual)" : "")}")));
+
+            var names = databases.Select(database => database.Name).ToList();
+            Assert.That(databases[0], Is.EqualTo(new DatabaseInfo(Settings.Database, true)));
+            Assert.That(databases.Skip(1).Select(database => database.IsCurrent), Is.All.False);
+            Assert.That(names.Skip(1), Is.Ordered.Using((IComparer<string>)StringComparer.Ordinal));
+            Assert.That(names, Is.SupersetOf(new[] { "postgres", $"{prefix}_a", $"{prefix}_b", $"{prefix}_restrito" }));
+            Assert.That(names, Has.None.EqualTo($"{prefix}_modelo").And.None.EqualTo($"{prefix}_fechado").And.None.EqualTo("template0").And.None.EqualTo("template1"));
+            Assert.That(names.IndexOf($"{prefix}_a"), Is.LessThan(names.IndexOf($"{prefix}_b")));
+            Assert.That(readerDatabases[0], Is.EqualTo(new DatabaseInfo(Settings.Database, true)));
+            Assert.That(readerDatabases.Select(database => database.Name), Has.Member($"{prefix}_a").And.No.Member($"{prefix}_restrito"));
+        }
+        finally
+        {
+            await using var admin = await OpenAsync();
+            foreach (var sql in new[] { $"ALTER DATABASE {prefix}_modelo IS_TEMPLATE false" }.Concat(created.Select(database => $"DROP DATABASE IF EXISTS {database}")).Append($"DROP ROLE IF EXISTS {reader}"))
+                await admin.ExecuteAsync(sql, CancellationToken.None);
+        }
+    }
+
     /// <summary>RN-CAT-010: o que `pg_database` diz do banco conectado, na ordem e com os nomes estáveis.</summary>
     [Test]
     public async Task Properties_ReportWhatTheServerSaysOfTheDatabase()

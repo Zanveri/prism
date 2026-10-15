@@ -2,6 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import type { Folder } from "@/app/connections/_lib/connections.schema";
+import type { ShownEnvironment } from "@/app/connections/_lib/environment";
+
 import type { QueryTab } from "../_lib/workbench-model";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 
@@ -10,7 +13,8 @@ const noop = () => {};
 const query = (id: string, title: string): QueryTab => ({ id, title, connectionId: "c-1", sessionId: null, sql: "" });
 const table = (id: string, schema: string, name: string): QueryTab => ({ id, title: `${schema}.${name}`, connectionId: "c-1", sessionId: null, sql: "", table: { schema, name, view: "data" } });
 
-const render = (tabs: QueryTab[], activeTabId: string | null) => renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, connectionOf: () => undefined, onSelect: noop, onClose: noop }));
+const render = (tabs: QueryTab[], activeTabId: string | null, environmentOf: (connectionId: string | null) => ShownEnvironment | null = () => null) =>
+  renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, connectionOf: () => undefined, environmentOf, onSelect: noop, onClose: noop, windowId: 1, onReorder: noop, onMove: noop, onReceive: noop }));
 
 const twelve = Array.from({ length: 12 }, (_, index) => (index % 2 === 0 ? query(`q${index}`, `consulta-${index + 1}.sql`) : table(`t${index}`, "producao", `tabela_${index}`)));
 
@@ -26,6 +30,15 @@ describe("a faixa de abas (D2)", () => {
     expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(11);
   });
 
+  it("cada aba se arrasta (RN-ABAS-001 a 003) e diz, na faixa, qual aba é; sem nada sendo arrastado não há marca de soltar", () => {
+    const markup = render(twelve, "q0");
+    const frames = [...markup.matchAll(/<div[^>]*data-tab-id="([^"]+)"[^>]*>/g)];
+
+    expect(frames.map((match) => match[1])).toEqual(twelve.map((tab) => tab.id));
+    expect(frames.every((match) => /draggable="true"/.test(match[0]))).toBe(true);
+    expect(markup).not.toMatch(/data-drop=/);
+  });
+
   it("fica numa linha só: rola na horizontal, sem quebrar, e cada aba mantém o tamanho dela", () => {
     const markup = render(twelve, "q0");
 
@@ -35,11 +48,11 @@ describe("a faixa de abas (D2)", () => {
     expect(markup.match(/class="flex flex-none items-center border-b-2/g)).toHaveLength(12);
   });
 
-  it("o título comprido encurta com reticências e leva o nome inteiro na dica", () => {
+  it("o título comprido encurta com reticências e leva o nome inteiro na dica (sozinha, a tabela aparece sem o esquema, RN-ABAS-008)", () => {
     const long = table("t1", "producao", "apontamento_de_producao_por_turno_e_por_maquina_do_mes_corrente");
     const markup = render([long], "t1");
 
-    expect(markup).toMatch(/<span class="[^"]*\btruncate\b[^"]*">producao\.apontamento_de_producao_por_turno_e_por_maquina_do_mes_corrente<\/span>/);
+    expect(markup).toMatch(/<span class="[^"]*\btruncate\b[^"]*">apontamento_de_producao_por_turno_e_por_maquina_do_mes_corrente<\/span>/);
     expect(markup).toContain(`title="${long.title}"`);
   });
 
@@ -81,5 +94,20 @@ describe("a faixa de abas (D2)", () => {
 
     expect(markup).not.toContain('aria-selected="true"');
     expect(markup.match(/role="tab"/g)).toHaveLength(3);
+  });
+});
+
+describe("a etiqueta do ambiente na aba (RN-CONN-015 e RN-PASTA-005)", () => {
+  const now = "2026-10-13T12:00:00Z";
+  const producao: Folder = { id: "f1", parentID: null, name: "Produção", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+
+  it("a aba mostra o ambiente que a conexão mostra: o herdado da pasta, com a dica de onde vem", () => {
+    const markup = render([query("q1", "consulta.sql")], "q1", (connectionId) => (connectionId === "c-1" ? { name: "Produção", color: "#FF8A7A", folder: producao } : null));
+
+    expect(markup).toMatch(/<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*title="Herdado da pasta Produção"[^>]*>Produção<\/span>|<span[^>]*title="Herdado da pasta Produção"[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/);
+  });
+
+  it("sem ambiente, nenhuma etiqueta", () => {
+    expect(render([query("q1", "consulta.sql")], "q1")).not.toContain("background-color");
   });
 });

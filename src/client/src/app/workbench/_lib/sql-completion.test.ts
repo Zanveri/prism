@@ -423,6 +423,22 @@ describe("ler a árvore do cache sem consultar o banco", () => {
     client.clear();
   });
 
+  it("só o banco da aba (RN-ARVORE-006): o banco da conexão não vê os níveis de outro banco, nem a lista dos bancos, e o outro só vê os dele", () => {
+    const client = new QueryClient();
+    client.setQueryData(["tree", "c1", "databases"], [node("database", "erp")]);
+    client.setQueryData(["tree", "c1", "schemas"], [node("schema", "public")]);
+    client.setQueryData(["tree", "c1", { database: "arquivo" }, "schemas"], [node("schema", "historico")]);
+    client.setQueryData(["tree", "c1", { database: "arquivo" }, "schema", "historico", "objects", "tables"], [node("table", "pedidos_2019")]);
+
+    expect(cachedLevels(client, "c1").map((entry) => entry.key)).toEqual([["tree", "c1", "schemas"]]);
+    expect(cachedLevels(client, "c1", "arquivo").map((entry) => entry.key)).toEqual([
+      ["tree", "c1", { database: "arquivo" }, "schemas"],
+      ["tree", "c1", { database: "arquivo" }, "schema", "historico", "objects", "tables"],
+    ]);
+    expect(cachedLevels(client, "c1", "outro")).toEqual([]);
+    client.clear();
+  });
+
   it("não busca nada: ler não inicia consulta nenhuma", () => {
     const client = new QueryClient();
     const fetched: unknown[] = [];

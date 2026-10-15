@@ -75,7 +75,7 @@ export function ApiGate({ children }: { children: ReactNode }) {
   if (state.status === "ready") return <RestartContext.Provider value={restart}>{children}</RestartContext.Provider>;
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8">
+    <div className="flex h-full flex-col items-center justify-center-safe gap-6 overflow-y-auto p-8">
       <div className="flex items-center gap-2.5 text-lg font-semibold tracking-[0.01em]">
         <PrismMark height={28} />
         <span>Prism</span>

@@ -3,26 +3,32 @@ import { copyFile, mkdir, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 /**
- * Os argumentos do instalador NSIS que este projeto gera (RN-ATUALIZA-006): `electron-builder.yml` não define `oneClick`
- * nem `perMachine`, então ele é de um clique e por usuário (`RequestExecutionLevel user`: nunca pede elevação). Cada
- * argumento foi conferido nos modelos do electron-builder 26.15.3 (`app-builder-lib/templates/nsis`); só entram os três:
+ * Os argumentos do instalador NSIS que este projeto gera (RN-ATUALIZA-006 e RN-INSTALA-003). Desde a 0.3.0 é o instalador
+ * assistido do electron-builder (`oneClick: false` no `electron-builder.yml`), com os dois modos (só do usuário ou para todos) e
+ * o `build/installer.nsh`; o manifesto continua sem exigir administrador (`RequestExecutionLevel user`), e por isso o `spawn`
+ * abaixo funciona nos dois modos. Cada argumento foi conferido nos modelos do electron-builder 26.15.3
+ * (`app-builder-lib/templates/nsis`); só entram os três, e nenhum escolhe o modo:
  *
  * - `--updated`: declarado em `NsisTarget.js` (`scriptGenerator.flags([...])`). Em `include/allowOnlyOneInstallerInstance.nsh`
  *   (`_CHECK_APP_RUNNING`) o instalador espera o app sair sozinho (300 ms + 1 s) em vez de perguntar se pode fechá-lo; em
  *   `include/installUtil.nsh` ele repassa `--updated` ao desinstalador da versão antiga, que então preserva os dados do
  *   usuário e remove a pasta de instalação de uma vez só (`uninstaller.nsh`, `un.atomicRMDir`). O Prism reaberto recebe
- *   `--updated` na linha de comando (`common.nsh`, `StartApp`), que ele não lê. (O atalho da área de trabalho não depende
- *   deste argumento: a ressalva `${ifNot} ${isUpdated}` de `include/installer.nsh` só existe com `RECREATE_DESKTOP_SHORTCUT`,
- *   que este projeto não define.)
- * - `/S`: o modo silencioso do próprio NSIS; sem janela nem pergunta.
- * - `--force-run`: em `installSection.nsh`, com `ONE_CLICK` e `RUN_AFTER_FINISH`, o app só é reaberto num instalador
- *   silencioso se este argumento veio (`${ifNot} ${Silent} ${orIf} ${isForceRun}`).
+ *   `--updated` na linha de comando (`common.nsh`, `StartApp`), que ele não lê.
+ * - `/S`: o modo silencioso do próprio NSIS; sem janela nem pergunta (o pedido de permissão do Windows não é do NSIS, e aparece).
+ * - `--force-run`: em `installSection.nsh`, no instalador assistido, o app só é reaberto num instalador silencioso se este
+ *   argumento veio (`${if} ${isForceRun} ${andIf} ${Silent}`). Com a permissão negada numa instalação para todos, é com ele que
+ *   `build/installer.nsh` (`prismReopenApp`) abre o Prism de novo na versão de antes.
+ *
+ * O modo vem do registro, e não daqui: o instalador acha a instalação que existe (`HKCU` ou `HKLM`, `Software\<guid>`,
+ * `InstallLocation`) e a atualiza no mesmo modo (RN-INSTALA-002). Na só do usuário, nada se pergunta; na para todos, o Windows
+ * pede a permissão de administrador (`UAC::RunElevated`, em `build/installer.nsh`).
  *
  * A remoção da versão antiga falha se algum arquivo da pasta de instalação estiver em uso, e num instalador silencioso essa
  * falha encerra o instalador sem reabrir o app (`installUtil.nsh`, `handleUninstallResult`). Por isso quem chama só roda o
  * instalador depois de o processo da API ter terminado (`updater.ts`, `install`).
  *
- * O comportamento do instalador de verdade ao atualizar por cima de uma instalação existente NÃO foi exercitado.
+ * O comportamento do instalador de verdade ao atualizar por cima de uma instalação existente é conferido pela pipeline só no
+ * modo do usuário e sem `--force-run` (`scripts/ci/check-windows-installer.sh`); o pedido de permissão negado não é exercitado.
  */
 export const installerArguments = ["--updated", "/S", "--force-run"] as const;
 

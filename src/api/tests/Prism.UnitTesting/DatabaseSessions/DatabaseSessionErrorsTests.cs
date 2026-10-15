@@ -233,6 +233,107 @@ public sealed class DatabaseSessionErrorsTests
         Assert.Equal(HttpStatusCode.Unauthorized, error.StatusCode);
     }
 
+    /// <summary>RN-EDIT-002: outro comando rodou na sessão depois do resultado, ou a tabela dele mudou no catálogo.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ResultChanged vira 409 RESULT_CHANGED")]
+    public void From_ResultChanged_Is409ResultChanged()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ResultChanged, "O resultado mudou."));
+
+        //Assert
+        Assert.Equal(("RESULT_CHANGED", HttpStatusCode.Conflict, "O resultado mudou."), (error.Type, error.StatusCode, error.Detail));
+    }
+
+    /// <summary>RN-SQL-017: o resultado de que se pedem os valores completos não é mais o da sessão (outro comando rodou), ou nunca foi.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ResultNotFound vira 404 RESULT_NOT_FOUND")]
+    public void From_ResultNotFound_Is404ResultNotFound()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ResultNotFound, "O resultado não existe mais."));
+
+        //Assert
+        Assert.Equal(("RESULT_NOT_FOUND", HttpStatusCode.NotFound, "O resultado não existe mais."), (error.Type, error.StatusCode, error.Detail));
+    }
+
+    /// <summary>RN-SQL-017: uma linha ou uma coluna fora do resultado.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK CellsInvalid vira 422 CELLS_INVALID")]
+    public void From_CellsInvalid_Is422CellsInvalid()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.CellsInvalid, "A linha 300 não está no resultado."));
+
+        //Assert
+        Assert.Equal(("CELLS_INVALID", HttpStatusCode.UnprocessableEntity, "A linha 300 não está no resultado."), (error.Type, error.StatusCode, error.Detail));
+    }
+
+    /// <summary>RN-GRADE-011: a recusa do filtro pelo registro de sessões, com o motivo no detalhe (pela rota, o validator recusa antes, com o mesmo código).</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK FilterInvalid vira 422 FILTER_INVALID com o motivo")]
+    public void From_FilterInvalid_Is422FilterInvalid()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar."));
+
+        //Assert
+        Assert.Equal(("FILTER_INVALID", HttpStatusCode.UnprocessableEntity, "O filtro tem aspas sem fechar."), (error.Type, error.StatusCode, error.Detail));
+    }
+
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ResultNotEditable vira 422 RESULT_NOT_EDITABLE com a extensão reason")]
+    public void From_ResultNotEditable_Is422_WithTheReason()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ResultNotEditable, "Somente leitura: agrupamento.", Reason: "agrupamento"));
+
+        //Assert
+        Assert.Equal(("RESULT_NOT_EDITABLE", HttpStatusCode.UnprocessableEntity, "Somente leitura: agrupamento.", (object?)"agrupamento"), (error.Type, error.StatusCode, error.Detail, error.Extensions["reason"]));
+    }
+
+    /// <summary>RN-EDIT-006: a recusa aponta a alteração e a coluna; a que não é de uma coluna não leva `column`.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK EditInvalid vira 422 EDIT_INVALID com change e column")]
+    public void From_EditInvalid_Is422_WithChangeAndColumn()
+    {
+        //Act
+        var cell = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.EditInvalid, "«x» não é um número inteiro.", Change: 2, Column: 4));
+        var row = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.EditInvalid, "A chave da linha não tem os valores das colunas da chave.", Change: 0));
+
+        //Assert
+        Assert.Equal(("EDIT_INVALID", HttpStatusCode.UnprocessableEntity, (object?)2, (object?)4), (cell.Type, cell.StatusCode, cell.Extensions["change"], cell.Extensions["column"]));
+        Assert.Equal((object?)0, row.Extensions["change"]);
+        Assert.False(row.Extensions.ContainsKey("column"));
+    }
+
+    /// <summary>RN-EDIT-005 e 012: as linhas que o comando afetou; `applied` só no banco sem log de transação.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK EditRowMismatch vira 422 EDIT_ROW_MISMATCH com change e rowsAffected, e applied quando vem")]
+    public void From_EditRowMismatch_Is422_WithChangeAndRowsAffected()
+    {
+        //Act
+        var transaction = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.EditRowMismatch, "A linha não existe mais.", Change: 1, RowsAffected: 0));
+        var oneAtATime = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.EditRowMismatch, "A linha não existe mais.", Change: 1, RowsAffected: 0, Applied: 1));
+
+        //Assert
+        Assert.Equal(("EDIT_ROW_MISMATCH", HttpStatusCode.UnprocessableEntity, (object?)1, (object?)0L), (transaction.Type, transaction.StatusCode, transaction.Extensions["change"], transaction.Extensions["rowsAffected"]));
+        Assert.False(transaction.Extensions.ContainsKey("applied"));
+        Assert.Equal((object?)1, oneAtATime.Extensions["applied"]);
+    }
+
+    /// <summary>RN-EDIT-005: a recusa do banco num comando do "Salvar" é o `SQL_EXECUTION_FAILED` de sempre, com a mensagem dele e a alteração que falhou.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ExecutionFailed de um Salvar leva change, e applied no banco sem log")]
+    public void From_ExecutionFailedOfASave_CarriesTheChange()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "duplicate key value violates unique constraint", SqlState: "23505", Change: 3, Applied: 2));
+
+        //Assert
+        Assert.Equal(("SQL_EXECUTION_FAILED", (object?)"23505", (object?)3, (object?)2), (error.Type, error.Extensions["sqlState"], error.Extensions["change"], error.Extensions["applied"]));
+    }
+
     /// <summary>
     /// Um membro novo de `EDatabaseFailure` (os drivers da IBM vêm aí) sem `case` no `From` cairia no `default` e viraria 500 em produção: este
     /// teste percorre o enum inteiro, e o membro sem mapeamento quebra aqui. Ele só acusa o membro porque o `default` lança, e é o teste

@@ -98,6 +98,34 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
                                                  AND SYSCAT.INDEXCOLUSE.COLORDER <> 'I'
                                                ORDER BY SYSCAT.INDEXES.INDNAME, SYSCAT.INDEXCOLUSE.COLSEQ";
 
+    /// <summary>
+    /// RN-EDIT-003: a tabela sem esquema é a do esquema atual da sessão (`CURRENT SCHEMA`). `T` é a tabela comum, `V` a visão, `S` a
+    /// tabela de consulta materializada e `N` o apelido federado (a tabela de outro servidor); o apelido de tabela (`A`) não é uma tabela.
+    /// </summary>
+    protected override (string Sql, IReadOnlyList<object> Parameters) EditRelationQuery(EditTableName table)
+        => ($@"SELECT RTRIM(TABSCHEMA),
+                      TABNAME,
+                      CASE TYPE WHEN 'T' THEN 'table' WHEN 'V' THEN 'view' WHEN 'S' THEN 'materializedView' WHEN 'N' THEN 'foreign' ELSE 'other' END,
+                      CAST(NULL AS BIGINT),
+                      0
+                 FROM SYSCAT.TABLES
+                WHERE TABSCHEMA = {(table.Schema is null ? "CURRENT SCHEMA" : "?")}
+                  AND TABNAME = ?", table.Schema is null ? [table.Name] : [table.Schema, table.Name]);
+
+    /// <summary>RN-EDIT-002: os índices da chave primária (`P`) e os únicos (`U`), que são também os das restrições únicas, sem as colunas de `INCLUDE`.</summary>
+    protected override string EditKeysSql => @"SELECT SYSCAT.INDEXES.INDNAME,
+                                                     CASE SYSCAT.INDEXES.UNIQUERULE WHEN 'P' THEN 1 ELSE 0 END,
+                                                     SYSCAT.INDEXCOLUSE.COLNAME
+                                                FROM SYSCAT.INDEXES
+                                                JOIN SYSCAT.INDEXCOLUSE ON SYSCAT.INDEXCOLUSE.INDSCHEMA = SYSCAT.INDEXES.INDSCHEMA AND SYSCAT.INDEXCOLUSE.INDNAME = SYSCAT.INDEXES.INDNAME
+                                               WHERE SYSCAT.INDEXES.TABSCHEMA = ?
+                                                 AND SYSCAT.INDEXES.TABNAME = ?
+                                                 AND SYSCAT.INDEXES.UNIQUERULE IN ('U', 'P')
+                                                 AND SYSCAT.INDEXCOLUSE.COLORDER <> 'I'
+                                               ORDER BY 2 DESC, 1, SYSCAT.INDEXCOLUSE.COLSEQ";
+
+    protected override string LockTimeoutSql => "SET CURRENT LOCK TIMEOUT 5";
+
     protected override string ForeignKeysSql => ForeignKeyColumnsSql("SYSCAT.REFERENCES.TABSCHEMA = ? AND SYSCAT.REFERENCES.TABNAME = ?");
 
     /// <summary>RN-CAT-004: as chaves que apontam para a tabela, também a dela mesma.</summary>
@@ -135,6 +163,12 @@ internal sealed class Db2Connection(ConnectionSettings settings, ILogger logger)
 
     /// <summary>RN-CAT-008: só tabela tem chave estrangeira, e o esquema basta.</summary>
     protected override string DiagramForeignKeysSql => ForeignKeyColumnsSql("SYSCAT.REFERENCES.TABSCHEMA = ?");
+
+    /// <summary>
+    /// RN-ARVORE-006: o Db2 conecta num banco só por vez e não tem SQL que liste os outros bancos da instância, então a lista é o banco
+    /// da sessão, com o nome que o servidor dá a ele (`CURRENT SERVER`, em maiúsculas).
+    /// </summary>
+    protected override string DatabasesSql => "SELECT CURRENT SERVER, 1 FROM SYSIBM.SYSDUMMY1";
 
     /// <summary>
     /// RN-CAT-010: a configuração do banco (`SYSIBMADM.DBCFG`), na partição em que a sessão está. Onde a conta não pode ler a visão de

@@ -14,6 +14,7 @@ function fakeStorage(initial: Record<string, string> = {}) {
 
 const saved = {
   theme: "light",
+  ui: { fontFamily: "Noto Sans" },
   editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true },
   results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125 },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
@@ -23,6 +24,7 @@ describe("o padrão das preferências", () => {
   it("é o do canvas e o combinado com as outras frentes (segunda leva): resultados, segurança e as duas chaves novas do editor", () => {
     expect(defaultPreferences).toEqual({
       theme: "dark",
+      ui: { fontFamily: "IBM Plex Sans" },
       editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false },
       results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
@@ -31,7 +33,7 @@ describe("o padrão das preferências", () => {
 
   it("não se altera por engano: o padrão é compartilhado por todo mundo que ainda não escolheu nada", () => {
     expect(Object.isFrozen(defaultPreferences)).toBe(true);
-    for (const group of [defaultPreferences.editor, defaultPreferences.results, defaultPreferences.security]) expect(Object.isFrozen(group)).toBe(true);
+    for (const group of [defaultPreferences.ui, defaultPreferences.editor, defaultPreferences.results, defaultPreferences.security]) expect(Object.isFrozen(group)).toBe(true);
   });
 });
 
@@ -58,7 +60,7 @@ describe("a leitura tolerante", () => {
   });
 
   it("cada campo fora do esquema volta ao padrão dele, e os outros, do mesmo grupo e dos outros, ficam como estão", () => {
-    const raw = JSON.stringify({ ...saved, editor: { ...saved.editor, fontFamily: "Comic Sans", fontSize: 99 }, results: { nullText: "x".repeat(13), autoLoadMore: true } });
+    const raw = JSON.stringify({ ...saved, editor: { ...saved.editor, fontFamily: 'Comic Sans"; color: red', fontSize: 99 }, results: { nullText: "x".repeat(13), autoLoadMore: true } });
 
     expect(parsePreferences(raw)).toEqual({
       ...saved,
@@ -70,7 +72,15 @@ describe("a leitura tolerante", () => {
   it.each([
     ["tema desconhecido", { theme: "sepia" }, ["theme"]],
     ["tema que não é texto", { theme: 1 }, ["theme"]],
-    ["fonte que o editor não oferece", { editor: { fontFamily: "Papyrus" } }, ["editor", "fontFamily"]],
+    // RN-CONFIG-008: qualquer fonte instalada vale, mas o nome vira CSS: o que escaparia da `font-family` não passa (fonts.test.ts tem a lista inteira).
+    ["fonte do editor com aspas", { editor: { fontFamily: 'Mono", x' } }, ["editor", "fontFamily"]],
+    ["fonte do editor com chave", { editor: { fontFamily: "Mono}" } }, ["editor", "fontFamily"]],
+    ["fonte do editor vazia", { editor: { fontFamily: "" } }, ["editor", "fontFamily"]],
+    ["fonte do editor que não é texto", { editor: { fontFamily: 12 } }, ["editor", "fontFamily"]],
+    ["fonte da interface com ponto e vírgula", { ui: { fontFamily: "Inter; color: red" } }, ["ui", "fontFamily"]],
+    ["fonte da interface com barra invertida", { ui: { fontFamily: "Inter\\" } }, ["ui", "fontFamily"]],
+    ["fonte da interface com quebra de linha", { ui: { fontFamily: "Inter\nX" } }, ["ui", "fontFamily"]],
+    ["fonte da interface nula", { ui: { fontFamily: null } }, ["ui", "fontFamily"]],
     ["tamanho de fonte abaixo do mínimo", { editor: { fontSize: 9 } }, ["editor", "fontSize"]],
     ["tamanho de fonte acima do máximo", { editor: { fontSize: 25 } }, ["editor", "fontSize"]],
     ["tamanho de fonte quebrado", { editor: { fontSize: 12.5 } }, ["editor", "fontSize"]],
@@ -120,7 +130,7 @@ describe("a leitura tolerante", () => {
     const parsed = parsePreferences(JSON.stringify({ theme: "system", senha: "segredo", extra: { a: 1 }, results: { nullText: "—", token: "x" } }));
 
     expect(parsed).toEqual({ ...defaultPreferences, theme: "system", results: { ...defaultPreferences.results, nullText: "—" } });
-    expect(Object.keys(parsed).sort()).toEqual(["editor", "results", "security", "theme"]);
+    expect(Object.keys(parsed).sort()).toEqual(["editor", "results", "security", "theme", "ui"]);
     expect(Object.keys(parsed.results).sort()).toEqual(["autoLoadMore", "gridZoom", "nullText", "showColumnTypes"]);
   });
 
@@ -131,6 +141,11 @@ describe("a leitura tolerante", () => {
     expect(parsePreferences(JSON.stringify({ results: { nullText: "[NULL]" } })).results.nullText).toBe("[NULL]");
   });
 
+  it("a fonte é qualquer uma do sistema (RN-CONFIG-008): o nome da lista passa, e a escolha da lista fixa de antes continua valendo", () => {
+    for (const name of ["Cascadia Mono", "Consolas", "JetBrains Mono", "Fira Code", "Noto Sans Mono CJK JP"]) expect(parsePreferences(JSON.stringify({ editor: { fontFamily: name } })).editor.fontFamily).toBe(name);
+    expect(parsePreferences(JSON.stringify({ ui: { fontFamily: "Ubuntu" } })).ui.fontFamily).toBe("Ubuntu");
+  });
+
   describe("as preferências da primeira versão (campos soltos do editor)", () => {
     it("o que o usuário já tinha escolhido não se perde: editorFontFamily, editorFontSize e editorTabSize viram o grupo editor", () => {
       const legacy = JSON.stringify({ theme: "light", editorFontFamily: "Consolas", editorFontSize: 18, editorTabSize: 2 });
@@ -139,7 +154,7 @@ describe("a leitura tolerante", () => {
     });
 
     it("cada campo solto fora do esquema volta ao padrão, e os que passam ficam", () => {
-      const legacy = JSON.stringify({ editorFontFamily: "Papyrus", editorFontSize: 16 });
+      const legacy = JSON.stringify({ editorFontFamily: "Papyrus;", editorFontSize: 16 });
 
       expect(parsePreferences(legacy).editor).toEqual({ ...defaultPreferences.editor, fontSize: 16 });
     });
@@ -193,6 +208,26 @@ describe("a chave é por usuário do cofre", () => {
 });
 
 describe("o armazenamento das preferências", () => {
+  it("o que outra janela gravou (RN-ABAS-004) vale aqui: a chave dela sai do que estava guardado, e quem ouve lê de novo", () => {
+    const { storage, items } = fakeStorage();
+    const store = createPreferencesStore(() => storage);
+    const listener = vi.fn();
+    store.subscribe(listener);
+    expect(store.get("ana").theme).toBe(defaultPreferences.theme);
+
+    items.set("prism:preferences:ana", JSON.stringify({ ...defaultPreferences, theme: "light" }));
+    store.refresh("prism:preferences:ana");
+    expect(listener).toHaveBeenCalledOnce();
+    expect(store.get("ana").theme).toBe("light");
+
+    store.refresh("outra-coisa");
+    expect(listener).toHaveBeenCalledOnce();
+
+    items.clear();
+    store.refresh(null);
+    expect(store.get("ana")).toEqual(defaultPreferences);
+  });
+
   it("um usuário sem nada gravado recebe o padrão, sempre o mesmo objeto (o gancho depende disso para não redesenhar)", () => {
     const { storage } = fakeStorage();
     const store = createPreferencesStore(() => storage);
@@ -272,6 +307,18 @@ describe("o armazenamento das preferências", () => {
     expect(store.get("ana").security.lockAfterMinutes).toBe(10);
     expect(store.get("ana").results.nullText).toBe("NULL");
     expect(items.get("prism:preferences:ana")).toBe(before);
+  });
+
+  it("a fonte com nome que escaparia do CSS não é gravada (RN-CONFIG-008), e a que pode virar CSS é", () => {
+    const { storage, items } = fakeStorage();
+    const store = createPreferencesStore(() => storage);
+
+    store.set("ana", { ui: { fontFamily: 'Inter"; } body { display: none } x {"' } });
+    store.set("ana", { editor: { fontFamily: "Mono\\" } });
+    expect(items.has("prism:preferences:ana")).toBe(false);
+
+    store.set("ana", { ui: { fontFamily: "Inter" }, editor: { fontFamily: "Fira Code" } });
+    expect(JSON.parse(items.get("prism:preferences:ana")!)).toMatchObject({ ui: { fontFamily: "Inter" }, editor: { fontFamily: "Fira Code" } });
   });
 
   it("o que está gravado e é lixo vale o padrão, e a próxima gravação o conserta", () => {

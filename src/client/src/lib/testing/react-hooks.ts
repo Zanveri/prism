@@ -6,8 +6,8 @@ type Deps = readonly unknown[] | undefined;
  * `renderToStaticMarkup` não roda efeito nem deixa trocar o estado). O teste cria a runtime em `vi.hoisted`, troca os ganchos do `react` por `hooks`
  * (`vi.mock("react", …)`) e renderiza por `render(() => Componente(props))`:
  *
- * - `useState`, `useRef`, `useMemo` e `useCallback` guardam por posição, como o React. Um `setState` durante a renderização pede outra, e os efeitos da
- *   que foi descartada não rodam.
+ * - `useState`, `useReducer`, `useRef`, `useId`, `useMemo` e `useCallback` guardam por posição, como o React. Um `setState` durante a renderização pede outra, e os efeitos da
+ *   que foi descartada não rodam. `useEffectEvent` devolve uma função que chama a versão mais recente do que recebeu.
  * - `useEffect` roda depois da renderização que valeu, só com as dependências trocadas e com a limpeza do anterior antes.
  * - `useSyncExternalStore` lê a foto na hora e NÃO assina: a troca de uma loja não redesenha sozinha, e quem redesenha é o teste, chamando `render` de
  *   novo. É o que deixa conferir o que faz o `onClick` de uma renderização antiga depois de a loja ter mudado.
@@ -54,6 +54,23 @@ export function createHookRuntime() {
     return value;
   }
 
+  /** Como `useState`, com o estado que o redutor calcula a cada ação. */
+  function useReducer<S, A, I>(reducer: (state: S, action: A) => S, initialArg: I, init?: (arg: I) => S): [S, (action: A) => void] {
+    const [state, setState] = useState<S>(() => (init === undefined ? (initialArg as unknown as S) : init(initialArg)));
+    return [state, (action: A) => setState((current) => reducer(current, action))];
+  }
+
+  /** Um id por posição, o mesmo a cada renderização. */
+  let ids = 0;
+  const useId = (): string => useRef(`:t${++ids}:`).current;
+
+  /** A função de efeito: a mesma a cada renderização, e chama o que a renderização mais recente lhe deu. */
+  function useEffectEvent<A extends unknown[], R>(callback: (...args: A) => R): (...args: A) => R {
+    const latest = useRef(callback);
+    latest.current = callback;
+    return useRef((...args: A) => latest.current(...args)).current;
+  }
+
   const useMemo = memoize;
   const useCallback = <T>(callback: T, deps: Deps): T => memoize(() => callback, deps);
   const useEffect = (effect: Effect, deps?: Deps) => void pending.push({ slot: effectCursor++, effect, deps });
@@ -95,5 +112,5 @@ export function createHookRuntime() {
     effectSlots = [];
   }
 
-  return { hooks: { useState, useRef, useMemo, useCallback, useEffect, useSyncExternalStore }, render, unmount };
+  return { hooks: { useState, useReducer, useRef, useId, useMemo, useCallback, useEffect, useEffectEvent, useSyncExternalStore }, render, unmount };
 }

@@ -2,7 +2,7 @@ import { formatCount } from "@/lib/utils/format";
 
 /**
  * Os textos das pastas e das conexões, num lugar só (RN-AVISO-002, RN-AVISO-003, RN-CONN-002): os diálogos de pasta, o diálogo de conexão
- * (RN-NAV-004 e 005), o de mover conexão e o de revelar a senha. A tela de Conexões deixou de existir (RN-NAV-001); o que o navegador diz
+ * (RN-NAV-004 e 005), o de mover e o de renomear conexão e o de revelar a senha. A tela de Conexões deixou de existir (RN-NAV-001); o que o navegador diz
  * está em `workbench.copy.ts` e `navigator.copy.ts`.
  */
 export const connectionsCopy = {
@@ -12,7 +12,8 @@ export const connectionsCopy = {
     name: "Nome da pasta",
     cancel: "Cancelar",
     create: { title: "Nova pasta", subfolderTitle: "Nova subpasta", submit: "Criar pasta", submitting: "Criando…" },
-    rename: { title: "Renomear pasta", submit: "Renomear", submitting: "Renomeando…" },
+    // RN-PASTA-006: o "Renomear" virou "Editar pasta…", com o nome e o ambiente.
+    edit: { title: "Editar pasta", submit: "Salvar", submitting: "Salvando…" },
     move: { title: "Mover pasta", description: (name: string) => `Escolha a pasta de destino de ${name}.`, submit: "Mover", submitting: "Movendo…" },
     remove: { title: "Excluir pasta", description: (name: string) => `A pasta ${name} será excluída. Só uma pasta vazia, sem subpastas e sem conexões, pode ser excluída.`, submit: "Excluir pasta", submitting: "Excluindo…" },
   },
@@ -72,7 +73,22 @@ export const connectionsCopy = {
     showPassword: "Mostrar senha",
     hidePassword: "Ocultar senha",
     passwordNotice: "A senha do banco fica criptografada com a sua senha do Prism. Para exibi-la, o Prism pede a sua senha de novo.",
-    environment: { title: "Ambiente", name: "Nome do ambiente", color: "Cor do ambiente", otherColor: "Outra cor", noColor: "Sem cor", hint: "O nome e a cor identificam esta conexão na lista e na árvore. Deixe o nome em branco se ela não pertence a um ambiente." },
+    // RN-CONN-017: a última bolinha é "Outra cor", e a cor escolhida por ela vai no nome dela. RN-PASTA-005: a seção é a mesma na pasta.
+    environment: {
+      title: "Ambiente",
+      name: "Nome do ambiente",
+      color: "Cor do ambiente",
+      otherColor: "Outra cor",
+      otherColorChosen: (hex: string) => `Outra cor: ${hex}`,
+      // RN-AMB-001: os ambientes que as pastas e as conexões já usam, para reaproveitar.
+      saved: "Ambientes já usados",
+      useSaved: (environment: string) => `Usar o ambiente ${environment}`,
+      connectionHint: "O nome e a cor identificam esta conexão na árvore, nas abas e na barra de status. Em branco, ela herda o ambiente da pasta, se houver.",
+      folderHint: "O nome e a cor identificam esta pasta na árvore. As conexões dela sem ambiente próprio herdam este.",
+      inherits: (environment: string, folder: string) => `Herda ${environment} da pasta ${folder}.`,
+      // A dica da etiqueta herdada, na árvore, na aba e na barra de status.
+      inheritedFrom: (folder: string) => `Herdado da pasta ${folder}`,
+    },
     save: "Salvar",
     saving: "Salvando…",
     test: "Testar conexão",
@@ -111,6 +127,16 @@ export const connectionsCopy = {
     submitting: "Movendo…",
   },
 
+  // RN-NAV-009: renomear uma conexão pelo navegador (F2 ou o menu), num diálogo só com o nome.
+  rename: {
+    title: "Renomear conexão",
+    name: "Nome da conexão",
+    nameTaken: "Já existe uma conexão com este nome nesta pasta.",
+    cancel: "Cancelar",
+    submit: "Renomear",
+    submitting: "Renomeando…",
+  },
+
   reveal: {
     title: "Confirme a sua senha",
     description: { before: "Para exibir a senha de ", between: " em ", after: ", digite a sua senha do Prism." },
@@ -126,11 +152,14 @@ export const connectionsCopy = {
     connectionUpdated: "Conexão alterada.",
     connectionDeleted: "Conexão excluída.",
     connectionMoved: "Conexão movida.",
+    connectionRenamed: "Conexão renomeada.",
+    // RN-CONN-016: a cópia aparece escolhida no navegador.
+    connectionDuplicated: "Conexão duplicada.",
     // RN-AVISO-002 e RN-AVISO-004. A falha leva a frase da tela, não o `title` da API: a mensagem do banco fica abaixo dos botões.
     connectionTested: "Conexão testada com sucesso.",
     connectionTestFailed: "Não foi possível conectar.",
     folderCreated: "Pasta criada.",
-    folderRenamed: "Pasta renomeada.",
+    folderUpdated: "Pasta alterada.",
     folderMoved: "Pasta movida.",
     folderDeleted: "Pasta excluída.",
     // RN-AVISO-003: o quinto erro de senha fecha o cofre e a tela volta ao login.

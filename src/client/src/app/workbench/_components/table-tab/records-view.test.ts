@@ -22,9 +22,12 @@ const rt = await vi.hoisted(async () => {
     ...createHookRuntime(),
     /** O catálogo das chaves estrangeiras: o que a consulta devolve (`undefined` enquanto não chegou) e o que a vista pediu a `useQuery` em cada renderização. */
     catalog: { data: undefined as ForeignKey[] | undefined, asked: [] as { queryKey: readonly unknown[]; enabled?: boolean }[] },
-    queryClient: {},
+    queryClient: { getQueryData: () => undefined },
+    // A conferência do catálogo da edição: o resultado é só leitura (o menu da célula abre com o motivo, sem rota de verdade).
+    service: { editTargetOrRefuse: vi.fn(async () => ({ ok: false, error: { code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: "teste", extensions: {} } })), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     saveText: vi.fn(),
+    cells: { resultCells: vi.fn() },
   };
 });
 
@@ -37,23 +40,36 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
   },
   useQueryClient: () => rt.queryClient,
 }));
-vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: true } } }) }));
+vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: true }, editor: { autocomplete: true } } }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("../../_lib/save-file", () => ({ saveText: rt.saveText }));
+vi.mock("../../_lib/full-values.service", () => rt.cells);
+vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
+vi.mock("../../_lib/record-edits.service", () => rt.service);
 
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import { csvBom } from "../../_lib/csv";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { forgetExcept } from "../../_lib/tab-memory";
+import { createRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import { recordsSql } from "../../_lib/table-sql";
 import { structureKey } from "../../_lib/table-structure.service";
 import { canClear } from "../../_lib/table-view";
 import { isBusyState } from "../../_lib/use-query-runner";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { ResultPanel } from "../result-panel";
+import { editCell, noEdits } from "../../_lib/record-edits";
+import { recordsCopy } from "../../_lib/records.copy";
+import { remember } from "../../_lib/tab-memory";
+import { EditsBanner } from "../edits-banner";
 import { RecordsFilter } from "./records-filter";
 import { RecordsView } from "./records-view";
+import { UnsavedEditsDialog } from "../unsaved-edits-dialog";
+import { ContextMenu } from "@/components/ui";
+import { groupItems, type ContextMenuItem } from "@/components/ui/context-menu";
+import { CustomFilterField } from "../custom-filter-field";
+import { ValueFilterDialog } from "../value-filter-dialog";
 
 /** PostgreSQL, como a API numera os bancos. */
 const pg: Engine = 1;
@@ -104,11 +120,12 @@ function fakeRunner(initial: RunnerState) {
     cancel: vi.fn(),
     loadMore: vi.fn(),
     countTotal: vi.fn(),
+    sessionOf: () => "s1",
   };
   return runner;
 }
 
-type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean };
+type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot };
 
 /** A vista de `loja.pedidos` na conexão `c1`: à vista e conectada, salvo o que `over` disser. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
@@ -125,8 +142,12 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
     const found = elementsOf(rt.render(() => RecordsView(props)));
     const filter = found.find((element) => element.type === RecordsFilter)!.props as unknown as ComponentProps<typeof RecordsFilter>;
     const panel = found.find((element) => element.type === ResultPanel)!.props as unknown as ComponentProps<typeof ResultPanel>;
+    const question = found.find((element) => element.type === UnsavedEditsDialog)?.props as unknown as ComponentProps<typeof UnsavedEditsDialog> | undefined;
+    const menu = found.find((element) => element.type === ContextMenu)?.props as unknown as ComponentProps<typeof ContextMenu> | undefined;
+    const values = found.find((element) => element.type === ValueFilterDialog)?.props as unknown as ComponentProps<typeof ValueFilterDialog> | undefined;
+    const custom = found.find((element) => element.type === CustomFilterField)?.props as unknown as ComponentProps<typeof CustomFilterField> | undefined;
 
-    return { filter, panel, records: panel.records! };
+    return { filter, panel, records: panel.records!, question, menu, values, custom };
   }
 
   return { show, onOpenTable };
@@ -668,6 +689,32 @@ describe("RecordsView: a memória da aba, o CSV e o que a área de resultado rec
     expect(rt.saveText).toHaveBeenCalledTimes(1);
   });
 
+  it("'Exportar CSV' com uma célula cortada pede o valor completo pela linha do resultado e grava o valor inteiro (RN-SQL-017)", async () => {
+    const full = "9".repeat(50_000);
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
+    const runner = fakeRunner(rowsState({ rows: [["10", full.slice(0, 10_000)]], truncated: new Map([[0, new Set([1])]]), resultId: "r1" }));
+    const { records } = mount(runner).show();
+
+    records.onExport();
+    await new Promise((done) => setTimeout(done, 0));
+
+    expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 1 }], expect.any(AbortSignal));
+    expect(rt.saveText.mock.calls).toEqual([["loja.pedidos.csv", `${csvBom}id;cliente_id\r\n10;${full}\r\n`, "text/csv;charset=utf-8"]]);
+    expect(rt.toast.success.mock.calls).toEqual([[workbenchCopy.tableTab.records.exported(1)]]);
+  });
+
+  it("'Exportar CSV' sem o valor completo grava o cortado e avisa quantos não vieram inteiros", async () => {
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [null] });
+    const runner = fakeRunner(rowsState({ rows: [["10", "4".repeat(10_000)]], truncated: new Map([[0, new Set([1])]]), resultId: "r1" }));
+    const { records } = mount(runner).show();
+
+    records.onExport();
+    await new Promise((done) => setTimeout(done, 0));
+
+    expect(rt.saveText.mock.calls[0][1]).toBe(`${csvBom}id;cliente_id\r\n10;${"4".repeat(10_000)}\r\n`);
+    expect(rt.toast.warning.mock.calls).toEqual([[`${workbenchCopy.tableTab.records.exported(1)} ${workbenchCopy.tableTab.records.exportedCut(1)}`]]);
+  });
+
   it("a área de resultado recebe o estado do executor, a sessão da aba, o nome da tabela e as preferências da grade, e os botões dela falam com o executor", () => {
     const state = rowsState();
     const runner = fakeRunner(state);
@@ -690,5 +737,257 @@ describe("RecordsView entrega à área de resultado o id da aba (RN-GRADE-009)",
     expect(mount(fakeRunner(rowsState())).show().panel.tabId).toBe("t1");
     rt.unmount();
     expect(mount(fakeRunner(rowsState()), { tabId: "t2" }).show().panel.tabId).toBe("t2");
+  });
+});
+
+describe("RecordsView: a edição das células (seção 22)", () => {
+  /** Uma alteração pendente na célula da coluna 1 da primeira linha, do resultado `r1`. */
+  const withPending = () => remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
+
+  it("com linhas na tela, a grade recebe a edição e a faixa, com o motivo de só leitura que a página trouxe", () => {
+    const { panel } = mount(fakeRunner(rowsState({ resultId: "r1", readOnly: "DISTINCT" }))).show();
+    const banner = panel.banner as { type: unknown; props: ComponentProps<typeof EditsBanner> };
+
+    expect(panel.editing?.rows).toEqual([["10", "4"]]);
+    expect(banner.type).toBe(EditsBanner);
+    expect(banner.props).toMatchObject({ pending: 0, readOnly: recordsCopy.edit.readOnly("DISTINCT"), failure: null });
+  });
+
+  it("as pendências lembradas com a aba voltam para o mesmo resultado (trocar de vista não as perde), e outro resultado começa sem nenhuma", () => {
+    withPending();
+
+    const same = mount(fakeRunner(rowsState({ resultId: "r1" }))).show();
+    rt.unmount();
+    const other = mount(fakeRunner(rowsState({ resultId: "r2" }))).show();
+
+    expect((same.panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
+    expect(same.panel.editing?.marks.get(0)?.pending.get(1)).toBe("5");
+    expect((other.panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(0);
+  });
+
+  it("com alterações não salvas, Atualizar pergunta antes e não executa; Descartar executa (RN-EDIT-007)", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+
+    view.show().records.onRefresh();
+    const { question } = view.show();
+
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(question).toMatchObject({ count: 1, canSave: true });
+
+    question!.onDiscard();
+    expect(runner.sent).toEqual([sent(noFilter)]);
+  });
+
+  it("Cancelar na pergunta não executa nada e mantém as pendências", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+
+    view.show().filter.onApply();
+    view.show().question!.onCancel();
+    const after = view.show();
+
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(after.question).toBeUndefined();
+    expect((after.panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending).toBe(1);
+  });
+
+  it("o filtro que chega de outra aba espera a resposta; Cancelar o deixa para lá, sem levá-lo ao campo", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+    filterHandoff.request("c1", pedidos, '"id" = 7');
+
+    const waiting = view.show();
+    expect(waiting.question).toMatchObject({ count: 1 });
+    expect(waiting.filter.applied).toBe("");
+
+    waiting.question!.onCancel();
+    expect(filterHandoff.peek("c1", pedidos)).toBeNull();
+    expect(view.show().filter.applied).toBe("");
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+});
+
+describe("RecordsView: o Filtrar do menu da célula (RN-GRADE-013)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  /** A coluna `code`, de texto, na tabela da vista. */
+  const textColumns: RowsState["columns"] = [...columns, { name: "code", type: "varchar", kind: "text" }];
+  const loaded = (over: Partial<RowsState> = {}) => rowsState({ columns: textColumns, rows: [["10", "4", "11.901"], ["11", "4", "11.901"], ["12", "5", null]], resultId: "r1", ...over });
+
+  /** Abre o menu da célula (como o clique direito) e devolve o submenu "Filtrar". */
+  async function filterMenu(view: ReturnType<typeof mount>, cell = { row: 0, column: 2 }) {
+    view.show().panel.editing!.onMenu(cell, { x: 10, y: 20 }, false);
+    await settle();
+    const menu = view.show().menu!;
+    const filter = menu.groups.flatMap(groupItems).find((item) => item.id === "filter")!;
+    return { menu, filter, items: filter.submenu!.groups.flatMap(groupItems) };
+  }
+  const choose = (items: ContextMenuItem[], id: string) => items.find((item) => item.id === id)!.onSelect!();
+
+  it("o menu da célula tem o Filtrar (F11) com o submenu, e o Atualizar (F5)", async () => {
+    const view = mount(fakeRunner(loaded()));
+    const { menu, filter, items } = await filterMenu(view);
+
+    expect(filter).toMatchObject({ label: "Filtrar", shortcut: "F11" });
+    expect(items.map((item) => item.label)).toContain(`"code" = '11.901'`);
+    expect(menu.groups.flatMap(groupItems).find((item) => item.id === "refresh")).toMatchObject({ label: "Atualizar", shortcut: "F5", disabled: false });
+  });
+
+  it("“Valor da célula” junta a condição ao texto do campo, com a ordem dele no fim, e executa", async () => {
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+    view.show().filter.onDraft('cliente_id = 4 ORDER BY "id" DESC');
+
+    const { items } = await filterMenu(view);
+    choose(items, "filter:cell:eq");
+    const after = view.show();
+
+    const text = `(cliente_id = 4) AND ("code" = '11.901') ORDER BY "id" DESC`;
+    expect(runner.sent).toEqual([sent(text)]);
+    expect(fieldOf(after)).toEqual({ draft: text, applied: text, command: sqlOf(text) });
+  });
+
+  it("com alterações não salvas, o Filtrar pergunta antes; Descartar executa (RN-EDIT-007)", async () => {
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+
+    const { items } = await filterMenu(view);
+    choose(items, "filter:cell:isNull");
+
+    expect(runner.run).not.toHaveBeenCalled();
+    view.show().question!.onDiscard();
+    expect(runner.sent).toEqual([sent(`"code" IS NULL`)]);
+  });
+
+  it("o Filtrar usa o valor LIDO da célula, e não a alteração pendente", async () => {
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 2, "outro", "11.901") });
+    const view = mount(fakeRunner(loaded()));
+
+    const { items } = await filterMenu(view);
+    expect(items.find((item) => item.id === "filter:cell:eq")?.label).toBe(`"code" = '11.901'`);
+  });
+
+  it("F11 abre o menu da célula ativa com o submenu Filtrar já aberto, pelo teclado", async () => {
+    const view = mount(fakeRunner(loaded()));
+
+    view.show().panel.editing!.onFilter!({ row: 0, column: 2 }, { x: 1, y: 2 }, "menu");
+    await settle();
+
+    expect(view.show().menu).toMatchObject({ openSubmenu: "filter", initialFocus: "first", point: { x: 1, y: 2 } });
+  });
+
+  it("Ctrl+F11 abre o Filtrar por valor: os valores distintos com a contagem; Filtrar monta IN e IS NULL por OR e executa", () => {
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+
+    view.show().panel.editing!.onFilter!({ row: 0, column: 2 }, { x: 1, y: 2 }, "values");
+    const { values } = view.show();
+
+    expect(values).toMatchObject({ column: "code", rows: 3, more: false, values: [{ value: "11.901", count: 2, usable: true }, { value: null, count: 1, usable: true }] });
+
+    values!.onApply(["11.901", null]);
+    expect(view.show().values).toBeUndefined();
+    expect(runner.sent).toEqual([sent(`"code" = '11.901' OR "code" IS NULL`)]);
+  });
+
+  it("Personalizado pede o valor no campo pequeno, que vira literal; o que não vira fica com o motivo", async () => {
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+
+    const { items } = await filterMenu(view);
+    choose(items, "filter:custom:gt");
+    const { custom } = view.show();
+    expect(custom).toMatchObject({ prefix: `"code" >`, point: { x: 10, y: 20 }, problem: null });
+
+    custom!.onApply("a\tb");
+    expect(view.show().custom?.problem).toBe("O valor não pode ter tabulação nem outro caractere de controle.");
+    expect(runner.run).not.toHaveBeenCalled();
+
+    view.show().custom!.onApply("O'Brien");
+    expect(view.show().custom).toBeUndefined();
+    expect(runner.sent).toEqual([sent(`"code" > 'O''Brien'`)]);
+  });
+
+  it("Remover todos os filtros e ordenações limpa o campo e lê a tabela sem filtro", async () => {
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+    view.show().filter.onDraft("cliente_id = 4");
+    view.show().filter.onApply();
+    runner.state = loaded();
+    runner.sent.length = 0;
+
+    const { items } = await filterMenu(view);
+    choose(items, "filter:clear");
+
+    expect(runner.sent).toEqual([sent(noFilter)]);
+    expect(fieldOf(view.show())).toEqual({ draft: "", applied: "", command: sqlOf(noFilter) });
+  });
+
+  it("com a aba ocupada, nada do Filtrar se aplica, e o menu diz por quê", async () => {
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: loaded() });
+    const view = mount(runner);
+
+    // As linhas de antes ficam na tela, esmaecidas; o menu abre sobre elas.
+    const { items, menu } = await filterMenu(view);
+    expect(items.every((item) => item.disabled === true)).toBe(true);
+    expect(menu.groups.flatMap(groupItems).find((item) => item.id === "refresh")).toMatchObject({ disabled: true });
+  });
+
+  it("o campo completa as colunas da grade, e continua com elas quando o filtro dá erro", () => {
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+    expect(view.show().filter.columns.map((column) => column.name)).toEqual(["id", "cliente_id", "code"]);
+
+    runner.state = { status: "error", source: "database", title: "Erro do banco", message: "column x does not exist", sqlState: "42703", errorAt: null };
+    expect(view.show().filter.columns.map((column) => column.name)).toEqual(["id", "cliente_id", "code"]);
+    expect(view.show().filter.autocomplete).toBe(true);
+  });
+});
+
+describe("RecordsView: F5 é o Atualizar (RN-GRADE-012)", () => {
+  it("a vista deixa o Atualizar na aba: F5 lê de novo com o filtro e a ordem em vigor", () => {
+    const slot = createRefreshSlot();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner, { refreshSlot: slot });
+    view.show().filter.onDraft('cliente_id = 4 ORDER BY "id" DESC');
+    view.show().filter.onApply();
+    runner.state = rowsState();
+    runner.sent.length = 0;
+    view.show();
+
+    slot.get()!();
+    expect(runner.sent).toEqual([sent('cliente_id = 4 ORDER BY "id" DESC')]);
+  });
+
+  it("com alterações não salvas, F5 pergunta antes; com algo em andamento, nada", () => {
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
+    const slot = createRefreshSlot();
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner, { refreshSlot: slot });
+    view.show();
+
+    slot.get()!();
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(view.show().question).toMatchObject({ count: 1 });
+    view.show().question!.onCancel();
+
+    runner.state = rowsState({ resultId: "r1", loadingMore: true });
+    view.show();
+    slot.get()!();
+    expect(view.show().question).toBeUndefined();
+    expect(runner.run).not.toHaveBeenCalled();
+  });
+
+  it("a vista que sai da tela tira o Atualizar dela da aba", () => {
+    const slot = createRefreshSlot();
+    mount(fakeRunner(rowsState()), { refreshSlot: slot }).show();
+    expect(slot.get()).not.toBeNull();
+
+    rt.unmount();
+    expect(slot.get()).toBeNull();
   });
 });

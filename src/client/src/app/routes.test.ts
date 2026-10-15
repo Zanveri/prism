@@ -8,6 +8,7 @@ import { DriversRedirect } from "@/app/drivers/page";
 import { WorkbenchSlot } from "@/app/_components/workbench-slot";
 import { WorkbenchPage } from "@/app/workbench/page";
 import { SettingsShortcut } from "@/app/settings/_components/settings-shortcut";
+import { FontSync } from "@/app/settings/_components/font-sync";
 import { ThemeSync } from "@/app/settings/_components/theme-sync";
 import { WorkbenchProvider } from "@/app/workbench/_lib/workbench-state";
 import { pathsConfig } from "@/config/paths.config";
@@ -68,8 +69,8 @@ describe("rotas: onde o estado da área de trabalho é montado", () => {
     expect(paths).toContain(pathsConfig.settings);
   });
 
-  it("o tema do usuário e o atalho Ctrl+, são montados dentro do provedor, portanto do guard: sem o cofre aberto não há usuário nem cofre", () => {
-    for (const component of [ThemeSync, SettingsShortcut]) {
+  it("o tema e as fontes do usuário (RN-CONFIG-008) e o atalho Ctrl+, são montados dentro do provedor, portanto do guard: sem o cofre aberto não há usuário nem cofre", () => {
+    for (const component of [ThemeSync, FontSync, SettingsShortcut]) {
       expect(elementsOf(providers[0].route.element).some((element) => element.type === component)).toBe(true);
       expect(placed.filter(({ route }) => elementsOf(route.element).some((element) => element.type === component))).toHaveLength(1);
     }

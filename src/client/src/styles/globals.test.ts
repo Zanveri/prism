@@ -47,6 +47,7 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
       "syntax-string": "#5ed3a3",
       "syntax-number": "#f2b644",
       "syntax-comment": "#8e99a8",
+      link: "#7db2ff",
     });
     expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort());
   });
@@ -163,9 +164,15 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   // com o motivo conferido logo abaixo: a cor que o tema herdaria do esquema dele não passa em alguma superfície dele.
   const fromCanvas = ["background", "panel", "raised", "selected", "selection", "border", "border-strong", "ink", "body", "muted", "subtle", ...syntaxText];
   const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [] };
+  // RN-LINK-001: o azul de link de cada tema (o canvas não o desenha): o do Prism nos dois do Prism, o da paleta do tema nos outros quatro.
+  const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7" } as const;
 
-  it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas e as da lista de trocadas, nem uma a mais", (id) => {
-    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, ...swapped[id]].sort());
+  it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
+    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...swapped[id]].sort());
+  });
+
+  it.each(extraThemes)("o azul de link do tema %s é o da paleta dele (o do GitHub Claro, escurecido o mínimo para passar na linha selecionada)", (id) => {
+    expect(themeBlock(id).overrides.link).toBe(ownLink[id]);
   });
 
   it.each(extraThemes.flatMap((id) => swapped[id].map((token) => [id, token] as const)))("o tema %s troca a ficha %s porque a herdada do esquema não passa em alguma superfície dele, e a trocada passa em todas", (id, token) => {
@@ -206,6 +213,11 @@ describe.each(themes)("contraste do tema $name (WCAG AA: 4,5:1 para texto, sem e
     expect(contrast(palette[text], palette[surface])).toBeGreaterThanOrEqual(4.5);
   });
 
+  // RN-LINK-001: o nome da tabela com o Ctrl apertado, no editor (sobre o fundo, a linha do cursor e a seleção) e onde mais um link aparecer.
+  it.each(([...surfaces, "selection"] as const).map((surface) => [surface] as const))("o azul de link sobre %s", (surface) => {
+    expect(contrast(palette.link, palette[surface])).toBeGreaterThanOrEqual(4.5);
+  });
+
   it.each(Object.entries(editorOnSelection))("no editor, %s por cima da seleção", (_what, token) => {
     expect(contrast(palette[token], palette.selection)).toBeGreaterThanOrEqual(4.5);
   });
@@ -235,5 +247,25 @@ describe("todos os temas", () => {
   it("são seis, e cada modo de tema (menos o do sistema) é um deles", () => {
     expect(themes.map((theme) => theme.id).sort()).toEqual(themeModes.filter((mode) => mode !== "system").sort());
     expect(themes).toHaveLength(6);
+  });
+});
+
+describe("a raiz não rola: a área de trabalho não é uma página", () => {
+  /** Os valores de uma propriedade (`overflow` pega também `overflow-x` e `overflow-y`) que as regras do CSS dão a um seletor, na ordem do arquivo. */
+  const valuesOf = (selector: string, property: "overflow" | "position") =>
+    [...css.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter((rule) => rule[1].split(",").some((part) => part.trim() === selector))
+      .flatMap((rule) => [...rule[2].matchAll(new RegExp(`(?:^|[;\\s])${property}${property === "overflow" ? "(?:-[xy])?" : ""}:\\s*([^;]+);`, "g"))].map((declaration) => declaration[1].trim()));
+
+  // Com o documento mais alto que a janela, ele rolava pela roda do mouse (na barra de status, no editor curto, no fim da grade) e por um
+  // `focus()` ou `scrollIntoView`. `hidden` ainda deixa o `scrollIntoView` e o `scrollTop` rolarem; `clip` não. Quem precisa rolar tem a própria área.
+  it.each(["html", "body"])("%s corta o que passa da janela (overflow: clip), e nenhuma outra regra o troca", (selector) => {
+    expect(valuesOf(selector, "overflow")).toEqual(["clip"]);
+  });
+
+  // No `html`, o `clip` vai para a janela como `hidden`: quem corta é o `body`. Sem ser posicionado, um `absolute` sem ancestral posicionado tem a
+  // janela como bloco, escapa do corte do `body` e dá à janela o que rolar (conferido no Electron: o `scrollIntoView` dele rolava 257 px).
+  it("o body é o bloco de quem é absolute sem ancestral posicionado (position: relative), para nada escapar do corte", () => {
+    expect(valuesOf("body", "position")).toEqual(["relative"]);
   });
 });

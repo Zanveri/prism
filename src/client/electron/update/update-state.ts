@@ -18,8 +18,17 @@ export type UpdateRelease = { version: string; prerelease: boolean; date: string
  * `format` é o pacote da mais recente para a instalação em uso (o instalador no Windows; no Linux e no macOS, o que vai para a
  * pasta de downloads), ou `null` se não há pacote para este sistema: a tela diz o que "Atualizar agora" vai fazer antes de baixar.
  * `releases` leva no máximo as 20 mais recentes: `omitted` é quantas mais antigas (ainda acima da instalada) ficaram de fora.
+ * `forAllUsers`: o Prism foi instalado pelo instalador do Windows para todos os usuários da máquina, e o Windows pede a permissão
+ * de administrador a cada atualização (RN-INSTALA-003); a tela diz isso antes de baixar.
  */
-export type UpdateOffer = { checkId: number; current: string; format: InstallFormat | null; releases: UpdateRelease[]; omitted: number };
+export type UpdateOffer = { checkId: number; current: string; format: InstallFormat | null; forAllUsers: boolean; releases: UpdateRelease[]; omitted: number };
+
+/**
+ * A atualização do Windows que não foi instalada (RN-INSTALA-003): o Prism mandou instalar `version` e abriu de novo em
+ * `current`, a versão de antes. A tela avisa uma vez, ao abrir. `forAllUsers`: a instalação é para todos os usuários, e o mais
+ * provável é que a permissão de administrador tenha sido negada.
+ */
+export type UpdateNotice = { version: string; current: string; forAllUsers: boolean };
 
 /**
  * O estado da atualização, que mora no processo principal e que a tela só espelha. Nenhum estado leva endereço nem caminho

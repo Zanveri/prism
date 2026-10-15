@@ -278,7 +278,7 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 
 ### 5.4 Árvore de objetos
 
-- **RN-ARVORE-001.** Níveis: pasta › conexão › banco conectado › esquemas › Tabelas, Visões e
+- **RN-ARVORE-001.** Níveis: pasta › conexão › bancos do servidor (RN-ARVORE-006) › esquemas › Tabelas, Visões e
   Rotinas (procedimentos e funções) › tabela › Colunas, Índices e Chaves estrangeiras.
 - **RN-ARVORE-002.** Cada nível é buscado só quando o usuário expande, e fica em memória até ele
   pedir "Atualizar" naquele nó.
@@ -289,6 +289,16 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   do objeto.
 - **RN-ARVORE-005.** Falha ao abrir a conexão aparece no próprio nó, com a mensagem do banco e
   "Tentar de novo".
+- **RN-ARVORE-006.** Bancos do servidor (pedido do dono em 2026-10-13, como o DBeaver): ao expandir a
+  conexão, a árvore lista os bancos do servidor a que a conta pode se conectar, em ordem de nome, com
+  o banco da conexão primeiro e marcado como o padrão. No PostgreSQL são os de `pg_database` que
+  aceitam conexão, sem os de modelo e só os em que a conta tem `CONNECT`; no Informix, os de
+  `sysmaster:sysdatabases`; no Db2, que conecta num banco só por vez e não tem SQL que liste os outros
+  bancos da instância, só o banco da conexão. Expandir um banco abre a sessão dele, com as mesmas
+  credenciais e o nome desse banco no lugar do da conexão; o editor, os Registros e o diagrama
+  abertos a partir de um banco usam a sessão dele. Desconectar a conexão fecha as sessões de todos os
+  bancos dela. A lista fica em memória até "Atualizar" no nó da conexão (RN-ARVORE-002). O menu do
+  banco tem "Nova consulta", que abre o editor na sessão dele.
 
 ### 5.5 Editor e resultado
 
@@ -442,8 +452,9 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `POST api/user/connections/test` | 204 | 404 `CONNECTION_NOT_FOUND` (com `id` e sem senha, quando a conexão não existe); 422 `CONNECTION_INVALID`, `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED` |
 | `POST api/user/connections/{id}/password/reveal` | 200 `{ password }` | 404 `CONNECTION_NOT_FOUND`; 422 `INVALID_PASSWORD`; 401 `VAULT_LOCKED` no quinto erro |
 | `PUT api/user/password` `{ currentPassword, newPassword }` | 204 (troca a senha e recifra o cofre, RN-COFRE-013) | 422 `INVALID_PASSWORD` (a atual não confere), `PASSWORD_INVALID` (a nova), `PASSWORD_UNCHANGED`; 401 `VAULT_LOCKED` no quinto erro |
-| `POST api/user/database-sessions` `{ connectionID, transactionMode?, isolationLevel? }` | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013) |
+| `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013) |
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
+| `GET api/user/database-sessions/{id}/databases` | 200 lista de `{ name, isCurrent }` (RN-ARVORE-006; espera a vez na sessão, como as consultas de catálogo) | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `DELETE api/user/database-sessions/{id}` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `GET api/user/database-sessions/{id}/schemas` | 200 lista | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `GET .../schemas/{schema}/objects?kind=` | 200 lista (`tables`, `views`, `routines`) | as mesmas, mais 422 `OBJECT_KIND_INVALID` |
@@ -455,7 +466,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET .../schemas/{schema}/views/{view}/definition` | 200 `{ definition }` (RN-CAT-006) | as mesmas |
 | `GET .../schemas/{schema}/diagram` | 200 `{ tables, foreignKeys }` (RN-CAT-008) | as mesmas |
 | `GET api/user/database-sessions/{id}/properties` | 200 lista de `{ name, value }` (RN-CAT-010) | as mesmas |
-| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize? }` | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` |
+| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem) |
 | `POST .../queries/next` | 200 página | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_CURSOR`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/count` | 200 `{ total }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_QUERY_TO_COUNT`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
@@ -1210,7 +1221,8 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   seleção atravessa a rolagem e o "carregar mais", e é esquecida numa nova execução.
 - **RN-GRADE-002.** Copiar. Ctrl+C copia a seleção como texto: células separadas por tabulação
   e linhas por quebra de linha (o que uma planilha cola); uma célula só é copiada como o valor
-  puro. Nulo vai vazio. Se alguma célula copiada estava cortada (RN-SQL-011), a tela avisa.
+  puro. Nulo vai vazio. A célula que chegou cortada (RN-SQL-011) é copiada com o valor completo
+  (RN-SQL-017); a tela avisa só quando algum valor não pôde vir inteiro.
 - **RN-GRADE-003.** Copiar avançado (Ctrl+Shift+C, como no DBeaver): um diálogo escolhe o que
   copiar (a seleção, as linhas inteiras da seleção ou todas as carregadas) e como: texto
   delimitado (delimitador, cabeçalho, número da linha, aspas, como escrever o nulo), JSON,
@@ -1826,3 +1838,326 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **Pontos de salvamento com botão**, "commit inteligente" (passar sozinho ao manual quando um comando grava), confirmação em
   duas fases e transação que atravessa um script de vários comandos (a execução de script ainda é da entrega 2).
 - **Proteções** da entrega 3 (somente leitura com senha, confirmar comando irreversível), que vão restringir a edição.
+
+## 23. Complemento de 2026-10-13: abas que se movem, janelas e scripts salvos
+
+Pedidos do dono em 2026-10-13: "poder mexer as tabs de lugar e até criar uma nova guia, como no
+Chrome, pra caso eu queira utilizar em outra tela, assim como o DBeaver", e "salvar essas
+consultas SQL, criptografadas, para que apenas o usuário consiga ver o que é aquele script".
+Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
+
+### Abas e janelas
+
+- **RN-ABAS-001.** As abas mudam de lugar arrastando-as ao longo da barra de abas; pelo teclado,
+  Ctrl+Shift+PageUp e Ctrl+Shift+PageDown movem a aba ativa uma posição. A ordem vale enquanto a
+  janela está aberta.
+- **RN-ABAS-002.** Uma aba vai para uma janela nova arrastando-a para fora da janela (a janela nova
+  abre onde ela foi solta) ou por "Mover para nova janela" no menu da aba. A janela nova é a área
+  de trabalho inteira, com navegador e barra de abas próprios, e recebe a aba como ela estava: o
+  texto do editor, o resultado na tela, o cursor aberto e a sessão com o banco, sem executar nada
+  de novo.
+- **RN-ABAS-003.** Uma aba passa de uma janela para outra arrastando-a até a barra de abas da outra,
+  ou por "Mover para a janela…" no menu da aba, que lista as outras janelas abertas. A janela que
+  fica sem abas continua aberta.
+- **RN-ABAS-004.** Todas as janelas usam a mesma API, o mesmo cofre e as mesmas preferências: o
+  bloqueio por inatividade e o "Sair" valem para todas, e o login libera todas. Fechar uma janela
+  fecha as abas dela, com as mesmas perguntas de fechar cada aba; fechar a última encerra o app,
+  como hoje.
+- **RN-ABAS-005.** Só o processo principal cria janelas e passa abas entre elas; a tela pede pelo
+  preload, por canais com o conteúdo validado (RN-SHELL-001), e nenhuma janela fala com outra
+  diretamente.
+- **RN-ABAS-008.** A aba de tabela mostra na barra só o nome da tabela enquanto as tabelas abertas na
+  janela são todas de um esquema só (pedido de 2026-10-14). Com tabelas de mais de um esquema abertas
+  (o mesmo esquema noutra conexão ou noutro banco conta como outro), todas mostram `esquema.tabela`.
+  Com tabelas de mais de um banco, a de um banco que não é o da conexão mostra também o banco. O nome
+  inteiro fica na dica da aba e na lista de abas.
+
+### Scripts salvos
+
+- **RN-SCRIPT-001.** Ctrl+S numa aba de consulta salva o SQL dela como script: na primeira vez pede
+  o nome (sugerido "Script 1", "Script 2"…); depois grava por cima. "Salvar como" (Ctrl+Shift+S)
+  grava com outro nome. A aba mostra o nome do script, e um ponto enquanto há mudança não salva;
+  fechá-la assim pergunta se salva.
+- **RN-SCRIPT-002.** Os scripts são do usuário e moram no cofre dele, cifrados como o resto do cofre
+  (RN-COFRE): só quem tem a senha do usuário os lê, nada vai em texto aberto para o disco, e o log
+  nunca leva o texto do SQL. Acrescentar os scripts ao cofre sobe o número do formato dele; um
+  cofre antigo é migrado ao abrir (RN-VERSAO-005).
+- **RN-SCRIPT-003.** O navegador tem a seção "Scripts", com os scripts do usuário em ordem de nome:
+  abrir (duplo clique ou Enter), renomear, excluir (com confirmação) e "Copiar SQL". O script
+  lembra a conexão e o banco da aba em que foi salvo; aberto, vira uma aba de consulta já nessa
+  conexão e nesse banco. Se a conexão não existe mais, a aba abre sem conexão e pede para
+  escolher uma.
+- **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
+  (sem diferenciar maiúsculas); SQL de até 1 MB.
+
+Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE` como as demais):
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, updatedAt }`, sem o SQL | |
+| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
+| `POST api/user/scripts` `{ name, sql, connectionID?, database? }` | 201 | 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database? }` | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
+
+### Ir do editor para a tabela
+
+- **RN-LINK-001.** No editor SQL, com Ctrl apertado (⌘ no macOS), o nome de uma tabela ou visão sob o
+  ponteiro fica azul e sublinhado, com o cursor de mão, e Ctrl+clique nele abre a aba da tabela nos
+  Registros (RN-TABELA-001), na conexão e no banco da aba do editor. Vira link só o nome que o
+  catálogo daquele banco conhece: com o esquema (`esquema.tabela`) ou sem ele (o esquema padrão da
+  sessão), com ou sem aspas, nas regras de nome de cada banco. Fora de texto entre aspas simples e de
+  comentário. Soltar o Ctrl ou tirar o ponteiro do nome desfaz o destaque.
+
+### Renomear e duplicar no navegador
+
+Pedido do dono em 2026-10-13: "F2 para renomear pastas e conexões, além da possibilidade de
+duplicar a conexão" pelo botão direito.
+
+- **RN-NAV-009.** No navegador, F2 na linha de uma pasta ou de uma conexão abre o "Renomear"
+  dela. A pasta usa o diálogo de "Renomear" que já existe. A conexão ganha um diálogo só com o
+  nome, que grava pelo `PATCH api/user/connections` sem mudar mais nada, senha incluída. As
+  recusas são as de sempre (nome repetido, nome inválido), no próprio diálogo. O menu de contexto
+  da conexão ganha "Renomear" (F2), e o "Renomear" da pasta passa a mostrar o atalho F2.
+- **RN-CONN-016.** "Duplicar conexão" no menu de contexto da conexão cria, na mesma pasta, uma
+  cópia com todos os campos e a senha salva. A senha é copiada dentro do cofre e não passa pela
+  tela. O nome da cópia é "<nome> (cópia)"; se esse já existir, "(cópia 2)", "(cópia 3)" e assim
+  por diante, cortando o nome original para caber no limite do nome. A cópia nasce desconectada e
+  aparece selecionada no navegador, e nada abre sozinho. Rota:
+  `POST api/user/connections/{id}/duplicate` → 201 com a conexão nova, no formato do
+  `GET api/user/connections/{id}`; 404 `CONNECTION_NOT_FOUND`. O log registra os IDs, nunca a senha.
+
+## 24. Complemento de 2026-10-13: fontes, troca de banco na aba e abas que voltam
+
+Pedidos: do dono, "permita o usuário utilizar as fontes do sistema na aplicação geral e outra fonte
+para o editor SQL"; e das issues 1 e 2 do repositório público: "ter uma opção de trocar o database
+conectado para executar as queries" e "ter histórico caso o programa feche ou a conexão seja
+fechada, assim, ao reabrir já retorna as queries feitas".
+
+### Fontes
+
+- **RN-CONFIG-008.** Configurações › Aparência ganha "Fonte da interface" e "Fonte do editor SQL".
+  - Cada uma oferece a fonte que o app traz, que é o padrão (IBM Plex Sans na interface, IBM Plex
+    Mono no editor), e as fontes instaladas no sistema, em ordem de nome e com busca pelo nome. A
+    do editor mostra as monoespaçadas primeiro.
+  - A escolha vale na hora, em todas as janelas, e fica nas preferências desta instalação, por
+    usuário (RN-CONFIG-001).
+  - A fonte da interface vale para todo o texto do app fora do código. A do editor vale para o
+    editor SQL e para os campos de SQL que usam o mesmo editor (o filtro dos Registros, o "Ver SQL").
+  - Uma fonte escolhida que não está mais instalada volta à do app, sem erro.
+  - A lista é lida na máquina, sem rede, de preferência sem dependência nova (a API de fontes locais
+    do Chromium ou o processo principal). Se a lista não puder ser lida, o campo aceita o nome
+    digitado.
+
+### Trocar o banco da aba de consulta
+
+- **RN-ARVORE-007.** A barra do editor da aba de consulta mostra o banco em que a aba roda e deixa
+  trocá-lo.
+  - A lista traz os bancos do servidor, a mesma da RN-ARVORE-006. No Db2, só o banco da conexão, e
+    a lista fica desabilitada com o motivo.
+  - Trocar passa a aba para a sessão daquele banco, a mesma que a árvore abre (RN-ARVORE-006), sem
+    executar nada. O texto do editor fica.
+  - Com alterações não salvas na grade (RN-EDIT-007) ou com transação aberta, a troca pergunta
+    antes, como ao executar outro comando.
+  - O script salvo guarda o banco da aba (RN-SCRIPT-001).
+
+### Abas que voltam na próxima entrada
+
+- **RN-ABAS-006.** O Prism grava no cofre do usuário, cifradas como os scripts (RN-SCRIPT-002), as
+  abas abertas de todas as janelas:
+  - de cada aba de consulta: o texto do editor, a conexão, o banco, o script de onde veio (se veio)
+    e se tem mudança não salva;
+  - de cada aba de tabela: a conexão, o banco, o esquema, a tabela e a vista;
+  - a ordem das abas e qual estava ativa.
+
+  Quando grava:
+  - alguns segundos depois de cada mudança, para um fechamento inesperado perder no máximo esses
+    segundos;
+  - ao fechar uma aba;
+  - antes de o cofre fechar (sair, bloqueio por inatividade, fechar o app).
+
+  O que volta:
+  - Na próxima entrada do mesmo usuário, as abas voltam na janela principal, na ordem em que
+    estavam.
+  - Voltam desconectadas: nada conecta nem executa sozinho.
+  - O resultado, o cursor e as alterações não salvas da grade não voltam.
+  - A aba de consulta cuja conexão foi excluída volta sem conexão, como um script sem conexão. A aba
+    de tabela cuja conexão foi excluída não volta, e a entrada avisa.
+  - O texto de cada aba vai até 1 MB (RN-SCRIPT-004). O que passa disso não é gravado, e a aba volta
+    vazia, com o aviso.
+  - Fechar uma aba a tira do que volta.
+
+- **RN-ABAS-007.** Fechar o app (a última janela) pergunta só pelo que não volta: as alterações
+  não salvas da grade (RN-EDIT-007). O texto das abas de consulta e os scripts com mudança não
+  salva voltam na próxima entrada (RN-ABAS-006), então não há pergunta por eles. Fechar uma aba,
+  várias abas ou uma janela que não é a última pergunta como antes, porque o que fecha não volta,
+  e a pergunta diz isso.
+
+| Rota | Sucesso | Erros |
+| --- | --- | --- |
+| `GET api/user/workspace` | 200 `{ tabs, activeIndex }` (lista vazia e `activeIndex` nulo quando nada foi gravado) | |
+| `PUT api/user/workspace` `{ tabs, activeIndex }` | 204 | 422 `WORKSPACE_INVALID` (formato, índice fora da lista), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
+
+O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes.
+
+## 25. Complemento de 2026-10-13, versão 0.3.0: o instalador do Windows como o do DBeaver
+
+Pedido do dono: "o DBeaver, quando eu baixava, executava um .exe e pedia permissão de admin do
+Windows; quando eu negava, ele continuava e instalava normalmente". Entra na 0.3.0, depois da 0.2.0
+estável.
+
+- **RN-INSTALA-001.** Ao abrir, o instalador do Windows (`Prism-<versão>-win-x64.exe`) pede a
+  permissão de administrador, pelo pedido do próprio Windows.
+  - Com a permissão, instala para todos os usuários da máquina, na pasta de programas do sistema.
+  - Sem ela (o pedido negado, ou uma conta sem administrador), segue sem erro e instala só para o
+    usuário, na pasta de programas do perfil, como hoje.
+  - Nos dois modos, cada usuário guarda os próprios dados (os cofres) no perfil dele
+    (`%APPDATA%\Zanveri\Prism`), e o app é o mesmo.
+- **RN-INSTALA-002.** Nunca ficam duas instalações. O instalador reconhece a que já existe e a
+  atualiza no mesmo modo, sem pedir a permissão quando ela é só do usuário. Quem quiser trocar de
+  modo desinstala antes.
+- **RN-INSTALA-003.** A atualização de dentro do app (RN-ATUALIZA-006) continua: o Prism confere o
+  instalador, se encerra, o instalador atualiza e o Prism abre de novo.
+  - Na instalação só do usuário, nada muda: sem pergunta e sem janela.
+  - Na instalação para todos, o Windows pede a permissão de administrador a cada atualização. Se ela
+    for negada, nada é instalado, o Prism abre de novo na versão que estava e avisa.
+- **RN-INSTALA-004.** O instalador silencioso aceita escolher o modo pela linha de comando, para
+  quem instala em várias máquinas: `/S /allusers` ou `/S /currentuser`.
+### Valor completo das células cortadas
+
+Defeito relatado pelo dono em 2026-10-13: copiar uma célula `CLOB` do Informix (um JSON longo) com
+Ctrl+C ou "Copiar valor" levou o texto cortado. Num cliente de banco a cópia tem de ser o valor
+inteiro.
+
+- **RN-SQL-017.** A grade continua mostrando o valor cortado (RN-SQL-011). Copiar (Ctrl+C,
+  "Copiar valor", copiar avançado) e exportar levam o valor completo, como veio do banco.
+  - A API guarda, em memória e só no processo dela, o valor completo de cada célula que cortou,
+    nas páginas que já entregou do resultado atual. Nunca grava em disco, nunca no log.
+  - Ela guarda até 256 MB por sessão. Passando disso, as células seguintes ficam sem valor
+    completo, e a página diz quais.
+  - Larga tudo quando a aba executa outro comando, quando o resultado é descartado e quando a
+    sessão fecha.
+  - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram.
+  - O texto vai inteiro. O binário vai como a grade o escreve (hexadecimal), inteiro.
+
+| Rota | Sucesso | Erros |
+| --- | --- | --- |
+| `POST api/user/database-sessions/{id}/results/{resultID}/cells` `{ cells: [{ row, column }] }` (até 10.000 células por pedido) | 200 `{ values: [{ row, column, value }] }`, na ordem pedida; `value` nulo quando a célula não tem valor completo | 404 `DATABASE_SESSION_NOT_FOUND`, `RESULT_NOT_FOUND` (outro comando já rodou); 422 `CELLS_INVALID` (lista vazia, acima do limite, linha ou coluna fora do resultado) |
+
+O log dessa rota registra só a contagem de células, nunca o valor.
+
+### Ambiente da pasta e o seletor de cor
+
+Pedidos do dono em 2026-10-13: "as pastas terem seus ambientes também, por exemplo uma pasta só de
+production, outra só de QAS, outra de develop"; e o seletor de "Outra cor" abria ao clicar em
+qualquer ponto da linha dele, e deve virar uma bolinha ao lado das outras, com o ícone de
+conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções herdadas continuam
+lá.
+
+- **RN-PASTA-005.** A pasta pode ter um ambiente, com nome e cor, nas mesmas regras do ambiente da
+  conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
+  ambiente: pasta ou conexão só com cor herda o de cima, e a subpasta sem ambiente não mostra o da
+  pasta de cima.
+  - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
+    a mesma do formulário da conexão.
+  - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
+  - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
+    o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
+    status). O ambiente próprio da conexão sempre ganha.
+  - Mover a conexão ou a pasta muda o que ela herda. O formulário da conexão sem ambiente próprio
+    diz qual ela herda e de qual pasta.
+  - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
+    `environmentName` e `environmentColor`, opcionais, com as recusas do ambiente da conexão em
+    `FOLDER_NAME_INVALID` ou num código próprio, como a conexão já faz.
+- **RN-CONN-017.** O seletor de cor do ambiente (da conexão e da pasta) é uma fileira de bolinhas.
+  - A última bolinha é "Outra cor", com o ícone de conta-gotas. Só ela abre o seletor de cor do
+    sistema; clicar em outro ponto da fileira ou da seção não abre nada.
+  - Com uma cor escolhida por ela, a bolinha fica com essa cor, a marca de escolhida das outras e o
+    conta-gotas ainda à vista, em contraste. O código `#RRGGBB` aparece na dica e no nome acessível.
+  - A linha "Outra cor #RRGGBB" de baixo sai.
+  - Pelo teclado: cada bolinha é um botão, e Enter ou Espaço na última abre o seletor.
+
+### Filtrar como no DBeaver, e o autocompletar do filtro
+
+Pedidos do dono em 2026-10-14: "adiciona os filtros do DBeaver exatamente como ele faz, atalho em
+F11, exibe os possíveis filtros pra coluna, isso tanto no resultado de um script SQL quanto nos
+registros"; e de um colega: "o filtro na tabela não recomenda as colunas". Substitui a RN-GRADE-005,
+que valia só nos Registros e nunca chegou à tela.
+
+- **RN-GRADE-013.** O menu de contexto da grade ganha "Filtrar" (F11), nos Registros e no
+  resultado da aba de consulta. F11 abre o submenu na célula ativa, e Ctrl+F11 abre direto
+  "Filtrar por valor…". Os itens do submenu:
+  - "Filtrar por valor…" (Ctrl+F11): um diálogo com os valores distintos da coluna nas linhas já
+    carregadas, cada um com quantas vezes aparece, em ordem de quantidade, com busca e caixas de
+    marcar. Confirmar monta `coluna IN (…)` (`=` com um valor só), e o nulo marcado entra como
+    `coluna IS NULL`, junto por `OR`.
+  - "Valor da célula": `coluna = valor`, `coluna <> valor`, `coluna > valor` e `coluna < valor`;
+    em coluna de texto, também `coluna LIKE '%valor%'`; e "É nulo" e "Não é nulo".
+  - "Personalizado": `coluna = …`, `<> …`, `> …` e `< …`, que pedem o valor num campo pequeno, sobre
+    a grade.
+  - "Remover todos os filtros e ordenações".
+
+  O valor vira literal pela RN-TABELA-007, e o rótulo mostra a condição como ela vai entrar. A
+  célula cortada ou binária só oferece as opções de nulo e o "Personalizado". A condição entra no
+  campo de filtro, junta por `AND` e entre parênteses ao que já estava (o `mergeCondition` de
+  `_lib/grid-export`), e é executada. Quando não dá para juntar com segurança, o item fica
+  desabilitado, com o motivo.
+- **RN-GRADE-011.** O resultado da aba de consulta ganha o campo de filtro dos Registros, acima da
+  grade, com o mesmo texto de ajuda ("Insira uma expressão SQL para filtrar os resultados (use
+  Ctrl+Espaço)").
+  - O texto do editor não muda. Ao aplicar, a aba executa de novo o mesmo comando com o filtro, e
+    a API junta o filtro ao comando: a condição entra no `WHERE` por `AND`, e a ordem troca o
+    `ORDER BY` do comando.
+  - Quando o comando não é um `SELECT` só que a API saiba ler, ela o embrulha
+    (`SELECT * FROM (<comando>) … WHERE …`). Nesse caso, o resultado fica só leitura e diz por
+    quê.
+  - Executar o comando do editor de novo limpa o filtro.
+  - Rota: `POST api/user/database-sessions/{id}/queries` ganha `filter`, opcional: o texto do campo
+    (condição, ordem ou as duas, como na RN-TABELA-010).
+  - A resposta diz como o filtro entrou, em `filterApplied`: `merged` ou `wrapped`.
+  - O filtro com terminador de comando, com comentário aberto ou com aspas abertas é recusado com
+    422 `FILTER_INVALID`.
+- **RN-TABELA-011.** O campo de filtro (dos Registros e do resultado) completa os nomes das colunas
+  e as palavras do filtro: `AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, `LIKE`, `IN`, `BETWEEN`,
+  `ORDER BY`, `ASC` e `DESC`.
+  - Ao digitar, segue a chave do autocompletar do editor (RN-CONFIG-004). Com Ctrl+Espaço,
+    completa sempre.
+  - Nos Registros, as colunas são as da tabela. No resultado, as do resultado.
+  - O nome é escrito como o banco pede (com aspas, quando precisa).
+- **RN-GRADE-012.** F5 atualiza, como no DBeaver (pedido de 2026-10-14: "F5 não atualiza os dados").
+  - Nos Registros, F5 lê a tabela de novo, com o filtro e a ordem do campo: é o "Atualizar".
+  - Na aba de consulta, F5 executa de novo o comando do resultado, com o filtro: é o "Executar de
+    novo".
+  - Na Estrutura e no Diagrama, F5 recarrega a vista.
+  - No navegador, F5 atualiza o nó escolhido, como o "Atualizar" do menu dele.
+  - Com alterações não salvas na grade, F5 pergunta antes, como executar outro comando. Com um
+    comando em andamento, não faz nada.
+  - Vale com o foco em qualquer ponto da aba, menos no campo de edição de uma célula.
+  - O menu da grade mostra "Atualizar" (F5).
+  - F5 e Ctrl+R nunca recarregam a janela do app.
+- **Fica para depois:** "Localizar e Substituir" na grade, salvar o filtro como padrão da tabela,
+  voltar ao filtro padrão e o diálogo "Personalizar filtros…".
+
+### Editar pasta, ambientes reaproveitados e o filtro por ambiente
+
+Pedido do dono em 2026-10-14: "não dá pra editar pasta: queria pôr o ambiente numa pasta que já
+existia e não tem a opção no botão direito"; "depois de criar o ambiente, salve para que ele possa
+ser reutilizado; assim dá pra agrupar tudo e até criar um filtro no navegador que busca só pelo
+ambiente".
+
+- **RN-PASTA-006.** O "Renomear" do menu da pasta passa a se chamar "Editar pasta…" (F2). O diálogo
+  dele se chama "Editar pasta" e tem o nome e a seção Ambiente (RN-PASTA-005).
+- **RN-AMB-001.** Os ambientes do usuário são os que as pastas e as conexões dele já usam: cada nome
+  distinto (sem diferenciar maiúsculas), com a cor da pasta ou conexão alterada por último. Nada é
+  gravado à parte; o ambiente some da lista quando ninguém mais o usa.
+  - A seção Ambiente (da conexão e da pasta) mostra, acima do campo do nome, os ambientes do
+    usuário como etiquetas coloridas. Escolher uma preenche o nome e a cor, que continuam
+    editáveis.
+  - O campo do nome também completa com eles ao digitar.
+- **RN-NAV-010.** O navegador ganha, ao lado do campo de filtro, um seletor de ambiente: "Todos os
+  ambientes" (o padrão), cada ambiente do usuário (RN-AMB-001) e "Sem ambiente".
+  - Com um ambiente escolhido, a árvore mostra só as conexões cujo ambiente (próprio ou herdado da
+    pasta, RN-PASTA-005) é esse, e as pastas no caminho até elas.
+  - Ele se combina com o campo de filtro de objetos.
+  - A escolha vale enquanto a janela está aberta.
+  - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
