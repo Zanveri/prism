@@ -10,8 +10,8 @@ import type { WorkspaceReport } from "./workspace-messages";
  * A fronteira de confiança do app (decisão 5 da seção 8 da especificação): o endereço e o token
  * da API, o aviso de que ela saiu, o pedido para reiniciá-la, a versão do app (RN-VERSAO-004) e a
  * pasta de dados em uso (só leitura). É tudo o que a tela recebe do processo principal, mais as
- * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`) e as abas que voltam na próxima entrada
- * (`workspace`).
+ * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`), as abas que voltam na próxima entrada
+ * (`workspace`) e o zoom do programa (`zoom`).
  */
 export type PrismBridge = {
   getApiConfig(): Promise<{ baseUrl: string; token: string }>;
@@ -28,6 +28,18 @@ export type PrismBridge = {
   windows: PrismWindows;
   session: PrismSession;
   workspace: PrismWorkspace;
+  zoom: PrismZoom;
+};
+
+/**
+ * O zoom do programa inteiro (RN-ZOOM-001), que mora no processo principal, desta instalação: o de agora, o pedido de outro (o processo principal confere
+ * que é um dos passos de `zoom.ts` e devolve o que ficou) e o aviso de que mudou, por um atalho desta ou de outra janela ou pelas Configurações de outra.
+ * As respostas e o aviso chegam sem tipo: a tela os confere. Os atalhos não passam por aqui: o processo principal os trata antes da página.
+ */
+export type PrismZoom = {
+  get(): Promise<unknown>;
+  set(zoom: number): Promise<unknown>;
+  onChanged(listener: (zoom: unknown) => void): () => void;
 };
 
 /**
@@ -185,6 +197,15 @@ const bridge: PrismBridge = {
     report: (report) => ipcRenderer.invoke("prism:workspace-report", report),
     withdraw: () => ipcRenderer.invoke("prism:workspace-withdraw"),
     flush: () => ipcRenderer.invoke("prism:workspace-flush"),
+  },
+  zoom: {
+    get: () => ipcRenderer.invoke("prism:zoom-get"),
+    set: (zoom) => ipcRenderer.invoke("prism:zoom-set", zoom),
+    onChanged(listener) {
+      const handler = (_event: unknown, zoom: unknown) => listener(zoom);
+      ipcRenderer.on("prism:zoom-changed", handler);
+      return () => ipcRenderer.removeListener("prism:zoom-changed", handler);
+    },
   },
   session: {
     share: (event) => ipcRenderer.invoke("prism:session-share", event),

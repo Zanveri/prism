@@ -1,10 +1,10 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { elementsOf } from "@/lib/testing/react-tree";
 
-import { ContextMenuItems, nextItemIndex, placeMenu, type ContextMenuItem } from "./context-menu";
+import { ContextMenuItems, firstItemOf, moveFocus, nextItemIndex, placeMenu, type ContextMenuItem } from "./context-menu";
 
 describe("placeMenu (o menu não sai da janela)", () => {
   const menu = { width: 220, height: 180 };
@@ -131,6 +131,18 @@ describe("ContextMenuItems (o que o menu desenha e o que um clique em cada item 
     expect(iconColumns([[item("a", "A"), item("b", "B")]])).toBe(0);
   });
 
+  it("o item de escolha única é um menuitemradio com aria-checked, e só o escolhido leva a marca; o comum continua menuitem", () => {
+    const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: [[item("a", "A cada 5 s", { checked: false }), item("b", "A cada 10 s", { checked: true })], [item("c", "Desligar")]], onChoose: () => {} }));
+
+    expect(markup.match(/role="menuitemradio"/g)).toHaveLength(2);
+    expect(markup).toMatch(/role="menuitemradio"[^>]*aria-checked="false"[^>]*>(?:(?!<\/button>).)*A cada 5 s/s);
+    expect(markup).toMatch(/role="menuitemradio"[^>]*aria-checked="true"[^>]*>(?:(?!<\/button>).)*A cada 10 s/s);
+    expect(markup.match(/role="menuitem"/g)).toHaveLength(1);
+    // A marca de escolhido é o desenho do `CheckIcon`, uma vez só; os três reservam a coluna dela.
+    expect(markup.match(/M3\.5 8\.5l3 3 6-7/g)).toHaveLength(1);
+    expect(markup.match(/size-4/g)).toHaveLength(3);
+  });
+
   it("o atalho aparece à direita só no item que tem um", () => {
     const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups: [[item("a", "Abrir registros", { shortcut: "Enter" }), item("b", "Copiar nome")]], onChoose: () => {} }));
 
@@ -143,5 +155,56 @@ describe("ContextMenuItems (o que o menu desenha e o que um clique em cada item 
     expect(markup).not.toContain("<img");
     expect(markup).not.toContain("<b>");
     expect(markup).toContain("&lt;img");
+  });
+});
+
+describe("o foco do teclado nos itens de escolha única (RN-GRADE-014: os intervalos da atualização automática)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /**
+   * O menu desenhado por `ContextMenuItems`, sem DOM: os elementos são os papéis dos itens na ordem da marcação, e a busca do menu acha o elemento cujo
+   * papel o seletor pede (`[role="…"]`, separados por vírgula), como `querySelectorAll` acharia. O foco é o `activeElement` da página de mentira.
+   */
+  function menuOf(groups: ContextMenuItem[][]) {
+    const markup = renderToStaticMarkup(createElement(ContextMenuItems, { groups, onChoose: () => {} }));
+    const page = { activeElement: null as unknown };
+    vi.stubGlobal("document", page);
+    const elements = [...markup.matchAll(/<button[^>]*role="([^"]+)"[^>]*data-item="([^"]+)"/g)].map(([, role, id]) => {
+      const element = { role, id, focus: vi.fn(() => (page.activeElement = element)) };
+      return element;
+    });
+    const matching = (selector: string) => {
+      const roles = [...selector.matchAll(/\[role="([^"]+)"\]/g)].map(([, role]) => role);
+      return elements.filter((element) => roles.includes(element.role));
+    };
+    const menu = { querySelectorAll: matching, querySelector: (selector: string) => matching(selector)[0] ?? null } as unknown as ParentNode;
+    const press = (key: string) => moveFocus({ key, preventDefault: () => {} }, menu);
+    const focused = () => (page.activeElement as { id: string } | null)?.id ?? null;
+    return { menu, elements, press, focused };
+  }
+
+  const item = (id: string, label: string, extra: Partial<ContextMenuItem> = {}): ContextMenuItem => ({ id, label, onSelect: vi.fn(), ...extra });
+  const intervals = [[item("a", "A cada 5 s", { checked: false }), item("b", "A cada 10 s", { checked: true }), item("c", "Personalizado…", { checked: false })], [item("off", "Desligar")]];
+
+  it("o menu do teclado começa no primeiro item, mesmo quando ele é de escolha única", () => {
+    const { menu, elements } = menuOf(intervals);
+
+    expect(elements.map((element) => element.role)).toEqual(["menuitemradio", "menuitemradio", "menuitemradio", "menuitem"]);
+    expect((firstItemOf(menu) as unknown as { id: string }).id).toBe("a");
+  });
+
+  it("as setas andam pelos itens de escolha única e pelos comuns, na ordem, e dão a volta; Home e End também os acham", () => {
+    const { elements, press, focused } = menuOf(intervals);
+
+    elements[0].focus();
+    const visited = ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowDown"].map((key) => (press(key), focused()));
+    expect(visited).toEqual(["b", "c", "off", "a"]);
+
+    press("ArrowUp");
+    expect(focused()).toBe("off");
+    press("Home");
+    expect(focused()).toBe("a");
+    press("End");
+    expect(focused()).toBe("off");
   });
 });

@@ -253,6 +253,46 @@ public sealed class FolderRepositoryTests
         Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
     }
 
+    /// <summary>RN-PASTA-007: a cor da pasta vai ao registro do cofre junto com o resto da pasta, à parte do ambiente.</summary>
+    [Trait("FolderRepository", "Update")]
+    [Fact(DisplayName = "OK grava a cor no registro da pasta, ao lado do ambiente")]
+    public async Task Update_ShouldWriteTheColor()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateFolder(name: "Produção") with { EnvironmentName = "Produção", EnvironmentColor = "#FF8A7A" };
+        var folder = FolderFakers.Create(iD: target.ID, name: "Produção", createdAt: target.CreatedAt, environmentName: "Produção", environmentColor: "#FF8A7A");
+        folder.ChangeColor("#7DB2FF", target.UpdatedAt.AddDays(1));
+        var repository = CreateRepository(Document([target]));
+
+        //Act
+        var result = await repository.Update(folder, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal([new VaultFolderRecord(target.ID, null, "Produção", target.CreatedAt, target.UpdatedAt.AddDays(1), "Produção", "#FF8A7A", "#7DB2FF")], _saved!.Folders);
+        VerifySavedOnce(cancellationToken);
+    }
+
+    [Trait("FolderRepository", "GetByID")]
+    [Fact(DisplayName = "OK devolve a pasta com a cor gravada; a gravada antes dela volta sem cor")]
+    public async Task GetByID_ShouldRestoreTheColor()
+    {
+        //Arrange
+        var colored = VaultFakers.CreateFolder(name: "Produção") with { Color = "#7DB2FF" };
+        var before = VaultFakers.CreateFolder(name: "Geral");
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(Document([colored, before])));
+        var repository = new FolderRepository(_vault.Object);
+
+        //Act
+        var withColor = await repository.GetByID(colored.ID, CancellationToken.None);
+        var withoutColor = await repository.GetByID(before.ID, CancellationToken.None);
+
+        //Assert
+        Assert.Equal("#7DB2FF", withColor.Value.Color);
+        Assert.Null(withoutColor.Value.Color);
+    }
+
     /// <summary>Só a caixa muda: a pasta continua sendo a mesma chave entre as irmãs, e não colide com ela mesma.</summary>
     [Trait("FolderRepository", "Update")]
     [Fact(DisplayName = "OK a pasta não conta como irmã de si mesma")]

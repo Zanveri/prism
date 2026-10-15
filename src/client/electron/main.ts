@@ -11,7 +11,7 @@ import { userDataDir } from "./data-dir";
 import { permissionAllowed } from "./permissions";
 import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
-import { createSplash } from "./splash";
+import { createSplash, splashGeometry } from "./splash";
 import { startUp } from "./startup";
 import { installedForAllUsers } from "./update/install-scope";
 import { createHttpGet } from "./update/net-transport";
@@ -20,6 +20,8 @@ import { createUpdater, type Updater } from "./update/updater";
 import { createWindowHub, newWindowBounds, type HubWindow, type Rect } from "./window-hub";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "./workspace-hub";
 import type { SavedWorkspace } from "./workspace-messages";
+import { isAppZoom, nextAppZoom, zoomFactor, zoomShortcut, type AppZoom } from "./zoom";
+import { readAppZoom, writeAppZoom, zoomFileName } from "./zoom-file";
 
 // A pasta de dados tem de ser fixada antes de qualquer leitura de `userData`, do `requestSingleInstanceLock` (que
 // a usa) e do `whenReady`: `%APPDATA%\Zanveri\Prism` empacotado e `%APPDATA%\Zanveri\Prism-dev` em desenvolvimento (`data-dir.ts`).
@@ -57,7 +59,33 @@ let lastWindowId = 0;
 /** As janelas que a pessoa fechou e cuja tela já fechou as abas (ou não tinha o que perguntar): o `close` delas passa. */
 const closeApproved = new Set<number>();
 
-/** As janelas ainda vivas, para os avisos que vão a todas (a API saiu, o estado da atualização). */
+/**
+ * O zoom do programa inteiro (RN-ZOOM-001), desta instalação: lido da pasta de dados ao abrir (o splash e a primeira janela já nascem nele) e mudado pelos
+ * atalhos de qualquer janela (`before-input-event`, em `createAppWindow`) e por Configurações › Aparência (`prism:zoom-set`). Vale para todas as janelas,
+ * também as que abrem depois. O Chromium guarda o zoom por origem, e as janelas do app são todas da mesma: mesmo assim cada uma recebe o valor, quem
+ * nasce depois o recebe no `webPreferences`, e cada navegação de uma janela (a recarga) o recebe de novo (`did-navigate`).
+ */
+const zoomFile = join(app.getPath("userData"), zoomFileName);
+let appZoom: AppZoom = readAppZoom(zoomFile);
+
+/** Aplica o zoom em todas as janelas, avisa as telas (a de Configurações mostra o valor) e grava. Gravar que falha só vai para o log: vale até fechar. */
+function changeZoom(next: AppZoom): AppZoom {
+  if (next === appZoom) return appZoom;
+
+  appZoom = next;
+  for (const window of liveWindows()) {
+    window.webContents.setZoomFactor(zoomFactor(next));
+    window.webContents.send("prism:zoom-changed", next);
+  }
+  try {
+    writeAppZoom(zoomFile, next);
+  } catch (error) {
+    console.log(`[prism] zoom: não foi gravado: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return appZoom;
+}
+
+/** As janelas ainda vivas, para os avisos que vão a todas (a API saiu, o estado da atualização, o zoom). */
 function liveWindows(): BrowserWindow[] {
   return [...appWindows.values()].filter((window) => !window.isDestroyed());
 }
@@ -198,6 +226,17 @@ ipcMain.handle("prism:api-restart", async (event) => {
 ipcMain.handle("prism:data-folder", (event) => {
   assertFromApp(event);
   return app.getPath("userData");
+});
+
+/** O zoom do programa (RN-ZOOM-001): o de agora, e o pedido de outro, que só vale se for um dos passos. A resposta é o que ficou. */
+ipcMain.handle("prism:zoom-get", (event) => {
+  assertFromApp(event);
+  return appZoom;
+});
+ipcMain.handle("prism:zoom-set", (event, zoom: unknown) => {
+  assertFromApp(event);
+  if (!isAppZoom(zoom)) throw new Error("Zoom fora dos passos.");
+  return changeZoom(zoom);
 });
 
 /**
@@ -346,7 +385,15 @@ function createAppWindow(bounds?: Rect) {
     backgroundColor: "#0E1114",
     // RN-SHELL-001.
     // A versão (RN-VERSAO-004) e o número da janela (RN-ABAS-003) vão como argumentos: o preload os lê em `process.argv` (`app-version.ts`).
-    webPreferences: { preload: join(__dirname, "../preload/preload.js"), contextIsolation: true, sandbox: true, nodeIntegration: false, additionalArguments: [versionArgument(app.getVersion()), windowArgument(id)] },
+    // RN-ZOOM-001: a janela já nasce no zoom do programa, sem um quadro em 100% antes.
+    webPreferences: {
+      preload: join(__dirname, "../preload/preload.js"),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      additionalArguments: [versionArgument(app.getVersion()), windowArgument(id)],
+      zoomFactor: zoomFactor(appZoom),
+    },
   });
   appWindows.set(id, window);
 
@@ -357,9 +404,26 @@ function createAppWindow(bounds?: Rect) {
     if (devServerUrl === undefined || url.split("#")[0] !== new URL(devServerUrl).href) event.preventDefault();
   });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // RN-ZOOM-001: Ctrl +, Ctrl − e Ctrl 0 (Cmd no macOS) em qualquer tela e com o foco em qualquer lugar (`zoomShortcut`, com teste). A tecla é tratada aqui,
+  // antes da página e do menu: o editor e a grade não a veem, o menu padrão de desenvolvimento não muda o zoom por fora, e o app empacotado do Windows e
+  // do Linux, que não tem menu, tem o atalho do mesmo jeito.
   // RN-GRADE-012: F5 e Ctrl+R nunca recarregam a janela (o texto das abas de SQL se perderia), e F5 e F11 chegam à tela (atualizar e o "Filtrar" da grade):
   // o menu, que só existe em desenvolvimento e no macOS, não recebe essas teclas (`menuShortcutIgnored`, com teste).
-  window.webContents.on("before-input-event", (_event, input) => window.webContents.setIgnoreMenuShortcuts(menuShortcutIgnored(input)));
+  window.webContents.on("before-input-event", (event, input) => {
+    const step = zoomShortcut(input, process.platform);
+    if (step !== null) {
+      event.preventDefault();
+      changeZoom(nextAppZoom(appZoom, step));
+      return;
+    }
+    window.webContents.setIgnoreMenuShortcuts(menuShortcutIgnored(input));
+  });
+  // RN-ZOOM-001: o `webPreferences.zoomFactor` é o zoom com que a janela nasceu, e o Electron o aplica de novo a cada navegação do quadro principal (a
+  // recarga das outras janelas no "Reiniciar" da API, a do Vite) quando o Chromium não guarda zoom para a origem. Voltar a 100% apaga o que a origem
+  // guardava (100% é o padrão dele): sem isto, a janela que nasceu em outro zoom voltaria a ele ao recarregar, e levaria junto as outras da mesma origem,
+  // com o `zoom.json` e Configurações dizendo 100%. Também cobre o zoom mudado enquanto a janela nova ainda carregava (o `setZoomFactor` num quadro que
+  // não existe ainda não vale). As rotas em hash não navegam o documento e não passam aqui.
+  window.webContents.on("did-navigate", () => window.webContents.setZoomFactor(zoomFactor(appZoom)));
 
   // A página que recarrega (ou cujo processo caiu) desmonta a área de trabalho sem avisar: ela deixa de estar pronta para receber abas, e fechar a
   // janela deixa de perguntar até ela montar de novo.
@@ -541,7 +605,8 @@ if (!app.requestSingleInstanceLock()) {
     // RN-MARCA-002 a 004. A falha da API já foi para o log em `launchApi`, e a janela principal
     // mostra o motivo com "Reiniciar"; um erro de outra parte da abertura vai para o log também.
     return startUp({
-      showSplash: () => createSplash({ iconPath, version: app.getVersion() }),
+      // RN-ZOOM-001: o splash já aparece no zoom do programa, do tamanho que couber na tela.
+      showSplash: () => createSplash({ iconPath, version: app.getVersion(), geometry: splashGeometry(zoomFactor(appZoom), screen.getPrimaryDisplay().workAreaSize) }),
       startApi: launchApi,
       createMainWindow,
     });

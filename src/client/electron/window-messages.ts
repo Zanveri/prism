@@ -87,10 +87,19 @@ export const tabTransferSchema = z.object({
     sql: z.string().max(maxSqlLength),
     table: z.object({ schema: name, name, view: z.enum(["data", "structure", "diagram"]) }).optional(),
     /**
-     * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o banco em que foi salvo (sem ele, o da conexão); a mudança não salva, a janela que
-     * recebe a refaz pelo texto e pelo banco da aba (RN-ARVORE-007).
+     * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o lugar em que foi salvo: a conexão e o banco (sem ele, o da conexão), ou o genérico
+     * (RN-SCRIPT-005); a mudança não salva, a janela que recebe a refaz pelo texto e pelo lugar da aba (RN-SCRIPT-003).
      */
-    script: z.object({ id: z.uuid(), name: z.string().min(1).max(200), savedSql: z.string().max(maxSqlLength), savedDatabase: z.string().min(1).max(10_000).optional() }).optional(),
+    script: z
+      .object({
+        id: z.uuid(),
+        name: z.string().min(1).max(200),
+        savedSql: z.string().max(maxSqlLength),
+        generic: z.literal(true).optional(),
+        savedConnectionId: id.optional(),
+        savedDatabase: z.string().min(1).max(10_000).optional(),
+      })
+      .optional(),
   }),
   /** A seleção do editor (o cursor é a seleção vazia), em posições do texto. */
   editor: z.object({ anchor: count, head: count }).nullable(),

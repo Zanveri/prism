@@ -6,7 +6,7 @@ import type { Connection, Folder } from "./connections.schema";
 const now = "2026-10-09T12:00:00Z";
 
 function folder(id: string, name: string, parentID: string | null = null): Folder {
-  return { id, parentID, name, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+  return { id, parentID, name, environmentName: null, environmentColor: null, color: null, createdAt: now, updatedAt: now };
 }
 
 function connection(id: string, name: string, folderID: string | null = null): Connection {

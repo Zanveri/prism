@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
@@ -10,12 +10,19 @@ import { refreshKey } from "../_lib/grid-editing";
 import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/result-layout";
 import { saveShortcut } from "../_lib/saved-scripts";
+import { scriptsCopy } from "../_lib/scripts.copy";
+import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
-import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
+import { isPersonBusy, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
 import { canClear } from "../_lib/table-view";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
+import { useAutoRefresh } from "../_lib/use-auto-refresh";
+import { useConnectedIds } from "../_lib/use-connected-ids";
+import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import type { QueryTab, TableView } from "../_lib/workbench-model";
+import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
+import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
@@ -23,7 +30,7 @@ import { ResultActions } from "./result-actions";
 import { resultEditDialogs } from "./result-edit-dialogs";
 import { ResultPanel } from "./result-panel";
 import { ResultSplitter } from "./result-splitter";
-import { NoConnectionBarView } from "./script-dialogs";
+import { NoConnectionBarView, type NoConnectionReason } from "./script-dialogs";
 import { RecordsFilter } from "./table-tab/records-filter";
 import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
 
@@ -38,21 +45,39 @@ type QueryTabPanelProps = {
   onEdited: (tabId: string) => void;
   /** RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S com o foco em qualquer lugar da aba (o editor, a barra, o resultado). */
   onSave: (tabId: string, mode: "save" | "saveAs") => void;
-  /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu. */
-  onAssignConnection: (tabId: string, connectionId: string) => void;
+  /**
+   * RN-ARVORE-008: a aba passa a outra conexão (pelo botão da conexão, ou a aba sem conexão pela faixa, RN-SCRIPT-003 e 005), depois da pergunta das
+   * alterações não salvas. Estável.
+   */
+  onSwitchConnection: (tabId: string, connectionId: string) => void;
   /** RN-LINK-001: o Ctrl+clique no nome de uma tabela abre a aba dela nos Registros, na conexão e no banco desta aba. Estável. */
   onOpenTable: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
   /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
   onSwitchDatabase: (tabId: string, database: string | undefined) => void;
 };
 
-/** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
-function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScript: boolean; onAssign: (tabId: string, connectionId: string) => void }) {
+/**
+ * RN-SCRIPT-003 e 005: a faixa da aba sem conexão, com as conexões cadastradas para escolher: as conectadas primeiro, com o caminho de pastas, na ordem da
+ * lista do botão da conexão (RN-ARVORE-008). Nada vem escolhido: a pessoa diz em qual o SQL vai rodar.
+ */
+function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onAssign: (connectionId: string) => void }) {
   const connections = useQuery(connectionsQuery);
+  const folders = useQuery(foldersQuery);
+  const connected = useConnectedIds(connections.data);
   const [value, setValue] = useState("");
-  const options = (connections.data ?? []).map((connection) => ({ value: connection.id, label: connection.name }));
+  const options = connectionChoices(connections.data ?? [], folders.data ?? [], connected).map(({ connection, path, connected: isConnected }) => ({
+    value: connection.id,
+    label: connection.name,
+    content: (
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="min-w-0 truncate">{connection.name}</span>
+        {path === "" ? null : <span className="min-w-0 truncate text-xs text-muted">{path}</span>}
+        {isConnected ? <span className="flex-none text-xs text-success">{scriptsCopy.noConnection.connectedMark}</span> : null}
+      </span>
+    ),
+  }));
 
-  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={(connectionId) => onAssign(tabId, connectionId)} forScript={forScript} />;
+  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={onAssign} reason={reason} />;
 }
 
 /**
@@ -69,7 +94,7 @@ function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScr
  * atalhos (`useRecordEdits`). Com alterações não salvas, executar outro comando e "Executar de novo" perguntam antes (RN-EDIT-007); o Salvar deixa
  * a grade com o que foi salvo, sem executar de novo, e o cursor que estava aberto fecha (RN-EDIT-009).
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
@@ -79,8 +104,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [layout, dispatch] = useReducer(layoutReducer, tab.id, (tabId) => recall(tabId, "layout") ?? initialLayout);
   useEffect(() => remember(tab.id, "layout", layout), [tab.id, layout]);
 
-  // "Carregar mais" também ocupa a sessão (RN-SESSAO-002), e a contagem em andamento também se cancela (RN-SQL-010).
-  const busy = state.status === "running" || (state.status === "rows" && (state.loadingMore || state.counting));
+  // "Carregar mais" também ocupa a sessão (RN-SESSAO-002), e a contagem em andamento também se cancela (RN-SQL-010). A execução da atualização automática
+  // não ocupa a aba para a pessoa (RN-GRADE-014): "Executar" não vira "Cancelar", e o comando dela toma o lugar da automática.
+  const busy = isPersonBusy(state);
   const cancelling = (state.status === "running" || state.status === "rows") && state.cancelling;
   // O erro que está na tela, inclusive enquanto um comando novo roda: a marca dele no editor dura o que ele durar.
   const shown = state.status === "running" ? state.previous : state;
@@ -103,6 +129,14 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [filterApplied, setFilterApplied] = useState("");
   const [filterProblem, setFilterProblem] = useState<{ message: string } | null>(null);
   const [pinned, setPinned] = useState<RunTarget | null>(null);
+  // O filtro é do resultado do executor da aba. Trocar o banco (RN-ARVORE-007) ou a conexão (RN-ARVORE-008) da aba, e o bloqueio por inatividade, dão a ela
+  // um executor novo, sem resultado: o filtro do resultado anterior sai junto. Sem isso o campo ficava à vista com o comando fixado (`pinned`) do resultado
+  // anterior, e "Aplicar" o executava, com o filtro, no banco ou na conexão novos. Ajuste durante a renderização: o campo velho não chega a aparecer.
+  const [filterRunner, setFilterRunner] = useState(runner);
+  if (filterRunner !== runner) {
+    setFilterRunner(runner);
+    clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+  }
   const base = filterBaseOf(state, pinned);
   const filterNow = useRef({ base, draft: filterDraft, applied: filterApplied });
   useEffect(() => {
@@ -130,7 +164,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
 
-  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun });
+  // RN-GRADE-014: a atualização automática do resultado, na barra dele e no menu da grade. Só a aba à vista (a ativa, com a área de trabalho na tela) a deixa
+  // executar; escondida, ela espera.
+  const onScreen = useWorkbenchOnScreen();
+  const auto = useAutoRefresh(runner, active && onScreen);
+
+  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun, autoRefresh: auto.source });
   const { guard } = edits;
   useEffect(() => {
     guardRef.current = guard;
@@ -139,20 +178,23 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
   // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
   // RN-EDIT-007: o comando que vai ser enviado, com alterações não salvas, espera a resposta da pergunta; o que o executor recusaria não pergunta nada.
+  // RN-SQL-018: o destaque do comando enviado acende só aqui, quando ele vai mesmo ao banco: sem conexão o executor só pede uma (RN-SCRIPT-003).
+  const hasConnection = tab.connectionId !== null;
   const handleRun = useCallback(
-    (target: RunTarget) => {
+    (target: RunTarget, flash: () => void) => {
       const go = () => {
-        if (commandWillRun(target, isBusyState(runner.getState()))) {
+        if (commandWillRun(target, isPersonBusy(runner.getState()))) {
           dispatch({ type: "run" });
           // RN-GRADE-011: o comando do editor vai sem o filtro do resultado, e o campo fica limpo.
           clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+          if (hasConnection) flash();
         }
         void runner.run(target);
       };
-      if (commandWillRun(target, isBusyState(runner.getState()))) guard(go);
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(go);
       else go();
     },
-    [runner, guard],
+    [runner, guard, hasConnection],
   );
   const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
   useEffect(() => {
@@ -168,13 +210,24 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
   const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
 
+  // RN-ARVORE-008: trocar a conexão pergunta o mesmo antes; o resultado sai com o executor de antes, e a aba vai ao banco padrão da conexão nova.
+  const [pickingConnection, setPickingConnection] = useState(false);
+  const handleChooseConnection = useCallback((connectionId: string) => guard(() => onSwitchConnection(tab.id, connectionId)), [guard, onSwitchConnection, tab.id]);
+
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     // RN-GRADE-012: F5 executa de novo o comando do resultado, com o filtro ("Executar de novo"), com o foco em qualquer ponto da aba; com algo em
     // andamento, nada. O campo de edição da célula não deixa a tecla subir.
     if (!event.defaultPrevented && refreshKey(event)) {
       event.preventDefault();
-      if (!isBusyState(runner.getState())) handleRerun();
+      if (!isPersonBusy(runner.getState())) handleRerun();
+      return;
+    }
+    // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre a lista das conexões desta aba, e fecha com o foco no botão dela. Com o foco dentro da lista (a busca),
+    // o teclado não sobe até aqui, e quem a fecha pelo mesmo atalho é ela.
+    if (!event.defaultPrevented && connectionShortcut(event)) {
+      event.preventDefault();
+      setPickingConnection((open) => !open);
       return;
     }
     const mode = event.defaultPrevented ? null : saveShortcut(event);
@@ -195,14 +248,15 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   return (
     <>
       <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
-        {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} forScript={tab.script !== undefined} onAssign={onAssignConnection} /> : null}
+        {tab.connectionId === null ? <NoConnectionBar reason={tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
         <EditorToolbar
           busy={busy}
           cancelling={cancelling}
           runnable={runnable}
           onRun={() => editor.current?.run()}
           onCancel={handleCancel}
-          database={connectionId === null ? null : <DatabasePicker connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
+          connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
+          database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
         />
   
         <div ref={area} className="flex min-h-0 flex-1 flex-col">
@@ -236,12 +290,15 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             style={{ flex: flex.result }}
             actions={<ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} />}
             nullText={preferences.results.nullText}
-            autoLoadMore={preferences.results.autoLoadMore}
+            // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão. Cada execução volta à primeira página, e a
+            // grade que ficou no fim (a rolagem fica) pediria a seguinte a cada intervalo, segurando o bloqueio por inatividade e lendo de novo à toa.
+            autoLoadMore={preferences.results.autoLoadMore && auto.state.status !== "on"}
             onLoadMore={loadMore}
             onCount={() => void runner.countTotal()}
             onRerun={handleRerun}
             editing={edits.editing}
             banner={<EditsBanner {...edits.banner} />}
+            autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} onChoose={auto.choose} />}
             filter={
               base === null ? undefined : (
                 <RecordsFilter
@@ -268,6 +325,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       </div>
       {/* Fora da caixa que trata o Ctrl+S do script: os diálogos e o menu vão por portal, e o teclado deles subiria até ela pela árvore do React. */}
       {resultEditDialogs(edits)}
+      {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
     </>
   );
 });

@@ -105,7 +105,7 @@ describe("withDatabase: a aba de consulta passa a outro banco do servidor (RN-AR
   });
 
   it("a aba de um script fica com mudança não salva enquanto o banco não é o salvo, e sem ela ao voltar ao banco salvo com o texto salvo (RN-SCRIPT-001)", () => {
-    const script = { id: "s1", name: "Fechamento", savedSql: "select 1", dirty: false };
+    const script = { id: "s1", name: "Fechamento", savedSql: "select 1", savedConnectionId: "c1", dirty: false };
     const moved = withDatabase({ ...tab, script }, "vendas");
     const back = withDatabase(moved!, undefined);
     const edited = withDatabase(moved!, undefined, "select 3");

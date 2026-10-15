@@ -6,7 +6,8 @@ namespace Prism.Application.Common.Environments;
 /// <summary>
 /// O ambiente (nome e cor) da conexão (RN-CONN-010) e da pasta (RN-PASTA-005) é uma regra só: o limite, o formato, a mensagem e a normalização moram
 /// aqui, e os validators e os domínios das duas a aplicam daqui, sem repetir. O código de erro é de quem valida (`CONNECTION_INVALID` na conexão,
-/// `FOLDER_NAME_INVALID` na pasta), por isso fica fora.
+/// `FOLDER_NAME_INVALID` na pasta), por isso fica fora. A regra da cor vale também para a cor da pasta (RN-PASTA-007) e para a do ícone do script
+/// (RN-SCRIPT-006): é a mesma `#RRGGBB`, com a mesma normalização.
 /// </summary>
 internal static class EnvironmentRules
 {

@@ -200,7 +200,7 @@ describe("a dica da linha da conexão (o que a lista da tela de Conexões mostra
 
 describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () => {
   const now = "2026-10-13T12:00:00Z";
-  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
   const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 1, hasChildren: true };
   const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
@@ -222,5 +222,83 @@ describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () =>
 
     expect(pill(markup)).toBeDefined();
     expect(pill(markup)).not.toContain("title=");
+  });
+});
+
+describe("a cor da pasta no ícone dela (RN-PASTA-007)", () => {
+  const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
+  /** O `<span>` em volta do ícone da linha, com o estilo dele. */
+  const iconSpan = (markup: string) => /<span[^>]*class="flex-none text-subtle[^"]*"[^>]*>\s*<svg/.exec(markup)?.[0] ?? "";
+
+  it("pinta o ícone, aberta ou fechada, com a cor ajustada ao contraste do tema (light-dark), e o ícone continua o da pasta", () => {
+    for (const open of [false, true]) {
+      const markup = render(folderNode, { open, folderColor: "#F2B644" });
+
+      expect(iconSpan(markup)).toMatch(/style="color:light-dark\(#[0-9A-F]{6}, #F2B644\)"/);
+    }
+  });
+
+  it("sem cor, o ícone é o neutro de sempre", () => {
+    expect(iconSpan(render(folderNode))).not.toContain("style=");
+    expect(iconSpan(render(folderNode, { folderColor: null }))).not.toContain("style=");
+  });
+
+  it("a cor e o ambiente vão juntos: a cor no ícone, a etiqueta do ambiente ao lado do nome", () => {
+    const markup = render(folderNode, { folderColor: "#7DB2FF", environment: { name: "Produção", color: "#FF8A7A", folder: null } });
+
+    expect(iconSpan(markup)).toContain("#7DB2FF");
+    expect(markup).toMatch(/<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/);
+  });
+
+  it("só a linha da pasta leva a cor: o esquema usa o mesmo desenho e fica neutro", () => {
+    const schema: NavNode = { key: "s", kind: "schema", label: "public", depth: 1, hasChildren: true };
+
+    expect(iconSpan(render(schema, { folderColor: "#7DB2FF" }))).not.toContain("style=");
+  });
+});
+
+describe("a densidade do navegador na linha (RN-NAV-011)", () => {
+  const now = "2026-10-15T12:00:00Z";
+  const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 0, hasChildren: true };
+  const [table] = objectNodes("c1", "public", "tables", [{ name: "pedido", kind: "table" }]);
+  const loading: NavNode = { key: "k#loading", kind: "loading", label: "Carregando…", depth: 2, hasChildren: false };
+  const rowClass = (markup: string) => /^<div[^>]* class="([^"]*)"/.exec(markup)?.[1].split(" ") ?? [];
+  const paddingOf = (markup: string) => Number(/padding-left:(\d+)px/.exec(markup)?.[1]);
+  const actionSizes = (markup: string) => [...markup.matchAll(/<button type="button" aria-label="[^"]*" title="[^"]*" class="([^"]*)"/g)].map((match) => match[1].split(" ").filter((name) => name.startsWith("size-")));
+
+  it("sem a escolha, a confortável, a do canvas: linha de 30 px, recuo de 10 px na raiz e 16 por nível, botões de ação de 24 px", () => {
+    const markup = render(connectionNode, { connection, status: "connected" });
+
+    expect(rowClass(markup)).toContain("h-[30px]");
+    expect(paddingOf(markup)).toBe(10);
+    expect(paddingOf(render(table))).toBe(10 + table.depth * 16);
+    expect(actionSizes(markup)).toEqual([["size-6"], ["size-6"], ["size-6"]]);
+  });
+
+  it("a compacta: linha de 22 px, recuo de 6 px na raiz e 12 por nível, e os três botões de ação de 20 px, que cabem nela", () => {
+    const markup = render(connectionNode, { connection, status: "connected", density: "compact" });
+
+    expect(rowClass(markup)).toContain("h-[22px]");
+    expect(rowClass(markup)).not.toContain("h-[30px]");
+    expect(paddingOf(markup)).toBe(6);
+    expect(paddingOf(render(table, { density: "compact" }))).toBe(6 + table.depth * 12);
+    expect(actionSizes(markup)).toEqual([["size-5"], ["size-5"], ["size-5"]]);
+    // O conteúdo se afasta dos três botões, no passo da compacta (22 px cada, e a folga da borda).
+    expect(markup).toContain("--actions-width:74px");
+  });
+
+  it("na compacta a etiqueta do banco, a do ambiente e o ponto de estado continuam na linha", () => {
+    const markup = render(connectionNode, { connection, status: "connected", density: "compact", environment: { name: "Produção", color: "#FF8A7A", folder: null } });
+
+    expect(markup).toContain(">PG</span>");
+    expect(markup).toContain(">Produção</span>");
+    expect(markup).toContain('aria-label="Conectada"');
+  });
+
+  it("a linha de \"carregando\" tem a altura da densidade; a de erro, a que a mensagem pede", () => {
+    expect(rowClass(render(loading))).toContain("h-[30px]");
+    expect(rowClass(render(loading, { density: "compact" }))).toContain("h-[22px]");
+    expect(rowClass(render(error(), { density: "compact" })).some((name) => name.startsWith("h-"))).toBe(false);
   });
 });

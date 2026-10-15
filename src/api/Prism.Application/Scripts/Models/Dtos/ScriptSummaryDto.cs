@@ -11,5 +11,9 @@ public sealed record ScriptSummaryDto
 
     /// <summary>Nulo é o banco da conexão.</summary>
     public string? Database { get; init; }
+
+    /// <summary>RN-SCRIPT-006: um ícone da lista fechada, nulo no padrão (o documento), e a cor dele, nula no script sem cor.</summary>
+    public string? Icon { get; init; }
+    public string? Color { get; init; }
     public DateTime UpdatedAt { get; init; }
 }

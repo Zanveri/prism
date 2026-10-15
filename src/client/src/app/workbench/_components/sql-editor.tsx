@@ -18,6 +18,7 @@ import { cachedLevels, sqlCompletion } from "../_lib/sql-completion";
 import { tableLinks } from "../_lib/table-link-extension";
 import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type TableLink } from "../_lib/table-links";
 import { liveEditors } from "../_lib/live-editors";
+import { flashRun, runFlash } from "../_lib/run-flash";
 import { keywordCase } from "../_lib/sql-keyword-case";
 import { hasStatement, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
@@ -116,15 +117,49 @@ const errorMark = StateField.define<DecorationSet>({
 
 /**
  * O que "Executar" envia (RN-SQL-001): o texto selecionado, como está; sem seleção, o comando onde
- * está o cursor, separado pelas regras do banco da aba (RN-SQL-002). Sem comando nenhum o texto vai
- * vazio: quem executa é que diz "não há comando", e também quando a seleção tem mais de um.
+ * está o cursor, separado pelas regras do banco da aba (RN-SQL-002) e, com `blankLines` (a preferência
+ * "A linha em branco separa os comandos", RN-SQL-018), também pela linha em branco. Sem comando nenhum
+ * o texto vai vazio: quem executa é que diz "não há comando", e também quando a seleção tem mais de um.
  */
-function runTarget(state: EditorState, engine: Engine | undefined): RunTarget {
+export function runTarget(state: EditorState, engine: Engine | undefined, blankLines: boolean): RunTarget {
   const { from, to, head } = state.selection.main;
   if (from !== to) return { sql: state.sliceDoc(from, to), offset: from, engine };
 
-  const statement = statementAt(state.doc.toString(), head, engine);
+  const statement = statementAt(state.doc.toString(), head, engine, { blankLines });
   return statement === null ? { sql: "", offset: head, engine } : { sql: statement.text, offset: statement.start, engine };
+}
+
+/**
+ * O trecho que pisca quando "Executar" envia `target` (RN-SQL-018): sem seleção, o comando do cursor, exatamente o que foi enviado; com a linha em
+ * branco separando, é assim que a pessoa vê qual comando o cursor pegou. A seleção já está à vista e não pisca; sem comando, nada pisca.
+ */
+export function flashRangeOf(state: EditorState, target: RunTarget): { from: number; to: number } | null {
+  if (!state.selection.main.empty || target.sql === "") return null;
+  return { from: target.offset, to: target.offset + target.sql.length };
+}
+
+/**
+ * O efeito que acende agora o destaque de `range` (de `flashRangeOf`, no instante do Ctrl+Enter), ou `null` quando nada pisca: entre apertar e
+ * enviar pode vir a pergunta das alterações não salvas da grade (RN-EDIT-007), e o trecho só pisca se ainda é o texto `sql` que foi enviado.
+ */
+export function flashEffect(state: EditorState, range: { from: number; to: number } | null, sql: string): StateEffect<unknown> | null {
+  return range !== null && state.sliceDoc(range.from, range.to) === sql ? flashRun(range.from, range.to) : null;
+}
+
+/**
+ * O que "Executar" envia agora (`runTarget`) e o destaque dele (RN-SQL-018), que quem executa acende só quando o comando vai mesmo ao banco: com a
+ * aba ocupada, sem conexão ou com a pergunta das alterações não salvas cancelada, nada foi enviado, e nada pode piscar.
+ */
+function sendFrom(view: EditorView, engine: Engine | undefined, blankLines: boolean): { target: RunTarget; flash: () => void } {
+  const target = runTarget(view.state, engine, blankLines);
+  const range = flashRangeOf(view.state, target);
+  return {
+    target,
+    flash: () => {
+      const effect = flashEffect(view.state, range, target.sql);
+      if (effect !== null) view.dispatch({ effects: effect });
+    },
+  };
 }
 
 /**
@@ -140,7 +175,9 @@ function docHasStatement(doc: Text, engine: Engine | undefined): boolean {
 /**
  * Se há comando para enviar, sem separar os comandos: roda a cada tecla e a cada movimento do
  * cursor, e o texto pode ter milhares de linhas. Sem seleção, há comando no cursor sempre que o
- * texto tem algum (`statementAt`). É o que habilita o botão "Executar".
+ * texto tem algum (`statementAt`), menos com o cursor na linha em branco que só separou um
+ * comentário do comando de baixo, sem comando acima (RN-SQL-018): o botão continua habilitado, e
+ * quem executa diz que não há comando. É o que habilita o botão "Executar".
  */
 function isRunnable(state: EditorState, engine: Engine | undefined): boolean {
   const { from, to } = state.selection.main;
@@ -173,7 +210,11 @@ type SqlEditorProps = {
   autoFocus: boolean;
   /** A posição, no texto, do erro que o banco apontou. */
   errorAt: number | null;
-  onRun: (target: RunTarget) => void;
+  /**
+   * Ctrl+Enter e o botão "Executar": `target` é o que vai ao executor, e `flash` acende o destaque do comando enviado (RN-SQL-018). Quem executa só
+   * chama `flash` quando o comando vai mesmo ao banco, e depois da pergunta das alterações não salvas, quando ela vier.
+   */
+  onRun: (target: RunTarget, flash: () => void) => void;
   /** O texto, com atraso: depois de uma pausa na digitação, ao perder o foco e ao desmontar. */
   onChange: (sql: string) => void;
   onRunnableChange: (runnable: boolean) => void;
@@ -204,7 +245,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   // Com "seguir o sistema", o esquema vem do sistema, e muda com o app aberto.
   const systemIsLight = useSyncExternalStore(subscribeSystemScheme, systemPrefersLight, () => false);
   const dark = resolveScheme(preferences.theme, systemIsLight) === "dark";
-  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords } = preferences.editor;
+  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, blankLineSeparates } = preferences.editor;
   // Os nomes sugeridos são os da árvore da conexão DESTA aba, que ela passa por propriedade: as abas ficam todas montadas, e ler a aba ativa
   // daria ao editor de uma aba os nomes da conexão de outra.
   const queryClient = useQueryClient();
@@ -214,9 +255,11 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const applied = useRef(`${fontFamily}|${fontSize}|${tabSize}|${dark}`);
   // O banco de agora, lido pelas funções do editor na hora em que rodam (executar, separar o comando, sugerir).
   const engineNow = useRef(engine);
+  // RN-SQL-018: a linha em branco separa os comandos? Lida na hora de executar: não muda nada no editor, e não precisa de compartimento.
+  const blankLinesNow = useRef(blankLineSeparates);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
 
-  const emitRun = useEffectEvent((target: RunTarget) => onRun(target));
+  const emitRun = useEffectEvent((target: RunTarget, flash: () => void) => onRun(target, flash));
   const emitChange = useEffectEvent((text: string) => onChange(text));
   const emitRunnable = useEffectEvent((runnable: boolean) => onRunnableChange(runnable));
   const emitEdited = useEffectEvent(() => onEdited());
@@ -247,8 +290,9 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
       emitChange(editor.state.doc.toString());
     }
 
-    function run(state: EditorState) {
-      emitRun(runTarget(state, engineNow.current));
+    function run(view: EditorView) {
+      const { target, flash } = sendFrom(view, engineNow.current, blankLinesNow.current);
+      emitRun(target, flash);
       return true;
     }
 
@@ -272,9 +316,10 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           tabSlot.of(tabSettings(initial.editor.tabSize)),
           caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine) : []),
           errorMark,
+          runFlash,
           tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
           // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco.
-          Prec.highest(keymap.of([{ key: "Mod-Enter", run: (target) => run(target.state) }])),
+          Prec.highest(keymap.of([{ key: "Mod-Enter", run }])),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.contentAttributes.of({ "aria-label": workbenchCopy.editor.label }),
@@ -308,6 +353,10 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
       view.current = null;
     };
   }, [initial]);
+
+  useEffect(() => {
+    blankLinesNow.current = blankLineSeparates;
+  }, [blankLineSeparates]);
 
   // A fonte, o tamanho, a tabulação e o esquema de cor mudam no editor que já existe, sem recriá-lo.
   useEffect(() => {
@@ -353,7 +402,8 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
         const editor = view.current;
         if (editor === null) return;
 
-        onRun(runTarget(editor.state, engineNow.current));
+        const { target, flash } = sendFrom(editor, engineNow.current, blankLinesNow.current);
+        onRun(target, flash);
         editor.focus();
       },
       focus: () => view.current?.focus(),

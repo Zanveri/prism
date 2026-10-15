@@ -4,6 +4,7 @@ import type { PrismBridge, PrismWorkspace } from "../../../electron/preload";
 import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowCloseRequestSchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowCloseRequest, type WindowEntry } from "../../../electron/window-messages";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "../../../electron/workspace-hub";
 import type { SavedWorkspace } from "../../../electron/workspace-messages";
+import { isAppZoom, type AppZoom } from "../../../electron/zoom";
 
 declare global {
   interface Window {
@@ -28,6 +29,39 @@ export async function readDataFolder(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * O zoom do programa inteiro (RN-ZOOM-001), que o processo principal guarda e aplica. A ponte é a fronteira de confiança: só um dos passos (`isAppZoom`) é
+ * resposta. Sem zoom (`null`) quando a ponte não existe (a tela fora do Electron, onde o zoom é o do próprio navegador), não responde ou responde outra
+ * coisa: a tela passa sem o controle.
+ */
+export async function currentAppZoom(): Promise<AppZoom | null> {
+  try {
+    const zoom = await getBridge().zoom.get();
+    return isAppZoom(zoom) ? zoom : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pede outro zoom; a resposta é o que ficou valendo, ou `null` se o pedido não valeu. Nunca lança. */
+export async function requestAppZoom(zoom: AppZoom): Promise<AppZoom | null> {
+  try {
+    const applied = await getBridge().zoom.set(zoom);
+    return isAppZoom(applied) ? applied : null;
+  } catch {
+    return null;
+  }
+}
+
+/** O zoom mudou: por um atalho, nesta ou noutra janela, ou pelas Configurações de outra. O aviso que não é um dos passos é ignorado. */
+export function onAppZoomChanged(listener: (zoom: AppZoom) => void): () => void {
+  return listen(() =>
+    getBridge().zoom.onChanged((raw) => {
+      if (isAppZoom(raw)) listener(raw);
+    }),
+  );
 }
 
 /**
@@ -107,6 +141,8 @@ export function getBridge(): PrismBridge {
       },
       session: { share: async () => {}, onPeer: () => () => {} },
       workspace: devWorkspaceBridge({ baseUrl: url.replace(/\/$/, ""), token }),
+      // Fora do Electron o zoom é o do navegador: não há o do programa (RN-ZOOM-001), e a tela passa sem o controle.
+      zoom: { get: async () => null, set: async () => null, onChanged: () => () => {} },
     };
   }
 

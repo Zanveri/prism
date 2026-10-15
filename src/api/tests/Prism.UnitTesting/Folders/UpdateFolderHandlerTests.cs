@@ -165,6 +165,62 @@ public sealed class UpdateFolderHandlerTests
         _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.EnvironmentName == null && updated.EnvironmentColor == null), cancellationToken), Times.Once);
     }
 
+    /// <summary>RN-PASTA-007: só a cor da pasta muda. Grava e carimba, sem conferir nome nem ciclo, e o ambiente fica como estava.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK só a cor muda: grava sem conferir duplicidade nem ciclo, e o ambiente fica")]
+    public async Task Handle_ShouldBeOK_WhenOnlyTheColorChanged()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var parentID = Guid.CreateVersion7();
+        var folder = FolderFakers.Create(parentID: parentID, name: "Produção", createdAt: CreatedAt, environmentName: "Produção", environmentColor: "#FF8A7A");
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Produção", parentID: parentID, environmentName: "Produção", environmentColor: "#FF8A7A", color: "#7DB2FF");
+        SetupGetByID(folder, cancellationToken);
+        SetupUpdateOK(cancellationToken);
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal("#7DB2FF", result.Value.Color);
+        Assert.Equal("Produção", result.Value.EnvironmentName);
+        Assert.Equal(_timeProvider.GetUtcNow().UtcDateTime, result.Value.UpdatedAt);
+        _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.Color == "#7DB2FF" && updated.EnvironmentColor == "#FF8A7A"), cancellationToken), Times.Once);
+        _folderQueries.VerifyNoOtherCalls();
+        _folderRepository.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-PASTA-007: a mesma cor, com espaços sobrando, é "nada mudou"; e o corpo sem cor (o `PATCH` grava a pasta por inteiro) a tira.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK a mesma cor não regrava, e sem cor no corpo a pasta fica sem cor")]
+    public async Task Handle_ShouldKeepOrRemoveTheColor()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var updatedAt = CreatedAt.AddDays(1);
+        var same = FolderFakers.Create(name: "Produção", createdAt: CreatedAt, updatedAt: updatedAt, color: "#7DB2FF");
+        var removed = FolderFakers.Create(name: "Geral", createdAt: CreatedAt, color: "#7DB2FF");
+        SetupGetByID(same, cancellationToken);
+        SetupGetByID(removed, cancellationToken);
+        SetupUpdateOK(cancellationToken);
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var unchanged = await handler.Handle(FolderFakers.ReturnUpdateFolderCommandValid(iD: same.ID, name: "Produção", color: " #7DB2FF"), cancellationToken);
+        var cleared = await handler.Handle(FolderFakers.ReturnUpdateFolderCommandValid(iD: removed.ID, name: "Geral"), cancellationToken);
+
+        //Assert
+        Assert.True(unchanged.IsSuccess);
+        Assert.Equal(updatedAt, unchanged.Value.UpdatedAt);
+        Assert.True(cleared.IsSuccess);
+        Assert.Null(cleared.Value.Color);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == same.ID), It.IsAny<CancellationToken>()), Times.Never);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == removed.ID && updated.Color == null), cancellationToken), Times.Once);
+    }
+
     /// <summary>Só a caixa da letra muda: grava, mas não é duplicidade, porque a pasta não colide com ela mesma. RN-PASTA-002.</summary>
     [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
     [Fact(DisplayName = "OK só a caixa do nome muda e nada é conferido")]

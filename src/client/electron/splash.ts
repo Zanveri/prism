@@ -69,15 +69,29 @@ export function splashPage(version: string): string {
     .replace("{{version}}", () => escapeHtml(version));
 }
 
+/** O tamanho do desenho do splash (`splash.html`), em 100%. */
+export const splashBaseSize = { width: 640, height: 400 } as const;
+
 /**
- * A janela de abertura (RN-MARCA-002): 640×400, sem moldura, no centro, sem preload e sem acesso a
+ * O splash no zoom do programa (RN-ZOOM-001): a janela cresce junto com o desenho, e o fator é o do zoom, até a janela caber na área útil da tela
+ * (a 200%, 1280×800 não cabe num monitor de 1366×768, e o splash não tem moldura para ser arrastado). A página continua desenhada em 640×400.
+ */
+export function splashGeometry(factor: number, workArea: { width: number; height: number }): { width: number; height: number; zoomFactor: number } {
+  const fit = Math.min(factor, workArea.width / splashBaseSize.width, workArea.height / splashBaseSize.height);
+  const zoomFactor = Number.isFinite(fit) && fit > 0 ? fit : 1;
+  return { width: Math.round(splashBaseSize.width * zoomFactor), height: Math.round(splashBaseSize.height * zoomFactor), zoomFactor };
+}
+
+/**
+ * A janela de abertura (RN-MARCA-002): 640×400 no zoom do programa (`splashGeometry`), sem moldura, no centro, sem preload e sem acesso a
  * nada do app. Não aparece enquanto o primeiro passo não estiver desenhado, para nunca mostrar a
  * barra vazia e sem texto.
  */
-export function createSplash(options: { iconPath: string | undefined; version: string }): { setStep(step: SplashStep): void; close(): void } {
+export function createSplash(options: { iconPath: string | undefined; version: string; geometry: ReturnType<typeof splashGeometry> }): { setStep(step: SplashStep): void; close(): void } {
+  const { width, height, zoomFactor } = options.geometry;
   const window = new BrowserWindow({
-    width: 640,
-    height: 400,
+    width,
+    height,
     useContentSize: true,
     frame: false,
     resizable: false,
@@ -86,7 +100,8 @@ export function createSplash(options: { iconPath: string | undefined; version: s
     title: "Prism",
     icon: options.iconPath,
     backgroundColor: "#0E1114",
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+    // RN-ZOOM-001: o splash já aparece no zoom escolhido. A página é `data:`, sem origem, e o zoom dela não se mistura com o das janelas do app.
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, zoomFactor },
   });
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));

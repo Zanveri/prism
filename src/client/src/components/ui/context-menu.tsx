@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils/cn";
 
+import { CheckIcon } from "./icons";
+
 export type ContextMenuItem = {
   id: string;
   label: string;
@@ -14,6 +16,11 @@ export type ContextMenuItem = {
   disabled?: boolean;
   /** Por que a ação não se aplica, embaixo do rótulo (a célula só leitura, com o motivo). Faz parte do texto do item, que o leitor de tela lê. */
   hint?: string;
+  /**
+   * O item é uma escolha de um grupo de escolha única (o intervalo da atualização automática, na grade): `menuitemradio`, com `aria-checked`, e a marca de
+   * escolhido no lugar do ícone. Sem a propriedade, é um item comum.
+   */
+  checked?: boolean;
   /**
    * Os itens de um submenu ("Filtrar", na grade): o item não executa, abre o submenu ao lado (seta para a direita, Enter, Espaço, o clique ou o mouse em
    * cima). Um nível só: o item de um submenu não tem outro.
@@ -82,6 +89,9 @@ export function nextItemIndex(key: string, current: number, count: number): numb
   }
 }
 
+/** O que é item do menu para as setas e para o foco: o comum e o de escolha única. */
+const itemSelector = '[role="menuitem"], [role="menuitemradio"]';
+
 /** Os itens de um grupo, com ou sem título. */
 export const groupItems = (group: ContextMenuGroup): ContextMenuItem[] => (Array.isArray(group) ? group : group.items);
 
@@ -101,16 +111,17 @@ type ItemsProps = {
  * diz que abre um menu (`aria-haspopup`) e se está aberto (`aria-expanded`), com a seta à direita.
  */
 export function ContextMenuItems({ groups, onChoose, expanded = null, onHover }: ItemsProps) {
-  const hasIcons = groups.some((group) => groupItems(group).some((item) => item.icon !== undefined));
+  const hasIcons = groups.some((group) => groupItems(group).some((item) => item.icon !== undefined || item.checked !== undefined));
   const shown = groups.filter((group) => groupItems(group).length > 0);
 
   const button = (item: ContextMenuItem) => (
     <button
       key={item.id}
       type="button"
-      role="menuitem"
+      role={item.checked === undefined ? "menuitem" : "menuitemradio"}
       tabIndex={-1}
       data-item={item.id}
+      aria-checked={item.checked}
       aria-disabled={item.disabled === true ? true : undefined}
       aria-haspopup={item.submenu === undefined ? undefined : "menu"}
       aria-expanded={item.submenu === undefined ? undefined : expanded === item.id}
@@ -124,7 +135,7 @@ export function ContextMenuItems({ groups, onChoose, expanded = null, onHover }:
         item.hint === undefined ? "h-7" : "min-h-7 py-1",
       )}
     >
-      {hasIcons ? <span className="flex size-4 flex-none items-center justify-center text-muted">{item.icon}</span> : null}
+      {hasIcons ? <span className="flex size-4 flex-none items-center justify-center text-muted">{item.icon ?? (item.checked === true ? <CheckIcon /> : null)}</span> : null}
       {item.hint === undefined ? (
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
       ) : (
@@ -166,11 +177,14 @@ const allItems = (groups: ContextMenuGroup[]) => groups.flatMap(groupItems);
 
 const menuClass = "fixed z-50 max-h-[calc(100dvh-1rem)] max-w-[min(360px,calc(100vw-1rem))] min-w-[208px] overflow-y-auto rounded-md border border-border-strong bg-raised p-1 shadow-2xl outline-none";
 
-/** Os itens de um menu (o principal ou o submenu), na ordem das setas. */
-const itemElementsOf = (menu: HTMLElement | null) => Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+/** Os itens de um menu (o principal ou o submenu), na ordem das setas: os comuns e os de escolha única. */
+const itemElementsOf = (menu: ParentNode | null) => Array.from(menu?.querySelectorAll<HTMLElement>(itemSelector) ?? []);
+
+/** O primeiro item do menu (comum ou de escolha única), que recebe o foco quando o menu ou o submenu vem do teclado. */
+export const firstItemOf = (menu: ParentNode | null): HTMLElement | null => menu?.querySelector<HTMLElement>(itemSelector) ?? null;
 
 /** As setas, Home e End movem o foco entre os itens do menu dado; devolve se a tecla foi dele. */
-function moveFocus(event: KeyboardEvent<HTMLElement>, menu: HTMLElement | null): boolean {
+export function moveFocus(event: Pick<KeyboardEvent<HTMLElement>, "key" | "preventDefault">, menu: ParentNode | null): boolean {
   const elements = itemElementsOf(menu);
   const target = nextItemIndex(event.key, elements.indexOf(document.activeElement as HTMLElement), elements.length);
   if (target === null) return false;
@@ -208,7 +222,7 @@ function Submenu({ label, groups, anchor, focusFirst, menuRef, onChoose, onBack,
   }, [anchor, menuRef]);
 
   useEffect(() => {
-    if (focusFirst) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+    if (focusFirst) firstItemOf(menuRef.current)?.focus({ preventScroll: true });
   }, [focusFirst, menuRef]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -282,7 +296,7 @@ export function ContextMenu({ label, point, groups, initialFocus = "menu", openS
 
     // O submenu que já abre com o menu leva o foco ele mesmo.
     if (!startsInSubmenu.current) {
-      if (initialFocus === "first") menu?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
+      if (initialFocus === "first") firstItemOf(menu)?.focus({ preventScroll: true });
       else menu?.focus({ preventScroll: true });
     }
 

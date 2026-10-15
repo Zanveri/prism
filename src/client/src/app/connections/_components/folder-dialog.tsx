@@ -11,13 +11,14 @@ import { createFolderSchema, editFolderSchema, moveFolderSchema, type Folder, ty
 import { connectionsQuery, createFolder, invalidateLists, updateFolder } from "../_lib/connections.service";
 import { folderInputOf } from "../_lib/folder-input";
 import { userEnvironments } from "../_lib/user-environments";
+import { ColorField } from "./color-field";
 import { EnvironmentPicker } from "./environment-picker";
 
 const copy = connectionsCopy.folder;
 const toasts = connectionsCopy.toasts;
 const formID = "folder-dialog-form";
 
-/** O que o diálogo faz: criar uma pasta (ou subpasta), editar a que existe (o nome e o ambiente, RN-PASTA-006), ou mudá-la de lugar. */
+/** O que o diálogo faz: criar uma pasta (ou subpasta), editar a que existe (o nome, a cor e o ambiente, RN-PASTA-006), ou mudá-la de lugar. */
 export type FolderDialogState = { mode: "create"; parentID: string | null } | { mode: "edit"; folder: Folder } | { mode: "move"; folder: Folder };
 
 /** Os campos que cada modo mostra: um erro da API com outra chave não apareceria em lugar nenhum. */
@@ -27,11 +28,12 @@ const successToast = { create: toasts.folderCreated, edit: toasts.folderUpdated,
 
 /**
  * Pasta: criar, criar dentro de outra, editar e mover (RN-PASTA-001 a 003). É um diálogo só, e
- * cada modo mostra só o que pergunta: criar, o nome, a pasta pai e o ambiente (RN-PASTA-005);
- * "Editar pasta" (o antigo "Renomear", também pelo F2, RN-NAV-009 e RN-PASTA-006), o nome e o ambiente;
- * mover, a pasta pai. Montado ao abrir e desmontado ao fechar, o que foi digitado não sobra para a
- * próxima vez. A seção Ambiente mostra os ambientes do usuário (RN-AMB-001), das pastas e das conexões
- * que o cache já tem (as listas do navegador).
+ * cada modo mostra só o que pergunta: criar, o nome, a pasta pai, a cor da pasta (RN-PASTA-007) e o
+ * ambiente (RN-PASTA-005); "Editar pasta…" (RN-PASTA-006, sem atalho), o nome, a cor e o ambiente;
+ * mover, a pasta pai. O "Renomear" (F2, RN-NAV-009), só com o nome, é o `RenameFolderDialog`. Montado
+ * ao abrir e desmontado ao fechar, o que foi digitado não sobra para a próxima vez. A cor vem antes da
+ * seção Ambiente, porque é da pasta e não passa a ninguém. A seção Ambiente mostra os ambientes do
+ * usuário (RN-AMB-001), das pastas e das conexões que o cache já tem (as listas do navegador).
  *
  * A pasta pai oferece todas as pastas, a própria e as de dentro dela inclusive: mover para dentro
  * de si mesma é recusa da API (`FOLDER_CYCLE`), que chega como aviso. Só o 422 de nome vai no campo.
@@ -40,6 +42,7 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
   const queryClient = useQueryClient();
   const toast = useToast();
   const [parentID, setParentID] = useState(state.mode === "create" ? (state.parentID ?? "") : state.mode === "move" ? (state.folder.parentID ?? "") : "");
+  const [folderColor, setFolderColor] = useState<string | null>(state.mode === "create" ? null : state.folder.color);
   const [color, setColor] = useState<string | null>(state.mode === "create" ? null : state.folder.environmentColor);
   const [errors, setErrors] = useState<FieldErrors>({});
   const connections = useQuery(connectionsQuery);
@@ -107,6 +110,8 @@ export function FolderDialog({ state, folders, onClose }: { state: FolderDialogS
             <FieldError id="folder-parent-error">{errors.parentID}</FieldError>
           </Field>
         )}
+
+        {state.mode === "move" ? null : <ColorField idPrefix="folder" legend={copy.color} name="color" color={folderColor} onChange={setFolderColor} error={errors.color} hint={copy.colorHint} />}
 
         {state.mode === "move" ? null : (
           <EnvironmentPicker

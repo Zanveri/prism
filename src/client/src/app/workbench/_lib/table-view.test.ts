@@ -192,7 +192,8 @@ const busyStates: RunnerState[] = [
   { ...loaded, loadingMore: true },
   { ...loaded, counting: true },
 ];
-const freeStates: RunnerState[] = [{ status: "idle" }, loaded, { status: "cancelled" }, { status: "affected", rowsAffected: 0, elapsedMs: 1 }, { status: "error", source: "database", title: "Erro do banco", message: "permission denied", sqlState: "42501", errorAt: null }];
+// A execução da atualização automática (RN-GRADE-014) não ocupa a aba para a pessoa: o comando dela vai, e o executor o põe no lugar da automática.
+const freeStates: RunnerState[] = [{ status: "idle" }, loaded, { status: "cancelled" }, { status: "affected", rowsAffected: 0, elapsedMs: 1 }, { status: "error", source: "database", title: "Erro do banco", message: "permission denied", sqlState: "42501", errorAt: null }, { status: "running", cancelling: false, previous: loaded, auto: true }];
 
 describe("applyRunPlan: o que a vista Registros faz com o plano de 'aplicar' e do clique no cabeçalho (RN-TABELA-005)", () => {
   const spies = () => ({ setProblem: vi.fn(), setFilter: vi.fn(), execute: vi.fn() });

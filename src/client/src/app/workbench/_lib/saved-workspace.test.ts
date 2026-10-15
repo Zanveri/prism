@@ -34,10 +34,27 @@ describe("o que vai para o cofre (RN-ABAS-006)", () => {
   });
 
   it("o texto é o do editor DESTE instante, e a mudança não salva do script segue esse texto", () => {
-    const tab = queryTab("a", "SELECT 1", { script: { id: s1, name: "Relatório", savedSql: "SELECT 1", dirty: false } });
+    const tab = queryTab("a", "SELECT 1", { script: { id: s1, name: "Relatório", savedSql: "SELECT 1", savedConnectionId: c1, dirty: false } });
 
     expect(savedTabOf(tab, "SELECT 12")).toMatchObject({ sql: "SELECT 12", dirty: true });
     expect(savedTabOf({ ...tab, sql: "SELECT 12", script: { ...tab.script!, dirty: true } }, "SELECT 1")).toMatchObject({ sql: "SELECT 1", dirty: false });
+  });
+
+  it("o script salvo noutro banco, na aba nesse banco e sem mexer no texto, vai sem a marca de mudança não salva; noutro banco, vai com ela (RN-ARVORE-007)", () => {
+    const script = { id: s1, name: "Relatório", savedSql: "SELECT 1", savedConnectionId: c1, savedDatabase: "vendas", dirty: false };
+
+    expect(savedTabOf(queryTab("a", "SELECT 1", { database: "vendas", script }), null)).toMatchObject({ database: "vendas", dirty: false });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { database: "compras", script }), null)).toMatchObject({ dirty: true });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { script }), null)).toMatchObject({ dirty: true });
+  });
+
+  it("a mudança não salva conta a conexão e o banco da aba (RN-SCRIPT-003), menos no script genérico (RN-SCRIPT-005)", () => {
+    const script = { id: s1, name: "Relatório", savedSql: "SELECT 1", savedConnectionId: c1, savedDatabase: "vendas", dirty: false };
+
+    expect(savedTabOf(queryTab("a", "SELECT 1", { database: "vendas", script }), null)).toMatchObject({ dirty: false });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { connectionId: c2, script }), null)).toMatchObject({ connectionID: c2, dirty: true });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { script }), null)).toMatchObject({ dirty: true });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { connectionId: c2, script: { id: s1, name: "Relatório", savedSql: "SELECT 1", generic: true, dirty: false } }), null)).toMatchObject({ dirty: false });
   });
 
   it("o texto acima de 1 MB não vai: a aba vai vazia, marcada", () => {
@@ -52,7 +69,7 @@ describe("o que vai para o cofre (RN-ABAS-006)", () => {
 
 describe("a janela que fecha (RN-ABAS-004 com a RN-ABAS-006)", () => {
   it("as abas que fecham por causa da janela continuam no que volta, com o que mudou nelas antes de fechar, e a ativa é a de quando a janela começou a fechar", () => {
-    const tabs = [queryTab("a", "SELECT 1"), queryTab("b", "SELECT 2", { script: { id: s1, name: "R", savedSql: "SELECT 0", dirty: true } }), queryTab("c", "SELECT 3")];
+    const tabs = [queryTab("a", "SELECT 1"), queryTab("b", "SELECT 2", { script: { id: s1, name: "R", savedSql: "SELECT 0", savedConnectionId: c1, dirty: true } }), queryTab("c", "SELECT 3")];
     const held = holdWorkspace(tabs, "b", (id) => (id === "c" ? "SELECT 33" : null));
 
     // O script foi salvo na pergunta, e a primeira aba fechou; depois, todas.
@@ -78,7 +95,7 @@ describe("o que volta na próxima entrada (RN-ABAS-006)", () => {
   let next = 0;
   const context = (overrides: Partial<RestoreContext> = {}): RestoreContext => ({
     connections: new Set([c1]),
-    scripts: new Map([[s1, { name: "Relatório", sql: "SELECT 'salvo'" }]]),
+    scripts: new Map([[s1, { name: "Relatório", sql: "SELECT 'salvo'", connectionID: c1 }]]),
     newId: () => `nova-${++next}`,
     nextNumber: (() => {
       let number = 7;
@@ -104,28 +121,51 @@ describe("o que volta na próxima entrada (RN-ABAS-006)", () => {
   it("a aba que veio de um script volta ligada a ele, com o nome e a marca de mudança não salva; a do script excluído volta como consulta comum", () => {
     const restored = restoreWorkspace({ tabs: [query("SELECT 'editado'", { scriptID: s1, dirty: true }), query("SELECT 'salvo'", { scriptID: s1 }), query("SELECT 'sumiu'", { scriptID: s2, dirty: true })], activeIndex: 0 }, context());
 
-    expect(restored.tabs[0]).toMatchObject({ title: "Relatório", sql: "SELECT 'editado'", script: { id: s1, name: "Relatório", savedSql: "SELECT 'salvo'", dirty: true } });
+    expect(restored.tabs[0]).toMatchObject({ title: "Relatório", sql: "SELECT 'editado'", script: { id: s1, name: "Relatório", savedSql: "SELECT 'salvo'", savedConnectionId: c1, dirty: true } });
     expect(restored.tabs[1]).toMatchObject({ title: "Relatório", script: { id: s1, savedSql: "SELECT 'salvo'", dirty: false } });
     expect(restored.tabs[2]).toMatchObject({ title: "consulta-7.sql", sql: "SELECT 'sumiu'" });
     expect(restored.tabs[2].script).toBeUndefined();
   });
 
   it("sem o texto salvo do script em mãos, a aba sem mudança usa o próprio texto, e a com mudança fica marcada", () => {
-    const restored = restoreWorkspace({ tabs: [query("SELECT 1", { scriptID: s1 }), query("SELECT 2", { scriptID: s1, dirty: true })], activeIndex: 0 }, context({ scripts: new Map([[s1, { name: "Relatório", sql: null }]]) }));
+    const restored = restoreWorkspace({ tabs: [query("SELECT 1", { scriptID: s1 }), query("SELECT 2", { scriptID: s1, dirty: true })], activeIndex: 0 }, context({ scripts: new Map([[s1, { name: "Relatório", sql: null, connectionID: c1 }]]) }));
 
-    expect(restored.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 1", dirty: false });
+    expect(restored.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 1", savedConnectionId: c1, dirty: false });
     expect(restored.tabs[1].script?.dirty).toBe(true);
   });
 
   it("o script salvo noutro banco volta com esse banco como o salvo, e a aba nele não fica marcada (RN-ARVORE-007)", () => {
     const restored = restoreWorkspace(
       { tabs: [query("SELECT 'salvo'", { scriptID: s1, database: "vendas" })], activeIndex: 0 },
-      context({ scripts: new Map([[s1, { name: "Relatório", sql: "SELECT 'salvo'", database: "vendas" }]]) }),
+      context({ scripts: new Map([[s1, { name: "Relatório", sql: "SELECT 'salvo'", connectionID: c1, database: "vendas" }]]) }),
     );
     const tab = restored.tabs[0] as QueryTab;
 
     expect(tab.script).toMatchObject({ id: s1, savedDatabase: "vendas", dirty: false });
-    expect(isScriptDirty(tab.script!, tab.sql, tab.database)).toBe(false);
+    expect(isScriptDirty(tab.script!, tab.sql, tab)).toBe(false);
+  });
+
+  it("a aba do script que trocou de conexão volta nessa conexão, marcada, e lembra a conexão com que o script está gravado (RN-SCRIPT-003)", () => {
+    const restored = restoreWorkspace({ tabs: [query("SELECT 'salvo'", { scriptID: s1, connectionID: c2, dirty: true })], activeIndex: 0 }, context({ connections: new Set([c1, c2]) }));
+    const tab = restored.tabs[0];
+
+    expect(tab).toMatchObject({ connectionId: c2, script: { savedConnectionId: c1, dirty: true } });
+    expect(isScriptDirty(tab.script!, tab.sql, tab)).toBe(true);
+    expect(isScriptDirty(tab.script!, tab.sql, { connectionId: c1 })).toBe(false);
+  });
+
+  it("a aba do script genérico volta genérica, na conexão em que estava, sem marca (RN-SCRIPT-005)", () => {
+    const restored = restoreWorkspace({ tabs: [query("SELECT 'salvo'", { scriptID: s1, connectionID: c2 })], activeIndex: 0 }, context({ connections: new Set([c1, c2]), scripts: new Map([[s1, { name: "Relatório", sql: "SELECT 'salvo'", connectionID: null }]]) }));
+    const tab = restored.tabs[0];
+
+    expect(tab).toMatchObject({ connectionId: c2, script: { generic: true, dirty: false } });
+    expect(tab.script).not.toHaveProperty("savedConnectionId");
+  });
+
+  it("o script gravado numa conexão que não existe mais volta medindo a mudança contra \"sem conexão\", como ao abri-lo", () => {
+    const restored = restoreWorkspace({ tabs: [query("SELECT 'salvo'", { scriptID: s1, connectionID: c2 })], activeIndex: 0 }, context({ connections: new Set([c2]) }));
+
+    expect(restored.tabs[0].script).toEqual({ id: s1, name: "Relatório", savedSql: "SELECT 'salvo'", dirty: false });
   });
 
   it("a aba de consulta cuja conexão foi excluída volta sem conexão (e sem banco), e a de tabela não volta; a ativa passa à vizinha", () => {

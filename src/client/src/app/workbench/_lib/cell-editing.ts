@@ -18,8 +18,11 @@ export type CellContext = {
   readOnly: string | null;
   /** O que o catálogo respondeu; nulo enquanto não se perguntou. */
   target: EditTarget | null;
-  /** RN-SESSAO-002: um comando roda na aba (o Salvar também). */
-  busy: boolean;
+  /**
+   * RN-SESSAO-002: um comando roda na aba (o Salvar também). `"refresh"`: é a execução da atualização automática (RN-GRADE-014), que vai trocar as linhas e o
+   * resultado da API; o motivo é outro.
+   */
+  busy: boolean | "refresh";
   column: number;
   row: RowContext;
 };
@@ -51,9 +54,9 @@ function keyUnknown(target: EditTarget, table: number, row: RowContext): string 
 }
 
 /** O que vale antes da coluna: o resultado, a aba ocupada e a tabela (a de posição `table`). */
-function tableAccess(readOnly: string | null, target: EditTarget | null, busy: boolean, table: number | null): EditAccess | null {
+function tableAccess(readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh", table: number | null): EditAccess | null {
   if (readOnly !== null) return denied(readOnly);
-  if (busy) return denied(copy.reasons.busy);
+  if (busy) return denied(busy === "refresh" ? copy.reasons.refreshing : copy.reasons.busy);
   if (target === null) return null;
   if (table === null) return allowed;
 
@@ -86,7 +89,7 @@ export function cellAccess({ readOnly, target, busy, column, row }: CellContext)
 }
 
 /** "Nova linha": só num resultado de uma tabela só que se edita (`rowOperations`); numa junção, só se alteram células. */
-export function newRowAccess(readOnly: string | null, target: EditTarget | null, busy: boolean): EditAccess {
+export function newRowAccess(readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
   const table = tableAccess(readOnly, target, busy, isJoin(target) ? null : 0);
   if (table === null) return allowed;
   if (!table.editable) return table;
@@ -96,7 +99,7 @@ export function newRowAccess(readOnly: string | null, target: EditTarget | null,
 }
 
 /** "Excluir linha": como a linha nova, e a linha lida precisa da chave inteira. A linha nova sai da grade. */
-export function deleteRowAccess(row: RowContext, readOnly: string | null, target: EditTarget | null, busy: boolean): EditAccess {
+export function deleteRowAccess(row: RowContext, readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
   const access = newRowAccess(readOnly, target, busy);
   if (!access.editable || target === null) return access;
 

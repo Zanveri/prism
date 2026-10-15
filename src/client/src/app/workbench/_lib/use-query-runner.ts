@@ -8,6 +8,7 @@ import type { useToast } from "@/components/ui/toast";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 
+import { createAutoRefresh, type AutoRefreshControl } from "./auto-refresh";
 import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
 import { scriptsCopy } from "./scripts.copy";
@@ -72,7 +73,10 @@ export type FilterRefusal = { code: "FILTER_INVALID"; message: string };
 
 export type RowsState = {
   status: "rows";
-  /** Muda a cada execução, e não a cada página: é a chave da grade. */
+  /**
+   * Muda a cada execução, e não a cada página: é a chave da grade. A execução automática (RN-GRADE-014) que traz as mesmas colunas fica com a de antes: a
+   * grade não é refeita, e a rolagem fica onde estava.
+   */
   id: number;
   /**
    * O comando que deu este resultado. É ele que "executar de novo" repete: o comando viaja com as
@@ -97,7 +101,7 @@ export type RowsState = {
   cancelling: boolean;
   /** "Carregar mais" encontrou o cursor fechado (RN-SQL-007): a área de resultado oferece executar de novo. */
   cursorClosed: boolean;
-  /** Só existe depois de "Contar total" (RN-SQL-006). */
+  /** Só existe depois de "Contar total" (RN-SQL-006). Enquanto conta de novo, fica o de antes, até chegar o novo. */
   total: number | null;
   counting: boolean;
   /** RN-EDIT-002: o resultado da API a que estas linhas pertencem; é por ele que a edição dos Registros pergunta e grava. */
@@ -155,9 +159,10 @@ export type RunnerState =
   | { status: "idle" }
   /**
    * `previous` é o resultado que estava na tela quando o comando começou: ele continua lá até a API
-   * aceitar o comando novo, e volta a ser o estado se ela não aceitar.
+   * aceitar o comando novo, e volta a ser o estado se ela não aceitar. `auto`: é a execução da atualização automática (RN-GRADE-014), que a área de
+   * resultado não esmaece e que não ocupa a aba para a pessoa nem para o bloqueio por inatividade (`isPersonBusy`).
    */
-  | { status: "running"; cancelling: boolean; previous: ResultState | null }
+  | { status: "running"; cancelling: boolean; previous: ResultState | null; auto?: true }
   | RowsState
   | AffectedState
   | CancelledState
@@ -185,6 +190,31 @@ export function isBusyState(state: RunnerState): boolean {
   return state.status === "running" || (state.status === "rows" && (state.loadingMore || state.counting));
 }
 
+/** A execução da atualização automática (RN-GRADE-014) está em andamento. */
+export function isAutoRun(state: RunnerState): boolean {
+  return state.status === "running" && state.auto === true;
+}
+
+/**
+ * Há um comando DA PESSOA em andamento: o que ela pediu (executar, "carregar mais", contar). É o "ocupado" da tela (os botões que viram "Cancelar", o
+ * que se desabilita, as teclas que não fazem nada) e do bloqueio por inatividade (RN-SEG-001). A execução da atualização automática (RN-GRADE-014) não
+ * conta: a tela não pode mudar a cada 5 s, o que a pessoa pede enquanto ela roda é atendido (o comando da pessoa toma o lugar dela; "carregar mais" e
+ * contar esperam por ela), e uma consulta repetida a cada 5 s recomeçaria a contagem do bloqueio a cada execução, e o Prism nunca bloquearia.
+ */
+export function isPersonBusy(state: RunnerState): boolean {
+  return isBusyState(state) && !isAutoRun(state);
+}
+
+/** O resultado de antes da execução automática que a pessoa interrompeu: o banco executou o comando novo, e o cursor dele fechou (RN-SQL-007). */
+function withCursorClosed(result: ResultState | null): ResultState | null {
+  return result?.status === "rows" && result.hasMore && !result.cursorClosed ? { ...result, cursorClosed: true } : result;
+}
+
+/** As mesmas colunas, na mesma ordem, com o mesmo tipo: a grade de antes serve às linhas novas. */
+function sameColumns(a: readonly QueryColumn[], b: readonly QueryColumn[]): boolean {
+  return a.length === b.length && a.every((column, index) => column.name === b[index].name && column.type === b[index].type && column.kind === b[index].kind);
+}
+
 export type QueryRunner = {
   subscribe: (listener: () => void) => () => void;
   getState: () => RunnerState;
@@ -193,6 +223,12 @@ export type QueryRunner = {
   /** Executa de novo o comando das linhas que estão na tela, e nunca outro: é o que o aviso de cursor fechado oferece. */
   rerun: () => Promise<void>;
   cancel: () => Promise<void>;
+  /**
+   * RN-GRADE-014: resolve quando não há execução automática em andamento, nem a que a pessoa interrompeu e ainda ocupa a sessão. "Exportar CSV" espera por
+   * ela (as linhas e os valores completos são os do resultado novo), e levar a aba para outra janela também (`handOffTab`: a outra janela recebe a sessão
+   * livre, com o resultado e o cursor que a tela mostra).
+   */
+  autoRunSettled: () => Promise<void>;
   loadMore: () => Promise<void>;
   countTotal: () => Promise<void>;
   /**
@@ -213,6 +249,11 @@ export type QueryRunner = {
    * para encerrar na API. O que estava a caminho chega e não muda mais nada.
    */
   release: () => { sessionId: string | null; busy: boolean };
+  /**
+   * A atualização automática da aba (RN-GRADE-014): ligar com um intervalo, trocá-lo, desligar (o que abandona a execução dela em andamento), e as pausas que
+   * a vista pede. Soltar e aposentar o executor a desligam; um comando da pessoa que não é o mesmo também, e a sessão que cai e fica caída.
+   */
+  autoRefresh: AutoRefreshControl;
   /**
    * Tira o executor de cena de vez (a aba fechou, o cofre bloqueou, o provedor saiu): como `release()`, e além disso ele volta ao
    * começo, sem resultado, e **recusa** `run`, `loadMore` e `countTotal` (não executa nada, não abre sessão, não avisa). Um painel que
@@ -268,7 +309,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   const listeners = new Set<() => void>();
 
   let sessionId: string | null = initial?.sessionId ?? null;
-  /** Cresce quando a aba é solta: a resposta que chegar depois não acha mais quem a esperava. */
+  /**
+   * Cresce quando a aba é solta, e quando o comando da pessoa interrompe a execução automática (RN-GRADE-014): a resposta que chegar depois não acha mais
+   * quem a esperava.
+   */
   let epoch = 0;
   /** `retire()` foi chamado: o executor saiu de cena e não executa mais nada. */
   let retired = false;
@@ -295,8 +339,16 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   let cancelRequested = false;
   // O aviso das células cortadas já saiu na janela de onde a aba veio.
   let truncationWarned = state.status === "rows" && state.truncated.size > 0;
-  /** O texto mudou depois de o comando ser enviado: a posição que o banco apontar já não é a do texto na tela. */
+  /**
+   * O texto mudou depois de o comando do editor ser enviado: a posição que o banco apontar já não é a do texto na tela. Só o comando que vem do editor
+   * (`run`) o zera: "executar de novo" (o F5) e a execução automática repetem o comando de quando ele foi enviado, com o lugar no texto daquele instante.
+   */
   let editedSinceRun = false;
+  /**
+   * RN-GRADE-014: a execução automática em andamento, ou a que o comando da pessoa interrompeu e que ainda ocupa a sessão (a resposta dela e a do
+   * cancelamento ainda não chegaram). O comando da pessoa, "carregar mais", contar, exportar e levar a aba para outra janela esperam por ela.
+   */
+  let autoBusy: Promise<void> | null = null;
   /** Os erros inesperados que o aviso central já mostrou: a rede de segurança não avisa de novo. */
   const reported = new WeakSet<object>();
 
@@ -312,6 +364,15 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   function setSession(id: string | null) {
     sessionId = id;
     onSession(id);
+  }
+
+  /**
+   * A sessão caiu e fica caída (a API já não a conhece, e ninguém a reabre agora): a atualização automática para, com a nota, e não abre outra sozinha
+   * (RN-GRADE-014, RN-SESSAO-004). O comando da pessoa que a reabre e executa não chama isto: o mesmo comando (o F5) a mantém ligada.
+   */
+  function sessionLost() {
+    setSession(null);
+    autoRefresh.lost();
   }
 
   /**
@@ -369,9 +430,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   /**
    * Abre a sessão da aba na primeira execução (RN-SESSAO-001) e envia o comando. Se a API já não
    * conhece a sessão (ela caiu), abre outra e repete uma vez (seção 7). `null` quando não há o que
-   * mostrar: a aba foi solta, ou o comando foi cancelado antes de ser enviado.
+   * mostrar: a aba foi solta, ou o comando foi cancelado antes de ser enviado. `reopen` falso é a execução automática (RN-GRADE-014): a sessão que caiu
+   * fica caída, e a resposta é a da API.
    */
-  async function execute(connection: string, sql: string, started: number, filter?: string): Promise<ApiResult<QueryResult> | null> {
+  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean): Promise<ApiResult<QueryResult> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
@@ -382,7 +444,11 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
           if (opened.ok) void call(() => closeDatabaseSession(opened.data.id), codes("DATABASE_SESSION_NOT_FOUND")).catch(() => undefined);
           return null;
         }
-        if (!opened.ok) return opened;
+        if (!opened.ok) {
+          // A sessão que caiu não reabriu: a aba segue sem ela.
+          if (reopened) autoRefresh.lost();
+          return opened;
+        }
 
         id = opened.data.id;
         setSession(id);
@@ -401,8 +467,12 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       if (started !== epoch) return null;
       if (result.ok || result.error.code !== "DATABASE_SESSION_NOT_FOUND") return result;
 
+      // Reabrir é do comando da pessoa (`reopen`), uma vez; fora isso a sessão fica caída.
+      if (!reopen || reopened || cancelRequested) {
+        sessionLost();
+        return result;
+      }
       setSession(null);
-      if (reopened || cancelRequested) return result;
     }
   }
 
@@ -487,15 +557,72 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     else patchRows({ cancelling });
   }
 
-  const run = async (target: RunTarget): Promise<FilterRefusal | void> => {
+  /**
+   * RN-GRADE-014: o comando da pessoa toma o lugar da execução automática em andamento. Ela é abandonada: a resposta dela não acha mais quem a esperava
+   * (`epoch`), e não muda a tela nem avisa; o relógio esquece dela (`yielded`); e a API recebe o cancelamento, calado (o que ele responder não interessa à
+   * pessoa). Devolve quando a sessão estiver livre: a resposta dela e a do cancelamento chegaram, e o cancelamento não alcança o comando da pessoa.
+   */
+  function abandonAuto(): Promise<void> {
+    const running = autoBusy ?? Promise.resolve();
+    epoch++;
+    autoRefresh.yielded();
+    const session = sessionId;
+    const cancelled =
+      session === null
+        ? Promise.resolve()
+        : call(
+            () => cancelQuery(session),
+            () => true,
+          ).then(
+            () => undefined,
+            () => undefined,
+          );
+    return holdAuto(Promise.all([running, cancelled]).then(() => undefined));
+  }
+
+  /**
+   * RN-GRADE-014: a pessoa desligou ("Desligar", o X) com a execução automática em andamento. Ela é abandonada como quando o comando da pessoa toma o lugar
+   * dela (`abandonAuto`): a resposta não muda mais a tela nem avisa, e a API recebe o cancelamento, calado. O resultado de antes volta já, com o cursor
+   * fechado (o banco executou o comando dela, RN-SQL-007). Sem isso, ela seguia sem nada na tela dizer, a aba ficava ocupada, e o resultado (ou o erro, com
+   * o aviso) chegava depois de desligada.
+   */
+  function stopAuto() {
+    autoRefresh.stop();
+    if (!isAutoRun(state)) return;
+
+    const shown = withCursorClosed(state.status === "running" ? state.previous : null);
+    void abandonAuto();
+    set(shown ?? { status: "idle" });
+  }
+
+  /** Junta `work` ao que ocupa a sessão em nome da atualização automática (`autoBusy`), e devolve o todo. */
+  function holdAuto(work: Promise<void>): Promise<void> {
+    const all = autoBusy === null ? work : Promise.all([autoBusy, work]).then(() => undefined);
+    autoBusy = all;
+    void all.then(() => {
+      if (autoBusy === all) autoBusy = null;
+    });
+    return all;
+  }
+
+  /**
+   * Executa o comando. `person`: o do editor (e o dos Registros, do filtro do resultado). `again`: "executar de novo" (o F5), o comando das linhas na tela,
+   * com o lugar no texto de quando ele foi enviado. `auto`: a execução da atualização automática (RN-GRADE-014), que não repete o aviso de valores cortados
+   * e mantém a grade quando as colunas são as mesmas. O comando da pessoa (`person` e `again`) avisa o relógio antes de enviar (outro comando a desliga) e,
+   * com a execução automática em andamento, toma o lugar dela: a aba o mostra rodando desde já, e ele sai quando a sessão estiver livre.
+   */
+  const runWith = async (target: RunTarget, kind: "person" | "again" | "auto"): Promise<FilterRefusal | void> => {
+    const auto = kind === "auto";
     let refusal: FilterRefusal | undefined;
     await guarded(async () => {
       if (retired) return refuse("run");
-      if (isBusy()) return;
+      // RN-SESSAO-002: um comando por vez. A execução automática não segura o comando da pessoa (`isPersonBusy`): ele toma o lugar dela, abaixo.
+      if (auto ? isBusy() : isPersonBusy(state)) return;
 
       // RN-SQL-001: uma execução leva um comando só. O comando do cursor é sempre um; a seleção pode ter mais, ou nenhum.
       const statements = statementCount(target.sql, target.engine);
-      const previous = resultOf(state);
+      // O que está na tela: com a execução automática rodando, o resultado de antes dela.
+      const previous = state.status === "running" ? state.previous : resultOf(state);
       if (statements === 0) {
         toast.warning(copy.nothingToSend);
         return;
@@ -514,12 +641,23 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         return;
       }
 
+      // RN-GRADE-014: a execução automática em andamento cede o lugar ao comando da pessoa (antes de `started`: a resposta dela já não é desta execução); a
+      // que já foi abandonada (desligada no meio) e ainda ocupa a sessão é esperada, pelo comando da pessoa e pela execução automática seguinte.
+      const yielding = !auto && isAutoRun(state) ? abandonAuto() : autoBusy;
       const started = epoch;
       cancelRequested = false;
-      editedSinceRun = false;
-      set({ status: "running", cancelling: false, previous });
+      if (kind === "person") editedSinceRun = false;
+      if (!auto) autoRefresh.ranByPerson(target);
+      set({ status: "running", cancelling: false, previous: yielding === null ? previous : withCursorClosed(previous), ...(auto ? { auto: true as const } : {}) });
 
-      const result = await execute(connectionId, target.sql, started, target.filter);
+      if (yielding !== null) {
+        await yielding;
+        if (started !== epoch) return;
+        // Cancelado enquanto a sessão se livrava: nada foi enviado, e o resultado de antes volta.
+        if (cancelRequested) return settle();
+      }
+
+      const result = await execute(connectionId, target.sql, started, target.filter, !auto);
       if (result === null) return;
       // RN-GRADE-011: a API recusou o filtro antes de executar: o resultado e o cursor de antes ficam como estavam, e a frase vai ao campo de filtro.
       if (!result.ok && result.error.code === "FILTER_INVALID" && target.filter !== undefined) {
@@ -537,10 +675,12 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         return;
       }
 
-      truncationWarned = false;
+      // RN-AVISO-003: o aviso é um por resultado, e o resultado que a atualização automática refaz é o mesmo: quem já foi avisado não é de novo (nem pelo
+      // "carregar mais" que vem depois dela).
+      if (!auto) truncationWarned = false;
       set({
         status: "rows",
-        id: ++resultId,
+        id: auto && previous?.status === "rows" && sameColumns(previous.columns, data.columns) ? previous.id : ++resultId,
         target,
         columns: data.columns,
         rows: data.rows,
@@ -562,13 +702,34 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       });
       // RN-SQL-013 e RN-AVISO-002: o comando gravou e está confirmado; as linhas são o que ele devolveu.
       if (data.totalRows !== null) toast.success(copy.commandCompleted(data.totalRows));
-      warnTruncated(data);
+      // RN-GRADE-014: a execução automática não repete o aviso de valores cortados; as células seguem marcadas, e "carregar mais" ainda avisa.
+      if (!auto) warnTruncated(data);
     });
     return refusal;
   };
 
-  const loadMore = () =>
-    guarded(async () => {
+  const run = (target: RunTarget) => runWith(target, "person");
+
+  /** RN-GRADE-014: o que a pessoa pede sobre o resultado na tela espera a execução automática em andamento, e segue sobre o resultado novo. */
+  const afterAuto = async () => {
+    while (autoBusy !== null) await autoBusy;
+  };
+
+  /**
+   * Espera a execução automática em andamento (`afterAuto`) e diz se o executor saiu de cena NESSE meio-tempo: trocar o banco ou a conexão da aba (ou fechá-la)
+   * com ela rodando a desliga e aposenta o executor, e o "Carregar mais" ou o "Contar total" que esperavam desistem calados, porque o painel não segurava um
+   * executor velho. A recusa com o registro (`refuse`) fica para o pedido que chega a um executor já aposentado.
+   */
+  const retiredWhileWaiting = async () => {
+    const before = retired;
+    await afterAuto();
+    return retired && !before;
+  };
+
+  const loadMore = async () => {
+    // Sem a espera, tudo até o envio acontece já na chamada: quem chama vê a aba ocupada na hora.
+    if (autoBusy !== null && (await retiredWhileWaiting())) return;
+    return guarded(async () => {
       if (retired) return refuse("loadMore");
       if (state.status !== "rows" || !state.hasMore || state.cursorClosed || isBusy()) return;
       // Aba desconectada: o cursor foi fechado com a sessão.
@@ -595,7 +756,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       }
 
       patchRows({ loadingMore: false, cancelling: false });
-      if (page.error.code === "DATABASE_SESSION_NOT_FOUND") setSession(null);
+      if (page.error.code === "DATABASE_SESSION_NOT_FOUND") sessionLost();
       if (page.error.code === "NO_OPEN_CURSOR" || page.error.code === "DATABASE_SESSION_NOT_FOUND") closeCursor();
       else if (page.error.code === "SQL_EXECUTION_FAILED") {
         // A leitura falhou ou foi cancelada: o comando morreu e a API fechou o cursor (o pedido seguinte já responderia 409
@@ -605,13 +766,16 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         warnOutcome(page.error);
       }
     });
+  };
 
-  const countTotal = () =>
-    guarded(async () => {
+  const countTotal = async () => {
+    if (autoBusy !== null && (await retiredWhileWaiting())) return;
+    return guarded(async () => {
       // Só há o que contar quando há linhas que a tela não leu (RN-SQL-006): com o resultado inteiro
-      // na tela, o total é o que está nela, e o comando que gravou já o trouxe (RN-SQL-013).
+      // na tela, o total é o que está nela, e o comando que gravou já o trouxe (RN-SQL-013). O total
+      // já contado se conta de novo (issue #10), mesmo que as linhas tenham chegado ao fim depois.
       if (retired) return refuse("countTotal");
-      if (state.status !== "rows" || !state.hasMore || state.total !== null || sessionId === null || isBusy()) return;
+      if (state.status !== "rows" || (!state.hasMore && state.total === null) || sessionId === null || isBusy()) return;
 
       const session = sessionId;
       const started = epoch;
@@ -626,11 +790,13 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       );
       if (started !== epoch || state.status !== "rows") return;
 
-      if (!counted.ok && counted.error.code === "DATABASE_SESSION_NOT_FOUND") setSession(null);
+      if (!counted.ok && counted.error.code === "DATABASE_SESSION_NOT_FOUND") sessionLost();
       if (!counted.ok) warnOutcome(counted.error);
-      // Cancelar a contagem não mexe no resultado nem no cursor (RN-SQL-010); a que terminou antes mostra o total.
-      patchRows({ counting: false, cancelling: false, total: counted.ok ? counted.data.total : null });
+      // Cancelar a contagem não mexe no resultado nem no cursor (RN-SQL-010); a que terminou antes mostra o total. A que falhou, ou foi
+      // cancelada, deixa o total de antes à vista (o de uma contagem anterior, quando é "Contar de novo").
+      patchRows({ counting: false, cancelling: false, ...(counted.ok ? { total: counted.data.total } : {}) });
     });
+  };
 
   async function cancel(): Promise<void> {
     if (!isBusy() || cancelRequested) return;
@@ -657,6 +823,8 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   function release() {
     const released = { sessionId, busy: isBusy() };
 
+    // Desconectar, fechar a aba, trocar de banco, ir para outra janela, o bloqueio: a atualização automática desliga antes de o comando sair de cena.
+    autoRefresh.halt();
     epoch++;
     sessionId = null;
     cancelRequested = false;
@@ -676,6 +844,18 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     return released;
   }
 
+  // RN-GRADE-014: o relógio da atualização automática observa este executor e executa por ele, como execução automática.
+  const autoRefresh = createAutoRefresh({
+    getState: () => state,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+    isBusy: isBusyState,
+    connected: () => sessionId !== null && !retired,
+    run: (target) => holdAuto(runWith(target, "auto").then(() => undefined)),
+  });
+
   return {
     subscribe: (listener) => {
       listeners.add(listener);
@@ -684,9 +864,12 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     getState: () => state,
     run,
     rerun: async () => {
-      if (state.status === "rows") await run(state.target);
+      // Com a execução automática em andamento, o resultado na tela é o de antes dela, e o comando dele é o que se executa de novo.
+      const shown = state.status === "running" ? state.previous : state;
+      if (shown?.status === "rows") await runWith(shown.target, "again");
     },
     cancel,
+    autoRunSettled: afterAuto,
     loadMore,
     countTotal,
     textEdited: () => {
@@ -702,6 +885,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     },
     release,
     retire,
+    autoRefresh: { subscribe: autoRefresh.subscribe, getState: autoRefresh.getState, blocker: autoRefresh.blocker, start: autoRefresh.start, stop: stopAuto, pause: autoRefresh.pause },
   };
 }
 

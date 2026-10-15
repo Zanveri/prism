@@ -6,25 +6,29 @@ import type { Engine } from "@/components/ui/engine-tag";
  */
 export type SqlStatement = { text: string; start: number; end: number };
 
-/** O comando e até onde ele vai no texto: a posição logo depois do `;` dele, ou o fim do texto quando não há `;`. */
-type Scanned = SqlStatement & { boundary: number };
+/**
+ * O comando e até onde ele vai no texto: a posição logo depois do `;` dele, ou o fim do texto quando não há `;`. `cut` diz que ele terminou numa
+ * linha em branco (RN-SQL-018), e não no `;` nem no fim do texto.
+ */
+type Scanned = SqlStatement & { boundary: number; cut: boolean };
 
 /**
  * O que muda de um banco para o outro na hora de separar os comandos (RN-SQL-002): no PostgreSQL e no
  * Db2 o comentário de bloco aceita outro dentro dele; no Informix o primeiro fecho o encerra e
  * `{ ... }` também é comentário. Só o PostgreSQL tem o bloco `$tag$ ... $tag$` (nos outros `$` é um
  * caractere qualquer) e só nele o `--` acaba também no retorno de carro; no Db2 e no Informix, só na
- * quebra de linha. `body` é o que cada banco entende por bloco com `;` no corpo (RN-SQL-001).
+ * quebra de linha. `body` é o que cada banco entende por bloco com `;` no corpo (RN-SQL-001). `beginBlock` diz que o `BEGIN` abre um bloco que vai
+ * até o fim do texto (no Db2, `db2Body`): para a linha em branco (RN-SQL-018), também quando ele não é a primeira palavra do comando.
  */
-type Dialect = { nestedComments: boolean; braceComments: boolean; dollarQuotes: boolean; carriageReturnEndsComment: boolean; body: () => Body };
+type Dialect = { nestedComments: boolean; braceComments: boolean; dollarQuotes: boolean; carriageReturnEndsComment: boolean; body: () => Body; beginBlock: boolean };
 
-const postgres: Dialect = { nestedComments: true, braceComments: false, dollarQuotes: true, carriageReturnEndsComment: true, body: standardBody };
+const postgres: Dialect = { nestedComments: true, braceComments: false, dollarQuotes: true, carriageReturnEndsComment: true, body: standardBody, beginBlock: false };
 
 /** Pelo número do banco na API: PostgreSQL 1, Db2 2, Informix 3. */
 const dialects: Record<Engine, Dialect> = {
   1: postgres,
-  2: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body },
-  3: { nestedComments: false, braceComments: true, dollarQuotes: false, carriageReturnEndsComment: false, body: informixBody },
+  2: { nestedComments: true, braceComments: false, dollarQuotes: false, carriageReturnEndsComment: false, body: db2Body, beginBlock: true },
+  3: { nestedComments: false, braceComments: true, dollarQuotes: false, carriageReturnEndsComment: false, body: informixBody, beginBlock: false },
 };
 
 /** Sem o banco, vale o PostgreSQL. */
@@ -121,24 +125,35 @@ function dollarTag(sql: string, at: number): string | null {
  * duplas, comentário e bloco `$tag$ ... $tag$` (RN-SQL-002). Os saltos usam `indexOf`, para um
  * texto de 1 MB separar em poucos milissegundos. Trecho que só tem espaços e comentários não é
  * comando: depois do último `;`, um comentário solto não vira o "comando do cursor".
+ *
+ * `cuts` são as linhas em branco que também separam (RN-SQL-018, de `blankLineCuts`), em ordem: o começo de cada uma. O comando de cima
+ * acaba no fim da linha anterior (o `\n` logo antes do corte), que é também até onde vai o cursor dele.
  */
-function scan(sql: string, dialect: Dialect): Scanned[] {
+function scan(sql: string, dialect: Dialect, cuts: readonly number[] = []): Scanned[] {
   const statements: Scanned[] = [];
   let segmentStart = 0;
   let hasCode = false;
 
-  function close(semicolon: number, boundary: number) {
+  function close(semicolon: number, boundary: number, cut = false) {
     let start = segmentStart;
     let end = semicolon;
     while (start < end && isWhitespace(sql.charCodeAt(start))) start++;
     while (end > start && isWhitespace(sql.charCodeAt(end - 1))) end--;
-    if (hasCode) statements.push({ text: sql.slice(start, end), start, end, boundary });
+    if (hasCode) statements.push({ text: sql.slice(start, end), start, end, boundary, cut });
     segmentStart = boundary;
     hasCode = false;
   }
 
   let position = 0;
+  let cut = 0;
   while (position < sql.length) {
+    // O corte cai sempre entre dois pedaços do texto, fora de aspas e de comentário: a leitura passa exatamente por ele (o `--` que acaba na
+    // quebra de linha para logo antes da linha em branco).
+    if (cut < cuts.length && position >= cuts[cut]) {
+      close(cuts[cut] - 1, cuts[cut] - 1, true);
+      cut++;
+    }
+
     const code = sql.charCodeAt(position);
 
     if (code === 59) {
@@ -170,9 +185,16 @@ function scan(sql: string, dialect: Dialect): Scanned[] {
 
 const toStatement = ({ text, start, end }: Scanned): SqlStatement => ({ text, start, end });
 
-/** Os comandos do texto, separados por `;` (RN-SQL-002), pelas regras do banco da aba. */
-export function splitStatements(sql: string, engine?: Engine): SqlStatement[] {
-  return scan(sql, dialectOf(engine)).map(toStatement);
+/**
+ * Como achar os comandos do texto. `blankLines` é a preferência "A linha em branco separa os comandos" (RN-SQL-018), que vale só para o
+ * comando do cursor; sem ela, só o `;` separa, como antes.
+ */
+export type StatementOptions = { blankLines?: boolean };
+
+/** Os comandos do texto, separados por `;` (RN-SQL-002) e, com `blankLines`, pela linha em branco (RN-SQL-018), pelas regras do banco da aba. */
+export function splitStatements(sql: string, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement[] {
+  const dialect = dialectOf(engine);
+  return scan(sql, dialect, blankLines ? blankLineCuts(sql, dialect) : []).map(toStatement);
 }
 
 /**
@@ -332,7 +354,9 @@ function standardBody(): Body {
  * tela avisa e não envia; com nenhum, não há o que enviar. O que separa é o `;`, menos o que está num
  * bloco com `;` no corpo (procedimento, função, gatilho, bloco composto): ele é um comando só, pelas
  * regras do banco da aba, as mesmas que a API aplica (`SqlText.HasSeveralStatements`). Só aqui a regra
- * vale: `splitStatements` e `statementAt`, que acham o comando do cursor, seguem separando pelo `;`.
+ * vale: `splitStatements` e `statementAt`, que acham o comando do cursor, seguem separando pelo `;`
+ * (a linha em branco, RN-SQL-018, é que nunca separa dentro do bloco). A conta é sempre só pelo `;`:
+ * a linha em branco não divide a seleção.
  */
 export function statementCount(sql: string, engine?: Engine): number {
   const dialect = dialectOf(engine);
@@ -353,15 +377,321 @@ export function statementCount(sql: string, engine?: Engine): number {
   return count + (started ? 1 : 0) + body.extra();
 }
 
+/*
+ * A linha em branco que separa os comandos (RN-SQL-018), como o "Smart" do DBeaver, com mais cuidado: o Prism ainda não confirma comando
+ * irreversível, e separar onde não devia executaria a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`). Na dúvida
+ * não separa: o banco recusa o texto inteiro, sem executar nada. Separa só quando o de baixo começa um comando e o de cima está fechado.
+ */
+
+/** As palavras que começam um comando depois da linha em branco. `SET` não está (`UPDATE t`, a linha em branco e `SET …` são um comando só), nem `BEGIN`, que abre bloco. */
+const commandWords = new Set(["select", "insert", "update", "delete", "merge", "values", "create", "truncate", "grant", "revoke", "call", "execute", "exec", "explain", "analyze", "analyse", "vacuum", "show", "copy", "declare", "commit", "rollback", "savepoint"]);
+
+/** Dentro de um `ALTER`, estas são cláusulas dele (`ALTER TABLE t … DROP COLUMN`, `ALTER EXTENSION e DROP TABLE t`, `ALTER DEFAULT PRIVILEGES … GRANT`), e não outro comando. */
+const alterClauses = new Set(["alter", "drop", "grant", "revoke"]);
+
+/**
+ * O que vem depois de `ALTER` e `DROP` quando eles começam um comando: o tipo do objeto. O resto é cláusula de outro comando (o `DROP STORAGE`
+ * do `TRUNCATE` no Db2 e no Informix, o `ALTER COLUMN` e o `DROP CONSTRAINT` do `ALTER TABLE`). `MATERIALIZED` e `FOREIGN` pedem a palavra seguinte.
+ */
+const objectKinds = new Set([
+  "table", "view", "index", "sequence", "schema", "function", "procedure", "routine", "trigger", "type", "domain", "database", "user", "role", "synonym",
+  "alias", "extension", "tablespace", "module", "nickname", "variable", "package", "server", "publication", "subscription", "policy", "rule", "aggregate",
+  "operator", "collation", "statistics", "owned", "system", "language", "cast", "event",
+]);
+
+/** As palavras que pedem continuação no fim do comando de cima: com elas, o que vem depois da linha em branco ainda é dele. */
+const continuationWords = new Set([
+  "where", "and", "or", "not", "on", "join", "inner", "outer", "left", "right", "full", "cross", "natural", "lateral", "from", "select", "set", "by",
+  "group", "order", "partition", "having", "union", "all", "intersect", "except", "minus", "then", "else", "when", "case", "as", "in", "into", "values",
+  "like", "ilike", "similar", "between", "is", "distinct", "unique", "using", "with", "recursive", "table", "grant", "revoke", "to", "for", "of", "over",
+  "escape", "any", "some", "exists", "limit", "offset", "returning", "window", "filter", "within", "collate", "at", "if", "do", "also", "instead",
+  "explain", "vacuum", "call", "execute", "exec", "declare", "lock", "release",
+]);
+
+/** O fim que pede continuação, além do `(` (os parênteses abertos já mantêm o comando aberto): a vírgula e os operadores. */
+const continuationMarks = new Set([",", "+", "-", "*", "/", "%", "=", "<", ">", "!", "|", "&", "^", "~", ".", ":", "@", "#", "["]);
+
+/** Antes destas, `INSERT` é o nome de um evento ou de um privilégio (`AFTER INSERT`, `ON INSERT`, `GRANT SELECT, INSERT`), e não o começo de um comando. */
+const insertEvents = new Set([",", "on", "of", "or", "before", "after", "grant", "revoke"]);
+
+/** O que dá ao `INSERT` o corpo que ele espera (o `EXECUTE PROCEDURE` do Informix incluído). */
+const insertBodies = new Set(["values", "select", "execute"]);
+
+/** O comando principal depois das consultas do `WITH`, e o comando que o `EXPLAIN` explica. */
+const withBodies = new Set(["select", "insert", "update", "delete", "merge", "values"]);
+const explainBodies = new Set([...withBodies, "with", "execute", "create", "declare", "table"]);
+
+/** Entre `CREATE` e o tipo do objeto que só o `;` termina (`CREATE OR REPLACE CONSTRAINT TRIGGER`, `CREATE EVENT TRIGGER`). */
+const beforeTrigger = new Set(["or", "replace", "constraint", "event"]);
+
+/**
+ * O que vem depois de `CREATE` nos comandos que só o `;` termina. O gatilho: no Db2 ele é um bloco (`db2Body`), e no PostgreSQL e no Informix o
+ * corpo vem depois do cabeçalho. O esquema: o `CREATE SCHEMA` traz os objetos dele (`CREATE TABLE`, `CREATE VIEW`, `CREATE INDEX`, `GRANT` e, no
+ * Db2, `COMMENT ON`) sem `;` entre eles, nos três bancos, e separá-lo criaria o esquema sozinho e depois a tabela fora dele.
+ */
+const untilSemicolon = new Set(["trigger", "schema"]);
+
+/** A posição, na lista, logo depois do `)` que fecha o `(` de `at`; o fim da lista quando ele não fecha. */
+function afterParentheses(list: readonly SqlToken[], at: number): number {
+  let depth = 0;
+  for (let index = at; index < list.length; index++) {
+    if (list[index].text === "(") depth++;
+    else if (list[index].text === ")" && --depth === 0) return index + 1;
+  }
+  return list.length;
+}
+
+/**
+ * Se o `WITH` em `index` abre consultas nomeadas: `WITH [RECURSIVE] nome [ ( … ) ] AS [ [NOT] MATERIALIZED ] (`. É o que separa o comando do
+ * `WITH UR|CS|RS|RR` do Db2, do `WITH TIME ZONE`, do `WITH ORDINALITY`, do `WITH CHECK OPTION`, do `WITH NO DATA` e do `WITH (opções)`.
+ */
+function opensQueries(list: readonly SqlToken[], index: number): boolean {
+  let at = index + 1;
+  if (list[at]?.text === "recursive") at++;
+
+  const name = list[at];
+  if (name === undefined || !(name.word || name.text === "'")) return false;
+  at++;
+  if (list[at]?.text === "(") at = afterParentheses(list, at);
+  if (list[at]?.text !== "as") return false;
+  at++;
+  if (list[at]?.text === "not") at++;
+  if (list[at]?.text === "materialized") at++;
+  return list[at]?.text === "(";
+}
+
+/** Se `ALTER` ou `DROP` (em `at - 1`) começam um comando: o tipo do objeto vem depois. */
+function namesObject(list: readonly SqlToken[], at: number): boolean {
+  const kind = list[at]?.text;
+  const next = list[at + 1]?.text;
+  if (kind === "materialized") return next === "view";
+  if (kind === "foreign") return next === "table" || next === "data";
+  return kind !== undefined && objectKinds.has(kind);
+}
+
+/** Se o pedaço em `index`, logo depois da linha em branco, começa um comando. `first` é a primeira palavra do comando de cima. */
+function startsCommand(list: readonly SqlToken[], index: number, first: string | undefined): boolean {
+  const { text, word } = list[index];
+  if (!word || (first === "alter" && alterClauses.has(text))) return false;
+
+  const next = list[index + 1]?.text;
+  switch (text) {
+    case "with":
+      return opensQueries(list, index);
+    case "alter":
+    case "drop":
+      return namesObject(list, index + 1);
+    case "comment":
+      return next === "on";
+    case "lock":
+      return next === "table";
+    case "refresh":
+      return next === "materialized" || next === "table";
+    // O `DO` do PostgreSQL, com o corpo entre aspas ou `$$`; o `DO` do `ON CONFLICT DO` e da regra (`DO INSTEAD`) não é comando.
+    case "do":
+      return next === "'" || next === "language";
+    default:
+      return commandWords.has(text);
+  }
+}
+
+/** O comando de cima, desde o último `;` ou a última linha em branco que separou, para dizer se ele já pode acabar (RN-SQL-018). Um novo a cada comando. */
+type CommandAbove = { next: (token: SqlToken, index: number) => void; started: () => boolean; open: () => boolean; first: () => string | undefined };
+
+function commandAbove(list: readonly SqlToken[]): CommandAbove {
+  const words: string[] = [];
+  let depth = 0;
+  let last: SqlToken | undefined;
+  let beforeLast: SqlToken | undefined;
+  // O que ainda espera o resto: o INSERT antes do VALUES ou do SELECT, o WITH antes do comando principal, o EXPLAIN antes do comando. E o
+  // CREATE TRIGGER e o CREATE SCHEMA, que só o `;` termina (`untilSemicolon`).
+  let insert = false;
+  let queries = false;
+  let explain = false;
+  let semicolonOnly = false;
+
+  return {
+    next(token, index) {
+      const { text } = token;
+
+      if (!token.word) {
+        if (text === "(") depth++;
+        else if (text === ")" && depth > 0) depth--;
+      } else {
+        if (words.length === 0) explain = text === "explain";
+        else if (explain && depth === 0 && explainBodies.has(text)) explain = false;
+        if (words.length < 5) {
+          words.push(text);
+          semicolonOnly ||= words[0] === "create" && untilSemicolon.has(words.slice(1).find((word) => !beforeTrigger.has(word)) ?? "");
+        }
+
+        if (text === "insert") insert ||= !insertEvents.has(last?.text ?? "");
+        else if (insertBodies.has(text)) insert = false;
+
+        if (text === "with" && depth === 0 && opensQueries(list, index)) queries = true;
+        else if (queries && depth === 0 && withBodies.has(text)) queries = false;
+      }
+
+      beforeLast = last;
+      last = token;
+    },
+    started: () => last !== undefined,
+    open() {
+      if (depth > 0 || insert || queries || explain || semicolonOnly) return true;
+      if (last === undefined) return false;
+      if (!last.word) return continuationMarks.has(last.text);
+
+      const before = beforeLast?.text;
+      switch (last.text) {
+        // `SET EXPLAIN ON` do Informix, `SET x = on`, `ALTER SYSTEM SET x TO on`: aqui o ON é um valor.
+        case "on":
+          return !(before === "=" || before === "to" || words[0] === "set");
+        // `INSERT INTO t DEFAULT VALUES` acabou.
+        case "values":
+          return before !== "default";
+        // `ON COMMIT DELETE ROWS` do Db2 e do PostgreSQL: o DELETE de baixo é do comando de cima.
+        case "commit":
+          return before === "on";
+        default:
+          return continuationWords.has(last.text);
+      }
+    },
+    first: () => words[0],
+  };
+}
+
+/**
+ * As linhas em branco entre dois pedaços do texto, ou `null` quando não há nenhuma: o começo da primeira, onde o comando de cima acaba, e o da
+ * última que vem depois de um comentário (`loose`), que solta esse comentário do comando de baixo. Entre os dois pedaços só há espaços e comentários: a linha
+ * que tem um comentário não é branca, e a quebra de linha que fecha um `--` começa a linha seguinte. Um comentário de bloco com linhas em branco
+ * dentro não tem linha em branco nenhuma. A primeira linha do texto nunca conta: antes dela não há o que separar.
+ */
+function blankLinesBetween(sql: string, from: number, to: number, dialect: Dialect): { first: number; loose: number | null } | null {
+  // O começo da linha em que a leitura está enquanto ela só tem espaços; -1 quando ela já tem outra coisa (o pedaço de cima, um comentário).
+  let line = -1;
+  let first: number | null = null;
+  let loose: number | null = null;
+  let commented = false;
+
+  let position = from;
+  while (position < to) {
+    const code = sql.charCodeAt(position);
+    if (code === 10) {
+      if (line >= 0) {
+        first ??= line;
+        if (commented) loose = line;
+      }
+      line = ++position;
+      continue;
+    }
+
+    const comment = code === 45 || code === 47 || code === 123 ? afterComment(sql, position, dialect) : null;
+    if (comment === null) position++;
+    else {
+      commented = true;
+      line = sql.charCodeAt(comment - 1) === 10 ? comment : -1;
+      position = comment;
+    }
+  }
+  return first === null ? null : { first, loose };
+}
+
+/**
+ * Onde a linha em branco separa os comandos (RN-SQL-018), em ordem: o começo da primeira linha em branco entre o comando de cima e o de baixo, e
+ * o da última antes do comando de baixo quando há comentário entre elas (o comentário logo acima do comando vai com ele; o que tem uma linha em
+ * branco antes do comando, não). Nunca dentro de texto, de nome entre aspas, de comentário nem de `$tag$ ... $tag$` (os pedaços de `tokens` já
+ * os pulam), nem dentro de um bloco com `;` no corpo: o corpo é o mesmo de `statementCount`, que só recomeça num `;` fora dele (no Db2, o bloco
+ * vai até o fim do texto, e começa também no `BEGIN` que não é a primeira palavra do comando).
+ */
+function blankLineCuts(sql: string, dialect: Dialect): number[] {
+  const list = [...tokens(sql, dialect)];
+  const cuts: number[] = [];
+  let body = dialect.body();
+  let command = commandAbove(list);
+
+  for (let index = 0; index < list.length; index++) {
+    const token = list[index];
+    const from = index === 0 ? 0 : list[index - 1].end;
+
+    // Uma linha em branco precisa de duas quebras de linha: o espaço de um caractere entre dois pedaços, o caso comum, nem é lido.
+    if (token.start - from > 1 && command.started() && !body.open() && !command.open()) {
+      const blank = blankLinesBetween(sql, from, token.start, dialect);
+      if (blank !== null && startsCommand(list, index, command.first())) {
+        cuts.push(blank.first);
+        body = dialect.body();
+        command = commandAbove(list);
+      }
+    }
+
+    if (!command.started() && !body.open() && token.text !== ";") {
+      const loose = blankLinesBetween(sql, from, token.start, dialect)?.loose ?? null;
+      if (loose !== null && loose > (cuts.at(-1) ?? 0)) cuts.push(loose);
+    }
+
+    // O `db2Body` só vê o bloco nas primeiras palavras do comando, e o `BEGIN` não começa comando: depois de uma linha em branco (`SELECT …`, a
+    // linha em branco e `BEGIN … END`), de um rótulo (`nome: BEGIN`) ou do `ALTER MODULE … ADD PROCEDURE`, o primeiro `;` do bloco recomeçaria a
+    // conta, e a linha em branco seguinte separaria o `DELETE` de dentro dele. O bloco vai até o fim do texto: dali em diante, nada separa.
+    if (dialect.beginBlock && token.text === "begin") return cuts;
+
+    body.next(token);
+    if (token.text === ";") {
+      if (!body.open()) body = dialect.body();
+      command = commandAbove(list);
+    } else command.next(token, index);
+  }
+  return cuts;
+}
+
+/** Se de `from` até `to` só há espaços e quebras de linha. */
+function onlyWhitespace(sql: string, from: number, to: number): boolean {
+  for (let position = from; position < to; position++) if (!isWhitespace(sql.charCodeAt(position))) return false;
+  return true;
+}
+
+/** Se a linha em que está `offset` só tem espaços (RN-SQL-018). */
+function isBlankLine(sql: string, offset: number): boolean {
+  const start = offset === 0 ? 0 : sql.lastIndexOf("\n", offset - 1) + 1;
+  const found = sql.indexOf("\n", offset);
+  return onlyWhitespace(sql, start, found < 0 ? sql.length : found);
+}
+
+/**
+ * Se o cursor está numa das linhas em branco onde a RN-SQL-018 separou: a linha dele só tem espaços, e entre ela e a de um corte (o começo de uma
+ * linha em branco, de `blankLineCuts`) só há outras linhas em branco. A linha em branco depois de um `;` não separou nada.
+ */
+function onBlankLineCut(sql: string, offset: number, cuts: readonly number[]): boolean {
+  if (cuts.length === 0 || !isBlankLine(sql, offset)) return false;
+
+  const after = cuts.findIndex((cut) => cut > offset);
+  const before = after < 0 ? cuts.at(-1) : cuts[after - 1];
+  const next = after < 0 ? undefined : cuts[after];
+  return (before !== undefined && onlyWhitespace(sql, before, offset)) || (next !== undefined && onlyWhitespace(sql, offset, next));
+}
+
 /**
  * O comando onde está o cursor (RN-SQL-001): o primeiro que termina no cursor ou depois dele,
  * contando o `;` como parte do comando (logo depois do `;`, ainda é o comando que ele fecha). Com
  * o cursor depois do último comando, é o último. `null` quando o texto não tem comando.
+ *
+ * Com `blankLines` (RN-SQL-018), a linha em branco também separa. O cursor numa das linhas em branco que terminaram o comando de cima fica com ele,
+ * como no DBeaver (também com um comentário solto no meio). Na linha em branco sem comando nenhum acima (no começo do texto, ou só com comentários
+ * acima), `null`, mesmo que haja um abaixo: "se não há nada acima, nada abaixo também". Nas outras linhas em branco fora de comando (depois de um
+ * comando terminado no `;`) a resposta é a de antes, o comando seguinte: o `;` não muda de resposta com a preferência ligada.
  */
-export function statementAt(sql: string, offset: number, engine?: Engine): SqlStatement | null {
-  const statements = scan(sql, dialectOf(engine));
+export function statementAt(sql: string, offset: number, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement | null {
+  const dialect = dialectOf(engine);
+  const cuts = blankLines ? blankLineCuts(sql, dialect) : [];
+  const statements = scan(sql, dialect, cuts);
   const found = statements.find((statement) => offset <= statement.boundary) ?? statements.at(-1);
-  return found === undefined ? null : toStatement(found);
+  if (found === undefined) return null;
+
+  if (blankLines && (offset < found.start || offset > found.end) && isBlankLine(sql, offset)) {
+    const previous = statements.findLast((statement) => statement.end <= offset);
+    if (previous === undefined) return null;
+    // O de cima que terminou no `;` não é desta regra: vale a resposta de antes.
+    if (previous.cut && onBlankLineCut(sql, offset, cuts)) return toStatement(previous);
+  }
+  return toStatement(found);
 }
 
 /**

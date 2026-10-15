@@ -3,11 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import { scriptsCopy as copy } from "../_lib/scripts.copy";
+import { ScriptIconView } from "./script-icon";
 import { ScriptsListView } from "./scripts-section";
 
 const scripts = [
-  { id: "s1", name: "Fechamento", connectionID: null, database: null, updatedAt: "" },
-  { id: "s2", name: "Pedidos", connectionID: "c1", database: "vendas", updatedAt: "" },
+  { id: "s1", name: "Fechamento", connectionID: null, database: null, icon: null, color: null, updatedAt: "" },
+  { id: "s2", name: "Pedidos", connectionID: "c1", database: "vendas", icon: "chart", color: "#F2B644", updatedAt: "" },
 ];
 const noop = () => {};
 const view = (over: Partial<Parameters<typeof ScriptsListView>[0]> = {}) => ScriptsListView({ scripts, failed: false, selectedId: null, onSelect: noop, onAction: noop, onMenu: noop, onRetry: noop, ...over });
@@ -45,6 +46,16 @@ describe("a lista da seção Scripts (RN-SCRIPT-003)", () => {
     expect(onMenu).toHaveBeenCalledWith(scripts[0], { x: 38, y: 40 }, "first");
   });
 
+  it("o script genérico leva a marca discreta ao lado do nome, e a dica diz o que é; o com conexão, não (RN-SCRIPT-005)", () => {
+    const [generic, bound] = rows(view());
+    const marks = (row: ReturnType<typeof rows>[number]) => elementsOf(row).filter((element) => element.props.children === copy.section.generic);
+
+    expect(marks(generic)).toHaveLength(1);
+    expect(generic.props.title).toBe(copy.section.rowHintGeneric("Fechamento"));
+    expect(marks(bound)).toHaveLength(0);
+    expect(bound.props.title).toBe(copy.section.rowHint("Pedidos"));
+  });
+
   it("as setas escolhem a linha vizinha", () => {
     const onSelect = vi.fn();
     const [first] = rows(view({ onSelect }));
@@ -64,5 +75,28 @@ describe("a lista da seção Scripts (RN-SCRIPT-003)", () => {
     expect(text(failed)).toContain(copy.section.failed);
     (elementsOf(failed).find((element) => element.props.children === copy.section.retry)?.props.onClick as () => void)();
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+});
+
+describe("o ícone de cada script na lista (RN-SCRIPT-006)", () => {
+  it("cada linha leva o ícone do script, na cor dele; o script sem ícone nem cor, o documento neutro", () => {
+    const icons = elementsOf(view()).filter((element) => element.type === ScriptIconView);
+
+    expect(icons.map((icon) => [icon.props.icon, icon.props.color])).toEqual([
+      ["document", null],
+      ["chart", "#F2B644"],
+    ]);
+  });
+});
+
+describe("a densidade do navegador na lista de scripts (RN-NAV-011)", () => {
+  const heights = (tree: ReturnType<typeof view>) => rows(tree).map((row) => String(row.props.className).split(" ").filter((name) => name.startsWith("h-")));
+
+  it("sem a escolha, a confortável: linhas de 28 px, como antes", () => {
+    expect(heights(view())).toEqual([["h-7"], ["h-7"]]);
+  });
+
+  it("a compacta: linhas de 22 px, como as da árvore", () => {
+    expect(heights(view({ density: "compact" }))).toEqual([["h-[22px]"], ["h-[22px]"]]);
   });
 });

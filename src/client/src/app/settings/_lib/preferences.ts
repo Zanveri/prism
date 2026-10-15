@@ -7,7 +7,7 @@ import { appFonts, fontNameSchema } from "./fonts";
  * `localStorage` da janela, fora do cofre, numa chave por usuário do cofre. Nada de segredo nem de dado de conexão passa por
  * aqui; quem apagar o `localStorage` perde só o gosto, e a tela volta ao padrão.
  *
- * Quem só lê usa `usePreferences()` e o nome do campo como está aqui, em grupos: `preferences.theme`, `preferences.ui.fontFamily`,
+ * Quem só lê usa `usePreferences()` e o nome do campo como está aqui, em grupos: `preferences.theme`, `preferences.ui.fontFamily`, `preferences.ui.navigatorDensity`,
  * `preferences.editor.fontSize`, `preferences.results.nullText`, `preferences.security.lockAfterMinutes`.
  */
 
@@ -22,6 +22,9 @@ export const themeModes = ["dark", "light", "system", "monokai", "dracula", "nor
  * duas grades (a da aba de consulta e a dos Registros). Independente do zoom do programa inteiro (RN-ZOOM-001).
  */
 export const gridZoomSteps = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200] as const;
+
+/** As densidades do navegador (RN-NAV-011): "Confortável", o desenho do canvas, e "Compacta", com linhas mais baixas. As medidas são do navegador (`navigator-density.ts`). */
+export const navigatorDensities = ["comfortable", "compact"] as const;
 
 export const preferenceLimits = {
   fontSize: { min: 10, max: 24 },
@@ -48,6 +51,8 @@ const fields = {
   /** RN-CONFIG-008: a fonte da interface, todo o texto fora do código. A do app ou uma instalada, pelo nome (`fonts.ts`). */
   ui: {
     fontFamily: fontNameSchema,
+    /** RN-NAV-011: a densidade do navegador, a da árvore e a da lista de scripts. */
+    navigatorDensity: z.enum(navigatorDensities),
   },
   editor: {
     /** RN-CONFIG-008: a fonte do editor SQL. Qualquer nome que pode virar CSS: a escolha da lista fixa de antes (Consolas…) continua valendo. */
@@ -58,6 +63,8 @@ const fields = {
     autocomplete: z.boolean(),
     /** RN-CONFIG-004: converter palavra-chave para maiúsculas ao digitar. */
     uppercaseKeywords: z.boolean(),
+    /** RN-SQL-018: sem seleção, a linha em branco também termina o comando do cursor. Desligada, só o `;`, como antes. */
+    blankLineSeparates: z.boolean(),
   },
   results: {
     /** RN-CONFIG-005: o texto do valor nulo na grade. */
@@ -87,6 +94,7 @@ const strict = z.object({
 export type Preferences = z.infer<typeof strict>;
 export type ThemeMode = Preferences["theme"];
 export type GridZoom = Preferences["results"]["gridZoom"];
+export type NavigatorDensity = Preferences["ui"]["navigatorDensity"];
 
 /** Uma mudança: os grupos entram pela metade (`{ results: { autoLoadMore: true } }` não toca em `results.nullText`). */
 export type PreferencesPatch = { [K in keyof Preferences]?: Preferences[K] extends object ? Partial<Preferences[K]> : Preferences[K] };
@@ -99,13 +107,13 @@ function freeze<T extends object>(value: T): T {
 /**
  * O padrão: o do canvas (`Configuracoes.dc.html`) onde ele diz, e o combinado com as outras frentes onde o canvas não diz
  * (as fontes que o app traz: RN-CONFIG-008; maiúsculas desligadas, bloqueio ligado em 10 minutos, "buscar mais ao rolar" desligado, o tipo no cabeçalho ligado, como a grade
- * sempre o mostrou: RN-CONFIG-006, e o zoom da grade em 100%: RN-GRADE-010). Congelado: é o mesmo objeto para
+ * sempre o mostrou: RN-CONFIG-006, o zoom da grade em 100%: RN-GRADE-010, a linha em branco separando os comandos, como no DBeaver: RN-SQL-018, e o navegador confortável, o do canvas: RN-NAV-011). Congelado: é o mesmo objeto para
  * todo mundo que ainda não escolheu nada. A ordem dos campos é a de `fields`.
  */
 export const defaultPreferences: Preferences = freeze({
   theme: "dark",
-  ui: { fontFamily: appFonts.ui },
-  editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false },
+  ui: { fontFamily: appFonts.ui, navigatorDensity: "comfortable" },
+  editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
   results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
   security: { lockEnabled: true, lockAfterMinutes: 10 },
 } as const satisfies Preferences);

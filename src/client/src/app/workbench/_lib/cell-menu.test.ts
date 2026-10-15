@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cellAccess, columnHintsOf, deleteRowAccess, newRowAccess, resultReadOnly, type CellContext } from "./cell-editing";
+import { autoRefreshMenuItem } from "./auto-refresh-menu";
 import { cellMenu, type CellMenuState } from "./cell-menu";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
@@ -116,6 +117,8 @@ describe("o que uma célula permite editar (RN-EDIT-002)", () => {
 
   it("com um comando em andamento na aba nada se edita", () => {
     expect(cellAccess({ ...read(1), busy: true })).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.busy) });
+    // RN-GRADE-014: a execução da atualização automática tem o motivo dela: as linhas vão mudar.
+    expect(cellAccess({ ...read(1), busy: "refresh" })).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.refreshing) });
   });
 
   it("linha nova e excluir linha só onde o resultado aceita; a linha com a chave cortada não se exclui", () => {
@@ -185,6 +188,15 @@ describe("o menu de contexto da célula", () => {
       [true, reason],
       [true, reason],
     ]);
+  });
+
+  it("o \"Atualizar automaticamente\" (RN-GRADE-014) vem logo depois do \"Atualizar\" (F5), no grupo da vista, como veio", () => {
+    const auto = autoRefreshMenuItem({ status: "off", stopped: null }, "writes");
+    const groups = cellMenu(state({ refresh: { editable: true }, autoRefresh: auto }));
+
+    expect(groups[1].map((item) => item.id)).toEqual(["refresh", "autoRefresh"]);
+    expect(groups[1][1]).toBe(auto);
+    expect(cellMenu(state()).flat().some((item) => item.id === "autoRefresh")).toBe(false);
   });
 
   it("os atalhos que a grade já trata vão à direita: F2 edita, Alt+Insert cria a linha", () => {

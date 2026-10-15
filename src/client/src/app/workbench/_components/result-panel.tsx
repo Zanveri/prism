@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
@@ -13,7 +13,7 @@ import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-
 import { autoLoadArmed } from "../_lib/result-paging";
 import { recall, remember } from "../_lib/tab-memory";
 import type { RecordsSort } from "../_lib/table-sql";
-import type { RowsState, RunnerState } from "../_lib/use-query-runner";
+import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
@@ -25,6 +25,47 @@ function PanelButton({ children, ...props }: { children: ReactNode; onClick: () 
   return (
     <Button type="button" variant="secondary" size="compact" className="h-7 px-2.5 text-xs" {...props}>
       {children}
+    </Button>
+  );
+}
+
+/**
+ * RN-SQL-006: "Contar total" e, com o total já contado, "Contar de novo" (issue #10). É UM botão só, no mesmo lugar da barra, que troca o que mostra: o
+ * texto antes da primeira contagem, o ícone com a dica depois. Clicado, ele continua na página e com o foco, e o F5 da aba segue valendo (antes, o
+ * botão virava o texto do total e o foco caía no `body`, fora da aba). Ocupado (`busy`: contando, carregando mais, outro comando da pessoa rodando) ele
+ * não se desabilita de verdade, só por `aria-disabled`: o botão `disabled` perde o foco. Quando ele sai da página com o foco (o resultado novo não tem o
+ * que contar), avisa `onFocusLost`, e quem desenha a área leva o foco para dentro dela.
+ */
+export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsState; busy: boolean; onCount: () => void; onFocusLost?: () => void }) {
+  const recount = rows.total !== null;
+  const lost = useRef(onFocusLost);
+  useLayoutEffect(() => {
+    lost.current = onFocusLost;
+  });
+  // A limpeza da ref (React 19) roda quando o botão sai, com ele ainda na página: é aí que se sabe se ele tinha o foco. Estável, para não rodar a cada
+  // renderização.
+  const watchFocus = useCallback((button: HTMLButtonElement | null) => {
+    if (button === null) return;
+    return () => {
+      if (button.ownerDocument.activeElement === button) lost.current?.();
+    };
+  }, []);
+
+  return (
+    <Button
+      ref={watchFocus}
+      type="button"
+      variant="secondary"
+      size="compact"
+      aria-disabled={busy || undefined}
+      aria-label={recount ? copy.recount : undefined}
+      title={recount ? copy.recount : undefined}
+      onClick={() => {
+        if (!busy) onCount();
+      }}
+      className={cn("h-7 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50", recount ? "w-7 px-0" : "px-2.5")}
+    >
+      {recount ? <RefreshIcon className={cn(rows.counting && "animate-spin")} /> : rows.counting ? copy.counting : copy.count}
     </Button>
   );
 }
@@ -46,7 +87,8 @@ function summaryOf(rows: RowsState): string {
  * roda sobre um resultado, a barra diz que roda: é a notícia que importa.
  */
 export function collapsedSummary(state: RunnerState): string {
-  if (state.status === "running") return copy.running;
+  // A execução da atualização automática (RN-GRADE-014) não é notícia: a barra segue com o resultado que está lá.
+  if (state.status === "running") return state.auto === true && state.previous !== null ? collapsedSummary(state.previous) : copy.running;
   if (state.status === "rows") return state.total === null ? summaryOf(state) : `${summaryOf(state)} · ${copy.total(state.total)}`;
   if (state.status === "affected") return copy.affected(state.rowsAffected, state.elapsedMs);
   if (state.status === "cancelled") return copy.cancelled;
@@ -117,6 +159,11 @@ type ResultPanelProps = {
    * filtrado na tela, para a pessoa corrigir o filtro; recolhida a área, recolhe com ela.
    */
   filter?: ReactNode;
+  /**
+   * RN-GRADE-014: a atualização automática (`AutoRefreshControl`), ao lado de "Atualizar": nos Registros, no rodapé, logo depois do botão; na aba de
+   * consulta, que não tem o botão (o F5 e "Executar" fazem a vez dele), na barra, antes do zoom, que fica também com a área recolhida.
+   */
+  autoRefresh?: ReactNode;
 };
 
 /**
@@ -124,8 +171,10 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter }: ResultPanelProps) {
-  const running = state.status === "running";
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh }: ResultPanelProps) {
+  // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
+  // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
+  const running = state.status === "running" && state.auto !== true;
   // O que está na tela: o estado ou, enquanto um comando novo roda, o resultado que já estava lá
   // (linhas, linhas afetadas ou um erro de SQL). Só a API aceitar o comando novo o substitui;
   // recusado antes disso, ele continua valendo.
@@ -149,46 +198,72 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   }, [tabId, sizing]);
   // Identidade estável: a grade é memorizada.
   const resize = useCallback((index: number, width: number) => setSizing((held) => withWidth(held, index, width)), []);
-  // "Carregar mais" e a contagem também ocupam a sessão (RN-SESSAO-002) e se cancelam (RN-SQL-010).
-  const busy = running || (state.status === "rows" && (state.loadingMore || state.counting));
+  // "Carregar mais" e a contagem também ocupam a sessão (RN-SESSAO-002) e se cancelam (RN-SQL-010). A execução da atualização automática (RN-GRADE-014) não
+  // ocupa a área para a pessoa: "Atualizar" não vira "Cancelar", "Exportar CSV" e a ordem pelo cabeçalho seguem valendo (o comando dela toma o lugar).
+  const busy = isPersonBusy(state);
   const cancelling = (state.status === "running" || state.status === "rows") && state.cancelling;
   // RN-CONFIG-005: a grade só avisa que chegou ao fim; quem decide se a página seguinte pode vir é esta conta.
   const autoLoad = autoLoadArmed(state, { enabled: autoLoadMore, connected });
   const loadedHint = autoLoadMore ? copy.loadedHintAuto : copy.loadedHint;
   const exportHintId = useId();
 
+  // RN-SQL-006: o botão de contar que sai da página com o foco (o resultado novo não tem o que contar) não o deixa cair no `body`, fora da aba, onde o F5
+  // não vale: o foco vai para a grade ou, sem ela (ou com ela recolhida), para a própria área.
+  const section = useRef<HTMLElement>(null);
+  const focusLost = useRef(false);
+  const rescueFocus = useCallback(() => {
+    focusLost.current = true;
+  }, []);
+  useLayoutEffect(() => {
+    if (!focusLost.current) return;
+    focusLost.current = false;
+    const area = section.current;
+    const page = area?.ownerDocument;
+    if (area === null || page === undefined || (page.activeElement !== null && page.activeElement !== page.body)) return;
+    area.querySelector<HTMLElement>('[role="grid"], [role="table"]')?.focus();
+    if (page.activeElement === null || page.activeElement === page.body) area.focus();
+  });
+
   return (
-    <section id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
+    // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
+    <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
       <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !collapsed && "border-b border-border")}>
         <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2>
         {collapsed ? (
           <span role={running ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
             {collapsedSummary(state)}
           </span>
-        ) : running ? (
-          // Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo.
-          shown === null ? null : (
-            <span role="status" className="px-2 text-xs text-muted">
-              {copy.running}
-            </span>
-          )
-        ) : rows === null ? null : (
+        ) : null}
+        {/*
+          As linhas na tela, também enquanto outro comando roda sobre elas (esmaecidas): o resumo, o total e o botão de contar ficam no lugar, com
+          "Executando…" depois. O botão, clicado, tem o foco, e não sai da página quando a pessoa executa de novo (RN-SQL-006).
+        */}
+        {collapsed || rows === null ? null : (
           <>
             <span className="px-2 text-xs text-muted">{summaryOf(rows)}</span>
             {/*
               RN-SQL-006: o total só é contado quando a pessoa pede, e só há o que contar quando há linhas
               que a tela não leu (`hasMore`, com o cursor aberto ou já fechado). Com o resultado inteiro na
-              tela, o total é o número do resumo, sem ir ao banco.
+              tela, o total é o número do resumo, sem ir ao banco. O total contado se conta de novo (issue #10):
+              enquanto isso, o de antes fica à vista, marcado. O botão vem sempre depois do total, no mesmo lugar
+              da árvore com ou sem ele: é o mesmo elemento, e o foco fica nele.
             */}
-            {rows.total !== null ? (
-              <span className="px-2 text-xs text-ink">{copy.total(rows.total)}</span>
-            ) : connected && rows.hasMore ? (
-              <PanelButton onClick={onCount} disabled={rows.counting || rows.loadingMore}>
-                {rows.counting ? copy.counting : copy.count}
-              </PanelButton>
-            ) : null}
+            {rows.total === null ? null : (
+              <span className={cn("px-2 text-xs", rows.counting ? "text-muted" : "text-ink")}>
+                {copy.total(rows.total)}
+                {rows.counting ? ` · ${copy.recounting}` : null}
+              </span>
+            )}
+            {connected && (rows.hasMore || rows.total !== null) ? <CountButton rows={rows} busy={busy} onCount={onCount} onFocusLost={rescueFocus} /> : null}
           </>
         )}
+        {/* Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo. */}
+        {!collapsed && running && shown !== null ? (
+          <span role="status" className="px-2 text-xs text-muted">
+            {copy.running}
+          </span>
+        ) : null}
+        {records ? null : (autoRefresh ?? null)}
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
         {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} /> : null}
         {actions}
@@ -319,6 +394,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 {copy.refresh}
               </PanelButton>
             )}
+            {autoRefresh ?? null}
             {/* RN-TABELA-006: exporta as linhas carregadas; a dica diz quantas são e que as outras não entram. */}
             {rows === null ? null : (
               <>

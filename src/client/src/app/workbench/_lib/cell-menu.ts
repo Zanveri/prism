@@ -1,13 +1,17 @@
+import type { AutoRefreshAction } from "./auto-refresh-menu";
 import type { EditAccess } from "./cell-editing";
 import type { FilterAction } from "./filter-menu";
 import { recordsCopy } from "./records.copy";
 
 const copy = recordsCopy.edit.menu;
 
-export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "deleteRow" | "filter" | "refresh" | FilterAction;
+export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction;
 
-/** Um item do menu da célula. O modelo só descreve; quem executa é a vista Registros, que tem as pendências e a área de transferência. */
-export type CellMenuItem = { id: CellMenuAction; label: string; shortcut?: string; disabled?: boolean; hint?: string; text?: string; submenu?: { label: string; groups: CellMenuGroup[] } };
+/**
+ * Um item do menu da célula. O modelo só descreve; quem executa é a vista Registros, que tem as pendências e a área de transferência. `checked`: o item é
+ * uma escolha de um grupo de escolha única (o intervalo da atualização automática), marcada ou não.
+ */
+export type CellMenuItem = { id: CellMenuAction; label: string; shortcut?: string; disabled?: boolean; hint?: string; text?: string; checked?: boolean; submenu?: { label: string; groups: CellMenuGroup[] } };
 
 /** Os itens entre dois separadores; com `label`, o grupo tem título (o "Valor da célula" do submenu "Filtrar"). */
 export type CellMenuGroup = CellMenuItem[] | { label: string; items: CellMenuItem[] };
@@ -29,19 +33,26 @@ export type CellMenuState = {
   filter?: CellMenuItem;
   /** RN-GRADE-012: "Atualizar" (F5); desabilitado com o motivo enquanto algo roda. */
   refresh?: EditAccess;
+  /** RN-GRADE-014: "Atualizar automaticamente", com o submenu dos intervalos (`autoRefreshMenuItem`), logo depois do "Atualizar". */
+  autoRefresh?: CellMenuItem;
 };
 
 const hintOf = (access: EditAccess) => (access.editable ? {} : { disabled: true, hint: access.reason });
 
 /**
  * O menu de contexto de uma célula dos Registros (pedido do dono, ao lado da RN-EDIT-001): copiar o valor, colar como alteração
- * pendente, editar, definir como NULL e desfazer a alteração; depois, o "Filtrar" (F11, com o submenu) e o "Atualizar" (F5), quando a grade os tem;
+ * pendente, editar, definir como NULL e desfazer a alteração; depois, o "Filtrar" (F11, com o submenu), o "Atualizar" (F5) e o "Atualizar automaticamente"
+ * (com o submenu dos intervalos), quando a grade os tem;
  * depois do separador, linha nova e excluir linha. O que não se aplica vem desabilitado, sem sumir, com o motivo quando é de só leitura (o de
  * `cellAccess`). Copiar vale sempre, também na célula só leitura; o nulo copia vazio. Os atalhos são os que a grade já trata.
  */
 export function cellMenu(state: CellMenuState): CellMenuItem[][] {
   const notNullable = !state.access.editable ? hintOf(state.access) : state.nullable ? {} : { disabled: true, hint: copy.notNullable };
-  const view: CellMenuItem[] = [...(state.filter === undefined ? [] : [state.filter]), ...(state.refresh === undefined ? [] : [{ id: "refresh" as const, label: copy.refresh, shortcut: "F5", disabled: false, ...hintOf(state.refresh) }])];
+  const view: CellMenuItem[] = [
+    ...(state.filter === undefined ? [] : [state.filter]),
+    ...(state.refresh === undefined ? [] : [{ id: "refresh" as const, label: copy.refresh, shortcut: "F5", disabled: false, ...hintOf(state.refresh) }]),
+    ...(state.autoRefresh === undefined ? [] : [state.autoRefresh]),
+  ];
 
   return [
     [

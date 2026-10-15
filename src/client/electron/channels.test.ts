@@ -50,6 +50,13 @@ describe("os canais entre a tela e o processo principal", () => {
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
 
+  it("o zoom do programa (RN-ZOOM-001): os dois pedidos conferem a origem, o pedido de outro zoom só vale com um dos passos, e o aviso vai a todas as janelas", () => {
+    expect(channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:zoom-"))).toEqual(["prism:zoom-get", "prism:zoom-set"]);
+    expect(main).toMatch(/ipcMain\.handle\("prism:zoom-get", \(event\) => \{\s*assertFromApp\(event\);\s*return appZoom;\s*\}\);/);
+    expect(main).toMatch(/ipcMain\.handle\("prism:zoom-set", \(event, zoom: unknown\) => \{\s*assertFromApp\(event\);\s*if \(!isAppZoom\(zoom\)\) throw new Error\([^)]*\);\s*return changeZoom\(zoom\);\s*\}\);/);
+    expect(main).toMatch(/for \(const window of liveWindows\(\)\) \{\s*window\.webContents\.setZoomFactor\(zoomFactor\(next\)\);\s*window\.webContents\.send\("prism:zoom-changed", next\);/);
+  });
+
   it("as abas que voltam (RN-ABAS-006): cada pedido confere a origem e passa ao centro da área de trabalho, que confere o relato com o schema", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:workspace-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?workspaceHub\.[a-zA-Z]+\(/g)].map((match) => match[1]);
     const workspaceChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:workspace-"));

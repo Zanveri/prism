@@ -303,7 +303,8 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 ### 5.5 Editor e resultado
 
 - **RN-SQL-001.** Executar (botão ou Ctrl+Enter) envia o texto selecionado; sem seleção, envia o
-  comando onde está o cursor. Uma execução leva um comando só: se a seleção tiver mais de um
+  comando onde está o cursor, que acaba no `;` e também na linha em branco, nas condições da
+  RN-SQL-018 (pedido do dono em 2026-10-15, issue #7). Uma execução leva um comando só: se a seleção tiver mais de um
   (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência entra na entrega 2.
   Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) conta como um
   comando só. No Db2 e no Informix a API repete a conferência e responde 422
@@ -312,7 +313,9 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-SQL-002.** Comandos são separados por `;` fora de texto entre aspas simples, de
   identificador entre aspas duplas, de comentário (`--` e `/* */`) e de `$tag$ ... $tag$` do
   PostgreSQL. Bloco que tem `;` no corpo (procedimento em Db2 ou Informix) é executado
-  selecionando o bloco inteiro.
+  selecionando o bloco inteiro. Sem seleção, a linha em branco também separa o comando do cursor,
+  pela RN-SQL-018 (mudou em 2026-10-15, pedido do dono, issue #7: antes só o `;` separava); a
+  seleção continua contada só pelo `;`.
 - **RN-SQL-003.** Qualquer comando SQL é aceito e enviado como está ao banco, sem ser dividido
   nem reescrito. Se o banco não aceita mais de um comando por envio, a recusa é a dele. A
   exceção são os comandos de controle de transação (`BEGIN`, `START TRANSACTION`, `COMMIT`,
@@ -345,7 +348,17 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   devolveu linhas, como subconsulta e em conexão separada; funciona com o cursor aberto ou já
   fechado. Sem comando desse tipo na sessão: 409 `NO_QUERY_TO_COUNT`. Se o banco recusar a
   subconsulta, a tela mostra o erro do banco. O total nunca é contado sem o usuário pedir. No
-  Commit manual vale a RN-TX-012 (a contagem roda na sessão e a ocupa).
+  Commit manual vale a RN-TX-012 (a contagem roda na sessão e a ocupa). Depois de contado, o total
+  pode ser contado de novo (pedido do dono em 2026-10-15, issue #10; antes o botão sumia e o total
+  ficava como estava até a próxima execução): "Contar de novo" é um botão de ícone, com dica, ao
+  lado do total e no mesmo lugar do "Contar total", para o foco não sair da aba (o F5 continua
+  valendo depois do clique). Enquanto outro comando roda sobre as linhas na tela, o resumo, o
+  total e o botão ficam onde estão (o botão desabilitado), com "Executando…" ao lado; e quando o
+  botão sai da barra (o resultado novo não tem o que contar), o foco vai para a grade, ou para a
+  própria área de resultado, e também não sai da aba. Enquanto conta de novo, o total anterior
+  fica à vista, marcado como em recontagem, até chegar o novo; se a contagem falhar ou for
+  cancelada, ele fica como estava, e o erro aparece como na primeira contagem. Vale nos Registros
+  e no resultado da aba de consulta.
 - **RN-SQL-007.** O cursor fecha quando acaba, a cada nova execução na aba, ao fechar a aba e
   após 5 minutos sem leitura, para não segurar recurso no banco. Depois disso "Carregar mais"
   responde 409 `NO_OPEN_CURSOR` e a tela oferece executar de novo. No PostgreSQL, enquanto o
@@ -418,9 +431,13 @@ de inicialização" do canvas (`docs/design/canvas/IconeApp.dc.html` e `Splash.d
   engrossa, com os mesmos elementos. Na barra superior das telas e ao lado do nome no login,
   a marca é a mesma ilustração em formato largo. O ícone padrão do Electron não aparece em
   lugar nenhum.
-- **RN-MARCA-002.** Ao abrir, o app mostra de imediato uma janela de splash de 640×400, sem
-  moldura e centralizada, com a ilustração do prisma, o nome, a versão, o passo atual e uma
-  barra de progresso.
+- **RN-MARCA-002.** Ao abrir, o app mostra de imediato uma janela de splash de 640×400 em 100%,
+  sem moldura e centralizada, com a ilustração do prisma, o nome, a versão, o passo atual e uma
+  barra de progresso. Ela cresce com o zoom do programa (RN-ZOOM-001), até caber na área útil da
+  tela: a 200%, num monitor de 1366×768, fica perto de 180%, o maior tamanho que cabe.
+
+  Alterada em 2026-10-15 (pedido do dono, issue #14, seção 30): o tamanho acompanha o zoom do
+  programa. Antes dizia só "640×400".
 - **RN-MARCA-003.** Passos do splash: "Iniciando o serviço local…" (1 de 2), até a API
   anunciar a porta; "Carregando a interface…" (2 de 2), até a janela principal estar pronta
   para aparecer. Então a janela principal aparece e o splash fecha. Não há espera artificial:
@@ -542,6 +559,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   a sonda da seção 10 mostrar que é necessário.
 - A porta sugerida do Informix é 9089, não 9088.
 - A barra do editor não tem Explicar plano nem Formatar, que entram na entrega 2.
+- O botão "Conexão e esquema desta aba" da barra do editor é o botão da conexão da aba
+  (RN-ARVORE-008), com a sigla do banco, o nome da conexão e o ambiente. O banco fica na lista ao
+  lado dele (RN-ARVORE-007), e o esquema não aparece: o canvas escreve os três num botão só.
+- O diálogo da pasta do canvas (`PastaAmbiente`) não tem a cor da pasta, e o ícone da pasta na
+  árvore do canvas é sempre neutro: no "Editar pasta…" a "Cor da pasta" vem antes da seção
+  Ambiente, e pinta o ícone da pasta (RN-PASTA-007). O canvas também não desenha a seção "Scripts",
+  nem o ícone e a cor de cada script (RN-SCRIPT-006).
 - A aba de tabela e a aba de diagrama entraram pela seção 18 (o DDL e o salto por chave
   estrangeira ainda não).
 - A Estrutura da tabela não empilha cartões como o canvas (`TabelaDetalhe`): mostra uma seção
@@ -554,6 +578,15 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   ("Transação aberta pela edição"), por decisão do dono (RN-EDIT-004).
 - A barra dos Registros ganha o seletor de nível de isolamento, que o canvas não tem
   (RN-ISOL-001).
+- Configurações › Editor SQL ganha "A linha em branco separa os comandos", que o canvas não tem
+  (RN-SQL-018).
+- A barra da área de resultado ganha "Contar de novo" ao lado do total (RN-SQL-006) e a
+  atualização automática (RN-GRADE-014), que o canvas não tem; nos Registros, a atualização
+  automática fica no rodapé, ao lado de "Atualizar".
+- Configurações › Aparência ganha o zoom do programa e a densidade do navegador, que o canvas não
+  tem; na densidade "Compacta" a árvore tem linhas de 22 px, e não as de 30 px do canvas, que
+  continuam sendo o padrão (RN-ZOOM-001 e RN-NAV-011, seção 30). Fora de 100% o splash tem o
+  tamanho do zoom, e não os 640×400 do canvas (RN-MARCA-002).
 
 ## 10. Riscos e sondas
 
@@ -612,6 +645,10 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
 
 (Em 2026-10-11 entraram pela seção 18: a aba de registros e de estrutura da tabela, o diagrama
 e a tela de configurações, nos limites ditos lá.)
+
+(Em 2026-10-15 entrou pela seção 29 a atualização automática do resultado de um comando,
+RN-GRADE-014. A "atualização automática" da lista abaixo, ao lado da assinatura de código, é a do
+próprio app, que entrou pela seção 17.)
 
 Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama ER, somente
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
@@ -1036,10 +1073,14 @@ Só da tela:
   chave de ligar e desligar.
 - **RN-CONFIG-005.** Resultados: o texto que representa o valor nulo na grade, e "buscar mais
   linhas ao rolar até o fim da grade" (a grade pede a página seguinte sozinha, uma por vez, e
-  para se o usuário cancelar). "Linhas por busca" depende da API (RN-SQL-016).
+  para se o usuário cancelar; com a atualização automática do resultado ligada, RN-GRADE-014, a
+  página seguinte espera o botão "Carregar mais", pelo pedido do dono em 2026-10-15, issue #11).
+  "Linhas por busca" depende da API (RN-SQL-016).
 - **RN-SEG-001.** Bloqueio por inatividade, ligado por padrão em 10 minutos (de 1 a 240, e pode
   ser desligado). Sem tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em
-  nenhuma aba (o tempo conta a partir do fim do último), o Prism avisa 60 segundos antes (30, quando o
+  nenhuma aba (o tempo conta a partir do fim do último; a execução da atualização automática,
+  RN-GRADE-014, não conta como comando em andamento nem como atividade, pedido do dono em
+  2026-10-15, issue #11), o Prism avisa 60 segundos antes (30, quando o
   tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
   mostra o bloqueio, que pede a senha do MESMO usuário. Desbloquear devolve a área de trabalho
   com as abas e o texto de SQL como estavam; os resultados que estavam na tela são descartados
@@ -1365,11 +1406,26 @@ Janela e zoom (pedido do dono em 2026-10-12):
   arrastada, minimizada ou fechada. O título da janela continua "Prism" (é o que a barra de
   tarefas e o Alt+Tab mostram). Numa plataforma em que o sistema não ofereça os botões
   sobrepostos, a janela mantém a barra nativa.
-- **RN-ZOOM-001.** Zoom do programa inteiro, como no VS Code e no Postman: `Ctrl +`, `Ctrl −` e
-  `Ctrl 0` (Cmd no macOS), e um controle em Configurações › Aparência, de 50% a 200%; 100% é o
-  tamanho de hoje. Vale para todas as telas da janela principal, desde a abertura, é lembrado
-  nesta instalação, e a barra da janela e os botões do sistema continuam alinhados em qualquer
-  valor. É independente do zoom da grade (RN-GRADE-010).
+- **RN-ZOOM-001.** Zoom do programa inteiro, como no VS Code e no Postman: `Ctrl +` (também
+  `Ctrl =` e o `+` do teclado numérico), `Ctrl −` e `Ctrl 0` (Cmd no macOS), e um controle em
+  Configurações › Aparência que mostra o valor de agora, com − e + e "Restaurar 100%". Os passos são
+  os do zoom da grade: 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 e 200%; 100% é o tamanho do canvas
+  (RN-CONFIG-009), e nos limites o passo que não anda mais não faz nada.
+  - Vale para todas as janelas do app, também as que abrem depois (RN-ABAS-002), e desde a
+    abertura: o splash e o login já aparecem no zoom escolhido. O splash, que não tem moldura
+    para ser arrastado, cresce só até caber na área útil da tela (RN-MARCA-002).
+  - É lembrado nesta instalação, e não por usuário: a escolha mora com o processo principal, fora
+    do cofre, porque o splash e o login vêm antes de se saber quem entra.
+  - Os atalhos valem em qualquer tela e com o foco em qualquer lugar, inclusive no editor SQL e na
+    grade, sem depender de menu (o app empacotado do Windows e do Linux não tem menu).
+  - Quando a barra da janela for a do app (RN-JANELA-001), ela e os botões do sistema continuam
+    alinhados em qualquer valor.
+  - É independente do zoom da grade (RN-GRADE-010): Ctrl+roda do mouse sobre a grade continua
+    sendo o zoom dela.
+
+  Alterada em 2026-10-15, quando foi feita (pedido do dono, issue #14, seção 30): os passos, todas
+  as janelas e o splash (até caber na tela), o "Restaurar 100%" e onde a escolha fica. Antes dizia
+  "de 50% a 200%" e "todas as telas da janela principal".
 
 ## 21. O projeto no GitHub (decisões do dono em 2026-10-12)
 
@@ -1882,17 +1938,27 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 
 - **RN-SCRIPT-001.** Ctrl+S numa aba de consulta salva o SQL dela como script: na primeira vez pede
   o nome (sugerido "Script 1", "Script 2"…); depois grava por cima. "Salvar como" (Ctrl+Shift+S)
-  grava com outro nome. A aba mostra o nome do script, e um ponto enquanto há mudança não salva;
-  fechá-la assim pergunta se salva.
+  grava com outro nome. O diálogo do nome, na primeira vez e no "Salvar como", tem a caixa "Script
+  genérico (sem conexão)" (RN-SCRIPT-005). A aba mostra o nome do script, e um ponto enquanto há
+  mudança não salva; fechá-la assim pergunta se salva. *Alterada a pedido do dono em 2026-10-15,
+  issue #9: entrou a caixa do script genérico.*
 - **RN-SCRIPT-002.** Os scripts são do usuário e moram no cofre dele, cifrados como o resto do cofre
   (RN-COFRE): só quem tem a senha do usuário os lê, nada vai em texto aberto para o disco, e o log
   nunca leva o texto do SQL. Acrescentar os scripts ao cofre sobe o número do formato dele; um
   cofre antigo é migrado ao abrir (RN-VERSAO-005).
 - **RN-SCRIPT-003.** O navegador tem a seção "Scripts", com os scripts do usuário em ordem de nome:
-  abrir (duplo clique ou Enter), renomear, excluir (com confirmação) e "Copiar SQL". O script
-  lembra a conexão e o banco da aba em que foi salvo; aberto, vira uma aba de consulta já nessa
-  conexão e nesse banco. Se a conexão não existe mais, a aba abre sem conexão e pede para
-  escolher uma.
+  abrir (duplo clique ou Enter), renomear, excluir (com confirmação), "Copiar SQL" e, conforme o
+  script, "Tornar genérico" ou "Vincular à conexão da aba" (RN-SCRIPT-005). O script lembra a
+  conexão e o banco da aba em que foi salvo, menos o genérico, que não lembra nenhum
+  (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco. Se a conexão
+  não existe mais, a aba abre sem conexão e pede para escolher uma.
+  - Mudança não salva é o texto, a conexão (RN-ARVORE-008) ou o banco (RN-ARVORE-007) da aba
+    diferente do que o script tem gravado. O Ctrl+S grava a conexão e o banco da aba junto com o
+    texto. No script genérico só o texto conta.
+  - As abas que voltam na próxima entrada (RN-ABAS-006) guardam essa marca, e a aba do script volta
+    lembrando a conexão com que ele está gravado.
+  - *Alterada a pedido do dono em 2026-10-15, issue #9: antes todo script lembrava uma conexão, e a
+    mudança não salva era só o texto e o banco.*
 - **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
   (sem diferenciar maiúsculas); SQL de até 1 MB.
 
@@ -1900,10 +1966,10 @@ Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`
 
 | Rota | Sucesso | Recusas |
 | --- | --- | --- |
-| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, updatedAt }`, sem o SQL | |
-| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
+| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, icon, color, updatedAt }`, sem o SQL (`icon` e `color`: RN-SCRIPT-006) | |
+| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, icon, color, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
 | `POST api/user/scripts` `{ name, sql, connectionID?, database? }` | 201 | 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
-| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database? }` | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database?, generic?, icon?, color? }` (`generic`: RN-SCRIPT-005; `icon` e `color`: RN-SCRIPT-006) | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE`, `SCRIPT_PLACE_INVALID` (`generic` com `connectionID` ou `database`), `SCRIPT_ICON_INVALID` (ícone fora da lista, cor fora de `#RRGGBB`) |
 | `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
 
 ### Ir do editor para a tabela
@@ -1921,10 +1987,13 @@ Pedido do dono em 2026-10-13: "F2 para renomear pastas e conexões, além da pos
 duplicar a conexão" pelo botão direito.
 
 - **RN-NAV-009.** No navegador, F2 na linha de uma pasta ou de uma conexão abre o "Renomear"
-  dela. A pasta usa o diálogo de "Renomear" que já existe. A conexão ganha um diálogo só com o
-  nome, que grava pelo `PATCH api/user/connections` sem mudar mais nada, senha incluída. As
-  recusas são as de sempre (nome repetido, nome inválido), no próprio diálogo. O menu de contexto
-  da conexão ganha "Renomear" (F2), e o "Renomear" da pasta passa a mostrar o atalho F2.
+  dela: um diálogo só com o nome, que grava pelo `PATCH` (`api/user/folders` ou
+  `api/user/connections`) sem mudar mais nada; na conexão, a senha incluída, e na pasta, a cor
+  (RN-PASTA-007) e o ambiente. As recusas são as de sempre (nome repetido, nome inválido), no
+  próprio diálogo. O menu de contexto da pasta e o da conexão têm "Renomear" (F2); o diálogo
+  inteiro é o "Editar pasta…" (RN-PASTA-006) e o "Editar conexão". *Alterada a pedido do dono em
+  2026-10-15, issue #8: a pasta usava o diálogo de "Renomear" que já existia, que virou o "Editar
+  pasta…" (F2) com a RN-PASTA-006; agora ela tem o diálogo só com o nome, como a conexão.*
 - **RN-CONN-016.** "Duplicar conexão" no menu de contexto da conexão cria, na mesma pasta, uma
   cópia com todos os campos e a senha salva. A senha é copiada dentro do cofre e não passa pela
   tela. O nome da cópia é "<nome> (cópia)"; se esse já existir, "(cópia 2)", "(cópia 3)" e assim
@@ -1962,7 +2031,9 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   - A lista traz os bancos do servidor, a mesma da RN-ARVORE-006. No Db2, só o banco da conexão, e
     a lista fica desabilitada com o motivo.
   - Trocar passa a aba para a sessão daquele banco, a mesma que a árvore abre (RN-ARVORE-006), sem
-    executar nada. O texto do editor fica.
+    executar nada. O texto do editor fica; o resultado e o filtro dele (RN-GRADE-011) saem, e o
+    filtro não volta a ser aplicado no banco novo (corrigido em 2026-10-15; vale também para a troca
+    da conexão, RN-ARVORE-008, e para o bloqueio, RN-SEG-001).
   - Com alterações não salvas na grade (RN-EDIT-007) ou com transação aberta, a troca pergunta
     antes, como ao executar outro comando.
   - O script salvo guarda o banco da aba (RN-SCRIPT-001).
@@ -2064,8 +2135,9 @@ lá.
   conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
   ambiente: pasta ou conexão só com cor herda o de cima, e a subpasta sem ambiente não mostra o da
   pasta de cima.
-  - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
-    a mesma do formulário da conexão.
+  - O diálogo de nova pasta e o "Editar pasta…" (RN-PASTA-006) ganham a seção Ambiente, a mesma do
+    formulário da conexão. *Alterada a pedido do dono em 2026-10-15, issue #8: era o diálogo de
+    renomear, pelo F2, que agora muda só o nome (RN-NAV-009).*
   - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
   - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
     o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
@@ -2151,8 +2223,11 @@ existia e não tem a opção no botão direito"; "depois de criar o ambiente, sa
 ser reutilizado; assim dá pra agrupar tudo e até criar um filtro no navegador que busca só pelo
 ambiente".
 
-- **RN-PASTA-006.** O "Renomear" do menu da pasta passa a se chamar "Editar pasta…" (F2). O diálogo
-  dele se chama "Editar pasta" e tem o nome e a seção Ambiente (RN-PASTA-005).
+- **RN-PASTA-006.** O menu da pasta tem "Editar pasta…", sem atalho, que abre o diálogo "Editar
+  pasta", com o nome, a cor da pasta (RN-PASTA-007) e a seção Ambiente (RN-PASTA-005). O
+  "Renomear" (F2) fica ao lado dele e muda só o nome (RN-NAV-009). *Alterada a pedido do dono em
+  2026-10-15, issue #8: antes o "Renomear" tinha virado o "Editar pasta…", com o F2, e o diálogo
+  não tinha a cor da pasta.*
 - **RN-AMB-001.** Os ambientes do usuário são os que as pastas e as conexões dele já usam: cada nome
   distinto (sem diferenciar maiúsculas), com a cor da pasta ou conexão alterada por último. Nada é
   gravado à parte; o ambiente some da lista quando ninguém mais o usa.
@@ -2167,3 +2242,286 @@ ambiente".
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+
+## 26. Complemento de 2026-10-15, versão 0.4.0: a linha em branco separa os comandos (issue #7)
+
+Pedido da issue 7 do repositório público, aprovado pelo dono em 2026-10-15 ("Faça todas issues, todas
+elas parecem boas mesmo"): "ctrl + enter no script executar apenas a query separada por enter". Quem
+vem do DBeaver separa os comandos com uma linha em branco, sem selecionar o texto e sem terminar cada
+um com `;`; no Prism, dois `SELECT` separados só por uma linha em branco iam juntos, e o banco
+respondia erro de sintaxe. Muda a RN-SQL-002, e a RN-SQL-001 passa a citar esta regra.
+
+- **RN-SQL-018.** Sem seleção, a linha em branco (só espaços e tabulações) também termina o comando
+  do cursor, como o "Smart" do DBeaver, porém com mais cuidado, porque o Prism ainda não confirma
+  comando irreversível (seção 13): na dúvida, não separa, e o banco recusa o texto inteiro em vez
+  de executar a metade dele.
+  - Nunca separa dentro de texto entre aspas simples, de identificador entre aspas duplas, de
+    comentário, de `$tag$ ... $tag$`, nem dentro de um bloco com `;` no corpo (rotina, gatilho,
+    bloco composto: os da RN-SQL-001), que continua sendo executado selecionando-o. No Db2, depois
+    que o bloco começa (`CREATE PROCEDURE`, `FUNCTION`, `TRIGGER` ou `BEGIN`), não separa até o fim
+    do texto, a mesma conta da RN-SQL-001; o `BEGIN` vale também fora do começo do comando: depois
+    de uma linha em branco, que ele não separa (com `SELECT …`, a linha em branco e `BEGIN … END`,
+    nenhuma linha em branco do bloco separa), de um rótulo (`nome: BEGIN`) ou de outro comando. No
+    Informix, até o `END PROCEDURE` ou o `END FUNCTION`.
+    `CREATE TRIGGER` e `CREATE SCHEMA` também não se separam antes do `;`, nos três bancos: o
+    `CREATE SCHEMA` traz os objetos dele (`CREATE TABLE`, `CREATE VIEW`, `CREATE INDEX`, `GRANT` e,
+    no Db2, `COMMENT ON`) sem `;` entre eles, e separar ali criaria o esquema sozinho e depois a
+    tabela fora dele.
+  - Separa só quando o texto depois da linha em branco (e dos comentários que vierem) começa um
+    comando: `SELECT`, `WITH nome [ ( … ) ] AS (`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `VALUES`,
+    `CREATE`, `ALTER` e `DROP` seguidos do tipo do objeto (`TABLE`, `VIEW`, `INDEX`…), `TRUNCATE`,
+    `GRANT`, `REVOKE`, `CALL`, `EXECUTE`, `EXPLAIN`, `COMMENT ON`, `ANALYZE`, `VACUUM`,
+    `LOCK TABLE`, `SHOW`, `COPY`, `DECLARE`, `REFRESH`, `COMMIT`, `ROLLBACK`, `SAVEPOINT` e `DO`
+    seguido do corpo. `SET` não começa comando aqui (`UPDATE t`, a linha em branco e `SET …` são um
+    comando só), nem `BEGIN` (abre bloco), nem o `WITH UR|CS|RS|RR` do Db2. Dentro de um `ALTER`,
+    `ALTER`, `DROP`, `GRANT` e `REVOKE` também não começam outro, porque podem ser cláusulas dele.
+  - E só quando o texto antes dela está fechado: os parênteses equilibrados; não termina em
+    vírgula, em operador nem em palavra que pede continuação (`WHERE`, `AND`, `OR`, `NOT`, `ON`,
+    `JOIN`, `FROM`, `SELECT`, `SET`, `BY`, `UNION`, `ALL`, `INTERSECT`, `EXCEPT`, `MINUS`, `THEN`,
+    `ELSE`, `WHEN`, `CASE`, `AS`, `IN`, `INTO`, `VALUES`, `LIKE`, `BETWEEN`, `IS`, `ON COMMIT`…); e
+    não é o começo de um comando que ainda espera o corpo: o `INSERT` antes do `VALUES` ou do
+    `SELECT`, o `WITH` antes do comando principal, o `EXPLAIN` antes do comando.
+  - Assim, `DELETE FROM t`, a linha em branco e `WHERE id = 1` são um comando só, e
+    `INSERT INTO t (a)`, a linha em branco e `SELECT a FROM s` também.
+  - O comentário logo acima do comando de baixo vai com ele, como no `;`.
+  - Com o cursor numa das linhas em branco que terminaram o comando de cima por esta regra (também
+    com um comentário solto entre ele e o de baixo), executa o de cima, como no DBeaver. Na linha em
+    branco sem comando nenhum acima dela no texto (no começo do texto, ou só com comentários acima),
+    nada é executado ("Não há comando para executar."), mesmo que haja um abaixo. Nas outras
+    linhas em branco fora de comando, as que vêm depois de um comando terminado no `;`, vale a regra
+    de antes (RN-SQL-001): o comando seguinte. Assim o `;` não muda de resposta: com
+    `DELETE FROM t WHERE id = 1;`, a linha em branco e `SELECT * FROM t;`, o cursor na linha em
+    branco executa o `SELECT`, como antes, e não o `DELETE` de novo.
+  - O `;` continua separando como antes (RN-SQL-002), e o comando do cursor entre dois comandos
+    separados pelo `;` é o mesmo de antes. A seleção continua indo como está, e a conta da seleção
+    (RN-SQL-001) continua só pelo `;`: a linha em branco não divide a seleção.
+  - Configurações › Editor SQL ganha "A linha em branco separa os comandos", ligada por padrão e
+    guardada com as outras preferências do editor (RN-CONFIG-001). Desligada, vale só o `;`, como
+    antes.
+  - Ao executar sem seleção, o editor destaca por um instante o trecho enviado, para a pessoa ver
+    qual comando rodou. O destaque segue o tema, some sozinho e não muda o texto, o cursor nem a
+    seleção; com "reduzir movimento" no sistema, aparece sem animação. Só destaca o que vai mesmo
+    ao banco: com um comando em andamento na aba, com a aba sem conexão (RN-SCRIPT-003) ou com a
+    pergunta das alterações não salvas da grade (RN-EDIT-007) cancelada, nada é enviado e nada é
+    destacado; respondida a pergunta, o destaque vem depois dela.
+  - A API não muda: continua recebendo um comando por execução.
+
+## 27. Complemento de 2026-10-15, versão 0.4.0: a conexão da aba de consulta e os scripts genéricos (issue #9)
+
+Issue #9 do repositório público, relatada na 0.2.0-beta.13 com Informix: "Scripts não abrem conexão
+com o banco salvo e não lista em qual servidor será executado". Quem reabre um script salvo não sabe
+em qual servidor ele vai rodar, porque a barra do editor mostra só o banco. O autor quer também
+scripts que não fiquem presos a uma conexão, "genéricos": abertos, rodam na conexão que está aberta;
+com mais de uma aberta, o Prism pergunta qual. O dono aprovou a proposta em 2026-10-15 ("Faça todas
+issues, todas elas parecem boas mesmo"). Altera a RN-SCRIPT-001 e a RN-SCRIPT-003, e a barra do
+editor ganha o botão da conexão que o canvas já desenhava (seção 9).
+
+- **RN-ARVORE-008.** A barra do editor da aba de consulta mostra, antes da lista dos bancos
+  (RN-ARVORE-007), o botão da conexão da aba: a sigla do banco (PG, DB2, IFX), o nome da conexão e
+  a etiqueta do ambiente dela, próprio ou herdado da pasta (RN-PASTA-005). A dica do botão traz o
+  servidor (`host:porta`) e o usuário.
+  - O clique no botão, ou Ctrl+9 com o foco em qualquer ponto da aba (como no DBeaver), abre a
+    lista das conexões do usuário, com busca pelo nome, pela pasta e pelo servidor. As conectadas
+    vêm primeiro, e cada conexão mostra o caminho de pastas dela.
+  - Escolher outra conexão troca a conexão DESTA aba, sem executar nada, e o texto do editor fica.
+    Com alterações não salvas na grade (RN-EDIT-007), pergunta antes, como ao executar outro
+    comando.
+  - Na troca, a sessão anterior da aba fecha e a aba passa ao banco padrão da nova conexão. O
+    resultado que estava na tela sai, como na troca do banco. A barra de status e a etiqueta da aba
+    acompanham.
+  - Com comando em andamento a troca espera: a lista abre, mas as conexões ficam desabilitadas,
+    com o motivo. A execução da atualização automática (RN-GRADE-014) não conta como comando em
+    andamento: a troca acontece e a desliga.
+  - A lista tem também "Mostrar no navegador", que revela e escolhe a conexão da aba na árvore: as
+    pastas acima dela abrem, e o navegador escondido aparece.
+  - Na aba sem conexão o botão diz "Sem conexão", e a lista dá a ela a conexão escolhida.
+  - A aba de uma tabela não troca de conexão: ela é a tabela daquela conexão.
+- **RN-SCRIPT-005.** O script genérico é o que não fica preso a uma conexão.
+  - O diálogo do nome do primeiro Ctrl+S e do "Salvar como" tem a caixa "Script genérico (sem
+    conexão)". Na aba sem conexão ela vem marcada e não se desmarca. No "Salvar como" de um script
+    genérico ela vem marcada.
+  - O menu do script na seção "Scripts" tem "Tornar genérico" no script com conexão, e "Vincular
+    à conexão da aba" no genérico. Vincular grava a conexão e o banco da aba em que o script está
+    aberto; sem aba aberta com conexão, o item fica desabilitado, com o motivo.
+  - O script genérico tem uma marca discreta na lista.
+  - O script genérico não guarda conexão nem banco. Aberto, com exatamente uma conexão conectada a
+    aba já abre nela, e o botão da conexão (RN-ARVORE-008) a mostra. Com mais de uma conectada, a
+    aba abre sem conexão e a faixa de escolher a conexão pergunta, com as conectadas primeiro. Com
+    nenhuma, a faixa pede qualquer conexão. O script nunca executa sozinho.
+  - Salvar um script genérico o mantém genérico: trocar a conexão ou o banco da aba dele não é
+    mudança não salva, e só o texto conta.
+  - Rota: o `PATCH api/user/scripts` ganha `generic`. Com `generic: true`, a conexão e o banco do
+    script são apagados; junto com `connectionID` ou `database`, a recusa é 422
+    `SCRIPT_PLACE_INVALID`. Sem ele vale a regra de antes, em que o ausente fica como está. No
+    `POST`, o script sem `connectionID` já nasce genérico. O cofre não muda de formato: o script já
+    guardava a conexão como opcional.
+
+## 28. Complemento de 2026-10-15, versão 0.4.0: cor da pasta, Renomear e Editar pasta, ícone e cor do script (issue #8)
+
+Issue #8 do repositório público, "Mudar ícone e cor de scripts e pastas": "ao editar uma pasta, ter
+a opção de editar a cor dela; hoje deixa colocar um badge, mas se permitisse os 2 ficaria mais
+limpo e bonito"; "para entrar nessa edição é 'Renomear', poderia mudar a opção para editar e
+manter o renomear apenas para renomear com o atalho do F2"; e "nos scripts seria legal poder mudar
+o ícone, com ícones pré-definidos no mesmo estilo já existente, e personalizar sua cor também". O
+dono aprovou a proposta em 2026-10-15 ("Faça todas issues, todas elas parecem boas mesmo"). Altera
+a RN-PASTA-006 e a RN-NAV-009 (e, por elas, o diálogo da seção Ambiente na RN-PASTA-005).
+
+- **RN-PASTA-007.** A pasta pode ter uma cor, opcional, que pinta o ícone dela na árvore, aberta ou
+  fechada. Sem cor, o ícone é o neutro de sempre.
+  - A cor da pasta não é o ambiente: uma pasta pode ter as duas, a cor no ícone e a etiqueta do
+    ambiente ao lado do nome (RN-PASTA-005). A cor não passa às subpastas nem às conexões, e não
+    conta no filtro por ambiente (RN-NAV-010) nem nos ambientes do usuário (RN-AMB-001).
+  - Escolhe-se em "Cor da pasta", no diálogo de nova pasta e no "Editar pasta…" (RN-PASTA-006),
+    antes da seção Ambiente: "Sem cor", as seis cores do canvas e "Outra cor", com o conta-gotas,
+    nas regras da RN-CONN-017. O "Renomear" (F2) e o "Mover" não a mudam.
+  - O ícone colorido, da pasta e do script (RN-SCRIPT-006), passa no contraste de ícone da
+    RN-CONFIG-003 (3:1) sobre as superfícies de todos os temas, os claros inclusive. Quando a cor
+    escolhida não chega a 3:1 (as seis do canvas são claras, feitas para os temas escuros), o ícone
+    é pintado com a variante mais próxima dela que chega: escurecida nos temas claros, clareada nos
+    escuros. A cor gravada, e a das bolinhas, é a que a pessoa escolheu.
+  - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem `color`,
+    opcional, no formato da cor do ambiente (`#RRGGBB`); a recusa é 422 `FOLDER_NAME_INVALID`, no
+    campo. O `PATCH` grava a pasta por inteiro, como já faz com o ambiente: sem `color`, a pasta
+    fica sem cor. O cofre não muda de formato: a pasta gravada antes abre sem cor.
+- **RN-SCRIPT-006.** Cada script tem um ícone e, opcional, uma cor, que aparecem na seção "Scripts"
+  do navegador e na aba do script, no lugar do ícone de documento.
+  - O ícone sai de uma lista fechada, no traço dos ícones do app: documento (o padrão, o de hoje),
+    código, banco de dados, tabela, gráfico, relógio, raio, inseto, chave inglesa, estrela e
+    bandeira (`document`, `code`, `database`, `table`, `chart`, `clock`, `lightning`, `bug`,
+    `wrench`, `star` e `flag`). A tela e a API conhecem a mesma lista.
+  - A cor se escolhe como a da pasta ("Sem cor", as seis cores e "Outra cor"), com a mesma regra de
+    contraste (RN-PASTA-007). Sem cor, o ícone é o neutro de sempre.
+  - O menu do script na seção "Scripts" ganha "Editar script…", com o nome, o ícone e a cor. O F2 e
+    o "Renomear" continuam mudando só o nome. O script novo (Ctrl+S, "Salvar como") nasce com o
+    ícone padrão e sem cor.
+  - Rota: o `PATCH api/user/scripts` ganha `icon` e `color`, e a lista e o item os devolvem (nulos
+    no ícone padrão e no script sem cor). O `PATCH` continua parcial: ausente ou nulo fica como
+    está; `color` vazio tira a cor, e `icon` vazio ou `document` volta ao ícone padrão. O ícone
+    fora da lista e a cor fora de `#RRGGBB` são 422 `SCRIPT_ICON_INVALID`, no campo. O cofre não
+    muda de formato: o script gravado antes abre com o ícone padrão e sem cor.
+
+## 29. Complemento de 2026-10-15, versão 0.4.0: contar de novo e atualização automática (issues #10 e #11)
+
+Pedidos das issues 10 e 11 do repositório público, que o dono aprovou em 2026-10-15 ("Faça todas
+issues, todas elas parecem boas mesmo"): "A contagem de linhas não pode ser recontada, poderia
+manter o botão para permitir refazer as contagens" (das quatro coisas da issue 10, era a que
+faltava: o texto de ajuda do filtro, o autocompletar das colunas e o F5 entraram pela RN-TABELA-011
+e pela RN-GRADE-012); e "Ter uma opção que executa a query de x em x tempos, para fazer um refresh
+nos dados que estão sendo acompanhados".
+
+- **Contar de novo** (issue #10): está na própria RN-SQL-006, alterada no lugar. O total contado
+  deixa de ser definitivo: "Contar de novo" conta outra vez, e o total anterior fica à vista até
+  chegar o novo, ou fica de vez se a contagem falhar ou for cancelada.
+- **RN-GRADE-014.** Atualizar automaticamente: o resultado de uma leitura é executado de novo
+  sozinho, a cada intervalo, para acompanhar dados que mudam (issue #11).
+  - Onde: no menu de contexto da grade, logo depois de "Atualizar" (F5), como submenu
+    (RN-MENU-001), e ao lado de "Atualizar": nos Registros, no rodapé, logo depois do botão
+    "Atualizar"; no resultado da aba de consulta, que não tem esse botão (o F5 e "Executar" fazem
+    a vez dele), na barra da área de resultado, que fica à vista também com a área recolhida. O
+    botão está sempre lá, com ou sem linhas na tela: quando não se aplica, desabilitado, com o
+    motivo. Os intervalos: 5 s, 10 s, 30 s, 1 min e 5 min; "Personalizado…", um diálogo pequeno
+    que pede os segundos (de 2 a 3.600, inteiros); e "Desligar". O intervalo em uso aparece
+    marcado.
+  - Ligada, o controle mostra "Atualiza a cada 10 s" com a hora da última atualização, e um
+    clique no X ao lado desliga. O texto abre os intervalos, para trocar. Desligada no meio de uma
+    execução automática, a execução é abandonada na hora, como quando a pessoa executa um comando
+    (abaixo): nada dela aparece, e o resultado de antes fica, com o cursor fechado (RN-SQL-007).
+  - Cada execução é a do F5 (RN-GRADE-012): o mesmo comando, com o mesmo filtro, lendo de novo a
+    primeira página. A seleção da grade se perde, como em qualquer execução nova (RN-GRADE-001); a
+    rolagem fica, quando as colunas são as mesmas. O total (RN-SQL-006) não é contado de novo
+    sozinho. A grade não esmaece enquanto a execução automática roda: o controle diz
+    "atualizando…". Ligada, a grade não busca a página seguinte sozinha ao rolar até o fim
+    (RN-CONFIG-005): cada execução volta à primeira página, e a busca sozinha leria de novo a cada
+    intervalo; "Carregar mais" continua no botão.
+  - A execução automática não toma a aba da pessoa (correção da revisão de 2026-10-15): os botões e
+    as teclas ficam como estão enquanto ela roda ("Executar" e "Atualizar" não viram "Cancelar",
+    nada se desabilita), e o que a pessoa pede nesse meio-tempo é atendido, e não perdido.
+    Executar um comando, o F5, "Atualizar", aplicar o filtro e ordenar pela coluna abandonam a
+    execução automática (a API recebe o cancelamento dela, e nada dela aparece: nem resultado, nem
+    aviso, nem nota) e executam o que a pessoa pediu, que a aba mostra rodando desde o clique.
+    "Carregar mais" e "Contar total" esperam a execução automática terminar e seguem sobre o
+    resultado novo. Só a edição de uma célula não começa enquanto ela roda: as linhas vão mudar,
+    e a faixa diz isso.
+  - A próxima execução só é marcada quando a anterior termina, e o tempo conta do fim dela: nunca
+    duas ao mesmo tempo. Vale para qualquer comando da aba: depois de "Carregar mais", de "Contar
+    total" e do F5, o tempo recomeça.
+  - Só para leitura: liga sobre o resultado que a API leu por cursor (RN-SQL-004). O comando que
+    grava e devolve linhas (RN-SQL-013: `INSERT`, `UPDATE`, `DELETE` ou `MERGE` com `RETURNING`, o
+    procedimento, a leitura que o banco recusou numa transação só de leitura) não se atualiza
+    sozinho, e o que não devolve linhas (DDL, `CALL`, linhas afetadas) não tem o que atualizar.
+    Quem diz se o comando grava é a regra da RN-SQL-013, e a tela não lê o texto de novo. Também
+    não liga com a aba ocupada nem desconectada. O que não se aplica aparece desabilitado, com o
+    motivo.
+  - Fica em pausa (não executa) enquanto há alteração não salva na grade (RN-EDIT-007), uma célula
+    em edição ou um menu ou diálogo da grade aberto, e enquanto a aba não está à vista (outra aba à
+    frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
+    Configurações): só a aba à vista fala com o banco sozinha. Ao sair da pausa, se o prazo já
+    passou, executa na hora; senão, espera o que falta. A pausa da grade vale desde o começo da
+    ação que abre a célula ou o menu, exclui, cola ou acrescenta uma linha (que antes pergunta à
+    API o que se edita), e não só depois: a ação nunca cai em outra linha. Se as linhas mudam
+    mesmo assim (a execução que já rodava quando o menu abriu), o menu fecha, e a escolha sobre a
+    célula não age.
+  - Para sozinha quando uma execução não traz um resultado de leitura novo: o erro do banco aparece
+    uma vez, como sempre (RN-SQL-009), e o controle diz numa nota curta que a atualização
+    automática parou e por quê (o erro, o cancelamento, o comando que não pôde ser executado, o
+    comando que gravou, a sessão com o banco que caiu). A nota fica até a próxima execução ou até
+    a pessoa ligar de novo. A execução automática não repete aviso: o de valores cortados
+    (RN-AVISO-003) não sai nela (nem no "Carregar mais" que vem depois dela, quando o resultado
+    já avisou), e as células cortadas continuam marcadas.
+  - Desliga quando a aba desconecta, fecha, troca de banco (RN-ARVORE-007) ou de conexão (RN-ARVORE-008), ou vai para outra janela
+    (RN-ABAS-002 e 003), quando o cofre bloqueia (RN-SEG-001) e quando a pessoa executa outro
+    comando na aba (outro texto, outro filtro, outra ordem). Também quando a sessão da aba cai (a
+    API já não a conhece, ao carregar mais, ao contar ou na própria execução automática), com a
+    nota: a execução automática não abre sessão nova, porque nada reconecta sozinho
+    (RN-SESSAO-004). Levar a aba para outra janela a suspende desde o começo da mudança, e a
+    execução que estava em andamento termina antes de a aba ir: a outra janela recebe a sessão
+    livre, com o resultado e o cursor que a aba mostra; se a aba não vai, ela continua. Executar
+    de novo o mesmo comando (F5, "Atualizar", "Executar de novo") a mantém ligada e recomeça o
+    tempo.
+  - A execução automática não é atividade da pessoa nem comando em andamento para o bloqueio por
+    inatividade (RN-SEG-001): com ela ligada, o Prism bloqueia no prazo, e o bloqueio a desliga.
+  - Não é gravada com as abas (RN-ABAS-006): as abas voltam com ela desligada.
+- **Fica para depois:** uma marca na faixa de abas para a aba com a atualização automática ligada.
+
+## 30. Complemento de 2026-10-15, versão 0.4.0: a área de trabalho mais enxuta (issue #14)
+
+Pedido da issue 14 do repositório público, "Adiciona configuração para deixar a visualização mais
+enxuta das conexões na sidebar": perto da árvore do DBeaver, a do navegador ocupa espaço demais, e
+quem a abriu quer uma configuração com menos espaçamento e letras menores, para ver mais itens. O
+dono aprovou a proposta inteira em 2026-10-15 ("Faça todas issues, todas elas parecem boas
+mesmo"): o texto da área de trabalho na escala do canvas, o zoom do programa inteiro, a densidade
+do navegador e a seção Scripts que lembra se ficou recolhida. As letras menores vêm das duas
+primeiras: a área de trabalho passa de 14 px a 13 px, e quem quer menos ainda usa o zoom.
+
+- **RN-CONFIG-009.** O texto da área de trabalho é o do canvas (`Workbench.dc.html`): 13 px em
+  linha de 20 px.
+  - Vale para tudo o que ela mostra sem tamanho próprio: a árvore do navegador, o campo de busca e
+    as mensagens dele, a seção Scripts, a barra de abas, as barras e os painéis das abas
+    (Registros, Estrutura, Diagrama, resultado). Até aqui a árvore, a busca, as mensagens e a barra
+    de abas herdavam o 14/22 dos formulários. A barra superior (13 px) e a barra de status (12 px)
+    já seguiam o canvas e não mudam.
+  - Formulários e diálogos, também os que abrem sobre a área de trabalho, e as telas de fora dela
+    (login, Configurações) continuam em 14/22, como o canvas os desenha.
+  - O editor SQL (o tamanho em Configurações › Editor SQL) e a grade (o zoom dela, RN-GRADE-010)
+    têm tamanho próprio e não mudam.
+- **RN-ZOOM-001** passa a existir no app, como a seção 20 a descreve, com os detalhes acertados
+  agora (os passos, todas as janelas e o splash, o "Restaurar 100%" e onde a escolha fica). O
+  splash cresce com o zoom só até caber na área útil da tela, e a RN-MARCA-002 deixa de ter o
+  tamanho fixo: 640×400 é o de 100%.
+  - O `Ctrl 0` continua sendo o 100% do programa inteiro, como o dono o pediu em 2026-10-12 (seção
+    20, "Janela e zoom"): o `Ctrl 0` do DBeaver, que escolhe o esquema ativo, não vira atalho da
+    lista dos bancos da aba (RN-ARVORE-007), que continua sem atalho próprio.
+- **RN-NAV-011.** "Densidade do navegador", em Configurações › Aparência: "Confortável" e
+  "Compacta".
+  - "Confortável" é o padrão e o desenho do canvas: linhas de 30 px e 16 px de recuo a cada nível.
+  - "Compacta" tem linhas de 22 px e 12 px de recuo a cada nível, para caber mais itens na mesma
+    altura, como no DBeaver. O texto continua 13/20 (RN-CONFIG-009), e os botões de ação da linha,
+    o ponto de estado, a etiqueta do banco, a do ambiente e as marcas (PK) cabem sem corte.
+  - Vale para a árvore e para a lista da seção Scripts. A linha de erro de um nó continua da
+    altura que a mensagem pede.
+  - A escolha vale na hora, em todas as janelas, sem fechar os nós abertos nem perder o item
+    escolhido, e fica nas preferências desta instalação, por usuário (RN-CONFIG-001), como o tema e
+    as fontes.
+- **RN-NAV-012.** A seção Scripts do navegador lembra se ficou recolhida ou aberta: volta assim ao
+  entrar de novo e ao abrir o app, por usuário, como o navegador escondido (RN-NAV-008). Aberta é o
+  padrão. A janela que abre depois começa como a última escolha.

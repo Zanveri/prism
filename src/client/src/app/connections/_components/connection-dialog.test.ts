@@ -20,7 +20,7 @@ vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal
 vi.mock("@/app/_components/api-gate", () => ({ useApiRestart: () => async () => {} }));
 
 const now = "2026-10-12T12:00:00Z";
-const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, createdAt: now, updatedAt: now };
 const mes: Connection = { id: "7d2f9a10-aaaa-4bbb-8ccc-000000000001", folderID: fabrica.id, name: "MES Produção", engine: 2, host: "srv-db2", port: 50000, database: "MES", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
 const license = { name: "Licença", url: "https://exemplo.local/licenca" };
 const catalog: Driver[] = [

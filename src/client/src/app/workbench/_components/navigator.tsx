@@ -11,6 +11,8 @@ import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
+import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
+import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -19,12 +21,13 @@ import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, e
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
+import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { refreshKey } from "../_lib/grid-editing";
-import { measureRendered, observeRenderedOffset } from "../_lib/row-measure";
+import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { isConnected } from "../_lib/workbench-model";
@@ -34,7 +37,7 @@ import { workbenchCopy } from "../_lib/workbench.copy";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
 import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
-import { NavigatorRow, rowHeight, type ConnectionStatus } from "./navigator-row";
+import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
 
 const copy = workbenchCopy.navigator;
@@ -80,12 +83,16 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   generateSelect: <DocumentIcon />,
   newFolder: <FolderPlusIcon />,
   renameFolder: <PencilIcon />,
+  editFolder: <PencilIcon />,
   moveFolder: <FolderMoveIcon />,
   deleteFolder: <TrashIcon />,
 };
 
-/** A ação do menu sobre uma pasta que existe e o modo do diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). */
-const folderActionTypes = { renameFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
+/**
+ * A ação do menu sobre uma pasta que existe e o diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). O "Renomear" (F2) é o
+ * diálogo só com o nome (RN-NAV-009), e o "Editar pasta…", o inteiro (RN-PASTA-006).
+ */
+const folderActionTypes = { renameFolder: "rename", editFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
 
 /** A ação de conexão que o menu pediu (RN-NAV-003 e 009): renomear, mover de pasta ou excluir, cada uma com o diálogo dela. */
 type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connection };
@@ -137,6 +144,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const folders = useQuery(foldersQuery);
   const connections = useQuery(connectionsQuery);
   const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, disconnect, disconnecting } = useWorkbench();
+  // RN-NAV-011: a densidade da árvore, que muda ao vivo com a escolha em Configurações › Aparência.
+  const density = usePreferences().preferences.ui.navigatorDensity;
   // As pastas começam abertas; só as recolhidas são estado. Ao ir para Conexões e voltar, elas reabrem.
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<OpenMenu | null>(null);
@@ -163,6 +172,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
   // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-PASTA-007: a cor do ícone de cada pasta que tem uma. É só dela: a subpasta e a conexão não a herdam.
+  const folderColors = useMemo(() => new Map((folders.data ?? []).flatMap((folder) => (folder.color === null ? [] : [[folder.id, folder.color] as const]))), [folders.data]);
   // RN-NAV-010: os ambientes do usuário no seletor (RN-AMB-001), e a árvore só com as conexões do escolhido e as pastas no caminho até elas. A busca
   // filtra depois, sobre esta árvore. O ambiente que ninguém mais usa sai da lista, e a escolha dele volta a "Todos" (ajuste durante a renderização,
   // só com as duas listas já na tela).
@@ -435,6 +446,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       case "newConnection":
       case "newFolder":
       case "renameFolder":
+      case "editFolder":
       case "moveFolder":
       case "deleteFolder": {
         const folder = (folders.data ?? []).find((candidate) => candidate.id === folderIdOf(node));
@@ -576,6 +588,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         )}
         <NavigatorList
           rows={rows}
+          density={density}
           open={search === null ? open : search.open}
           matches={search?.matches}
           searching={search !== null}
@@ -585,6 +598,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           reveal={reveal}
           connectionById={connectionById}
           environments={environments}
+          folderColors={folderColors}
           statuses={statuses}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
@@ -642,9 +656,13 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
 type NavigatorListProps = {
   rows: NavNode[];
+  /** RN-NAV-011: a altura das linhas (e a estimativa da lista virtual), o recuo e os botões de ação. */
+  density: NavigatorDensity;
   open: ReadonlySet<string>;
   connectionById: ReadonlyMap<string, Connection>;
   environments: EnvironmentLookup;
+  /** RN-PASTA-007: a cor do ícone das pastas que têm uma, pelo id. */
+  folderColors: ReadonlyMap<string, string>;
   statuses: ReadonlyMap<string, ConnectionStatus>;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
@@ -676,7 +694,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, density, open, connectionById, environments, folderColors, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -689,8 +707,19 @@ function NavigatorList({ rows, open, connectionById, environments, statuses, dis
   // As linhas são medidas (a de erro é mais alta que as outras), e a área de trabalho fica escondida por baixo das outras telas: a linha sem caixa não mede
   // zero (`measureRendered`), senão as primeiras linhas somem ao voltar; e a rolagem lida sem caixa não é posição (`observeRenderedOffset`), senão quem rola e
   // sai logo em seguida volta para uma lista em branco.
+  const rowHeight = navigatorMetrics[density].rowHeight;
   // eslint-disable-next-line react-hooks/incompatible-library -- o virtualizador devolve funções que não se memorizam; nada aqui depende disso.
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => rowHeight, overscan: 12, getItemKey: (index) => rows[index].key, measureElement: measureRendered, observeElementOffset: observeRenderedOffset });
+
+  // RN-NAV-011: a densidade mudou (em Configurações, com a árvore escondida por baixo, ou noutra janela, com ela à mostra). As alturas guardadas são as da
+  // outra, inclusive as das linhas que rolaram para fora e não vão se medir de novo: a lista esquece todas, e cada uma vale a estimativa nova até ser medida.
+  // As desenhadas são medidas de novo na hora (`remeasureRendered`): a de erro não muda de caixa com a densidade, e nada mais a mediria.
+  const measuredDensity = useRef(density);
+  useLayoutEffect(() => {
+    if (measuredDensity.current === density) return;
+    measuredDensity.current = density;
+    remeasureRendered(virtualizer);
+  }, [density, virtualizer]);
 
   // A conexão que o formulário acabou de salvar: rola até ela e lhe dá o foco, uma vez por pedido. A linha pode ainda não estar desenhada (a lista
   // virtual só desenha o que se vê, e o navegador pode estar voltando a aparecer, sem caixa ainda): a cada quadro pede a rolagem até ela e tenta de
@@ -815,12 +844,14 @@ function NavigatorList({ rows, open, connectionById, environments, statuses, dis
             >
               <NavigatorRow
                 node={node}
+                density={density}
                 index={item.index}
                 open={open.has(node.key)}
                 tabbable={node.key === tabbable}
                 selected={node.key === selectedKey}
                 connection={connection}
                 environment={environment}
+                folderColor={folderId === null ? null : (folderColors.get(folderId) ?? null)}
                 status={connection ? statuses.get(connection.id) : undefined}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}

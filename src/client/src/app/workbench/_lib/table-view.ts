@@ -1,9 +1,8 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import type { FilterRequest } from "./filter-handoff";
-import { isBusy } from "./result-paging";
 import { nextSort, orderOf, recordsRunPlan, sortOf, withOrder, type RecordsRunPlan } from "./table-sql";
-import type { RunnerState } from "./use-query-runner";
+import { isPersonBusy, type RunnerState } from "./use-query-runner";
 import type { TableView } from "./workbench-model";
 
 /**
@@ -67,7 +66,10 @@ export function needsFirstRun(state: RunnerState, { engine, visible, disconnecte
 export type HandoffContext = {
   /** A aba está À VISTA (a ativa, com a área de trabalho na tela). */
   visible: boolean;
-  /** Há algo em andamento na aba (comando, "carregar mais" ou contagem): o executor recusaria outro comando (RN-SESSAO-002). */
+  /**
+   * Há algo da pessoa em andamento na aba (comando, "carregar mais" ou contagem): o executor recusaria outro comando (RN-SESSAO-002). A execução da
+   * atualização automática não conta: o comando da pessoa toma o lugar dela (`isPersonBusy`, RN-GRADE-014).
+   */
   busy: boolean;
   /** A pessoa desconectou a conexão e ainda não a reconectou: nada é enviado sem o clique em "Atualizar" (RN-SESSAO-004). */
   disconnected: boolean;
@@ -131,9 +133,12 @@ export function applyRunPlan(plan: RecordsRunPlan, deps: RunPlanDeps): void {
   deps.execute(plan.filter);
 }
 
-/** "Aplicar" e "Atualizar": do estado do executor (ocupado ou não) até o comando. */
+/**
+ * "Aplicar" e "Atualizar": do estado do executor (ocupado ou não) até o comando. Ocupado é o comando da pessoa (`isPersonBusy`): com a execução da
+ * atualização automática em andamento o comando vai, e o executor o põe no lugar dela (RN-GRADE-014).
+ */
 export function runRecords({ engine, schema, name }: RecordsTable, next: string, state: RunnerState, deps: RunPlanDeps): void {
-  applyRunPlan(recordsRunPlan(engine, schema, name, next, isBusy(state)), deps);
+  applyRunPlan(recordsRunPlan(engine, schema, name, next, isPersonBusy(state)), deps);
 }
 
 /**
@@ -144,7 +149,7 @@ export function runRecords({ engine, schema, name }: RecordsTable, next: string,
  */
 export function sortRecords(table: RecordsTable, { draft, filter, column, columns }: { draft: string; filter: string; column: string; columns: readonly { name: string }[] }, state: RunnerState, deps: FieldDeps): void {
   const next = nextSort(sortOf(filter, columns, table.engine), column);
-  const plan = recordsRunPlan(table.engine, table.schema, table.name, withOrder(draft, next, table.engine), isBusy(state));
+  const plan = recordsRunPlan(table.engine, table.schema, table.name, withOrder(draft, next, table.engine), isPersonBusy(state));
 
   if (plan.kind === "send") {
     deps.setDraft(plan.filter);
@@ -159,7 +164,7 @@ export function sortRecords(table: RecordsTable, { draft, filter, column, column
  * mais de um comando só o aviso aparece.
  */
 export function filterRecords(table: RecordsTable, text: string, state: RunnerState, deps: FieldDeps): void {
-  const plan = recordsRunPlan(table.engine, table.schema, table.name, text, isBusy(state));
+  const plan = recordsRunPlan(table.engine, table.schema, table.name, text, isPersonBusy(state));
 
   if (plan.kind === "send") {
     deps.setDraft(plan.filter);
@@ -198,7 +203,7 @@ export type TakeHandoffDeps = {
  * o ESTADO do executor, e não um "ocupado" já calculado: é daqui que sai se a aba está ocupada. Sem o banco da conexão o texto é lido como PostgreSQL.
  */
 export function takeHandoff(request: FilterRequest | null, taken: number | null, { visible, disconnected, state, filter, engine, unsaved = false }: { visible: boolean; disconnected: boolean; state: RunnerState; filter: string; engine: Engine | undefined; unsaved?: boolean }, deps: TakeHandoffDeps): void {
-  const taking = handoffToTake(request, taken, { visible, busy: isBusy(state), disconnected, unsaved });
+  const taking = handoffToTake(request, taken, { visible, busy: isPersonBusy(state), disconnected, unsaved });
   if (taking === null) return;
 
   const text = [taking.where, orderOf(filter, engine)].filter((part) => part !== "").join(" ");

@@ -1217,6 +1217,78 @@ describe("contar total (RN-SQL-006)", () => {
   });
 });
 
+describe("contar de novo (RN-SQL-006, issue #10)", () => {
+  /** Uma aba com linhas na tela e o total já contado (1000). */
+  async function counted() {
+    const context = await withResult();
+    context.api.on(`POST ${sessions}/s1/queries/count`, json({ total: 1000 }));
+    await context.runner.countTotal();
+    return context;
+  }
+
+  it("conta outra vez: o total de antes fica à vista enquanto conta, e o novo toma o lugar dele", async () => {
+    const { api, runner } = await counted();
+    const answer = deferred<Response>();
+
+    api.on(`POST ${sessions}/s1/queries/count`, answer.promise);
+    const counting = runner.countTotal();
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: true, total: 1000 });
+
+    answer.resolve(json({ total: 1003 }));
+    await counting;
+
+    expect(api.routes().filter((route) => route.endsWith("/queries/count"))).toHaveLength(2);
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: false, total: 1003 });
+  });
+
+  it("a contagem de novo recusada pelo banco deixa o total de antes, com o aviso central, como a primeira", async () => {
+    const { api, toast, runner } = await counted();
+
+    api.on(`POST ${sessions}/s1/queries/count`, problem(422, "SQL_EXECUTION_FAILED", { detail: "ERROR: canceling statement due to statement timeout", sqlState: "57014" }));
+    await runner.countTotal();
+
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: false, total: 1000 });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de SQL_EXECUTION_FAILED", "ERROR: canceling statement due to statement timeout");
+  });
+
+  it("a contagem de novo cancelada deixa o total de antes, com \"Comando cancelado.\"", async () => {
+    const { api, toast, runner } = await counted();
+    const answer = deferred<Response>();
+
+    api.on(`POST ${sessions}/s1/queries/count`, answer.promise);
+    api.on(`POST ${sessions}/s1/queries/cancel`, new Response(null, { status: 204 }));
+    const counting = runner.countTotal();
+    await runner.cancel();
+    answer.resolve(problem(422, "SQL_EXECUTION_FAILED", afterCancel.postgresCanceled));
+    await counting;
+
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: false, cancelling: false, total: 1000 });
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.commandCancelled);
+  });
+
+  it("com as linhas todas carregadas depois da contagem, o total contado ainda se conta de novo", async () => {
+    const { api, runner } = await counted();
+    api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
+    await runner.loadMore();
+
+    api.on(`POST ${sessions}/s1/queries/count`, json({ total: 3 }));
+    await runner.countTotal();
+
+    expect(runner.getState()).toMatchObject({ status: "rows", hasMore: false, total: 3 });
+  });
+
+  it("um comando novo começa sem total: contar de novo é só sobre o total que está na tela", async () => {
+    const { api, runner } = await counted();
+
+    api.on(`POST ${sessions}/s1/queries`, page([["9", "z"]], { hasMore: false }));
+    await runner.run({ sql: "select * from u", offset: 0 });
+    await runner.countTotal();
+
+    expect(api.routes().filter((route) => route.endsWith("/queries/count"))).toHaveLength(1);
+    expect(runner.getState()).toMatchObject({ status: "rows", total: null });
+  });
+});
+
 describe("cancelar (RN-SQL-010)", () => {
   /** Um comando em execução, cancelado pelo usuário; o banco responde `answer` e a promessa devolvida termina com o comando. */
   async function cancelledWith(answer: Response) {

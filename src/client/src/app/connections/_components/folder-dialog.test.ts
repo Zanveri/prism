@@ -16,8 +16,8 @@ vi.mock("@/components/ui/dialog", () => ({
 vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui")>()), useToast: () => ({ success() {}, warning() {}, error() {} }) }));
 
 const now = "2026-10-14T12:00:00Z";
-const desenvolvimento: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f1", parentID: null, name: "Desenvolvimento", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
-const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f2", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+const desenvolvimento: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f1", parentID: null, name: "Desenvolvimento", environmentName: null, environmentColor: null, color: null, createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f2", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
 const qas: Connection = { id: "7d2f9a10-aaaa-4bbb-8ccc-000000000001", folderID: null, name: "MES QAS", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: "QAS", environmentColor: "#F2B644", createdAt: now, updatedAt: now };
 
 function render(state: FolderDialogState, connections: Connection[] = [qas]) {
@@ -53,6 +53,19 @@ describe("Editar pasta (RN-PASTA-006)", () => {
 
     expect(markup).toMatch(/<button[^>]*aria-pressed="false"[^>]*>(<[^>]*>)*Produção</);
     expect(markup).toMatch(/<button[^>]*aria-pressed="false"[^>]*>(<[^>]*>)*QAS</);
+  });
+
+  it("a cor da pasta (RN-PASTA-007) vem antes da seção Ambiente, com a que a pasta já tem, na nova pasta e no Editar pasta…", () => {
+    const edited = render({ mode: "edit", folder: { ...fabrica, color: "#7DB2FF" } });
+    const created = render({ mode: "create", parentID: null });
+
+    expect(edited).toContain(`<legend class="mb-2 p-0 text-sm text-muted">${connectionsCopy.folder.color}</legend>`);
+    expect(edited).toMatch(/<input type="hidden" name="color" value="#7DB2FF"\/>/);
+    expect(edited.indexOf(connectionsCopy.folder.color)).toBeLessThan(edited.indexOf('id="folder-environment-title"'));
+    expect(edited).toContain(connectionsCopy.folder.colorHint);
+    expect(created).toMatch(/<input type="hidden" name="color" value=""\/>/);
+    expect(created).toMatch(/<button[^>]*aria-label="Sem cor"[^>]*aria-pressed="true"/);
+    expect(render({ mode: "move", folder: fabrica })).not.toContain(connectionsCopy.folder.color);
   });
 
   it("nova pasta e mover continuam como eram", () => {

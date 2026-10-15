@@ -166,7 +166,9 @@ export function WorkbenchPage() {
   const dialogRequest = dialog === null ? null : dialog.request.mode === "new" ? dialog.request : editing === undefined ? null : ({ mode: "edit", connection: editing } as const);
 
   return (
-    <div className="flex h-full flex-col">
+    // RN-CONFIG-009: a área de trabalho inteira na escala do canvas, 13/20 (`text-sm`), aqui e só aqui; quem tem tamanho próprio (o editor, a grade, as
+    // etiquetas) fica com ele. Os diálogos abrem num portal no <body> e continuam no 14/22 dos formulários.
+    <div className="flex h-full flex-col text-sm">
       <TopBar leading={<NavigatorToggle hidden={hidden} controls={asideId} shortcut={shortcuts.toggle} onToggle={() => (hidden ? showNavigator(false) : hideNavigator("toggle"))} />} />
 
       <div className="flex min-h-0 flex-1">

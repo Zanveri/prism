@@ -16,7 +16,7 @@ import { EnvironmentPicker, type EnvironmentPickerProps } from "./environment-pi
 
 const copy = connectionsCopy.form.environment;
 const now = "2026-10-13T12:00:00Z";
-const fabrica: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
 
 const base: EnvironmentPickerProps = { idPrefix: "cx", defaultName: "", color: null, onColorChange: () => {}, errors: {}, hint: copy.connectionHint };
 

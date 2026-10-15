@@ -25,3 +25,24 @@ export function useNavigatorHidden(): [boolean, (hidden: boolean) => void] {
 
   return [hidden, setHidden];
 }
+
+/**
+ * A seção Scripts do navegador está recolhida (RN-NAV-012), e quem a muda: como o navegador escondido, a escolha é do usuário do cofre aberto e volta na
+ * próxima entrada. Sem usuário (a sessão ainda não chegou), aberta.
+ */
+export function useScriptsCollapsed(): [boolean, (collapsed: boolean) => void] {
+  const session = useQuery({ ...sessionQuery, staleTime: Infinity });
+  const userName = session.data?.userName ?? null;
+
+  const read = () => (userName === null ? false : navigatorLayoutStore.get(userName).scriptsCollapsed);
+  const collapsed = useSyncExternalStore(navigatorLayoutStore.subscribe, read, read);
+
+  const setCollapsed = useCallback(
+    (next: boolean) => {
+      if (userName !== null) navigatorLayoutStore.set(userName, { scriptsCollapsed: next });
+    },
+    [userName],
+  );
+
+  return [collapsed, setCollapsed];
+}
