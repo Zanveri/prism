@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Engine } from "@/components/ui";
 
+import type { AutoRefreshBlocker, AutoRefreshState } from "../../_lib/auto-refresh";
 import type { ForeignKey } from "../../_lib/database-sessions.schema";
 import type { QueryRunner, RowsState, RunnerState, RunTarget } from "../../_lib/use-query-runner";
 
@@ -56,7 +57,7 @@ import { createRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import { recordsSql } from "../../_lib/table-sql";
 import { structureKey } from "../../_lib/table-structure.service";
 import { canClear } from "../../_lib/table-view";
-import { isBusyState } from "../../_lib/use-query-runner";
+import { isPersonBusy } from "../../_lib/use-query-runner";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { ResultPanel } from "../result-panel";
 import { editCell, noEdits } from "../../_lib/record-edits";
@@ -70,6 +71,8 @@ import { ContextMenu } from "@/components/ui";
 import { groupItems, type ContextMenuItem } from "@/components/ui/context-menu";
 import { CustomFilterField } from "../custom-filter-field";
 import { ValueFilterDialog } from "../value-filter-dialog";
+import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
+import { autoRefreshCopy } from "../../_lib/auto-refresh.copy";
 
 /** PostgreSQL, como a API numera os bancos. */
 const pg: Engine = 1;
@@ -101,8 +104,9 @@ const sqlOf = (filter: string) => recordsSql(pg, pedidos.schema, pedidos.name, f
 const sent = (filter: string): RunTarget => ({ sql: sqlOf(filter), offset: 0, engine: pg });
 
 /**
- * O executor de mentira, com o que o de verdade tem de relevante aqui: `run` recusa calado com algo em andamento (RN-SESSAO-002) e, quando aceita, passa a
- * "executando" NA MESMA chamada. `sent` são os comandos aceitos; `run` (o espião) conta também os pedidos recusados. O estado é o que a prova pôr.
+ * O executor de mentira, com o que o de verdade tem de relevante aqui: `run` recusa calado com algo da pessoa em andamento (RN-SESSAO-002), aceita no
+ * lugar da execução automática (RN-GRADE-014) e, quando aceita, passa a "executando" NA MESMA chamada. `sent` são os comandos aceitos; `run` (o espião)
+ * conta também os pedidos recusados. O estado é o que a prova pôr.
  */
 function fakeRunner(initial: RunnerState) {
   const runner = {
@@ -111,21 +115,27 @@ function fakeRunner(initial: RunnerState) {
     subscribe: () => () => {},
     getState: (): RunnerState => runner.state,
     run: vi.fn((target: RunTarget): Promise<void> => {
-      if (!isBusyState(runner.state)) {
+      if (!isPersonBusy(runner.state)) {
         runner.sent.push(target);
-        runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : null };
+        runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : runner.state.status === "running" ? runner.state.previous : null };
       }
       return Promise.resolve();
     }),
+    /** RN-GRADE-014: a execução automática em andamento termina quando a prova soltar (`settleAuto`). */
+    autoRunSettled: vi.fn(() => runner.autoDone),
+    autoDone: Promise.resolve(),
     cancel: vi.fn(),
     loadMore: vi.fn(),
     countTotal: vi.fn(),
     sessionOf: () => "s1",
+    /** RN-GRADE-014: o relógio da atualização automática, desligado; a prova lê as pausas e os pedidos de ligar e desligar. */
+    autoRefresh: { subscribe: () => () => {}, getState: (): AutoRefreshState => ({ status: "off", stopped: null }), blocker: (): AutoRefreshBlocker | null => null, start: vi.fn(), stop: vi.fn(), pause: vi.fn() },
   };
   return runner;
 }
 
-type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot };
+/** `runner` troca o executor da vista (o provedor que entrega outro à aba). */
+type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner };
 
 /** A vista de `loja.pedidos` na conexão `c1`: à vista e conectada, salvo o que `over` disser. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
@@ -146,8 +156,10 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
     const menu = found.find((element) => element.type === ContextMenu)?.props as unknown as ComponentProps<typeof ContextMenu> | undefined;
     const values = found.find((element) => element.type === ValueFilterDialog)?.props as unknown as ComponentProps<typeof ValueFilterDialog> | undefined;
     const custom = found.find((element) => element.type === CustomFilterField)?.props as unknown as ComponentProps<typeof CustomFilterField> | undefined;
+    const auto = elementsOf(panel.autoRefresh).find((element) => element.type === AutoRefreshControl)?.props as unknown as ComponentProps<typeof AutoRefreshControl> | undefined;
+    const autoDialog = found.find((element) => element.type === AutoRefreshDialog)?.props as unknown as ComponentProps<typeof AutoRefreshDialog> | undefined;
 
-    return { filter, panel, records: panel.records!, question, menu, values, custom };
+    return { filter, panel, records: panel.records!, question, menu, values, custom, auto, autoDialog };
   }
 
   return { show, onOpenTable };
@@ -989,5 +1001,377 @@ describe("RecordsView: F5 é o Atualizar (RN-GRADE-012)", () => {
 
     rt.unmount();
     expect(slot.get()).toBeNull();
+  });
+});
+
+describe("RecordsView: a atualização automática (RN-GRADE-014)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const pauses = (runner: ReturnType<typeof fakeRunner>) => runner.autoRefresh.pause.mock.calls.map(([reason, on]) => `${String(reason)}:${String(on)}`);
+
+  it("à vista, a vista tira a pausa de fora de vista; escondida, põe; desmontada (outra vista da tabela), põe de novo", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show();
+    expect(pauses(runner)).toContain("hidden:false");
+
+    runner.autoRefresh.pause.mockClear();
+    view.show({ visible: false });
+    expect(pauses(runner)).toContain("hidden:true");
+    expect(pauses(runner).at(-1)).toBe("hidden:true");
+
+    view.show({ visible: true });
+    runner.autoRefresh.pause.mockClear();
+    rt.unmount();
+    expect(pauses(runner)).toContain("hidden:true");
+  });
+
+  it("a grade com alteração não salva fica em pausa (a execução trocaria as linhas debaixo da edição); sem nenhuma, não", () => {
+    const clean = fakeRunner(rowsState({ resultId: "r1" }));
+    mount(clean).show();
+    expect(pauses(clean)).toContain("editing:false");
+    expect(pauses(clean)).not.toContain("editing:true");
+    rt.unmount();
+
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
+    const dirty = fakeRunner(rowsState({ resultId: "r1" }));
+    mount(dirty).show();
+    expect(pauses(dirty)).toContain("editing:true");
+  });
+
+  it("a área recebe o controle com o estado do relógio da aba e o motivo; escolher um intervalo nele liga", () => {
+    const runner = fakeRunner(rowsState());
+    const { auto } = mount(runner).show();
+
+    expect(auto).toMatchObject({ state: { status: "off", stopped: null }, blocker: null });
+    auto!.onChoose("autoRefresh:every:10000");
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(10_000);
+
+    auto!.onChoose("autoRefresh:off");
+    expect(runner.autoRefresh.stop).toHaveBeenCalledOnce();
+  });
+
+  it("sem linhas na tela (o erro do banco), o controle fica, com o motivo de não ligar", () => {
+    const runner = fakeRunner({ status: "error", source: "database", title: "Erro do banco", message: "x", sqlState: null, errorAt: null });
+    runner.autoRefresh.blocker = () => "noRows";
+    const { auto } = mount(runner).show();
+
+    expect(auto).toMatchObject({ blocker: "noRows" });
+  });
+
+  it("o menu da célula tem \"Atualizar automaticamente\" logo depois do \"Atualizar\", e escolher um intervalo no submenu liga", async () => {
+    const runner = fakeRunner(rowsState({ resultId: "r1" }));
+    const view = mount(runner);
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 10, y: 20 }, false);
+    await settle();
+    const menu = view.show().menu!;
+    const items = menu.groups.flatMap(groupItems);
+    const at = items.findIndex((item) => item.id === "refresh");
+
+    expect(items[at + 1]).toMatchObject({ id: "autoRefresh", label: autoRefreshCopy.menu.label, disabled: false });
+    items[at + 1].submenu!.groups.flatMap(groupItems).find((item) => item.id === "autoRefresh:every:30000")!.onSelect!();
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(30_000);
+  });
+
+  it("a execução automática não ocupa a vista para a pessoa: o campo não está ocupado, e F5, aplicar e ordenar vão ao executor, que a põe de lado", () => {
+    const slot = createRefreshSlot();
+    const autoRun: RunnerState = { status: "running", cancelling: false, previous: rowsState(), auto: true };
+    const runner = fakeRunner(autoRun);
+    const view = mount(runner, { refreshSlot: slot });
+    expect(view.show().filter.busy).toBe(false);
+
+    slot.get()!();
+    expect(runner.sent).toEqual([sent(noFilter)]);
+
+    runner.state = autoRun;
+    view.show().filter.onDraft("cliente_id = 4");
+    view.show().filter.onApply();
+    expect(runner.sent.at(-1)).toEqual(sent("cliente_id = 4"));
+
+    runner.state = autoRun;
+    view.show().records.onSort("id");
+    expect(runner.sent).toHaveLength(3);
+  });
+
+  it("\"Exportar CSV\" durante a execução automática espera por ela e exporta o resultado novo", async () => {
+    let finish!: () => void;
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: rowsState(), auto: true });
+    runner.autoDone = new Promise<void>((resolve) => (finish = resolve));
+    const { records } = mount(runner).show();
+
+    records.onExport();
+    await settle();
+    expect(rt.saveText).not.toHaveBeenCalled();
+
+    runner.state = rowsState({ rows: [["11", "5"]] });
+    finish();
+    await settle();
+    expect(rt.saveText.mock.calls).toEqual([["loja.pedidos.csv", `${csvBom}id;cliente_id\r\n11;5\r\n`, "text/csv;charset=utf-8"]]);
+  });
+
+  it("ligada, a grade não busca a página seguinte sozinha ao rolar até o fim (RN-CONFIG-005): cada execução volta à primeira página", () => {
+    const runner = fakeRunner(rowsState({ hasMore: true }));
+    const view = mount(runner);
+    expect(view.show().panel.autoLoadMore).toBe(true);
+
+    runner.autoRefresh.getState = () => ({ status: "on", everyMs: 5_000, lastAt: null, running: false, paused: null });
+    expect(view.show().panel.autoLoadMore).toBe(false);
+  });
+
+  it("\"Personalizado…\" abre o diálogo; o texto fora do limite fica nele, com o motivo; o válido liga e fecha", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().auto!.onChoose("autoRefresh:custom");
+
+    const opened = view.show().autoDialog!;
+    expect(opened).toMatchObject({ everyMs: null, error: null });
+    opened.onSubmit("1");
+    expect(view.show().autoDialog).toMatchObject({ error: autoRefreshCopy.dialog.invalid });
+    expect(runner.autoRefresh.start).not.toHaveBeenCalled();
+
+    view.show().autoDialog!.onSubmit("45");
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(45_000);
+    expect(view.show().autoDialog).toBeUndefined();
+  });
+});
+
+describe("RecordsView: a edição e o menu da célula diante da atualização automática (RN-GRADE-014)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const pauses = (runner: ReturnType<typeof fakeRunner>) => runner.autoRefresh.pause.mock.calls.map(([reason, on]) => `${String(reason)}:${String(on)}`);
+  const pendingOf = (view: ReturnType<typeof mount>) => (view.show().panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending;
+
+  /** O alvo da edição de `loja.pedidos`: as duas colunas editáveis, com `id` como chave. */
+  const target = {
+    tables: [{ schema: "loja", name: "pedidos", key: [0], editable: true, reason: null }],
+    columns: [
+      { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+      { table: 0, baseColumn: "cliente_id", editable: true, reason: null, nullable: true, generated: null },
+    ],
+    rowOperations: true,
+    oneAtATime: false,
+  };
+  /** A pergunta do alvo que só responde quando a prova soltar (a API devagar). */
+  function slowTarget(): () => void {
+    let answer!: () => void;
+    rt.service.editTargetOrRefuse.mockImplementationOnce(() => new Promise((resolve) => (answer = () => resolve({ ok: true, data: target }))) as never);
+    return () => answer();
+  }
+  /** O resultado da tela: `id` 10 na primeira linha. */
+  const first = () => rowsState({ resultId: "r1", rows: [["10", "4"], ["20", "5"]] });
+  /** O que uma execução automática trouxe no lugar: outra linha entrou na frente, e o `id` 10 desceu para a segunda. */
+  const second = () => rowsState({ resultId: "r2", rows: [["5", "9"], ["10", "4"], ["20", "5"]] });
+
+  let clipboard: { writeText: ReturnType<typeof vi.fn>; readText: ReturnType<typeof vi.fn> };
+  beforeEach(() => {
+    clipboard = { writeText: vi.fn(async () => {}), readText: vi.fn(async () => "7") };
+    vi.stubGlobal("navigator", { clipboard });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    // A resposta lenta que uma prova não consumiu não vale para a seguinte.
+    rt.service.editTargetOrRefuse.mockReset();
+  });
+
+  it("o duplo clique segura a atualização desde o começo, antes de o alvo chegar, e a solta só com o campo aberto (sem um instante livre)", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+    runner.autoRefresh.pause.mockClear();
+
+    view.show().panel.editing!.onEdit({ row: 0, column: 1 });
+    expect(pauses(runner)).toEqual(["editing:true"]);
+
+    answer();
+    await settle();
+    expect(view.show().panel.editing!.editor).toMatchObject({ row: 0, column: 1, draft: "4" });
+    expect(pauses(runner)).not.toContain("editing:false");
+  });
+
+  it("se as linhas mudaram enquanto o alvo era perguntado, o campo não abre na linha que entrou no lugar, e a pausa sai", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+
+    view.show().panel.editing!.onEdit({ row: 0, column: 1 });
+    runner.state = second();
+    view.show();
+    answer();
+    await settle();
+
+    expect(view.show().panel.editing!.editor).toBeNull();
+    expect(pauses(runner).at(-1)).toBe("editing:false");
+  });
+
+  it("o alvo que chega do resultado de antes não serve ao novo, nem antes de a tela redesenhar: o novo pergunta o dele", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+
+    view.show().panel.editing!.onEdit({ row: 0, column: 1 });
+    runner.state = second();
+    const editing = view.show().panel.editing!;
+    answer();
+    await settle();
+    rt.service.editTargetOrRefuse.mockImplementationOnce(async () => ({ ok: true, data: target }) as never);
+    editing.onEdit({ row: 1, column: 1 });
+    await settle();
+
+    expect(rt.service.editTargetOrRefuse).toHaveBeenLastCalledWith("s1", "r2", null);
+    expect(view.show().panel.editing!.editor).toMatchObject({ row: 1, column: 1, draft: "4" });
+  });
+
+  it("a troca que a tela ainda não desenhou também conta: o executor é lido na hora", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+
+    view.show().panel.editing!.onEdit({ row: 0, column: 1 });
+    runner.state = second();
+    answer();
+    await settle();
+
+    expect(view.show().panel.editing!.editor).toBeNull();
+  });
+
+  it("o clique direito também segura desde o começo; com as linhas trocadas no meio-tempo, o menu não abre, e nada é excluído", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+    runner.autoRefresh.pause.mockClear();
+
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 10, y: 20 }, false);
+    expect(pauses(runner)).toEqual(["editing:true"]);
+    runner.state = second();
+    view.show();
+    answer();
+    await settle();
+
+    expect(view.show().menu).toBeUndefined();
+    expect(pendingOf(view)).toBe(0);
+  });
+
+  it("sem troca, \"Excluir linha\" do menu vale na linha que o menu mostrava", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 10, y: 20 }, false);
+    answer();
+    await settle();
+
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "deleteRow")!.onSelect!();
+    await settle();
+
+    expect(pendingOf(view)).toBe(1);
+    expect(view.show().panel.editing!.marks.get(0)?.deleted).toBe(true);
+  });
+
+  it("o menu aberto durante uma execução automática que já rodava fecha quando as linhas mudam, e a escolha que chegar depois não age na linha nova", async () => {
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: first(), auto: true });
+    const view = mount(runner);
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 10, y: 20 }, false);
+    await settle();
+    const opened = view.show().menu!;
+    // As linhas vão mudar: o alvo não é perguntado por elas.
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+
+    runner.state = second();
+    expect(view.show().menu).toBeUndefined();
+
+    // O clique que já estava a caminho, no menu de antes.
+    opened.groups.flatMap(groupItems).find((item) => item.id === "copy")!.onSelect!();
+    await settle();
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it("\"Colar\" segura a atualização também enquanto lê a área de transferência, e não cola na linha que entrou no lugar", async () => {
+    const runner = fakeRunner(first());
+    const view = mount(runner);
+    view.show();
+    const answer = slowTarget();
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 10, y: 20 }, false);
+    answer();
+    await settle();
+    let paste!: (text: string) => void;
+    clipboard.readText.mockImplementationOnce(() => new Promise<string>((resolve) => (paste = resolve)));
+
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "paste")!.onSelect!();
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("editing:true");
+
+    runner.state = second();
+    view.show();
+    paste("7");
+    await settle();
+
+    expect(pendingOf(view)).toBe(0);
+    expect(pauses(runner).at(-1)).toBe("editing:false");
+  });
+
+  it("o duplo clique durante a execução automática não pergunta o alvo à API: a faixa diz por quê, e a pausa não fica", async () => {
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: first(), auto: true });
+    const view = mount(runner);
+    view.show();
+    runner.autoRefresh.pause.mockClear();
+
+    view.show().panel.editing!.onEdit({ row: 0, column: 1 });
+    await settle();
+
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+    expect((view.show().panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.notice).toBe(recordsCopy.edit.readOnly(recordsCopy.edit.reasons.refreshing));
+    expect(pauses(runner)).not.toContain("editing:true");
+  });
+
+  it("o menu aberto, o \"Filtrar por valor…\" e o campo do \"Personalizado\" põem a pausa, e fechá-los a tira", async () => {
+    const textColumns: RowsState["columns"] = [...columns, { name: "code", type: "varchar", kind: "text" }];
+    const runner = fakeRunner(rowsState({ columns: textColumns, rows: [["10", "4", "a"]], resultId: "r1" }));
+    const view = mount(runner);
+    const cell = { row: 0, column: 2 };
+
+    view.show().panel.editing!.onMenu(cell, { x: 10, y: 20 }, false);
+    await settle();
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("editing:true");
+    view.show().menu!.onClose();
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("editing:false");
+
+    view.show().panel.editing!.onFilter!(cell, { x: 1, y: 2 }, "values");
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("editing:true");
+    view.show().values!.onClose();
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("editing:false");
+
+    view.show().panel.editing!.onMenu(cell, { x: 10, y: 20 }, false);
+    await settle();
+    const filter = view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "filter")!;
+    filter.submenu!.groups.flatMap(groupItems).find((item) => item.id === "filter:custom:gt")!.onSelect!();
+    view.show();
+    expect(view.show().custom).toBeDefined();
+    expect(pauses(runner).at(-1)).toBe("editing:true");
+    view.show().custom!.onClose();
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("editing:false");
+  });
+
+  it("a vista que sai de cena, ou o executor trocado, tira a pausa da edição do executor de antes", () => {
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "5", "4") });
+    const before = fakeRunner(first());
+    const after = fakeRunner(first());
+    const view = mount(before);
+    view.show();
+    expect(pauses(before).at(-1)).toBe("editing:true");
+
+    view.show({ runner: after as unknown as QueryRunner });
+    expect(pauses(before).at(-1)).toBe("editing:false");
+    expect(pauses(after).at(-1)).toBe("editing:true");
+
+    rt.unmount();
+    expect(pauses(after).at(-1)).toBe("editing:false");
   });
 });

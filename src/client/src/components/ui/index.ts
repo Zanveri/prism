@@ -37,6 +37,7 @@ export {
   SearchIcon,
   StopIcon,
   TableIcon,
+  TimerIcon,
   TrashIcon,
   WorkbenchIcon,
 } from "./icons";

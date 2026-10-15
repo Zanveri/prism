@@ -9,7 +9,6 @@ import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
 import { allCutCells, noFullValues, withFullValues, type FullValues } from "../../_lib/full-values";
 import { inDatabase } from "../../_lib/navigator-model";
-import { isBusy } from "../../_lib/result-paging";
 import { saveText } from "../../_lib/save-file";
 import { recall, remember } from "../../_lib/tab-memory";
 import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
@@ -17,9 +16,11 @@ import type { TableRef } from "../../_lib/table-diagram";
 import { recordsSql, sortOf, sqlLiteral } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
 import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
-import { useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
+import { useAutoRefresh } from "../../_lib/use-auto-refresh";
+import { isAutoRun, isPersonBusy, useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../../_lib/use-record-edits";
+import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
 import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
@@ -142,25 +143,32 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const refreshRef = useRef<() => void>(() => {});
   const menuRefresh = useCallback(() => refreshRef.current(), []);
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh });
+  // RN-GRADE-014: a atualização automática dos registros, na barra do resultado e no menu da grade; repete o comando em vigor (o do "Atualizar"). Só com a
+  // aba à vista: escondida, ou com a vista desmontada (a Estrutura, o Diagrama), ela espera.
+  const auto = useAutoRefresh(runner, visible);
+
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {
     guardRef.current = guard;
     refreshRef.current = refresh;
   });
-  // RN-GRADE-012: F5 é o "Atualizar", com o filtro e a ordem em vigor e a pergunta das alterações não salvas; com algo em andamento, nada.
+  // RN-GRADE-012: F5 é o "Atualizar", com o filtro e a ordem em vigor e a pergunta das alterações não salvas; com algo da pessoa em andamento, nada (a
+  // execução da atualização automática não segura: o comando toma o lugar dela, RN-GRADE-014).
   const refreshByKey = useCallback(() => {
-    if (!isBusy(runner.getState())) refresh();
+    if (!isPersonBusy(runner.getState())) refresh();
   }, [runner, refresh]);
   useRefreshSlot(refreshSlot, refreshByKey);
 
   /**
    * "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. RN-SQL-017: a célula
    * cortada sai com o valor completo, pedido antes à API (sem célula cortada, nada é pedido e o arquivo sai na hora); cancelada a busca, nada é gravado.
+   * Com a execução da atualização automática em andamento, espera por ela e exporta o resultado novo (RN-GRADE-014): o de antes já não está na API, e o
+   * valor completo das células cortadas dele não viria.
    */
   const { completeValues } = edits;
-  const exportCsv = useCallback(() => {
+  const exportNow = useCallback(() => {
     const current = runner.getState();
     if (current.status !== "rows") return;
 
@@ -174,6 +182,10 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
       if (full !== null) write(full);
     });
   }, [runner, schema, name, toast, completeValues]);
+  const exportCsv = useCallback(() => {
+    if (isAutoRun(runner.getState())) void runner.autoRunSettled().then(exportNow);
+    else exportNow();
+  }, [runner, exportNow]);
 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
@@ -269,7 +281,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         }}
         applied={filter}
         problem={problem}
-        busy={isBusy(state)}
+        busy={isPersonBusy(state)}
         command={engine === undefined ? null : recordsSql(engine, schema, name, filter)}
         onApply={apply}
         onClear={clear}
@@ -298,13 +310,17 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         }}
         editing={edits.editing}
         banner={<EditsBanner {...edits.banner} />}
+        // No rodapé, ao lado de "Atualizar": o menu dos intervalos abre para cima.
+        autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} opensUp onChoose={auto.choose} />}
         nullText={preferences.results.nullText}
-        autoLoadMore={preferences.results.autoLoadMore}
+        // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão (cada execução volta à primeira página).
+        autoLoadMore={preferences.results.autoLoadMore && auto.state.status !== "on"}
         onLoadMore={loadMore}
         onCount={() => void runner.countTotal()}
         onRerun={refresh}
       />
       {resultEditDialogs(edits)}
+      {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
       {edits.question === null && handoffWaits ? (
         <UnsavedEditsDialog
           count={edits.pending}

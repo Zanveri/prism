@@ -15,6 +15,7 @@ import { recallForTransfer } from "../_lib/tab-memory";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
+import { handOffTab } from "../_lib/tab-handoff";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
 import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
@@ -180,7 +181,8 @@ export function WorkbenchTabs() {
   /**
    * Manda a aba para outra janela (RN-ABAS-002 e 003): o texto e a seleção do editor DESTE instante, o resultado, a sessão e o que a tela lembrava.
    * Só quando o processo principal a levou ela sai daqui, sem fechar a sessão (que agora é da outra janela). Com comando em andamento não vai: a
-   * resposta chegaria aqui, à aba que já saiu.
+   * resposta chegaria aqui, à aba que já saiu. A atualização automática fica suspensa durante a ida, e a execução automática em andamento termina antes
+   * de a aba ser lida (`handOffTab`, RN-GRADE-014).
    *
    * `saved`: a aba acabou de salvar as alterações para poder ir (RN-EDIT-007). Nos Registros, as linhas na tela são as de antes de salvar, e o Salvar
    * lê os registros de novo (RN-EDIT-005): a aba vai sem elas, e a janela que a recebe lê os registros na mesma sessão, já com o que foi gravado. A aba
@@ -191,18 +193,28 @@ export function WorkbenchTabs() {
     if (tab === undefined) return;
 
     const runner = runnerOf(tabId);
-    const current = runner.getState();
-    const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
-    const transfer = isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
-    if (transfer === null) {
-      toast.warning(copy.moveBusy);
-      return;
-    }
-
-    const reply = await sendTabAway({ target, transfer });
-    if (reply.ok) detachTab(tabId);
-    // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
-    else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
+    const outcome = await handOffTab(runner, {
+      // Enquanto a execução automática terminava, a aba pode ter fechado (o executor saiu: `runnerOf` lança) ou trocado de executor (outro banco): nada vai.
+      alive: () => {
+        try {
+          return runnerOf(tabId) === runner;
+        } catch {
+          return false;
+        }
+      },
+      prepare: (current) => {
+        const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
+        return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
+      },
+      send: async (transfer) => {
+        const reply = await sendTabAway({ target, transfer });
+        if (reply.ok) detachTab(tabId);
+        // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
+        else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
+        return reply.ok;
+      },
+    });
+    if (outcome === "busy") toast.warning(copy.moveBusy);
   }
 
   function handleMove(tabId: string, target: TabMoveTarget) {

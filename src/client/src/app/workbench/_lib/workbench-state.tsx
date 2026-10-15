@@ -24,7 +24,7 @@ import { moveTab, shiftTab } from "./tab-order";
 import { withDatabase } from "./tab-database";
 import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
-import { createQueryRunner, isBusyState, type QueryRunner } from "./use-query-runner";
+import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-runner";
 import { createLockHandles } from "./workbench-lock";
 import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type TableView } from "./workbench-model";
 import { workbenchCopy } from "./workbench.copy";
@@ -365,7 +365,9 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     (tabId: string, database: string | undefined) => {
       const tab = tabs.find((candidate) => candidate.id === tabId);
       const runner = runners.get(tabId);
-      if (tab === undefined || (runner !== undefined && isBusyState(runner.getState()))) return;
+      // Com um comando da pessoa em andamento, nada (a barra o desabilita). A execução da atualização automática (RN-GRADE-014) não segura: `retire()` a
+      // desliga e a sessão de antes se encerra com ela.
+      if (tab === undefined || (runner !== undefined && isPersonBusy(runner.getState()))) return;
       // O texto do editor deste instante: o da aba chega com atraso, e o ponto de um script é recalculado por ele.
       const sql = liveEditors.snapshot(tabId)?.sql;
       const next = withDatabase(tab, database, sql);

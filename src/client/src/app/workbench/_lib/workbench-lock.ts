@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { isBusyState, type QueryRunner } from "./use-query-runner";
+import { isPersonBusy, type QueryRunner } from "./use-query-runner";
 import type { QueryTab } from "./workbench-model";
 
 /**
@@ -18,9 +18,12 @@ export function withoutSessions(tabs: QueryTab[]): QueryTab[] {
   return tabs.map((tab) => ({ ...tab, sessionId: null }));
 }
 
-/** Alguma aba tem comando em andamento (executar, "carregar mais" ou contar): o bloqueio por inatividade não conta o tempo enquanto isso. */
+/**
+ * Alguma aba tem comando em andamento (executar, "carregar mais" ou contar): o bloqueio por inatividade não conta o tempo enquanto isso. A execução da
+ * atualização automática (RN-GRADE-014) não conta (`isPersonBusy`): com ela ligada o Prism bloqueia no prazo, e o bloqueio a desliga.
+ */
 export function anyRunnerBusy(runners: ReadonlyMap<string, QueryRunner>): boolean {
-  return [...runners.values()].some((runner) => isBusyState(runner.getState()));
+  return [...runners.values()].some((runner) => isPersonBusy(runner.getState()));
 }
 
 export type DiscardForLockDeps = {
