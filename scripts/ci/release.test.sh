@@ -330,7 +330,7 @@ reset_calls
 pipeline main -- --expect v0.2.1
 expect "12b. main com a 0.2.0 no package.json e commit novo, SEM a seção da 0.2.1 no changelog: lança a v0.2.1 do mesmo jeito" 0 "Prism 0.2.1 publicado. A tag v0.2.1 aponta para $next"
 check "12b. as notas são as do git-cliff, e não a seção da 0.2.0" eval "release_field v0.2.1 .body | grep -q 'Coisa do beta' && ! release_field v0.2.1 .body | grep -q 'Coisa da 0.2.0' && release_field v0.2.1 .body | grep -q '^### Somas SHA-256\$'"
-check "12b. o git-cliff partiu da estável anterior (v0.2.0)" is "$(cat "$FAKE/cliff.argv")" "--config cliff.toml --unreleased --strip all v0.2.0..HEAD"
+check "12b. o git-cliff partiu da estável anterior (v0.2.0)" is "$(cat "$FAKE/cliff.argv")" "--config cliff.toml --strip all v0.2.0..HEAD"
 check "12b. a estável é a mais recente, e não é pré-lançamento" is "$(release_field v0.2.1 '"\(.prerelease) \(.make_latest)"')" "false true"
 
 git -C "$work" checkout -q "$stable"

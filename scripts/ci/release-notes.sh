@@ -70,29 +70,35 @@ if grep -qvE '^[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*$' "$sums"; then
 fi
 
 # cliff_notes <o que dizer sem tag anterior>: as notas do git-cliff com os commits desde $since (sem ela, o histórico inteiro), em
-# `notes`, e de onde elas partem, em `origin`.
+# `notes`, e de onde elas partem, em `origin`. As notas são para quem usa o app: o cliff.toml só deixa entrar o que muda o que ele
+# vê, então um merge só de documentação, testes ou pipeline sai sem item, e as notas dizem isso.
 cliff_notes() {
   local range=()
   if [ -n "$since" ]; then
     version_fields "${since#v}" > /dev/null && [[ "$since" == v* ]] || fail "\"$since\" não é uma tag de versão (vX.Y.Z ou vX.Y.Z-beta.N)."
+    # Com o intervalo, SEM o --unreleased: junto dele o git-cliff (2.14) volta até a última estável e ignora o começo do
+    # intervalo, e as notas de cada beta repetiam tudo desde a estável. O intervalo já é o que não foi lançado.
     range=("$since..HEAD")
-    origin="com os commits desde a $since"
+    origin="o que mudou desde a ${since#v}"
   else
-    origin="com os commits do histórico inteiro ($1)"
+    # Sem tag anterior, "--unreleased" fica com o histórico inteiro (não há estável antes).
+    range=(--unreleased)
+    origin="tudo o que entrou até aqui ($1)"
   fi
-  # Só o corpo: "--unreleased" fica com o que vem depois da última estável, e "--strip all" tira o cabeçalho do CHANGELOG.md.
-  notes=$(bash "$here/git-cliff.sh" --config cliff.toml --unreleased --strip all "${range[@]+"${range[@]}"}") || fail "o git-cliff falhou: as notas de $version não saíram."
+  # Só o corpo: "--strip all" tira o cabeçalho do CHANGELOG.md.
+  notes=$(bash "$here/git-cliff.sh" --config cliff.toml --strip all "${range[@]}") || fail "o git-cliff falhou: as notas de $version não saíram."
   if [ -z "${notes//[[:space:]]/}" ]; then
     notes="
-Nenhum commit no formato dos commits do projeto (Conventional Commits) desde a tag anterior."
+Nenhuma mudança que apareça para quem usa o Prism: só ajustes internos (documentação, testes ou empacotamento)."
   fi
 }
 
 if [ "$beta" -eq 1 ]; then
   [[ "$version" =~ -beta\.[0-9]+$ ]] || fail "\"$version\" não é a versão de um beta (X.Y.Z-beta.N)."
   cliff_notes "é o primeiro pré-lançamento"
-  header="> Versão beta (pré-lançamento), $origin."
-  echo "release-notes: beta $version, notas do git-cliff $origin."
+  # Um parágrafo simples, e não uma citação ("> "): o app desenha a citação como parágrafo com o ">" na frente.
+  header="Versão beta (pré-lançamento), para experimentar. Abaixo, $origin."
+  echo "release-notes: beta $version, notas do git-cliff: $origin."
 else
   [[ "$version" =~ $stable_pattern ]] || fail "\"$version\" é um pré-lançamento: as notas dele vêm do git-cliff, não do changelog (use --beta)."
   header=
@@ -101,7 +107,7 @@ else
     echo "release-notes: seção $version do CHANGELOG.md."
   else
     cliff_notes "é a primeira estável"
-    echo "release-notes: estável $version, sem a seção \"$(notes_heading "$version")\" com texto no CHANGELOG.md: notas do git-cliff $origin."
+    echo "release-notes: estável $version, sem a seção \"$(notes_heading "$version")\" com texto no CHANGELOG.md: notas do git-cliff, $origin."
   fi
 fi
 

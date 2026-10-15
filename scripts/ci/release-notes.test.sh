@@ -117,11 +117,11 @@ printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\
 run --beta --since v0.1.0 0.2.0-beta.3
 expect "beta: as notas são as do git-cliff" 0 "Coisa nova do beta" "Coisa de pré-lançamento."
 expect "beta: o changelog não entra (nem a seção \"Não lançado\" nem a de uma versão)" 0 "" "Defeito da 0.2.0."
-expect "beta: diz que é beta e de onde as notas partem" 0 "desde a v0.1.0"
+expect "beta: diz que é beta e de onde as notas partem" 0 "o que mudou desde a 0.1.0"
 total=$((total + 1))
-if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --unreleased --strip all v0.1.0..HEAD" ]; then echo "ok   $total - beta: o git-cliff roda com o cliff.toml do repositório, só o que não foi lançado, sem cabeçalho, desde a tag anterior"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff: $(cat "$work/cliff-args")"; fi
+if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --strip all v0.1.0..HEAD" ]; then echo "ok   $total - beta: o git-cliff roda com o cliff.toml do repositório, sem cabeçalho, desde a tag anterior e sem o --unreleased (que faria o git-cliff ignorar o começo do intervalo)"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff: $(cat "$work/cliff-args")"; fi
 total=$((total + 1))
-expected=$(printf '> Versão beta (pré-lançamento), com os commits desde a v0.1.0.\n\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n\n### Somas SHA-256\n\n```\n%s  Prism-0.2.0-win-x64.exe\n%s  Prism-0.2.0-linux-x64.tar.gz\n```\nfim' "$a" "$b")
+expected=$(printf 'Versão beta (pré-lançamento), para experimentar. Abaixo, o que mudou desde a 0.1.0.\n\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n\n### Somas SHA-256\n\n```\n%s  Prism-0.2.0-win-x64.exe\n%s  Prism-0.2.0-linux-x64.tar.gz\n```\nfim' "$a" "$b")
 if [ "$(cat "$work/release-notes.md"; printf fim)" = "$expected" ]; then
   echo "ok   $total - CONTRATO (beta): as notas terminam com o mesmo bloco das somas, e nada depois dele"
 else
@@ -142,13 +142,13 @@ fi
 printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n' > "$work/cliff-body"
 
 run --beta 0.1.0-beta.1
-expect "o primeiro beta (sem tag anterior) usa o histórico inteiro" 0 "com os commits do histórico inteiro"
+expect "o primeiro beta (sem tag anterior) usa o histórico inteiro" 0 "tudo o que entrou até aqui"
 total=$((total + 1))
-if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --unreleased --strip all" ]; then echo "ok   $total - e o git-cliff roda sem intervalo"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff sem tag anterior: $(cat "$work/cliff-args")"; fi
+if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --strip all --unreleased" ]; then echo "ok   $total - e o git-cliff roda sem intervalo"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff sem tag anterior: $(cat "$work/cliff-args")"; fi
 
 printf '\n\n' > "$work/cliff-body"
 run --beta --since v0.1.0-beta.1 0.1.0-beta.2
-expect "beta sem nenhum commit no formato: as notas dizem isso (nunca ficam vazias)" 0 "Nenhum commit no formato dos commits do projeto"
+expect "beta sem nenhuma mudança para quem usa: as notas dizem isso (nunca ficam vazias)" 0 "Nenhuma mudança que apareça para quem usa o Prism"
 
 touch "$work/cliff-falha"
 run --beta --since v0.1.0 0.2.0-beta.3
@@ -178,7 +178,7 @@ expect "estável SEM a seção: as notas são as do git-cliff" 0 "Coisa nova do 
 expect "e a saída diz que a seção falta e desde que tag as notas partem" 0 'sem a seção "## [0.3.0] - AAAA-MM-DD"' "falha"
 expect "sem o título da versão nem a faixa de beta: a estável não leva cabeçalho" 0 "" "Versão beta"
 total=$((total + 1))
-if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --unreleased --strip all v0.2.0..HEAD" ]; then echo "ok   $total - estável: o git-cliff roda como no beta, desde a estável anterior"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff na estável: $(cat "$work/cliff-args")"; fi
+if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --strip all v0.2.0..HEAD" ]; then echo "ok   $total - estável: o git-cliff roda como no beta, desde a estável anterior"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff na estável: $(cat "$work/cliff-args")"; fi
 total=$((total + 1))
 expected=$(printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n\n### Somas SHA-256\n\n```\n%s  Prism-0.2.0-win-x64.exe\n%s  Prism-0.2.0-linux-x64.tar.gz\n```\nfim' "$a" "$b")
 if [ "$(cat "$work/release-notes.md"; printf fim)" = "$expected" ]; then
@@ -190,9 +190,9 @@ else
 fi
 
 run 0.3.0
-expect "estável sem a seção e sem a tag anterior (a primeira estável): o histórico inteiro" 0 "com os commits do histórico inteiro"
+expect "estável sem a seção e sem a tag anterior (a primeira estável): o histórico inteiro" 0 "tudo o que entrou até aqui"
 total=$((total + 1))
-if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --unreleased --strip all" ]; then echo "ok   $total - e o git-cliff roda sem intervalo"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff sem tag anterior: $(cat "$work/cliff-args")"; fi
+if [ "$(cat "$work/cliff-args")" = "--config cliff.toml --strip all --unreleased" ]; then echo "ok   $total - e o git-cliff roda sem intervalo"; else failures=$((failures + 1)); echo "FALHA $total - argumentos do git-cliff sem tag anterior: $(cat "$work/cliff-args")"; fi
 
 printf '# Changelog\n\n## [0.3.0] - 2026-02-01\n\n## [0.2.0] - 2026-01-02\n\n- Defeito da 0.2.0.\n' > "$work/CHANGELOG.md"
 run --since v0.2.0 0.3.0
@@ -204,7 +204,7 @@ write_changelog
 
 printf '\n\n' > "$work/cliff-body"
 run --since v0.2.0 0.3.0
-expect "estável sem nenhum commit no formato: as notas dizem isso (nunca ficam vazias)" 0 "Nenhum commit no formato dos commits do projeto"
+expect "estável sem nenhuma mudança para quem usa: as notas dizem isso (nunca ficam vazias)" 0 "Nenhuma mudança que apareça para quem usa o Prism"
 printf '\n### Adicionado\n\n- **client:** Coisa nova do beta\n\n### Corrigido\n\n- Defeito do beta\n' > "$work/cliff-body"
 
 touch "$work/cliff-falha"
