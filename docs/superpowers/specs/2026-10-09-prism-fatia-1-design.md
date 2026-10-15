@@ -2727,7 +2727,11 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
 - **RN-PROT-006.** As sessões abertas. Mudar as proteções (na conexão, numa pasta acima, ou movendo
   uma das duas) não fecha nenhuma sessão: o comando seguinte de cada sessão já segue a regra nova,
   porque a API lê as proteções do cofre a cada comando. O cursor aberto continua sendo lido
-  ("Carregar mais"): ele é de uma leitura que já rodou.
+  ("Carregar mais"): ele é de uma leitura que já rodou. O resultado que já está na grade fica com a
+  edição que tinha quando foi executado: a recusa da edição (RN-PROT-002) vem da proteção do momento
+  do pedido, e o resultado novo, executado depois da mudança, já sai com ela. A sessão de uma conexão
+  que acabou de ser excluída, e que ainda não fechou (RN-CONN-014), responde como a sessão que não
+  existe (404 `DATABASE_SESSION_NOT_FOUND`).
   - No PostgreSQL, antes de cada comando da pessoa e de cada "Salvar", a sessão é posta no modo da
     conexão daquele momento: `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` quando ela é
     somente leitura, e `... READ WRITE` quando deixa de ser. O `SET` só vai ao banco quando o modo
@@ -2774,6 +2778,11 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - A verificação não conta como atividade da pessoa nem como comando em andamento para o bloqueio
     por inatividade (RN-SEG-001), e não contará para o encerramento por ociosidade, quando ele vier
     (seção 13). Ela não roda com a verificação desligada, nem com o cofre bloqueado.
+  - A verificação também não deixa a sessão ocupada para a pessoa: o comando ou o "Salvar" que
+    chega durante ela espera o fim dela (no máximo o prazo do driver), em vez de responder
+    `SESSION_BUSY` (RN-SESSAO-002), e o "Cancelar" pedido nessa espera faz o comando desistir na
+    hora, sem esperar o fim dela e sem ir ao banco, como cancelado (RN-SQL-010); a verificação em si
+    não é interrompida.
 - **RN-VERIF-003.** O indicador, ao lado do nome da conexão conectada na árvore (no lugar do ponto de
   conectada) e na barra de status da aba dela:
   - "Respondeu na última verificação", o ponto do canvas, com a hora e o tempo na dica ("Respondeu
@@ -2845,7 +2854,8 @@ Notas:
   resposta (UTC); `elapsedMs`, o tempo da consulta (só em `ok` e `failed`); `message` e `sqlState`,
   só em `failed`, com a mensagem do banco como veio e o SQLSTATE quando o driver o informa. A falha
   do banco é resposta 200, e não erro: a tela a mostra no indicador, sem o aviso de erro de toda
-  chamada que falha (RN-AVISO-004). O cofre fechado é o 401 de sempre.
+  chamada que falha (RN-AVISO-004). O cofre fechado é o 401 de sempre. A rota não olha
+  `verificationEnabled`: quem decide se pede é a tela, e a consulta é a gravada na conexão.
 - `CONNECTION_READ_ONLY` (422): o comando não é uma leitura numa conexão somente leitura, ou a rota é
   da edição; nada foi ao banco, e o resultado anterior continua (a recusa não leva `executed`).
 
