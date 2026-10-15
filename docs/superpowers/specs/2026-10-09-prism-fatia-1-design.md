@@ -303,7 +303,8 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 ### 5.5 Editor e resultado
 
 - **RN-SQL-001.** Executar (botão ou Ctrl+Enter) envia o texto selecionado; sem seleção, envia o
-  comando onde está o cursor. Uma execução leva um comando só: se a seleção tiver mais de um
+  comando onde está o cursor, que acaba no `;` e também na linha em branco, nas condições da
+  RN-SQL-018 (pedido do dono em 2026-10-15, issue #7). Uma execução leva um comando só: se a seleção tiver mais de um
   (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência entra na entrega 2.
   Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) conta como um
   comando só. No Db2 e no Informix a API repete a conferência e responde 422
@@ -312,7 +313,9 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-SQL-002.** Comandos são separados por `;` fora de texto entre aspas simples, de
   identificador entre aspas duplas, de comentário (`--` e `/* */`) e de `$tag$ ... $tag$` do
   PostgreSQL. Bloco que tem `;` no corpo (procedimento em Db2 ou Informix) é executado
-  selecionando o bloco inteiro.
+  selecionando o bloco inteiro. Sem seleção, a linha em branco também separa o comando do cursor,
+  pela RN-SQL-018 (mudou em 2026-10-15, pedido do dono, issue #7: antes só o `;` separava); a
+  seleção continua contada só pelo `;`.
 - **RN-SQL-003.** Qualquer comando SQL é aceito e enviado como está ao banco, sem ser dividido
   nem reescrito. Se o banco não aceita mais de um comando por envio, a recusa é a dele. A
   exceção são os comandos de controle de transação (`BEGIN`, `START TRANSACTION`, `COMMIT`,
@@ -554,6 +557,8 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   ("Transação aberta pela edição"), por decisão do dono (RN-EDIT-004).
 - A barra dos Registros ganha o seletor de nível de isolamento, que o canvas não tem
   (RN-ISOL-001).
+- Configurações › Editor SQL ganha "A linha em branco separa os comandos", que o canvas não tem
+  (RN-SQL-018).
 
 ## 10. Riscos e sondas
 
@@ -2167,3 +2172,66 @@ ambiente".
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+
+## 26. Complemento de 2026-10-15: a linha em branco separa os comandos (issue #7)
+
+Pedido da issue 7 do repositório público, aprovado pelo dono em 2026-10-15 ("Faça todas issues, todas
+elas parecem boas mesmo"): "ctrl + enter no script executar apenas a query separada por enter". Quem
+vem do DBeaver separa os comandos com uma linha em branco, sem selecionar o texto e sem terminar cada
+um com `;`; no Prism, dois `SELECT` separados só por uma linha em branco iam juntos, e o banco
+respondia erro de sintaxe. Muda a RN-SQL-002, e a RN-SQL-001 passa a citar esta regra.
+
+- **RN-SQL-018.** Sem seleção, a linha em branco (só espaços e tabulações) também termina o comando
+  do cursor, como o "Smart" do DBeaver, porém com mais cuidado, porque o Prism ainda não confirma
+  comando irreversível (seção 13): na dúvida, não separa, e o banco recusa o texto inteiro em vez
+  de executar a metade dele.
+  - Nunca separa dentro de texto entre aspas simples, de identificador entre aspas duplas, de
+    comentário, de `$tag$ ... $tag$`, nem dentro de um bloco com `;` no corpo (rotina, gatilho,
+    bloco composto: os da RN-SQL-001), que continua sendo executado selecionando-o. No Db2, depois
+    que o bloco começa (`CREATE PROCEDURE`, `FUNCTION`, `TRIGGER` ou `BEGIN`), não separa até o fim
+    do texto, a mesma conta da RN-SQL-001; o `BEGIN` vale também fora do começo do comando: depois
+    de uma linha em branco, que ele não separa (com `SELECT …`, a linha em branco e `BEGIN … END`,
+    nenhuma linha em branco do bloco separa), de um rótulo (`nome: BEGIN`) ou de outro comando. No
+    Informix, até o `END PROCEDURE` ou o `END FUNCTION`.
+    `CREATE TRIGGER` e `CREATE SCHEMA` também não se separam antes do `;`, nos três bancos: o
+    `CREATE SCHEMA` traz os objetos dele (`CREATE TABLE`, `CREATE VIEW`, `CREATE INDEX`, `GRANT` e,
+    no Db2, `COMMENT ON`) sem `;` entre eles, e separar ali criaria o esquema sozinho e depois a
+    tabela fora dele.
+  - Separa só quando o texto depois da linha em branco (e dos comentários que vierem) começa um
+    comando: `SELECT`, `WITH nome [ ( … ) ] AS (`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `VALUES`,
+    `CREATE`, `ALTER` e `DROP` seguidos do tipo do objeto (`TABLE`, `VIEW`, `INDEX`…), `TRUNCATE`,
+    `GRANT`, `REVOKE`, `CALL`, `EXECUTE`, `EXPLAIN`, `COMMENT ON`, `ANALYZE`, `VACUUM`,
+    `LOCK TABLE`, `SHOW`, `COPY`, `DECLARE`, `REFRESH`, `COMMIT`, `ROLLBACK`, `SAVEPOINT` e `DO`
+    seguido do corpo. `SET` não começa comando aqui (`UPDATE t`, a linha em branco e `SET …` são um
+    comando só), nem `BEGIN` (abre bloco), nem o `WITH UR|CS|RS|RR` do Db2. Dentro de um `ALTER`,
+    `ALTER`, `DROP`, `GRANT` e `REVOKE` também não começam outro, porque podem ser cláusulas dele.
+  - E só quando o texto antes dela está fechado: os parênteses equilibrados; não termina em
+    vírgula, em operador nem em palavra que pede continuação (`WHERE`, `AND`, `OR`, `NOT`, `ON`,
+    `JOIN`, `FROM`, `SELECT`, `SET`, `BY`, `UNION`, `ALL`, `INTERSECT`, `EXCEPT`, `MINUS`, `THEN`,
+    `ELSE`, `WHEN`, `CASE`, `AS`, `IN`, `INTO`, `VALUES`, `LIKE`, `BETWEEN`, `IS`, `ON COMMIT`…); e
+    não é o começo de um comando que ainda espera o corpo: o `INSERT` antes do `VALUES` ou do
+    `SELECT`, o `WITH` antes do comando principal, o `EXPLAIN` antes do comando.
+  - Assim, `DELETE FROM t`, a linha em branco e `WHERE id = 1` são um comando só, e
+    `INSERT INTO t (a)`, a linha em branco e `SELECT a FROM s` também.
+  - O comentário logo acima do comando de baixo vai com ele, como no `;`.
+  - Com o cursor numa das linhas em branco que terminaram o comando de cima por esta regra (também
+    com um comentário solto entre ele e o de baixo), executa o de cima, como no DBeaver. Na linha em
+    branco sem comando nenhum acima dela no texto (no começo do texto, ou só com comentários acima),
+    nada é executado ("Não há comando para executar."), mesmo que haja um abaixo. Nas outras
+    linhas em branco fora de comando, as que vêm depois de um comando terminado no `;`, vale a regra
+    de antes (RN-SQL-001): o comando seguinte. Assim o `;` não muda de resposta: com
+    `DELETE FROM t WHERE id = 1;`, a linha em branco e `SELECT * FROM t;`, o cursor na linha em
+    branco executa o `SELECT`, como antes, e não o `DELETE` de novo.
+  - O `;` continua separando como antes (RN-SQL-002), e o comando do cursor entre dois comandos
+    separados pelo `;` é o mesmo de antes. A seleção continua indo como está, e a conta da seleção
+    (RN-SQL-001) continua só pelo `;`: a linha em branco não divide a seleção.
+  - Configurações › Editor SQL ganha "A linha em branco separa os comandos", ligada por padrão e
+    guardada com as outras preferências do editor (RN-CONFIG-001). Desligada, vale só o `;`, como
+    antes.
+  - Ao executar sem seleção, o editor destaca por um instante o trecho enviado, para a pessoa ver
+    qual comando rodou. O destaque segue o tema, some sozinho e não muda o texto, o cursor nem a
+    seleção; com "reduzir movimento" no sistema, aparece sem animação. Só destaca o que vai mesmo
+    ao banco: com um comando em andamento na aba, com a aba sem conexão (RN-SCRIPT-003) ou com a
+    pergunta das alterações não salvas da grade (RN-EDIT-007) cancelada, nada é enviado e nada é
+    destacado; respondida a pergunta, o destaque vem depois dela.
+  - A API não muda: continua recebendo um comando por execução.
