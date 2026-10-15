@@ -17,7 +17,7 @@ namespace Prism.UnitTesting.Databases;
 /// não deixa provocar na hora certa: a limpeza da transação que falha com a conexão viva e o cancelamento que chega enquanto o `BEGIN`
 /// da tentativa ainda está indo ao banco. O comportamento com o PostgreSQL de verdade é dos fixtures de integração.
 /// </summary>
-public sealed class AdoDatabaseConnectionTests
+public sealed partial class AdoDatabaseConnectionTests
 {
     private const string ReadQuery = "SELECT numero FROM tabela";
 

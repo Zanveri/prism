@@ -16,7 +16,7 @@ namespace Prism.UnitTesting.Databases;
 /// volta (rede morta) e o temporizador que dispara fora de hora. O comportamento com o banco de verdade é do fixture de integração
 /// de mesmo nome.
 /// </summary>
-public sealed class DatabaseSessionServiceTests
+public sealed partial class DatabaseSessionServiceTests
 {
     private static readonly ConnectionSettings Settings = new(EDatabaseEngine.PostgreSql, "banco.local", 5432, "producao", "operador", "senha-de-teste");
 
@@ -565,7 +565,10 @@ public sealed class DatabaseSessionServiceTests
         /// <summary>RN-PROT-002: os comandos que chegaram pelo caminho da conexão somente leitura, na ordem.</summary>
         public List<string> ExecutedReadOnly { get; } = [];
 
-        /// <summary>RN-SQL-007: há um cursor aberto na conexão, o que o teste disser.</summary>
+        /// <summary>
+        /// RN-SQL-007: há um cursor aberto na conexão. Segue o da base: a página com mais linhas o abre, e todo comando que chega à conexão, o
+        /// fim da leitura e o fechamento por ociosidade o fecham. O teste pode dar o que quiser.
+        /// </summary>
         public bool HasOpenCursor { get; set; }
 
         /// <summary>RN-VERIF-002: as consultas de verificação que chegaram (nula é a do banco), na ordem.</summary>
@@ -576,20 +579,36 @@ public sealed class DatabaseSessionServiceTests
 
         public TaskCompletionSource? VerificationGate { get; set; }
 
+        /// <summary>A conexão cai na verificação, como a que o administrador derrubou.</summary>
+        public bool ClosesItselfOnVerify { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
         {
             Executed.Add(sql);
+            HasOpenCursor = false;
             if (Failure is { } failure)
                 return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
 
-            return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+            return Respond();
         }
 
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
         {
             ExecutedReadOnly.Add(sql);
+            HasOpenCursor = false;
 
-            return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+            return Respond();
+        }
+
+        /// <summary>O desfecho que o teste deu, com o cursor aberto quando a página tem mais linhas; sem ele, o comando nunca volta.</summary>
+        private Task<Result<QueryOutcome, DatabaseFailure>> Respond()
+        {
+            if (!Outcomes.TryDequeue(out var outcome))
+                return new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+
+            HasOpenCursor = outcome.Page?.HasMore ?? false;
+
+            return Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome));
         }
 
         public async Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken)
@@ -597,6 +616,9 @@ public sealed class DatabaseSessionServiceTests
             Verified.Add(sql);
             if (VerificationGate is { } gate)
                 await gate.Task;
+
+            if (ClosesItselfOnVerify)
+                IsOpen = false;
 
             return VerificationFailure is { } failure ? UnitResult.Failure(failure) : UnitResult.Success<DatabaseFailure>();
         }
@@ -606,12 +628,16 @@ public sealed class DatabaseSessionServiceTests
             if (ClosesItselfOnFetch)
                 IsOpen = false;
 
-            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(NextPage ?? new QueryPage([], [], NextPageHasMore, 0, [])));
+            var page = NextPage ?? new QueryPage([], [], NextPageHasMore, 0, []);
+            HasOpenCursor = page.HasMore;
+
+            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(page));
         }
 
         public Task CloseCursorAsync()
         {
             CloseCursorCalls++;
+            HasOpenCursor = false;
             if (ClosesItselfOnCloseCursor)
                 IsOpen = false;
 
