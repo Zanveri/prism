@@ -445,8 +445,29 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return opened;
     }
 
-    public async Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
-        => await QueryAsync(nameof(PingAsync), EDatabaseFailure.ConnectionFailed, PingSql, [], reader => reader.GetValue(0), cancellationToken);
+    public Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
+        => VerifyAsync(null, cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001. A consulta própria (validada antes como uma leitura só, RN-PROT-005) vai como a pessoa a escreveu, com o ajuste que o
+    /// banco pede num texto dela (<see cref="ConfigureUserCommand"/>), lida até o fim e com o prazo do driver, como o catálogo; no banco que tem
+    /// transação só de leitura ela roda numa, e nem uma função chamada por ela grava. Sem ela, a do banco (<see cref="PingSql"/>).
+    /// </summary>
+    public async Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken)
+        => await RunAsync(nameof(VerifyAsync), EDatabaseFailure.ConnectionFailed, async token =>
+        {
+            if (sql is not null)
+                await BeginReadOnlyAsync(token);
+
+            var reader = await StartAsync(sql ?? PingSql, [], userCommand: false, token, userText: sql is not null);
+            while (await reader.ReadAsync(token))
+            {
+            }
+
+            await FinishCursorAsync(token);
+
+            return true;
+        }, cancellationToken);
 
     public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
     {
@@ -1121,7 +1142,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// PostgreSQL não aceita outro comando na conexão. Os parâmetros são posicionais, e cada banco escreve o marcador dele (`$1`, `?`).
     /// </summary>
     /// <param name="userCommand">É comando do usuário: sem tempo limite, porque só para quando ele cancela (RN-SQL-010), e com o ajuste que o banco pede.</param>
-    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken)
+    /// <param name="userText">O texto é da pessoa, mas o comando tem o prazo do driver (a consulta de verificação própria, RN-VERIF-001): leva o ajuste que o banco pede num texto dela.</param>
+    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken, bool userText = false)
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
@@ -1129,10 +1151,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         // O padrão dos drivers é 30 segundos, e um comando do usuário pode levar horas.
         if (userCommand)
-        {
             command.CommandTimeout = 0;
+
+        if (userCommand || userText)
             ConfigureUserCommand(command);
-        }
 
         foreach (var value in parameters)
         {

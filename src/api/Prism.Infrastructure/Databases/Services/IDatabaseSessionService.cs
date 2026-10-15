@@ -16,8 +16,23 @@ public interface IDatabaseSessionService
     /// </summary>
     Task<Result<DatabaseSessionInfo, DatabaseFailure>> OpenAsync(Guid connectionID, ConnectionSettings settings, long vaultGeneration, CancellationToken cancellationToken);
 
-    /// <summary>RN-CONN-013: abre, roda a consulta de verificação e fecha. Não registra sessão. Falha `ConnectionFailed`.</summary>
+    /// <summary>RN-CONN-013: abre, roda a consulta de verificação do banco e fecha. Não registra sessão. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001: o mesmo, com a consulta de verificação própria do formulário (já validada como uma leitura só) no lugar da do
+    /// banco, quando ela vem. A falha dela é `ConnectionFailed`, com a mensagem do banco.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, string? verificationQuery, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-VERIF-002: roda a consulta de verificação (a própria, já validada, ou a do banco quando ela é nula) numa sessão já aberta da conexão, do cofre
+    /// da geração `vaultGeneration`, e nunca numa nova: sem nenhuma, `NotConnected`. Nunca numa sessão com cursor aberto, que a consulta fecharia
+    /// (RN-SQL-007), nem numa com comando em andamento: primeiro a sessão sem resultado (a da árvore) e depois a de uma aba sem cursor; com todas
+    /// ocupadas, `Busy` na hora, sem esperar a vez. A falha do banco é `Failed`, e a sessão cuja conexão caiu sai do registro. Não é atividade:
+    /// não mexe no tempo sem leitura do cursor (RN-SQL-007) nem no resultado da sessão.
+    /// </summary>
+    Task<ConnectionVerification> VerifyAsync(Guid connectionID, string? verificationQuery, long vaultGeneration, CancellationToken cancellationToken);
 
     /// <summary>
     /// RN-PROT-002 e 006: a conexão de que a sessão é, para quem decide as proteções dela a cada comando (as do cofre, que a Application lê). Nulo

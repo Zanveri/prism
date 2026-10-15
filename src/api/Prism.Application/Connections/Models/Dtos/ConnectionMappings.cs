@@ -1,6 +1,7 @@
 using Prism.Application.Common.Protections;
 using Prism.Application.Connections.Domain;
 using Prism.Core.Mappers;
+using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Vault.Models;
 
 namespace Prism.Application.Connections.Models.Dtos;
@@ -24,5 +25,23 @@ internal static class ConnectionMappings
             VerificationEnabled = source.VerificationEnabled ?? true,
             VerificationInterval = source.VerificationInterval ?? ConnectionRules.VerificationIntervalDefault,
             Protections = protections.ToDto()
+        };
+
+    /// <summary>RN-VERIF-002: o desfecho da verificação, com o estado em texto e o instante da resposta.</summary>
+    public static ConnectionVerificationDto ToDto(this ConnectionVerification source, DateTime checkedAt)
+        => new()
+        {
+            Status = source.Status switch
+            {
+                EVerificationStatus.Ok => "ok",
+                EVerificationStatus.Failed => "failed",
+                EVerificationStatus.Busy => "busy",
+                EVerificationStatus.NotConnected => "notConnected",
+                _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")
+            },
+            CheckedAt = checkedAt,
+            ElapsedMs = source.ElapsedMs,
+            Message = source.Message,
+            SqlState = source.SqlState
         };
 }

@@ -16,6 +16,9 @@ namespace Prism.Application.Connections.Features.TestConnection;
 /// RN-CONN-013: os campos do formulário, sem gravar nada. `ID` e `Password` são opcionais: sem `Password` e com `ID`, a API usa a senha
 /// que o cofre guarda para essa conexão (a tela não tem como mandá-la sem a pessoa redigitá-la, RN-CONN-002), desde que o host e a porta
 /// sejam os gravados (422 `CONNECTION_INVALID`, sem conectar); sem `Password` e sem `ID`, o validator recusa. Os campos que só servem para gravar (nome, pasta, ambiente) que o formulário mande são ignorados.
+///
+/// `VerificationQuery` é a consulta de verificação do formulário (RN-VERIF-001): quando vem, o teste a executa no lugar da do banco, com as regras da
+/// verificação periódica (uma leitura só, até 1.000 caracteres; a recusa é do validator, antes de conectar).
 /// </summary>
 public sealed record TestConnectionCommand : IRequest<UnitResult<ApiErrorDto>>
 {
@@ -26,6 +29,7 @@ public sealed record TestConnectionCommand : IRequest<UnitResult<ApiErrorDto>>
     public string Database { get; init; } = string.Empty;
     public string UserName { get; init; } = string.Empty;
     public string? Password { get; init; }
+    public string? VerificationQuery { get; init; }
 
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e esta é a senha do banco (e o host e o usuário vão junto).</summary>
     public override string ToString() => nameof(TestConnectionCommand);
@@ -59,7 +63,7 @@ internal sealed class TestConnectionHandler(IConnectionQueries connectionQueries
 
         // Aparados como o domínio os grava (`Connection.Create`): testar e gravar o mesmo formulário conecta da mesma forma.
         var settings = new ConnectionSettings(request.Engine, request.Host.Trim(), request.Port, request.Database.Trim(), request.UserName.Trim(), password);
-        var tested = await databaseSessionService.TestAsync(settings, cancellationToken);
+        var tested = await databaseSessionService.TestAsync(settings, ConnectionRules.NormalizeVerificationQuery(request.VerificationQuery), cancellationToken);
         if (tested.IsFailure)
             return UnitResult.Failure(DatabaseSessionErrors.From(tested.Error));
 

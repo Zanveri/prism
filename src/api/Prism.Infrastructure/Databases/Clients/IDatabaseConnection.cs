@@ -18,12 +18,20 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// <summary>
     /// RN-SQL-007: há um cursor aberto entre páginas, à espera do "carregar mais", que qualquer outro comando nesta conexão fecharia antes de ser
     /// enviado. A recusa antes de ir ao banco (controle de transação, mais de um comando) não o toca. Lido por quem tem a vez da sessão: é por
-    /// aqui que o registro de sessões sabe, depois de uma operação, se o cursor continua aberto.
+    /// aqui que o registro de sessões sabe, depois de uma operação, se o cursor continua aberto, e se a verificação periódica (RN-VERIF-002) pode
+    /// rodar na sessão sem fechá-lo.
     /// </summary>
     bool HasOpenCursor { get; }
 
     /// <summary>RN-CONN-013: a consulta de verificação do banco. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001 e 002: a consulta de verificação própria da conexão, já validada como uma leitura só, ou a do banco quando ela é
+    /// nula. Lida até o fim, com o prazo do driver; no PostgreSQL a própria roda numa transação só de leitura. Fecha o cursor aberto, como qualquer
+    /// comando: quem chama confere antes (<see cref="HasOpenCursor"/>). Falha `ConnectionFailed`, com a mensagem e o SQLSTATE do banco.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken);
 
     /// <summary>
     /// Envia o comando como está, um por vez (RN-SQL-003); controle de transação é recusado com `TransactionControlNotSupported`, sem

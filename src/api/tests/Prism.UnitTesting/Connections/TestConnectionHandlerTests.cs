@@ -35,14 +35,14 @@ public sealed class TestConnectionHandlerTests
         var cancellationToken = new CancellationToken();
         var settings = new ConnectionSettings(EDatabaseEngine.PostgreSql, "pg.local", 5432, "producao", "operador", "senha-digitada");
         _vaultService.SetupGet(v => v.Generation).Returns(Generation);
-        _databaseSessionService.Setup(s => s.TestAsync(settings, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
+        _databaseSessionService.Setup(s => s.TestAsync(settings, null, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
 
         //Act
         var result = await CreateHandler().Handle(CreateCommand(id: Guid.CreateVersion7()), cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
-        _databaseSessionService.Verify(s => s.TestAsync(settings, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.TestAsync(settings, null, cancellationToken), Times.Once);
         _vaultService.VerifyGet(v => v.Generation, Times.Exactly(2));
         _connectionQueries.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();
@@ -61,7 +61,7 @@ public sealed class TestConnectionHandlerTests
         var calls = new List<string>();
         _vaultService.SetupGet(v => v.Generation).Callback(() => calls.Add("Generation")).Returns(Generation);
         _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).Callback(() => calls.Add("GetRecordByID")).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
-        _databaseSessionService.Setup(s => s.TestAsync(settings, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
+        _databaseSessionService.Setup(s => s.TestAsync(settings, null, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
 
         //Act
         var result = await CreateHandler().Handle(CreateCommand(id: record.ID, password: null), cancellationToken);
@@ -71,7 +71,7 @@ public sealed class TestConnectionHandlerTests
         // A geração é lida antes da senha guardada e conferida depois do teste.
         Assert.Equal(["Generation", "GetRecordByID", "Generation"], calls);
         _connectionQueries.Verify(q => q.GetRecordByID(record.ID, cancellationToken), Times.Once);
-        _databaseSessionService.Verify(s => s.TestAsync(settings, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.TestAsync(settings, null, cancellationToken), Times.Once);
         _vaultService.VerifyGet(v => v.Generation, Times.Exactly(2));
         _connectionQueries.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();
@@ -181,7 +181,7 @@ public sealed class TestConnectionHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         _vaultService.SetupGet(v => v.Generation).Returns(Generation);
-        _databaseSessionService.Setup(s => s.TestAsync(It.IsAny<ConnectionSettings>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(new DatabaseFailure(EDatabaseFailure.ConnectionFailed, "database \"producao\" does not exist", "3D000")));
+        _databaseSessionService.Setup(s => s.TestAsync(It.IsAny<ConnectionSettings>(), null, cancellationToken)).ReturnsAsync(UnitResult.Failure(new DatabaseFailure(EDatabaseFailure.ConnectionFailed, "database \"producao\" does not exist", "3D000")));
 
         //Act
         var result = await CreateHandler().Handle(CreateCommand(), cancellationToken);
@@ -191,7 +191,7 @@ public sealed class TestConnectionHandlerTests
         Assert.Equal("DATABASE_CONNECTION_FAILED", result.Error.Type);
         Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
         Assert.Equal("database \"producao\" does not exist", result.Error.Detail);
-        _databaseSessionService.Verify(s => s.TestAsync(It.IsAny<ConnectionSettings>(), cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.TestAsync(It.IsAny<ConnectionSettings>(), null, cancellationToken), Times.Once);
         // Falhou ao testar: a geração não chega a ser conferida.
         _vaultService.VerifyGet(v => v.Generation, Times.Once);
         _connectionQueries.VerifyNoOtherCalls();
@@ -207,7 +207,7 @@ public sealed class TestConnectionHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         _vaultService.SetupSequence(v => v.Generation).Returns(Generation).Returns(Generation + 1);
-        _databaseSessionService.Setup(s => s.TestAsync(It.IsAny<ConnectionSettings>(), cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
+        _databaseSessionService.Setup(s => s.TestAsync(It.IsAny<ConnectionSettings>(), null, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
 
         //Act
         var result = await CreateHandler().Handle(CreateCommand(), cancellationToken);
@@ -216,7 +216,7 @@ public sealed class TestConnectionHandlerTests
         Assert.True(result.IsFailure);
         Assert.Equal("VAULT_LOCKED", result.Error.Type);
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
-        _databaseSessionService.Verify(s => s.TestAsync(It.IsAny<ConnectionSettings>(), cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.TestAsync(It.IsAny<ConnectionSettings>(), null, cancellationToken), Times.Once);
         _vaultService.VerifyGet(v => v.Generation, Times.Exactly(2));
         _connectionQueries.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();

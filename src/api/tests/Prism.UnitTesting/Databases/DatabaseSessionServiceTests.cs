@@ -568,6 +568,14 @@ public sealed class DatabaseSessionServiceTests
         /// <summary>RN-SQL-007: há um cursor aberto na conexão, o que o teste disser.</summary>
         public bool HasOpenCursor { get; set; }
 
+        /// <summary>RN-VERIF-002: as consultas de verificação que chegaram (nula é a do banco), na ordem.</summary>
+        public List<string?> Verified { get; } = [];
+
+        /// <summary>O que a verificação responde; sem ele, sucesso. Com <see cref="VerificationGate"/>, ela só volta quando o teste o completa.</summary>
+        public DatabaseFailure? VerificationFailure { get; set; }
+
+        public TaskCompletionSource? VerificationGate { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
         {
             Executed.Add(sql);
@@ -584,6 +592,14 @@ public sealed class DatabaseSessionServiceTests
             return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
         }
 
+        public async Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken)
+        {
+            Verified.Add(sql);
+            if (VerificationGate is { } gate)
+                await gate.Task;
+
+            return VerificationFailure is { } failure ? UnitResult.Failure(failure) : UnitResult.Success<DatabaseFailure>();
+        }
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
         {
