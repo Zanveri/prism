@@ -418,9 +418,13 @@ de inicialização" do canvas (`docs/design/canvas/IconeApp.dc.html` e `Splash.d
   engrossa, com os mesmos elementos. Na barra superior das telas e ao lado do nome no login,
   a marca é a mesma ilustração em formato largo. O ícone padrão do Electron não aparece em
   lugar nenhum.
-- **RN-MARCA-002.** Ao abrir, o app mostra de imediato uma janela de splash de 640×400, sem
-  moldura e centralizada, com a ilustração do prisma, o nome, a versão, o passo atual e uma
-  barra de progresso.
+- **RN-MARCA-002.** Ao abrir, o app mostra de imediato uma janela de splash de 640×400 em 100%,
+  sem moldura e centralizada, com a ilustração do prisma, o nome, a versão, o passo atual e uma
+  barra de progresso. Ela cresce com o zoom do programa (RN-ZOOM-001), até caber na área útil da
+  tela: a 200%, num monitor de 1366×768, fica perto de 180%, o maior tamanho que cabe.
+
+  Alterada em 2026-10-15 (pedido do dono, issue #14, seção 30): o tamanho acompanha o zoom do
+  programa. Antes dizia só "640×400".
 - **RN-MARCA-003.** Passos do splash: "Iniciando o serviço local…" (1 de 2), até a API
   anunciar a porta; "Carregando a interface…" (2 de 2), até a janela principal estar pronta
   para aparecer. Então a janela principal aparece e o splash fecha. Não há espera artificial:
@@ -554,6 +558,10 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   ("Transação aberta pela edição"), por decisão do dono (RN-EDIT-004).
 - A barra dos Registros ganha o seletor de nível de isolamento, que o canvas não tem
   (RN-ISOL-001).
+- Configurações › Aparência ganha o zoom do programa e a densidade do navegador, que o canvas não
+  tem; na densidade "Compacta" a árvore tem linhas de 22 px, e não as de 30 px do canvas, que
+  continuam sendo o padrão (RN-ZOOM-001 e RN-NAV-011, seção 30). Fora de 100% o splash tem o
+  tamanho do zoom, e não os 640×400 do canvas (RN-MARCA-002).
 
 ## 10. Riscos e sondas
 
@@ -1365,11 +1373,26 @@ Janela e zoom (pedido do dono em 2026-10-12):
   arrastada, minimizada ou fechada. O título da janela continua "Prism" (é o que a barra de
   tarefas e o Alt+Tab mostram). Numa plataforma em que o sistema não ofereça os botões
   sobrepostos, a janela mantém a barra nativa.
-- **RN-ZOOM-001.** Zoom do programa inteiro, como no VS Code e no Postman: `Ctrl +`, `Ctrl −` e
-  `Ctrl 0` (Cmd no macOS), e um controle em Configurações › Aparência, de 50% a 200%; 100% é o
-  tamanho de hoje. Vale para todas as telas da janela principal, desde a abertura, é lembrado
-  nesta instalação, e a barra da janela e os botões do sistema continuam alinhados em qualquer
-  valor. É independente do zoom da grade (RN-GRADE-010).
+- **RN-ZOOM-001.** Zoom do programa inteiro, como no VS Code e no Postman: `Ctrl +` (também
+  `Ctrl =` e o `+` do teclado numérico), `Ctrl −` e `Ctrl 0` (Cmd no macOS), e um controle em
+  Configurações › Aparência que mostra o valor de agora, com − e + e "Restaurar 100%". Os passos são
+  os do zoom da grade: 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 e 200%; 100% é o tamanho do canvas
+  (RN-CONFIG-009), e nos limites o passo que não anda mais não faz nada.
+  - Vale para todas as janelas do app, também as que abrem depois (RN-ABAS-002), e desde a
+    abertura: o splash e o login já aparecem no zoom escolhido. O splash, que não tem moldura
+    para ser arrastado, cresce só até caber na área útil da tela (RN-MARCA-002).
+  - É lembrado nesta instalação, e não por usuário: a escolha mora com o processo principal, fora
+    do cofre, porque o splash e o login vêm antes de se saber quem entra.
+  - Os atalhos valem em qualquer tela e com o foco em qualquer lugar, inclusive no editor SQL e na
+    grade, sem depender de menu (o app empacotado do Windows e do Linux não tem menu).
+  - Quando a barra da janela for a do app (RN-JANELA-001), ela e os botões do sistema continuam
+    alinhados em qualquer valor.
+  - É independente do zoom da grade (RN-GRADE-010): Ctrl+roda do mouse sobre a grade continua
+    sendo o zoom dela.
+
+  Alterada em 2026-10-15, quando foi feita (pedido do dono, issue #14, seção 30): os passos, todas
+  as janelas e o splash (até caber na tela), o "Restaurar 100%" e onde a escolha fica. Antes dizia
+  "de 50% a 200%" e "todas as telas da janela principal".
 
 ## 21. O projeto no GitHub (decisões do dono em 2026-10-12)
 
@@ -2167,3 +2190,43 @@ ambiente".
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+
+## 30. Complemento de 2026-10-15: a área de trabalho mais enxuta (issue #14)
+
+Pedido da issue 14 do repositório público, "Adiciona configuração para deixar a visualização mais
+enxuta das conexões na sidebar": perto da árvore do DBeaver, a do navegador ocupa espaço demais, e
+quem a abriu quer uma configuração com menos espaçamento e letras menores, para ver mais itens. O
+dono aprovou a proposta inteira em 2026-10-15 ("Faça todas issues, todas elas parecem boas
+mesmo"): o texto da área de trabalho na escala do canvas, o zoom do programa inteiro, a densidade
+do navegador e a seção Scripts que lembra se ficou recolhida. As letras menores vêm das duas
+primeiras: a área de trabalho passa de 14 px a 13 px, e quem quer menos ainda usa o zoom.
+
+- **RN-CONFIG-009.** O texto da área de trabalho é o do canvas (`Workbench.dc.html`): 13 px em
+  linha de 20 px.
+  - Vale para tudo o que ela mostra sem tamanho próprio: a árvore do navegador, o campo de busca e
+    as mensagens dele, a seção Scripts, a barra de abas, as barras e os painéis das abas
+    (Registros, Estrutura, Diagrama, resultado). Até aqui a árvore, a busca, as mensagens e a barra
+    de abas herdavam o 14/22 dos formulários. A barra superior (13 px) e a barra de status (12 px)
+    já seguiam o canvas e não mudam.
+  - Formulários e diálogos, também os que abrem sobre a área de trabalho, e as telas de fora dela
+    (login, Configurações) continuam em 14/22, como o canvas os desenha.
+  - O editor SQL (o tamanho em Configurações › Editor SQL) e a grade (o zoom dela, RN-GRADE-010)
+    têm tamanho próprio e não mudam.
+- **RN-ZOOM-001** passa a existir no app, como a seção 20 a descreve, com os detalhes acertados
+  agora (os passos, todas as janelas e o splash, o "Restaurar 100%" e onde a escolha fica). O
+  splash cresce com o zoom só até caber na área útil da tela, e a RN-MARCA-002 deixa de ter o
+  tamanho fixo: 640×400 é o de 100%.
+- **RN-NAV-011.** "Densidade do navegador", em Configurações › Aparência: "Confortável" e
+  "Compacta".
+  - "Confortável" é o padrão e o desenho do canvas: linhas de 30 px e 16 px de recuo a cada nível.
+  - "Compacta" tem linhas de 22 px e 12 px de recuo a cada nível, para caber mais itens na mesma
+    altura, como no DBeaver. O texto continua 13/20 (RN-CONFIG-009), e os botões de ação da linha,
+    o ponto de estado, a etiqueta do banco, a do ambiente e as marcas (PK) cabem sem corte.
+  - Vale para a árvore e para a lista da seção Scripts. A linha de erro de um nó continua da
+    altura que a mensagem pede.
+  - A escolha vale na hora, em todas as janelas, sem fechar os nós abertos nem perder o item
+    escolhido, e fica nas preferências desta instalação, por usuário (RN-CONFIG-001), como o tema e
+    as fontes.
+- **RN-NAV-012.** A seção Scripts do navegador lembra se ficou recolhida ou aberta: volta assim ao
+  entrar de novo e ao abrir o app, por usuário, como o navegador escondido (RN-NAV-008). Aberta é o
+  padrão. A janela que abre depois começa como a última escolha.
