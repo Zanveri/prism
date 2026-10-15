@@ -40,6 +40,14 @@ describe("o que vai para o cofre (RN-ABAS-006)", () => {
     expect(savedTabOf({ ...tab, sql: "SELECT 12", script: { ...tab.script!, dirty: true } }, "SELECT 1")).toMatchObject({ sql: "SELECT 1", dirty: false });
   });
 
+  it("o script salvo noutro banco, na aba nesse banco e sem mexer no texto, vai sem a marca de mudança não salva; noutro banco, vai com ela (RN-ARVORE-007)", () => {
+    const script = { id: s1, name: "Relatório", savedSql: "SELECT 1", savedDatabase: "vendas", dirty: false };
+
+    expect(savedTabOf(queryTab("a", "SELECT 1", { database: "vendas", script }), null)).toMatchObject({ database: "vendas", dirty: false });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { database: "compras", script }), null)).toMatchObject({ dirty: true });
+    expect(savedTabOf(queryTab("a", "SELECT 1", { script }), null)).toMatchObject({ dirty: true });
+  });
+
   it("o texto acima de 1 MB não vai: a aba vai vazia, marcada", () => {
     expect(savedTabOf(queryTab("a", "é".repeat(512 * 1024 + 1)), null)).toMatchObject({ sql: "", sqlTooLarge: true });
     expect(savedTabOf(queryTab("a", "a".repeat(1024 * 1024)), null)).toMatchObject({ sqlTooLarge: false });

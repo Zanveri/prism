@@ -16,8 +16,9 @@ export type LiveSql = (tabId: string) => string | null;
 
 /**
  * Uma aba como vai para o cofre. A vista da tabela é a enumeração da tela (`TableView`) e a do schema (`workspace-messages.ts`) ao mesmo tempo: a ida (aqui)
- * e a volta (`restoreWorkspace`) atribuem uma à outra, e uma que divergir não compila. A mudança não salva do script segue o texto deste instante
- * (`isScriptDirty`, a mesma conta do ponto da faixa). O texto que passa de 1 MB (RN-SCRIPT-004) não vai: a aba vai vazia, marcada, e volta com o aviso.
+ * e a volta (`restoreWorkspace`) atribuem uma à outra, e uma que divergir não compila. A mudança não salva do script segue o texto deste instante e o banco
+ * da aba (`isScriptDirty`, a mesma conta do ponto da faixa, RN-ARVORE-007). O texto que passa de 1 MB (RN-SCRIPT-004) não vai: a aba vai vazia, marcada, e volta
+ * com o aviso.
  */
 export function savedTabOf(tab: QueryTab, liveSql: string | null): SavedTab {
   if (isTableTab(tab)) return { kind: "table", connectionID: tab.connectionId, database: tab.database ?? null, schema: tab.table.schema, table: tab.table.name, view: tab.table.view };
@@ -30,7 +31,7 @@ export function savedTabOf(tab: QueryTab, liveSql: string | null): SavedTab {
     database: tab.connectionId === null ? null : (tab.database ?? null),
     sql: fits ? sql : "",
     scriptID: tab.script?.id ?? null,
-    dirty: tab.script === undefined ? false : isScriptDirty(tab.script, sql),
+    dirty: tab.script === undefined ? false : isScriptDirty(tab.script, sql, tab.database),
     sqlTooLarge: !fits,
   };
 }
