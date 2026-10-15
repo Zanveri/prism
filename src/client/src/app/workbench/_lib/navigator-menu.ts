@@ -28,6 +28,7 @@ export type MenuAction =
   | { type: "copy"; text: string }
   | { type: "newFolder" }
   | { type: "renameFolder" }
+  | { type: "editFolder" }
   | { type: "moveFolder" }
   | { type: "deleteFolder" };
 
@@ -46,7 +47,8 @@ export type KeyPress = { key: string; shiftKey: boolean; ctrlKey: boolean; altKe
 
 /**
  * A ação do menu que uma tecla na linha faz (RN-NAV-009): o F2, sem modificador, é o "Renomear" da pasta e o da conexão, os mesmos itens que o
- * menu mostra com o atalho. As outras linhas não se renomeiam, e as outras teclas da árvore (setas, Enter, o menu) são tratadas por ela: `null`.
+ * menu mostra com o atalho, e os dois mudam só o nome (o "Editar pasta…", RN-PASTA-006, não tem atalho). As outras linhas não se renomeiam, e as
+ * outras teclas da árvore (setas, Enter, o menu) são tratadas por ela: `null`.
  */
 export function keyActionFor(node: NavNode, press: KeyPress): MenuAction | null {
   if (press.key !== renameShortcut || press.shiftKey || press.ctrlKey || press.altKey || press.metaKey) return null;
@@ -147,11 +149,17 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
       ];
     }
 
-    // As ações que a tela de Conexões tinha para a pasta, e "Nova conexão" e "Nova pasta" dentro dela, como a barra de ações (RN-NAV-002 e 003).
+    // As ações que a tela de Conexões tinha para a pasta, e "Nova conexão" e "Nova pasta" dentro dela, como a barra de ações (RN-NAV-002 e 003). O
+    // "Renomear" (F2, RN-NAV-009) muda só o nome, como o da conexão; o "Editar pasta…" (RN-PASTA-006) abre o diálogo inteiro: o nome, a cor e o ambiente.
     case "folder":
       return [
         [item("newConnection", moved.newConnection, { type: "newConnection" }), item("newFolder", moved.newFolder, { type: "newFolder" })],
-        [item("renameFolder", copy.renameFolder, { type: "renameFolder" }, { shortcut: renameShortcut }), item("moveFolder", copy.moveFolder, { type: "moveFolder" }), item("deleteFolder", copy.deleteFolder, { type: "deleteFolder" })],
+        [
+          item("renameFolder", copy.renameFolder, { type: "renameFolder" }, { shortcut: renameShortcut }),
+          item("editFolder", copy.editFolder, { type: "editFolder" }),
+          item("moveFolder", copy.moveFolder, { type: "moveFolder" }),
+          item("deleteFolder", copy.deleteFolder, { type: "deleteFolder" }),
+        ],
         [copyName],
       ];
 

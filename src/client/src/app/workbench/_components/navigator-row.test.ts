@@ -200,7 +200,7 @@ describe("a dica da linha da conexão (o que a lista da tela de Conexões mostra
 
 describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () => {
   const now = "2026-10-13T12:00:00Z";
-  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
   const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 1, hasChildren: true };
   const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
@@ -222,5 +222,37 @@ describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () =>
 
     expect(pill(markup)).toBeDefined();
     expect(pill(markup)).not.toContain("title=");
+  });
+});
+
+describe("a cor da pasta no ícone dela (RN-PASTA-007)", () => {
+  const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
+  /** O `<span>` em volta do ícone da linha, com o estilo dele. */
+  const iconSpan = (markup: string) => /<span[^>]*class="flex-none text-subtle[^"]*"[^>]*>\s*<svg/.exec(markup)?.[0] ?? "";
+
+  it("pinta o ícone, aberta ou fechada, com a cor ajustada ao contraste do tema (light-dark), e o ícone continua o da pasta", () => {
+    for (const open of [false, true]) {
+      const markup = render(folderNode, { open, folderColor: "#F2B644" });
+
+      expect(iconSpan(markup)).toMatch(/style="color:light-dark\(#[0-9A-F]{6}, #F2B644\)"/);
+    }
+  });
+
+  it("sem cor, o ícone é o neutro de sempre", () => {
+    expect(iconSpan(render(folderNode))).not.toContain("style=");
+    expect(iconSpan(render(folderNode, { folderColor: null }))).not.toContain("style=");
+  });
+
+  it("a cor e o ambiente vão juntos: a cor no ícone, a etiqueta do ambiente ao lado do nome", () => {
+    const markup = render(folderNode, { folderColor: "#7DB2FF", environment: { name: "Produção", color: "#FF8A7A", folder: null } });
+
+    expect(iconSpan(markup)).toContain("#7DB2FF");
+    expect(markup).toMatch(/<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/);
+  });
+
+  it("só a linha da pasta leva a cor: o esquema usa o mesmo desenho e fica neutro", () => {
+    const schema: NavNode = { key: "s", kind: "schema", label: "public", depth: 1, hasChildren: true };
+
+    expect(iconSpan(render(schema, { folderColor: "#7DB2FF" }))).not.toContain("style=");
   });
 });

@@ -405,6 +405,40 @@ public sealed class FoldersTests
         Assert.That(listed[0].GetProperty("environmentName").ValueKind, Is.EqualTo(JsonValueKind.Null));
     }
 
+    /// <summary>
+    /// RN-PASTA-007: a cor da pasta, aparada, vai na resposta da criação e na lista, à parte do ambiente; o `PATCH` a troca, e o corpo sem ela (o `PATCH`
+    /// grava a pasta por inteiro) a tira. A cor fora de `#RRGGBB` é 422 `FOLDER_NAME_INVALID` no campo dela, e nada é gravado.
+    /// </summary>
+    [Test]
+    public async Task Color_IsCreatedListedChangedRemovedAndRefused()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
+
+        var created = await host.Client.PostAsJsonAsync(FoldersPath, new { name = "Produção", parentID = (Guid?)null, environmentName = "Produção", environmentColor = "#FF8A7A", color = " #7DB2FF " });
+        var createdBody = await ReadJsonAsync(created);
+        var listed = (await ListFoldersAsync(host)).Single();
+        var changed = await host.Client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, FoldersPath) { Content = JsonContent.Create(new { id = IdOf(createdBody), name = "Produção", parentID = (Guid?)null, environmentName = "Produção", environmentColor = "#FF8A7A", color = "#B79CFF" }) });
+        var changedBody = await ReadJsonAsync(changed);
+        var refused = await host.Client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, FoldersPath) { Content = JsonContent.Create(new { id = IdOf(createdBody), name = "Produção", color = "azul" }) });
+        var refusedBody = await ReadJsonAsync(refused);
+        var removed = await UpdateFolderAsync(host, IdOf(createdBody), "Produção", null);
+        var removedBody = await ReadJsonAsync(removed);
+
+        Assert.That(created.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That(createdBody.GetProperty("color").GetString(), Is.EqualTo("#7DB2FF"));
+        Assert.That(createdBody.GetProperty("environmentColor").GetString(), Is.EqualTo("#FF8A7A"));
+        Assert.That(listed.GetProperty("color").GetString(), Is.EqualTo("#7DB2FF"));
+        Assert.That(changed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(changedBody.GetProperty("color").GetString(), Is.EqualTo("#B79CFF"));
+        Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+        Assert.That(refusedBody.GetProperty("type").GetString(), Is.EqualTo("FOLDER_NAME_INVALID"));
+        Assert.That(refusedBody.GetProperty("errorCodes").GetProperty("Color")[0].GetString(), Is.EqualTo("FOLDER_NAME_INVALID"));
+        Assert.That(removed.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(removedBody.GetProperty("color").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That((await ListFoldersAsync(host)).Single().GetProperty("color").ValueKind, Is.EqualTo(JsonValueKind.Null));
+    }
+
     [Test]
     public async Task Delete_Empty_Returns204()
     {
@@ -488,7 +522,7 @@ public sealed class FoldersTests
         var folders = await ListFoldersAsync(host);
 
         Assert.That(folders.Select(item => item.GetProperty("name").GetString()), Is.EqualTo(new[] { "Alfa", "beta", "Delta", "Gama" }));
-        Assert.That(folders[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "parentID", "name", "environmentName", "environmentColor", "createdAt", "updatedAt" }));
+        Assert.That(folders[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "parentID", "name", "environmentName", "environmentColor", "color", "createdAt", "updatedAt" }));
     }
 
     /// <summary>O que foi salvo está no arquivo cifrado, e não na memória da API: fechar o cofre e entrar de novo devolve as pastas.</summary>

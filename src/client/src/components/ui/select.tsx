@@ -140,10 +140,12 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
     const item = items[index];
     if (!item) return;
 
-    onChange(item.value);
     setOpen(false);
-    // Como num `<select>`: depois de escolher, o foco volta ao controle.
-    requestAnimationFrame(() => buttonRef.current?.focus());
+    // Como num `<select>`: depois de escolher, o foco volta ao controle. Na hora, e antes do `onChange`: quem recebe a escolha pode abrir uma pergunta (trocar
+    // o banco da aba com alterações não salvas na grade, RN-EDIT-007), e o diálogo dela guarda quem tem o foco ao abrir para devolvê-lo ao fechar. Adiado para
+    // o quadro seguinte, o foco chegaria depois de o diálogo pegar o dele e voltaria ao controle, atrás da pergunta.
+    buttonRef.current?.focus();
+    onChange(item.value);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {

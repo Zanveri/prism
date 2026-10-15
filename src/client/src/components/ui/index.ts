@@ -6,10 +6,15 @@ export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
 export { Field, FieldLabel, Input } from "./field";
 export { FieldError, FormMessage, type FormMessageProps } from "./form-message";
+export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
+  BugIcon,
+  ChartIcon,
   CheckIcon,
   ChevronIcon,
+  ClockIcon,
   CloseIcon,
+  CodeIcon,
   ColumnsIcon,
   DatabaseIcon,
   DiagramIcon,
@@ -19,13 +24,16 @@ export {
   EyedropperIcon,
   EyeIcon,
   EyeOffIcon,
+  FlagIcon,
   FolderIcon,
   FolderMoveIcon,
   FolderPlusIcon,
   ForeignKeyIcon,
   IndexIcon,
+  LightningIcon,
   LockIcon,
   LockOpenIcon,
+  NoColorIcon,
   PackageIcon,
   PencilIcon,
   PlayIcon,
@@ -35,10 +43,12 @@ export {
   RefreshIcon,
   RoutineIcon,
   SearchIcon,
+  StarIcon,
   StopIcon,
   TableIcon,
   TrashIcon,
   WorkbenchIcon,
+  WrenchIcon,
 } from "./icons";
 export { navItem } from "./nav-item";
 export { Segmented, segmentedItem } from "./segmented";

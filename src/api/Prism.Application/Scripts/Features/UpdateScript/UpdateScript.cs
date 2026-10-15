@@ -9,6 +9,8 @@ namespace Prism.Application.Scripts.Features.UpdateScript;
 /// <summary>
 /// O `PATCH` é parcial: o que vem ausente ou nulo fica como está. Renomear manda `name`; gravar a aba por cima (RN-SCRIPT-001) manda `sql` e o lugar
 /// (`connectionID` e `database`). O lugar é um par: com `connectionID` os dois são gravados, e `database` nulo é o banco da conexão; sem ele, ficam os dois.
+/// `generic: true` apaga o lugar, e o script passa a ser genérico (RN-SCRIPT-005): é o jeito explícito de tirar a conexão, porque a ausente fica. O "Editar
+/// script…" (RN-SCRIPT-006) manda o nome, o `icon` e a `color`: a cor vazia tira a cor, e o ícone vazio ou `document` volta ao padrão.
 /// </summary>
 public sealed record UpdateScriptCommand : IRequest<Result<ScriptSummaryDto, ApiErrorDto>>
 {
@@ -17,6 +19,9 @@ public sealed record UpdateScriptCommand : IRequest<Result<ScriptSummaryDto, Api
     public string? Sql { get; init; }
     public Guid? ConnectionID { get; init; }
     public string? Database { get; init; }
+    public bool Generic { get; init; }
+    public string? Icon { get; init; }
+    public string? Color { get; init; }
 
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprimiria o texto do SQL.</summary>
     public override string ToString() => nameof(UpdateScriptCommand);
@@ -28,7 +33,7 @@ internal sealed class UpdateScriptHandler(IScriptRepository scriptRepository, Ti
     {
         // Nada é lido antes: a existência, o nome único e o que fica de cada campo ausente são do registro mais recente, dentro da gravação.
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var updated = await scriptRepository.Update(request.ID, script => script.Change(request.Name, request.Sql, request.ConnectionID, request.Database, now), cancellationToken);
+        var updated = await scriptRepository.Update(request.ID, script => script.Change(request.Name, request.Sql, request.ConnectionID, request.Database, request.Generic, request.Icon, request.Color, now), cancellationToken);
         if (updated.IsFailure)
             return Result.Failure<ScriptSummaryDto, ApiErrorDto>(updated.Error);
 

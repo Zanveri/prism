@@ -98,13 +98,13 @@ public sealed class ScriptsTests
         var id = body.GetProperty("id").GetGuid();
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
         Assert.That(response.Headers.Location?.ToString(), Is.EqualTo($"{ScriptsPath}/{id}"));
-        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "updatedAt" }));
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "icon", "color", "updatedAt" }));
         Assert.That(body.GetProperty("name").GetString(), Is.EqualTo("Fechamento do mês"));
         Assert.That(body.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
         Assert.That(body.GetProperty("database").GetString(), Is.EqualTo("vendas"));
         var listed = await ListAsync(host);
         Assert.That(listed, Has.Count.EqualTo(1));
-        Assert.That(listed[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "updatedAt" }));
+        Assert.That(listed[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "icon", "color", "updatedAt" }));
         Assert.That(listed[0].GetProperty("id").GetGuid(), Is.EqualTo(id));
     }
 
@@ -116,7 +116,7 @@ public sealed class ScriptsTests
 
         var body = await GetAsync(host, id);
 
-        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "sql", "updatedAt" }));
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "icon", "color", "sql", "updatedAt" }));
         Assert.That(body.GetProperty("sql").GetString(), Is.EqualTo("SELECT *\n  FROM pedidos;\n"));
         Assert.That(body.GetProperty("connectionID").ValueKind, Is.EqualTo(JsonValueKind.Null));
         Assert.That(body.GetProperty("database").ValueKind, Is.EqualTo(JsonValueKind.Null));
@@ -224,6 +224,96 @@ public sealed class ScriptsTests
         Assert.That(stored.GetProperty("connectionID").GetGuid(), Is.EqualTo(otherConnection));
         Assert.That(stored.GetProperty("database").ValueKind, Is.EqualTo(JsonValueKind.Null));
         Assert.That(stored.GetProperty("updatedAt").GetDateTime(), Is.GreaterThanOrEqualTo(createdAt));
+    }
+
+    /// <summary>RN-SCRIPT-005: `generic: true` tira o lugar do script (a ausência da conexão não tira: o ausente fica), e o SQL enviado junto é gravado.</summary>
+    [Test]
+    public async Task Patch_Generic_ClearsThePlace_AndTheAbsentConnectionKeepsIt()
+    {
+        await using var host = await StartWithUserAsync();
+        var connectionID = Guid.CreateVersion7();
+        var id = await CreateAsync(host, "Relatório", "SELECT 1", connectionID, "vendas");
+
+        var kept = await PatchAsync(host, new { id, sql = "SELECT 2" });
+        Assert.That(kept.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await GetAsync(host, id)).GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
+
+        var response = await PatchAsync(host, new { id, sql = "SELECT 3", generic = true });
+
+        var body = await ReadJsonAsync(response);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), body.ToString());
+        Assert.That(body.GetProperty("connectionID").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        var stored = await GetAsync(host, id);
+        Assert.That(stored.GetProperty("sql").GetString(), Is.EqualTo("SELECT 3"));
+        Assert.That(stored.GetProperty("connectionID").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(stored.GetProperty("database").ValueKind, Is.EqualTo(JsonValueKind.Null));
+
+        // Vincular de novo é mandar o lugar, como o Ctrl+S de uma aba com conexão.
+        Assert.That((await PatchAsync(host, new { id, connectionID, database = "vendas" })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await GetAsync(host, id)).GetProperty("database").GetString(), Is.EqualTo("vendas"));
+    }
+
+    [Test]
+    public async Task Patch_GenericWithAPlace_Returns422_AndChangesNothing()
+    {
+        await using var host = await StartWithUserAsync();
+        var connectionID = Guid.CreateVersion7();
+        var id = await CreateAsync(host, "Relatório", "SELECT 1", connectionID, "vendas");
+
+        await AssertProblemAsync(await PatchAsync(host, new { id, generic = true, connectionID = Guid.CreateVersion7() }), HttpStatusCode.UnprocessableEntity, "SCRIPT_PLACE_INVALID");
+        await AssertProblemAsync(await PatchAsync(host, new { id, generic = true, database = "outro" }), HttpStatusCode.UnprocessableEntity, "SCRIPT_PLACE_INVALID");
+        var stored = await GetAsync(host, id);
+        Assert.That(stored.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
+        Assert.That(stored.GetProperty("database").GetString(), Is.EqualTo("vendas"));
+    }
+
+    /// <summary>
+    /// RN-SCRIPT-006: o "Editar script…" grava o ícone e a cor pelo `PATCH`, e a lista e o item os devolvem; o ausente fica, a cor vazia a tira e o ícone
+    /// `document` (o padrão) volta a nulo. O script novo nasce com os dois nulos, e o lugar e o SQL não mudam.
+    /// </summary>
+    [Test]
+    public async Task Patch_IconAndColor_AreSavedListedAndCleared()
+    {
+        await using var host = await StartWithUserAsync();
+        var connectionID = Guid.CreateVersion7();
+        var id = await CreateAsync(host, "Relatório", "SELECT 1", connectionID, "vendas");
+        var created = await GetAsync(host, id);
+
+        var response = await PatchAsync(host, new { id, name = "Relatório", icon = "chart", color = " #F2B644 " });
+        var body = await ReadJsonAsync(response);
+        var listed = (await ListAsync(host)).Single();
+        var renamed = await ReadJsonAsync(await PatchAsync(host, new { id, name = "Relatório mensal" }));
+        var cleared = await ReadJsonAsync(await PatchAsync(host, new { id, icon = "document", color = "" }));
+        var stored = await GetAsync(host, id);
+
+        Assert.That(created.GetProperty("icon").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(created.GetProperty("color").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), body.ToString());
+        Assert.That((body.GetProperty("icon").GetString(), body.GetProperty("color").GetString()), Is.EqualTo(("chart", "#F2B644")));
+        Assert.That((listed.GetProperty("icon").GetString(), listed.GetProperty("color").GetString()), Is.EqualTo(("chart", "#F2B644")));
+        Assert.That((renamed.GetProperty("icon").GetString(), renamed.GetProperty("color").GetString()), Is.EqualTo(("chart", "#F2B644")));
+        Assert.That(cleared.GetProperty("icon").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(cleared.GetProperty("color").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(stored.GetProperty("sql").GetString(), Is.EqualTo("SELECT 1"));
+        Assert.That(stored.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
+        Assert.That(stored.GetProperty("name").GetString(), Is.EqualTo("Relatório mensal"));
+    }
+
+    /// <summary>RN-SCRIPT-006: o ícone fora da lista fechada e a cor fora de `#RRGGBB` são 422 `SCRIPT_ICON_INVALID`, no campo; nada é gravado.</summary>
+    [Test]
+    public async Task Patch_InvalidIconOrColor_Returns422_AndChangesNothing()
+    {
+        await using var host = await StartWithUserAsync();
+        var id = await CreateAsync(host, "Relatório");
+
+        var icon = await AssertProblemAsync(await PatchAsync(host, new { id, icon = "foguete" }), HttpStatusCode.UnprocessableEntity, "SCRIPT_ICON_INVALID");
+        var color = await AssertProblemAsync(await PatchAsync(host, new { id, icon = "star", color = "amarelo" }), HttpStatusCode.UnprocessableEntity, "SCRIPT_ICON_INVALID");
+
+        Assert.That(icon.GetProperty("errorCodes").GetProperty("Icon")[0].GetString(), Is.EqualTo("SCRIPT_ICON_INVALID"));
+        Assert.That(color.GetProperty("errorCodes").GetProperty("Color")[0].GetString(), Is.EqualTo("SCRIPT_ICON_INVALID"));
+        var stored = await GetAsync(host, id);
+        Assert.That(stored.GetProperty("icon").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        Assert.That(stored.GetProperty("color").ValueKind, Is.EqualTo(JsonValueKind.Null));
     }
 
     [Test]

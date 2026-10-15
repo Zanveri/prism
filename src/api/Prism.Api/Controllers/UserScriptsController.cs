@@ -47,7 +47,10 @@ public sealed class UserScriptsController(IMediator mediator) : ControllerBase
         return Created($"/api/user/scripts/{result.Value.ID}", result.Value);
     }
 
-    /// <summary>O corpo leva `id` e só o que muda: `name`, `sql`, e o lugar (`connectionID` com `database`); o ausente fica como está.</summary>
+    /// <summary>
+    /// O corpo leva `id` e só o que muda: `name`, `sql`, o lugar (`connectionID` com `database`), o ícone e a cor (`icon` e `color`, RN-SCRIPT-006); o ausente
+    /// fica como está. `generic: true` tira o lugar (RN-SCRIPT-005).
+    /// </summary>
     [HttpPatch]
     public async Task<IActionResult> UpdateScript([FromBody] UpdateScriptCommand command, CancellationToken cancellationToken)
     {

@@ -10,9 +10,10 @@ const timestamp = z.string();
 
 /**
  * A pasta como a API a devolve (RN-PASTA-001). `parentID` nulo é a raiz. O ambiente (RN-PASTA-005) vem sempre, nulo quando a pasta não tem: é o
- * que as conexões dela sem ambiente próprio herdam (`environment.ts`).
+ * que as conexões dela sem ambiente próprio herdam (`environment.ts`). A cor (RN-PASTA-007) também, nula na pasta sem cor: é a do ícone dela na árvore,
+ * e não passa a ninguém.
  */
-export const folderSchema = z.object({ id, parentID: id.nullable(), name: z.string(), environmentName: z.string().nullable(), environmentColor: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
+export const folderSchema = z.object({ id, parentID: id.nullable(), name: z.string(), environmentName: z.string().nullable(), environmentColor: z.string().nullable(), color: z.string().nullable(), createdAt: timestamp, updatedAt: timestamp });
 
 export type Folder = z.infer<typeof folderSchema>;
 
@@ -101,13 +102,16 @@ export const revealPasswordSchema = z.object({ password: z.string().min(1, "Info
 
 const folderName = z.string().trim().min(1, "Informe o nome da pasta.").max(60, "O nome pode ter no máximo 60 caracteres.");
 
-/** Criar uma pasta: o nome, onde ela fica (`""` é a raiz) e o ambiente (RN-PASTA-005). */
-export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), ...environmentFields });
+/** Criar uma pasta: o nome, onde ela fica (`""` é a raiz), a cor do ícone dela (RN-PASTA-007, no formato da cor do ambiente) e o ambiente (RN-PASTA-005). */
+export const createFolderSchema = z.object({ name: folderName, parentID: z.string().transform(emptyToNull), color: environmentFields.environmentColor, ...environmentFields });
 
-/** "Editar pasta…" (também pelo F2, RN-NAV-009 e RN-PASTA-006) pergunta o nome e o ambiente. */
-export const editFolderSchema = createFolderSchema.pick({ name: true, environmentName: true, environmentColor: true });
+/** "Editar pasta…" (RN-PASTA-006) pergunta o nome, a cor e o ambiente. */
+export const editFolderSchema = createFolderSchema.pick({ name: true, color: true, environmentName: true, environmentColor: true });
+
+/** O "Renomear" da pasta (F2, RN-NAV-009) pergunta só o nome. */
+export const renameFolderSchema = createFolderSchema.pick({ name: true });
 
 export const moveFolderSchema = createFolderSchema.pick({ parentID: true });
 
-/** O que a API recebe ao criar (`id` ausente) ou alterar uma pasta: o `PATCH` grava a pasta por inteiro, o ambiente inclusive. */
+/** O que a API recebe ao criar (`id` ausente) ou alterar uma pasta: o `PATCH` grava a pasta por inteiro, o ambiente e a cor inclusive. */
 export type FolderInput = z.output<typeof createFolderSchema>;

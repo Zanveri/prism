@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { connectionsQuery } from "@/app/connections/_lib/connections.service";
+import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
@@ -10,12 +10,16 @@ import { refreshKey } from "../_lib/grid-editing";
 import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/result-layout";
 import { saveShortcut } from "../_lib/saved-scripts";
+import { scriptsCopy } from "../_lib/scripts.copy";
+import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
 import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
 import { canClear } from "../_lib/table-view";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
+import { useConnectedIds } from "../_lib/use-connected-ids";
 import type { QueryTab, TableView } from "../_lib/workbench-model";
+import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
@@ -23,7 +27,7 @@ import { ResultActions } from "./result-actions";
 import { resultEditDialogs } from "./result-edit-dialogs";
 import { ResultPanel } from "./result-panel";
 import { ResultSplitter } from "./result-splitter";
-import { NoConnectionBarView } from "./script-dialogs";
+import { NoConnectionBarView, type NoConnectionReason } from "./script-dialogs";
 import { RecordsFilter } from "./table-tab/records-filter";
 import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
 
@@ -38,21 +42,39 @@ type QueryTabPanelProps = {
   onEdited: (tabId: string) => void;
   /** RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S com o foco em qualquer lugar da aba (o editor, a barra, o resultado). */
   onSave: (tabId: string, mode: "save" | "saveAs") => void;
-  /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu. */
-  onAssignConnection: (tabId: string, connectionId: string) => void;
+  /**
+   * RN-ARVORE-008: a aba passa a outra conexão (pelo botão da conexão, ou a aba sem conexão pela faixa, RN-SCRIPT-003 e 005), depois da pergunta das
+   * alterações não salvas. Estável.
+   */
+  onSwitchConnection: (tabId: string, connectionId: string) => void;
   /** RN-LINK-001: o Ctrl+clique no nome de uma tabela abre a aba dela nos Registros, na conexão e no banco desta aba. Estável. */
   onOpenTable: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
   /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
   onSwitchDatabase: (tabId: string, database: string | undefined) => void;
 };
 
-/** RN-SCRIPT-003: a faixa da aba sem conexão, com as conexões cadastradas para escolher. */
-function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScript: boolean; onAssign: (tabId: string, connectionId: string) => void }) {
+/**
+ * RN-SCRIPT-003 e 005: a faixa da aba sem conexão, com as conexões cadastradas para escolher: as conectadas primeiro, com o caminho de pastas, na ordem da
+ * lista do botão da conexão (RN-ARVORE-008). Nada vem escolhido: a pessoa diz em qual o SQL vai rodar.
+ */
+function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onAssign: (connectionId: string) => void }) {
   const connections = useQuery(connectionsQuery);
+  const folders = useQuery(foldersQuery);
+  const connected = useConnectedIds(connections.data);
   const [value, setValue] = useState("");
-  const options = (connections.data ?? []).map((connection) => ({ value: connection.id, label: connection.name }));
+  const options = connectionChoices(connections.data ?? [], folders.data ?? [], connected).map(({ connection, path, connected: isConnected }) => ({
+    value: connection.id,
+    label: connection.name,
+    content: (
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="min-w-0 truncate">{connection.name}</span>
+        {path === "" ? null : <span className="min-w-0 truncate text-xs text-muted">{path}</span>}
+        {isConnected ? <span className="flex-none text-xs text-success">{scriptsCopy.noConnection.connectedMark}</span> : null}
+      </span>
+    ),
+  }));
 
-  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={(connectionId) => onAssign(tabId, connectionId)} forScript={forScript} />;
+  return <NoConnectionBarView options={options} value={value} onChange={setValue} onAssign={onAssign} reason={reason} />;
 }
 
 /**
@@ -69,7 +91,7 @@ function NoConnectionBar({ tabId, forScript, onAssign }: { tabId: string; forScr
  * atalhos (`useRecordEdits`). Com alterações não salvas, executar outro comando e "Executar de novo" perguntam antes (RN-EDIT-007); o Salvar deixa
  * a grade com o que foi salvo, sem executar de novo, e o cursor que estava aberto fecha (RN-EDIT-009).
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onAssignConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
@@ -171,6 +193,10 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
   const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
 
+  // RN-ARVORE-008: trocar a conexão pergunta o mesmo antes; o resultado sai com o executor de antes, e a aba vai ao banco padrão da conexão nova.
+  const [pickingConnection, setPickingConnection] = useState(false);
+  const handleChooseConnection = useCallback((connectionId: string) => guard(() => onSwitchConnection(tab.id, connectionId)), [guard, onSwitchConnection, tab.id]);
+
   // RN-SCRIPT-001: o atalho vale com o foco em qualquer lugar da aba. O editor não o trata, e a tecla chega aqui; os diálogos ficam fora desta árvore.
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     // RN-GRADE-012: F5 executa de novo o comando do resultado, com o filtro ("Executar de novo"), com o foco em qualquer ponto da aba; com algo em
@@ -178,6 +204,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     if (!event.defaultPrevented && refreshKey(event)) {
       event.preventDefault();
       if (!isBusyState(runner.getState())) handleRerun();
+      return;
+    }
+    // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre (ou fecha) a lista das conexões desta aba.
+    if (!event.defaultPrevented && connectionShortcut(event)) {
+      event.preventDefault();
+      setPickingConnection((open) => !open);
       return;
     }
     const mode = event.defaultPrevented ? null : saveShortcut(event);
@@ -198,14 +230,15 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   return (
     <>
       <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
-        {tab.connectionId === null ? <NoConnectionBar tabId={tab.id} forScript={tab.script !== undefined} onAssign={onAssignConnection} /> : null}
+        {tab.connectionId === null ? <NoConnectionBar reason={tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
         <EditorToolbar
           busy={busy}
           cancelling={cancelling}
           runnable={runnable}
           onRun={() => editor.current?.run()}
           onCancel={handleCancel}
-          database={connectionId === null ? null : <DatabasePicker connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
+          connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
+          database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
         />
   
         <div ref={area} className="flex min-h-0 flex-1 flex-col">

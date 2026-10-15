@@ -15,6 +15,7 @@ import { recallForTransfer } from "../_lib/tab-memory";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
+import { scriptsQuery } from "../_lib/scripts.service";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
 import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
@@ -51,13 +52,15 @@ const askEverything = closeAsks({ closesTheApp: false });
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
   const folders = useQuery(foldersQuery);
   // RN-PASTA-005: o ambiente que a conexão de cada aba mostra, o próprio ou o herdado da pasta; o mesmo objeto enquanto as pastas não mudam.
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-SCRIPT-006: o ícone e a cor da aba de um script vêm da lista dos scripts, que se atualiza depois do "Editar script…".
+  const scripts = useQuery(scriptsQuery);
   const queryClient = useQueryClient();
 
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
@@ -82,15 +85,18 @@ export function WorkbenchTabs() {
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
-  // O mesmo com a troca do banco da aba de consulta (RN-ARVORE-007), que também consulta a lista de abas.
+  // O mesmo com a troca do banco (RN-ARVORE-007) e da conexão (RN-ARVORE-008) da aba de consulta, que também consultam a lista de abas.
   const latestOpenTable = useRef(openTableTab);
   const latestSwitchDatabase = useRef(switchDatabase);
+  const latestSwitchConnection = useRef(switchConnection);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
     latestSwitchDatabase.current = switchDatabase;
+    latestSwitchConnection.current = switchConnection;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
+  const handleSwitchConnection = useCallback((tabId: string, connectionId: string) => latestSwitchConnection.current(tabId, connectionId), []);
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -299,6 +305,7 @@ export function WorkbenchTabs() {
     const connection = connectionOf(connectionId);
     return connection === undefined ? null : environments.connection(connection);
   };
+  const scriptOf = (scriptId: string) => scripts.data?.find((script) => script.id === scriptId);
 
   const question = confirm === null ? null : closeConfirmationText(confirm.total, confirm.withSql);
 
@@ -306,7 +313,7 @@ export function WorkbenchTabs() {
     <>
       <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tabs.length === 0 ? null : (
-          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} environmentOf={environmentOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
+          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} environmentOf={environmentOf} scriptOf={scriptOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
         )}
 
         {tabs.length === 0 ? (
@@ -336,7 +343,7 @@ export function WorkbenchTabs() {
                 {isTableTab(tab) ? (
                   <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onSwitchConnection={handleSwitchConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
                 )}
               </div>
             );

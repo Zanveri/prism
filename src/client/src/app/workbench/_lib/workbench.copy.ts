@@ -52,8 +52,9 @@ export const workbenchCopy = {
       copyName: "Copiar nome",
       copyQualifiedName: "Copiar nome qualificado",
       newSubfolder: "Nova subpasta",
-      // RN-PASTA-006: o diálogo da pasta tem o nome e o ambiente.
-      renameFolder: "Editar pasta…",
+      // RN-NAV-009: o Renomear (F2) muda só o nome; RN-PASTA-006: o Editar pasta…, sem atalho, tem o nome, a cor e o ambiente.
+      renameFolder: "Renomear",
+      editFolder: "Editar pasta…",
       moveFolder: "Mover",
       deleteFolder: "Excluir",
       // RN-AVISO-002 e 003: o resultado de copiar. Quando a área de transferência recusa, o texto continua na tela para a pessoa copiar.
@@ -118,6 +119,34 @@ export const workbenchCopy = {
       connectionDatabase: "banco da conexão",
       loading: "Carregando os bancos…",
       locked: "No Db2, a conexão usa um banco só.",
+    },
+    // RN-ARVORE-008: a conexão da aba, antes do banco, e a lista que a troca (o clique ou Ctrl+9, como no DBeaver).
+    connection: {
+      // O nome acessível começa pelo que o botão mostra (a sigla, o nome e o ambiente, na ordem da tela), e diz depois o que ele é: quem usa comando de voz
+      // diz o que vê, e o leitor de tela ouve o ambiente, que é o aviso da conexão.
+      label: (engine: string, name: string, environment: string | null) => `${engine} ${name}${environment === null ? "" : ` ${environment}`}, conexão desta aba`,
+      none: "Sem conexão",
+      noneLabel: "Sem conexão, escolher a conexão desta aba",
+      // A lista de conexões ainda não chegou.
+      loading: "…",
+      loadingLabel: "Conexão desta aba, carregando",
+      shortcut: "Ctrl+9",
+      shortcutMac: "Cmd+9",
+      // A dica do botão: o servidor e o usuário, e o atalho.
+      title: (host: string, port: number, userName: string, shortcut: string) => `${host}:${port}\nUsuário: ${userName}\n${shortcut} troca a conexão desta aba`,
+      noneTitle: (shortcut: string) => `${shortcut} escolhe a conexão desta aba`,
+      list: "Conexões",
+      search: "Buscar conexão",
+      searchPlaceholder: "Nome, pasta ou servidor",
+      connected: "Conectadas",
+      others: "Desconectadas",
+      connectedMark: "conectada",
+      current: "a desta aba",
+      root: "Sem pasta",
+      noMatch: (query: string) => `Nenhuma conexão encontrada para “${query}”.`,
+      empty: "Não há conexão cadastrada. Crie uma em Conexões.",
+      busy: "Espere o comando terminar, ou cancele-o, para trocar a conexão.",
+      reveal: "Mostrar no navegador",
     },
   },
 

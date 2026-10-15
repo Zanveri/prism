@@ -12,8 +12,13 @@ export const connectionsCopy = {
     name: "Nome da pasta",
     cancel: "Cancelar",
     create: { title: "Nova pasta", subfolderTitle: "Nova subpasta", submit: "Criar pasta", submitting: "Criando…" },
-    // RN-PASTA-006: o "Renomear" virou "Editar pasta…", com o nome e o ambiente.
+    // RN-PASTA-006: o "Editar pasta…" tem o nome, a cor da pasta e o ambiente.
     edit: { title: "Editar pasta", submit: "Salvar", submitting: "Salvando…" },
+    // RN-NAV-009: o "Renomear" (F2), só com o nome, como o da conexão.
+    rename: { title: "Renomear pasta", submit: "Renomear", submitting: "Renomeando…", nameTaken: "Já existe uma pasta com este nome aqui." },
+    // RN-PASTA-007: a cor do ícone da pasta, à parte do ambiente.
+    color: "Cor da pasta",
+    colorHint: "Pinta o ícone da pasta na árvore. Não é o ambiente: não passa às subpastas nem às conexões.",
     move: { title: "Mover pasta", description: (name: string) => `Escolha a pasta de destino de ${name}.`, submit: "Mover", submitting: "Movendo…" },
     remove: { title: "Excluir pasta", description: (name: string) => `A pasta ${name} será excluída. Só uma pasta vazia, sem subpastas e sem conexões, pode ser excluída.`, submit: "Excluir pasta", submitting: "Excluindo…" },
   },
@@ -116,6 +121,13 @@ export const connectionsCopy = {
     { name: "Cinza", hex: "#AEB7C4" },
   ],
 
+  // RN-PASTA-007 e RN-SCRIPT-006: as bolinhas da cor de um ícone (a pasta, o script), com "Sem cor" na frente.
+  iconColor: {
+    none: "Sem cor",
+    other: "Outra cor",
+    otherChosen: (hex: string) => `Outra cor: ${hex}`,
+  },
+
   // RN-NAV-003: mover uma conexão de pasta pelo menu do navegador (na tela de Conexões era trocar a pasta no formulário).
   move: {
     title: "Mover conexão",
@@ -160,6 +172,7 @@ export const connectionsCopy = {
     connectionTestFailed: "Não foi possível conectar.",
     folderCreated: "Pasta criada.",
     folderUpdated: "Pasta alterada.",
+    folderRenamed: "Pasta renomeada.",
     folderMoved: "Pasta movida.",
     folderDeleted: "Pasta excluída.",
     // RN-AVISO-003: o quinto erro de senha fecha o cofre e a tela volta ao login.

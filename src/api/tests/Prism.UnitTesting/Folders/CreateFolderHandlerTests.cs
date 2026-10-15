@@ -78,6 +78,31 @@ public sealed class CreateFolderHandlerTests
         Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
     }
 
+    /// <summary>RN-PASTA-007: a cor da pasta vai aparada ao cofre e volta na resposta, à parte do ambiente.</summary>
+    [Trait("CreateFolderHandler", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK cria com a cor da pasta aparada e sem ambiente")]
+    public async Task Handle_ShouldBeOK_WithColor()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var command = FolderFakers.ReturnCreateFolderCommandValid(name: "Produção", color: " #7DB2FF ");
+        Folder? inserted = null;
+        _folderQueries.Setup(q => q.Exists("Produção", null, cancellationToken)).ReturnsAsync(false);
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(inserted);
+        Assert.Equal("#7DB2FF", inserted.Color);
+        Assert.Null(inserted.EnvironmentName);
+        Assert.Equal("#7DB2FF", result.Value.Color);
+        Assert.Null(result.Value.EnvironmentColor);
+    }
+
     [Trait("CreateFolderHandler", "CreateFolderCommand")]
     [Fact(DisplayName = "OK cria dentro de uma pasta que existe")]
     public async Task Handle_ShouldBeOK_Child()

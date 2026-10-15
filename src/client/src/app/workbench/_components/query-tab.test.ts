@@ -44,6 +44,7 @@ import { recordsCopy } from "../_lib/records.copy";
 import { forgetExcept, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
+import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
@@ -116,7 +117,7 @@ const tab: QueryTab = { id: "q1", title: "Consulta 1", connectionId: "c1", sessi
 /** A aba `q1` na conexão `c1`, à vista. O painel é memorizado: a função dele é a de dentro do `memo`. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
   const panel = (QueryTabPanel as unknown as { type: (props: ComponentProps<typeof QueryTabPanel>) => ReactNode }).type;
-  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onAssignConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn() };
+  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn() };
 
   /** O que a aba entrega agora à área de resultado, ao editor e às janelas por cima. Duas voltas, como no teste dos Registros: os efeitos da primeira mexem nos registros de módulo. */
   function show() {
@@ -130,11 +131,14 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = 
     const toolbar = found.find((element) => element.type === EditorToolbar)!.props as unknown as ComponentProps<typeof EditorToolbar>;
     const slot = toolbar.database as { type: unknown; props: ComponentProps<typeof DatabasePicker> } | null | undefined;
     const picker = slot?.type === DatabasePicker ? slot.props : null;
+    const connectionSlot = toolbar.connection as { type: unknown; props: ComponentProps<typeof ConnectionPicker> } | null | undefined;
+    const connection = connectionSlot?.type === ConnectionPicker ? connectionSlot.props : null;
+    const noConnection = found.find((element) => typeof element.props.reason === "string" && typeof element.props.onAssign === "function")?.props as { reason: string; onAssign: (connectionId: string) => void } | undefined;
     const filterSlot = area.filter as { type: unknown; props: ComponentProps<typeof RecordsFilter> } | undefined;
     const filter = filterSlot?.type === RecordsFilter ? filterSlot.props : null;
     const keys = found.find((element) => typeof element.props.onKeyDown === "function")!.props.onKeyDown as (event: unknown) => void;
 
-    return { area, editor, question, menu, banner, picker, filter, keys };
+    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys };
   }
 
   return { show, props };
@@ -563,6 +567,90 @@ describe("QueryTabPanel: o banco da aba na barra do editor (RN-ARVORE-007)", () 
 
     expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledWith("s1", "r1", expect.any(Array));
     expect(view.props.onSwitchDatabase).toHaveBeenCalledWith("q1", "vendas");
+  });
+});
+
+describe("QueryTabPanel: a conexão da aba na barra do editor (RN-ARVORE-008)", () => {
+  const ctrl9 = (over: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; defaultPrevented: boolean }> = {}) => ({ key: "9", code: "Digit9", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, defaultPrevented: false, preventDefault: vi.fn(), ...over });
+
+  it("a barra mostra o botão da conexão da aba, antes do banco, fechado, e sabe se há comando em andamento", () => {
+    const idle = mount(fakeRunner(rowsState())).show().connection;
+    expect(idle).toMatchObject({ connectionId: "c1", busy: false, open: false });
+    rt.unmount();
+
+    expect(mount(fakeRunner(rowsState({ loadingMore: true }))).show().connection?.busy).toBe(true);
+  });
+
+  it("a aba sem conexão também tem o botão, sem conexão, e ele dá a conexão escolhida", () => {
+    expect(mount(fakeRunner({ status: "idle" }), { connectionId: null }).show().connection).toMatchObject({ connectionId: null });
+  });
+
+  it("Ctrl+9 (ou Cmd+9) com o foco em qualquer ponto da aba abre a lista, e de novo a fecha; com Shift, ou já tratado, não", () => {
+    const view = mount(fakeRunner(rowsState()));
+
+    const event = ctrl9();
+    view.show().keys(event);
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(view.show().connection?.open).toBe(true);
+
+    view.show().keys(ctrl9({ ctrlKey: false, metaKey: true }));
+    expect(view.show().connection?.open).toBe(false);
+
+    view.show().keys(ctrl9({ shiftKey: true }));
+    view.show().keys(ctrl9({ defaultPrevented: true }));
+    expect(view.show().connection?.open).toBe(false);
+    expect(view.props.onSave).not.toHaveBeenCalled();
+  });
+
+  it("o botão abre e fecha a lista pelo mesmo estado", () => {
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().connection!.onOpenChange(true);
+    expect(view.show().connection?.open).toBe(true);
+    view.show().connection!.onOpenChange(false);
+    expect(view.show().connection?.open).toBe(false);
+  });
+
+  it("escolher outra conexão passa a aba para ela, sem executar nada", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().connection!.onChoose("c2");
+
+    expect(view.props.onSwitchConnection).toHaveBeenCalledWith("q1", "c2");
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(runner.rerun).not.toHaveBeenCalled();
+  });
+
+  it("com alterações não salvas na grade, a troca pergunta antes (RN-EDIT-007): Cancelar fica na conexão, Descartar troca", () => {
+    withPending();
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().connection!.onChoose("c2");
+    expect(view.props.onSwitchConnection).not.toHaveBeenCalled();
+    view.show().question!.onCancel();
+    expect(view.props.onSwitchConnection).not.toHaveBeenCalled();
+
+    view.show().connection!.onChoose("c2");
+    view.show().question!.onDiscard();
+    expect(view.props.onSwitchConnection).toHaveBeenCalledWith("q1", "c2");
+  });
+
+  it("a faixa da aba sem conexão diz por quê: o script cuja conexão sumiu, o genérico ou a aba que voltou; e escolher troca pela mesma via (RN-SCRIPT-003 e 005)", () => {
+    const missing = mount(fakeRunner({ status: "idle" }), { connectionId: null, script: { id: "s1", name: "Fechamento", savedSql: "", dirty: false } });
+    expect(missing.show().noConnection?.reason).toBe("scriptMissing");
+    rt.unmount();
+
+    expect(mount(fakeRunner({ status: "idle" }), { connectionId: null, script: { id: "s1", name: "Fechamento", savedSql: "", generic: true, dirty: false } }).show().noConnection?.reason).toBe("generic");
+    rt.unmount();
+
+    const restored = mount(fakeRunner({ status: "idle" }), { connectionId: null });
+    expect(restored.show().noConnection?.reason).toBe("restored");
+    restored.show().noConnection!.onAssign("c2");
+    expect(restored.props.onSwitchConnection).toHaveBeenCalledWith("q1", "c2");
+    rt.unmount();
+
+    expect(mount(fakeRunner(rowsState())).show().noConnection).toBeUndefined();
   });
 });
 

@@ -297,3 +297,91 @@ export function PackageIcon(props: ComponentProps<"svg">) {
     </Icon>
   );
 }
+
+/** "Sem cor" nas bolinhas de cor da pasta e do script (RN-PASTA-007 e RN-SCRIPT-006): o traço na diagonal. */
+export function NoColorIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12l8-8" />
+    </Icon>
+  );
+}
+
+/*
+ * Os ícones que um script pode ter (RN-SCRIPT-006), além do documento, do banco e da tabela, que já existiam: a lista fechada é `scriptIcons`, em
+ * `saved-scripts.ts`. Mesmo traço dos outros: 16×16, linha de 1,5, pontas redondas, sem preenchimento.
+ */
+
+/** Código: os sinais de menor e de maior, e a barra entre eles. */
+export function CodeIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M5 4.5L1.75 8 5 11.5M11 4.5L14.25 8 11 11.5M9.25 3l-2.5 10" />
+    </Icon>
+  );
+}
+
+/** Gráfico: três barras sobre a base. */
+export function ChartIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 13.5h11M4.75 13.5V9M8 13.5V3.5M11.25 13.5V6.5" />
+    </Icon>
+  );
+}
+
+/** Relógio: o mostrador e os dois ponteiros. */
+export function ClockIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M8 4.75V8l2.25 1.5" />
+    </Icon>
+  );
+}
+
+/** Raio. */
+export function LightningIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M9 1.75L3.75 9h4l-.75 5.25L12.25 7h-4z" />
+    </Icon>
+  );
+}
+
+/** Inseto: o corpo, as antenas e as seis patas. */
+export function BugIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <rect x="4.75" y="5.25" width="6.5" height="8.75" rx="3.25" />
+      <path d="M6.5 5.25l-.75-2M9.5 5.25l.75-2M4.75 8.5H2.5M11.25 8.5h2.25M4.9 11.5l-2.15 1.25M11.1 11.5l2.15 1.25" />
+    </Icon>
+  );
+}
+
+/** Chave inglesa: a cabeça aberta e o cabo na diagonal. */
+export function WrenchIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M13.5 4.75a3.25 3.25 0 0 1-4.4 3.05L3.9 13a1.4 1.4 0 0 1-2-2l5.2-5.2a3.25 3.25 0 0 1 4.1-4.2L9.25 3.5l.5 2.25 2.25.5z" />
+    </Icon>
+  );
+}
+
+/** Estrela de cinco pontas. */
+export function StarIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 2.2l1.53 4.1 4.37.18-3.43 2.72 1.17 4.22L8 11l-3.64 2.42 1.17-4.22-3.43-2.72 4.37-.18z" />
+    </Icon>
+  );
+}
+
+/** Bandeira: o mastro e o pano recortado. */
+export function FlagIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M3.5 14V2.5M3.5 3h8.75l-2 3 2 3H3.5" />
+    </Icon>
+  );
+}

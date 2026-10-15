@@ -4,7 +4,7 @@ import type { Connection, Folder } from "./connections.schema";
 import { environmentKey, findEnvironment, userEnvironments } from "./user-environments";
 
 function folder(id: string, environmentName: string | null, environmentColor: string | null, updatedAt: string): Folder {
-  return { id, parentID: null, name: `Pasta ${id}`, environmentName, environmentColor, createdAt: updatedAt, updatedAt };
+  return { id, parentID: null, name: `Pasta ${id}`, environmentName, environmentColor, color: null, createdAt: updatedAt, updatedAt };
 }
 
 function connection(id: string, environmentName: string | null, environmentColor: string | null, updatedAt: string): Connection {
@@ -52,6 +52,13 @@ describe("os ambientes do usuário (RN-AMB-001)", () => {
   it("nada é gravado à parte: sem pasta nem conexão que o use, o ambiente some da lista", () => {
     expect(userEnvironments([], [])).toEqual([]);
     expect(userEnvironments([folder("f1", null, null, "2026-10-14T10:00:00Z")], [connection("c1", null, null, "2026-10-14T10:00:00Z")])).toEqual([]);
+  });
+
+  it("a cor da pasta (RN-PASTA-007) não é ambiente: a pasta só com ela não entra na lista, e a com ambiente leva a cor do ambiente", () => {
+    const at = "2026-10-14T10:00:00Z";
+    const folders = [{ ...folder("f1", null, null, at), color: "#B79CFF" }, { ...folder("f2", "QAS", "#F2B644", at), color: "#7DB2FF" }];
+
+    expect(userEnvironments(folders, [])).toEqual([{ key: "qas", name: "QAS", color: "#F2B644" }]);
   });
 
   it("a data que não se lê perde para qualquer outra", () => {

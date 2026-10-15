@@ -20,7 +20,7 @@ internal interface IFolderRepository
 
     Task<UnitResult<ApiErrorDto>> Insert(Folder folder, CancellationToken cancellationToken);
 
-    /// <summary>Grava nome, pasta pai e ambiente, os campos que a pasta muda.</summary>
+    /// <summary>Grava nome, pasta pai, ambiente e cor, os campos que a pasta muda.</summary>
     Task<UnitResult<ApiErrorDto>> Update(Folder folder, CancellationToken cancellationToken);
 
     Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken);

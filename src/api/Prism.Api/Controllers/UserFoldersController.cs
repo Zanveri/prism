@@ -39,7 +39,10 @@ public sealed class UserFoldersController(IMediator mediator) : ControllerBase
         return Created("/api/user/folders", result.Value);
     }
 
-    /// <summary>Renomear e mover são a mesma rota: o corpo leva `id`, `name` e `parentID` (nulo é a raiz).</summary>
+    /// <summary>
+    /// Renomear, mover e editar são a mesma rota: o corpo leva a pasta por inteiro, `id`, `name`, `parentID` (nulo é a raiz), o ambiente
+    /// (`environmentName` e `environmentColor`, RN-PASTA-005) e a cor (`color`, RN-PASTA-007).
+    /// </summary>
     [HttpPatch]
     public async Task<IActionResult> UpdateFolder([FromBody] UpdateFolderCommand command, CancellationToken cancellationToken)
     {

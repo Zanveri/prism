@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  appearanceChanged,
+  defaultScriptIcon,
+  editedScriptInput,
   copyName,
   exceedsScriptLimit,
   isScriptDirty,
   maxScriptBytes,
   normalizeScriptName,
   refusalProblem,
+  placeChanged,
+  savedPlaceOfTab,
   saveShortcut,
   scriptKeyTarget,
+  scriptIconOf,
+  scriptIcons,
   scriptMenu,
   scriptRowKey,
   scriptNameProblem,
@@ -16,6 +23,7 @@ import {
   scriptsToAsk,
   suggestScriptName,
   withEditedSql,
+  withSavedPlace,
 } from "./saved-scripts";
 
 const scripts = (...names: string[]) => names.map((name, index) => ({ id: `s${index + 1}`, name }));
@@ -65,29 +73,72 @@ describe("o tamanho do SQL (até 1 MB, em bytes de UTF-8, como a API conta)", ()
   });
 });
 
-describe("a mudança não salva (RN-SCRIPT-001)", () => {
+describe("a mudança não salva (RN-SCRIPT-001 e 003)", () => {
+  /** A aba na conexão c1, no banco da conexão. */
+  const inC1 = { connectionId: "c1" };
+  const savedInC1 = { savedSql: "SELECT 1", savedConnectionId: "c1" };
+
   it("é o texto diferente do que foi salvo", () => {
-    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1")).toBe(false);
-    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1 ")).toBe(true);
+    expect(isScriptDirty(savedInC1, "SELECT 1", inC1)).toBe(false);
+    expect(isScriptDirty(savedInC1, "SELECT 1 ", inC1)).toBe(true);
   });
 
   it("o texto novo da aba recalcula o ponto: desfazer até o salvo o apaga", () => {
-    const tab = { id: "t1", sql: "SELECT 1", script: { id: "s1", name: "a", savedSql: "SELECT 1", dirty: true } };
+    const tab = { id: "t1", sql: "SELECT 1", connectionId: "c1", script: { id: "s1", name: "a", ...savedInC1, dirty: true } };
     expect(withEditedSql(tab, "SELECT 1").script?.dirty).toBe(false);
     expect(withEditedSql(tab, "SELECT 2").script?.dirty).toBe(true);
-    expect(withEditedSql({ id: "t2", sql: "" }, "SELECT 2")).toEqual({ id: "t2", sql: "SELECT 2" });
+    expect(withEditedSql({ id: "t2", sql: "", connectionId: "c1" }, "SELECT 2")).toEqual({ id: "t2", sql: "SELECT 2", connectionId: "c1" });
   });
 
   it("é também o banco da aba diferente do banco em que foi salvo (RN-ARVORE-007); sem banco, é o da conexão", () => {
-    expect(isScriptDirty({ savedSql: "SELECT 1" }, "SELECT 1", "vendas")).toBe(true);
-    expect(isScriptDirty({ savedSql: "SELECT 1", savedDatabase: "vendas" }, "SELECT 1", "vendas")).toBe(false);
-    expect(isScriptDirty({ savedSql: "SELECT 1", savedDatabase: "vendas" }, "SELECT 1")).toBe(true);
+    expect(isScriptDirty(savedInC1, "SELECT 1", { ...inC1, database: "vendas" })).toBe(true);
+    expect(isScriptDirty({ ...savedInC1, savedDatabase: "vendas" }, "SELECT 1", { ...inC1, database: "vendas" })).toBe(false);
+    expect(isScriptDirty({ ...savedInC1, savedDatabase: "vendas" }, "SELECT 1", inC1)).toBe(true);
+  });
+
+  it("é também a conexão da aba diferente da conexão em que foi salvo (RN-ARVORE-008), e voltar a ela apaga o ponto", () => {
+    expect(isScriptDirty(savedInC1, "SELECT 1", { connectionId: "c2" })).toBe(true);
+    expect(isScriptDirty(savedInC1, "SELECT 1", { connectionId: null })).toBe(true);
+    expect(placeChanged(savedInC1, inC1)).toBe(false);
+    expect(placeChanged(savedInC1, { connectionId: "c2" })).toBe(true);
+  });
+
+  it("o script salvo numa conexão que não existe mais abre sem conexão sem ponto; dar uma conexão à aba é mudança que o Ctrl+S grava", () => {
+    const missing = { savedSql: "SELECT 1" };
+    expect(isScriptDirty(missing, "SELECT 1", { connectionId: null })).toBe(false);
+    expect(isScriptDirty(missing, "SELECT 1", { connectionId: "c2" })).toBe(true);
+  });
+
+  it("no script genérico só o texto conta: trocar a conexão ou o banco da aba não é mudança (RN-SCRIPT-005)", () => {
+    const generic = { savedSql: "SELECT 1", generic: true as const };
+    expect(isScriptDirty(generic, "SELECT 1", { connectionId: "c2", database: "vendas" })).toBe(false);
+    expect(isScriptDirty(generic, "SELECT 1", { connectionId: null })).toBe(false);
+    expect(isScriptDirty(generic, "SELECT 2", inC1)).toBe(true);
   });
 
   it("com a aba noutro banco, desfazer o texto até o salvo não apaga o ponto", () => {
-    const tab = { id: "t1", sql: "SELECT 2", database: "vendas", script: { id: "s1", name: "a", savedSql: "SELECT 1", dirty: true } };
+    const tab = { id: "t1", sql: "SELECT 2", connectionId: "c1", database: "vendas", script: { id: "s1", name: "a", ...savedInC1, dirty: true } };
     expect(withEditedSql(tab, "SELECT 1").script?.dirty).toBe(true);
     expect(withEditedSql({ ...tab, script: { ...tab.script, savedDatabase: "vendas" } }, "SELECT 1").script?.dirty).toBe(false);
+  });
+
+  it("o lugar que o Ctrl+S grava é o da aba, ou nenhum no genérico", () => {
+    expect(savedPlaceOfTab({ connectionId: "c1", database: "vendas" }, false)).toEqual({ savedConnectionId: "c1", savedDatabase: "vendas" });
+    expect(savedPlaceOfTab({ connectionId: "c1" }, false)).toEqual({ savedConnectionId: "c1" });
+    expect(savedPlaceOfTab({ connectionId: null }, false)).toEqual({});
+    expect(savedPlaceOfTab({ connectionId: "c1", database: "vendas" }, true)).toEqual({ generic: true });
+  });
+
+  it("o lugar salvo novo (tornar genérico, vincular) troca o de antes e refaz o ponto pelo texto e pela aba", () => {
+    const tab = { id: "t1", sql: "SELECT 1", connectionId: "c2", script: { id: "s1", name: "a", ...savedInC1, savedDatabase: "vendas", dirty: true } };
+
+    const generic = withSavedPlace(tab, { generic: true });
+    expect(generic.script).toEqual({ id: "s1", name: "a", savedSql: "SELECT 1", generic: true, dirty: false });
+
+    const bound = withSavedPlace({ ...tab, script: generic.script }, { savedConnectionId: "c2" });
+    expect(bound.script).toEqual({ id: "s1", name: "a", savedSql: "SELECT 1", savedConnectionId: "c2", dirty: false });
+    expect(withSavedPlace(tab, { savedConnectionId: "c2" }, "SELECT 9").script?.dirty).toBe(true);
+    expect(withSavedPlace({ id: "t2", sql: "", connectionId: null }, { generic: true })).toEqual({ id: "t2", sql: "", connectionId: null });
   });
 
   it("fechar pergunta só pelas abas que são scripts com mudança, na ordem da faixa", () => {
@@ -105,18 +156,35 @@ describe("a mudança não salva (RN-SCRIPT-001)", () => {
 describe("onde o script abre (RN-SCRIPT-003)", () => {
   const connections = new Set(["c1", "c2"]);
 
-  it("na conexão e no banco em que foi salvo, se a conexão ainda existe", () => {
-    expect(scriptPlace({ connectionID: "c1", database: "vendas" }, connections)).toEqual({ connectionId: "c1", database: "vendas", missing: false });
-    expect(scriptPlace({ connectionID: "c2", database: null }, connections)).toEqual({ connectionId: "c2", database: undefined, missing: false });
+  it("na conexão e no banco em que foi salvo, se a conexão ainda existe; a aba guarda esse lugar como o salvo", () => {
+    expect(scriptPlace({ connectionID: "c1", database: "vendas" }, connections)).toEqual({ connectionId: "c1", database: "vendas", missing: false, saved: { savedConnectionId: "c1", savedDatabase: "vendas" } });
+    expect(scriptPlace({ connectionID: "c2", database: null }, connections)).toEqual({ connectionId: "c2", database: undefined, missing: false, saved: { savedConnectionId: "c2" } });
   });
 
-  it("sem conexão quando a dele não existe mais, ou quando nunca teve; só a que sumiu é \"não existe mais\"", () => {
-    expect(scriptPlace({ connectionID: "c9", database: "vendas" }, connections)).toEqual({ connectionId: null, database: undefined, missing: true });
-    expect(scriptPlace({ connectionID: null, database: null }, connections)).toEqual({ connectionId: null, database: undefined, missing: false });
+  it("sem conexão quando a dele não existe mais, e a aba mede a mudança contra \"sem conexão\"", () => {
+    expect(scriptPlace({ connectionID: "c9", database: "vendas" }, connections)).toEqual({ connectionId: null, database: undefined, missing: true, saved: {} });
   });
 
   it("com a lista de conexões ainda sem chegar, não decide: abre na dele", () => {
-    expect(scriptPlace({ connectionID: "c9", database: null }, null)).toEqual({ connectionId: "c9", database: undefined, missing: false });
+    expect(scriptPlace({ connectionID: "c9", database: null }, null)).toEqual({ connectionId: "c9", database: undefined, missing: false, saved: { savedConnectionId: "c9" } });
+  });
+});
+
+describe("onde o script genérico abre (RN-SCRIPT-005)", () => {
+  const connections = new Set(["c1", "c2", "c3"]);
+  const generic = { connectionID: null, database: null };
+
+  it("com exatamente uma conexão conectada, na dela, no banco padrão", () => {
+    expect(scriptPlace(generic, connections, ["c2"])).toEqual({ connectionId: "c2", database: undefined, missing: false, saved: { generic: true } });
+  });
+
+  it("com mais de uma conectada, sem conexão: a faixa pergunta qual", () => {
+    expect(scriptPlace(generic, connections, ["c1", "c3"])).toEqual({ connectionId: null, database: undefined, missing: false, saved: { generic: true } });
+  });
+
+  it("sem nenhuma conectada (ou com a lista sem chegar), sem conexão, e nada \"sumiu\"", () => {
+    expect(scriptPlace(generic, connections, [])).toEqual({ connectionId: null, database: undefined, missing: false, saved: { generic: true } });
+    expect(scriptPlace(generic, null)).toEqual({ connectionId: null, database: undefined, missing: false, saved: { generic: true } });
   });
 });
 
@@ -159,8 +227,16 @@ describe("a recusa da API, no campo do nome", () => {
 });
 
 describe("o menu de um script e as teclas da linha (RN-SCRIPT-003)", () => {
-  it("abrir primeiro; renomear e copiar o SQL; excluir à parte, por último", () => {
-    expect(scriptMenu().map((group) => group.map((item) => item.action))).toEqual([["open"], ["rename", "copySql"], ["delete"]]);
+  it("abrir primeiro; renomear, editar (RN-SCRIPT-006), copiar o SQL e o lugar; excluir à parte, por último", () => {
+    expect(scriptMenu({ generic: false, bindable: false }).map((group) => group.map((item) => item.action))).toEqual([["open"], ["rename", "edit", "copySql", "makeGeneric"], ["delete"]]);
+  });
+
+  it("o script com conexão oferece \"Tornar genérico\"; o genérico, \"Vincular à conexão da aba\", apagado sem aba aberta com conexão (RN-SCRIPT-005)", () => {
+    const placeItem = (script: { generic: boolean; bindable: boolean }) => scriptMenu(script)[1][3];
+
+    expect(placeItem({ generic: false, bindable: true })).toEqual({ action: "makeGeneric" });
+    expect(placeItem({ generic: true, bindable: true })).toEqual({ action: "bind" });
+    expect(placeItem({ generic: true, bindable: false })).toEqual({ action: "bind", disabled: true });
   });
 
   it("Enter abre, F2 renomeia, Delete exclui, Shift+F10 e a tecla de menu abrem o menu; o resto não é da linha", () => {
@@ -173,5 +249,39 @@ describe("o menu de um script e as teclas da linha (RN-SCRIPT-003)", () => {
     expect(scriptRowKey(key({ key: "ContextMenu" }))).toBe("menu");
     expect(scriptRowKey(key({ key: "F10" }))).toBeNull();
     expect(scriptRowKey(key({ key: "a" }))).toBeNull();
+  });
+});
+
+describe("o ícone e a cor do script (RN-SCRIPT-006)", () => {
+  it("a lista fechada é a da API (ScriptRules.Icons), na mesma ordem, com o documento de antes como padrão", () => {
+    expect(scriptIcons).toEqual(["document", "code", "database", "table", "chart", "clock", "lightning", "bug", "wrench", "star", "flag"]);
+    expect(defaultScriptIcon).toBe("document");
+  });
+
+  it("o ícone nulo é o padrão, e o que esta versão não conhece também", () => {
+    expect(scriptIconOf({ icon: null })).toBe("document");
+    expect(scriptIconOf({ icon: "foguete" })).toBe("document");
+    for (const icon of scriptIcons) expect(scriptIconOf({ icon })).toBe(icon);
+  });
+
+  it("o PATCH do Editar script… leva o nome normalizado, o ícone e a cor; sem cor vai vazio, para a API tirar a que havia", () => {
+    expect(editedScriptInput("s1", { name: "  Fechamento   mensal ", icon: "chart", color: "#F2B644" })).toEqual({ id: "s1", name: "Fechamento mensal", icon: "chart", color: "#F2B644" });
+    expect(editedScriptInput("s1", { name: "Fechamento", icon: "document", color: null })).toEqual({ id: "s1", name: "Fechamento", icon: "document", color: "" });
+  });
+
+  it("sem mudança nenhuma (o nome como a API o grava, o ícone padrão como nulo, a cor sem a caixa) o diálogo fecha sem chamar a API", () => {
+    const plain = { name: "Fechamento", icon: null, color: null };
+    const colored = { name: "Fechamento", icon: "star", color: "#7DB2FF" };
+
+    expect(appearanceChanged(plain, { name: " Fechamento ", icon: "document", color: null })).toBe(false);
+    expect(appearanceChanged(colored, { name: "Fechamento", icon: "star", color: "#7db2ff" })).toBe(false);
+    expect(appearanceChanged(plain, { name: "Fechamento 2", icon: "document", color: null })).toBe(true);
+    expect(appearanceChanged(plain, { name: "Fechamento", icon: "bug", color: null })).toBe(true);
+    expect(appearanceChanged(plain, { name: "Fechamento", icon: "document", color: "#FF8A7A" })).toBe(true);
+    expect(appearanceChanged(colored, { name: "Fechamento", icon: "star", color: null })).toBe(true);
+  });
+
+  it("o F2 da linha continua só renomeando: o Editar script… é do menu", () => {
+    expect(scriptRowKey({ key: "F2", shiftKey: false })).toBe("rename");
   });
 });

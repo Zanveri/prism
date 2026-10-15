@@ -14,5 +14,8 @@ public sealed class UpdateFolderValidator : AbstractValidator<UpdateFolderComman
         // RN-PASTA-005: o ambiente tem as regras do ambiente da conexão, e a recusa vai no código das pastas, no campo de cada um.
         RuleFor(request => request.EnvironmentName).MustBeAnEnvironmentName().WithErrorCode("FOLDER_NAME_INVALID");
         RuleFor(request => request.EnvironmentColor).MustBeAnEnvironmentColor().WithErrorCode("FOLDER_NAME_INVALID");
+
+        // RN-PASTA-007: a cor da pasta é `#RRGGBB`, como a do ambiente, e a recusa vai no mesmo código, no campo dela.
+        RuleFor(request => request.Color).MustBeAnEnvironmentColor().WithErrorCode("FOLDER_NAME_INVALID");
     }
 }
