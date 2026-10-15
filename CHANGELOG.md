@@ -6,6 +6,57 @@ Todas as mudanças relevantes do Prism são registradas aqui. O formato segue o
 
 ## Não lançado
 
+## [0.3.0] - 2026-10-15
+
+A 0.3.0 reúne tudo o que foi testado nos betas da 0.2.0 e da 0.3.0 (a 0.2.0 não saiu como versão estável).
+
+**Antes de atualizar:** na primeira entrada, o Prism converte o seu cofre para um formato novo, e uma versão anterior do Prism
+não o abre mais (ela avisa que é preciso atualizar). Se quiser poder voltar para a versão que você usa hoje, copie antes a pasta
+de dados do Prism (no Windows, `%APPDATA%\Zanveri\Prism`).
+
+### Adicionado
+
+- **Edite os dados direto na grade**, nos Registros de uma tabela e no resultado de uma consulta: F2, Enter, duplo clique ou
+  comece a digitar. As alterações ficam destacadas até você salvar, e o Prism pergunta antes de você perdê-las. Vale também no
+  resultado de uma junção, coluna por coluna.
+- **Filtrar (F11)**, como no DBeaver: pelo menu da célula, filtre pelo valor dela, por uma condição ou pelo que você escrever;
+  Ctrl+F11 abre a lista dos valores da coluna para escolher. O campo de filtro sugere as colunas enquanto você digita e agora
+  também fica acima do resultado da consulta.
+- **F5 atualiza** os Registros, o resultado da consulta, a Estrutura, o Diagrama e o item escolhido no navegador.
+- **Scripts salvos:** Ctrl+S guarda a consulta como um script, cifrado no seu cofre, e os scripts ficam numa seção própria do
+  navegador.
+- **As abas voltam** na próxima entrada, na mesma ordem e com o SQL que você ainda não salvou.
+- **Abas em mais de uma janela:** arraste uma aba para mudar a ordem ou para levá-la a outra janela.
+- **Todos os bancos do servidor** aparecem sob a conexão, no navegador, e a aba de consulta mostra em qual banco ela roda e deixa
+  trocar.
+- **Ctrl+clique no nome de uma tabela**, no editor SQL, abre os registros dela.
+- **Duplicar conexão**, no menu da conexão.
+- **Editar pasta (F2):** a pasta ganha um ambiente, com nome e cor, que as conexões dela usam quando não têm um próprio. Os
+  ambientes que você já usa aparecem prontos para escolher, e o navegador filtra as conexões por ambiente.
+- **Escolha a fonte** da interface e a do editor SQL, em Configurações › Aparência.
+
+### Alterado
+
+- **Instalador do Windows:** ele pede permissão de administrador para instalar para todos os usuários do computador; sem a
+  permissão, instala só para você. A atualização de dentro do app segue o mesmo modo.
+- A aba de uma tabela mostra só o nome dela; o esquema aparece quando há tabelas de mais de um esquema abertas.
+
+### Corrigido
+
+- Copiar (Ctrl+C e "Copiar valor") e exportar para CSV levam o valor inteiro de uma célula grande, e não só o pedaço que a
+  grade mostra.
+- Um resultado parado por cinco minutos, sem carregar mais linhas, passa a liberar o banco, em vez de às vezes ficar aberto até
+  a conexão fechar.
+- Na árvore, a seta para a esquerda volta ao item de cima, como em qualquer árvore.
+
+## [0.1.1] - 2026-10-13
+
+### Alterado
+
+- O Prism passa a ser distribuído sob a licença GNU GPL versão 3 (GPL-3.0-only).
+
+## [0.1.0] - 2026-10-13
+
 PostgreSQL, Db2 e Informix funcionam; os drivers da IBM (Db2 e Informix) são instalados sob demanda, em Configurações ›
 Drivers. Nenhum pacote é assinado.
 
