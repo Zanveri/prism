@@ -732,6 +732,12 @@ com as fontes, está em os registros internos do projeto.
   notas de um pré-lançamento são geradas pelo `git-cliff` na hora, com os commits desde a tag
   anterior, seguidas das somas, e NÃO são gravadas no `CHANGELOG.md` (um commit a cada merge na
   `develop` encheria o histórico). Uma versão estável reúne tudo desde a estável anterior.
+  **As notas são escritas para quem usa o Prism** (decisão do dono em 2026-10-15): o que o
+  `git-cliff` gera só traz o que o usuário percebe (`feat`, `fix`, `perf`, o escopo `security` e
+  a quebra de contrato), sem o escopo do commit e sem as referências à especificação; ficam de
+  fora `docs`, `build`, `ci`, `test`, `chore`, `refactor` e `feat(api)`, porque a API local fica
+  fora do contrato. A seção de uma versão estável no `CHANGELOG.md` é escrita em linguagem de
+  quem usa, curta, sem termos internos.
 - **RN-VERSAO-008.** Lançar uma versão (decisões do dono em 2026-10-10 e 2026-10-12): os ramos
   de trabalho entram por pull request em `develop`; `develop` entra em `main`. A pipeline só roda
   no merge (RN-ABERTO-005) e faz o lançamento sozinha; ninguém cria tag à mão.

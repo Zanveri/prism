@@ -6,16 +6,21 @@
 #   bash scripts/ci/git-cliff.sh --unreleased --tag vX.Y.Z --prepend CHANGELOG.md vANTERIOR..HEAD
 # (o intervalo desde a estável anterior: a tag dela fica no commit de merge da main, que não está na história da develop).
 # As notas de um BETA saem daqui também, mas não vão para o CHANGELOG.md: o release-notes.sh roda
-#   git-cliff --unreleased --strip all <tag anterior>..HEAD
-# e as põe na release, seguidas das somas.
+#   git-cliff --strip all <tag anterior>..HEAD
+# e as põe na release, seguidas das somas. (SEM o --unreleased: junto de um intervalo, ele faz o git-cliff 2.14 voltar até a
+# última estável e ignorar o começo do intervalo, e cada beta repetia tudo desde ela.)
 # O `--prepend` tira de CHANGELOG.md o texto do `header` abaixo e o escreve de novo no topo, seguido da seção nova e do que já
 # havia. Por isso o `header` TEM de ser, byte a byte, o começo do CHANGELOG.md (inclusive a linha "## Não lançado" e a linha
 # em branco que vem depois). Mudou um, mude o outro na mesma alteração.
 #
-# Categorias do Keep a Changelog 1.1.0 em português (Adicionado, Alterado, Corrigido, Segurança) e as que os tipos da
-# RN-VERSAO-006 pedem além delas (Documentação, Empacotamento e pipeline, Testes e manutenção). Descontinuado e Removido não
-# têm tipo de commit: quem escreve a seção acrescenta à mão quando houver. O tipo `release` não aparece. Quebra de contrato
-# (`!` depois do tipo) vai para a primeira categoria.
+# AS NOTAS SÃO PARA QUEM USA O PRISM (decisão do dono em 2026-10-15): elas aparecem na página da release e na tela do app que
+# oferece a atualização. Por isso só entra o que quem usa percebe, nas categorias do Keep a Changelog 1.1.0 em português
+# (Adicionado, Alterado, Corrigido, Segurança), e cada item é a descrição do commit sem o escopo e sem as referências à
+# especificação ("(RN-…)", "(seção N)"). Não entram: `docs`, `build`, `ci`, `test`, `chore` e `refactor` (não mudam o que o
+# usuário vê) e `feat(api)` (a API local só conversa com o próprio app e fica fora do contrato; o que o usuário vê de uma
+# funcionalidade nova vem no commit da interface). Uma correção da API entra: ela muda o que o usuário vê. Descontinuado e
+# Removido não têm tipo de commit: quem escreve a seção acrescenta à mão quando houver. O tipo `release` não aparece. Quebra de
+# contrato (`!` depois do tipo) vai para a primeira categoria, qualquer que seja o tipo.
 
 [changelog]
 header = """
@@ -35,8 +40,8 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | striptags | trim | upper_first }}
 
-{% for commit in commits %}\
-- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}
+{% for commit in commits | unique(attribute="message") %}\
+- {{ commit.message | upper_first }}
 {% endfor %}\
 {% endfor %}\n
 """
@@ -53,16 +58,23 @@ sort_commits = "oldest"
 # ignore_tags o --unreleased pararia na última beta, e a estável perderia os commits anteriores a ela.)
 tag_pattern = '^v[0-9]+\.[0-9]+\.[0-9]+$'
 
+# As referências à especificação saem do texto: "(RN-GRADE-012)", "(RN-EDIT-002 e 003)", "(local-fonts, RN-CONFIG-008)",
+# "(seção 22)". Só o parêntese que cita uma regra ou uma seção; o resto da mensagem fica como veio.
+commit_preprocessors = [
+  { pattern = '\s*\([^()]*\b(?:RN-[A-Z]+-[0-9]+|seção [0-9]+)[^()]*\)', replace = "" },
+]
+
+# A primeira regra que casa decide. O que não casa com nenhuma não entra (filter_commits).
 commit_parsers = [
   { message = "^release", skip = true },
   { field = "breaking", pattern = "true", group = "<!-- 0 -->Mudanças que quebram o contrato" },
   { message = "^[a-z]+\\(security\\)", group = "<!-- 4 -->Segurança" },
+  { message = "^(docs|build|ci|test|chore|refactor|style)", skip = true },
+  { message = "^[a-z]+\\((ci|build|spec|deps)\\)", skip = true },
+  { message = "^feat\\(api\\)", skip = true },
   { message = "^feat", group = "<!-- 1 -->Adicionado" },
-  { message = "^(perf|refactor)", group = "<!-- 2 -->Alterado" },
+  { message = "^perf", group = "<!-- 2 -->Alterado" },
   { message = "^fix", group = "<!-- 3 -->Corrigido" },
-  { message = "^docs", group = "<!-- 5 -->Documentação" },
-  { message = "^(build|ci)", group = "<!-- 6 -->Empacotamento e pipeline" },
-  { message = "^(test|chore)", group = "<!-- 7 -->Testes e manutenção" },
 ]
 
 # `git cliff --bumped-version` sugere o próximo número pelas regras da RN-VERSAO-002: funcionalidade nova sobe o segundo
