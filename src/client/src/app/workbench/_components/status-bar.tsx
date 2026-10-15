@@ -4,8 +4,9 @@ import { engineOption } from "@/app/connections/_lib/connections.schema";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { environmentLookup } from "@/app/connections/_lib/environment";
+import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
-import { LockOpenIcon } from "@/components/ui";
+import { LockIcon, LockOpenIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { databaseSessionQuery } from "../_lib/database-sessions.service";
@@ -18,7 +19,7 @@ const copy = workbenchCopy.status;
 
 /**
  * A barra de status: a conexão e o banco da aba ativa (o outro banco do servidor em que ela roda, RN-ARVORE-006 e 007, ou o da conexão) com a etiqueta do
- * ambiente (RN-CONN-015), "Auto-commit"
+ * ambiente (RN-CONN-015), o cadeado da conexão somente leitura (RN-PROT-002, com a dica de onde ele vem), "Auto-commit"
  * (RN-SESSAO-005: nesta fatia toda sessão é auto-commit) e o cofre aberto. "Conectada" é a mesma
  * definição do navegador (`isConnected`): a árvore abriu a sessão dela, ou alguma aba tem a sua.
  */
@@ -34,6 +35,7 @@ export function StatusBar() {
   // `enabled: false`: só lê o que a árvore já guardou, nunca abre uma sessão por aqui.
   const treeSession = useQuery({ ...databaseSessionQuery(tab?.connectionId ?? ""), enabled: false });
   const connected = tab !== null && isConnected(tab.connectionId, tabs, treeSession.isSuccess);
+  const readOnly = connection === undefined ? null : readOnlyHintOf(connection.protections, folders.data ?? []);
 
   return (
     <footer aria-label={copy.label} className="flex min-h-7 flex-wrap items-center gap-x-5 gap-y-1 border-t border-border bg-panel px-3 py-1 text-xs text-muted">
@@ -48,6 +50,12 @@ export function StatusBar() {
             {connected ? copy.connected : copy.disconnected} · {copy.place(connection.name, tab.database ?? connection.database)} · {engineOption(connection.engine).label}
           </span>
           <ShownEnvironmentPill environment={environmentLookup(folders.data ?? []).connection(connection)} />
+          {readOnly === null ? null : (
+            <span title={readOnly} className="flex items-center gap-1">
+              <LockIcon className="size-3.5" />
+              <span>{copy.readOnly}</span>
+            </span>
+          )}
         </span>
       )}
       <span>{copy.autoCommit}</span>

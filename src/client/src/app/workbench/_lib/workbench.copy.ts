@@ -124,7 +124,8 @@ export const workbenchCopy = {
     connection: {
       // O nome acessível começa pelo que o botão mostra (a sigla, o nome e o ambiente, na ordem da tela), e diz depois o que ele é: quem usa comando de voz
       // diz o que vê, e o leitor de tela ouve o ambiente, que é o aviso da conexão.
-      label: (engine: string, name: string, environment: string | null) => `${engine} ${name}${environment === null ? "" : ` ${environment}`}, conexão desta aba`,
+      // RN-PROT-002: a dica do cadeado vai no nome acessível, depois do ambiente ("Somente leitura, herdado da pasta Fábrica").
+      label: (engine: string, name: string, environment: string | null, readOnly: string | null = null) => `${engine} ${name}${environment === null ? "" : ` ${environment}`}${readOnly === null ? "" : `, ${readOnly.charAt(0).toLowerCase()}${readOnly.slice(1)}`}, conexão desta aba`,
       none: "Sem conexão",
       noneLabel: "Sem conexão, escolher a conexão desta aba",
       // A lista de conexões ainda não chegou.
@@ -310,6 +311,8 @@ export const workbenchCopy = {
     // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
     place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
+    // RN-PROT-002: a conexão da aba é somente leitura (a dica diz de onde vem).
+    readOnly: "Somente leitura",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,
   },
 

@@ -251,8 +251,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         if (stillShown) latest.current = { ...latest.current, target: result.data };
         return result.data;
       }
-      if (result.error.code === "RESULT_NOT_EDITABLE") {
-        const why = editErrorDetails(result.error.extensions).reason ?? result.error.detail ?? result.error.title;
+      // RN-PROT-002: a conexão que passou a ser somente leitura depois de o resultado chegar responde como o resultado só leitura, com o motivo da página.
+      if (result.error.code === "RESULT_NOT_EDITABLE" || result.error.code === "CONNECTION_READ_ONLY") {
+        const why = result.error.code === "CONNECTION_READ_ONLY" ? copy.reasons.connectionReadOnly : (editErrorDetails(result.error.extensions).reason ?? result.error.detail ?? result.error.title);
         setAnswer({ resultId: id, target: null, readOnly: why });
         if (stillShown) latest.current = { ...latest.current, readOnlyReason: why };
         return null;

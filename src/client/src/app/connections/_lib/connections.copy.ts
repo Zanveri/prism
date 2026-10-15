@@ -154,6 +154,8 @@ export const connectionsCopy = {
       connectionHint: "Nenhum comando que altere dados ou estrutura é executado nesta conexão: INSERT, UPDATE, DELETE, CREATE, ALTER, DROP e TRUNCATE ficam bloqueados. Para marcar ou desmarcar esta opção, o Prism pede a sua senha.",
       folderHint: "Nenhum comando que altere dados ou estrutura é executado nas conexões desta pasta. Para marcar ou desmarcar esta opção, o Prism pede a sua senha.",
     },
+    // RN-PROT-002: o cadeado ao lado do nome da conexão (a árvore, a lista do botão da conexão da aba, a barra de status) e a dica dele.
+    readOnlyMark: (folder: string | null) => (folder === null ? "Somente leitura" : `Somente leitura, herdado da pasta ${folder}`),
     // RN-PROT-004: a proteção herdada aparece marcada e desabilitada, e a frase diz de onde vem e por que não se afrouxa aqui.
     inheritedFrom: (folder: string) => `Herdado da pasta ${folder}`,
     connectionCannotLoosen: (folder: string) => `A pasta ${folder} impõe esta proteção a tudo o que está dentro dela, e a conexão não a afrouxa: para tirá-la, mude a pasta ou mova a conexão para fora dela.`,

@@ -10,6 +10,7 @@ import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
+import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
@@ -172,6 +173,11 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
   // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-PROT-002: a dica do cadeado de cada conexão somente leitura (a própria ou a herdada de uma pasta acima), pelo id.
+  const readOnlyHints = useMemo(() => new Map(connectionList.flatMap((connection) => {
+    const hint = readOnlyHintOf(connection.protections, folders.data ?? []);
+    return hint === null ? [] : [[connection.id, hint] as const];
+  })), [connectionList, folders.data]);
   // RN-PASTA-007: a cor do ícone de cada pasta que tem uma. É só dela: a subpasta e a conexão não a herdam.
   const folderColors = useMemo(() => new Map((folders.data ?? []).flatMap((folder) => (folder.color === null ? [] : [[folder.id, folder.color] as const]))), [folders.data]);
   // RN-NAV-010: os ambientes do usuário no seletor (RN-AMB-001), e a árvore só com as conexões do escolhido e as pastas no caminho até elas. A busca
@@ -599,6 +605,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           connectionById={connectionById}
           environments={environments}
           folderColors={folderColors}
+          readOnlyHints={readOnlyHints}
           statuses={statuses}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
@@ -663,6 +670,8 @@ type NavigatorListProps = {
   environments: EnvironmentLookup;
   /** RN-PASTA-007: a cor do ícone das pastas que têm uma, pelo id. */
   folderColors: ReadonlyMap<string, string>;
+  /** RN-PROT-002: a dica do cadeado das conexões somente leitura, pelo id. */
+  readOnlyHints: ReadonlyMap<string, string>;
   statuses: ReadonlyMap<string, ConnectionStatus>;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
@@ -694,7 +703,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, density, open, connectionById, environments, folderColors, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -852,6 +861,7 @@ function NavigatorList({ rows, density, open, connectionById, environments, fold
                 connection={connection}
                 environment={environment}
                 folderColor={folderId === null ? null : (folderColors.get(folderId) ?? null)}
+                readOnly={connection ? (readOnlyHints.get(connection.id) ?? null) : null}
                 status={connection ? statuses.get(connection.id) : undefined}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}

@@ -2,10 +2,12 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type R
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 
+import { ReadOnlyMark } from "@/app/connections/_components/read-only-mark";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup, type ShownEnvironment } from "@/app/connections/_lib/environment";
+import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { CheckIcon, ChevronIcon, EngineTag, PlugIcon } from "@/components/ui";
 import { engineTags } from "@/components/ui/engine-tag";
 import { controlClassName } from "@/components/ui/field";
@@ -28,6 +30,8 @@ type ConnectionButtonViewProps = {
   /** A conexão da aba; `null` na aba sem conexão, e `undefined` enquanto a lista de conexões não chegou. */
   connection: Connection | null | undefined;
   environment: ShownEnvironment | null;
+  /** RN-PROT-002: a dica do cadeado da conexão somente leitura (`readOnlyHintOf`); nula quando ela não é. */
+  readOnly?: string | null;
   shortcut: { label: string; aria: string };
   open: boolean;
   panelId: string;
@@ -36,16 +40,16 @@ type ConnectionButtonViewProps = {
 };
 
 /**
- * RN-ARVORE-008, só o desenho do botão: a sigla do banco, o nome da conexão e a etiqueta do ambiente (o próprio ou o herdado da pasta), como o botão
- * "Conexão e esquema desta aba" do canvas; a dica traz o servidor, o usuário e o atalho. Na aba sem conexão, "Sem conexão". O nome acessível começa pelo
- * que se vê, na mesma ordem, e só depois diz que é a conexão desta aba.
+ * RN-ARVORE-008, só o desenho do botão: a sigla do banco, o nome da conexão, a etiqueta do ambiente (o próprio ou o herdado da pasta) e, na conexão
+ * somente leitura (RN-PROT-002), o cadeado, como o botão "Conexão e esquema desta aba" do canvas; a dica traz o servidor, o usuário e o atalho. Na aba sem
+ * conexão, "Sem conexão". O nome acessível começa pelo que se vê, na mesma ordem, e só depois diz que é a conexão desta aba.
  */
-export function ConnectionButtonView({ connection, environment, shortcut, open, panelId, buttonRef, onToggle }: ConnectionButtonViewProps) {
+export function ConnectionButtonView({ connection, environment, readOnly = null, shortcut, open, panelId, buttonRef, onToggle }: ConnectionButtonViewProps) {
   return (
     <button
       ref={buttonRef}
       type="button"
-      aria-label={connection === undefined ? copy.loadingLabel : connection === null ? copy.noneLabel : copy.label(engineTags[connection.engine], connection.name, environment?.name ?? null)}
+      aria-label={connection === undefined ? copy.loadingLabel : connection === null ? copy.noneLabel : copy.label(engineTags[connection.engine], connection.name, environment?.name ?? null, readOnly)}
       title={connection == null ? copy.noneTitle(shortcut.label) : copy.title(connection.host, connection.port, connection.userName, shortcut.label)}
       aria-haspopup="dialog"
       aria-expanded={open}
@@ -66,6 +70,7 @@ export function ConnectionButtonView({ connection, environment, shortcut, open, 
           <EngineTag engine={connection.engine} />
           <span className="min-w-0 truncate">{connection.name}</span>
           <ShownEnvironmentPill environment={environment} />
+          <ReadOnlyMark hint={readOnly} />
         </>
       )}
       <ChevronIcon aria-hidden className="flex-none text-subtle" />
@@ -84,6 +89,8 @@ type ConnectionListViewProps = {
   /** A conexão da aba, marcada na lista. */
   current: string | null;
   environments: EnvironmentLookup;
+  /** RN-PROT-002: a dica do cadeado de cada conexão somente leitura; nula nas outras. */
+  readOnlyOf?: (connection: Connection) => string | null;
   /** Há comando em andamento na aba: a troca espera (as conexões ficam desabilitadas, com o motivo), e "Mostrar no navegador" continua. */
   busy: boolean;
   onQuery: (query: string) => void;
@@ -98,7 +105,7 @@ type ConnectionListViewProps = {
  * conectadas (as conectadas primeiro), cada uma com a sigla, o nome, o ambiente e o caminho de pastas, e "Mostrar no navegador", que revela a conexão da aba
  * na árvore. Quem filtra e ordena é `connectionChoices`.
  */
-export function ConnectionListView({ id, query, choices, total, active, current, environments, busy, onQuery, onKeyDown, onActive, onChoose, onReveal }: ConnectionListViewProps) {
+export function ConnectionListView({ id, query, choices, total, active, current, environments, readOnlyOf = () => null, busy, onQuery, onKeyDown, onActive, onChoose, onReveal }: ConnectionListViewProps) {
   const listId = `${id}-lista`;
   const statusId = `${id}-situacao`;
   const grouped = choices.some((choice) => choice.connected);
@@ -123,6 +130,7 @@ export function ConnectionListView({ id, query, choices, total, active, current,
         <EngineTag engine={connection.engine} />
         <span className="min-w-0 truncate">{connection.name}</span>
         <ShownEnvironmentPill environment={environments.connection(connection)} />
+        <ReadOnlyMark hint={readOnlyOf(connection)} />
         <span className="ml-auto min-w-0 truncate pl-2 text-xs font-normal text-muted">{choice.path === "" ? copy.root : choice.path}</span>
         {selected ? <CheckIcon aria-label={copy.current} className="flex-none text-accent" /> : null}
       </div>
@@ -243,6 +251,7 @@ export function ConnectionListPanel({ id, current, connections, environments, bu
       active={active}
       current={current}
       environments={environments}
+      readOnlyOf={(connection) => readOnlyHintOf(connection.protections, folders.data ?? [])}
       busy={busy}
       onQuery={(text) => {
         setQuery(text);
@@ -356,7 +365,11 @@ export function ConnectionPicker({ connectionId, busy, open, onOpenChange, onCho
 
   return (
     <>
-      <ConnectionButtonView connection={connection} environment={connection == null ? null : environments.connection(connection)} shortcut={shortcut} open={open} panelId={panelId} buttonRef={button} onToggle={() => onOpenChange(!open)} />
+      <ConnectionButtonView
+        connection={connection}
+        environment={connection == null ? null : environments.connection(connection)}
+        readOnly={connection == null ? null : readOnlyHintOf(connection.protections, folders.data ?? [])}
+        shortcut={shortcut} open={open} panelId={panelId} buttonRef={button} onToggle={() => onOpenChange(!open)} />
       {open && position !== null
         ? createPortal(
             <div

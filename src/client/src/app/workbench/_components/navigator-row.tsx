@@ -1,5 +1,6 @@
 import type { ComponentProps, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
+import { ReadOnlyMark } from "@/app/connections/_components/read-only-mark";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import { engineOption, type Connection } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
@@ -83,6 +84,8 @@ export type NavigatorRowProps = {
   environment?: ShownEnvironment | null;
   /** RN-PASTA-007: a cor da pasta, só na linha dela; pinta o ícone, aberta ou fechada, ajustada ao contraste do tema (`iconColorStyle`). Sem ela, o neutro. */
   folderColor?: string | null;
+  /** RN-PROT-002: na linha da conexão somente leitura, a dica do cadeado (`readOnlyHintOf`), que diz de onde ele vem; sem ela, nada. */
+  readOnly?: string | null;
   status?: ConnectionStatus;
   busy?: boolean;
   onSelect: (node: NavNode) => void;
@@ -109,7 +112,7 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, readOnly = null, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
   const metrics = navigatorMetrics[density];
   const paddingLeft = rowIndent(metrics, node.depth);
 
@@ -204,6 +207,7 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           <span className={cn("truncate", monoKinds.has(node.kind) && "font-mono", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
           <ShownEnvironmentPill environment={environment} />
+          {isConnection ? <ReadOnlyMark hint={readOnly} /> : null}
           {node.badge ? <span className="flex-none text-[11px] font-semibold text-accent">{node.badge}</span> : null}
           {hasDetail ? <span className={cn("min-w-0 flex-1 truncate text-right text-xs text-subtle", node.kind !== "group" && "font-mono")}>{node.detail}</span> : null}
         </span>

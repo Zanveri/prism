@@ -219,9 +219,10 @@ function sameColumns(a: readonly QueryColumn[], b: readonly QueryColumn[]): bool
 
 /**
  * RN-SQL-021: as recusas da API que são do comando, e não da sessão nem da API: o script pergunta o que fazer, como no erro do banco. As outras (a sessão
- * ocupada, a conexão que não abre, a API fora do ar) param o script sem perguntar.
+ * ocupada, a conexão que não abre, a API fora do ar) param o script sem perguntar. Na conexão somente leitura, o comando que não é leitura também
+ * (`CONNECTION_READ_ONLY`, RN-PROT-002).
  */
-const scriptCommandRefusals = ["TRANSACTION_CONTROL_NOT_SUPPORTED", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", "MULTIPLE_STATEMENTS_NOT_SUPPORTED"] as const;
+const scriptCommandRefusals = ["TRANSACTION_CONTROL_NOT_SUPPORTED", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", "CONNECTION_READ_ONLY"] as const;
 
 /** O erro de um comando do script como as Estatísticas e a pergunta o mostram (RN-SQL-009 e 021): o do banco, como veio, ou a frase da API. */
 function scriptErrorOf(error: ApiError): ScriptError {
@@ -511,9 +512,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       }
 
       const session = id;
+      // RN-PROT-002: a recusa do somente leitura é tratada no lugar, como a do controle de transação: a frase da API, e o resultado de antes fica.
       const result = await call(
         () => executeQuery(session, sql, filter),
-        codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
+        codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", "CONNECTION_READ_ONLY", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
       );
       if (started !== epoch) return null;
       if (result.ok || result.error.code !== "DATABASE_SESSION_NOT_FOUND") return result;
@@ -540,6 +542,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    *
    * O controle de transação que rodou (`executed`, RN-SESSAO-005) também substitui: a API desfez a
    * transação que ele deixou aberta, e o cursor anterior fechou.
+   *
+   * A recusa do somente leitura (`CONNECTION_READ_ONLY`, RN-PROT-002) é como a do controle de transação
+   * antes de executar: nada foi ao banco, o cursor anterior continua aberto e o resultado de antes fica, com
+   * a frase da API no aviso; sem resultado na tela, a frase vai à área de resultado.
    *
    * Nos outros casos a API não aceitou comando nenhum, e `previous` continua na tela: o aviso diz
    * o que houve. Sem resultado na tela, a área de resultado mostra a frase da API para o controle
@@ -574,6 +580,16 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       }
       if (notify) toast.error(copy.commandFailed);
       return { status: "error", source: "api", title: error.title, message: error.detail, sqlState: null, errorAt: null, ...(executed ? { executed: true as const } : {}) };
+    }
+
+    // RN-PROT-002: o comando que não é leitura numa conexão somente leitura. A API recusou antes de ir ao banco: o resultado e o cursor dele ficam.
+    if (error.code === "CONNECTION_READ_ONLY") {
+      if (previous !== null) {
+        if (notify) toast.error(error.title, error.detail ?? undefined);
+        return previous;
+      }
+      if (notify) toast.error(copy.commandFailed);
+      return { status: "error", source: "api", title: error.title, message: error.detail, sqlState: null, errorAt: null };
     }
 
     // Daqui em diante o aviso central já disse o que houve.

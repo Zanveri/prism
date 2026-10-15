@@ -1,3 +1,4 @@
+import { connectionsCopy } from "./connections.copy";
 import type { Confirmation, Folder, Protections } from "./connections.schema";
 
 /** RN-PROT-001: as três escolhas de "Confirmar antes de executar", como os campos do formulário as escrevem: `none` é "Não". */
@@ -54,4 +55,13 @@ export function shownProtections(protections: Protections, folders: readonly Fol
     readOnly: protections.readOnly ? { from: folderOf(protections.readOnlyFolderID) } : null,
     confirm: protections.confirmCommands === null ? null : { level: protections.confirmCommands, from: folderOf(protections.confirmCommandsFolderID) },
   };
+}
+
+/**
+ * RN-PROT-002: a dica do cadeado de uma conexão somente leitura ("Somente leitura", ou "Somente leitura, herdado da pasta Fábrica"), ou nula quando ela não
+ * é. Quem diz é o `protections` da API, o que vale agora, com a pasta de onde vem.
+ */
+export function readOnlyHintOf(protections: Protections, folders: readonly Folder[]): string | null {
+  const readOnly = shownProtections(protections, folders).readOnly;
+  return readOnly === null ? null : connectionsCopy.protections.readOnlyMark(readOnly.from?.name ?? null);
 }
