@@ -15,7 +15,7 @@ function fakeStorage(initial: Record<string, string> = {}) {
 const saved = {
   theme: "light",
   ui: { fontFamily: "Noto Sans" },
-  editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true },
+  editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false },
   results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125 },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
 };
@@ -25,7 +25,7 @@ describe("o padrão das preferências", () => {
     expect(defaultPreferences).toEqual({
       theme: "dark",
       ui: { fontFamily: "IBM Plex Sans" },
-      editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false },
+      editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
       results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
     });
@@ -91,6 +91,8 @@ describe("a leitura tolerante", () => {
     ["tabulação negativa", { editor: { tabSize: -4 } }, ["editor", "tabSize"]],
     ["autocompletar que não é booleano", { editor: { autocomplete: "sim" } }, ["editor", "autocomplete"]],
     ["maiúsculas que não é booleano", { editor: { uppercaseKeywords: 1 } }, ["editor", "uppercaseKeywords"]],
+    ["linha em branco que não é booleano", { editor: { blankLineSeparates: "false" } }, ["editor", "blankLineSeparates"]],
+    ["linha em branco nula", { editor: { blankLineSeparates: null } }, ["editor", "blankLineSeparates"]],
     ["texto do nulo vazio", { results: { nullText: "" } }, ["results", "nullText"]],
     ["texto do nulo só de espaços", { results: { nullText: "   " } }, ["results", "nullText"]],
     ["texto do nulo com 13 caracteres", { results: { nullText: "1234567890123" } }, ["results", "nullText"]],
@@ -415,6 +417,25 @@ describe("o tipo de dado no cabeçalho das colunas (RN-CONFIG-006)", () => {
     store.set("ana", { results: { showColumnTypes: false } });
 
     expect(createPreferencesStore(() => storage).get("ana").results).toEqual({ ...defaultPreferences.results, nullText: "∅", showColumnTypes: false });
+  });
+});
+
+describe("a linha em branco separa os comandos (RN-SQL-018)", () => {
+  it("é ligada por padrão, como no DBeaver, e quem gravou as preferências antes dela existir a recebe ligada, sem mexer no resto do editor", () => {
+    const before = JSON.stringify({ ...saved, editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true } });
+
+    expect(defaultPreferences.editor.blankLineSeparates).toBe(true);
+    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, blankLineSeparates: true });
+  });
+
+  it("desligada, fica desligada ao abrir de novo, sem mexer no resto do grupo", () => {
+    const { storage } = fakeStorage();
+    const store = createPreferencesStore(() => storage);
+    store.set("ana", { editor: { fontSize: 15 } });
+
+    store.set("ana", { editor: { blankLineSeparates: false } });
+
+    expect(createPreferencesStore(() => storage).get("ana").editor).toEqual({ ...defaultPreferences.editor, fontSize: 15, blankLineSeparates: false });
   });
 });
 

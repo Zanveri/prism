@@ -58,6 +58,8 @@ const fields = {
     autocomplete: z.boolean(),
     /** RN-CONFIG-004: converter palavra-chave para maiúsculas ao digitar. */
     uppercaseKeywords: z.boolean(),
+    /** RN-SQL-018: sem seleção, a linha em branco também termina o comando do cursor. Desligada, só o `;`, como antes. */
+    blankLineSeparates: z.boolean(),
   },
   results: {
     /** RN-CONFIG-005: o texto do valor nulo na grade. */
@@ -99,13 +101,13 @@ function freeze<T extends object>(value: T): T {
 /**
  * O padrão: o do canvas (`Configuracoes.dc.html`) onde ele diz, e o combinado com as outras frentes onde o canvas não diz
  * (as fontes que o app traz: RN-CONFIG-008; maiúsculas desligadas, bloqueio ligado em 10 minutos, "buscar mais ao rolar" desligado, o tipo no cabeçalho ligado, como a grade
- * sempre o mostrou: RN-CONFIG-006, e o zoom da grade em 100%: RN-GRADE-010). Congelado: é o mesmo objeto para
+ * sempre o mostrou: RN-CONFIG-006, o zoom da grade em 100%: RN-GRADE-010, e a linha em branco separando os comandos, como no DBeaver: RN-SQL-018). Congelado: é o mesmo objeto para
  * todo mundo que ainda não escolheu nada. A ordem dos campos é a de `fields`.
  */
 export const defaultPreferences: Preferences = freeze({
   theme: "dark",
   ui: { fontFamily: appFonts.ui },
-  editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false },
+  editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
   results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
   security: { lockEnabled: true, lockAfterMinutes: 10 },
 } as const satisfies Preferences);

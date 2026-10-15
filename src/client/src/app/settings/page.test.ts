@@ -231,6 +231,10 @@ describe("Editor SQL", () => {
   const editor = (markup: string) => sectionsOf(markup).find((section) => section.id === "cfg-editor")?.html ?? "";
   /** O valor de cada campo de texto, pelo id. */
   const valueOf = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0].match(/value="([^"]*)"/)?.[1];
+  /** As caixas de marcar: a tag, se está marcada e se o rótulo é o texto dela. */
+  const box = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "";
+  const checked = (tag: string) => / checked(=""| |\/|>)/.test(tag);
+  const labelled = (html: string, id: string, text: string) => new RegExp(`<label[^>]*><input[^>]*id="${id}"[^>]*/><span>${text}</span></label>`).test(html);
 
   it("tem o tamanho da fonte e o da tabulação, com o padrão do canvas; a fonte fica em Aparência (RN-CONFIG-008)", () => {
     const html = editor(render().markup);
@@ -255,10 +259,6 @@ describe("Editor SQL", () => {
 
 
   describe("autocompletar e maiúsculas (RN-CONFIG-004)", () => {
-    const box = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "";
-    const checked = (tag: string) => / checked(=""| |\/|>)/.test(tag);
-    const labelled = (html: string, id: string, text: string) => new RegExp(`<label[^>]*><input[^>]*id="${id}"[^>]*/><span>${text}</span></label>`).test(html);
-
     it("são duas caixas de marcar com os textos do canvas, não 'em breve': autocompletar ligado e maiúsculas desligado, como no canvas", () => {
       const html = editor(render().markup);
 
@@ -284,6 +284,26 @@ describe("Editor SQL", () => {
       expect(html).toContain("Nunca consulta o banco.");
       expect(html).toContain("esquemas, tabelas, visões e colunas");
       expect(html).toContain("o que você cola ficam como estão");
+    });
+  });
+
+  describe("a linha em branco separa os comandos (RN-SQL-018)", () => {
+    it("é uma caixa de marcar depois das duas do RN-CONFIG-004, ligada por padrão, com a dica do que ela faz e do que acontece desligada", () => {
+      const html = editor(render().markup);
+
+      expect(box(html, "cfg-linha-em-branco")).toContain('type="checkbox"');
+      expect(labelled(html, "cfg-linha-em-branco", "A linha em branco separa os comandos")).toBe(true);
+      expect(checked(box(html, "cfg-linha-em-branco"))).toBe(true);
+      expect(html.indexOf('id="cfg-maiusculas"')).toBeLessThan(html.indexOf('id="cfg-linha-em-branco"'));
+      expect(html).toContain("até o ponto e vírgula ou até uma linha em branco, como no DBeaver");
+      expect(html).toContain("nunca dentro de texto, comentário ou rotina. Desligada, só o ponto e vírgula separa.");
+    });
+
+    it("mostra a escolha do usuário, sem mexer nas outras caixas", () => {
+      const html = editor(render({ editor: { blankLineSeparates: false } }).markup);
+
+      expect(checked(box(html, "cfg-linha-em-branco"))).toBe(false);
+      expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
     });
   });
 });
