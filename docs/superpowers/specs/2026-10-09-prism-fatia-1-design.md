@@ -345,7 +345,17 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   devolveu linhas, como subconsulta e em conexão separada; funciona com o cursor aberto ou já
   fechado. Sem comando desse tipo na sessão: 409 `NO_QUERY_TO_COUNT`. Se o banco recusar a
   subconsulta, a tela mostra o erro do banco. O total nunca é contado sem o usuário pedir. No
-  Commit manual vale a RN-TX-012 (a contagem roda na sessão e a ocupa).
+  Commit manual vale a RN-TX-012 (a contagem roda na sessão e a ocupa). Depois de contado, o total
+  pode ser contado de novo (pedido do dono em 2026-10-15, issue #10; antes o botão sumia e o total
+  ficava como estava até a próxima execução): "Contar de novo" é um botão de ícone, com dica, ao
+  lado do total e no mesmo lugar do "Contar total", para o foco não sair da aba (o F5 continua
+  valendo depois do clique). Enquanto outro comando roda sobre as linhas na tela, o resumo, o
+  total e o botão ficam onde estão (o botão desabilitado), com "Executando…" ao lado; e quando o
+  botão sai da barra (o resultado novo não tem o que contar), o foco vai para a grade, ou para a
+  própria área de resultado, e também não sai da aba. Enquanto conta de novo, o total anterior
+  fica à vista, marcado como em recontagem, até chegar o novo; se a contagem falhar ou for
+  cancelada, ele fica como estava, e o erro aparece como na primeira contagem. Vale nos Registros
+  e no resultado da aba de consulta.
 - **RN-SQL-007.** O cursor fecha quando acaba, a cada nova execução na aba, ao fechar a aba e
   após 5 minutos sem leitura, para não segurar recurso no banco. Depois disso "Carregar mais"
   responde 409 `NO_OPEN_CURSOR` e a tela oferece executar de novo. No PostgreSQL, enquanto o
@@ -554,6 +564,9 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   ("Transação aberta pela edição"), por decisão do dono (RN-EDIT-004).
 - A barra dos Registros ganha o seletor de nível de isolamento, que o canvas não tem
   (RN-ISOL-001).
+- A barra da área de resultado ganha "Contar de novo" ao lado do total (RN-SQL-006) e a
+  atualização automática (RN-GRADE-014), que o canvas não tem; nos Registros, a atualização
+  automática fica no rodapé, ao lado de "Atualizar".
 
 ## 10. Riscos e sondas
 
@@ -612,6 +625,10 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
 
 (Em 2026-10-11 entraram pela seção 18: a aba de registros e de estrutura da tabela, o diagrama
 e a tela de configurações, nos limites ditos lá.)
+
+(Em 2026-10-15 entrou pela seção 29 a atualização automática do resultado de um comando,
+RN-GRADE-014. A "atualização automática" da lista abaixo, ao lado da assinatura de código, é a do
+próprio app, que entrou pela seção 17.)
 
 Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama ER, somente
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
@@ -1036,10 +1053,14 @@ Só da tela:
   chave de ligar e desligar.
 - **RN-CONFIG-005.** Resultados: o texto que representa o valor nulo na grade, e "buscar mais
   linhas ao rolar até o fim da grade" (a grade pede a página seguinte sozinha, uma por vez, e
-  para se o usuário cancelar). "Linhas por busca" depende da API (RN-SQL-016).
+  para se o usuário cancelar; com a atualização automática do resultado ligada, RN-GRADE-014, a
+  página seguinte espera o botão "Carregar mais", pelo pedido do dono em 2026-10-15, issue #11).
+  "Linhas por busca" depende da API (RN-SQL-016).
 - **RN-SEG-001.** Bloqueio por inatividade, ligado por padrão em 10 minutos (de 1 a 240, e pode
   ser desligado). Sem tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em
-  nenhuma aba (o tempo conta a partir do fim do último), o Prism avisa 60 segundos antes (30, quando o
+  nenhuma aba (o tempo conta a partir do fim do último; a execução da atualização automática,
+  RN-GRADE-014, não conta como comando em andamento nem como atividade, pedido do dono em
+  2026-10-15, issue #11), o Prism avisa 60 segundos antes (30, quando o
   tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
   mostra o bloqueio, que pede a senha do MESMO usuário. Desbloquear devolve a área de trabalho
   com as abas e o texto de SQL como estavam; os resultados que estavam na tela são descartados
@@ -2167,3 +2188,86 @@ ambiente".
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+
+## 29. Complemento de 2026-10-15: contar de novo e atualização automática (issues #10 e #11)
+
+Pedidos das issues 10 e 11 do repositório público, que o dono aprovou em 2026-10-15 ("Faça todas
+issues, todas elas parecem boas mesmo"): "A contagem de linhas não pode ser recontada, poderia
+manter o botão para permitir refazer as contagens" (das quatro coisas da issue 10, era a que
+faltava: o texto de ajuda do filtro, o autocompletar das colunas e o F5 entraram pela RN-TABELA-011
+e pela RN-GRADE-012); e "Ter uma opção que executa a query de x em x tempos, para fazer um refresh
+nos dados que estão sendo acompanhados".
+
+- **Contar de novo** (issue #10): está na própria RN-SQL-006, alterada no lugar. O total contado
+  deixa de ser definitivo: "Contar de novo" conta outra vez, e o total anterior fica à vista até
+  chegar o novo, ou fica de vez se a contagem falhar ou for cancelada.
+- **RN-GRADE-014.** Atualizar automaticamente: o resultado de uma leitura é executado de novo
+  sozinho, a cada intervalo, para acompanhar dados que mudam (issue #11).
+  - Onde: no menu de contexto da grade, logo depois de "Atualizar" (F5), como submenu
+    (RN-MENU-001), e ao lado de "Atualizar": nos Registros, no rodapé, logo depois do botão
+    "Atualizar"; no resultado da aba de consulta, que não tem esse botão (o F5 e "Executar" fazem
+    a vez dele), na barra da área de resultado, que fica à vista também com a área recolhida. O
+    botão está sempre lá, com ou sem linhas na tela: quando não se aplica, desabilitado, com o
+    motivo. Os intervalos: 5 s, 10 s, 30 s, 1 min e 5 min; "Personalizado…", um diálogo pequeno
+    que pede os segundos (de 2 a 3.600, inteiros); e "Desligar". O intervalo em uso aparece
+    marcado.
+  - Ligada, o controle mostra "Atualiza a cada 10 s" com a hora da última atualização, e um
+    clique no X ao lado desliga. O texto abre os intervalos, para trocar. Desligada no meio de uma
+    execução automática, a execução é abandonada na hora, como quando a pessoa executa um comando
+    (abaixo): nada dela aparece, e o resultado de antes fica, com o cursor fechado (RN-SQL-007).
+  - Cada execução é a do F5 (RN-GRADE-012): o mesmo comando, com o mesmo filtro, lendo de novo a
+    primeira página. A seleção da grade se perde, como em qualquer execução nova (RN-GRADE-001); a
+    rolagem fica, quando as colunas são as mesmas. O total (RN-SQL-006) não é contado de novo
+    sozinho. A grade não esmaece enquanto a execução automática roda: o controle diz
+    "atualizando…". Ligada, a grade não busca a página seguinte sozinha ao rolar até o fim
+    (RN-CONFIG-005): cada execução volta à primeira página, e a busca sozinha leria de novo a cada
+    intervalo; "Carregar mais" continua no botão.
+  - A execução automática não toma a aba da pessoa (correção da revisão de 2026-10-15): os botões e
+    as teclas ficam como estão enquanto ela roda ("Executar" e "Atualizar" não viram "Cancelar",
+    nada se desabilita), e o que a pessoa pede nesse meio-tempo é atendido, e não perdido.
+    Executar um comando, o F5, "Atualizar", aplicar o filtro e ordenar pela coluna abandonam a
+    execução automática (a API recebe o cancelamento dela, e nada dela aparece: nem resultado, nem
+    aviso, nem nota) e executam o que a pessoa pediu, que a aba mostra rodando desde o clique.
+    "Carregar mais" e "Contar total" esperam a execução automática terminar e seguem sobre o
+    resultado novo. Só a edição de uma célula não começa enquanto ela roda: as linhas vão mudar,
+    e a faixa diz isso.
+  - A próxima execução só é marcada quando a anterior termina, e o tempo conta do fim dela: nunca
+    duas ao mesmo tempo. Vale para qualquer comando da aba: depois de "Carregar mais", de "Contar
+    total" e do F5, o tempo recomeça.
+  - Só para leitura: liga sobre o resultado que a API leu por cursor (RN-SQL-004). O comando que
+    grava e devolve linhas (RN-SQL-013: `INSERT`, `UPDATE`, `DELETE` ou `MERGE` com `RETURNING`, o
+    procedimento, a leitura que o banco recusou numa transação só de leitura) não se atualiza
+    sozinho, e o que não devolve linhas (DDL, `CALL`, linhas afetadas) não tem o que atualizar.
+    Quem diz se o comando grava é a regra da RN-SQL-013, e a tela não lê o texto de novo. Também
+    não liga com a aba ocupada nem desconectada. O que não se aplica aparece desabilitado, com o
+    motivo.
+  - Fica em pausa (não executa) enquanto há alteração não salva na grade (RN-EDIT-007), uma célula
+    em edição ou um menu ou diálogo da grade aberto, e enquanto a aba não está à vista (outra aba à
+    frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
+    Configurações): só a aba à vista fala com o banco sozinha. Ao sair da pausa, se o prazo já
+    passou, executa na hora; senão, espera o que falta. A pausa da grade vale desde o começo da
+    ação que abre a célula ou o menu, exclui, cola ou acrescenta uma linha (que antes pergunta à
+    API o que se edita), e não só depois: a ação nunca cai em outra linha. Se as linhas mudam
+    mesmo assim (a execução que já rodava quando o menu abriu), o menu fecha, e a escolha sobre a
+    célula não age.
+  - Para sozinha quando uma execução não traz um resultado de leitura novo: o erro do banco aparece
+    uma vez, como sempre (RN-SQL-009), e o controle diz numa nota curta que a atualização
+    automática parou e por quê (o erro, o cancelamento, o comando que não pôde ser executado, o
+    comando que gravou, a sessão com o banco que caiu). A nota fica até a próxima execução ou até
+    a pessoa ligar de novo. A execução automática não repete aviso: o de valores cortados
+    (RN-AVISO-003) não sai nela (nem no "Carregar mais" que vem depois dela, quando o resultado
+    já avisou), e as células cortadas continuam marcadas.
+  - Desliga quando a aba desconecta, fecha, troca de banco (RN-ARVORE-007) ou vai para outra janela
+    (RN-ABAS-002 e 003), quando o cofre bloqueia (RN-SEG-001) e quando a pessoa executa outro
+    comando na aba (outro texto, outro filtro, outra ordem). Também quando a sessão da aba cai (a
+    API já não a conhece, ao carregar mais, ao contar ou na própria execução automática), com a
+    nota: a execução automática não abre sessão nova, porque nada reconecta sozinho
+    (RN-SESSAO-004). Levar a aba para outra janela a suspende desde o começo da mudança, e a
+    execução que estava em andamento termina antes de a aba ir: a outra janela recebe a sessão
+    livre, com o resultado e o cursor que a aba mostra; se a aba não vai, ela continua. Executar
+    de novo o mesmo comando (F5, "Atualizar", "Executar de novo") a mantém ligada e recomeça o
+    tempo.
+  - A execução automática não é atividade da pessoa nem comando em andamento para o bloqueio por
+    inatividade (RN-SEG-001): com ela ligada, o Prism bloqueia no prazo, e o bloqueio a desliga.
+  - Não é gravada com as abas (RN-ABAS-006): as abas voltam com ela desligada.
+- **Fica para depois:** uma marca na faixa de abas para a aba com a atualização automática ligada.
