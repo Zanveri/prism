@@ -18,7 +18,7 @@ export const autoRefreshCopy = {
     busy: "há um comando em andamento na aba",
     writes: "o comando grava no banco, e só uma leitura se atualiza sozinha",
     noRows: "não há linhas de uma leitura na tela",
-    disconnected: "a aba não está conectada; use Atualizar para conectar",
+    disconnected: "a aba não está conectada; use Atualizar (F5) para conectar",
   },
 
   bar: {
@@ -30,7 +30,8 @@ export const autoRefreshCopy = {
     every: (interval: string) => `Atualiza a cada ${interval}`,
     last: (time: string) => `última às ${time}`,
     running: "atualizando…",
-    paused: "em pausa enquanto a grade é editada",
+    /** A pausa da grade: alteração não salva, célula em edição, o menu da célula, "Filtrar por valor…" ou o "Personalizado" abertos. */
+    paused: "em pausa enquanto a grade está em uso",
     /** O texto ligado é um botão: abre os intervalos. */
     change: "Trocar o intervalo da atualização automática",
     off: "Desligar a atualização automática",
