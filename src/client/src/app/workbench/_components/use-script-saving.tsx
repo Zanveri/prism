@@ -5,7 +5,7 @@ import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 
 import { liveEditors } from "../_lib/live-editors";
-import { copyName, exceedsScriptLimit, normalizeScriptName, refusalProblem, scriptNameProblem, suggestScriptName } from "../_lib/saved-scripts";
+import { copyName, exceedsScriptLimit, normalizeScriptName, refusalProblem, savedPlaceOfTab, scriptNameProblem, suggestScriptName, type SavedPlace } from "../_lib/saved-scripts";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { ScriptSummary } from "../_lib/scripts.schema";
 import { createScriptOrRefuse, overwriteScriptOrRefuse, scriptsQuery } from "../_lib/scripts.service";
@@ -16,12 +16,14 @@ const copy = scriptsCopy;
 
 export type SaveMode = "save" | "saveAs";
 
-type Asking = { tabId: string; mode: SaveMode; initialName: string; resolve: (saved: boolean) => void };
+/** O diálogo do nome aberto: a aba, o modo, a sugestão, como a caixa do script genérico nasce (RN-SCRIPT-005) e quem espera a resposta. */
+type Asking = { tabId: string; mode: SaveMode; initialName: string; generic: { initial: boolean; locked: boolean }; resolve: (saved: boolean) => void };
 
 /**
  * RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S de uma aba de consulta. O texto é o do editor DESTE instante (`liveEditors`; o da aba chega com atraso). A aba que já é
- * um script grava por cima, com o lugar dela (a conexão e o banco); a que não é, e o "Salvar como", pedem o nome, com a sugestão. Um script que outra janela
- * excluiu pede o nome de novo, como na primeira vez. `save` devolve se gravou: é o que o fechar com mudança não salva espera antes de seguir.
+ * um script grava por cima, com o lugar dela (a conexão e o banco), e o script genérico continua genérico (RN-SCRIPT-005); a que não é, e o "Salvar como",
+ * pedem o nome, com a sugestão e a caixa do script genérico (marcada no "Salvar como" de um genérico, e presa marcada na aba sem conexão). Um script que outra
+ * janela excluiu pede o nome de novo, como na primeira vez. `save` devolve se gravou: é o que o fechar com mudança não salva espera antes de seguir.
  *
  * As chamadas passam pelo cache de mutações (o que não é recusa de nome vai ao aviso central) e não ficam nele, com o SQL, depois de responder.
  */
@@ -44,8 +46,8 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
   const knownScripts = useCallback(() => queryClient.getQueryData<ScriptSummary[]>(scriptsQuery.queryKey) ?? [], [queryClient]);
 
   const finish = useCallback(
-    (tab: QueryTab, saved: ScriptSummary, sql: string) => {
-      setTabScript(tab.id, { id: saved.id, name: saved.name }, sql, tab.database);
+    (tab: QueryTab, saved: ScriptSummary, sql: string, place: SavedPlace) => {
+      setTabScript(tab.id, { id: saved.id, name: saved.name }, sql, place);
       void queryClient.invalidateQueries({ queryKey: scriptsQuery.queryKey });
       toast.success(copy.toasts.saved(saved.name));
     },
@@ -66,10 +68,14 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
 
       if (mode === "save" && tab.script !== undefined) {
         const script = tab.script;
-        const result = await throughMutationCache(queryClient, () => overwriteScriptOrRefuse({ id: script.id, sql, connectionID: tab.connectionId, database: tab.database ?? null })).catch(() => null);
+        // RN-SCRIPT-005: o genérico grava o texto e continua genérico, qualquer que seja a conexão da aba. A aba sem conexão manda a conexão nula, e o script
+        // fica no lugar que tinha (o ausente fica).
+        const generic = script.generic === true;
+        const place = generic ? ({ generic: true } as const) : { connectionID: tab.connectionId, database: tab.database ?? null };
+        const result = await throughMutationCache(queryClient, () => overwriteScriptOrRefuse({ id: script.id, sql, ...place })).catch(() => null);
         if (result === null) return false;
         if (result.ok) {
-          finish(tab, result.data, sql);
+          finish(tab, result.data, sql, savedPlaceOfTab(tab, generic));
           return true;
         }
         if (result.error.code !== "SCRIPT_NOT_FOUND") {
@@ -82,15 +88,16 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
 
       const names = knownScripts();
       const initialName = mode === "saveAs" && tab.script !== undefined ? copyName(tab.script.name, names) : suggestScriptName(names);
+      const generic = { initial: mode === "saveAs" && tab.script?.generic === true, locked: tab.connectionId === null };
       return new Promise<boolean>((resolve) => {
         setError(null);
-        setAsking({ tabId, mode, initialName, resolve });
+        setAsking({ tabId, mode, initialName, generic, resolve });
       });
     },
     [queryClient, toast, finish, forgetScript, knownScripts],
   );
 
-  async function submit(name: string) {
+  async function submit(name: string, generic: boolean) {
     if (asking === null || pending) return;
 
     const tab = tabOf(asking.tabId);
@@ -106,7 +113,8 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
     if (exceedsScriptLimit(sql)) return setError(copy.errors.tooLarge);
 
     setPending(true);
-    const result = await throughMutationCache(queryClient, () => createScriptOrRefuse({ name: normalizeScriptName(name), sql, connectionID: tab.connectionId, database: tab.database ?? null })).catch(() => null);
+    // RN-SCRIPT-005: o genérico nasce sem conexão nem banco.
+    const result = await throughMutationCache(queryClient, () => createScriptOrRefuse({ name: normalizeScriptName(name), sql, connectionID: generic ? null : tab.connectionId, database: generic ? null : (tab.database ?? null) })).catch(() => null);
     setPending(false);
     // A falha que não é do nome já foi ao aviso central; o diálogo fica, com o que foi digitado.
     if (result === null) return;
@@ -118,7 +126,7 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
       return;
     }
 
-    finish(tab, result.data, sql);
+    finish(tab, result.data, sql, savedPlaceOfTab(tab, generic || tab.connectionId === null));
     asking.resolve(true);
     setAsking(null);
   }
@@ -138,7 +146,8 @@ export function useScriptSaving(): { save: (tabId: string, mode: SaveMode) => Pr
         initialName={asking.initialName}
         pending={pending}
         error={error}
-        onSubmit={(name) => void submit(name)}
+        generic={asking.generic}
+        onSubmit={(name, generic) => void submit(name, generic)}
         onCancel={cancel}
       />
     );
