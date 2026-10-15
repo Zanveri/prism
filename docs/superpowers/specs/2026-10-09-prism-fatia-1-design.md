@@ -2031,7 +2031,9 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   - A lista traz os bancos do servidor, a mesma da RN-ARVORE-006. No Db2, só o banco da conexão, e
     a lista fica desabilitada com o motivo.
   - Trocar passa a aba para a sessão daquele banco, a mesma que a árvore abre (RN-ARVORE-006), sem
-    executar nada. O texto do editor fica.
+    executar nada. O texto do editor fica; o resultado e o filtro dele (RN-GRADE-011) saem, e o
+    filtro não volta a ser aplicado no banco novo (corrigido em 2026-10-15; vale também para a troca
+    da conexão, RN-ARVORE-008, e para o bloqueio, RN-SEG-001).
   - Com alterações não salvas na grade (RN-EDIT-007) ou com transação aberta, a troca pergunta
     antes, como ao executar outro comando.
   - O script salvo guarda o banco da aba (RN-SCRIPT-001).
