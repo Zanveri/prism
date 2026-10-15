@@ -910,7 +910,9 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   nome de cada um em `scriptsCopy.icons`, desenhados já na cor escolhida) e a "Cor do ícone" (o `ColorField` da cor da pasta). Gravar passa pela conferência
   do nome do renomear; sem mudança (`appearanceChanged`) o diálogo fecha sem chamar a API; senão `editScriptOrRefuse` manda o `PATCH` (`editedScriptInput`: o
   nome normalizado, o ícone, e a cor, com "sem cor" como texto vazio, porque o nulo do `PATCH` fica). O nome repetido e o inválido voltam ao campo do nome,
-  e o `SCRIPT_ICON_INVALID`, ao da cor; o nome novo vai ao título das abas (`renameScript`), e a lista se atualiza. O script novo nasce com o padrão e sem
+  e o `SCRIPT_ICON_INVALID` traz a frase de cada campo em `errors` ("Escolha um dos ícones da lista.", "Use uma cor no formato #RRGGBB."), que vai à lista
+  dos ícones (um `FieldError` abaixo dela, ligado ao grupo por `aria-describedby`) ou à "Cor do ícone" (`editScriptErrors`, `_lib/edit-script-errors.ts`, com
+  teste; só a recusa sem erro de campo leva o `title` da API, à cor); o nome novo vai ao título das abas (`renameScript`), e a lista se atualiza. O script novo nasce com o padrão e sem
   cor. **Conferido sob Xvfb** (a API de desenvolvimento, sem banco): as pastas com cor no ícone (a subpasta neutra, a etiqueta do ambiente ao lado), as
   variantes escuras no tema claro (`getComputedStyle`), o menu da pasta com "Renomear F2" e "Editar pasta…", a cor trocada pelo "Editar pasta…" e mantida
   pelo F2 (`GET api/user/folders`), e o "Editar script…" que trocou o ícone e a cor da linha e da aba aberta em seguida.

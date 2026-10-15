@@ -11,6 +11,7 @@ import { unwrap } from "@/lib/api/prism-api";
 import { cn } from "@/lib/utils/cn";
 
 import { databaseSessionQuery } from "../_lib/database-sessions.service";
+import { editScriptErrors, type EditScriptErrors } from "../_lib/edit-script-errors";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { appearanceChanged, normalizeScriptName, refusalProblem, savedPlaceOfTab, scriptIconOf, scriptKeyTarget, scriptMenu, scriptNameProblem, scriptPlace, scriptRowKey, type ScriptAction, type ScriptAppearance } from "../_lib/saved-scripts";
@@ -129,7 +130,7 @@ export function ScriptsSection() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ script: ScriptSummary; point: { x: number; y: number }; initialFocus: "first" | "menu" } | null>(null);
   const [renaming, setRenaming] = useState<{ script: ScriptSummary; pending: boolean; error: string | null } | null>(null);
-  const [editing, setEditing] = useState<{ script: ScriptSummary; pending: boolean; errors: { name?: string; color?: string } } | null>(null);
+  const [editing, setEditing] = useState<{ script: ScriptSummary; pending: boolean; errors: EditScriptErrors } | null>(null);
   const [deleting, setDeleting] = useState<{ script: ScriptSummary; pending: boolean } | null>(null);
   const section = useRef<HTMLElement>(null);
 
@@ -231,9 +232,8 @@ export function ScriptsSection() {
     const result = await throughMutationCache(queryClient, () => editScriptOrRefuse(script.id, edited)).catch(() => null);
     if (result === null) return setEditing((current) => (current === null ? null : { ...current, pending: false }));
     if (!result.ok) {
-      const refused = refusalProblem(result.error.code, edited.name);
-      if (refused === "taken") void refresh();
-      const errors = result.error.code === "SCRIPT_ICON_INVALID" ? { color: result.error.title } : { name: refused === null ? result.error.title : copy.errors[refused] };
+      if (result.error.code === "SCRIPT_ALREADY_EXISTS") void refresh();
+      const errors = editScriptErrors(result.error, edited.name);
       return setEditing((current) => (current === null ? null : { ...current, pending: false, errors }));
     }
 

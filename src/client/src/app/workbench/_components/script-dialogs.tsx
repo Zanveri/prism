@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 
 import { ColorField } from "@/app/connections/_components/color-field";
-import { Button, Dialog, Select, TextField, type SelectOption } from "@/components/ui";
+import { Button, Dialog, FieldError, Select, TextField, type SelectOption } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import type { EditScriptErrors } from "../_lib/edit-script-errors";
 import { maxScriptNameLength, scriptIconOf, scriptIcons, type ScriptAppearance, type ScriptIcon } from "../_lib/saved-scripts";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { ScriptIconView } from "./script-icon";
@@ -86,13 +87,14 @@ export function ScriptNameDialog({ title, description = copy.save.description, s
 }
 
 const editFormID = "script-edit-form";
+const iconErrorID = "script-icon-error";
 
 type EditScriptDialogProps = {
   /** O script como a lista o tem: o nome, o ícone (nulo é o padrão) e a cor. */
   script: { name: string; icon: string | null; color: string | null };
   pending: boolean;
-  /** As recusas no lugar: a do nome (da conferência da tela ou da API) e a do ícone ou da cor (`SCRIPT_ICON_INVALID`). */
-  errors: { name?: string; color?: string };
+  /** As recusas no lugar: a do nome (da conferência da tela ou da API), a do ícone e a da cor (`SCRIPT_ICON_INVALID`, cada uma no campo dela). */
+  errors: EditScriptErrors;
   onSubmit: (edited: ScriptAppearance) => void;
   onCancel: () => void;
 };
@@ -137,7 +139,7 @@ export function EditScriptDialog({ script, pending, errors, onSubmit, onCancel }
       <form id={editFormID} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <TextField id="script-edit-name" name="name" label={copy.save.nameLabel} defaultValue={script.name} maxLength={maxScriptNameLength} autoComplete="off" spellCheck={false} autoFocus error={errors.name} />
 
-        <fieldset className="m-0 min-w-0 border-0 p-0">
+        <fieldset className="m-0 min-w-0 border-0 p-0" aria-describedby={errors.icon === undefined ? undefined : iconErrorID}>
           <legend className="mb-2 p-0 text-sm text-muted">{copy.edit.icon}</legend>
           <div className="flex flex-wrap gap-2">
             {scriptIcons.map((option) => {
@@ -161,6 +163,7 @@ export function EditScriptDialog({ script, pending, errors, onSubmit, onCancel }
               );
             })}
           </div>
+          <FieldError id={iconErrorID}>{errors.icon}</FieldError>
         </fieldset>
 
         <ColorField idPrefix="script" legend={copy.edit.color} color={color} onChange={setColor} error={errors.color} />

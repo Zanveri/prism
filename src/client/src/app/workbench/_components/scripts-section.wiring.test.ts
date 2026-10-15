@@ -18,7 +18,7 @@ const rt = await vi.hoisted(async () => {
     treeSessions: new Set<string>(),
     workbench: { openScriptTab: vi.fn(), renameScript: vi.fn(), forgetScript: vi.fn(), setScriptPlace: vi.fn() },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
-    service: { getScript: vi.fn(), changeScriptPlace: vi.fn() },
+    service: { getScript: vi.fn(), changeScriptPlace: vi.fn(), editScriptOrRefuse: vi.fn() },
   };
 });
 
@@ -40,6 +40,7 @@ import { elementsOf } from "@/lib/testing/react-tree";
 
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { Script, ScriptSummary } from "../_lib/scripts.schema";
+import { EditScriptDialog } from "./script-dialogs";
 import { ScriptsListView, ScriptsSection } from "./scripts-section";
 
 const generic: ScriptSummary = { id: "s1", name: "Fechamento", connectionID: null, database: null, icon: null, color: null, updatedAt: "2026-10-15T00:00:00Z" };
@@ -143,6 +144,26 @@ describe("ScriptsSection: \"Tornar genérico\" e \"Vincular à conexão da aba\"
     await settle();
     expect(rt.service.changeScriptPlace).toHaveBeenCalledOnce();
     expect(rt.workbench.setScriptPlace).not.toHaveBeenCalled();
+    expect(rt.toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("ScriptsSection: a recusa do \"Editar script…\" fica no campo dela (RN-SCRIPT-006)", () => {
+  /** O diálogo aberto, como a seção o desenha agora. */
+  const dialog = () => elementsOf(rt.render(() => ScriptsSection())).find((element) => element.type === EditScriptDialog)?.props as unknown as ComponentProps<typeof EditScriptDialog> | undefined;
+
+  it.each([
+    ["o ícone", { icon: ["Escolha um dos ícones da lista."] }, { icon: "Escolha um dos ícones da lista." }],
+    ["a cor", { color: ["Use uma cor no formato #RRGGBB."] }, { color: "Use uma cor no formato #RRGGBB." }],
+  ])("o 422 SCRIPT_ICON_INVALID d%s leva a frase da API ao lugar dele, e não o título genérico", async (_name, errors, shown) => {
+    rt.service.editScriptOrRefuse.mockResolvedValueOnce({ ok: false, error: { code: "SCRIPT_ICON_INVALID", title: "Um ou mais campos são inválidos.", status: 422, detail: null, errors, extensions: {} } });
+
+    act(bound, "edit");
+    dialog()!.onSubmit({ name: "Pedidos", icon: "star", color: "#ABCDEF" });
+    await settle();
+
+    expect(rt.service.editScriptOrRefuse).toHaveBeenCalledWith("s2", { name: "Pedidos", icon: "star", color: "#ABCDEF" });
+    expect(dialog()).toMatchObject({ pending: false, errors: shown });
     expect(rt.toast.success).not.toHaveBeenCalled();
   });
 });

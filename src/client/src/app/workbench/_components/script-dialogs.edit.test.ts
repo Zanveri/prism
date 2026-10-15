@@ -5,6 +5,7 @@ const rt = await vi.hoisted(async () => (await import("@/lib/testing/react-hooks
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 
 import { ColorField } from "@/app/connections/_components/color-field";
+import { FieldError } from "@/components/ui";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { scriptIcons } from "../_lib/saved-scripts";
@@ -77,14 +78,26 @@ describe("o Editar script… (RN-SCRIPT-006)", () => {
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith({ name: "a", icon: "star", color: null });
   });
 
-  it("as recusas ficam no lugar: a do nome no campo, a do ícone ou da cor na cor; enquanto grava, nada se envia de novo", () => {
+  it("as recusas ficam no lugar: a do nome no campo, a do ícone abaixo dos ícones (ligada ao grupo), a da cor na cor; enquanto grava, nada se envia de novo", () => {
     rt.unmount();
     const onSubmit = vi.fn();
-    const { name, color, form } = drawn({ errors: { name: copy.errors.taken, color: "Use uma cor no formato #RRGGBB." }, pending: true, onSubmit });
+    const { all, name, color, form } = drawn({ errors: { name: copy.errors.taken, icon: "Escolha um dos ícones da lista.", color: "Use uma cor no formato #RRGGBB." }, pending: true, onSubmit });
 
     expect(name.props.error).toBe(copy.errors.taken);
     expect(color.props.error).toBe("Use uma cor no formato #RRGGBB.");
+    const iconError = all.find((element) => element.type === FieldError) as Found;
+    expect(iconError.props.children).toBe("Escolha um dos ícones da lista.");
+    const icons = all.find((element) => element.type === "fieldset") as Found;
+    expect(icons.props["aria-describedby"]).toBe(iconError.props.id);
     submit(form, "Outro");
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("sem recusa do ícone, a lista dos ícones não aponta para erro nenhum", () => {
+    rt.unmount();
+    const { all } = drawn();
+
+    expect((all.find((element) => element.type === "fieldset") as Found).props["aria-describedby"]).toBeUndefined();
+    expect(all.find((element) => element.type === FieldError)?.props.children).toBeUndefined();
   });
 });
