@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Features.DuplicateConnection;
@@ -23,6 +24,9 @@ public sealed class DuplicateConnectionHandlerTests
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 13, 9, 0, 0, TimeSpan.Zero));
     private readonly CollectingSink _sink = new();
 
+    /// <summary>As proteções que valem para uma conexão sem nenhuma (RN-PROT-004).</summary>
+    private static readonly EffectiveProtections NoProtections = new(false, null, null, null);
+
     private DuplicateConnectionHandler CreateHandler()
         => new(_connectionRepository.Object, _timeProvider, new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(_sink).CreateLogger());
 
@@ -36,7 +40,7 @@ public sealed class DuplicateConnectionHandlerTests
         var command = new DuplicateConnectionCommand(Guid.CreateVersion7());
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var copy = ConnectionFakers.Create(name: "MES (cópia)", password: "marca-da-senha-do-banco", environmentName: "Produção", environmentColor: "#FF0000", createdAt: now);
-        _connectionRepository.Setup(r => r.Duplicate(command.ID, now, cancellationToken)).ReturnsAsync(Result.Success<Connection, ApiErrorDto>(copy));
+        _connectionRepository.Setup(r => r.Duplicate(command.ID, now, cancellationToken)).ReturnsAsync(Result.Success<(Connection, EffectiveProtections), ApiErrorDto>((copy, NoProtections)));
         var handler = CreateHandler();
 
         //Act
@@ -64,7 +68,7 @@ public sealed class DuplicateConnectionHandlerTests
         var cancellationToken = new CancellationToken();
         var command = new DuplicateConnectionCommand(Guid.CreateVersion7());
         var copy = ConnectionFakers.Create(name: "marca-do-nome", host: "marca-do-host", userName: "marca-do-usuario", password: "marca-da-senha-do-banco");
-        _connectionRepository.Setup(r => r.Duplicate(command.ID, It.IsAny<DateTime>(), cancellationToken)).ReturnsAsync(Result.Success<Connection, ApiErrorDto>(copy));
+        _connectionRepository.Setup(r => r.Duplicate(command.ID, It.IsAny<DateTime>(), cancellationToken)).ReturnsAsync(Result.Success<(Connection, EffectiveProtections), ApiErrorDto>((copy, NoProtections)));
         var handler = CreateHandler();
 
         //Act
@@ -86,7 +90,7 @@ public sealed class DuplicateConnectionHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = new DuplicateConnectionCommand(Guid.CreateVersion7());
-        _connectionRepository.Setup(r => r.Duplicate(command.ID, It.IsAny<DateTime>(), cancellationToken)).ReturnsAsync(Result.Failure<Connection, ApiErrorDto>(ConnectionErrors.NotFound(command.ID)));
+        _connectionRepository.Setup(r => r.Duplicate(command.ID, It.IsAny<DateTime>(), cancellationToken)).ReturnsAsync(Result.Failure<(Connection, EffectiveProtections), ApiErrorDto>(ConnectionErrors.NotFound(command.ID)));
         var handler = CreateHandler();
 
         //Act
@@ -106,7 +110,7 @@ public sealed class DuplicateConnectionHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = new DuplicateConnectionCommand(Guid.CreateVersion7());
-        _connectionRepository.Setup(r => r.Duplicate(command.ID, It.IsAny<DateTime>(), cancellationToken)).ReturnsAsync(Result.Failure<Connection, ApiErrorDto>(VaultErrors.From(EVaultError.Locked)));
+        _connectionRepository.Setup(r => r.Duplicate(command.ID, It.IsAny<DateTime>(), cancellationToken)).ReturnsAsync(Result.Failure<(Connection, EffectiveProtections), ApiErrorDto>(VaultErrors.From(EVaultError.Locked)));
         var handler = CreateHandler();
 
         //Act

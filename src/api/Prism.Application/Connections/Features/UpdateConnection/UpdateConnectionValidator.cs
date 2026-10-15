@@ -1,5 +1,8 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Prism.Application.Common.Environments;
+using Prism.Application.Common.Protections;
+using Prism.Application.Connections.Features.CreateConnection;
 using Prism.Application.Connections.Models;
 
 namespace Prism.Application.Connections.Features.UpdateConnection;
@@ -20,5 +23,15 @@ public sealed class UpdateConnectionValidator : AbstractValidator<UpdateConnecti
         RuleFor(request => request.Password).Must(password => password is null || password.Length > 0).WithMessage("Informe a nova senha do banco, ou deixe em branco para manter a atual.").WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.EnvironmentName).MustBeAnEnvironmentName().WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.EnvironmentColor).MustBeAnEnvironmentColor().WithErrorCode("CONNECTION_INVALID");
+
+        // RN-PROT-001 e RN-VERIF-001: as regras do `CreateConnectionValidator`. A senha do usuário (RN-PROT-003) não é regra daqui: quem diz se ela é
+        // pedida, e a confere, é a gravação.
+        RuleFor(request => request.ConfirmCommands).MustBeAConfirmation().WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.VerificationInterval).Must(ConnectionRules.VerificationIntervalIsValid).WithMessage(CreateConnectionValidator.VerificationIntervalMessage).WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.VerificationQuery).Custom((query, context) =>
+        {
+            if (ConnectionRules.VerificationQueryRefusal(query, context.InstanceToValidate.Engine) is { } refusal)
+                context.AddFailure(new ValidationFailure(nameof(UpdateConnectionCommand.VerificationQuery), refusal) { ErrorCode = "CONNECTION_INVALID" });
+        });
     }
 }

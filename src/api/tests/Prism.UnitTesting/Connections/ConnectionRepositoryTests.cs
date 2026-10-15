@@ -22,15 +22,20 @@ public sealed class ConnectionRepositoryTests
 {
     private readonly Mock<IVaultService> _vault = new();
     private VaultDocument? _saved;
+    private bool _passwordAsked;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord>? folders = null, IReadOnlyList<VaultConnectionRecord>? connections = null)
         => new("marina.costa", folders ?? [], connections ?? [], [], VaultWorkspaceRecord.Empty);
 
     private static VaultConnectionRecord ToRecord(Connection connection)
-        => new(connection.ID, connection.FolderID, connection.Name, connection.Engine, connection.Host, connection.Port, connection.Database, connection.UserName, connection.Password, connection.EnvironmentName, connection.EnvironmentColor, connection.CreatedAt, connection.UpdatedAt);
+        => ConnectionRecords.ToRecord(connection);
 
-    /// <summary>Roda a função do `SaveAsync` contra o documento atual, como o serviço faz, e responde o que o teste mandou (sucesso por padrão).</summary>
-    private ConnectionRepository CreateRepository(VaultDocument current, EVaultError? failure = null)
+    /// <summary>
+    /// Roda a função do `SaveAsync` (e a do `SaveWithPasswordAsync`, a da alteração, RN-PROT-003) contra o documento atual, como o serviço faz, e
+    /// responde o que o teste mandou (sucesso por padrão). Na alteração, `_passwordAsked` diz se a mudança pediu a senha do usuário, pela pergunta
+    /// que o repository entregou, e `check` é o que o serviço responde da conferência quando ela é pedida (conferiu, por padrão).
+    /// </summary>
+    private ConnectionRepository CreateRepository(VaultDocument current, EVaultError? failure = null, EPasswordCheck check = EPasswordCheck.Matched)
     {
         _vault.Setup(v => v.SaveAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), It.IsAny<CancellationToken>()))
             .Returns((Func<VaultDocument, VaultDocument> change, CancellationToken _) =>
@@ -40,12 +45,28 @@ public sealed class ConnectionRepositoryTests
                 return Task.FromResult(failure is null ? UnitResult.Success<EVaultError>() : UnitResult.Failure(failure.Value));
             });
 
+        _vault.Setup(v => v.SaveWithPasswordAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), It.IsAny<Func<VaultDocument, VaultDocument, bool>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns((Func<VaultDocument, VaultDocument> change, Func<VaultDocument, VaultDocument, bool> needsPassword, string? _, CancellationToken _) =>
+            {
+                _saved = change(current);
+                _passwordAsked = !ReferenceEquals(_saved, current) && needsPassword(current, _saved);
+
+                return Task.FromResult(failure is { } error ? Result.Failure<EPasswordCheck, EVaultError>(error) : Result.Success<EPasswordCheck, EVaultError>(_passwordAsked ? check : EPasswordCheck.NotNeeded));
+            });
+
         return new ConnectionRepository(_vault.Object);
     }
 
     private void VerifySavedOnce(CancellationToken cancellationToken)
     {
         _vault.Verify(v => v.SaveAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), cancellationToken), Times.Once);
+        _vault.VerifyNoOtherCalls();
+    }
+
+    /// <summary>A alteração grava pelo `SaveWithPasswordAsync` (RN-PROT-003), com a senha do usuário que veio.</summary>
+    private void VerifySavedWithPasswordOnce(string? userPassword, CancellationToken cancellationToken)
+    {
+        _vault.Verify(v => v.SaveWithPasswordAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), It.IsAny<Func<VaultDocument, VaultDocument, bool>>(), userPassword, cancellationToken), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 
@@ -245,14 +266,14 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(changed, "nova-senha", cancellationToken);
+        var result = await repository.Update(changed, "nova-senha", null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal([before, ToRecord(changed), after], _saved!.Connections);
         Assert.Equal("nova-senha", _saved.Connections[1].Password);
         Assert.Same(current.Folders, _saved.Folders);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     /// <summary>
@@ -272,7 +293,7 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(readEarlier, null, cancellationToken);
+        var result = await repository.Update(readEarlier, null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
@@ -280,7 +301,7 @@ public sealed class ConnectionRepositoryTests
         Assert.Equal("X-gravada-pela-outra-requisicao", saved.Password);
         Assert.Equal("Nova", saved.Name);
         Assert.Equal(readEarlier.Host, saved.Host);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -293,12 +314,12 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(Document(connections: [target]));
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", password: "P0-lida-antes", createdAt: target.CreatedAt), "senha-nova", cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", password: "P0-lida-antes", createdAt: target.CreatedAt), "senha-nova", null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal("senha-nova", Assert.Single(_saved!.Connections).Password);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -312,12 +333,12 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "PRODUÇÃO", host: target.Host, port: target.Port), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "PRODUÇÃO", host: target.Host, port: target.Port), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal("PRODUÇÃO", Assert.Single(_saved!.Connections).Name);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     /// <summary>
@@ -335,7 +356,7 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", host: "outro.local", port: target.Port, createdAt: target.CreatedAt), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", host: "outro.local", port: target.Port, createdAt: target.CreatedAt), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
@@ -343,7 +364,7 @@ public sealed class ConnectionRepositoryTests
         Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
         Assert.Equal("Ao mudar o host ou a porta, informe a senha da conexão de novo.", result.Error.Detail);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -358,13 +379,13 @@ public sealed class ConnectionRepositoryTests
         var otherPort = target.Port == 5432 ? 5433 : 5432;
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", host: target.Host, port: otherPort, createdAt: target.CreatedAt), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", host: target.Host, port: otherPort, createdAt: target.CreatedAt), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("CONNECTION_INVALID", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -377,7 +398,7 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(Document(connections: [target]));
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Antiga", host: "outro.local", port: target.Port + 1, createdAt: target.CreatedAt), "senha-do-outro-servidor", cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Antiga", host: "outro.local", port: target.Port + 1, createdAt: target.CreatedAt), "senha-do-outro-servidor", null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
@@ -385,7 +406,7 @@ public sealed class ConnectionRepositoryTests
         Assert.Equal("outro.local", saved.Host);
         Assert.Equal(target.Port + 1, saved.Port);
         Assert.Equal("senha-do-outro-servidor", saved.Password);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     /// <summary>
@@ -403,13 +424,13 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", host: "PG.LOCAL", port: target.Port, createdAt: target.CreatedAt), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Nova", host: "PG.LOCAL", port: target.Port, createdAt: target.CreatedAt), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("CONNECTION_INVALID", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     /// <summary>O servidor que a senha prende é host e porta: mudar só o banco (`engine`) mantém a senha gravada, que continua indo ao mesmo servidor.</summary>
@@ -423,14 +444,14 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(Document(connections: [target]));
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Antiga", engine: EDatabaseEngine.Db2, host: "pg.local", port: target.Port, createdAt: target.CreatedAt), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "Antiga", engine: EDatabaseEngine.Db2, host: "pg.local", port: target.Port, createdAt: target.CreatedAt), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         var saved = Assert.Single(_saved!.Connections);
         Assert.Equal(EDatabaseEngine.Db2, saved.Engine);
         Assert.Equal("senha-gravada", saved.Password);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -444,14 +465,14 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(connection, null, cancellationToken);
+        var result = await repository.Update(connection, null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("CONNECTION_NOT_FOUND", result.Error.Type);
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -465,14 +486,14 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: Guid.CreateVersion7()), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: Guid.CreateVersion7()), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("FOLDER_NOT_FOUND", result.Error.Type);
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -487,14 +508,14 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "produção"), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: null, name: "produção"), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("CONNECTION_ALREADY_EXISTS", result.Error.Type);
         Assert.Equal(HttpStatusCode.Conflict, result.Error.StatusCode);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -509,13 +530,13 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: folder.ID, name: "Produção"), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: folder.ID, name: "Produção"), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("CONNECTION_ALREADY_EXISTS", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Update")]
@@ -528,13 +549,13 @@ public sealed class ConnectionRepositoryTests
         var repository = CreateRepository(Document(connections: [target]), EVaultError.Locked);
 
         //Act
-        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, host: target.Host, port: target.Port), null, cancellationToken);
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, host: target.Host, port: target.Port), null, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("VAULT_LOCKED", result.Error.Type);
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("ConnectionRepository", "Delete")]
@@ -630,7 +651,7 @@ public sealed class ConnectionRepositoryTests
         Assert.NotEqual(source.ID, copy.ID);
         Assert.Equal(source with { ID = copy.ID, Name = "MES (cópia)", CreatedAt = createdAt, UpdatedAt = createdAt }, copy);
         Assert.Equal("segredo-do-banco", copy.Password);
-        Assert.Equal(ToRecord(result.Value), copy);
+        Assert.Equal(ToRecord(result.Value.Copy), copy);
         Assert.Same(current.Folders, _saved.Folders);
         Assert.Same(current.Scripts, _saved.Scripts);
         VerifySavedOnce(cancellationToken);
@@ -650,8 +671,8 @@ public sealed class ConnectionRepositoryTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        Assert.Null(result.Value.FolderID);
-        Assert.Equal("Local (cópia)", result.Value.Name);
+        Assert.Null(result.Value.Copy.FolderID);
+        Assert.Equal("Local (cópia)", result.Value.Copy.Name);
         Assert.Null(_saved!.Connections[1].FolderID);
     }
 
@@ -676,8 +697,8 @@ public sealed class ConnectionRepositoryTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("MES (cópia 2)", result.Value.Name);
-        Assert.Equal(folder.ID, result.Value.FolderID);
+        Assert.Equal("MES (cópia 2)", result.Value.Copy.Name);
+        Assert.Equal(folder.ID, result.Value.Copy.FolderID);
         Assert.Equal("MES (cópia 2)", _saved!.Connections[^1].Name);
     }
 

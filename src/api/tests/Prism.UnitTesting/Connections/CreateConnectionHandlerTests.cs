@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Features.CreateConnection;
@@ -20,6 +21,9 @@ public sealed class CreateConnectionHandlerTests
     private readonly Mock<IConnectionRepository> _connectionRepository = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero));
 
+    /// <summary>As proteções que valem para uma conexão sem nenhuma, a dela e as das pastas acima (RN-PROT-004).</summary>
+    private static readonly EffectiveProtections NoProtections = new(false, null, null, null);
+
     [Trait("CreateConnectionHandler", "CreateConnectionCommand")]
     [Fact(DisplayName = "OK grava a conexão normalizada, com a senha, e responde sem ela")]
     public async Task Handle_ShouldBeOK()
@@ -29,7 +33,7 @@ public sealed class CreateConnectionHandlerTests
         var folderID = Guid.CreateVersion7();
         var command = ConnectionFakers.ReturnCreateConnectionCommandValid(folderID: folderID, name: "  Produção   Sul ", engine: EDatabaseEngine.Informix, host: " ifx.local ", port: 9089, password: "segredo", environmentName: "Produção", environmentColor: "#FF0000");
         Connection? inserted = null;
-        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).Callback<Connection, CancellationToken>((connection, _) => inserted = connection).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).Callback<Connection, CancellationToken>((connection, _) => inserted = connection).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(NoProtections));
         var handler = new CreateConnectionHandler(_connectionRepository.Object, _timeProvider);
 
         //Act
@@ -64,7 +68,7 @@ public sealed class CreateConnectionHandlerTests
         var cancellationToken = new CancellationToken();
         var folderID = Guid.CreateVersion7();
         var command = ConnectionFakers.ReturnCreateConnectionCommandValid(folderID: folderID);
-        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(FolderErrors.NotFound(folderID)));
+        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(FolderErrors.NotFound(folderID)));
         var handler = new CreateConnectionHandler(_connectionRepository.Object, _timeProvider);
 
         //Act
@@ -85,7 +89,7 @@ public sealed class CreateConnectionHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = ConnectionFakers.ReturnCreateConnectionCommandValid();
-        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(ConnectionErrors.AlreadyExists(command.Name)));
+        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(ConnectionErrors.AlreadyExists(command.Name)));
         var handler = new CreateConnectionHandler(_connectionRepository.Object, _timeProvider);
 
         //Act
@@ -106,7 +110,7 @@ public sealed class CreateConnectionHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = ConnectionFakers.ReturnCreateConnectionCommandValid();
-        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(VaultErrors.From(EVaultError.Locked)));
+        _connectionRepository.Setup(r => r.Insert(It.IsAny<Connection>(), cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(VaultErrors.From(EVaultError.Locked)));
         var handler = new CreateConnectionHandler(_connectionRepository.Object, _timeProvider);
 
         //Act

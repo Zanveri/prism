@@ -1,5 +1,7 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Prism.Application.Common.Environments;
+using Prism.Application.Common.Protections;
 using Prism.Application.Connections.Models;
 
 namespace Prism.Application.Connections.Features.CreateConnection;
@@ -21,5 +23,18 @@ public sealed class CreateConnectionValidator : AbstractValidator<CreateConnecti
         RuleFor(request => request.Password).Must(password => !string.IsNullOrEmpty(password)).WithMessage("Informe a senha do banco.").WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.EnvironmentName).MustBeAnEnvironmentName().WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.EnvironmentColor).MustBeAnEnvironmentColor().WithErrorCode("CONNECTION_INVALID");
+
+        // RN-PROT-001 e RN-VERIF-001: as regras do `UpdateConnectionValidator`, no mesmo código. A consulta de verificação é uma leitura só no banco
+        // escolhido (RN-PROT-005), com o motivo da recusa no campo.
+        RuleFor(request => request.ConfirmCommands).MustBeAConfirmation().WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.VerificationInterval).Must(ConnectionRules.VerificationIntervalIsValid).WithMessage(VerificationIntervalMessage).WithErrorCode("CONNECTION_INVALID");
+        RuleFor(request => request.VerificationQuery).Custom((query, context) =>
+        {
+            if (ConnectionRules.VerificationQueryRefusal(query, context.InstanceToValidate.Engine) is { } refusal)
+                context.AddFailure(new ValidationFailure(nameof(CreateConnectionCommand.VerificationQuery), refusal) { ErrorCode = "CONNECTION_INVALID" });
+        });
     }
+
+    /// <summary>RN-VERIF-001: a mensagem do intervalo fora da faixa, a mesma na criação, na alteração e no teste.</summary>
+    internal const string VerificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3.600 segundos.";
 }

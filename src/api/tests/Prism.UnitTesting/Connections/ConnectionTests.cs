@@ -17,7 +17,7 @@ public sealed class ConnectionTests
         var folderID = Guid.CreateVersion7();
 
         //Act
-        var connection = Connection.Create(folderID, "  Produção   Sul ", EDatabaseEngine.Db2, "  db2.local ", 50000, " PRODUCAO ", " operador ", " senha com espaço ", "  Produção  ", " #A1b2C3 ", CreatedAt);
+        var connection = Connection.Create(folderID, "  Produção   Sul ", EDatabaseEngine.Db2, "  db2.local ", 50000, " PRODUCAO ", " operador ", " senha com espaço ", "  Produção  ", " #A1b2C3 ", new ConnectionSafeguards(), CreatedAt);
 
         //Assert
         Assert.NotEqual(Guid.Empty, connection.ID);
@@ -40,7 +40,7 @@ public sealed class ConnectionTests
     public void Create_ShouldStoreTheNameComposed()
     {
         //Act
-        var connection = Connection.Create(null, "Fábrica", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, CreatedAt);
+        var connection = Connection.Create(null, "Fábrica", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, new ConnectionSafeguards(), CreatedAt);
 
         //Assert
         Assert.Equal("Fábrica", connection.Name);
@@ -51,7 +51,7 @@ public sealed class ConnectionTests
     public void Create_ShouldTurnBlankEnvironmentIntoNull()
     {
         //Act
-        var connection = Connection.Create(null, "Produção", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", "   ", "  ", CreatedAt);
+        var connection = Connection.Create(null, "Produção", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", "   ", "  ", new ConnectionSafeguards(), CreatedAt);
 
         //Assert
         Assert.Null(connection.FolderID);
@@ -67,7 +67,7 @@ public sealed class ConnectionTests
         var id = Guid.CreateVersion7();
 
         //Act
-        var connection = Connection.Restore(id, null, "  Nome  ", EDatabaseEngine.Informix, " host ", 9089, "d", "u", "p", "Prod", "#000000", CreatedAt, UpdatedAt);
+        var connection = Connection.Restore(id, null, "  Nome  ", EDatabaseEngine.Informix, " host ", 9089, "d", "u", "p", "Prod", "#000000", new ConnectionSafeguards(), CreatedAt, UpdatedAt);
 
         //Assert
         Assert.Equal(id, connection.ID);
@@ -87,7 +87,7 @@ public sealed class ConnectionTests
         var folderID = Guid.CreateVersion7();
 
         //Act
-        connection.Update(folderID, "  Novo   Nome ", EDatabaseEngine.Informix, " novo-host ", 9089, " novo_db ", " novo_usuario ", "nova-senha", " Homologação ", "#112233", UpdatedAt);
+        connection.Update(folderID, "  Novo   Nome ", EDatabaseEngine.Informix, " novo-host ", 9089, " novo_db ", " novo_usuario ", "nova-senha", " Homologação ", "#112233", new ConnectionSafeguards(), UpdatedAt);
 
         //Assert
         Assert.Equal(id, connection.ID);
@@ -114,7 +114,7 @@ public sealed class ConnectionTests
         var connection = ConnectionFakers.Create(password: "senha-gravada");
 
         //Act
-        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, UpdatedAt);
+        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, new ConnectionSafeguards(), UpdatedAt);
 
         //Assert
         Assert.Equal("senha-gravada", connection.Password);
@@ -128,7 +128,7 @@ public sealed class ConnectionTests
         var connection = ConnectionFakers.Create(environmentName: "Produção", environmentColor: "#FF0000");
 
         //Act
-        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, UpdatedAt);
+        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, new ConnectionSafeguards(), UpdatedAt);
 
         //Assert
         Assert.Null(connection.EnvironmentName);
@@ -142,7 +142,7 @@ public sealed class ConnectionTests
     {
         //Arrange
         var folderID = Guid.CreateVersion7();
-        var source = Connection.Restore(Guid.CreateVersion7(), folderID, "MES", EDatabaseEngine.Informix, "ifx.local", 9089, "mes", "informix", "segredo", "Produção", "#FF0000", CreatedAt, UpdatedAt);
+        var source = Connection.Restore(Guid.CreateVersion7(), folderID, "MES", EDatabaseEngine.Informix, "ifx.local", 9089, "mes", "informix", "segredo", "Produção", "#FF0000", new ConnectionSafeguards(), CreatedAt, UpdatedAt);
         var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
 
         //Act

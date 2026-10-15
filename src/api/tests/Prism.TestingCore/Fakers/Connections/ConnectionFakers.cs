@@ -16,20 +16,21 @@ namespace Prism.TestingCore.Fakers.Connections;
 public static class ConnectionFakers
 {
     /// <summary>O domínio só nasce por `Create` (ID novo, criada agora); o teste que precisa dele como o cofre o devolve usa o `Restore`.</summary>
-    internal static Connection Create(Guid? iD = null, Guid? folderID = null, string? name = null, EDatabaseEngine? engine = null, string? host = null, int? port = null, string? database = null, string? userName = null, string? password = null, string? environmentName = null, string? environmentColor = null, DateTime? createdAt = null, DateTime? updatedAt = null)
+    /// <remarks>Sem `safeguards`, as proteções e a verificação do padrão (RN-PROT-001 e 002, RN-VERIF-001).</remarks>
+    internal static Connection Create(Guid? iD = null, Guid? folderID = null, string? name = null, EDatabaseEngine? engine = null, string? host = null, int? port = null, string? database = null, string? userName = null, string? password = null, string? environmentName = null, string? environmentColor = null, DateTime? createdAt = null, DateTime? updatedAt = null, ConnectionSafeguards? safeguards = null)
     {
         var faker = new Faker("pt_BR");
         var created = createdAt ?? faker.Date.Recent().ToUniversalTime();
 
-        return Connection.Restore(iD ?? Guid.CreateVersion7(), folderID, name ?? RandomName(), engine ?? faker.Random.Enum<EDatabaseEngine>(), host ?? RandomHost(), port ?? RandomPort(), database ?? RandomDatabase(), userName ?? RandomUserName(), password ?? RandomPassword(), environmentName, environmentColor, created, updatedAt ?? created);
+        return Connection.Restore(iD ?? Guid.CreateVersion7(), folderID, name ?? RandomName(), engine ?? faker.Random.Enum<EDatabaseEngine>(), host ?? RandomHost(), port ?? RandomPort(), database ?? RandomDatabase(), userName ?? RandomUserName(), password ?? RandomPassword(), environmentName, environmentColor, safeguards ?? new ConnectionSafeguards(), created, updatedAt ?? created);
     }
 
     public static CreateConnectionCommand ReturnCreateConnectionCommandValid(Guid? folderID = null, string? name = null, EDatabaseEngine? engine = null, string? host = null, int? port = null, string? database = null, string? userName = null, string? password = null, string? environmentName = null, string? environmentColor = null)
         => new() { FolderID = folderID, Name = name ?? RandomName(), Engine = engine ?? new Faker().Random.Enum<EDatabaseEngine>(), Host = host ?? RandomHost(), Port = port ?? RandomPort(), Database = database ?? RandomDatabase(), UserName = userName ?? RandomUserName(), Password = password ?? RandomPassword(), EnvironmentName = environmentName, EnvironmentColor = environmentColor };
 
     /// <summary>`password` nulo é o que o `PATCH` manda para manter a senha gravada (RN-CONN-004).</summary>
-    public static UpdateConnectionCommand ReturnUpdateConnectionCommandValid(Guid? iD = null, Guid? folderID = null, string? name = null, EDatabaseEngine? engine = null, string? host = null, int? port = null, string? database = null, string? userName = null, string? password = null, string? environmentName = null, string? environmentColor = null)
-        => new() { ID = iD ?? Guid.CreateVersion7(), FolderID = folderID, Name = name ?? RandomName(), Engine = engine ?? new Faker().Random.Enum<EDatabaseEngine>(), Host = host ?? RandomHost(), Port = port ?? RandomPort(), Database = database ?? RandomDatabase(), UserName = userName ?? RandomUserName(), Password = password, EnvironmentName = environmentName, EnvironmentColor = environmentColor };
+    public static UpdateConnectionCommand ReturnUpdateConnectionCommandValid(Guid? iD = null, Guid? folderID = null, string? name = null, EDatabaseEngine? engine = null, string? host = null, int? port = null, string? database = null, string? userName = null, string? password = null, string? environmentName = null, string? environmentColor = null, string? userPassword = null)
+        => new() { ID = iD ?? Guid.CreateVersion7(), FolderID = folderID, Name = name ?? RandomName(), Engine = engine ?? new Faker().Random.Enum<EDatabaseEngine>(), Host = host ?? RandomHost(), Port = port ?? RandomPort(), Database = database ?? RandomDatabase(), UserName = userName ?? RandomUserName(), Password = password, EnvironmentName = environmentName, EnvironmentColor = environmentColor, UserPassword = userPassword };
 
     public static RevealConnectionPasswordCommand ReturnRevealConnectionPasswordCommandValid(Guid? iD = null, string? password = null)
         => new() { ID = iD ?? Guid.CreateVersion7(), Password = password ?? RandomPassword() };

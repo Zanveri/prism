@@ -15,6 +15,10 @@ namespace Prism.Application.Connections.Features.UpdateConnection;
 /// O `PATCH` grava todos os campos: `FolderID` nulo move a conexão para a raiz, e quem não muda a pasta manda a que ela
 /// já tem. A senha é a exceção (RN-CONN-004): `Password` ausente ou nula mantém a gravada, e enviada troca. Sem ela, host e porta não
 /// podem mudar (422 `CONNECTION_INVALID`, decidido pelo repository dentro da gravação): a senha gravada só vai ao servidor para o qual foi gravada.
+///
+/// As proteções (RN-PROT-001 e 002) e a verificação (RN-VERIF-001) também são gravadas por inteiro, como o ambiente: o ausente volta ao padrão.
+/// `UserPassword` é a senha do usuário do Prism, que só a mudança do somente leitura pede (RN-PROT-003: marcar, desmarcar, ou tirar a conexão de uma
+/// pasta somente leitura); quem decide se ela é pedida é a gravação, contra o documento mais recente.
 /// </summary>
 public sealed record UpdateConnectionCommand : IRequest<Result<ConnectionDto, ApiErrorDto>>
 {
@@ -30,7 +34,21 @@ public sealed record UpdateConnectionCommand : IRequest<Result<ConnectionDto, Ap
     public string? EnvironmentName { get; init; }
     public string? EnvironmentColor { get; init; }
 
-    /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e esta pode ser a senha nova do banco (e o host e o usuário vão junto).</summary>
+    /// <summary>RN-PROT-001: `none`, `irreversible` ou `all`; ausente, nulo ou vazio é `none`.</summary>
+    public string? ConfirmCommands { get; init; }
+
+    /// <summary>RN-PROT-002: ausente é falso.</summary>
+    public bool ReadOnly { get; init; }
+
+    /// <summary>RN-VERIF-001: ausente ou nulo, ligada, a cada 30 segundos, com a consulta do banco.</summary>
+    public bool? VerificationEnabled { get; init; }
+    public int? VerificationInterval { get; init; }
+    public string? VerificationQuery { get; init; }
+
+    /// <summary>RN-PROT-003: a senha do usuário do Prism, e não a do banco.</summary>
+    public string? UserPassword { get; init; }
+
+    /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e esta pode ser a senha nova do banco (e o host e o usuário vão junto), e a do usuário.</summary>
     public override string ToString() => nameof(UpdateConnectionCommand);
 }
 
@@ -48,14 +66,16 @@ internal sealed class UpdateConnectionHandler(IConnectionQueries connectionQueri
         if (read.Value is not { } record)
             return Result.Failure<ConnectionDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ID));
 
-        var connection = Connection.Restore(record.ID, record.FolderID, record.Name, record.Engine, record.Host, record.Port, record.Database, record.UserName, record.Password, record.EnvironmentName, record.EnvironmentColor, record.CreatedAt, record.UpdatedAt);
-        connection.Update(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, timeProvider.GetUtcNow().UtcDateTime);
+        var connection = ConnectionRecords.ToDomain(record);
+        var safeguards = ConnectionSafeguards.From(request.ConfirmCommands, request.ReadOnly, request.VerificationEnabled, request.VerificationInterval, request.VerificationQuery);
+        connection.Update(request.FolderID, request.Name, request.Engine, request.Host, request.Port, request.Database, request.UserName, request.Password, request.EnvironmentName, request.EnvironmentColor, safeguards, timeProvider.GetUtcNow().UtcDateTime);
 
-        // A senha vai à parte: omitida (nula) mantém a do documento na hora da gravação, e não a que esta leitura trouxe (RN-CONN-004).
-        var updated = await connectionRepository.Update(connection, request.Password, cancellationToken);
+        // A senha vai à parte: omitida (nula) mantém a do documento na hora da gravação, e não a que esta leitura trouxe (RN-CONN-004). A do usuário
+        // também: a gravação a confere só se a mudança do somente leitura a pede (RN-PROT-003).
+        var updated = await connectionRepository.Update(connection, request.Password, request.UserPassword, cancellationToken);
         if (updated.IsFailure)
             return Result.Failure<ConnectionDto, ApiErrorDto>(updated.Error);
 
-        return Result.Success<ConnectionDto, ApiErrorDto>(connection.ToDto());
+        return Result.Success<ConnectionDto, ApiErrorDto>(connection.ToDto(updated.Value));
     }
 }

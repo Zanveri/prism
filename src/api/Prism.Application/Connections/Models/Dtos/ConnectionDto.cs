@@ -1,3 +1,4 @@
+using Prism.Application.Common.Protections;
 using Prism.Infrastructure.Databases.Models;
 
 namespace Prism.Application.Connections.Models.Dtos;
@@ -18,6 +19,22 @@ public sealed record ConnectionDto
     public bool HasPassword { get; init; }
     public string? EnvironmentName { get; init; }
     public string? EnvironmentColor { get; init; }
+
+    /// <summary>RN-PROT-001: a confirmação própria da conexão, `irreversible` ou `all`; nula é "Não".</summary>
+    public string? ConfirmCommands { get; init; }
+
+    /// <summary>RN-PROT-002: o somente leitura próprio da conexão. O que vale, com o das pastas acima, está em `Protections`.</summary>
+    public bool ReadOnly { get; init; }
+
+    /// <summary>RN-VERIF-001: a verificação periódica, ligada por padrão, a cada `VerificationInterval` segundos (30 por padrão).</summary>
+    public bool VerificationEnabled { get; init; }
+    public int VerificationInterval { get; init; }
+
+    /// <summary>RN-VERIF-001: a consulta de verificação própria; nula é a do banco (RN-CONN-013).</summary>
+    public string? VerificationQuery { get; init; }
+
+    /// <summary>RN-PROT-004: as proteções que valem, a própria e as das pastas acima, e de onde cada uma vem.</summary>
+    public ProtectionsDto Protections { get; init; } = new();
     public DateTime CreatedAt { get; init; }
     public DateTime UpdatedAt { get; init; }
 }

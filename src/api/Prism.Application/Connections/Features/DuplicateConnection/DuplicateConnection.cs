@@ -22,10 +22,12 @@ internal sealed class DuplicateConnectionHandler(IConnectionRepository connectio
         if (duplicated.IsFailure)
             return Result.Failure<ConnectionDto, ApiErrorDto>(duplicated.Error);
 
-        // RN-LOG-001: os IDs, e nada da conexão (nome, host, usuário e senha ficam fora do log).
-        _logger.Information("Conexão {ConnectionID} duplicada; a cópia é a conexão {CopyID}.", request.ID, duplicated.Value.ID);
+        var (copy, protections) = duplicated.Value;
 
-        // RN-CONN-001: a resposta é a do detalhe, sem a senha.
-        return Result.Success<ConnectionDto, ApiErrorDto>(duplicated.Value.ToDto());
+        // RN-LOG-001: os IDs, e nada da conexão (nome, host, usuário e senha ficam fora do log).
+        _logger.Information("Conexão {ConnectionID} duplicada; a cópia é a conexão {CopyID}.", request.ID, copy.ID);
+
+        // RN-CONN-001: a resposta é a do detalhe, sem a senha, e com as proteções que valem (RN-PROT-004).
+        return Result.Success<ConnectionDto, ApiErrorDto>(copy.ToDto(protections));
     }
 }
