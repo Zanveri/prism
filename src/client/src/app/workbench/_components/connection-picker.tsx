@@ -12,7 +12,7 @@ import { controlClassName } from "@/components/ui/field";
 import { cn } from "@/lib/utils/cn";
 
 import { connectionReveal } from "../_lib/connection-intent";
-import { choiceKeyTarget, connectionChoices, connectionShortcutLabel, type ConnectionChoice } from "../_lib/tab-connection";
+import { choiceKeyTarget, connectionChoices, connectionShortcut, connectionShortcutLabel, type ConnectionChoice } from "../_lib/tab-connection";
 import { useConnectedIds } from "../_lib/use-connected-ids";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -287,8 +287,8 @@ type ConnectionPickerProps = {
 /**
  * RN-ARVORE-008: o botão da conexão da aba de consulta, na barra do editor, antes do banco, e a lista que a troca. A lista vai num portal `position: fixed`
  * em `document.body`, como a do `Select`, para o `overflow-hidden` de um painel não a recortar. O teclado dela não sobe à aba (o F5, o Ctrl+S e o Ctrl+W
- * da aba não valem enquanto se digita a busca), e ela fecha com Esc, com a escolha, com o clique fora e com o foco que sai dela. O foco volta a quem o tinha
- * antes de abrir (o botão, ou o editor no Ctrl+9), na hora e antes da troca (`focusBack`).
+ * da aba não valem enquanto se digita a busca), e ela fecha com Esc, com o Ctrl+9 (que a abriu), com a escolha, com o clique fora e com o foco que sai dela.
+ * O foco volta a quem o tinha antes de abrir (o botão, ou o editor no Ctrl+9), na hora e antes da troca (`focusBack`).
  */
 export function ConnectionPicker({ connectionId, busy, open, onOpenChange, onChoose }: ConnectionPickerProps) {
   const panelId = useId();
@@ -365,8 +365,14 @@ export function ConnectionPicker({ connectionId, busy, open, onOpenChange, onCho
               role="dialog"
               aria-label={copy.list}
               style={{ position: "fixed", ...position }}
-              // O teclado da lista é dela: o Ctrl+W, o F5 e o Ctrl+S da aba não valem enquanto se digita a busca (o portal sobe pela árvore do React).
-              onKeyDown={(event) => event.stopPropagation()}
+              // O teclado da lista é dela: o Ctrl+W, o F5 e o Ctrl+S da aba não valem enquanto se digita a busca (o portal sobe pela árvore do React). Por isso
+              // o Ctrl+9, que abre a lista pela aba, é tratado aqui também: com o foco nela (a busca, "Mostrar no navegador"), ele a fecha e devolve o foco.
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.defaultPrevented || !connectionShortcut(event)) return;
+                event.preventDefault();
+                close(true);
+              }}
               onBlur={(event) => {
                 const next = event.relatedTarget as Node | null;
                 if (next !== null && !panel.current?.contains(next) && !button.current?.contains(next)) onOpenChange(false);

@@ -215,7 +215,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       if (!isPersonBusy(runner.getState())) handleRerun();
       return;
     }
-    // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre (ou fecha) a lista das conexões desta aba.
+    // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre a lista das conexões desta aba, e fecha com o foco no botão dela. Com o foco dentro da lista (a busca),
+    // o teclado não sobe até aqui, e quem a fecha pelo mesmo atalho é ela.
     if (!event.defaultPrevented && connectionShortcut(event)) {
       event.preventDefault();
       setPickingConnection((open) => !open);

@@ -937,9 +937,10 @@ aparece, seção 9), e deixa trocá-la.
   ouve o ambiente): "IFX ERP Informix Produção, conexão desta aba", "Sem conexão, escolher a conexão desta aba"; com `aria-haspopup="dialog"` e
   `aria-keyshortcuts`. Na aba sem conexão, "Sem conexão" com o ícone da tomada. Ele lê só as consultas das conexões e das pastas: montado em cada aba de
   consulta, não redesenha a cada mudança das abas.
-- **A lista** abre pelo clique ou por **Ctrl+9** (Cmd+9 no macOS; `connectionShortcut`, pela tecla `Digit9`, tratado no painel da aba como o Ctrl+S: abre e
-  fecha). Vai num portal `position: fixed` em `document.body`, como a do `Select` (`role="dialog"`), com 400 px de largura, presa à janela, e abre para cima
-  quando não cabe embaixo. A posição nasce nula a cada abertura, e só por isso o efeito que guarda quem tinha o foco (o botão, ou o editor no Ctrl+9) roda
+- **A lista** abre pelo clique ou por **Ctrl+9** (Cmd+9 no macOS; `connectionShortcut`, pela tecla `Digit9`: abre e fecha). Quem abre é o painel da aba,
+  como o Ctrl+S; aberta, o foco está nela e o teclado dela não sobe à aba, então o segundo Ctrl+9 é tratado no `onKeyDown` da própria lista, que fecha e
+  devolve o foco como o Esc (com o foco no botão, que fica na aba, o painel da aba fecha). Vai num portal `position: fixed` em `document.body`, como a do
+  `Select` (`role="dialog"`), com 400 px de largura, presa à janela, e abre para cima quando não cabe embaixo. A posição nasce nula a cada abertura, e só por isso o efeito que guarda quem tinha o foco (o botão, ou o editor no Ctrl+9) roda
   antes de o campo de busca existir e pegar o foco. O campo é o combobox da lista (`ConnectionListView`, testado sem DOM): as setas marcam (`choiceKeyTarget`,
   sem dar a volta), Enter escolhe, Esc fecha e devolve o foco; o clique fora fecha sem mexer no foco, e o foco que sai da lista também fecha. O teclado da
   lista não sobe à aba (`stopPropagation` no painel): o F5, o Ctrl+S e o Ctrl+W da aba não valem enquanto se digita a busca. O clique numa opção não tira o

@@ -96,6 +96,43 @@ describe("ConnectionPicker: o foco volta na hora a quem o tinha ao abrir a lista
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it("o segundo Ctrl+9 vem de dentro da lista (a busca tem o foco, e o teclado dela não sobe à aba): ela fecha e devolve o foco ao editor", () => {
+    const props = { connectionId: "c1", busy: false, open: true, onOpenChange: vi.fn(), onChoose: vi.fn() };
+    openFromEditor(props);
+    const dialog = elementsOf(rt.render(() => ConnectionPicker(props))).find((element) => element.props.role === "dialog");
+    const keyDown = dialog!.props.onKeyDown as (event: unknown) => void;
+    const press = (over: object = {}) => ({ key: "9", code: "Digit9", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, defaultPrevented: false, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...over });
+
+    // Outras teclas ficam na lista e não fecham nada.
+    const other = press({ key: "a", code: "KeyA", ctrlKey: false });
+    keyDown(other);
+    expect(other.stopPropagation).toHaveBeenCalled();
+    expect(other.preventDefault).not.toHaveBeenCalled();
+    expect(props.onOpenChange).not.toHaveBeenCalled();
+
+    const ctrl9 = press();
+    keyDown(ctrl9);
+
+    expect(ctrl9.stopPropagation).toHaveBeenCalled();
+    expect(ctrl9.preventDefault).toHaveBeenCalled();
+    expect(page.activeElement).toBe(editor);
+    expect(props.onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it("o Cmd+9 do macOS também fecha a lista por dentro; com Shift, não", () => {
+    const props = { connectionId: "c1", busy: false, open: true, onOpenChange: vi.fn(), onChoose: vi.fn() };
+    openFromEditor(props);
+    const dialog = elementsOf(rt.render(() => ConnectionPicker(props))).find((element) => element.props.role === "dialog");
+    const keyDown = dialog!.props.onKeyDown as (event: unknown) => void;
+    const press = (over: object) => ({ key: "9", code: "Digit9", ctrlKey: false, metaKey: true, altKey: false, shiftKey: false, defaultPrevented: false, preventDefault: vi.fn(), stopPropagation: vi.fn(), ...over });
+
+    keyDown(press({ shiftKey: true }));
+    expect(props.onOpenChange).not.toHaveBeenCalled();
+
+    keyDown(press({}));
+    expect(props.onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
   it("\"Mostrar no navegador\" fecha sem devolver o foco: ele vai à linha da conexão na árvore", () => {
     const props = { connectionId: "c1", busy: false, open: true, onOpenChange: vi.fn(), onChoose: vi.fn() };
     const panel = openFromEditor(props);

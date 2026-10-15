@@ -598,7 +598,7 @@ describe("QueryTabPanel: a conexão da aba na barra do editor (RN-ARVORE-008)", 
     expect(mount(fakeRunner({ status: "idle" }), { connectionId: null }).show().connection).toMatchObject({ connectionId: null });
   });
 
-  it("Ctrl+9 (ou Cmd+9) com o foco em qualquer ponto da aba abre a lista, e de novo a fecha; com Shift, ou já tratado, não", () => {
+  it("Ctrl+9 (ou Cmd+9) com o foco em qualquer ponto da aba abre a lista, e de novo, de dentro dela, a fecha; com Shift, ou já tratado, não", () => {
     const view = mount(fakeRunner(rowsState()));
 
     const event = ctrl9();
@@ -606,7 +606,15 @@ describe("QueryTabPanel: a conexão da aba na barra do editor (RN-ARVORE-008)", 
     expect(event.preventDefault).toHaveBeenCalled();
     expect(view.show().connection?.open).toBe(true);
 
+    // Aberta, o foco está na busca da lista, e o teclado dela não sobe à aba: o segundo Ctrl+9 é tratado nela, que fecha pelo `onOpenChange` que recebeu
+    // (a tecla dentro da lista é de `connection-picker.focus.test.ts`).
+    view.show().connection!.onOpenChange(false);
+    expect(view.show().connection?.open).toBe(false);
+
     view.show().keys(ctrl9({ ctrlKey: false, metaKey: true }));
+    expect(view.show().connection?.open).toBe(true);
+    // Com o foco no botão da conexão (que fica na aba), a tecla chega aqui e fecha.
+    view.show().keys(ctrl9());
     expect(view.show().connection?.open).toBe(false);
 
     view.show().keys(ctrl9({ shiftKey: true }));
