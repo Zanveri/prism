@@ -154,7 +154,8 @@ export const workbenchCopy = {
     label: "Resultado da consulta",
     title: "Resultado",
     empty: "Nenhum comando executado nesta aba.",
-    emptyHint: "Ctrl+Enter executa o texto selecionado ou, sem seleção, o comando onde está o cursor.",
+    // RN-SQL-001 e 019: os dois jeitos de executar; `script` é o atalho do script na plataforma (Alt+X, ou Cmd+Option+X no macOS).
+    emptyHint: (script: string) => `Ctrl+Enter executa o texto selecionado ou, sem seleção, o comando onde está o cursor. ${script} executa os comandos da seleção ou do texto inteiro, um depois do outro.`,
     running: "Executando…",
     grid: "Linhas do resultado",
     rowNumber: "#",
@@ -165,8 +166,9 @@ export const workbenchCopy = {
     // RN-SQL-013: o comando gravou, foi até o fim e devolveu `total` linhas; a tela recebeu as primeiras.
     returnedRows: (received: number, total: number, elapsedMs: number) =>
       `${received < total ? `${received.toLocaleString("pt-BR")} de ` : ""}${formatCount(total, "linha devolvida", "linhas devolvidas")} · comando concluído · ${formatElapsed(elapsedMs)}`,
-    // RN-SQL-001: uma execução leva um comando só.
-    tooManyStatements: (count: number) => `A seleção tem ${count.toLocaleString("pt-BR")} comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele.`,
+    // RN-SQL-001: uma execução leva um comando só; quem executa vários é o script (RN-SQL-019).
+    tooManyStatements: (count: number, script: string) =>
+      `A seleção tem ${count.toLocaleString("pt-BR")} comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${script}).`,
     // RN-SQL-008. Há comando (DDL) para o qual o banco não conta linhas, e o driver responde um número negativo.
     affected: (count: number, elapsedMs: number) => `${count < 0 ? "Comando executado" : formatCount(count, "linha afetada", "linhas afetadas")} · ${formatElapsed(elapsedMs)}`,
     loadedHint: (count: number) => `Linhas 1 a ${count.toLocaleString("pt-BR")} carregadas. As próximas linhas e o total só são buscados quando você pedir.`,
@@ -320,8 +322,8 @@ export const workbenchCopy = {
     commandExecuted: (rowsAffected: number) => (rowsAffected < 0 ? "Comando executado." : `Comando executado. ${formatCount(rowsAffected, "linha afetada", "linhas afetadas")}.`),
     // RN-AVISO-002 e RN-SQL-013: comando que grava e devolve linhas, já confirmado no banco.
     commandCompleted: (totalRows: number) => `Comando executado. ${formatCount(totalRows, "linha devolvida", "linhas devolvidas")}.`,
-    // RN-AVISO-003 e RN-SQL-001: a seleção tem mais de um comando, e nada foi enviado.
-    tooManyStatements: "A seleção tem mais de um comando. Nada foi executado.",
+    // RN-AVISO-003 e RN-SQL-001: a seleção tem mais de um comando, e nada foi enviado; o script executa todos (RN-SQL-019).
+    tooManyStatements: (script: string) => `A seleção tem mais de um comando. Nada foi executado: para executar todos, use Executar script (${script}).`,
     // Ctrl+Enter sem comando no cursor nem na seleção (só espaços, `;` e comentários).
     nothingToSend: "Não há comando para executar.",
     // O mesmo texto do aviso central para o que não é recusa da API: o que a rede de segurança da aba pegou.

@@ -317,11 +317,28 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // O nome de cada aba agora, que o executor lê no fim de um script (RN-SQL-020): a aba pode ter sido renomeada, ou salva como script, depois de ele
+  // nascer. Criado uma vez e nunca trocado, por `useState`, como `runners`: `createRunner` vai a `createLockHandles` durante a renderização, e o lint do
+  // React não deixa uma ref ir junto.
+  const [titles] = useState(() => new Map<string, string>());
+  useEffect(() => {
+    titles.clear();
+    for (const tab of tabs) titles.set(tab.id, tab.title);
+  });
+
   // A sessão é de quem executa; a aba só guarda uma cópia dela, para a tela dizer que a conexão está conectada.
   const createRunner = useCallback(
     (tab: Pick<QueryTab, "id" | "connectionId" | "database">, initial?: Parameters<typeof createQueryRunner>[0]["initial"]) =>
-      createQueryRunner({ connectionId: tab.connectionId, database: tab.database, queryClient, toast, onSession: (sessionId) => updateTab(tab.id, { sessionId }), initial }),
-    [queryClient, toast, updateTab],
+      createQueryRunner({
+        connectionId: tab.connectionId,
+        database: tab.database,
+        queryClient,
+        toast,
+        onSession: (sessionId) => updateTab(tab.id, { sessionId }),
+        initial,
+        title: () => titles.get(tab.id) ?? null,
+      }),
+    [queryClient, toast, updateTab, titles],
   );
 
   const addTab = useCallback(

@@ -38,6 +38,7 @@ export {
   PackageIcon,
   PencilIcon,
   PlayIcon,
+  PlayScriptIcon,
   PlugIcon,
   PlusIcon,
   PowerIcon,

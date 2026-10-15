@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/query-client";
 
 import { queryOutcomeCopy } from "./query-outcome.copy";
+import { platformScriptShortcut } from "./script-run";
 import { scriptsCopy } from "./scripts.copy";
 import { countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { createQueryRunner, isBusyState, type RunnerState } from "./use-query-runner";
@@ -295,8 +296,10 @@ describe("uma execução leva um comando só (RN-SQL-001)", () => {
     await runner.run({ sql: "update t set a = 1;\ndelete from t;\nselect 3;", offset: 0 });
 
     expect(api.calls).toEqual([]);
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
-    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements);
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements(platformScriptShortcut));
+    // Os dois ensinam o script, que executa todos (RN-SQL-019).
+    expect(copy.tooManyStatements("Alt+X")).toBe("A seleção tem mais de um comando. Nada foi executado: para executar todos, use Executar script (Alt+X).");
   });
 
   it("seleção com um comando só vai como está, com o `;` e o comentário que vieram juntos (RN-SQL-003)", async () => {
@@ -329,7 +332,7 @@ describe("uma execução leva um comando só (RN-SQL-001)", () => {
     await runner.run({ sql, offset: 0, engine: 3 });
 
     expect(api.calls).toEqual([]);
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
   });
 });
 
@@ -545,7 +548,7 @@ describe("o resultado na tela só é substituído quando a API aceitou um comand
 
     expect(runner.getState()).toBe(result);
     expect(api.calls).toHaveLength(2);
-    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements);
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements(platformScriptShortcut));
 
     // O cursor continua aberto: "carregar mais" segue lendo dele.
     api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
@@ -824,7 +827,7 @@ describe("linhas afetadas e erro de SQL também são resultado na tela", () => {
     expect(runner.getState()).toMatchObject({ status: "notice" });
 
     await runner.run({ sql: "select 1; select 2; select 3", offset: 0 });
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
 
     api.on(`POST ${sessions}`, session("s1"));
     api.on(`POST ${sessions}/s1/queries`, problem(500, "INTERNAL_SERVER_ERROR"));

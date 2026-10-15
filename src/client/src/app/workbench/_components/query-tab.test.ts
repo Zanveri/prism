@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Engine } from "@/components/ui";
 
 import type { AutoRefreshBlocker, AutoRefreshState } from "../_lib/auto-refresh";
+import type { ScriptChoice, ScriptRun } from "../_lib/script-run";
 import type { EditTarget } from "../_lib/record-edits.schema";
 import type { QueryRunner, RowsState, RunnerState, RunTarget } from "../_lib/use-query-runner";
 import type { QueryTab } from "../_lib/workbench-model";
@@ -110,6 +111,18 @@ function fakeRunner(initial: RunnerState) {
       return Promise.resolve();
     }),
     rerun: vi.fn(() => Promise.resolve()),
+    /** RN-SQL-019: os scripts aceitos (o espião conta também os recusados), e o estado do script que a aba desenha. */
+    scripts: [] as RunTarget[][],
+    runScript: vi.fn((targets: RunTarget[]): Promise<void> => {
+      if (!isPersonBusy(runner.state) && targets.length > 0) {
+        runner.scripts.push(targets);
+        runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : null };
+      }
+      return Promise.resolve();
+    }),
+    runCommand: vi.fn<(target: RunTarget) => Promise<void>>(() => Promise.resolve()),
+    scriptState: null as ScriptRun | null,
+    script: { subscribe: () => () => {}, getState: (): ScriptRun | null => runner.scriptState, decide: vi.fn<(choice: ScriptChoice) => void>() },
     cancel: vi.fn(),
     loadMore: vi.fn(),
     countTotal: vi.fn(),

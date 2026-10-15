@@ -288,6 +288,16 @@ export function PlayIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** Executar script (RN-SQL-019): os comandos em fila e o triângulo de executar. */
+export function PlayScriptIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 4h5M2.5 8h4M2.5 12h5" />
+      <path d="M9.5 4.5v7l5-3.5z" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
 /** Cancelar o comando em execução. */
 export function StopIcon(props: ComponentProps<"svg">) {
   return (

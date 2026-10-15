@@ -8,12 +8,13 @@ import { cn } from "@/lib/utils/cn";
 
 import { refreshKey } from "../_lib/grid-editing";
 import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
-import { commandWillRun, initialLayout, layoutReducer, paneFlex } from "../_lib/result-layout";
+import { commandWillRun, initialLayout, layoutReducer, paneFlex, scriptWillRun } from "../_lib/result-layout";
 import { saveShortcut } from "../_lib/saved-scripts";
+import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScriptTab, statisticsSummary, type ScriptTab } from "../_lib/script-run";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
-import { isPersonBusy, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
+import { isPersonBusy, useQueryRunner, useScriptRun, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
 import { canClear } from "../_lib/table-view";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
@@ -31,6 +32,9 @@ import { resultEditDialogs } from "./result-edit-dialogs";
 import { ResultPanel } from "./result-panel";
 import { ResultSplitter } from "./result-splitter";
 import { NoConnectionBarView, type NoConnectionReason } from "./script-dialogs";
+import { ScriptErrorDialog } from "./script-error-dialog";
+import { ScriptStatistics } from "./script-statistics";
+import { ScriptTabs, scriptTabId } from "./script-tabs";
 import { RecordsFilter } from "./table-tab/records-filter";
 import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
 
@@ -55,6 +59,9 @@ type QueryTabPanelProps = {
   /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
   onSwitchDatabase: (tabId: string, database: string | undefined) => void;
 };
+
+/** A plataforma, para o atalho do script (RN-SQL-019): Alt+X, ou Cmd+Option+X no macOS. */
+const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 
 /**
  * RN-SCRIPT-003 e 005: a faixa da aba sem conexão, com as conexões cadastradas para escolher: as conectadas primeiro, com o caminho de pastas, na ordem da
@@ -93,9 +100,14 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
  * A grade do resultado se edita como a dos Registros (seção 22, RN-EDIT-001): o mesmo campo na célula, a mesma faixa, o mesmo menu e os mesmos
  * atalhos (`useRecordEdits`). Com alterações não salvas, executar outro comando e "Executar de novo" perguntam antes (RN-EDIT-007); o Salvar deixa
  * a grade com o que foi salvo, sem executar de novo, e o cursor que estava aberto fecha (RN-EDIT-009).
+ *
+ * Depois de um script (seção 31, RN-SQL-019 a 022), a área de resultado tem abas: uma por resultado guardado e as Estatísticas. A do último comando é o
+ * resultado do executor, com tudo o que vale nele; as outras mostram as linhas guardadas, só para leitura. A pergunta de erro do script fica fora da
+ * caixa do teclado, como os outros diálogos.
  */
 export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
+  const script = useScriptRun(runner);
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
   const area = useRef<HTMLDivElement>(null);
@@ -129,13 +141,18 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [filterApplied, setFilterApplied] = useState("");
   const [filterProblem, setFilterProblem] = useState<{ message: string } | null>(null);
   const [pinned, setPinned] = useState<RunTarget | null>(null);
+  // RN-SQL-020: a aba do resultado à frente, depois de um script. A escolha da pessoa vale para aquele script (pelo `id`); o seguinte volta às Estatísticas.
+  const [chosenTab, setChosenTab] = useState<{ run: number; tab: ScriptTab } | null>(null);
   // O filtro é do resultado do executor da aba. Trocar o banco (RN-ARVORE-007) ou a conexão (RN-ARVORE-008) da aba, e o bloqueio por inatividade, dão a ela
   // um executor novo, sem resultado: o filtro do resultado anterior sai junto. Sem isso o campo ficava à vista com o comando fixado (`pinned`) do resultado
   // anterior, e "Aplicar" o executava, com o filtro, no banco ou na conexão novos. Ajuste durante a renderização: o campo velho não chega a aparecer.
+  // A aba do script escolhida sai também: cada executor numera os scripts dele desde o 1, e o primeiro script do executor novo herdava a escolha feita no
+  // do anterior (abria nela, e não nas Estatísticas, e às vezes no resultado de outro comando).
   const [filterRunner, setFilterRunner] = useState(runner);
   if (filterRunner !== runner) {
     setFilterRunner(runner);
     clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+    setChosenTab(null);
   }
   const base = filterBaseOf(state, pinned);
   const filterNow = useRef({ base, draft: filterDraft, applied: filterApplied });
@@ -147,7 +164,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     (draft: string) =>
       guardRef.current(() => {
         const { base: target, applied } = filterNow.current;
-        void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next) });
+        // RN-SQL-020: o filtro do resultado do último comando de um script muda só ele; as outras abas do script ficam.
+        void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next, { keepScript: true }) });
       }),
     [runner],
   );
@@ -164,10 +182,19 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
 
+  const shownTab = script === null ? null : shownScriptTab(script, chosenTab !== null && chosenTab.run === script.id ? chosenTab.tab : null);
+  // O resultado do executor está à vista: sem script, ou com a aba do último comando à frente (a do cursor aberto).
+  const liveShown = script === null || shownTab === script.live;
+  const tabIds = useId();
+  // A aba guardada à frente (não a do último comando): as linhas dela, só para leitura.
+  const kept = script === null || typeof shownTab !== "number" || shownTab === script.live ? null : (script.results.find((result) => result.entry === shownTab) ?? null);
+  // RN-SQL-019: o comando do script em execução, que o editor marca.
+  const runningAt = script !== null && script.phase === "running" && script.current !== null ? entryAt(script, script.current).target : null;
+
   // RN-GRADE-014: a atualização automática do resultado, na barra dele e no menu da grade. Só a aba à vista (a ativa, com a área de trabalho na tela) a deixa
-  // executar; escondida, ela espera.
+  // executar; escondida, ela espera. Com outra aba do script à frente (RN-SQL-020), o resultado do último comando também não está à vista, e ela espera.
   const onScreen = useWorkbenchOnScreen();
-  const auto = useAutoRefresh(runner, active && onScreen);
+  const auto = useAutoRefresh(runner, active && onScreen && liveShown);
 
   const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun, autoRefresh: auto.source });
   const { guard } = edits;
@@ -196,6 +223,38 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     },
     [runner, guard, hasConnection],
   );
+  // RN-SQL-019: "Executar script" (o botão e o Alt+X): as mesmas regras de uma execução (a pergunta das alterações não salvas, o filtro que sai, a área
+  // recolhida que volta), e o executor roda os comandos um por vez.
+  const handleRunScript = useCallback(
+    (targets: RunTarget[]) => {
+      const go = () => {
+        if (scriptWillRun(targets, isPersonBusy(runner.getState()))) {
+          dispatch({ type: "run" });
+          clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+        }
+        void runner.runScript(targets);
+      };
+      if (scriptWillRun(targets, isPersonBusy(runner.getState()))) guard(go);
+      else go();
+    },
+    [runner, guard],
+  );
+  // RN-SQL-020: "Executar este comando", numa aba guardada do script: como o Ctrl+Enter nele. O que o executor recusaria (a aba ocupada) não pergunta, não
+  // limpa o filtro nem mexe na área.
+  const handleRunAlone = useCallback(
+    (target: RunTarget) => {
+      const go = () => {
+        if (commandWillRun(target, isPersonBusy(runner.getState()))) {
+          dispatch({ type: "run" });
+          clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+        }
+        void runner.runCommand(target);
+      };
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(go);
+      else go();
+    },
+    [runner, guard],
+  );
   const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
   useEffect(() => {
     rerunRef.current = handleRerun;
@@ -218,9 +277,16 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     // RN-GRADE-012: F5 executa de novo o comando do resultado, com o filtro ("Executar de novo"), com o foco em qualquer ponto da aba; com algo em
     // andamento, nada. O campo de edição da célula não deixa a tecla subir.
+    // Depois de um script, só na aba do resultado do último comando (RN-SQL-020): é o resultado que o F5 executa de novo.
     if (!event.defaultPrevented && refreshKey(event)) {
       event.preventDefault();
-      if (!isPersonBusy(runner.getState())) handleRerun();
+      if (!isPersonBusy(runner.getState()) && liveShown) handleRerun();
+      return;
+    }
+    // RN-SQL-019: Alt+X (Cmd+Option+X no macOS), como no DBeaver, com o foco em qualquer ponto da aba; o campo da célula não deixa a tecla subir.
+    if (!event.defaultPrevented && scriptShortcut(event, platform)) {
+      event.preventDefault();
+      editor.current?.runScript();
       return;
     }
     // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre a lista das conexões desta aba, e fecha com o foco no botão dela. Com o foco dentro da lista (a busca),
@@ -254,6 +320,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           cancelling={cancelling}
           runnable={runnable}
           onRun={() => editor.current?.run()}
+          onRunScript={() => editor.current?.runScript()}
+          scriptShortcut={scriptShortcutLabel(platform)}
           onCancel={handleCancel}
           connection={<ConnectionPicker connectionId={connectionId} busy={busy} open={pickingConnection} onOpenChange={setPickingConnection} onChoose={handleChooseConnection} />}
           database={connectionId === null ? null : <DatabasePicker key={connectionId} connectionId={connectionId} database={tab.database} engine={engine} busy={busy} onChoose={handleChooseDatabase} />}
@@ -273,6 +341,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
               autoFocus={active}
               errorAt={shown?.status === "error" ? shown.errorAt : null}
               onRun={handleRun}
+              onRunScript={handleRunScript}
+              runningAt={runningAt}
               onChange={(sql) => onSqlChange(tab.id, { sql })}
               onRunnableChange={setRunnable}
               onEdited={handleEdited}
@@ -284,15 +354,15 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   
           <ResultPanel
             id={resultId}
-            state={state}
-            connected={tab.sessionId !== null}
+            state={kept === null ? state : kept.rows}
+            connected={kept === null && tab.sessionId !== null}
             collapsed={layout.mode === "collapsed"}
             style={{ flex: flex.result }}
             actions={<ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} />}
             nullText={preferences.results.nullText}
             // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão. Cada execução volta à primeira página, e a
             // grade que ficou no fim (a rolagem fica) pediria a seguinte a cada intervalo, segurando o bloqueio por inatividade e lendo de novo à toa.
-            autoLoadMore={preferences.results.autoLoadMore && auto.state.status !== "on"}
+            autoLoadMore={kept === null && preferences.results.autoLoadMore && auto.state.status !== "on"}
             onLoadMore={loadMore}
             onCount={() => void runner.countTotal()}
             onRerun={handleRerun}
@@ -320,11 +390,23 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
                 />
               )
             }
+            tabs={script === null || shownTab === null ? undefined : { list: <ScriptTabs run={script} shown={shownTab} idPrefix={tabIds} panelId={`${tabIds}-panel`} onChoose={(chosen) => setChosenTab({ run: script.id, tab: chosen })} />, panelId: `${tabIds}-panel`, labelledBy: scriptTabId(tabIds, shownTab) }}
+            progress={scriptProgress(script)}
+            statistics={script === null || shownTab !== "statistics" ? undefined : { body: <ScriptStatistics run={script} />, summary: statisticsSummary(script) }}
+            kept={kept === null ? undefined : { busy, onRunAlone: () => handleRunAlone(kept.rows.target) }}
           />
         </div>
       </div>
       {/* Fora da caixa que trata o Ctrl+S do script: os diálogos e o menu vão por portal, e o teclado deles subiria até ela pela árvore do React. */}
       {resultEditDialogs(edits)}
+      {/*
+        RN-SQL-021: a pergunta de erro do script, enquanto ele espera a resposta, só na aba à vista (a ativa, com a área de trabalho na tela). O diálogo vai
+        por portal, por cima de tudo: o de uma aba escondida, ou da área de trabalho por baixo de Configurações, cobria a tela de outra coisa e tirava o foco
+        de quem digitava. O script de outra aba espera, com a marca na faixa (`ScriptWaitingMark`), e a pergunta aparece quando a pessoa vai até ela.
+      */}
+      {active && onScreen && script !== null && script.phase === "paused" && script.current !== null ? (
+        <ScriptErrorDialog entry={entryAt(script, script.current)} number={script.current + 1} total={script.size} onChoose={runner.script.decide} />
+      ) : null}
       {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
     </>
   );
