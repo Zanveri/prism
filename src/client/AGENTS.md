@@ -549,7 +549,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   a cada troca de fonte. **Conferido sob Xvfb** (`pnpm dev`, uma conexão para um host que não existe, a tecla e o clique pelo protocolo de
   depuração): o comando do cursor, o `DELETE` com a linha em branco antes do `WHERE` e o cursor na linha em branco piscam, no tema escuro e no
   claro, a marca sai do DOM antes de um segundo, e desligar a preferência faz o texto inteiro piscar, sem recriar o editor. Depois da
-  revisão, também: com o comando em andamento (o Cancelar na barra, a conexão para `10.255.255.1` tentando abrir), o Ctrl+Enter não pisca
+  revisão, também: com o comando em andamento (o Cancelar na barra, a conexão tentando abrir para um endereço que não responde, como o
+  `192.0.2.1` da faixa de documentação; ele tem de descartar o pacote, e não recusar, ou a falha chega na hora), o Ctrl+Enter não pisca
   nada; e com `DELETE …;`, a linha em branco e `SELECT …;`, o cursor na linha em branco pisca e envia o `SELECT`.
 - **A posição do erro vale para o texto que foi enviado, e é em caracteres.** O PostgreSQL conta caracteres (de 1 em diante) e
   o editor conta unidades UTF-16: cada emoji antes do erro valeria dois para o editor e um para o banco, e a marca cairia um
