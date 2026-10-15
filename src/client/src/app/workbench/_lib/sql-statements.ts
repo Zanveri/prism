@@ -383,8 +383,8 @@ export function statementCount(sql: string, engine?: Engine): number {
 }
 
 /*
- * A linha em branco que separa os comandos (RN-SQL-018), como o "Smart" do DBeaver, com mais cuidado: o Prism ainda não confirma comando
- * irreversível, e separar onde não devia executaria a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`). Na dúvida
+ * A linha em branco que separa os comandos (RN-SQL-018), como o "Smart" do DBeaver, com mais cuidado: só a conexão que pede confirma o comando
+ * irreversível (RN-PROT-001), e separar onde não devia executaria a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`). Na dúvida
  * não separa: o banco recusa o texto inteiro, sem executar nada. Separa só quando o de baixo começa um comando e o de cima está fechado.
  */
 

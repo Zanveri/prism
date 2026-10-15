@@ -88,6 +88,11 @@ type Params = {
   refresh?: () => void;
   /** RN-GRADE-014: o "Atualizar automaticamente" do menu da grade, logo depois do "Atualizar"; sem ele, o menu não o tem. */
   autoRefresh?: AutoRefreshSource;
+  /**
+   * RN-PROT-001: o aviso antes do "Salvar", com quantas alterações vão (o `saveQuestion` da conexão, que só pergunta em "Todos os comandos"). Resolve falso
+   * quando a pessoa cancela: nada é gravado e as alterações ficam. Sem ele, o Salvar não pergunta.
+   */
+  confirmSave?: (count: number) => true | Promise<boolean>;
 };
 
 const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notice: null };
@@ -129,7 +134,7 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 
  *   pendências (RN-EDIT-012). Sem o alvo (as pendências lembradas com a aba voltam sem ele), o Salvar e o "Ver SQL" o perguntam antes.
  * - As alterações não salvas vão ao registro da aba (`unsaved-edits.ts`), de onde quem fecha abas pergunta.
  */
-export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh }: Params) {
+export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave }: Params) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -164,9 +169,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   // RN-GRADE-013: o diálogo "Filtrar por valor…" e o campo do "Personalizado", com o que cada um precisa para juntar a condição ao campo.
   const [valueFilter, setValueFilter] = useState<{ cell: GridCell; values: DistinctValue[]; rows: number; more: boolean } | null>(null);
   const [customFilter, setCustomFilter] = useState<{ cell: GridCell; operator: CompareOperator; point: { x: number; y: number }; problem: string | null } | null>(null);
-  const sources = useRef({ filter, refresh, autoRefresh });
+  const sources = useRef({ filter, refresh, autoRefresh, confirmSave });
   useEffect(() => {
-    sources.current = { filter, refresh, autoRefresh };
+    sources.current = { filter, refresh, autoRefresh, confirmSave };
   });
   // RN-SQL-017: a busca dos valores completos em andamento, que a faixa mostra e deixa cancelar.
   const [fetching, setFetching] = useState<AbortController | null>(null);
@@ -485,8 +490,29 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     setBanner(noBanner);
   }, [setEditor, putEdits]);
 
-  /** RN-EDIT-005 e 012: o Salvar. Devolve se gravou tudo; `reread` vai a `onSaved` (os Registros leem de novo). */
+  /** O aviso antes do Salvar (RN-PROT-001) em espera: um segundo Salvar não abre outro. */
+  const confirming = useRef(false);
+
+  /**
+   * RN-EDIT-005 e 012: o Salvar. Devolve se gravou tudo; `reread` vai a `onSaved` (os Registros leem de novo). Na conexão com "Todos os comandos"
+   * (RN-PROT-001), pergunta antes, uma vez por Salvar, com quantas alterações vão; cancelado, nada é gravado. A resposta pode chegar depois de as linhas
+   * mudarem: o Salvar segue com o que está na tela então, e só se for o mesmo resultado.
+   */
   const save = useCallback(async (reread = true): Promise<boolean> => {
+    const before = latest.current;
+    if (pendingCount(before.edits) === 0) return true;
+    if (before.saving || before.shown === null || before.resultId === null || runner.sessionOf() === null || confirming.current) return false;
+
+    // Sem a pergunta, a resposta vem na hora (`true`), e o Salvar segue na mesma chamada, como antes.
+    const answer = sources.current.confirmSave?.(pendingCount(before.edits)) ?? true;
+    if (answer !== true) {
+      confirming.current = true;
+      const confirmed = await answer.finally(() => {
+        confirming.current = false;
+      });
+      if (!confirmed || latest.current.resultId !== before.resultId) return false;
+    }
+
     const { shown: current, resultId: id, edits: pending, saving: writing } = latest.current;
     const sessionId = runner.sessionOf();
     if (pendingCount(pending) === 0) return true;

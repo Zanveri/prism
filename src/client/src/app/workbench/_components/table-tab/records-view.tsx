@@ -16,11 +16,14 @@ import type { TableRef } from "../../_lib/table-diagram";
 import { recordsSql, sortOf, sqlLiteral } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
 import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
+import { saveQuestion } from "../../_lib/command-confirmation";
 import { useAutoRefresh } from "../../_lib/use-auto-refresh";
+import { useCommandConfirmation } from "../../_lib/use-command-confirmation";
 import { isAutoRun, isPersonBusy, useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../../_lib/use-record-edits";
 import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
+import { ConfirmCommandDialog } from "../confirm-command-dialog";
 import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
@@ -147,7 +150,13 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // aba à vista: escondida, ou com a vista desmontada (a Estrutura, o Diagrama), ela espera.
   const auto = useAutoRefresh(runner, visible);
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source });
+  // RN-PROT-001: o que o Prism monta para mostrar a tabela (os Registros, com o filtro e a ordem do campo, e a atualização automática deles) não pergunta; o
+  // "Salvar" da grade, em "Todos os comandos", pergunta uma vez, com quantas alterações vão.
+  const confirmation = useCommandConfirmation(connectionId, database);
+  const { confirmed } = confirmation;
+  const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
+
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {
@@ -321,6 +330,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
       />
       {resultEditDialogs(edits)}
       {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
+      {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={edits.banner.onViewSql} />}
       {edits.question === null && handoffWaits ? (
         <UnsavedEditsDialog
           count={edits.pending}

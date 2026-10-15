@@ -6,6 +6,7 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion } from "../_lib/command-confirmation";
 import { refreshKey } from "../_lib/grid-editing";
 import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex, scriptWillRun } from "../_lib/result-layout";
@@ -14,15 +15,18 @@ import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScri
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
-import { isPersonBusy, useQueryRunner, useScriptRun, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
+import { isPersonBusy, useQueryRunner, useScriptRun, type QueryRunner, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
+import { conditionOf } from "../_lib/table-sql";
 import { canClear } from "../_lib/table-view";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
 import { useAutoRefresh } from "../_lib/use-auto-refresh";
+import { useCommandConfirmation } from "../_lib/use-command-confirmation";
 import { useConnectedIds } from "../_lib/use-connected-ids";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import type { QueryTab, TableView } from "../_lib/workbench-model";
 import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
+import { ConfirmCommandDialog } from "./confirm-command-dialog";
 import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
@@ -62,6 +66,12 @@ type QueryTabPanelProps = {
 
 /** A plataforma, para o atalho do script (RN-SQL-019): Alt+X, ou Cmd+Option+X no macOS. */
 const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+
+/** O comando das linhas na tela (com a execução automática rodando, o do resultado de antes dela), que o F5 e a atualização automática executam de novo. */
+function rowsTargetOf(state: RunnerState): RunTarget | null {
+  const shown = state.status === "running" ? state.previous : state;
+  return shown?.status === "rows" ? shown.target : null;
+}
 
 /**
  * RN-SCRIPT-003 e 005: a faixa da aba sem conexão, com as conexões cadastradas para escolher: as conectadas primeiro, com o caminho de pastas, na ordem da
@@ -104,10 +114,18 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
  * Depois de um script (seção 31, RN-SQL-019 a 022), a área de resultado tem abas: uma por resultado guardado e as Estatísticas. A do último comando é o
  * resultado do executor, com tudo o que vale nele; as outras mostram as linhas guardadas, só para leitura. A pergunta de erro do script fica fora da
  * caixa do teclado, como os outros diálogos.
+ *
+ * Na conexão que confirma antes de executar (RN-PROT-001), o aviso vem antes de o comando sair, depois da pergunta das alterações não salvas: no
+ * "Executar" e no Ctrl+Enter, no "Executar este comando", no "Executar script" (uma vez, com a lista), no F5 e no "Executar de novo", no filtro e na ordem do
+ * resultado, no "Salvar" da grade (em "Todos os comandos") e ao ligar a atualização automática (em "Todos os comandos", uma vez). Cancelado, nada sai, e a
+ * aba fica como estava, com o resultado de antes.
  */
 export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
   const script = useScriptRun(runner);
+  // RN-PROT-001: o aviso antes de executar, pelas proteções da conexão da aba.
+  const confirmation = useCommandConfirmation(tab.connectionId, tab.database);
+  const { confirm, confirmed } = confirmation;
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
   const area = useRef<HTMLDivElement>(null);
@@ -163,11 +181,20 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const sendFilter = useCallback(
     (draft: string) =>
       guardRef.current(() => {
-        const { base: target, applied } = filterNow.current;
-        // RN-SQL-020: o filtro do resultado do último comando de um script muda só ele; as outras abas do script ficam.
-        void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next, { keepScript: true }) });
+        // RN-PROT-001: aplicar o filtro e ordenar executam de novo o comando do resultado, e perguntam pelo comando que vai ao banco, com o filtro junto.
+        const before = filterNow.current.base;
+        if (before === null || isPersonBusy(runner.getState())) return;
+        const filter = conditionOf(draft);
+        confirm(
+          (protections) => commandQuestion(protections, filter === "" ? before : { ...before, filter }),
+          () => {
+            const { base: target, applied } = filterNow.current;
+            // RN-SQL-020: o filtro do resultado do último comando de um script muda só ele; as outras abas do script ficam.
+            void applyResultFilter(target, draft, applied, runner.getState(), { setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned, run: (next) => runner.run(next, { keepScript: true }) });
+          },
+        );
       }),
-    [runner],
+    [runner, confirm],
   );
   const filterSource = useMemo<GridFilterSource>(
     () => ({
@@ -194,9 +221,20 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // RN-GRADE-014: a atualização automática do resultado, na barra dele e no menu da grade. Só a aba à vista (a ativa, com a área de trabalho na tela) a deixa
   // executar; escondida, ela espera. Com outra aba do script à frente (RN-SQL-020), o resultado do último comando também não está à vista, e ela espera.
   const onScreen = useWorkbenchOnScreen();
-  const auto = useAutoRefresh(runner, active && onScreen && liveShown);
+  // RN-PROT-001: em "Todos os comandos", ligar pergunta uma vez, pelo comando do resultado na tela (com o filtro dele).
+  const confirmAuto = useCallback(
+    (proceed: () => void) => {
+      const target = rowsTargetOf(runner.getState());
+      if (target === null) return proceed();
+      confirm((protections) => autoRefreshQuestion(protections, target), proceed);
+    },
+    [runner, confirm],
+  );
+  const auto = useAutoRefresh(runner, active && onScreen && liveShown, confirmAuto);
+  // RN-PROT-001: o "Salvar" da grade, em "Todos os comandos", pergunta uma vez, com quantas alterações vão.
+  const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
 
-  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun, autoRefresh: auto.source });
+  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun, autoRefresh: auto.source, confirmSave });
   const { guard } = edits;
   useEffect(() => {
     guardRef.current = guard;
@@ -218,10 +256,11 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         }
         void runner.run(target);
       };
-      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(go);
+      // RN-PROT-001: o aviso vem depois da pergunta das alterações não salvas, logo antes de o comando sair; cancelado, nada sai.
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, target), go));
       else go();
     },
-    [runner, guard, hasConnection],
+    [runner, guard, hasConnection, confirm],
   );
   // RN-SQL-019: "Executar script" (o botão e o Alt+X): as mesmas regras de uma execução (a pergunta das alterações não salvas, o filtro que sai, a área
   // recolhida que volta), e o executor roda os comandos um por vez.
@@ -234,10 +273,11 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         }
         void runner.runScript(targets);
       };
-      if (scriptWillRun(targets, isPersonBusy(runner.getState()))) guard(go);
+      // RN-PROT-001: uma vez, antes do primeiro comando, com a lista dos que pedem confirmação; confirmado, o script roda sem perguntar de novo.
+      if (scriptWillRun(targets, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => scriptQuestion(protections, targets), go));
       else go();
     },
-    [runner, guard],
+    [runner, guard, confirm],
   );
   // RN-SQL-020: "Executar este comando", numa aba guardada do script: como o Ctrl+Enter nele. O que o executor recusaria (a aba ocupada) não pergunta, não
   // limpa o filtro nem mexe na área.
@@ -250,12 +290,24 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         }
         void runner.runCommand(target);
       };
-      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(go);
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, target), go));
       else go();
     },
-    [runner, guard],
+    [runner, guard, confirm],
   );
-  const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
+  // RN-GRADE-012 e RN-PROT-001: o F5 e o "Executar de novo" perguntam pelo comando do resultado na tela, com o filtro dele, como qualquer execução.
+  const handleRerun = useCallback(
+    () =>
+      guard(() => {
+        const target = rowsTargetOf(runner.getState());
+        if (target === null || isPersonBusy(runner.getState())) return void runner.rerun();
+        confirm(
+          (protections) => commandQuestion(protections, target),
+          () => void runner.rerun(),
+        );
+      }),
+    [runner, guard, confirm],
+  );
   useEffect(() => {
     rerunRef.current = handleRerun;
   });
@@ -408,6 +460,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         <ScriptErrorDialog entry={entryAt(script, script.current)} number={script.current + 1} total={script.size} onChoose={runner.script.decide} />
       ) : null}
       {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
+      {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
+      {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" ? edits.banner.onViewSql : undefined} />}
     </>
   );
 });

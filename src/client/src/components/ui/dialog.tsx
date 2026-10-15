@@ -24,6 +24,13 @@ export type DialogProps = {
   footer?: ReactNode;
   /** `alertdialog` para a pergunta que interrompe (`ConfirmDialog`). */
   role?: "dialog" | "alertdialog";
+  /** Uma faixa no topo do painel, acima do título: a do ambiente no aviso de confirmação (RN-PROT-001). Quem a desenha dá a cor dela. */
+  banner?: ReactNode;
+  /**
+   * Os ids (separados por espaço) do que, no corpo, diz o que o diálogo pergunta, quando isso não é a `description` do cabeçalho: o leitor de tela os lê
+   * junto do título quando o diálogo abre (o aviso de confirmação, RN-PROT-001: o que o comando faz e o comando). Com os dois, a `description` vem antes.
+   */
+  describedBy?: string;
   children?: ReactNode;
   onClose: () => void;
 };
@@ -51,6 +58,12 @@ export function closesFromBackdrop(event: { button: number; target: unknown; cur
   return event.button === 0 && event.target === event.currentTarget && canClose(state);
 }
 
+/** O `aria-describedby` do painel: a `description` do cabeçalho, quando há, e o que o corpo aponta (`describedBy`), nessa ordem; sem nenhum, nada. */
+export function describedByOf(descriptionID: string | null, describedBy: string | undefined): string | undefined {
+  const ids = [descriptionID, describedBy === undefined || describedBy === "" ? null : describedBy].filter((id) => id !== null);
+  return ids.length === 0 ? undefined : ids.join(" ");
+}
+
 const focusable = "button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 /**
@@ -65,7 +78,7 @@ const focusable = "button:not([disabled]), [href], input:not([disabled]), textar
  * O foco entra no diálogo — num campo com `autoFocus`, se houver, senão no próprio painel —,
  * fica preso nele pelo Tab e volta ao que estava focado ao fechar.
  */
-export function Dialog({ open, title, icon, description, size = "md", pending = false, dismissible = true, footer, role = "dialog", children, onClose }: DialogProps) {
+export function Dialog({ open, title, icon, description, size = "md", pending = false, dismissible = true, footer, role = "dialog", banner, describedBy, children, onClose }: DialogProps) {
   const titleID = useId();
   const descriptionID = useId();
   const panel = useRef<HTMLDivElement>(null);
@@ -137,12 +150,13 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
         role={role}
         aria-modal="true"
         aria-labelledby={titleID}
-        aria-describedby={description === undefined ? undefined : descriptionID}
+        aria-describedby={describedByOf(description === undefined ? null : descriptionID, describedBy)}
         aria-busy={pending}
         tabIndex={-1}
         onKeyDown={onKeyDown}
-        className={cn("flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-border-strong bg-raised shadow-2xl outline-none", sizes[size])}
+        className={cn("flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-border-strong bg-raised shadow-2xl outline-none", banner !== undefined && "overflow-hidden", sizes[size])}
       >
+        {banner === undefined ? null : <div className="flex-none">{banner}</div>}
         <div className="px-6 pt-6 pb-4">
           <div className={cn("flex gap-3", icon === undefined ? "items-start" : "items-center")}>
             {icon === undefined ? null : <span className="flex size-9 flex-none items-center justify-center rounded-lg border border-border-strong">{icon}</span>}

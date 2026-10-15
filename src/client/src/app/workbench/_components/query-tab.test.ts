@@ -25,6 +25,12 @@ const rt = await vi.hoisted(async () => {
     cells: { resultCells: vi.fn() },
     /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
     screen: { on: true },
+    /**
+     * RN-PROT-001: as proteções da conexão da aba, que o aviso de mentira (`useCommandConfirmation`) usa para decidir, e as perguntas que ele abriu, com as
+     * respostas. Sem proteção, nada pergunta e tudo segue na mesma chamada, como antes.
+     */
+    protections: { readOnly: null, confirm: null } as { readOnly: { from: null } | null; confirm: { level: "irreversible" | "all"; from: null } | null },
+    asked: [] as { question: { kind: string } & Record<string, unknown>; proceed: () => void; cancelled?: () => void }[],
   };
 });
 
@@ -36,6 +42,22 @@ vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unk
 vi.mock("../_lib/record-edits.service", () => rt.service);
 vi.mock("../_lib/full-values.service", () => rt.cells);
 vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => rt.screen.on }));
+// O aviso de confirmação de mentira (RN-PROT-001): decide pela pergunta que a aba monta com as proteções de `rt.protections`, e guarda a que abriria.
+vi.mock("../_lib/use-command-confirmation", () => ({
+  useCommandConfirmation: () => ({
+    confirm: (make: (protections: unknown) => ({ kind: string } & Record<string, unknown>) | null, proceed: () => void, cancelled?: () => void) => {
+      const question = make(rt.protections);
+      if (question === null) return proceed();
+      rt.asked.push({ question, proceed, cancelled });
+    },
+    confirmed: (make: (protections: unknown) => ({ kind: string } & Record<string, unknown>) | null) => {
+      const question = make(rt.protections);
+      if (question === null) return true;
+      return new Promise<boolean>((resolve) => rt.asked.push({ question, proceed: () => resolve(true), cancelled: () => resolve(false) }));
+    },
+    open: null,
+  }),
+}));
 // O editor de SQL é CodeMirror, que precisa da página; aqui basta o que a aba entrega a ele.
 vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
   return null;
@@ -191,6 +213,8 @@ beforeEach(() => {
   forgetExcept(new Set());
   unsavedEdits.forgetExcept(new Set());
   rt.screen.on = true;
+  rt.protections = { readOnly: null, confirm: null };
+  rt.asked.length = 0;
 });
 
 afterEach(() => rt.unmount());
