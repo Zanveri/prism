@@ -542,6 +542,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   a sonda da seção 10 mostrar que é necessário.
 - A porta sugerida do Informix é 9089, não 9088.
 - A barra do editor não tem Explicar plano nem Formatar, que entram na entrega 2.
+- O botão "Conexão e esquema desta aba" da barra do editor é o botão da conexão da aba
+  (RN-ARVORE-008), com a sigla do banco, o nome da conexão e o ambiente. O banco fica na lista ao
+  lado dele (RN-ARVORE-007), e o esquema não aparece: o canvas escreve os três num botão só.
+- O diálogo da pasta do canvas (`PastaAmbiente`) não tem a cor da pasta, e o ícone da pasta na
+  árvore do canvas é sempre neutro: no "Editar pasta…" a "Cor da pasta" vem antes da seção
+  Ambiente, e pinta o ícone da pasta (RN-PASTA-007). O canvas também não desenha a seção "Scripts",
+  nem o ícone e a cor de cada script (RN-SCRIPT-006).
 - A aba de tabela e a aba de diagrama entraram pela seção 18 (o DDL e o salto por chave
   estrangeira ainda não).
 - A Estrutura da tabela não empilha cartões como o canvas (`TabelaDetalhe`): mostra uma seção
@@ -1882,17 +1889,27 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 
 - **RN-SCRIPT-001.** Ctrl+S numa aba de consulta salva o SQL dela como script: na primeira vez pede
   o nome (sugerido "Script 1", "Script 2"…); depois grava por cima. "Salvar como" (Ctrl+Shift+S)
-  grava com outro nome. A aba mostra o nome do script, e um ponto enquanto há mudança não salva;
-  fechá-la assim pergunta se salva.
+  grava com outro nome. O diálogo do nome, na primeira vez e no "Salvar como", tem a caixa "Script
+  genérico (sem conexão)" (RN-SCRIPT-005). A aba mostra o nome do script, e um ponto enquanto há
+  mudança não salva; fechá-la assim pergunta se salva. *Alterada a pedido do dono em 2026-10-15,
+  issue #9: entrou a caixa do script genérico.*
 - **RN-SCRIPT-002.** Os scripts são do usuário e moram no cofre dele, cifrados como o resto do cofre
   (RN-COFRE): só quem tem a senha do usuário os lê, nada vai em texto aberto para o disco, e o log
   nunca leva o texto do SQL. Acrescentar os scripts ao cofre sobe o número do formato dele; um
   cofre antigo é migrado ao abrir (RN-VERSAO-005).
 - **RN-SCRIPT-003.** O navegador tem a seção "Scripts", com os scripts do usuário em ordem de nome:
-  abrir (duplo clique ou Enter), renomear, excluir (com confirmação) e "Copiar SQL". O script
-  lembra a conexão e o banco da aba em que foi salvo; aberto, vira uma aba de consulta já nessa
-  conexão e nesse banco. Se a conexão não existe mais, a aba abre sem conexão e pede para
-  escolher uma.
+  abrir (duplo clique ou Enter), renomear, excluir (com confirmação), "Copiar SQL" e, conforme o
+  script, "Tornar genérico" ou "Vincular à conexão da aba" (RN-SCRIPT-005). O script lembra a
+  conexão e o banco da aba em que foi salvo, menos o genérico, que não lembra nenhum
+  (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco. Se a conexão
+  não existe mais, a aba abre sem conexão e pede para escolher uma.
+  - Mudança não salva é o texto, a conexão (RN-ARVORE-008) ou o banco (RN-ARVORE-007) da aba
+    diferente do que o script tem gravado. O Ctrl+S grava a conexão e o banco da aba junto com o
+    texto. No script genérico só o texto conta.
+  - As abas que voltam na próxima entrada (RN-ABAS-006) guardam essa marca, e a aba do script volta
+    lembrando a conexão com que ele está gravado.
+  - *Alterada a pedido do dono em 2026-10-15, issue #9: antes todo script lembrava uma conexão, e a
+    mudança não salva era só o texto e o banco.*
 - **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
   (sem diferenciar maiúsculas); SQL de até 1 MB.
 
@@ -1900,10 +1917,10 @@ Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`
 
 | Rota | Sucesso | Recusas |
 | --- | --- | --- |
-| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, updatedAt }`, sem o SQL | |
-| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
+| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, icon, color, updatedAt }`, sem o SQL (`icon` e `color`: RN-SCRIPT-006) | |
+| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, icon, color, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
 | `POST api/user/scripts` `{ name, sql, connectionID?, database? }` | 201 | 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
-| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database? }` | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database?, generic?, icon?, color? }` (`generic`: RN-SCRIPT-005; `icon` e `color`: RN-SCRIPT-006) | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE`, `SCRIPT_PLACE_INVALID` (`generic` com `connectionID` ou `database`), `SCRIPT_ICON_INVALID` (ícone fora da lista, cor fora de `#RRGGBB`) |
 | `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
 
 ### Ir do editor para a tabela
@@ -1921,10 +1938,13 @@ Pedido do dono em 2026-10-13: "F2 para renomear pastas e conexões, além da pos
 duplicar a conexão" pelo botão direito.
 
 - **RN-NAV-009.** No navegador, F2 na linha de uma pasta ou de uma conexão abre o "Renomear"
-  dela. A pasta usa o diálogo de "Renomear" que já existe. A conexão ganha um diálogo só com o
-  nome, que grava pelo `PATCH api/user/connections` sem mudar mais nada, senha incluída. As
-  recusas são as de sempre (nome repetido, nome inválido), no próprio diálogo. O menu de contexto
-  da conexão ganha "Renomear" (F2), e o "Renomear" da pasta passa a mostrar o atalho F2.
+  dela: um diálogo só com o nome, que grava pelo `PATCH` (`api/user/folders` ou
+  `api/user/connections`) sem mudar mais nada; na conexão, a senha incluída, e na pasta, a cor
+  (RN-PASTA-007) e o ambiente. As recusas são as de sempre (nome repetido, nome inválido), no
+  próprio diálogo. O menu de contexto da pasta e o da conexão têm "Renomear" (F2); o diálogo
+  inteiro é o "Editar pasta…" (RN-PASTA-006) e o "Editar conexão". *Alterada a pedido do dono em
+  2026-10-15, issue #8: a pasta usava o diálogo de "Renomear" que já existia, que virou o "Editar
+  pasta…" (F2) com a RN-PASTA-006; agora ela tem o diálogo só com o nome, como a conexão.*
 - **RN-CONN-016.** "Duplicar conexão" no menu de contexto da conexão cria, na mesma pasta, uma
   cópia com todos os campos e a senha salva. A senha é copiada dentro do cofre e não passa pela
   tela. O nome da cópia é "<nome> (cópia)"; se esse já existir, "(cópia 2)", "(cópia 3)" e assim
@@ -2064,8 +2084,9 @@ lá.
   conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
   ambiente: pasta ou conexão só com cor herda o de cima, e a subpasta sem ambiente não mostra o da
   pasta de cima.
-  - O diálogo de nova pasta e o de renomear (também pelo F2, RN-NAV-009) ganham a seção Ambiente,
-    a mesma do formulário da conexão.
+  - O diálogo de nova pasta e o "Editar pasta…" (RN-PASTA-006) ganham a seção Ambiente, a mesma do
+    formulário da conexão. *Alterada a pedido do dono em 2026-10-15, issue #8: era o diálogo de
+    renomear, pelo F2, que agora muda só o nome (RN-NAV-009).*
   - O ambiente da pasta aparece como etiqueta colorida ao lado do nome dela na árvore.
   - A conexão sem ambiente próprio herda o da pasta mais próxima acima dela que tenha um. Ela mostra
     o herdado em todo lugar onde mostraria o próprio (RN-CONN-015: lista, árvore, aba e barra de
@@ -2151,8 +2172,11 @@ existia e não tem a opção no botão direito"; "depois de criar o ambiente, sa
 ser reutilizado; assim dá pra agrupar tudo e até criar um filtro no navegador que busca só pelo
 ambiente".
 
-- **RN-PASTA-006.** O "Renomear" do menu da pasta passa a se chamar "Editar pasta…" (F2). O diálogo
-  dele se chama "Editar pasta" e tem o nome e a seção Ambiente (RN-PASTA-005).
+- **RN-PASTA-006.** O menu da pasta tem "Editar pasta…", sem atalho, que abre o diálogo "Editar
+  pasta", com o nome, a cor da pasta (RN-PASTA-007) e a seção Ambiente (RN-PASTA-005). O
+  "Renomear" (F2) fica ao lado dele e muda só o nome (RN-NAV-009). *Alterada a pedido do dono em
+  2026-10-15, issue #8: antes o "Renomear" tinha virado o "Editar pasta…", com o F2, e o diálogo
+  não tinha a cor da pasta.*
 - **RN-AMB-001.** Os ambientes do usuário são os que as pastas e as conexões dele já usam: cada nome
   distinto (sem diferenciar maiúsculas), com a cor da pasta ou conexão alterada por último. Nada é
   gravado à parte; o ambiente some da lista quando ninguém mais o usa.
@@ -2167,3 +2191,96 @@ ambiente".
   - Ele se combina com o campo de filtro de objetos.
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
+
+## 27. Complemento de 2026-10-15: a conexão da aba de consulta e os scripts genéricos (issue #9)
+
+Issue #9 do repositório público, relatada na 0.2.0-beta.13 com Informix: "Scripts não abrem conexão
+com o banco salvo e não lista em qual servidor será executado". Quem reabre um script salvo não sabe
+em qual servidor ele vai rodar, porque a barra do editor mostra só o banco. O autor quer também
+scripts que não fiquem presos a uma conexão, "genéricos": abertos, rodam na conexão que está aberta;
+com mais de uma aberta, o Prism pergunta qual. O dono aprovou a proposta em 2026-10-15 ("Faça todas
+issues, todas elas parecem boas mesmo"). Altera a RN-SCRIPT-001 e a RN-SCRIPT-003, e a barra do
+editor ganha o botão da conexão que o canvas já desenhava (seção 9).
+
+- **RN-ARVORE-008.** A barra do editor da aba de consulta mostra, antes da lista dos bancos
+  (RN-ARVORE-007), o botão da conexão da aba: a sigla do banco (PG, DB2, IFX), o nome da conexão e
+  a etiqueta do ambiente dela, próprio ou herdado da pasta (RN-PASTA-005). A dica do botão traz o
+  servidor (`host:porta`) e o usuário.
+  - O clique no botão, ou Ctrl+9 com o foco em qualquer ponto da aba (como no DBeaver), abre a
+    lista das conexões do usuário, com busca pelo nome, pela pasta e pelo servidor. As conectadas
+    vêm primeiro, e cada conexão mostra o caminho de pastas dela.
+  - Escolher outra conexão troca a conexão DESTA aba, sem executar nada, e o texto do editor fica.
+    Com alterações não salvas na grade (RN-EDIT-007), pergunta antes, como ao executar outro
+    comando.
+  - Na troca, a sessão anterior da aba fecha e a aba passa ao banco padrão da nova conexão. O
+    resultado que estava na tela sai, como na troca do banco. A barra de status e a etiqueta da aba
+    acompanham.
+  - Com comando em andamento a troca espera: a lista abre, mas as conexões ficam desabilitadas,
+    com o motivo.
+  - A lista tem também "Mostrar no navegador", que revela e escolhe a conexão da aba na árvore: as
+    pastas acima dela abrem, e o navegador escondido aparece.
+  - Na aba sem conexão o botão diz "Sem conexão", e a lista dá a ela a conexão escolhida.
+  - A aba de uma tabela não troca de conexão: ela é a tabela daquela conexão.
+- **RN-SCRIPT-005.** O script genérico é o que não fica preso a uma conexão.
+  - O diálogo do nome do primeiro Ctrl+S e do "Salvar como" tem a caixa "Script genérico (sem
+    conexão)". Na aba sem conexão ela vem marcada e não se desmarca. No "Salvar como" de um script
+    genérico ela vem marcada.
+  - O menu do script na seção "Scripts" tem "Tornar genérico" no script com conexão, e "Vincular
+    à conexão da aba" no genérico. Vincular grava a conexão e o banco da aba em que o script está
+    aberto; sem aba aberta com conexão, o item fica desabilitado, com o motivo.
+  - O script genérico tem uma marca discreta na lista.
+  - O script genérico não guarda conexão nem banco. Aberto, com exatamente uma conexão conectada a
+    aba já abre nela, e o botão da conexão (RN-ARVORE-008) a mostra. Com mais de uma conectada, a
+    aba abre sem conexão e a faixa de escolher a conexão pergunta, com as conectadas primeiro. Com
+    nenhuma, a faixa pede qualquer conexão. O script nunca executa sozinho.
+  - Salvar um script genérico o mantém genérico: trocar a conexão ou o banco da aba dele não é
+    mudança não salva, e só o texto conta.
+  - Rota: o `PATCH api/user/scripts` ganha `generic`. Com `generic: true`, a conexão e o banco do
+    script são apagados; junto com `connectionID` ou `database`, a recusa é 422
+    `SCRIPT_PLACE_INVALID`. Sem ele vale a regra de antes, em que o ausente fica como está. No
+    `POST`, o script sem `connectionID` já nasce genérico. O cofre não muda de formato: o script já
+    guardava a conexão como opcional.
+
+## 28. Complemento de 2026-10-15: cor da pasta, Renomear e Editar pasta, ícone e cor do script (issue #8)
+
+Issue #8 do repositório público, "Mudar ícone e cor de scripts e pastas": "ao editar uma pasta, ter
+a opção de editar a cor dela; hoje deixa colocar um badge, mas se permitisse os 2 ficaria mais
+limpo e bonito"; "para entrar nessa edição é 'Renomear', poderia mudar a opção para editar e
+manter o renomear apenas para renomear com o atalho do F2"; e "nos scripts seria legal poder mudar
+o ícone, com ícones pré-definidos no mesmo estilo já existente, e personalizar sua cor também". O
+dono aprovou a proposta em 2026-10-15 ("Faça todas issues, todas elas parecem boas mesmo"). Altera
+a RN-PASTA-006 e a RN-NAV-009 (e, por elas, o diálogo da seção Ambiente na RN-PASTA-005).
+
+- **RN-PASTA-007.** A pasta pode ter uma cor, opcional, que pinta o ícone dela na árvore, aberta ou
+  fechada. Sem cor, o ícone é o neutro de sempre.
+  - A cor da pasta não é o ambiente: uma pasta pode ter as duas, a cor no ícone e a etiqueta do
+    ambiente ao lado do nome (RN-PASTA-005). A cor não passa às subpastas nem às conexões, e não
+    conta no filtro por ambiente (RN-NAV-010) nem nos ambientes do usuário (RN-AMB-001).
+  - Escolhe-se em "Cor da pasta", no diálogo de nova pasta e no "Editar pasta…" (RN-PASTA-006),
+    antes da seção Ambiente: "Sem cor", as seis cores do canvas e "Outra cor", com o conta-gotas,
+    nas regras da RN-CONN-017. O "Renomear" (F2) e o "Mover" não a mudam.
+  - O ícone colorido, da pasta e do script (RN-SCRIPT-006), passa no contraste de ícone da
+    RN-CONFIG-003 (3:1) sobre as superfícies de todos os temas, os claros inclusive. Quando a cor
+    escolhida não chega a 3:1 (as seis do canvas são claras, feitas para os temas escuros), o ícone
+    é pintado com a variante mais próxima dela que chega: escurecida nos temas claros, clareada nos
+    escuros. A cor gravada, e a das bolinhas, é a que a pessoa escolheu.
+  - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem `color`,
+    opcional, no formato da cor do ambiente (`#RRGGBB`); a recusa é 422 `FOLDER_NAME_INVALID`, no
+    campo. O `PATCH` grava a pasta por inteiro, como já faz com o ambiente: sem `color`, a pasta
+    fica sem cor. O cofre não muda de formato: a pasta gravada antes abre sem cor.
+- **RN-SCRIPT-006.** Cada script tem um ícone e, opcional, uma cor, que aparecem na seção "Scripts"
+  do navegador e na aba do script, no lugar do ícone de documento.
+  - O ícone sai de uma lista fechada, no traço dos ícones do app: documento (o padrão, o de hoje),
+    código, banco de dados, tabela, gráfico, relógio, raio, inseto, chave inglesa, estrela e
+    bandeira (`document`, `code`, `database`, `table`, `chart`, `clock`, `lightning`, `bug`,
+    `wrench`, `star` e `flag`). A tela e a API conhecem a mesma lista.
+  - A cor se escolhe como a da pasta ("Sem cor", as seis cores e "Outra cor"), com a mesma regra de
+    contraste (RN-PASTA-007). Sem cor, o ícone é o neutro de sempre.
+  - O menu do script na seção "Scripts" ganha "Editar script…", com o nome, o ícone e a cor. O F2 e
+    o "Renomear" continuam mudando só o nome. O script novo (Ctrl+S, "Salvar como") nasce com o
+    ícone padrão e sem cor.
+  - Rota: o `PATCH api/user/scripts` ganha `icon` e `color`, e a lista e o item os devolvem (nulos
+    no ícone padrão e no script sem cor). O `PATCH` continua parcial: ausente ou nulo fica como
+    está; `color` vazio tira a cor, e `icon` vazio ou `document` volta ao ícone padrão. O ícone
+    fora da lista e a cor fora de `#RRGGBB` são 422 `SCRIPT_ICON_INVALID`, no campo. O cofre não
+    muda de formato: o script gravado antes abre com o ícone padrão e sem cor.
