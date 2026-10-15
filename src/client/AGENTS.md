@@ -41,6 +41,8 @@ configuração).
 
 Para ver a tela sem olhar a janela: `pnpm dev --remoteDebuggingPort 9222` e o protocolo de
 depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, capturar a tela).
+Numa cópia de trabalho cujo `node_modules/electron` não tem o `dist/` (o binário não foi baixado), o `electron-vite` falha com "Electron
+uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electron pnpm dev …` usa o binário de outra cópia, da mesma versão.
 
 ## Processo principal
 
@@ -436,7 +438,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   inteira fica montada por baixo (`WorkbenchSlot`), e o texto, o resultado, o comando em andamento e o histórico de desfazer continuam.
   Só sair do cofre os desmonta; o bloqueio por inatividade mantém as abas e o texto, mas dá a cada aba um executor novo (ver "Bloqueio
   por inatividade").
-- **"Executar"** envia a seleção ou, sem seleção, `statementAt(texto, cursor, banco)` (`sql-statements.ts`). Uma execução
+- **"Executar"** envia a seleção ou, sem seleção, `statementAt(texto, cursor, banco, { blankLines })` (`sql-statements.ts`; quem monta
+  é o `runTarget` de `sql-editor.tsx`, com teste, e `blankLines` é a preferência `editor.blankLineSeparates`, lida na hora: ver "A linha
+  em branco separa o comando do cursor", abaixo). Uma execução
   leva um comando só (RN-SQL-001): quem confere é o `run`, com `statementCount`, e a seleção com mais de um não é enviada
   (aviso de atenção; e o estado `notice`, quando não há linhas na tela). Trecho só com comentários não é comando. O botão
   pergunta "há o que enviar?" a cada tecla com `hasStatement`, que para no primeiro caractere de comando: não separe os
@@ -446,6 +450,54 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   PostgreSQL o comentário de bloco aceita outro dentro dele e existe o bloco `$tag$`; no Db2 e no Informix o primeiro `*/`
   fecha o comentário e `$` é um caractere qualquer; no Informix `{ ... }` também é comentário. Sem o banco, vale o
   PostgreSQL.
+- **A linha em branco separa o comando do cursor** (RN-SQL-018, issue #7; `blankLineCuts` em `sql-statements.ts`, testes em
+  `sql-statements.blank-line.test.ts`). Com a preferência ligada (o padrão), sem seleção, a linha em branco (só espaços) também termina o
+  comando, como o "Smart" do DBeaver. A regra é **"na dúvida, não separa"**: o Prism ainda não confirma comando irreversível, e separar onde
+  não devia executa a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`), enquanto não separar só faz o banco
+  recusar o texto inteiro. Separa só quando as duas condições valem: o pedaço logo depois da linha em branco começa um comando
+  (`startsCommand`: `commandWords`, mais os casos que olham a palavra seguinte, `WITH` com `nome [ ( … ) ] AS (` em `opensQueries`, `ALTER`
+  e `DROP` com o tipo do objeto em `objectKinds`, `COMMENT ON`, `LOCK TABLE`, `REFRESH MATERIALIZED|TABLE` e `DO` com o corpo) e o comando
+  de cima está fechado (`commandAbove`: parênteses em zero; o fim não é vírgula, operador nem palavra de `continuationWords`, com as
+  exceções de valor `SET … ON`, `DEFAULT VALUES` e o `ON COMMIT` que pede o `DELETE ROWS`; e nada espera o resto: o `INSERT` antes do
+  `VALUES`/`SELECT`/`EXECUTE`, o `WITH` antes do comando principal, o `EXPLAIN` antes do comando, e o `CREATE TRIGGER` e o `CREATE SCHEMA`,
+  que só o `;` termina, em `untilSemicolon`: o esquema traz os objetos dele, `CREATE TABLE`, `GRANT`…, sem `;` entre eles, e separá-lo criaria
+  a tabela fora dele). `SET` e `BEGIN` não começam comando de propósito, e dentro de um `ALTER` nem `ALTER`, `DROP`, `GRANT` e `REVOKE`
+  (são cláusulas dele). Dentro de um bloco com `;` no corpo nunca separa: o corpo é o `dialect.body()` do `statementCount`, recomeçado só no `;` que
+  fecha e no corte (no Db2, depois do bloco, até o fim do texto). Esse corpo só vê o bloco nas primeiras palavras do comando, e o `BEGIN` não
+  começa comando: no Db2 (`beginBlock`), o primeiro `begin` em qualquer lugar do texto para os cortes até o fim, porque com `SELECT …`, a linha
+  em branco e `BEGIN … END` (ou `nome: BEGIN`, ou `ALTER MODULE … ADD PROCEDURE`) o primeiro `;` do bloco recomeçaria o corpo, e a linha em
+  branco depois de `purge: LOOP` mandaria sozinho o `DELETE` de dentro do laço. A coluna chamada `BEGIN` também para os cortes (na dúvida,
+  não separa). **Palavra nova que começa comando**: só se nenhuma cláusula de outro comando pode começar com ela depois de um texto que
+  parece completo (o `LOCK MODE ROW` do `CREATE TABLE` do Informix e o `DROP STORAGE` do `TRUNCATE` são os exemplos); na dúvida, peça a
+  palavra seguinte, como o `LOCK` faz. O corte é posicional: `blankLineCuts` devolve
+  o começo da primeira linha em branco entre os dois comandos (e o da última, quando há comentário entre elas: o comentário separado do
+  comando de baixo por uma linha em branco não vai com ele), e o `scan` fecha o comando de cima no `\n` antes dela, que é também o
+  `boundary` do cursor; o `scan` marca esse comando com `cut`. **O cursor numa linha em branco** fora de um comando (`statementAt`) dá
+  `null` quando acima dele não há comando nenhum, no começo do texto ou só com comentários acima ("se não há nada acima, nada abaixo
+  também", do dono, como no DBeaver: nem o `DELETE` de baixo vai; o executor diz "Não há comando para executar.", e o botão continua
+  habilitado, porque o `hasStatement` não separa os comandos). Com um comando acima, só muda de resposta onde a regra cortou
+  (`onBlankLineCut`: a linha dele está na mesma sequência de linhas em branco de um corte) e foi o corte que terminou o de cima (`cut`): fica
+  com ele. Depois de um comando terminado no `;` vale a resposta de antes, o comando seguinte: **o `;` não muda de resposta com a
+  preferência ligada** (com `DELETE …;`, a linha em branco e `SELECT …;`, o cursor na linha em branco é o `SELECT`, e não o `DELETE` de
+  novo). Um teste confere isso posição a posição, com a preferência ligada e desligada, nos textos em que a linha em branco não corta nada
+  e que não começam por linhas em branco (essas, com a preferência, não executam nada). A seleção e o
+  `statementCount` não mudam: a conta é sempre só pelo `;`. Custa uma leitura dos pedaços do texto por execução (por volta de 100 ms num
+  texto de 1 MB); o `hasStatement` de cada tecla não passa por aqui.
+- **O destaque do comando enviado** (RN-SQL-018; `_lib/run-flash.ts`, com teste): ao executar sem seleção (Ctrl+Enter ou o botão), o
+  `sendFrom` de `sql-editor.tsx` entrega ao `onRun`, junto com o alvo, o `flash` que manda `flashRun(de, até)` com o trecho que `flashRangeOf`
+  deu no instante da tecla, exatamente o texto enviado; a seleção e o "sem comando" não piscam. **Quem acende é a aba, e só quando o comando
+  vai mesmo ao banco**: o `handleRun` de `query-tab.tsx` chama o `flash` dentro do `go()`, com `commandWillRun` (um comando, a aba livre) e
+  com conexão, depois da pergunta das alterações não salvas (RN-EDIT-007) quando ela vem; com um comando em andamento o executor larga o
+  Ctrl+Enter calado, e o destaque nessa hora diria que algo rodou. Se o texto mudou entre a tecla e o envio, nada pisca (`flashEffect`). A
+  marca `.cm-run-flash` (um `StateField`) usa o acento do tema, translúcido, numa animação de 700 ms (`runFlashMs`); um `ViewPlugin` a
+  apaga no fim e leva o relógio junto quando o editor desmonta, e qualquer edição a apaga antes. Cada destaque tem um
+  número (`data-run`): é outra marca, o CodeMirror a redesenha e a animação recomeça mesmo no mesmo trecho. Com `prefers-reduced-motion`,
+  a marca aparece parada e some de uma vez. A cor está no `baseTheme` da extensão, e não no `editorTheme`: a animação não precisa ser refeita
+  a cada troca de fonte. **Conferido sob Xvfb** (`pnpm dev`, uma conexão para um host que não existe, a tecla e o clique pelo protocolo de
+  depuração): o comando do cursor, o `DELETE` com a linha em branco antes do `WHERE` e o cursor na linha em branco piscam, no tema escuro e no
+  claro, a marca sai do DOM antes de um segundo, e desligar a preferência faz o texto inteiro piscar, sem recriar o editor. Depois da
+  revisão, também: com o comando em andamento (o Cancelar na barra, a conexão para `10.255.255.1` tentando abrir), o Ctrl+Enter não pisca
+  nada; e com `DELETE …;`, a linha em branco e `SELECT …;`, o cursor na linha em branco pisca e envia o `SELECT`.
 - **A posição do erro vale para o texto que foi enviado, e é em caracteres.** O PostgreSQL conta caracteres (de 1 em diante) e
   o editor conta unidades UTF-16: cada emoji antes do erro valeria dois para o editor e um para o banco, e a marca cairia um
   caractere antes por emoji. `utf16IndexOf` (`sql-statements.ts`, com teste) converte; acento comum não precisa. O editor avisa cada alteração (`onEdited`, sem atraso): a marca
@@ -1249,7 +1301,7 @@ fechar não apaga as abas.
   vivem na memória da sessão e a tela segue. `usePreferences()` devolve `{ preferences, update, signedIn }`
   (`useSyncExternalStore`); quem só lê usa o nome do campo, em grupos (`preferences.editor.fontSize`): `theme`, `ui` (`fontFamily`, a fonte da
   interface), `editor` (fonte,
-  tamanho, tabulação, `autocomplete` e `uppercaseKeywords`), `results` (`nullText` e `autoLoadMore`) e `security` (`lockEnabled` e `lockAfterMinutes`); `update` aceita um grupo pela metade, e o
+  tamanho, tabulação, `autocomplete`, `uppercaseKeywords` e `blankLineSeparates`), `results` (`nullText` e `autoLoadMore`) e `security` (`lockEnabled` e `lockAfterMinutes`); `update` aceita um grupo pela metade, e o
   formato antigo (três campos soltos do editor) é migrado (`upgradeLegacy`). **Nunca guarde segredo nem
   dado de conexão ali**: quem apagar o `localStorage` perde só o gosto. As de atualização (verificar ao abrir, versão pulada) são
   outra coisa: moram no processo principal e a tela as lê e muda pela ponte (`window.prism.updates`).
@@ -1280,7 +1332,9 @@ fechar não apaga as abas.
   ligar uma não refazer o tema. O editor de outra aba nasce com as de agora (`initial`). **Extensão nova que depende de preferência ganha o
   próprio compartimento e a própria entrada de `initial`**, ou só vale para o editor criado depois. O padrão da tabulação é 4 (o do canvas; o
   editor usava 2). A fonte do editor é a de Configurações › Aparência (ver "Fontes"): o `themeSlot` a recebe pelas preferências, e não pela
-  variável `--font-editor`, porque reconfigurar o compartimento é o que faz o CodeMirror medir o texto de novo.
+  variável `--font-editor`, porque reconfigurar o compartimento é o que faz o CodeMirror medir o texto de novo. A preferência que não muda
+  nada no editor, só o que ele faz numa ação, não precisa de compartimento: `blankLineSeparates` (RN-SQL-018) vive numa ref
+  (`blankLinesNow`, como o `engineNow`) e é lida na hora de executar.
 - **Fontes** (RN-CONFIG-008; `_lib/fonts.ts`, `_lib/system-fonts.ts`, `_components/font-picker.tsx` e `font-sync.tsx`): Aparência tem "Fonte da
   interface" (`ui.fontFamily`, padrão IBM Plex Sans) e "Fonte do editor SQL" (`editor.fontFamily`, padrão IBM Plex Mono; o campo saiu da seção
   Editor SQL, que diz onde ele está, e a escolha da lista fixa de antes continua valendo). **O nome vira CSS**: o esquema (`fontNameSchema`) e a
@@ -1332,6 +1386,9 @@ fechar não apaga as abas.
   booleano: fora de aspas, de comentário e de nome depois de ponto. **A lista é fixa de propósito**: o dialeto do PostgreSQL marca `id`,
   `name`, `type` e `count` como palavra-chave, e converter "tudo o que o dialeto marca" reescreveria o nome das colunas do usuário. Um falso
   negativo deixa a palavra como foi digitada; um falso positivo reescreve um nome dele. O preço: `PRIMARY KEY` sai `PRIMARY key`.
+- **A linha em branco separa os comandos** (RN-SQL-018; `editor.blankLineSeparates`, ligada por padrão, a caixa `cfg-linha-em-branco`
+  depois das duas do RN-CONFIG-004; não está no canvas, seção 9 da especificação): desligada, o comando do cursor volta a ser separado só
+  pelo `;`, exatamente como antes. Ver "A linha em branco separa o comando do cursor", na área de trabalho.
 - **A navegação da tela não usa `<a href="#cfg-…">`** como o canvas: a rota é em hash, e uma âncora a trocaria. São botões que rolam
   e dão foco ao título da seção; `activeSection` (pura) decide a marcada pela rolagem.
 - **O que ainda não existe é um `ComingSoonCard`**, sem controle nenhum: o `page.test.ts` confere que ele não tem `input`, `select`,
