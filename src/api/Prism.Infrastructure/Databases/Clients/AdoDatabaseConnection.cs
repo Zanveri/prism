@@ -127,6 +127,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     public bool IsOpen => !_discarded && _connection?.State == ConnectionState.Open;
 
+    /// <summary>O leitor só fica aberto entre páginas: o fim da leitura (<see cref="FinishCursorAsync"/>) e o abandono (<see cref="DisposeCursorAsync"/>) o tiram.</summary>
+    public bool HasOpenCursor => _reader is not null;
+
     /// <summary>A consulta de verificação do banco (RN-CONN-013).</summary>
     protected abstract string PingSql { get; }
 

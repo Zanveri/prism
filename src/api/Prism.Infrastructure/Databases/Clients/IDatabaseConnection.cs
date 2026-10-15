@@ -15,6 +15,14 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// <summary>`false` quando a conexão caiu (rede, banco reiniciado, sessão derrubada por um administrador): depois de uma falha, é o que diz que ela não serve mais.</summary>
     bool IsOpen { get; }
 
+    /// <summary>
+    /// RN-SQL-007: há um cursor aberto entre páginas, à espera do "carregar mais". Toda operação que vai ao banco o fecha antes de ser
+    /// enviada, menos o "carregar mais", que lê dele e o fecha quando acaba ou falha. A recusa antes de ir ao banco (controle de
+    /// transação, mais de um comando) não o toca. É por aqui que o registro de sessões sabe, depois de uma operação, se o cursor
+    /// continua aberto.
+    /// </summary>
+    bool HasOpenCursor { get; }
+
     /// <summary>RN-CONN-013: a consulta de verificação do banco. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken);
 
