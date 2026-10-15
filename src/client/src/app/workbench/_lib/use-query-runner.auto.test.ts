@@ -341,6 +341,32 @@ describe("o que a pessoa pede enquanto a execução automática roda (RN-GRADE-0
     expect(rowsOf(runner)).toMatchObject({ rows: [["1", "novo"]], total: 42 });
   });
 
+  it("o executor aposentado durante a espera (trocar o banco ou a conexão da aba) faz o \"Carregar mais\" e o \"Contar total\" que esperavam desistirem calados", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { api, runner, autoAnswer } = await withAutoRunning();
+    const sent = api.calls.length;
+    const more = runner.loadMore();
+    const count = runner.countTotal();
+    await vi.advanceTimersByTimeAsync(0);
+
+    runner.retire();
+    autoAnswer.resolve(page([["1", "novo"]]));
+    await more;
+    await count;
+
+    // Nada foi enviado depois da execução automática, e o registro não diz que o painel segurou um executor velho: ele foi aposentado no meio da espera.
+    expect(api.calls.slice(sent).map((call) => call.path)).not.toContain(`${sessions}/s1/queries/next`);
+    expect(api.calls.slice(sent).map((call) => call.path)).not.toContain(`${sessions}/s1/queries/count`);
+    expect(warn).not.toHaveBeenCalled();
+    expect(runner.getState()).toEqual({ status: "idle" });
+
+    // O pedido que chega ao executor JÁ aposentado continua recusado com o registro.
+    await runner.loadMore();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0][0])).toContain('"loadMore"');
+    warn.mockRestore();
+  });
+
   it("autoRunSettled espera a execução automática em andamento; sem ela, resolve na hora", async () => {
     const { runner, autoAnswer } = await withAutoRunning();
     let settled = false;

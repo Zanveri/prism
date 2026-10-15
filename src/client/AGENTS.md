@@ -1483,7 +1483,9 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   abandona (`stopAuto`, o `stop` que o executor entrega): o resultado de antes volta na hora, com `cursorClosed`, e o próximo comando, da pessoa ou da
   atualização ligada de novo, espera `autoBusy`; antes ela seguia sem nada na tela dizer, e o resultado ou o erro chegavam depois de desligada.
   "Carregar mais", "Contar total" e "Exportar CSV" esperam por
-  ela (`afterAuto`, `autoRunSettled`) e seguem sobre o resultado novo (o de antes já não está na API). A edição da célula não começa: `cellAccess` recebe
+  ela (`afterAuto`, `autoRunSettled`) e seguem sobre o resultado novo (o de antes já não está na API); o executor aposentado durante a espera (a troca do
+  banco ou da conexão, que a desliga) faz o "Carregar mais" e o "Contar total" desistirem calados (`retiredWhileWaiting`), sem o registro do `refuse`, que
+  fica para o pedido que chega a um executor já aposentado. A edição da célula não começa: `cellAccess` recebe
   `busy: "refresh"`, com o motivo "a atualização automática está lendo as linhas de novo" na faixa, e o alvo não é perguntado à API por um resultado que vai
   mudar; o resto do menu ("Atualizar", "Filtrar") segue `isPersonBusy`. A aba que vai para outra janela passa por `handOffTab` (`_lib/tab-handoff.ts`):
   a pausa `moving` desde o começo, a espera da execução em andamento, e a pausa tirada no fim (a aba que foi é solta, e isso a desliga). **Depois da espera

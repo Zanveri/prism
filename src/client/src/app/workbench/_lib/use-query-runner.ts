@@ -715,9 +715,20 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     while (autoBusy !== null) await autoBusy;
   };
 
+  /**
+   * Espera a execução automática em andamento (`afterAuto`) e diz se o executor saiu de cena NESSE meio-tempo: trocar o banco ou a conexão da aba (ou fechá-la)
+   * com ela rodando a desliga e aposenta o executor, e o "Carregar mais" ou o "Contar total" que esperavam desistem calados, porque o painel não segurava um
+   * executor velho. A recusa com o registro (`refuse`) fica para o pedido que chega a um executor já aposentado.
+   */
+  const retiredWhileWaiting = async () => {
+    const before = retired;
+    await afterAuto();
+    return retired && !before;
+  };
+
   const loadMore = async () => {
     // Sem a espera, tudo até o envio acontece já na chamada: quem chama vê a aba ocupada na hora.
-    if (autoBusy !== null) await afterAuto();
+    if (autoBusy !== null && (await retiredWhileWaiting())) return;
     return guarded(async () => {
       if (retired) return refuse("loadMore");
       if (state.status !== "rows" || !state.hasMore || state.cursorClosed || isBusy()) return;
@@ -758,7 +769,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   };
 
   const countTotal = async () => {
-    if (autoBusy !== null) await afterAuto();
+    if (autoBusy !== null && (await retiredWhileWaiting())) return;
     return guarded(async () => {
       // Só há o que contar quando há linhas que a tela não leu (RN-SQL-006): com o resultado inteiro
       // na tela, o total é o que está nela, e o comando que gravou já o trouxe (RN-SQL-013). O total
