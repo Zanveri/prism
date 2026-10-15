@@ -1483,7 +1483,11 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   ela (`afterAuto`, `autoRunSettled`) e seguem sobre o resultado novo (o de antes já não está na API). A edição da célula não começa: `cellAccess` recebe
   `busy: "refresh"`, com o motivo "a atualização automática está lendo as linhas de novo" na faixa, e o alvo não é perguntado à API por um resultado que vai
   mudar; o resto do menu ("Atualizar", "Filtrar") segue `isPersonBusy`. A aba que vai para outra janela passa por `handOffTab` (`_lib/tab-handoff.ts`):
-  a pausa `moving` desde o começo, a espera da execução em andamento, e a pausa tirada no fim (a aba que foi é solta, e isso a desliga).
+  a pausa `moving` desde o começo, a espera da execução em andamento, e a pausa tirada no fim (a aba que foi é solta, e isso a desliga). **Depois da espera
+  vale a lista de abas DE AGORA**: `sendTab` relê a aba de `latestTabs` (o título, o banco e o script podem ter mudado; a que fechou não vai, sem aviso), e
+  `detachTab` a tira da lista de agora (`setTabs` funcional, a vizinha escolhida pela lista da última renderização): com a lista da renderização em que a
+  pessoa pediu, a aba aberta durante a espera sumia (e a sessão dela ficava aberta) e a fechada voltava sem executor (`workbench-state.detach.test.ts` e
+  `workbench-tabs.move.test.ts`).
 - **O que a execução automática não faz**: não esmaece a grade nem diz "Executando…" (o `running` do `ResultPanel` exclui `auto`); não repete o aviso de
   valores cortados (`truncationWarned` só é zerado pelo comando da pessoa: o "Carregar mais" depois dela também não avisa de novo o resultado que já avisou);
   com as mesmas colunas, fica com o `id` de antes (a chave da grade: a grade não é refeita, e a rolagem fica); ligada, a grade não busca a página seguinte

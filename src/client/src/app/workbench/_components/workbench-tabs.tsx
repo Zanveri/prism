@@ -90,10 +90,13 @@ export function WorkbenchTabs() {
   const latestOpenTable = useRef(openTableTab);
   const latestSwitchDatabase = useRef(switchDatabase);
   const latestSwitchConnection = useRef(switchConnection);
+  // A lista de abas da última renderização, para o que roda depois de uma espera (a ida para outra janela, o fechamento da janela).
+  const latestTabs = useRef(tabs);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
     latestSwitchDatabase.current = switchDatabase;
     latestSwitchConnection.current = switchConnection;
+    latestTabs.current = tabs;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
@@ -188,27 +191,32 @@ export function WorkbenchTabs() {
    * Manda a aba para outra janela (RN-ABAS-002 e 003): o texto e a seleção do editor DESTE instante, o resultado, a sessão e o que a tela lembrava.
    * Só quando o processo principal a levou ela sai daqui, sem fechar a sessão (que agora é da outra janela). Com comando em andamento não vai: a
    * resposta chegaria aqui, à aba que já saiu. A atualização automática fica suspensa durante a ida, e a execução automática em andamento termina antes
-   * de a aba ser lida (`handOffTab`, RN-GRADE-014).
+   * de a aba ser lida (`handOffTab`, RN-GRADE-014). Por essa espera, a aba que vai é a da lista DE AGORA (`latestTabs`), e não a da renderização em que a
+   * pessoa pediu: o título, o banco e o script dela podem ter mudado, e a aba que fechou nesse meio-tempo não vai, sem aviso.
    *
    * `saved`: a aba acabou de salvar as alterações para poder ir (RN-EDIT-007). Nos Registros, as linhas na tela são as de antes de salvar, e o Salvar
    * lê os registros de novo (RN-EDIT-005): a aba vai sem elas, e a janela que a recebe lê os registros na mesma sessão, já com o que foi gravado. A aba
    * de consulta já está com a grade salva (RN-EDIT-009), e vai com ela, sem executar nada.
    */
   async function sendTab(tabId: string, target: TabMoveTarget, saved = false) {
-    const tab = tabs.find((candidate) => candidate.id === tabId);
-    if (tab === undefined) return;
+    const tabNow = () => latestTabs.current.find((candidate) => candidate.id === tabId);
+    const asked = tabNow();
+    if (asked === undefined) return;
 
     const runner = runnerOf(tabId);
     const outcome = await handOffTab(runner, {
-      // Enquanto a execução automática terminava, a aba pode ter fechado (o executor saiu: `runnerOf` lança) ou trocado de executor (outro banco): nada vai.
+      // Enquanto a execução automática terminava, a aba pode ter fechado (ela saiu da lista, e o executor também: `runnerOf` lança) ou trocado de executor
+      // (outro banco, outra conexão): nada vai.
       alive: () => {
         try {
-          return runnerOf(tabId) === runner;
+          return tabNow() !== undefined && runnerOf(tabId) === runner;
         } catch {
           return false;
         }
       },
       prepare: (current) => {
+        // `alive` acabou de achá-la na lista de agora.
+        const tab = tabNow() ?? asked;
         const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
         return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
       },
@@ -268,10 +276,8 @@ export function WorkbenchTabs() {
     setWindowClosing(false);
     void releaseWindow().finally(() => tellWindows((windows) => windows.close()));
   }, [releaseWindow]);
-  const latestTabs = useRef(tabs);
   const latestHandleClose = useRef(handleClose);
   useEffect(() => {
-    latestTabs.current = tabs;
     latestHandleClose.current = handleClose;
   });
   useEffect(

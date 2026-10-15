@@ -474,18 +474,27 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const reorderTab = useCallback((tabId: string, insertAt: number) => setTabs((current) => moveTab(current, tabId, insertAt) ?? current), []);
   const shiftTabBy = useCallback((tabId: string, delta: -1 | 1) => setTabs((current) => shiftTab(current, tabId, delta) ?? current), []);
 
+  // A lista de abas da última renderização. Soltar a aba que foi para outra janela vem depois de uma espera (a ida espera a execução automática em
+  // andamento terminar, RN-GRADE-014), por uma função de uma renderização antiga: a lista que ela viu pode não ter a aba aberta nem ter a fechada nesse meio-tempo.
+  const latestTabs = useRef(tabs);
+  useEffect(() => {
+    latestTabs.current = tabs;
+  });
+
+  // Tira a aba da lista DE AGORA (`setTabs` funcional, e a vizinha escolhida na lista de agora): com a lista que a função viu, a aba aberta durante a espera
+  // sumia (e a sessão dela ficava aberta), e a fechada voltava sem executor.
   const detachTab = useCallback(
     (tabId: string) => {
-      const remaining = tabs.filter((tab) => tab.id !== tabId);
-      if (remaining.length === tabs.length) return;
+      const current = latestTabs.current;
+      if (!current.some((tab) => tab.id === tabId)) return;
 
-      setTabs(remaining);
-      setActiveTabId(nextActiveTab(tabs, activeTabId, remaining));
+      setTabs((now) => now.filter((tab) => tab.id !== tabId));
+      setActiveTabId((active) => nextActiveTab(current, active, current.filter((tab) => tab.id !== tabId)));
       // Só o executor sai de cena: a sessão, com o cursor aberto, é da janela que recebeu a aba.
       runners.get(tabId)?.retire();
       runners.delete(tabId);
     },
-    [tabs, activeTabId, runners],
+    [runners],
   );
 
   const releaseWindow = useCallback(async () => {
