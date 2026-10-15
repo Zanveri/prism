@@ -2506,6 +2506,9 @@ primeiras: a área de trabalho passa de 14 px a 13 px, e quem quer menos ainda u
   agora (os passos, todas as janelas e o splash, o "Restaurar 100%" e onde a escolha fica). O
   splash cresce com o zoom só até caber na área útil da tela, e a RN-MARCA-002 deixa de ter o
   tamanho fixo: 640×400 é o de 100%.
+  - O `Ctrl 0` continua sendo o 100% do programa inteiro, como o dono o pediu em 2026-10-12 (seção
+    20, "Janela e zoom"): o `Ctrl 0` do DBeaver, que escolhe o esquema ativo, não vira atalho da
+    lista dos bancos da aba (RN-ARVORE-007), que continua sem atalho próprio.
 - **RN-NAV-011.** "Densidade do navegador", em Configurações › Aparência: "Confortável" e
   "Compacta".
   - "Confortável" é o padrão e o desenho do canvas: linhas de 30 px e 16 px de recuo a cada nível.
