@@ -88,3 +88,15 @@ describe("o ícone de cada script na lista (RN-SCRIPT-006)", () => {
     ]);
   });
 });
+
+describe("a densidade do navegador na lista de scripts (RN-NAV-011)", () => {
+  const heights = (tree: ReturnType<typeof view>) => rows(tree).map((row) => String(row.props.className).split(" ").filter((name) => name.startsWith("h-")));
+
+  it("sem a escolha, a confortável: linhas de 28 px, como antes", () => {
+    expect(heights(view())).toEqual([["h-7"], ["h-7"]]);
+  });
+
+  it("a compacta: linhas de 22 px, como as da árvore", () => {
+    expect(heights(view({ density: "compact" }))).toEqual([["h-[22px]"], ["h-[22px]"]]);
+  });
+});

@@ -5,9 +5,11 @@ import { engineOption, type Connection } from "@/app/connections/_lib/connection
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
+import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon, iconColorStyle } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { actionsWidth as actionsWidthOf, navigatorMetrics, rowIndent } from "../_lib/navigator-density";
 import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
 import type { MatchRange } from "../_lib/navigator-search";
 import { isRefreshable } from "../_lib/navigator-toolbar";
@@ -15,11 +17,6 @@ import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
 const copy = workbenchCopy.navigator;
-
-/** O recuo do canvas: 10 px na raiz e 16 px a mais por nível. */
-export const rowHeight = 30;
-const baseIndent = 10;
-const levelIndent = 16;
 
 export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "failed";
 
@@ -62,7 +59,7 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
 
 function ActionButton({ label, className, children, ...props }: { label: string } & ComponentProps<"button">) {
   return (
-    <button type="button" aria-label={label} title={label} className={cn("flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-border hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", className)} {...props}>
+    <button type="button" aria-label={label} title={label} className={cn("flex flex-none cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-border hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", className)} {...props}>
       {children}
     </button>
   );
@@ -70,6 +67,8 @@ function ActionButton({ label, className, children, ...props }: { label: string 
 
 export type NavigatorRowProps = {
   node: NavNode;
+  /** A densidade do navegador (RN-NAV-011): a altura da linha, o recuo e o tamanho dos botões de ação. Sem ela, a confortável, a do canvas. */
+  density?: NavigatorDensity;
   index: number;
   open: boolean;
   /** A linha que o Tab alcança (a da última seleção); as outras só se alcançam pelas setas. */
@@ -110,12 +109,13 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, index, open, tabbable, selected, connection, environment, folderColor = null, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
-  const paddingLeft = baseIndent + node.depth * levelIndent;
+export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+  const metrics = navigatorMetrics[density];
+  const paddingLeft = rowIndent(metrics, node.depth);
 
   if (node.kind === "loading") {
     return (
-      <div style={{ paddingLeft: paddingLeft + 22 }} className="flex h-[30px] items-center pr-3 text-sm text-subtle italic">
+      <div style={{ paddingLeft: paddingLeft + 22 }} className={cn("flex items-center pr-3 text-sm text-subtle italic", metrics.rowClass)}>
         {node.label}
       </div>
     );
@@ -154,7 +154,7 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
   const hasDetail = Boolean(node.detail) && !isConnection;
   const canRefresh = isRefreshable(node, connected);
   // Com o mouse ou o foco na linha, o fim dela é das ações; o conteúdo se afasta delas em vez de ficar escondido.
-  const actionsWidth = (Number(isConnection && connection !== undefined) + Number(canRefresh) + Number(isConnection && connected)) * 26 + 8;
+  const actionsWidth = actionsWidthOf(metrics, Number(isConnection && connection !== undefined) + Number(canRefresh) + Number(isConnection && connected));
   const opensTab = tableTargetOf(node) !== null;
   const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : null;
   // A conexão mostra na dica o que a lista da tela de Conexões trazia embaixo do nome e a árvore não mostra: o banco e o endereço (RN-NAV-003).
@@ -168,7 +168,7 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
         // que guarda de onde veio; e só se o menu abre, senão um pedido ignorado tiraria o foco do menu que já está aberto.
         if (onContextMenu(node, { x: event.clientX, y: event.clientY })) event.currentTarget.querySelector<HTMLElement>("[data-row-toggle]")?.focus({ preventScroll: true });
       }}
-      className={cn("group relative flex h-[30px] items-center", selected ? "bg-selected" : "hover:bg-selected")}
+      className={cn("group relative flex items-center", metrics.rowClass, selected ? "bg-selected" : "hover:bg-selected")}
     >
       <button
         type="button"
@@ -213,17 +213,17 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
       {/* Sobre o fim da linha, no lugar do ponto de estado e dos detalhes: só enquanto o mouse ou o foco estão na linha. */}
       <div className="absolute inset-y-0 right-1 hidden items-center gap-0.5 bg-selected pl-1 group-focus-within:flex group-hover:flex">
         {isConnection && connection ? (
-          <ActionButton label={copy.newQuery(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onNewQuery(node)}>
+          <ActionButton label={copy.newQuery(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onNewQuery(node)} className={metrics.actionClass}>
             <DocumentIcon />
           </ActionButton>
         ) : null}
         {canRefresh ? (
-          <ActionButton label={copy.refresh(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onRefresh(node)}>
+          <ActionButton label={copy.refresh(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onRefresh(node)} className={metrics.actionClass}>
             <RefreshIcon />
           </ActionButton>
         ) : null}
         {isConnection && connected ? (
-          <ActionButton label={copy.disconnect(name)} tabIndex={tabbable ? 0 : -1} disabled={busy} onClick={() => onDisconnect(node)}>
+          <ActionButton label={copy.disconnect(name)} tabIndex={tabbable ? 0 : -1} disabled={busy} onClick={() => onDisconnect(node)} className={metrics.actionClass}>
             <PowerIcon />
           </ActionButton>
         ) : null}

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createPreferencesStore, defaultPreferences, gridZoomSteps, parseNullText, parsePreferences, preferenceLimits, preferencesKey, themeModes, type PreferencesStorage } from "./preferences";
+import { createPreferencesStore, defaultPreferences, gridZoomSteps, navigatorDensities, parseNullText, parsePreferences, preferenceLimits, preferencesKey, themeModes, type PreferencesStorage } from "./preferences";
 
 /** O `localStorage` de mentira: um mapa em memória, que também mostra o que foi gravado. */
 function fakeStorage(initial: Record<string, string> = {}) {
@@ -14,7 +14,7 @@ function fakeStorage(initial: Record<string, string> = {}) {
 
 const saved = {
   theme: "light",
-  ui: { fontFamily: "Noto Sans" },
+  ui: { fontFamily: "Noto Sans", navigatorDensity: "compact" },
   editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false },
   results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125 },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
@@ -24,7 +24,7 @@ describe("o padrão das preferências", () => {
   it("é o do canvas e o combinado com as outras frentes (segunda leva): resultados, segurança e as duas chaves novas do editor", () => {
     expect(defaultPreferences).toEqual({
       theme: "dark",
-      ui: { fontFamily: "IBM Plex Sans" },
+      ui: { fontFamily: "IBM Plex Sans", navigatorDensity: "comfortable" },
       editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
       results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
@@ -103,6 +103,9 @@ describe("a leitura tolerante", () => {
     ["tipo no cabeçalho que não é booleano", { results: { showColumnTypes: "false" } }, ["results", "showColumnTypes"]],
     ["tipo no cabeçalho nulo", { results: { showColumnTypes: null } }, ["results", "showColumnTypes"]],
     ["zoom da grade fora dos passos", { results: { gridZoom: 68 } }, ["results", "gridZoom"]],
+    ["densidade do navegador desconhecida", { ui: { navigatorDensity: "spacious" } }, ["ui", "navigatorDensity"]],
+    ["densidade do navegador em maiúsculas", { ui: { navigatorDensity: "COMPACT" } }, ["ui", "navigatorDensity"]],
+    ["densidade do navegador que não é texto", { ui: { navigatorDensity: 22 } }, ["ui", "navigatorDensity"]],
     ["zoom da grade abaixo de 50%", { results: { gridZoom: 25 } }, ["results", "gridZoom"]],
     ["zoom da grade acima de 200%", { results: { gridZoom: 300 } }, ["results", "gridZoom"]],
     ["zoom da grade em texto", { results: { gridZoom: "100" } }, ["results", "gridZoom"]],
@@ -141,6 +144,14 @@ describe("a leitura tolerante", () => {
     expect(parsePreferences(JSON.stringify({ editor: { fontSize: 24, tabSize: 8 }, security: { lockAfterMinutes: 240 } }))).toMatchObject({ editor: { fontSize: 24, tabSize: 8 }, security: { lockAfterMinutes: 240 } });
     expect(parsePreferences(JSON.stringify({ results: { nullText: "123456789012" } })).results.nullText).toBe("123456789012");
     expect(parsePreferences(JSON.stringify({ results: { nullText: "[NULL]" } })).results.nullText).toBe("[NULL]");
+  });
+
+  it("a densidade do navegador (RN-NAV-011): as duas, e o padrão é a confortável, o desenho do canvas; a fonte da interface, do mesmo grupo, fica", () => {
+    expect(navigatorDensities).toEqual(["comfortable", "compact"]);
+    expect(defaultPreferences.ui.navigatorDensity).toBe("comfortable");
+    for (const density of navigatorDensities) expect(parsePreferences(JSON.stringify({ ui: { navigatorDensity: density } })).ui.navigatorDensity).toBe(density);
+    // As preferências de antes da densidade: o grupo só com a fonte continua valendo, e a densidade é a padrão.
+    expect(parsePreferences(JSON.stringify({ ui: { fontFamily: "Ubuntu" } })).ui).toEqual({ fontFamily: "Ubuntu", navigatorDensity: "comfortable" });
   });
 
   it("a fonte é qualquer uma do sistema (RN-CONFIG-008): o nome da lista passa, e a escolha da lista fixa de antes continua valendo", () => {

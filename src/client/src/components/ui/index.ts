@@ -33,6 +33,7 @@ export {
   LightningIcon,
   LockIcon,
   LockOpenIcon,
+  MinusIcon,
   NoColorIcon,
   PackageIcon,
   PencilIcon,

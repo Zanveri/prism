@@ -13,7 +13,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
@@ -78,14 +78,39 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
   ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
+- **O zoom do programa inteiro** (RN-ZOOM-001; `zoom.ts`, puro e sem Node, porque a tela também o importa, e `zoom-file.ts`, com o disco; os dois com
+  teste). É **desta instalação**, e não do usuário: `zoom.json` (`{ "zoom": 110 }`) na pasta de dados, fora do cofre, lido uma vez ao carregar o `main.ts`
+  (depois do `setPath`) com leitura tolerante (o que não é um dos passos vale 100%) e gravado de forma atômica, como `update-preferences.json`; gravar que
+  falha só vai para o log. Os passos são os do zoom da grade (`appZoomSteps`). **Onde vale**: o splash nasce nele (`splashGeometry`, em `splash.ts`: a
+  janela de 640×400 cresce junto, até caber na área útil da tela, e a página `data:` recebe o `zoomFactor`); cada janela do app nasce nele pelo
+  `webPreferences.zoomFactor`; e a mudança (`changeZoom`) chama `setZoomFactor` em todas as vivas e manda `prism:zoom-changed`. O Chromium guarda o zoom
+  **por origem** (as janelas do app são todas de `app://prism`, ou do servidor do Vite): conferido no Electron, o `setZoomFactor` de uma janela vale nas
+  outras da mesma origem e passa por cima do `webPreferences.zoomFactor` das que nascem depois, e a página `data:` do splash fica à parte. Por isso o
+  valor é um só, e todo lugar recebe o mesmo. **Cuidado com 100%**: é o padrão do Chromium, e ir a ele APAGA o zoom guardado para a origem; e o Electron
+  reaplica o `webPreferences.zoomFactor` (o zoom com que a janela nasceu) a cada navegação do quadro principal quando a origem não guarda zoom. Sem
+  mais nada, a janela nascida em 125% voltava a 125% ao recarregar depois de ir a 100% (o "Reiniciar" da API recarrega as outras janelas; o Vite recarrega
+  em desenvolvimento), levava as outras da mesma origem junto, e o `zoom.json` e Configurações continuavam dizendo 100% (conferido sob Xvfb no `pnpm dev`:
+  aberto em 125%, Ctrl+0 e `location.reload()` voltavam a 1,25 sem a correção, e ficam em 1). Por isso cada janela recebe o zoom de agora também no
+  `did-navigate` (as rotas em hash não passam por ele), o que cobre ainda o zoom mudado enquanto uma janela nova carregava. **Os atalhos** são tratados
+  no `before-input-event` de `createAppWindow`, ANTES do `menuShortcutIgnored`:
+  `zoomShortcut` (Ctrl+= e Ctrl++, o + do teclado numérico, Ctrl+- e Ctrl+0; Cmd no macOS; sem Alt, que é o AltGr) chama `event.preventDefault()`, e a
+  tecla não chega à página (o editor e a grade não a veem: nenhum caractere entra no editor) nem ao menu (o Zoom do menu padrão de desenvolvimento não
+  muda o zoom por fora). A tecla é o caractere (`key`), menos o + e o - do teclado numérico (`code`); o 0 vai pelo caractere, porque com o Num Lock
+  desligado aquela tecla é o Insert, e Ctrl+Insert é o copiar do Windows e do Linux, que tem de chegar à página (conferido sob Xvfb: `xdotool key
+  ctrl+KP_Insert` chega à página como `Insert`/`Numpad0` e o zoom não muda). Ctrl+roda do mouse continua sendo só o zoom da grade: o
+  Electron não muda o zoom pela roda. **Conferido sob Xvfb** (`xdotool key`, teclas de verdade: o `Input.dispatchKeyEvent` do protocolo de depuração NÃO
+  passa pelo `before-input-event`): o login abriu em 125% com o `zoom.json` já gravado, o splash em 800×500 com a página em 640×400, Ctrl+- e Ctrl+=,
+  Ctrl++ e o + numérico andaram um passo cada com o foco no editor (o texto dele não mudou), Ctrl+0 voltou a 100%, o controle de Configurações
+  acompanhou o atalho, e a janela nova de "Mover para nova janela" nasceu no zoom de então e mudou junto com a primeira.
 - Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
-  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas") e `workspace` (ver "Abas que voltam na
-  próxima entrada"). Os canais da API são
+  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `workspace` (ver "Abas que voltam na
+  próxima entrada") e `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`; os das abas que voltam, `prism:workspace-*`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  os das janelas, `prism:windows-*` e `prism:session-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
+  passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -382,6 +407,11 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 
 ## Área de trabalho (`src/app/workbench`)
 
+- **O texto da área de trabalho é 13/20** (RN-CONFIG-009, a escala do canvas): a raiz de `WorkbenchPage` leva `text-sm`, e só ela; tudo de dentro herda
+  dali (a árvore, a busca e as mensagens do navegador, a seção Scripts, a barra de abas, as barras e os painéis das abas). Até a 0.3.0 a árvore, a busca e
+  as abas herdavam o 14/22 do `body`. Os diálogos abrem num portal no `<body>` e continuam no 14/22 dos formulários, como a tela de login e as
+  Configurações; o editor (o tamanho em Configurações › Editor SQL), a grade (o zoom dela) e as etiquetas têm tamanho próprio. Peça nova da área de
+  trabalho não escreve `text-sm` nem `text-base` para "voltar ao normal": herda (o `page.test.ts` confere a raiz).
 - **O estado fica dentro do guard do cofre e acima das telas de dentro.** Em `routes.tsx`, o `VaultGuard` é a rota de fora
   e o `WorkbenchProvider` (`_lib/workbench-state.tsx`) é uma rota sem caminho dentro dele, com Conexões, Drivers e Configurações
   como filhas. **A área de trabalho não é uma rota filha**: o `WorkbenchSlot` (`app/_components/workbench-slot.tsx`) a mantém MONTADA
@@ -856,7 +886,11 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
   script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
   aberta. Mover a aba para outra janela não pergunta: o texto vai com ela.
-- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a lista é `ScriptsListView`, sem estado, testada sem DOM), abaixo da árvore e recolhível: em ordem de
+- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a lista é `ScriptsListView`, sem estado, testada sem DOM), abaixo da árvore e recolhível
+  (**lembra se ficou recolhida**, RN-NAV-012: `useScriptsCollapsed`, na chave `prism:navigator:<usuário>` ao lado do navegador escondido, `NavigatorLayout`
+  com `hidden` e `scriptsCollapsed`; a loja muda só o campo pedido, e o gravado antes, só com `hidden`, vale com a seção aberta. Cada janela tem o seu
+  armazém, que não ouve as outras (a janela aberta fica como está, a que abre depois começa como a última escolha): por isso o `set` grava o pedido sobre o
+  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): em ordem de
   nome, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem, F2 renomeia, Delete exclui (com a confirmação), Shift+F10 e a tecla de menu abrem o
   menu (Abrir; Renomear, Editar script…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do script; excluir deixa as abas com o texto, como consultas sem script.
   O lugar (RN-SCRIPT-005, `scriptMenu`): o script com conexão oferece "Tornar genérico" (`PATCH` com `generic`); o genérico, "Vincular à conexão da aba" (a
@@ -1036,6 +1070,20 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   `connectionReveal`, como a busca). A árvore vazia pelo filtro diz "Nenhuma conexão em X." (ou "sem ambiente") numa região viva, e não é o
   primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
   "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
+- **Densidade** (RN-NAV-011; `_lib/navigator-density.ts`, com teste). `navigatorMetrics` tem as medidas de cada uma, com as classes escritas por inteiro
+  para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px, a linha da lista de
+  scripts de 28 px); a compacta tem linha de 22 px, recuo de 6 px e 12 por nível, botões de 20 px e a linha de script de 22 px. O texto é o 13/20 nas
+  duas, e as etiquetas (18 px) e o ponto de estado cabem (conferido sob Xvfb: as 16 linhas de uma árvore de teste e os 8 scripts à vista numa janela de
+  900 px, com os três botões de ação dentro da linha). O `Navigator` lê a preferência e a passa à `NavigatorList` e a cada `NavigatorRow` (`density`;
+  sem ela, a confortável), e a `ScriptsSection` à `ScriptsListView`. A lista virtual estima a linha pela densidade e, quando ela muda (em
+  Configurações, com a árvore escondida por baixo, ou noutra janela, com ela à mostra: as preferências chegam pelo evento `storage`), **esquece as
+  alturas medidas na outra e mede de novo as desenhadas** (`remeasureRendered`, em `_lib/row-measure.ts`, num `useLayoutEffect` que só roda na troca):
+  as linhas que rolaram para fora não se medem de novo, e ficariam com a altura antiga. Só `virtualizer.measure()` não basta: a linha de erro não muda
+  de caixa com a densidade (a altura vem da mensagem e do botão), o `ResizeObserver` não a avisa e o `ref` não é chamado de novo, e ela ficava com a
+  estimativa, com as linhas de baixo por cima da mensagem até sair de vista. `remeasureRendered` lê as linhas (`getVirtualItems`, que refaz as
+  posições com as estimativas) ANTES de medir: medida logo depois de `measure()`, a linha de erro mede o mesmo que a posição ainda guardada, e a
+  biblioteca não grava medida igual. O `row-measure.test.ts` reproduz a troca com o `Virtualizer` de verdade (e as duas causas), e **reprova a lista
+  que mede as linhas e esquece as medidas só com `.measure()`**; a grade, que não mede, continua com `measure()`.
 - **`ContextMenu`** (`components/ui/context-menu.tsx`) é genérico. Portal `position: fixed` em `document.body`; `role="menu"` com
   `menuitem` e `separator`; o item desabilitado é `aria-disabled` e continua na ordem das setas; as setas dão a volta, Home e End,
   Enter e Espaço (o clique do botão), Esc e Tab fecham, e clique fora, rolar e trocar o foco da janela também. `placeMenu` (abre com
@@ -1500,7 +1548,7 @@ fechar não apaga as abas.
   ou valor fora do esquema volta ao padrão do campo, sem lançar). Se o `localStorage` falta, recusa o acesso ou lança ao gravar, elas
   vivem na memória da sessão e a tela segue. `usePreferences()` devolve `{ preferences, update, signedIn }`
   (`useSyncExternalStore`); quem só lê usa o nome do campo, em grupos (`preferences.editor.fontSize`): `theme`, `ui` (`fontFamily`, a fonte da
-  interface), `editor` (fonte,
+  interface, e `navigatorDensity`, a densidade do navegador), `editor` (fonte,
   tamanho, tabulação, `autocomplete`, `uppercaseKeywords` e `blankLineSeparates`), `results` (`nullText` e `autoLoadMore`) e `security` (`lockEnabled` e `lockAfterMinutes`); `update` aceita um grupo pela metade, e o
   formato antigo (três campos soltos do editor) é migrado (`upgradeLegacy`). **Nunca guarde segredo nem
   dado de conexão ali**: quem apagar o `localStorage` perde só o gosto. As de atualização (verificar ao abrir, versão pulada) são
@@ -1606,6 +1654,17 @@ fechar não apaga as abas.
   controlados (o valor sai pelo `FormData`), a mutação leva `gcTime: 0` e é esvaziada (`reset`) assim que a resposta chega, o que apaga as
   `variables` com as senhas; um campo `userName` escondido e só de leitura diz ao gerenciador de senhas e ao leitor de tela de que conta é a
   senha.
+- **Zoom do programa** (RN-ZOOM-001; `_components/app-zoom-control.tsx`, `_lib/app-zoom.ts`), em Aparência: o valor de agora (`<output>`, lido pelo leitor
+  de tela quando muda), − e + (desabilitados nos limites) e "Restaurar 100%" (desabilitado em 100%), por `aria-disabled` e não `disabled`, para o botão
+  que se desabilita ao ser usado não perder o foco (conferido sob Xvfb: Enter no "Restaurar 100%" em 110% e no − até 50% deixam o foco no botão); a
+  dica diz os atalhos na tecla da plataforma e que o zoom vale para quem entra nesta conta do computador (a pasta de dados é da conta: no Prism instalado
+  para todos os usuários do Windows, cada conta tem o seu). **Não é
+  preferência**: o valor vem do processo principal (`appZoomQuery`, relida a cada visita às Configurações, porque os atalhos o mudam com elas fechadas), o
+  pedido vai pela ponte (`requestAppZoom`, com o passo calculado por `nextAppZoom`) e o aviso `onAppZoomChanged` põe o valor novo na consulta enquanto a
+  seção está aberta; a ponte é conferida em `lib/api/bridge.ts` (`currentAppZoom`: só um dos passos é resposta). Fora do Electron (o zoom é o do
+  navegador) a resposta é `null` e o controle não aparece.
+- **Densidade do navegador** (RN-NAV-011), em Aparência, ao lado do zoom: dois botões de opção, "Confortável" (o padrão, o desenho do canvas) e
+  "Compacta", em `ui.navigatorDensity`. As medidas são do navegador (ver "Navegador: clique, menu e busca").
 - **Resultados** (RN-CONFIG-005; `results-section.tsx`): o texto do valor nulo na grade (de 1 a 12 caracteres, que não sejam só espaços nem
   tenham caractere de controle ou de direção de texto) e "buscar mais linhas ao rolar até o fim" (`autoLoadMore`, desligado de saída).
   Com ele ligado a grade pede a página seguinte sozinha (`autoLoadArmed`, em `result-paging.ts`): uma por vez, com linhas na tela, mais a
@@ -2057,7 +2116,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   nenhuma cor fixa (`#rrggbb`, `text-white`, `fill` nomeado) entra em componente: só os tokens. As exceções são a ilustração da
   marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, as prévias do tema e os `.svg` do splash.
 - A escala de texto reaproveita os nomes padrão com os tamanhos do canvas: `text-xs` 12/18,
-  `text-sm` 13/20, `text-base` 14/22 (o corpo), `text-lg` 18/24. `rounded-xl` é o raio do diálogo
+  `text-sm` 13/20 (a área de trabalho inteira, pela raiz dela: RN-CONFIG-009), `text-base` 14/22 (o corpo: formulários, diálogos, login e
+  Configurações), `text-lg` 18/24. `rounded-xl` é o raio do diálogo
   (10px) e `shadow-2xl` a sombra do que flutua.
 - O sucesso usa o mesmo verde do Db2 (`#5ED3A3` no escuro, `#097244` no Prism Claro: o `#0B7A4B` do canvas dava 4,37:1 sobre a linha
   selecionada), como a especificação pede; o canvas não tem outro.
