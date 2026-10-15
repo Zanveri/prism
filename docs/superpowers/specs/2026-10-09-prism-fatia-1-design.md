@@ -2241,7 +2241,7 @@ ambiente".
   - A escolha vale enquanto a janela está aberta.
   - O seletor mostra a etiqueta colorida do ambiente escolhido, e "Limpar" volta a "Todos".
 
-## 26. Complemento de 2026-10-15: a linha em branco separa os comandos (issue #7)
+## 26. Complemento de 2026-10-15, versão 0.4.0: a linha em branco separa os comandos (issue #7)
 
 Pedido da issue 7 do repositório público, aprovado pelo dono em 2026-10-15 ("Faça todas issues, todas
 elas parecem boas mesmo"): "ctrl + enter no script executar apenas a query separada por enter". Quem
@@ -2304,7 +2304,7 @@ respondia erro de sintaxe. Muda a RN-SQL-002, e a RN-SQL-001 passa a citar esta 
     destacado; respondida a pergunta, o destaque vem depois dela.
   - A API não muda: continua recebendo um comando por execução.
 
-## 27. Complemento de 2026-10-15: a conexão da aba de consulta e os scripts genéricos (issue #9)
+## 27. Complemento de 2026-10-15, versão 0.4.0: a conexão da aba de consulta e os scripts genéricos (issue #9)
 
 Issue #9 do repositório público, relatada na 0.2.0-beta.13 com Informix: "Scripts não abrem conexão
 com o banco salvo e não lista em qual servidor será executado". Quem reabre um script salvo não sabe
@@ -2328,7 +2328,8 @@ editor ganha o botão da conexão que o canvas já desenhava (seção 9).
     resultado que estava na tela sai, como na troca do banco. A barra de status e a etiqueta da aba
     acompanham.
   - Com comando em andamento a troca espera: a lista abre, mas as conexões ficam desabilitadas,
-    com o motivo.
+    com o motivo. A execução da atualização automática (RN-GRADE-014) não conta como comando em
+    andamento: a troca acontece e a desliga.
   - A lista tem também "Mostrar no navegador", que revela e escolhe a conexão da aba na árvore: as
     pastas acima dela abrem, e o navegador escondido aparece.
   - Na aba sem conexão o botão diz "Sem conexão", e a lista dá a ela a conexão escolhida.
@@ -2353,7 +2354,7 @@ editor ganha o botão da conexão que o canvas já desenhava (seção 9).
     `POST`, o script sem `connectionID` já nasce genérico. O cofre não muda de formato: o script já
     guardava a conexão como opcional.
 
-## 28. Complemento de 2026-10-15: cor da pasta, Renomear e Editar pasta, ícone e cor do script (issue #8)
+## 28. Complemento de 2026-10-15, versão 0.4.0: cor da pasta, Renomear e Editar pasta, ícone e cor do script (issue #8)
 
 Issue #8 do repositório público, "Mudar ícone e cor de scripts e pastas": "ao editar uma pasta, ter
 a opção de editar a cor dela; hoje deixa colocar um badge, mas se permitisse os 2 ficaria mais
@@ -2397,7 +2398,7 @@ a RN-PASTA-006 e a RN-NAV-009 (e, por elas, o diálogo da seção Ambiente na RN
     fora da lista e a cor fora de `#RRGGBB` são 422 `SCRIPT_ICON_INVALID`, no campo. O cofre não
     muda de formato: o script gravado antes abre com o ícone padrão e sem cor.
 
-## 29. Complemento de 2026-10-15: contar de novo e atualização automática (issues #10 e #11)
+## 29. Complemento de 2026-10-15, versão 0.4.0: contar de novo e atualização automática (issues #10 e #11)
 
 Pedidos das issues 10 e 11 do repositório público, que o dono aprovou em 2026-10-15 ("Faça todas
 issues, todas elas parecem boas mesmo"): "A contagem de linhas não pode ser recontada, poderia
@@ -2465,7 +2466,7 @@ nos dados que estão sendo acompanhados".
     a pessoa ligar de novo. A execução automática não repete aviso: o de valores cortados
     (RN-AVISO-003) não sai nela (nem no "Carregar mais" que vem depois dela, quando o resultado
     já avisou), e as células cortadas continuam marcadas.
-  - Desliga quando a aba desconecta, fecha, troca de banco (RN-ARVORE-007) ou vai para outra janela
+  - Desliga quando a aba desconecta, fecha, troca de banco (RN-ARVORE-007) ou de conexão (RN-ARVORE-008), ou vai para outra janela
     (RN-ABAS-002 e 003), quando o cofre bloqueia (RN-SEG-001) e quando a pessoa executa outro
     comando na aba (outro texto, outro filtro, outra ordem). Também quando a sessão da aba cai (a
     API já não a conhece, ao carregar mais, ao contar ou na própria execução automática), com a
@@ -2480,7 +2481,7 @@ nos dados que estão sendo acompanhados".
   - Não é gravada com as abas (RN-ABAS-006): as abas voltam com ela desligada.
 - **Fica para depois:** uma marca na faixa de abas para a aba com a atualização automática ligada.
 
-## 30. Complemento de 2026-10-15: a área de trabalho mais enxuta (issue #14)
+## 30. Complemento de 2026-10-15, versão 0.4.0: a área de trabalho mais enxuta (issue #14)
 
 Pedido da issue 14 do repositório público, "Adiciona configuração para deixar a visualização mais
 enxuta das conexões na sidebar": perto da árvore do DBeaver, a do navegador ocupa espaço demais, e
