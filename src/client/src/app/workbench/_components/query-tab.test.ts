@@ -784,6 +784,35 @@ describe("QueryTabPanel: o campo de filtro no resultado (RN-GRADE-011)", () => {
     expect(view.show().filter).toMatchObject({ draft: `(id > 5) AND ("status" = 'aberta')` });
   });
 
+  it.each([
+    ["o banco", { database: "vendas" }],
+    ["a conexão", { connectionId: "c2" }],
+  ] as const)("depois de trocar %s da aba, o filtro do resultado anterior sai: o campo some, e o comando anterior não volta a ser executado (RN-ARVORE-007 e 008)", async (_name, place) => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().filter!.onDraft("id > 0");
+    view.show().filter!.onApply();
+    await settle();
+    // O comando filtrado deu erro: o campo fica à vista pelo comando fixado, para a correção.
+    runner.state = { status: "error", source: "database", title: "Erro do banco", message: "falhou", sqlState: null, errorAt: null };
+    expect(view.show().filter).toMatchObject({ draft: "id > 0", applied: "id > 0" });
+
+    // A troca: a aba ganha um executor novo, sem resultado, no lugar novo (o provedor aposenta o de antes).
+    const next = fakeRunner({ status: "idle" });
+    view.props.runner = next as unknown as QueryRunner;
+    view.props.tab = { ...view.props.tab, ...place };
+
+    expect(view.show().filter).toBeNull();
+    expect(next.run).not.toHaveBeenCalled();
+
+    // O primeiro resultado do lugar novo traz o campo vazio.
+    next.state = rowsState({ target: { sql: "select * from pedido", offset: 0, engine: pg } });
+    expect(view.show().filter).toMatchObject({ draft: "", applied: "", problem: null });
+    view.show().filter!.onApply();
+    await settle();
+    expect(next.sent).toEqual([{ sql: "select * from pedido", offset: 0, engine: pg }]);
+  });
+
   it("F5 é o Executar de novo, com o foco em qualquer ponto da aba; com algo em andamento, nada (RN-GRADE-012)", () => {
     const runner = fakeRunner(rowsState({ target: filtered("id > 0") }));
     const view = mount(runner);

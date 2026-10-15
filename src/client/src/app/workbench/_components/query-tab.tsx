@@ -129,6 +129,14 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [filterApplied, setFilterApplied] = useState("");
   const [filterProblem, setFilterProblem] = useState<{ message: string } | null>(null);
   const [pinned, setPinned] = useState<RunTarget | null>(null);
+  // O filtro é do resultado do executor da aba. Trocar o banco (RN-ARVORE-007) ou a conexão (RN-ARVORE-008) da aba, e o bloqueio por inatividade, dão a ela
+  // um executor novo, sem resultado: o filtro do resultado anterior sai junto. Sem isso o campo ficava à vista com o comando fixado (`pinned`) do resultado
+  // anterior, e "Aplicar" o executava, com o filtro, no banco ou na conexão novos. Ajuste durante a renderização: o campo velho não chega a aparecer.
+  const [filterRunner, setFilterRunner] = useState(runner);
+  if (filterRunner !== runner) {
+    setFilterRunner(runner);
+    clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+  }
   const base = filterBaseOf(state, pinned);
   const filterNow = useRef({ base, draft: filterDraft, applied: filterApplied });
   useEffect(() => {

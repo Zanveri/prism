@@ -1421,7 +1421,10 @@ a RN-GRADE-011 e o F5 a RN-GRADE-012.
   nulo); o embrulhado é só leitura, com o motivo da API ou, sem ele, `gridFilterCopy.result.wrapped`, que a faixa mostra. O 422 `FILTER_INVALID` (só com
   filtro) volta de `runner.run` como valor (`FilterRefusal`): nada é executado, o resultado e o cursor de antes ficam, sem aviso, e a frase da API vai ao
   campo (`problem: { message }`). O erro do banco num comando filtrado não marca o editor (a posição é a do comando que a API montou). Executar pelo editor
-  limpa o filtro (`clearResultFilter`, só quando o comando vai de fato ser enviado). A ordem pelo clique no cabeçalho não existe no resultado: a ordem vai
+  limpa o filtro (`clearResultFilter`, só quando o comando vai de fato ser enviado). **O filtro é do executor da aba**: trocar o banco (RN-ARVORE-007) ou a
+  conexão (RN-ARVORE-008), e o bloqueio por inatividade, dão à aba um executor novo, sem resultado, e o painel limpa o filtro ao ver o executor trocado
+  (ajuste durante a renderização, `filterRunner`). Até a 0.3.0 o campo ficava à vista depois da troca do banco com o comando fixado (`pinned`) do resultado
+  anterior, e "Aplicar" o executava, com o filtro, no banco novo. A ordem pelo clique no cabeçalho não existe no resultado: a ordem vai
   escrita no campo.
 - **F5** (RN-GRADE-012): nos Registros é o "Atualizar"; na Estrutura e no Diagrama, o "Atualizar" da vista; na aba de consulta, o "Executar de novo"; no
   navegador, o "Atualizar" do nó escolhido, quando se aplica (`refreshesSelection`). Com algo em andamento, nada; com alterações não salvas na grade, a
