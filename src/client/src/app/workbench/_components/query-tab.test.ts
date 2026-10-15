@@ -1083,6 +1083,23 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
     expect(runner.runCommand).toHaveBeenCalledWith(targets[0]);
   });
 
+  it("na conexão que confirma (RN-PROT-001), Executar este comando pergunta como o Ctrl+Enter nele, pelo comando da aba guardada; cancelado, nada roda", () => {
+    rt.protections = { readOnly: null, confirm: { level: "all", from: null } };
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    finished(runner);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+
+    view.show().area.kept!.onRunAlone();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select 1", irreversible: null } }]);
+    rt.asked[0].cancelled?.();
+    expect(runner.runCommand).not.toHaveBeenCalled();
+
+    view.show().area.kept!.onRunAlone();
+    rt.asked[1].proceed();
+    expect(runner.runCommand).toHaveBeenCalledExactlyOnceWith(targets[0]);
+  });
+
   it("com um comando em andamento na aba, Executar este comando diz que está ocupado e não pergunta, não limpa o filtro nem abre a área recolhida", () => {
     withPending();
     const runner = fakeRunner(rowsState({ target: targets[2] }));
@@ -1301,6 +1318,20 @@ describe("QueryTabPanel: o aviso antes de executar, na conexão que confirma (RN
     view.show().area.onRerun();
     expect(rt.asked).toHaveLength(2);
     rt.asked[1].cancelled?.();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("o “Atualizar” do menu da grade pergunta como o F5, pelo comando do resultado", async () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 0, y: 0 }, false);
+    await settle();
+
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "refresh")!.onSelect!();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select * from loja.pedido", irreversible: null } }]);
+    expect(runner.rerun).not.toHaveBeenCalled();
+    rt.asked[0].proceed();
     expect(runner.rerun).toHaveBeenCalledOnce();
   });
 
