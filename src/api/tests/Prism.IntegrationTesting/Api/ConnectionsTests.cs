@@ -274,7 +274,7 @@ public sealed class ConnectionsTests
         Assert.That(listRaw, Does.Not.Contain(DatabasePassword));
         Assert.That(detailRaw, Does.Not.Contain(DatabasePassword));
         Assert.That(list.Select(IdOf), Is.EqualTo(new[] { IdOf(alfa), IdOf(beta) }));
-        Assert.That(list[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "folderID", "name", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor", "createdAt", "updatedAt" }));
+        Assert.That(list[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "folderID", "name", "engine", "host", "port", "database", "userName", "hasPassword", "environmentName", "environmentColor", "confirmCommands", "readOnly", "verificationEnabled", "verificationInterval", "verificationQuery", "protections", "createdAt", "updatedAt" }));
         Assert.That(list.All(item => item.GetProperty("hasPassword").GetBoolean()), Is.True);
         Assert.That(JsonDocument.Parse(detailRaw).RootElement.GetRawText(), Is.EqualTo(list[1].GetRawText()));
     }

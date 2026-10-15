@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Folders.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -7,7 +8,10 @@ using Prism.Infrastructure.Vault.Services;
 
 namespace Prism.Application.Folders.Features.GetFolders;
 
-/// <summary>A lista inteira das pastas do usuário, sem paginação: a tela monta a árvore a partir dela.</summary>
+/// <summary>
+/// A lista inteira das pastas do usuário, sem paginação: a tela monta a árvore a partir dela. Cada pasta leva as proteções que valem para ela
+/// (RN-PROT-004), das pastas acima na mesma leitura.
+/// </summary>
 public sealed record GetFoldersCommand : IRequest<Result<IReadOnlyList<FolderDto>, ApiErrorDto>>;
 
 internal sealed class GetFoldersHandler(IVaultService vaultService) : IRequestHandler<GetFoldersCommand, Result<IReadOnlyList<FolderDto>, ApiErrorDto>>
@@ -20,7 +24,8 @@ internal sealed class GetFoldersHandler(IVaultService vaultService) : IRequestHa
             return Task.FromResult(Result.Failure<IReadOnlyList<FolderDto>, ApiErrorDto>(VaultErrors.From(read.Error)));
 
         // Pelo nome, sem diferenciar maiúsculas; o ID (Guid v7, que cresce com o tempo) desempata nomes iguais de pastas diferentes.
-        IReadOnlyList<FolderDto> folders = [.. read.Value.Folders.OrderBy(folder => folder.Name, StringComparer.OrdinalIgnoreCase).ThenBy(folder => folder.ID).Select(folder => folder.ToDto())];
+        var byID = ProtectionRules.FoldersOf(read.Value);
+        IReadOnlyList<FolderDto> folders = [.. read.Value.Folders.OrderBy(folder => folder.Name, StringComparer.OrdinalIgnoreCase).ThenBy(folder => folder.ID).Select(folder => folder.ToDto(ProtectionRules.Of(byID, folder.ParentID, folder.ReadOnly == true, folder.ConfirmCommands)))];
 
         return Task.FromResult(Result.Success<IReadOnlyList<FolderDto>, ApiErrorDto>(folders));
     }

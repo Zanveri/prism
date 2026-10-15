@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Folders.Domain;
 using Prism.Application.Folders.Features.UpdateFolder;
@@ -22,11 +23,14 @@ public sealed class UpdateFolderHandlerTests
     private readonly Mock<IFolderRepository> _folderRepository = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero));
 
-    private void SetupGetByID(Folder folder, CancellationToken cancellationToken)
-        => _folderRepository.Setup(r => r.GetByID(folder.ID, cancellationToken)).ReturnsAsync(Result.Success<Folder, ApiErrorDto>(folder));
+    /// <summary>As proteções que valem para uma pasta sem nenhuma, a dela e as das pastas acima (RN-PROT-004).</summary>
+    private static readonly EffectiveProtections NoProtections = new(false, null, null, null);
 
-    private void SetupUpdateOK(CancellationToken cancellationToken)
-        => _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+    private void SetupGetByID(Folder folder, CancellationToken cancellationToken, EffectiveProtections? protections = null)
+        => _folderRepository.Setup(r => r.GetByID(folder.ID, cancellationToken)).ReturnsAsync(Result.Success<(Folder, EffectiveProtections), ApiErrorDto>((folder, protections ?? NoProtections)));
+
+    private void SetupUpdateOK(CancellationToken cancellationToken, EffectiveProtections? protections = null)
+        => _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), It.IsAny<string?>(), cancellationToken)).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(protections ?? NoProtections));
 
     [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
     [Fact(DisplayName = "OK renomeia e muda de pasta, carimbando UpdatedAt com o relógio")]
@@ -57,7 +61,7 @@ public sealed class UpdateFolderHandlerTests
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.IsSelfOrDescendant(newParentID, folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.Exists("Nova pasta", newParentID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.Name == "Nova pasta" && updated.ParentID == newParentID), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.Name == "Nova pasta" && updated.ParentID == newParentID), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -84,7 +88,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("Produção Sul", result.Value.Name);
         Assert.Equal(updatedAt, result.Value.UpdatedAt);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<CancellationToken>()), Times.Never);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -137,7 +141,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
         Assert.Equal(_timeProvider.GetUtcNow().UtcDateTime, result.Value.UpdatedAt);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.EnvironmentName == "Produção" && updated.EnvironmentColor == "#FF8A7A"), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.EnvironmentName == "Produção" && updated.EnvironmentColor == "#FF8A7A"), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -162,7 +166,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value.EnvironmentName);
         Assert.Null(result.Value.EnvironmentColor);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.EnvironmentName == null && updated.EnvironmentColor == null), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.EnvironmentName == null && updated.EnvironmentColor == null), null, cancellationToken), Times.Once);
     }
 
     /// <summary>RN-PASTA-007: só a cor da pasta muda. Grava e carimba, sem conferir nome nem ciclo, e o ambiente fica como estava.</summary>
@@ -188,7 +192,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("Produção", result.Value.EnvironmentName);
         Assert.Equal(_timeProvider.GetUtcNow().UtcDateTime, result.Value.UpdatedAt);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.Color == "#7DB2FF" && updated.EnvironmentColor == "#FF8A7A"), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == folder.ID && updated.Color == "#7DB2FF" && updated.EnvironmentColor == "#FF8A7A"), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -217,8 +221,8 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal(updatedAt, unchanged.Value.UpdatedAt);
         Assert.True(cleared.IsSuccess);
         Assert.Null(cleared.Value.Color);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == same.ID), It.IsAny<CancellationToken>()), Times.Never);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == removed.ID && updated.Color == null), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == same.ID), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ID == removed.ID && updated.Color == null), null, cancellationToken), Times.Once);
     }
 
     /// <summary>Só a caixa da letra muda: grava, mas não é duplicidade, porque a pasta não colide com ela mesma. RN-PASTA-002.</summary>
@@ -243,7 +247,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("PRODUÇÃO", result.Value.Name);
         Assert.Equal(parentID, result.Value.ParentID);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -269,7 +273,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Equal("Nova", result.Value.Name);
         _folderQueries.Verify(q => q.Exists("Nova", parentID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), null, cancellationToken), Times.Once);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
@@ -296,7 +300,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value.ParentID);
         _folderQueries.Verify(q => q.Exists("Linha 1", null, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ParentID == null), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ParentID == null), null, cancellationToken), Times.Once);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
@@ -309,7 +313,7 @@ public sealed class UpdateFolderHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var command = FolderFakers.ReturnUpdateFolderCommandValid();
-        _folderRepository.Setup(r => r.GetByID(command.ID, cancellationToken)).ReturnsAsync(Result.Failure<Folder, ApiErrorDto>(FolderErrors.NotFound(command.ID)));
+        _folderRepository.Setup(r => r.GetByID(command.ID, cancellationToken)).ReturnsAsync(Result.Failure<(Folder, EffectiveProtections), ApiErrorDto>(FolderErrors.NotFound(command.ID)));
         var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -320,7 +324,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("FOLDER_NOT_FOUND", result.Error.Type);
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
         _folderRepository.Verify(r => r.GetByID(command.ID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<CancellationToken>()), Times.Never);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -342,7 +346,7 @@ public sealed class UpdateFolderHandlerTests
         SetupGetByID(folder, cancellationToken);
         _folderQueries.Setup(q => q.IsSelfOrDescendant(newParentID, folder.ID, cancellationToken)).ReturnsAsync(false);
         _folderQueries.Setup(q => q.Exists("Produção", newParentID, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(FolderErrors.ParentNotFound(newParentID)));
+        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), null, cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(FolderErrors.ParentNotFound(newParentID)));
         var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -355,7 +359,7 @@ public sealed class UpdateFolderHandlerTests
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.IsSelfOrDescendant(newParentID, folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.Exists("Produção", newParentID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -373,7 +377,7 @@ public sealed class UpdateFolderHandlerTests
         SetupGetByID(folder, cancellationToken);
         _folderQueries.Setup(q => q.IsSelfOrDescendant(newParentID, folder.ID, cancellationToken)).ReturnsAsync(false);
         _folderQueries.Setup(q => q.Exists("Produção", newParentID, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(VaultErrors.From(EVaultError.Locked)));
+        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), null, cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(VaultErrors.From(EVaultError.Locked)));
         var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -386,7 +390,7 @@ public sealed class UpdateFolderHandlerTests
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.IsSelfOrDescendant(newParentID, folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.Exists("Produção", newParentID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
@@ -414,7 +418,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal(HttpStatusCode.Conflict, result.Error.StatusCode);
         _folderQueries.Verify(q => q.IsSelfOrDescendant(newParentID, folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.Exists(It.IsAny<string>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<CancellationToken>()), Times.Never);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
@@ -441,7 +445,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("FOLDER_ALREADY_EXISTS", result.Error.Type);
         Assert.Equal(HttpStatusCode.Conflict, result.Error.StatusCode);
         _folderQueries.Verify(q => q.Exists("Produção", parentID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<CancellationToken>()), Times.Never);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
@@ -459,7 +463,7 @@ public sealed class UpdateFolderHandlerTests
         var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Nova", parentID: parentID);
         SetupGetByID(folder, cancellationToken);
         _folderQueries.Setup(q => q.Exists("Nova", parentID, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(FolderErrors.AlreadyExists("Nova")));
+        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), null, cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(FolderErrors.AlreadyExists("Nova")));
         var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -470,7 +474,7 @@ public sealed class UpdateFolderHandlerTests
         Assert.Equal("FOLDER_ALREADY_EXISTS", result.Error.Type);
         _folderRepository.Verify(r => r.GetByID(folder.ID, cancellationToken), Times.Once);
         _folderQueries.Verify(q => q.Exists("Nova", parentID, cancellationToken), Times.Once);
-        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), cancellationToken), Times.Once);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), null, cancellationToken), Times.Once);
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }

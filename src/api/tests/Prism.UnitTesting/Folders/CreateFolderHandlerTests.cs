@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Folders.Domain;
 using Prism.Application.Folders.Features.CreateFolder;
@@ -29,7 +30,7 @@ public sealed class CreateFolderHandlerTests
         var command = FolderFakers.ReturnCreateFolderCommandValid(name: "  Produção   Sul ");
         Folder? inserted = null;
         _folderQueries.Setup(q => q.Exists("Produção Sul", null, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(new EffectiveProtections(false, null, null, null)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -63,7 +64,7 @@ public sealed class CreateFolderHandlerTests
         var command = FolderFakers.ReturnCreateFolderCommandValid(name: "Produção", environmentName: "  Produção   Sul ", environmentColor: " #FF8A7A ");
         Folder? inserted = null;
         _folderQueries.Setup(q => q.Exists("Produção", null, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(new EffectiveProtections(false, null, null, null)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -88,7 +89,7 @@ public sealed class CreateFolderHandlerTests
         var command = FolderFakers.ReturnCreateFolderCommandValid(name: "Produção", color: " #7DB2FF ");
         Folder? inserted = null;
         _folderQueries.Setup(q => q.Exists("Produção", null, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(new EffectiveProtections(false, null, null, null)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -112,7 +113,7 @@ public sealed class CreateFolderHandlerTests
         var parentID = Guid.CreateVersion7();
         var command = FolderFakers.ReturnCreateFolderCommandValid(parentID: parentID);
         _folderQueries.Setup(q => q.Exists(command.Name, parentID, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(new EffectiveProtections(false, null, null, null)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -141,7 +142,7 @@ public sealed class CreateFolderHandlerTests
         var parentID = Guid.CreateVersion7();
         var command = FolderFakers.ReturnCreateFolderCommandValid(parentID: parentID);
         _folderQueries.Setup(q => q.Exists(command.Name, parentID, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(FolderErrors.ParentNotFound(parentID)));
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(FolderErrors.ParentNotFound(parentID)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -167,7 +168,7 @@ public sealed class CreateFolderHandlerTests
         var parentID = Guid.CreateVersion7();
         var command = FolderFakers.ReturnCreateFolderCommandValid(parentID: parentID);
         _folderQueries.Setup(q => q.Exists(command.Name, parentID, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(VaultErrors.From(EVaultError.Locked)));
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(VaultErrors.From(EVaultError.Locked)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act
@@ -218,7 +219,7 @@ public sealed class CreateFolderHandlerTests
         var cancellationToken = new CancellationToken();
         var command = FolderFakers.ReturnCreateFolderCommandValid();
         _folderQueries.Setup(q => q.Exists(command.Name, null, cancellationToken)).ReturnsAsync(false);
-        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(UnitResult.Failure(FolderErrors.AlreadyExists(command.Name)));
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(FolderErrors.AlreadyExists(command.Name)));
         var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
 
         //Act

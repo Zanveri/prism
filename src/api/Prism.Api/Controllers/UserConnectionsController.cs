@@ -53,7 +53,11 @@ public sealed class UserConnectionsController(IMediator mediator) : ControllerBa
         return Created($"/api/user/connections/{result.Value.ID}", result.Value);
     }
 
-    /// <summary>O corpo leva `id` e todos os campos; `password` ausente ou nulo mantém a senha gravada, desde que o host e a porta não mudem (RN-CONN-004: 422 `CONNECTION_INVALID`).</summary>
+    /// <summary>
+    /// O corpo leva `id` e todos os campos; `password` ausente ou nulo mantém a senha gravada, desde que o host e a porta não mudem (RN-CONN-004: 422
+    /// `CONNECTION_INVALID`). `userPassword` é a senha do usuário que a mudança do somente leitura pede (RN-PROT-003: 422 `USER_PASSWORD_REQUIRED` ou
+    /// `INVALID_PASSWORD`, e 401 `VAULT_LOCKED` no quinto erro seguido).
+    /// </summary>
     [HttpPatch]
     public async Task<IActionResult> UpdateConnection([FromBody] UpdateConnectionCommand command, CancellationToken cancellationToken)
     {
