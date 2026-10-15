@@ -100,7 +100,7 @@ describe("levelPathOf (a chave de uma consulta da árvore, de volta ao nó)", ()
 // --- a árvore de exemplo --------------------------------------------------------------------------------------------
 
 const now = "2026-10-09T12:00:00Z";
-const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, createdAt: now, updatedAt: now };
 const connection = (id: string, name: string, folderID: string | null): Connection => ({ id, folderID, name, engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now });
 
 const base = treeNodes(buildConnectionTree([folder], [connection("c1", "MES Produção", "f1"), connection("c2", "ERP", null)]));

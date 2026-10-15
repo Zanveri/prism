@@ -80,12 +80,16 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   generateSelect: <DocumentIcon />,
   newFolder: <FolderPlusIcon />,
   renameFolder: <PencilIcon />,
+  editFolder: <PencilIcon />,
   moveFolder: <FolderMoveIcon />,
   deleteFolder: <TrashIcon />,
 };
 
-/** A ação do menu sobre uma pasta que existe e o modo do diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). */
-const folderActionTypes = { renameFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
+/**
+ * A ação do menu sobre uma pasta que existe e o diálogo que a atende ("Nova subpasta" cria: não é sobre a pasta, é dentro dela). O "Renomear" (F2) é o
+ * diálogo só com o nome (RN-NAV-009), e o "Editar pasta…", o inteiro (RN-PASTA-006).
+ */
+const folderActionTypes = { renameFolder: "rename", editFolder: "edit", moveFolder: "move", deleteFolder: "delete" } as const;
 
 /** A ação de conexão que o menu pediu (RN-NAV-003 e 009): renomear, mover de pasta ou excluir, cada uma com o diálogo dela. */
 type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connection };
@@ -163,6 +167,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const connectionById = useMemo(() => new Map(connectionList.map((connection) => [connection.id, connection])), [connectionList]);
   // RN-PASTA-005: a etiqueta de cada pasta e o ambiente que cada conexão mostra; mover a conexão ou a pasta é outra lista de pastas, e outra resposta.
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-PASTA-007: a cor do ícone de cada pasta que tem uma. É só dela: a subpasta e a conexão não a herdam.
+  const folderColors = useMemo(() => new Map((folders.data ?? []).flatMap((folder) => (folder.color === null ? [] : [[folder.id, folder.color] as const]))), [folders.data]);
   // RN-NAV-010: os ambientes do usuário no seletor (RN-AMB-001), e a árvore só com as conexões do escolhido e as pastas no caminho até elas. A busca
   // filtra depois, sobre esta árvore. O ambiente que ninguém mais usa sai da lista, e a escolha dele volta a "Todos" (ajuste durante a renderização,
   // só com as duas listas já na tela).
@@ -435,6 +441,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       case "newConnection":
       case "newFolder":
       case "renameFolder":
+      case "editFolder":
       case "moveFolder":
       case "deleteFolder": {
         const folder = (folders.data ?? []).find((candidate) => candidate.id === folderIdOf(node));
@@ -585,6 +592,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           reveal={reveal}
           connectionById={connectionById}
           environments={environments}
+          folderColors={folderColors}
           statuses={statuses}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
@@ -645,6 +653,8 @@ type NavigatorListProps = {
   open: ReadonlySet<string>;
   connectionById: ReadonlyMap<string, Connection>;
   environments: EnvironmentLookup;
+  /** RN-PASTA-007: a cor do ícone das pastas que têm uma, pelo id. */
+  folderColors: ReadonlyMap<string, string>;
   statuses: ReadonlyMap<string, ConnectionStatus>;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
@@ -676,7 +686,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, open, connectionById, environments, folderColors, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -821,6 +831,7 @@ function NavigatorList({ rows, open, connectionById, environments, statuses, dis
                 selected={node.key === selectedKey}
                 connection={connection}
                 environment={environment}
+                folderColor={folderId === null ? null : (folderColors.get(folderId) ?? null)}
                 status={connection ? statuses.get(connection.id) : undefined}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}

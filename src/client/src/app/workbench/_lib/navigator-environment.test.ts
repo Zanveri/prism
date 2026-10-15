@@ -8,7 +8,7 @@ import { allEnvironments, choiceAvailable, filterByEnvironment, noEnvironment, t
 const now = "2026-10-14T10:00:00Z";
 
 function folder(id: string, parentID: string | null, environmentName: string | null = null): Folder {
-  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor: null, createdAt: now, updatedAt: now };
+  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor: null, color: null, createdAt: now, updatedAt: now };
 }
 
 function connection(id: string, folderID: string | null, environmentName: string | null = null): Connection {

@@ -6,7 +6,7 @@ import { environmentLookup } from "./environment";
 const now = "2026-10-13T12:00:00Z";
 
 function folder(id: string, parentID: string | null, environmentName: string | null = null, environmentColor: string | null = null): Folder {
-  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor, createdAt: now, updatedAt: now };
+  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor, color: null, createdAt: now, updatedAt: now };
 }
 
 function connection(folderID: string | null, environmentName: string | null = null, environmentColor: string | null = null): Connection {
@@ -97,5 +97,13 @@ describe("o ambiente da pasta (RN-PASTA-005)", () => {
     expect(lookup.inheritedIn("extrusao")?.folder).toBe(extrusao);
     expect(lookup.inheritedIn(null)).toBeNull();
     expect(lookup.inheritedIn("geral")).toBeNull();
+  });
+
+  it("a cor da pasta (RN-PASTA-007) não é ambiente e não passa adiante: a pasta só com ela não tem etiqueta, e a conexão de dentro não herda nada", () => {
+    const pintada: Folder = { ...folder("pintada", null), color: "#B79CFF" };
+    const lookup = environmentLookup([pintada]);
+
+    expect(lookup.folder("pintada")).toBeNull();
+    expect(lookup.connection(connection("pintada"))).toBeNull();
   });
 });

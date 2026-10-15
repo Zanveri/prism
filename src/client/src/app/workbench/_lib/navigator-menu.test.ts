@@ -8,7 +8,7 @@ import { selectAllSql } from "./table-sql";
 import { columnNodes, databaseNodes, flattenVisible, foreignKeyNodes, indexNodes, navKey, objectNodes, schemaNodes, tableGroupNodes, treeNodes, type NavNode, type TableLevelPath } from "./navigator-model";
 
 const now = "2026-10-09T12:00:00Z";
-const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, createdAt: now, updatedAt: now };
 const mes: Connection = { id: "c1", folderID: "f1", name: "MES Produção", engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
 const { roots } = treeNodes(buildConnectionTree([folder], [mes]));
 const [folderNode] = roots;
@@ -201,15 +201,23 @@ describe("menuFor: o resto da árvore", () => {
     expect(menuFor(node, idle)).toEqual([[expect.objectContaining({ id: "copyName", action: { type: "copy", text: name } })]]);
   });
 
-  it("pasta: Nova conexão e Nova pasta (criam dentro dela), Editar pasta…, Mover, Excluir e Copiar nome (o que a tela de Conexões oferecia, RN-NAV-003)", () => {
+  it("pasta: Nova conexão e Nova pasta (criam dentro dela), Renomear, Editar pasta…, Mover, Excluir e Copiar nome (o que a tela de Conexões oferecia, RN-NAV-003)", () => {
     const groups = menuFor(folderNode, idle);
 
-    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "moveFolder", "deleteFolder"], ["copyName"]]);
-    expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "moveFolder", "deleteFolder", "copy"]);
+    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "editFolder", "moveFolder", "deleteFolder"], ["copyName"]]);
+    expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "editFolder", "moveFolder", "deleteFolder", "copy"]);
     expect([byId(groups, "newConnection")?.label, byId(groups, "newFolder")?.label]).toEqual(["Nova conexão", "Nova pasta"]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
-    // RN-PASTA-006: o "Renomear" da pasta virou "Editar pasta…" (o nome e o ambiente), com o mesmo F2 (RN-NAV-009).
-    expect(byId(groups, "renameFolder")).toMatchObject({ label: "Editar pasta…", shortcut: "F2" });
+  });
+
+  it("pasta: o Renomear (F2) muda só o nome, como o da conexão (RN-NAV-009), e o Editar pasta…, sem atalho, abre o diálogo inteiro (RN-PASTA-006)", () => {
+    const groups = menuFor(folderNode, idle);
+
+    expect(byId(groups, "renameFolder")).toMatchObject({ label: "Renomear", shortcut: "F2", action: { type: "renameFolder" } });
+    expect(byId(groups, "editFolder")).toMatchObject({ label: "Editar pasta…", action: { type: "editFolder" } });
+    expect(byId(groups, "editFolder")?.shortcut).toBeUndefined();
+    // O mesmo rótulo e o mesmo atalho do Renomear da conexão.
+    expect(byId(menuFor(connectionNode, idle), "renameConnection")).toMatchObject({ label: byId(groups, "renameFolder")?.label, shortcut: "F2" });
   });
 
   it("as linhas Carregando… e de erro não têm menu", () => {
@@ -243,6 +251,11 @@ describe("keyActionFor: as teclas da linha que são ações do menu (RN-NAV-009)
   it("F2 na pasta é o Renomear da pasta, e na conexão o Renomear da conexão", () => {
     expect(keyActionFor(folderNode, f2)).toEqual({ type: "renameFolder" });
     expect(keyActionFor(connectionNode, f2)).toEqual({ type: "renameConnection" });
+  });
+
+  it("nenhuma tecla da linha abre o Editar pasta… (RN-PASTA-006: ele não tem atalho)", () => {
+    for (const key of ["F2", "F3", "F4", "Enter", "e", "E"])
+      for (const modifier of [{}, { shiftKey: true }, { ctrlKey: true }, { altKey: true }]) expect(keyActionFor(folderNode, { ...f2, key, ...modifier })).not.toEqual({ type: "editFolder" });
   });
 
   it("nas outras linhas o F2 não faz nada: banco, esquema, grupo, tabela, visão, rotina, coluna, índice e chave estrangeira não se renomeiam", () => {

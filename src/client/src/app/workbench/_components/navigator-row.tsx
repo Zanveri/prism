@@ -5,7 +5,7 @@ import { engineOption, type Connection } from "@/app/connections/_lib/connection
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
-import { Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon } from "@/components/ui";
+import { Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon, iconColorStyle } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
@@ -82,6 +82,8 @@ export type NavigatorRowProps = {
    * pasta (`environmentLookup`). Sem ela, nada.
    */
   environment?: ShownEnvironment | null;
+  /** RN-PASTA-007: a cor da pasta, só na linha dela; pinta o ícone, aberta ou fechada, ajustada ao contraste do tema (`iconColorStyle`). Sem ela, o neutro. */
+  folderColor?: string | null;
   status?: ConnectionStatus;
   busy?: boolean;
   onSelect: (node: NavNode) => void;
@@ -108,7 +110,7 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, index, open, tabbable, selected, connection, environment, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+export function NavigatorRow({ node, index, open, tabbable, selected, connection, environment, folderColor = null, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
   const paddingLeft = baseIndent + node.depth * levelIndent;
 
   if (node.kind === "loading") {
@@ -191,7 +193,13 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
         ) : (
           <span aria-hidden className="size-4 flex-none" />
         )}
-        {isConnection && connection ? <EngineTag engine={connection.engine} /> : <span className="flex-none text-subtle [&>svg]:text-current">{icons[node.kind]}</span>}
+        {isConnection && connection ? (
+          <EngineTag engine={connection.engine} />
+        ) : (
+          <span style={node.kind === "folder" && folderColor !== null ? { color: iconColorStyle(folderColor) } : undefined} className="flex-none text-subtle [&>svg]:text-current">
+            {icons[node.kind]}
+          </span>
+        )}
         {/* O nome tem a prioridade: o detalhe ocupa só o que sobra, encolhe primeiro e some antes de o nome ser cortado. */}
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           <span className={cn("truncate", monoKinds.has(node.kind) && "font-mono", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
