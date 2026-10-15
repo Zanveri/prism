@@ -18,7 +18,7 @@ function connection(id: string, name: string, over: Partial<Connection> = {}): C
 
 const connections = [
   connection("c1", "Produção", { folderID: "erp" }),
-  connection("c2", "homologação", { folderID: "qas", host: "10.0.0.7" }),
+  connection("c2", "homologação", { folderID: "qas", host: "192.0.2.7" }),
   connection("c3", "Desenvolvimento 10"),
   connection("c4", "Desenvolvimento 9"),
 ];
@@ -56,7 +56,7 @@ describe("connectionChoices: a lista das conexões da troca (RN-ARVORE-008) e da
 
     expect(ids(connectionChoices(connections, folders, none, "producao"))).toEqual(["c1"]);
     expect(ids(connectionChoices(connections, folders, none, " clientes "))).toEqual(["c1"]);
-    expect(ids(connectionChoices(connections, folders, none, "10.0.0"))).toEqual(["c2"]);
+    expect(ids(connectionChoices(connections, folders, none, "192.0.2"))).toEqual(["c2"]);
     expect(ids(connectionChoices(connections, folders, none, "desenv"))).toEqual(["c4", "c3"]);
     expect(connectionChoices(connections, folders, none, "nada disso")).toEqual([]);
   });
