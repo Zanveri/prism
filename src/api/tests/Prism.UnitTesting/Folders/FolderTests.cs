@@ -238,4 +238,23 @@ public sealed class FolderTests
         Assert.Null(blank.Color);
         Assert.Null(none.Color);
     }
+
+    /// <summary>RN-PROT-001 e 002: a confirmação "Não" se guarda nula, e mudar as proteções carimba a data.</summary>
+    [Trait("Folder", "ChangeProtections")]
+    [Fact(DisplayName = "OK muda as proteções, com o none e o branco nulos, e carimba UpdatedAt")]
+    public void ChangeProtections_ShouldNormalizeAndStamp()
+    {
+        //Arrange
+        var created = Folder.Create("Fábrica", null, null, null, null, " irreversible ", true, CreatedAt);
+        var later = CreatedAt.AddDays(1);
+
+        //Act
+        var createdProtections = (created.ConfirmCommands, created.ReadOnly);
+        created.ChangeProtections("none", false, later);
+
+        //Assert
+        Assert.Equal(("irreversible", true), createdProtections);
+        Assert.Equal(((string?)null, false), (created.ConfirmCommands, created.ReadOnly));
+        Assert.Equal(later, created.UpdatedAt);
+    }
 }

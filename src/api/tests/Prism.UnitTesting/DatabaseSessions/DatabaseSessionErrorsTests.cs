@@ -361,4 +361,19 @@ public sealed class DatabaseSessionErrorsTests
         //Assert
         Assert.IsType<NotImplementedException>(exception);
     }
+
+    /// <summary>RN-PROT-002: nada foi ao banco, e a recusa não leva `executed`: o resultado anterior continua.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ConnectionReadOnly vira 422 CONNECTION_READ_ONLY com o motivo e sem executed")]
+    public void From_ConnectionReadOnly_Is422ConnectionReadOnly()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco."));
+
+        //Assert
+        Assert.Equal("CONNECTION_READ_ONLY", error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, error.StatusCode);
+        Assert.Equal("A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco.", error.Detail);
+        Assert.Empty(error.Extensions);
+    }
 }

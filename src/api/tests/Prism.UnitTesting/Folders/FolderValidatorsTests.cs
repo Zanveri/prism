@@ -271,4 +271,35 @@ public sealed class FolderValidatorsTests
     [Fact(DisplayName = "Erro nome com 61 caracteres")]
     public void UpdateFolder_ShouldBeError_NameTooLong()
         => AssertUpdateNameInvalid(new string('a', 61));
+
+    /// <summary>RN-PROT-001: a confirmação é uma da lista, e a recusa vai no código das pastas, no campo dela.</summary>
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK com as proteções, e erro na confirmação fora da lista")]
+    public void CreateFolder_ShouldValidateTheConfirmation()
+    {
+        //Arrange
+        var validator = new CreateFolderValidator();
+
+        //Act
+        var valid = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(confirmCommands: "all", readOnly: true));
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(confirmCommands: "todos"), nameof(CreateFolderCommand.ConfirmCommands));
+    }
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK com as proteções e a senha do usuário, e erro na confirmação fora da lista")]
+    public void UpdateFolder_ShouldValidateTheConfirmation()
+    {
+        //Arrange
+        var validator = new UpdateFolderValidator();
+
+        //Act
+        var valid = validator.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(confirmCommands: "irreversible", readOnly: true, userPassword: "senha"));
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(confirmCommands: "Irreversible"), nameof(UpdateFolderCommand.ConfirmCommands));
+    }
 }

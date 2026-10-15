@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Folders.Domain;
 using Prism.Application.Folders.Repositories;
 using Prism.Infrastructure.Vault.Models;
@@ -624,5 +625,108 @@ public sealed class FolderRepositoryTests
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
         _vault.Verify(v => v.Read(), Times.Once);
         _vault.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-PROT-001 e 002: as proteções vão ao registro do cofre, com o padrão nulo.</summary>
+    [Trait("FolderRepository", "Update")]
+    [Fact(DisplayName = "OK grava as proteções da pasta e pede a senha por marcar o somente leitura")]
+    public async Task Update_ShouldWriteTheProtections_AndAskThePassword()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateFolder(name: "Fábrica");
+        var folder = FolderFakers.Create(iD: target.ID, name: "Fábrica", createdAt: target.CreatedAt, confirmCommands: "irreversible", readOnly: true);
+        var repository = CreateRepository(Document([target]));
+
+        //Act
+        var result = await repository.Update(folder, "senha-do-usuario", cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(_passwordAsked);
+        Assert.Equal([new VaultFolderRecord(target.ID, null, "Fábrica", target.CreatedAt, folder.UpdatedAt, ConfirmCommands: "irreversible", ReadOnly: true)], _saved!.Folders);
+        Assert.Equal(new EffectiveProtections(true, null, "irreversible", null), result.Value);
+        VerifySavedWithPasswordOnce("senha-do-usuario", cancellationToken);
+    }
+
+    /// <summary>RN-PROT-003: mover para fora de uma pasta somente leitura a pasta que tem conexão dentro afrouxa o herdado dela.</summary>
+    [Trait("FolderRepository", "Update")]
+    [Fact(DisplayName = "OK mover a pasta com conexão para fora da pasta somente leitura pede a senha, e a vazia não")]
+    public async Task Update_MovingOutOfAReadOnlyFolder_AsksThePasswordOnlyWithAConnectionInside()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder(name: "Fábrica") with { ReadOnly = true };
+        var line = VaultFakers.CreateFolder(parentID: factory.ID, name: "Linha 1");
+        var empty = VaultFakers.CreateFolder(parentID: factory.ID, name: "Linha 2");
+        var connection = VaultFakers.CreateConnection(folderID: line.ID);
+
+        //Act
+        var withConnection = await CreateRepository(Document([factory, line, empty], [connection])).Update(FolderFakers.Create(iD: line.ID, name: line.Name, createdAt: line.CreatedAt), null, CancellationToken.None);
+        var askedWithConnection = _passwordAsked;
+        var withoutConnection = await CreateRepository(Document([factory, line, empty], [connection])).Update(FolderFakers.Create(iD: empty.ID, name: empty.Name, createdAt: empty.CreatedAt), null, CancellationToken.None);
+        var askedWithoutConnection = _passwordAsked;
+
+        //Assert
+        Assert.True(withConnection.IsSuccess);
+        Assert.True(askedWithConnection);
+        Assert.True(withoutConnection.IsSuccess);
+        Assert.False(askedWithoutConnection);
+    }
+
+    [Trait("FolderRepository", "Update")]
+    [Theory(DisplayName = "Erro a senha do usuário que faltou ou não conferiu, no campo dela")]
+    [InlineData(EPasswordCheck.Missing, "USER_PASSWORD_REQUIRED")]
+    [InlineData(EPasswordCheck.Wrong, "INVALID_PASSWORD")]
+    public async Task Update_ShouldBeError_WhenThePasswordIsMissingOrWrong(EPasswordCheck check, string code)
+    {
+        //Arrange
+        var target = VaultFakers.CreateFolder() with { ReadOnly = true };
+        var folder = FolderFakers.Create(iD: target.ID, name: target.Name, createdAt: target.CreatedAt);
+        var repository = CreateRepository(Document([target]), check: check);
+
+        //Act
+        var result = await repository.Update(folder, null, CancellationToken.None);
+
+        //Assert
+        Assert.Equal((code, HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+        Assert.Equal(new[] { code }, ((Dictionary<string, string[]>)result.Error.Extensions["errorCodes"]!)["UserPassword"]);
+    }
+
+    /// <summary>RN-PROT-004: a pasta nova devolve as proteções que valem, com as das pastas acima; criar marcada não pede senha.</summary>
+    [Trait("FolderRepository", "Insert")]
+    [Fact(DisplayName = "OK a pasta nova devolve as proteções que valem, com as da pasta acima")]
+    public async Task Insert_ShouldReturnTheEffectiveProtections()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder() with { ConfirmCommands = "all" };
+        var folder = FolderFakers.Create(parentID: factory.ID, readOnly: true);
+        var repository = CreateRepository(Document([factory]));
+
+        //Act
+        var result = await repository.Insert(folder, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new EffectiveProtections(true, null, "all", factory.ID), result.Value);
+        Assert.True(_saved!.Folders[^1].ReadOnly);
+        VerifySavedOnce(CancellationToken.None);
+    }
+
+    [Trait("FolderRepository", "GetByID")]
+    [Fact(DisplayName = "OK devolve a pasta com as proteções gravadas e as que valem")]
+    public async Task GetByID_ShouldRestoreTheProtections()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder() with { ReadOnly = true };
+        var record = VaultFakers.CreateFolder(parentID: factory.ID) with { ConfirmCommands = "irreversible" };
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(Document([factory, record])));
+        var repository = new FolderRepository(_vault.Object);
+
+        //Act
+        var result = await repository.GetByID(record.ID, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(("irreversible", false), (result.Value.Folder.ConfirmCommands, result.Value.Folder.ReadOnly));
+        Assert.Equal(new EffectiveProtections(true, factory.ID, "irreversible", null), result.Value.Protections);
     }
 }

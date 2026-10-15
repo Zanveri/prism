@@ -478,4 +478,76 @@ public sealed class UpdateFolderHandlerTests
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
+
+    /// <summary>RN-PROT-001 a 003: mudar as proteções grava a pasta, e a senha do usuário vai à gravação, que decide se ela é pedida.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK mudar as proteções grava, com a senha do usuário, e responde as que valem")]
+    public async Task Handle_ShouldBeOK_WhenTheProtectionsChange()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = FolderFakers.Create(name: "Fábrica", createdAt: CreatedAt);
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Fábrica", confirmCommands: " all ", readOnly: true, userPassword: "senha-do-usuario");
+        var effective = new EffectiveProtections(true, null, "all", null);
+        SetupGetByID(folder, cancellationToken);
+        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), "senha-do-usuario", cancellationToken)).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(effective));
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(("all", true), (result.Value.ConfirmCommands, result.Value.ReadOnly));
+        Assert.Equal(new ProtectionsDto { ReadOnly = true, ConfirmCommands = "all" }, result.Value.Protections);
+        _folderRepository.Verify(r => r.Update(It.Is<Folder>(updated => updated.ConfirmCommands == "all" && updated.ReadOnly), "senha-do-usuario", cancellationToken), Times.Once);
+    }
+
+    /// <summary>As mesmas proteções (o "none" é o "Não" nulo) não são mudança: nada é gravado, nem a senha é pedida, e as que valem vêm da leitura.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK as mesmas proteções não são mudança, e nada é gravado")]
+    public async Task Handle_ShouldBeOK_WhenTheProtectionsDidNotChange()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = FolderFakers.Create(name: "Fábrica", createdAt: CreatedAt, readOnly: true);
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Fábrica", confirmCommands: "none", readOnly: true);
+        var inherited = new EffectiveProtections(true, null, "irreversible", Guid.CreateVersion7());
+        SetupGetByID(folder, cancellationToken, inherited);
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(inherited.ToDto(), result.Value.Protections);
+        _folderRepository.Verify(r => r.Update(It.IsAny<Folder>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>RN-PROT-003: a senha que faltou ou não conferiu é a resposta da gravação, como veio.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "Erro a senha do usuário que faltou, dita pela gravação")]
+    public async Task Handle_ShouldBeError_WhenThePasswordIsMissing()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = FolderFakers.Create(name: "Fábrica", createdAt: CreatedAt, readOnly: true);
+        var command = FolderFakers.ReturnUpdateFolderCommandValid(iD: folder.ID, name: "Fábrica");
+        SetupGetByID(folder, cancellationToken);
+        _folderRepository.Setup(r => r.Update(It.IsAny<Folder>(), null, cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(ProtectionErrors.PasswordRequired()));
+        var handler = new UpdateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.Equal(("USER_PASSWORD_REQUIRED", HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+    }
+
+    /// <summary>RN-LOG-001: o comando leva a senha do usuário, e o `ToString()` gerado a imprimiria.</summary>
+    [Trait("UpdateFolderHandler", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK o ToString do comando não imprime a senha do usuário")]
+    public void Command_ToString_ShouldNotPrintThePassword()
+        => Assert.Equal("UpdateFolderCommand", FolderFakers.ReturnUpdateFolderCommandValid(userPassword: "marca-da-senha").ToString());
 }

@@ -222,4 +222,26 @@ public sealed class TestConnectionHandlerTests
         _databaseSessionService.VerifyNoOtherCalls();
         _vaultService.VerifyNoOtherCalls();
     }
+
+    /// <summary>RN-CONN-013 e RN-VERIF-001: a consulta de verificação do formulário vai aparada ao teste, no lugar da do banco; em branco, a do banco.</summary>
+    [Trait("TestConnectionHandler", "TestConnectionCommand")]
+    [Theory(DisplayName = "OK testa com a consulta de verificação do formulário, aparada, ou com a do banco")]
+    [InlineData("  SELECT 2 \n", "SELECT 2")]
+    [InlineData("   ", null)]
+    public async Task Handle_ShouldTestWithTheVerificationQuery(string query, string? sent)
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var settings = new ConnectionSettings(EDatabaseEngine.PostgreSql, "pg.local", 5432, "producao", "operador", "senha-digitada");
+        _vaultService.SetupGet(v => v.Generation).Returns(Generation);
+        _databaseSessionService.Setup(s => s.TestAsync(settings, sent, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
+
+        //Act
+        var result = await CreateHandler().Handle(CreateCommand() with { VerificationQuery = query }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        _databaseSessionService.Verify(s => s.TestAsync(settings, sent, cancellationToken), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
 }

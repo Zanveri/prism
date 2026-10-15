@@ -1,4 +1,5 @@
 using Prism.Application.Connections.Models;
+using Prism.Infrastructure.Databases.Models;
 
 namespace Prism.UnitTesting.Connections;
 
@@ -148,5 +149,66 @@ public sealed class ConnectionRulesTests
         Assert.Equal(80, ConnectionRules.NameMaxLength);
         Assert.True(ConnectionRules.NameIsValid(new string('a', ConnectionRules.NameMaxLength)));
         Assert.False(ConnectionRules.NameIsValid(new string('a', ConnectionRules.NameMaxLength + 1)));
+    }
+
+    [Trait("ConnectionRules", "VerificationIntervalIsValid")]
+    [Theory(DisplayName = "OK o intervalo da verificação é de 5 a 3.600 segundos, e o ausente é o padrão")]
+    [InlineData(null, true)]
+    [InlineData(5, true)]
+    [InlineData(30, true)]
+    [InlineData(3600, true)]
+    [InlineData(4, false)]
+    [InlineData(0, false)]
+    [InlineData(-30, false)]
+    [InlineData(3601, false)]
+    public void VerificationIntervalIsValid_ShouldAcceptFrom5To3600(int? interval, bool valid)
+        => Assert.Equal(valid, ConnectionRules.VerificationIntervalIsValid(interval));
+
+    [Trait("ConnectionRules", "NormalizeVerificationQuery")]
+    [Theory(DisplayName = "OK a consulta de verificação em branco é nula, e a escrita é aparada")]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("  \n ", null)]
+    [InlineData("  SELECT 1 \n", "SELECT 1")]
+    public void NormalizeVerificationQuery_ShouldTrimAndBlankIsNull(string? query, string? normalized)
+        => Assert.Equal(normalized, ConnectionRules.NormalizeVerificationQuery(query));
+
+    /// <summary>RN-VERIF-001: até 1.000 caracteres depois de aparada, e uma leitura só no banco da conexão, com o motivo da recusa.</summary>
+    [Trait("ConnectionRules", "VerificationQueryRefusal")]
+    [Theory(DisplayName = "OK a consulta de verificação em branco ou de uma leitura só serve")]
+    [InlineData(null, EDatabaseEngine.PostgreSql)]
+    [InlineData("  ", EDatabaseEngine.Db2)]
+    [InlineData("SELECT 1", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT 1 FROM SYSIBM.SYSDUMMY1;", EDatabaseEngine.Db2)]
+    [InlineData("SELECT 1 FROM systables WHERE tabid = 1", EDatabaseEngine.Informix)]
+    public void VerificationQueryRefusal_ShouldBeNull_ForASingleRead(string? query, EDatabaseEngine engine)
+        => Assert.Null(ConnectionRules.VerificationQueryRefusal(query, engine));
+
+    [Trait("ConnectionRules", "VerificationQueryRefusal")]
+    [Theory(DisplayName = "Erro a consulta de verificação que não é uma leitura só diz por quê")]
+    [InlineData("UPDATE loja.pedido SET x = 1", EDatabaseEngine.PostgreSql, "A consulta de verificação tem de ser uma leitura só: um UPDATE não é leitura.")]
+    [InlineData("SELECT 1; SELECT 2", EDatabaseEngine.PostgreSql, "A consulta de verificação tem de ser uma leitura só: o texto tem mais de um comando.")]
+    [InlineData("SELECT * FROM TABLE(MON_GET_DATABASE(-1))", EDatabaseEngine.Db2, "A consulta de verificação tem de ser uma leitura só: no Db2, uma função de tabela (TABLE (...)) pode gravar sem que o comando mostre.")]
+    [InlineData("SHOW server_version", EDatabaseEngine.Informix, "A consulta de verificação tem de ser uma leitura só: um SHOW não é leitura.")]
+    public void VerificationQueryRefusal_ShouldExplain(string query, EDatabaseEngine engine, string refusal)
+        => Assert.Equal(refusal, ConnectionRules.VerificationQueryRefusal(query, engine));
+
+    /// <summary>O limite é contado depois de aparada: os espaços em volta não contam.</summary>
+    [Trait("ConnectionRules", "VerificationQueryRefusal")]
+    [Fact(DisplayName = "Erro a consulta de verificação com mais de 1.000 caracteres, contados depois de aparada")]
+    public void VerificationQueryRefusal_ShouldLimitTheLength()
+    {
+        //Arrange
+        var atTheLimit = "SELECT " + new string('1', ConnectionRules.VerificationQueryMaxLength - 7);
+        var overTheLimit = atTheLimit + "1";
+
+        //Act
+        var accepted = ConnectionRules.VerificationQueryRefusal("   " + atTheLimit + "   ", EDatabaseEngine.PostgreSql);
+        var refused = ConnectionRules.VerificationQueryRefusal(overTheLimit, EDatabaseEngine.PostgreSql);
+
+        //Assert
+        Assert.Equal(1000, atTheLimit.Length);
+        Assert.Null(accepted);
+        Assert.Equal("A consulta de verificação pode ter no máximo 1.000 caracteres.", refused);
     }
 }

@@ -234,4 +234,27 @@ public sealed class CreateFolderHandlerTests
         _folderQueries.VerifyNoOtherCalls();
         _folderRepository.VerifyNoOtherCalls();
     }
+
+    /// <summary>RN-PROT-001 a 004: as proteções vão normalizadas ao cofre, sem pedir senha, e a resposta leva as que valem, que a gravação calculou.</summary>
+    [Trait("CreateFolderHandler", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK cria com as proteções normalizadas e responde as que valem")]
+    public async Task Handle_ShouldBeOK_WithProtections()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var parentID = Guid.CreateVersion7();
+        var command = FolderFakers.ReturnCreateFolderCommandValid(name: "Linha 1", parentID: parentID, confirmCommands: " irreversible ", readOnly: true);
+        Folder? inserted = null;
+        _folderQueries.Setup(q => q.Exists("Linha 1", parentID, cancellationToken)).ReturnsAsync(false);
+        _folderRepository.Setup(r => r.Insert(It.IsAny<Folder>(), cancellationToken)).Callback<Folder, CancellationToken>((folder, _) => inserted = folder).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(new EffectiveProtections(true, null, "all", parentID)));
+        var handler = new CreateFolderHandler(_folderQueries.Object, _folderRepository.Object, _timeProvider);
+
+        //Act
+        var result = await handler.Handle(command, cancellationToken);
+
+        //Assert
+        Assert.Equal(("irreversible", true), (inserted!.ConfirmCommands, inserted.ReadOnly));
+        Assert.Equal(("irreversible", true), (result.Value.ConfirmCommands, result.Value.ReadOnly));
+        Assert.Equal(new ProtectionsDto { ReadOnly = true, ConfirmCommands = "all", ConfirmCommandsFolderID = parentID }, result.Value.Protections);
+    }
 }

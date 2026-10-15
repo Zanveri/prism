@@ -5,6 +5,7 @@ using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Vault.Models;
 using System.Net;
 using System.Text.Json;
 
@@ -237,5 +238,92 @@ public sealed class ExecuteQueryHandlerTests
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal(("FILTER_INVALID", HttpStatusCode.UnprocessableEntity, "O filtro tem aspas sem fechar."), (result.Error.Type, result.Error.StatusCode, result.Error.Detail));
+    }
+
+    /// <summary>RN-PROT-002 e 006: a proteção é a do cofre agora, lida pela conexão da sessão, e vai ao registro de sessões com o comando.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "OK na conexão somente leitura o comando vai ao registro de sessões como somente leitura")]
+    public async Task Handle_ShouldExecuteAsReadOnly_WhenTheConnectionIsReadOnly()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        var connectionID = Guid.CreateVersion7();
+        _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
+        _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, true, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, true, cancellationToken), Times.Once);
+    }
+
+    /// <summary>RN-PROT-002: a recusa do registro de sessões é 422 `CONNECTION_READ_ONLY`, sem `executed`.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "Erro o comando que não é leitura na conexão somente leitura vira 422 CONNECTION_READ_ONLY")]
+    public async Task Handle_ShouldBeError_ConnectionReadOnly()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        var connectionID = Guid.CreateVersion7();
+        _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
+        _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "DELETE FROM loja.pedido", null, QueryPaging.DefaultPageSize, true, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, "A conexão é somente leitura.")));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = "DELETE FROM loja.pedido" }, cancellationToken);
+
+        //Assert
+        Assert.Equal(("CONNECTION_READ_ONLY", HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+        Assert.False(result.Error.Extensions.ContainsKey("executed"));
+    }
+
+    /// <summary>O cofre fechado é o 401 de sempre, e a conexão excluída (as sessões dela estão fechando) responde como a sessão que não existe; nada vai ao banco.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Theory(DisplayName = "Erro cofre fechado e conexão excluída não executam nada")]
+    [InlineData(true, "VAULT_LOCKED", HttpStatusCode.Unauthorized)]
+    [InlineData(false, "DATABASE_SESSION_NOT_FOUND", HttpStatusCode.NotFound)]
+    public async Task Handle_ShouldNotExecute_WhenTheProtectionCannotBeRead(bool locked, string code, HttpStatusCode status)
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        var connectionID = Guid.CreateVersion7();
+        _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
+        _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(locked ? Result.Failure<bool?, EVaultError>(EVaultError.Locked) : Result.Success<bool?, EVaultError>(null));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
+
+        //Assert
+        Assert.Equal((code, status), (result.Error.Type, result.Error.StatusCode));
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>A sessão que não existe não tem conexão: o cofre nem é lido, e quem responde que ela não existe é o registro de sessões.</summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "OK sessão que não existe não lê o cofre, e o registro de sessões responde")]
+    public async Task Handle_WithoutTheSession_ShouldNotReadTheVault()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionNotFound, "A sessão com o banco não existe ou já foi fechada.")));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
+
+        //Assert
+        Assert.Equal("DATABASE_SESSION_NOT_FOUND", result.Error.Type);
+        _connectionQueries.VerifyNoOtherCalls();
     }
 }

@@ -8,6 +8,7 @@ using Prism.Application.DatabaseSessions.Features.PreviewEdits;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Vault.Models;
 using System.Net;
 
 namespace Prism.UnitTesting.DatabaseSessions;
@@ -160,5 +161,31 @@ public sealed class EditHandlersTests
 
         //Assert
         result.ShouldHaveValidationErrorFor(command => command.ResultID).WithErrorCode("EDIT_INVALID");
+    }
+
+    /// <summary>RN-PROT-002: a edição de registros não existe numa conexão somente leitura; as três rotas recusam antes de chegar ao registro de sessões.</summary>
+    [Trait("EditHandlers", "ConnectionReadOnly")]
+    [Fact(DisplayName = "Erro na conexão somente leitura edit-target, edits e preview viram 422 CONNECTION_READ_ONLY sem ir ao banco")]
+    public async Task EditHandlers_ShouldBeError_WhenTheConnectionIsReadOnly()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID, connectionID) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
+        _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
+        IReadOnlyList<EditChangeDto> changes = [new EditChangeDto { Kind = "delete", Table = 0, Key = ["1"] }];
+
+        //Act
+        var target = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID }, cancellationToken);
+        var applied = await new ApplyEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new ApplyEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = changes }, cancellationToken);
+        var preview = await new PreviewEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new PreviewEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = changes }, cancellationToken);
+
+        //Assert
+        const string refusal = "A conexão é somente leitura: nada se grava nela, e a edição de registros não vale. Nada foi enviado ao banco.";
+        Assert.Equal(("CONNECTION_READ_ONLY", HttpStatusCode.UnprocessableEntity, refusal), (target.Error.Type, target.Error.StatusCode, target.Error.Detail));
+        Assert.Equal(("CONNECTION_READ_ONLY", refusal), (applied.Error.Type, applied.Error.Detail));
+        Assert.Equal(("CONNECTION_READ_ONLY", refusal), (preview.Error.Type, preview.Error.Detail));
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.Exactly(3));
+        _databaseSessionService.VerifyNoOtherCalls();
     }
 }

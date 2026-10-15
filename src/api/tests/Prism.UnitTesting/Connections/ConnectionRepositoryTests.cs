@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Repositories;
 using Prism.Infrastructure.Databases.Models;
@@ -761,5 +762,165 @@ public sealed class ConnectionRepositoryTests
         Assert.Equal("VAULT_UNAVAILABLE", result.Error.Type);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, result.Error.StatusCode);
         VerifySavedOnce(cancellationToken);
+    }
+
+    /// <summary>RN-PROT-003: marcar o somente leitura pede a senha do usuário, e a senha que veio vai à mesma operação do cofre que grava.</summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "OK marcar o somente leitura pede a senha, que vai junto com a gravação")]
+    public async Task Update_MarkingReadOnly_AsksThePassword()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateConnection();
+        var changed = ConnectionFakers.Create(iD: target.ID, folderID: null, name: target.Name, host: target.Host, port: target.Port, createdAt: target.CreatedAt, safeguards: new ConnectionSafeguards(ReadOnly: true));
+        var repository = CreateRepository(Document(connections: [target]));
+
+        //Act
+        var result = await repository.Update(changed, null, "senha-do-usuario", cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(_passwordAsked);
+        Assert.True(_saved!.Connections.Single().ReadOnly);
+        Assert.Equal(new EffectiveProtections(true, null, null, null), result.Value);
+        VerifySavedWithPasswordOnce("senha-do-usuario", cancellationToken);
+    }
+
+    /// <summary>RN-PROT-003: a alteração que não mexe no somente leitura não pede a senha; a que veio não é conferida.</summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "OK mudar a confirmação e a verificação não pede a senha")]
+    public async Task Update_ChangingTheConfirmation_DoesNotAskThePassword()
+    {
+        //Arrange
+        var target = VaultFakers.CreateConnection();
+        var changed = ConnectionFakers.Create(iD: target.ID, folderID: null, name: target.Name, host: target.Host, port: target.Port, createdAt: target.CreatedAt, safeguards: new ConnectionSafeguards("all", VerificationEnabled: false, VerificationInterval: 600, VerificationQuery: "SELECT 1"));
+        var repository = CreateRepository(Document(connections: [target]));
+
+        //Act
+        var result = await repository.Update(changed, null, null, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.False(_passwordAsked);
+        var saved = _saved!.Connections.Single();
+        Assert.Equal(("all", (bool?)null, (bool?)false, (int?)600, "SELECT 1"), (saved.ConfirmCommands, saved.ReadOnly, saved.VerificationEnabled, saved.VerificationInterval, saved.VerificationQuery));
+    }
+
+    /// <summary>RN-PROT-003 e 004: tirar a conexão de uma pasta somente leitura afrouxa o herdado, e pede a senha; as proteções que valem saem do documento gravado.</summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "OK mover a conexão para fora da pasta somente leitura pede a senha, e as proteções que valem são as do lugar novo")]
+    public async Task Update_MovingOutOfAReadOnlyFolder_AsksThePassword()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder() with { ReadOnly = true };
+        var other = VaultFakers.CreateFolder() with { ConfirmCommands = "irreversible" };
+        var target = VaultFakers.CreateConnection(folderID: factory.ID);
+        var changed = ConnectionFakers.Create(iD: target.ID, folderID: other.ID, name: target.Name, host: target.Host, port: target.Port, createdAt: target.CreatedAt);
+        var repository = CreateRepository(Document([factory, other], [target]));
+
+        //Act
+        var result = await repository.Update(changed, null, "senha-do-usuario", CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(_passwordAsked);
+        Assert.Equal(new EffectiveProtections(false, null, "irreversible", other.ID), result.Value);
+    }
+
+    /// <summary>
+    /// RN-PROT-003: a senha que faltou ou não conferiu é a resposta, no campo `UserPassword`; o quinto erro seguido (o cofre já fechou) é o 401
+    /// de sempre. A tradução é do `SaveOrRefuseWithPassword`.
+    /// </summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Theory(DisplayName = "Erro a senha do usuário que faltou ou não conferiu, no campo dela")]
+    [InlineData(EPasswordCheck.Missing, "USER_PASSWORD_REQUIRED", "Senha do usuário necessária.")]
+    [InlineData(EPasswordCheck.Wrong, "INVALID_PASSWORD", "Senha incorreta.")]
+    public async Task Update_ShouldBeError_WhenThePasswordIsMissingOrWrong(EPasswordCheck check, string code, string title)
+    {
+        //Arrange
+        var target = VaultFakers.CreateConnection() with { ReadOnly = true };
+        var changed = ConnectionFakers.Create(iD: target.ID, folderID: null, name: target.Name, host: target.Host, port: target.Port, createdAt: target.CreatedAt);
+        var repository = CreateRepository(Document(connections: [target]), check: check);
+
+        //Act
+        var result = await repository.Update(changed, null, "senha-errada", CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal((code, HttpStatusCode.UnprocessableEntity, title), (result.Error.Type, result.Error.StatusCode, result.Error.Title));
+        Assert.Equal(new[] { code }, ((Dictionary<string, string[]>)result.Error.Extensions["errorCodes"]!)["UserPassword"]);
+        Assert.True(((Dictionary<string, string[]>)result.Error.Extensions["errors"]!).ContainsKey("UserPassword"));
+    }
+
+    [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "Erro o quinto erro seguido, com o cofre já fechado, é 401 VAULT_LOCKED")]
+    public async Task Update_ShouldBeError_WhenTheFifthWrongPasswordLockedTheVault()
+    {
+        //Arrange
+        var target = VaultFakers.CreateConnection() with { ReadOnly = true };
+        var changed = ConnectionFakers.Create(iD: target.ID, folderID: null, name: target.Name, host: target.Host, port: target.Port, createdAt: target.CreatedAt);
+        var repository = CreateRepository(Document(connections: [target]), EVaultError.Locked);
+
+        //Act
+        var result = await repository.Update(changed, null, "senha-errada", CancellationToken.None);
+
+        //Assert
+        Assert.Equal(("VAULT_LOCKED", HttpStatusCode.Unauthorized), (result.Error.Type, result.Error.StatusCode));
+    }
+
+    /// <summary>A recusa da regra vem antes da senha: a função não mudou nada, e nada pede senha.</summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "Erro a conexão que não existe é 404, mesmo marcando o somente leitura sem a senha")]
+    public async Task Update_RuleRefusal_ComesBeforeThePassword()
+    {
+        //Arrange
+        var changed = ConnectionFakers.Create(safeguards: new ConnectionSafeguards(ReadOnly: true));
+        var repository = CreateRepository(Document(connections: [VaultFakers.CreateConnection()]), check: EPasswordCheck.Missing);
+
+        //Act
+        var result = await repository.Update(changed, null, null, CancellationToken.None);
+
+        //Assert
+        Assert.Equal("CONNECTION_NOT_FOUND", result.Error.Type);
+        Assert.False(_passwordAsked);
+    }
+
+    /// <summary>RN-PROT-003 e 004: criar uma conexão já marcada, ou dentro de uma pasta somente leitura, não pede senha; as proteções saem do documento gravado.</summary>
+    [Trait("ConnectionRepository", "Insert")]
+    [Fact(DisplayName = "OK a conexão nova devolve as proteções que valem, com as da pasta")]
+    public async Task Insert_ShouldReturnTheEffectiveProtections()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder() with { ReadOnly = true, ConfirmCommands = "all" };
+        var connection = ConnectionFakers.Create(folderID: factory.ID, safeguards: new ConnectionSafeguards("irreversible"));
+        var repository = CreateRepository(Document([factory]));
+
+        //Act
+        var result = await repository.Insert(connection, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new EffectiveProtections(true, factory.ID, "all", factory.ID), result.Value);
+        Assert.Equal("irreversible", _saved!.Connections.Single().ConfirmCommands);
+    }
+
+    /// <summary>RN-CONN-016 e RN-PROT-003: a cópia leva as proteções e a verificação da origem, sem pedir a senha.</summary>
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "OK a cópia leva as proteções e a verificação da origem, e as que valem")]
+    public async Task Duplicate_ShouldCopyTheSafeguards()
+    {
+        //Arrange
+        var source = VaultFakers.CreateConnection() with { ConfirmCommands = "all", ReadOnly = true, VerificationEnabled = false, VerificationInterval = 45, VerificationQuery = "SELECT 2" };
+        var repository = CreateRepository(Document(connections: [source]));
+
+        //Act
+        var result = await repository.Duplicate(source.ID, DateTime.UtcNow, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        var copy = _saved!.Connections[^1];
+        Assert.Equal((source.ConfirmCommands, source.ReadOnly, source.VerificationEnabled, source.VerificationInterval, source.VerificationQuery), (copy.ConfirmCommands, copy.ReadOnly, copy.VerificationEnabled, copy.VerificationInterval, copy.VerificationQuery));
+        Assert.Equal(new EffectiveProtections(true, null, "all", null), result.Value.Protections);
+        VerifySavedOnce(CancellationToken.None);
     }
 }

@@ -165,4 +165,57 @@ public sealed class ConnectionTests
         Assert.Equal(now, copy.UpdatedAt);
         Assert.Equal("MES", source.Name);
     }
+
+    /// <summary>RN-PROT-001 e RN-VERIF-001: "Não" e a consulta em branco se guardam nulos, e a consulta é aparada.</summary>
+    [Trait("Connection", "Create")]
+    [Fact(DisplayName = "OK as proteções e a verificação são normalizadas na criação")]
+    public void Create_ShouldNormalizeTheSafeguards()
+    {
+        //Act
+        var none = Connection.Create(null, "a", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, ConnectionSafeguards.From(" none ", false, null, null, "   "), CreatedAt);
+        var set = Connection.Create(null, "b", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, ConnectionSafeguards.From(" all ", true, false, 120, "  SELECT 1 \n"), CreatedAt);
+
+        //Assert
+        Assert.Equal(new ConnectionSafeguards(), none.Safeguards);
+        Assert.Equal((null, false, true, 30, null), (none.ConfirmCommands, none.ReadOnly, none.VerificationEnabled, none.VerificationInterval, none.VerificationQuery));
+        Assert.Equal(new ConnectionSafeguards("all", true, false, 120, "SELECT 1"), set.Safeguards);
+    }
+
+    /// <summary>O `PATCH` grava as proteções e a verificação por inteiro: o ausente volta ao padrão.</summary>
+    [Trait("Connection", "Update")]
+    [Fact(DisplayName = "OK alterar grava as proteções e a verificação, e o ausente volta ao padrão")]
+    public void Update_ShouldWriteTheSafeguards()
+    {
+        //Arrange
+        var connection = ConnectionFakers.Create(safeguards: new ConnectionSafeguards("all", true, false, 60, "SELECT 1"));
+
+        //Act
+        connection.Update(null, "a", EDatabaseEngine.PostgreSql, "h", 1, "d", "u", null, null, null, ConnectionSafeguards.From(null, false, null, null, null), UpdatedAt);
+
+        //Assert
+        Assert.Equal(new ConnectionSafeguards(), connection.Safeguards);
+        Assert.Equal(UpdatedAt, connection.UpdatedAt);
+    }
+
+    /// <summary>RN-CONN-016 e RN-PROT-003: a cópia nasce com as proteções e a verificação da origem.</summary>
+    [Trait("Connection", "Duplicate")]
+    [Fact(DisplayName = "OK a cópia leva as proteções e a verificação da origem")]
+    public void Duplicate_ShouldCopyTheSafeguards()
+    {
+        //Arrange
+        var safeguards = new ConnectionSafeguards("irreversible", true, false, 90, "SELECT 1 FROM systables WHERE tabid = 1");
+        var source = ConnectionFakers.Create(safeguards: safeguards);
+
+        //Act
+        var copy = source.Duplicate("cópia", UpdatedAt);
+
+        //Assert
+        Assert.Equal(safeguards, copy.Safeguards);
+    }
+
+    /// <summary>RN-LOG-001: a consulta de verificação não vai para o log por um `ToString()`.</summary>
+    [Trait("Connection", "ConnectionSafeguards")]
+    [Fact(DisplayName = "OK o ToString das proteções não imprime a consulta de verificação")]
+    public void ConnectionSafeguards_ToString_ShouldNotPrintTheQuery()
+        => Assert.Equal("ConnectionSafeguards", new ConnectionSafeguards(VerificationQuery: "SELECT marca_secreta").ToString());
 }
