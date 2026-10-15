@@ -1,7 +1,7 @@
 import { fitsSavedSqlLimit, type SavedTab, type SavedWorkspace } from "../../../../electron/workspace-messages";
 
 import { inDatabase } from "./navigator-model";
-import { isScriptDirty, type ScriptRef } from "./saved-scripts";
+import { isScriptDirty, scriptPlace, type ScriptRef } from "./saved-scripts";
 import { isTableTab, type QueryTab } from "./workbench-model";
 
 /**
@@ -16,9 +16,9 @@ export type LiveSql = (tabId: string) => string | null;
 
 /**
  * Uma aba como vai para o cofre. A vista da tabela é a enumeração da tela (`TableView`) e a do schema (`workspace-messages.ts`) ao mesmo tempo: a ida (aqui)
- * e a volta (`restoreWorkspace`) atribuem uma à outra, e uma que divergir não compila. A mudança não salva do script segue o texto deste instante e o banco
- * da aba (`isScriptDirty`, a mesma conta do ponto da faixa, RN-ARVORE-007). O texto que passa de 1 MB (RN-SCRIPT-004) não vai: a aba vai vazia, marcada, e volta
- * com o aviso.
+ * e a volta (`restoreWorkspace`) atribuem uma à outra, e uma que divergir não compila. A mudança não salva do script segue o texto deste instante e o lugar
+ * da aba (`isScriptDirty`, a mesma conta do ponto da faixa: a conexão e o banco contam, RN-SCRIPT-003). O texto que passa de 1 MB (RN-SCRIPT-004) não vai: a aba
+ * vai vazia, marcada, e volta com o aviso.
  */
 export function savedTabOf(tab: QueryTab, liveSql: string | null): SavedTab {
   if (isTableTab(tab)) return { kind: "table", connectionID: tab.connectionId, database: tab.database ?? null, schema: tab.table.schema, table: tab.table.name, view: tab.table.view };
@@ -31,7 +31,7 @@ export function savedTabOf(tab: QueryTab, liveSql: string | null): SavedTab {
     database: tab.connectionId === null ? null : (tab.database ?? null),
     sql: fits ? sql : "",
     scriptID: tab.script?.id ?? null,
-    dirty: tab.script === undefined ? false : isScriptDirty(tab.script, sql, tab.database),
+    dirty: tab.script === undefined ? false : isScriptDirty(tab.script, sql, tab),
     sqlTooLarge: !fits,
   };
 }
@@ -97,8 +97,11 @@ export function createWorkspaceSource(liveSql: LiveSql) {
 /** O que a reabertura precisa saber: as conexões que existem, os scripts que existem (com o texto salvo, quando foi lido), e de onde vêm os ids e os números. */
 export type RestoreContext = {
   connections: ReadonlySet<string>;
-  /** O nome de cada script, o SQL salvo dele (`null` se não foi lido: só a aba com mudança não salva precisa dele) e o banco em que foi salvo (RN-ARVORE-007). */
-  scripts: ReadonlyMap<string, { name: string; sql: string | null; database?: string | null }>;
+  /**
+   * O nome de cada script, o SQL salvo dele (`null` se não foi lido: só a aba com mudança não salva precisa dele) e o lugar em que foi salvo: a conexão
+   * (nula no script genérico, RN-SCRIPT-005) e o banco (RN-ARVORE-007).
+   */
+  scripts: ReadonlyMap<string, { name: string; sql: string | null; connectionID: string | null; database?: string | null }>;
   newId: () => string;
   /** O número da próxima "consulta-N.sql" da janela. */
   nextNumber: () => number;
@@ -119,8 +122,9 @@ export type RestoredWorkspace = {
 
 /**
  * As abas gravadas, de volta, na ordem em que estavam: desconectadas (sem sessão), com ids novos, a consulta com o número seguinte da janela, a aba de um
- * script com o nome que ele tem hoje e a marca de mudança não salva que tinha, e a ativa. A que perdeu a conexão volta sem ela (a de tabela não volta), e a
- * ativa que não voltou passa à vizinha, como ao fechar uma aba.
+ * script com o nome que ele tem hoje, o lugar com que ele está gravado (a conexão e o banco, ou o genérico: RN-SCRIPT-003 e 005) e a marca de mudança não
+ * salva que tinha, e a ativa. A aba volta na conexão em que estava, que pode não ser a do script (a troca é a mudança não salva). A que perdeu a conexão
+ * volta sem ela (a de tabela não volta), e a ativa que não voltou passa à vizinha, como ao fechar uma aba.
  */
 export function restoreWorkspace(saved: SavedWorkspace, context: RestoreContext): RestoredWorkspace {
   const emptied: string[] = [];
@@ -143,7 +147,9 @@ export function restoreWorkspace(saved: SavedWorkspace, context: RestoreContext)
     if (tab.connectionID !== null && connectionId === null) withoutConnection++;
 
     const script = tab.scriptID === null ? undefined : context.scripts.get(tab.scriptID);
-    const ref: ScriptRef | undefined = script === undefined || tab.scriptID === null ? undefined : { id: tab.scriptID, name: script.name, savedSql: script.sql ?? (tab.dirty ? "" : tab.sql), ...(script.database == null ? {} : { savedDatabase: script.database }), dirty: tab.dirty };
+    // O lugar salvo é o de abrir o script (`scriptPlace`): a conexão que não existe mais vale "sem conexão", como na aba que abre sem ela.
+    const ref: ScriptRef | undefined =
+      script === undefined || tab.scriptID === null ? undefined : { id: tab.scriptID, name: script.name, savedSql: script.sql ?? (tab.dirty ? "" : tab.sql), ...scriptPlace({ connectionID: script.connectionID, database: script.database ?? null }, context.connections).saved, dirty: tab.dirty };
     const title = ref?.name ?? `consulta-${context.nextNumber()}.sql`;
     if (tab.sqlTooLarge) emptied.push(title);
 

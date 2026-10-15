@@ -14,13 +14,14 @@ import { closeDatabaseSession, databaseSessionKey, treeSessionIds } from "./data
 import { filterHandoff } from "./filter-handoff";
 import { liveEditors } from "./live-editors";
 import { inDatabase, parseNavKey } from "./navigator-model";
-import { withEditedSql, type ScriptRef } from "./saved-scripts";
+import { isScriptDirty, withEditedSql, withSavedPlace, type SavedPlace, type ScriptRef } from "./saved-scripts";
 import { createWorkspaceSource, restoreWorkspace, type LiveSql } from "./saved-workspace";
 import type { Script } from "./scripts.schema";
 import { getScript, scriptsQuery } from "./scripts.service";
 import { cancelQuery } from "./query.service";
 import { forgetExcept, rememberTransferred } from "./tab-memory";
 import { moveTab, shiftTab } from "./tab-order";
+import { withConnection } from "./tab-connection";
 import { withDatabase } from "./tab-database";
 import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
@@ -61,20 +62,30 @@ type WorkbenchState = {
   /** O editor grava aqui o texto da aba, com atraso (não a cada tecla); a sessão, quem grava é o que a aba executa. */
   updateTab: (tabId: string, patch: Partial<Pick<QueryTab, "sessionId" | "sql">>) => void;
   /**
-   * RN-SCRIPT-003: abre o script numa aba de consulta, na conexão e no banco dados (`connectionId` nulo: a conexão dele não existe mais, e a aba pede uma).
-   * O script que já tem aba volta para ela: uma aba por script.
+   * RN-SCRIPT-003: abre o script numa aba de consulta, na conexão e no banco dados (`connectionId` nulo: a conexão dele não existe mais, ou o script é genérico
+   * e não há uma só conectada, e a aba pede uma), com o lugar salvo que a aba guarda (`saved`, `scriptPlace`). O script que já tem aba volta para ela: uma aba
+   * por script.
    */
-  openScriptTab: (script: Script, place: { connectionId: string | null; database?: string }) => void;
-  /** RN-SCRIPT-001: a aba foi salva como o script dado, com este texto e neste banco (o ponto apaga, se o editor ainda tem esse texto e a aba, esse banco). */
-  setTabScript: (tabId: string, script: { id: string; name: string }, savedSql: string, savedDatabase: string | undefined) => void;
+  openScriptTab: (script: Script, place: { connectionId: string | null; database?: string; saved: SavedPlace }) => void;
+  /**
+   * RN-SCRIPT-001: a aba foi salva como o script dado, com este texto e neste lugar (a conexão e o banco da aba, ou o genérico, RN-SCRIPT-005). O ponto é
+   * refeito pelo texto do editor deste instante e pelo lugar da aba: o que mudou enquanto a gravação ia continua marcado.
+   */
+  setTabScript: (tabId: string, script: { id: string; name: string }, savedSql: string, saved: SavedPlace) => void;
+  /** RN-SCRIPT-005: o menu do script o tornou genérico ou o vinculou à conexão da aba; as abas dele guardam o lugar novo e refazem o ponto. */
+  setScriptPlace: (scriptId: string, saved: SavedPlace) => void;
   /** RN-SCRIPT-001: o texto do editor mudou, sem atraso: o ponto da aba de um script acende na hora (só a primeira tecla muda o estado). */
   markScriptEdited: (tabId: string) => void;
   /** RN-SCRIPT-003: o script mudou de nome no navegador; as abas dele mudam de título. */
   renameScript: (scriptId: string, name: string) => void;
   /** RN-SCRIPT-003: o script foi excluído; as abas dele continuam, com o texto, como consultas sem script. */
   forgetScript: (scriptId: string) => void;
-  /** RN-SCRIPT-003: a aba sem conexão recebe a que a pessoa escolheu, no banco da conexão, com um executor novo. */
-  assignConnection: (tabId: string, connectionId: string) => void;
+  /**
+   * RN-ARVORE-008: a aba de consulta passa a outra conexão, no banco padrão dela, sem executar nada. Ganha um executor novo nessa conexão, que abre a sessão
+   * na próxima execução; o de antes sai de cena com o resultado, e a sessão dele fecha. O texto fica. A aba sem conexão (RN-SCRIPT-003 e 005) recebe a
+   * escolhida pelo mesmo caminho. Com comando em andamento não troca (a lista não oferece).
+   */
+  switchConnection: (tabId: string, connectionId: string) => void;
   /**
    * RN-ARVORE-007: a aba de consulta passa a outro banco do servidor da conexão (`undefined`: o da conexão), sem executar nada. Ganha um executor novo nesse
    * banco, que abre a sessão dele na próxima execução, como a aba aberta pela árvore (RN-ARVORE-006); o de antes sai de cena com o resultado, e a sessão dele
@@ -269,16 +280,23 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     [reporter],
   );
 
-  // O ponto é recalculado contra o que acabou de ser salvo: o banco pode ter mudado enquanto a gravação ia (RN-ARVORE-007).
+  // O ponto é recalculado contra o que acabou de ser salvo, pelo texto do editor deste instante e pelo lugar da aba: o texto, a conexão (RN-ARVORE-008) ou o
+  // banco (RN-ARVORE-007) podem ter mudado enquanto a gravação ia.
   const setTabScript = useCallback(
-    (tabId: string, saved: { id: string; name: string }, savedSql: string, savedDatabase: string | undefined) =>
+    (tabId: string, saved: { id: string; name: string }, savedSql: string, place: SavedPlace) =>
       setTabs((current) =>
         current.map((tab) => {
           if (tab.id !== tabId) return tab;
-          const script: ScriptRef = { id: saved.id, name: saved.name, savedSql, ...(savedDatabase === undefined ? {} : { savedDatabase }), dirty: tab.database !== savedDatabase };
-          return { ...tab, title: saved.name, script };
+          const script: Omit<ScriptRef, "dirty"> = { id: saved.id, name: saved.name, savedSql, ...place };
+          return { ...tab, title: saved.name, script: { ...script, dirty: isScriptDirty(script, liveSql(tab.id) ?? tab.sql, tab) } };
         }),
       ),
+    [],
+  );
+
+  const setScriptPlace = useCallback(
+    (scriptId: string, saved: SavedPlace) =>
+      setTabs((current) => (current.some((tab) => tab.script?.id === scriptId) ? current.map((tab) => (tab.script?.id === scriptId ? withSavedPlace(tab, saved, liveSql(tab.id) ?? tab.sql) : tab)) : current)),
     [],
   );
 
@@ -327,27 +345,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   );
 
   const openScriptTab = useCallback(
-    (script: Script, place: { connectionId: string | null; database?: string }) => {
+    (script: Script, place: { connectionId: string | null; database?: string; saved: SavedPlace }) => {
       const open = tabs.find((tab) => tab.script?.id === script.id);
       if (open !== undefined) return setActiveTabId(open.id);
 
-      const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...(place.database === undefined ? {} : { savedDatabase: place.database }), dirty: false };
+      const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...place.saved, dirty: false };
       addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref });
     },
     [tabs, addTab],
-  );
-
-  // A aba sem conexão não abriu sessão nenhuma (o executor dela não executa): o executor novo é o da conexão escolhida, no banco da conexão.
-  const assignConnection = useCallback(
-    (tabId: string, connectionId: string) => {
-      const tab = tabs.find((candidate) => candidate.id === tabId);
-      if (tab === undefined || tab.connectionId !== null) return;
-
-      runners.get(tabId)?.retire();
-      runners.set(tabId, createRunner({ id: tabId, connectionId }));
-      setTabs((current) => current.map((candidate) => (candidate.id === tabId ? { ...candidate, connectionId, database: undefined, sessionId: null } : candidate)));
-    },
-    [tabs, runners, createRunner],
   );
 
   // O que uma aba soltou fecha na API em segundo plano (cancela o que rodava e fecha a sessão, RN-SESSAO-004), pelo cache de mutações sem ficar nele; a falha
@@ -375,6 +380,25 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const released = runner?.retire();
       runners.set(tabId, createRunner(next));
       setTabs((current) => current.map((candidate) => (candidate.id === tabId ? (withDatabase(candidate, database, sql) ?? candidate) : candidate)));
+      if (released) endInBackground(released);
+    },
+    [tabs, runners, createRunner, endInBackground],
+  );
+
+  // O mesmo caminho da troca do banco: o executor de antes sai de cena primeiro (o resultado na tela é da conexão anterior), e a sessão dele fecha em segundo
+  // plano. A aba sem conexão não tinha sessão (o executor dela não executa), e o fechamento não chama a API.
+  const switchConnection = useCallback(
+    (tabId: string, connectionId: string) => {
+      const tab = tabs.find((candidate) => candidate.id === tabId);
+      const runner = runners.get(tabId);
+      if (tab === undefined || (runner !== undefined && isBusyState(runner.getState()))) return;
+      const sql = liveEditors.snapshot(tabId)?.sql;
+      const next = withConnection(tab, connectionId, sql);
+      if (next === null) return;
+
+      const released = runner?.retire();
+      runners.set(tabId, createRunner(next));
+      setTabs((current) => current.map((candidate) => (candidate.id === tabId ? (withConnection(candidate, connectionId, sql) ?? candidate) : candidate)));
       if (released) endInBackground(released);
     },
     [tabs, runners, createRunner, endInBackground],
@@ -509,7 +533,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
       const restored = restoreWorkspace(saved.data, {
         connections: new Set(connectionList.map((connection) => connection.id)),
-        scripts: new Map(scriptList.map((script) => [script.id, { name: script.name, sql: read.get(script.id) ?? null, database: script.database }])),
+        scripts: new Map(scriptList.map((script) => [script.id, { name: script.name, sql: read.get(script.id) ?? null, connectionID: script.connectionID, database: script.database }])),
         newId: () => crypto.randomUUID(),
         nextNumber: () => nextNumber.current++,
       });
@@ -577,8 +601,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const { mutate: disconnect } = disconnectMutation;
 
   const value = useMemo<WorkbenchState>(
-    () => ({ tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab: setActiveTabId, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, markScriptEdited, renameScript, forgetScript, assignConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose }),
-    [tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, markScriptEdited, renameScript, forgetScript, assignConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose],
+    () => ({ tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, setActiveTab: setActiveTabId, reorderTab, shiftTab: shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose }),
+    [tabs, activeTabId, openQueryTab, openTableTab, openScriptTab, setTableView, closeTab, reorderTab, shiftTabBy, detachTab, releaseWindow, updateTab, setTabScript, setScriptPlace, markScriptEdited, renameScript, forgetScript, switchConnection, switchDatabase, runnerOf, expanded, setNodeOpen, disconnect, disconnecting, restoredTableConnections, holdForWindowClose, releaseWindowClose],
   );
 
   return (
