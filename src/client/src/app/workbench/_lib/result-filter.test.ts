@@ -63,6 +63,13 @@ describe("applyResultFilter: aplicar executa de novo o comando com o filtro, e o
     await applyResultFilter(null, "x", "", rows(), deps);
     expect(deps.run).not.toHaveBeenCalled();
   });
+
+  it("a execução da atualização automática não segura o filtro: ele vai ao executor, que o põe no lugar dela (RN-GRADE-014)", async () => {
+    const deps = spies();
+    await applyResultFilter(command, "id > 1", "", { status: "running", cancelling: false, previous: rows(), auto: true }, deps);
+
+    expect(deps.run.mock.calls).toEqual([[{ ...command, filter: "id > 1" }]]);
+  });
 });
 
 describe("clearResultFilter: executar pelo editor limpa o filtro", () => {

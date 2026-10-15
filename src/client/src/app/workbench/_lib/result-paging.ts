@@ -11,11 +11,6 @@ export function nearEnd(view: { scrollTop: number; clientHeight: number; scrollH
   return view.clientHeight > 0 && view.scrollHeight - view.scrollTop - view.clientHeight <= loadMoreMargin;
 }
 
-/** A aba está ocupada: um comando, "carregar mais" ou a contagem em andamento (RN-SESSAO-002). O executor recusa outro comando enquanto isso. */
-export function isBusy(state: RunnerState): boolean {
-  return state.status === "running" || (state.status === "rows" && (state.loadingMore || state.counting));
-}
-
 /**
  * Quando a grade pode pedir a página seguinte sozinha (RN-CONFIG-005): a preferência ligada, linhas na tela, mais
  * a ler e nada em andamento. Uma por vez (página, contagem e comando seguram a próxima), nunca durante um

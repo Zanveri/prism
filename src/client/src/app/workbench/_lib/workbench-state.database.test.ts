@@ -12,9 +12,10 @@ const rt = await vi.hoisted(async () => {
 
   type Fake = {
     options: { connectionId: string | null; database?: string; onSession: (sessionId: string | null) => void };
-    state: { status: string };
+    /** `auto`: a execução da atualização automática (RN-GRADE-014). */
+    state: { status: string; auto?: true };
     session: string | null;
-    getState: () => { status: string };
+    getState: () => { status: string; auto?: true };
     run: ReturnType<typeof vi.fn>;
     retire: ReturnType<typeof vi.fn>;
     release: ReturnType<typeof vi.fn>;
@@ -153,6 +154,26 @@ describe("WorkbenchProvider.switchDatabase: a aba de consulta passa a outro banc
 
     expect(value.runnerOf(value.tabs[0].id)).toBe(runner as unknown as QueryRunner);
     expect(value.tabs[0].database).toBeUndefined();
+  });
+
+  it("a execução da atualização automática (RN-GRADE-014) não segura a troca: o executor de antes é aposentado (o que a desliga), e a sessão dele fecha", async () => {
+    render().openQueryTab("c1", "select * from fila");
+    let value = render();
+    const tab = value.tabs[0];
+    const before = fake(value.runnerOf(tab.id));
+    before.session = "s-mes";
+    before.options.onSession("s-mes");
+    before.state = { status: "running", auto: true };
+    value = render();
+
+    value.switchDatabase(tab.id, "vendas");
+    value = render();
+    await settle();
+
+    expect(value.runnerOf(tab.id)).not.toBe(before as unknown as QueryRunner);
+    expect(before.retire).toHaveBeenCalledOnce();
+    expect(rt.sessions.close).toHaveBeenCalledWith("s-mes");
+    expect(value.tabs[0].database).toBe("vendas");
   });
 
   it("a aba de uma tabela não troca de banco: ela é a tabela daquele banco", () => {

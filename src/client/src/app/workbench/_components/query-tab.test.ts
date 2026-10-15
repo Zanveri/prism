@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Engine } from "@/components/ui";
 
+import type { AutoRefreshBlocker, AutoRefreshState } from "../_lib/auto-refresh";
 import type { EditTarget } from "../_lib/record-edits.schema";
 import type { QueryRunner, RowsState, RunnerState, RunTarget } from "../_lib/use-query-runner";
 import type { QueryTab } from "../_lib/workbench-model";
@@ -20,16 +21,19 @@ const rt = await vi.hoisted(async () => {
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
     cells: { resultCells: vi.fn() },
+    /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
+    screen: { on: true },
   };
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => rt.queryClient }));
-vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: false }, editor: { autocomplete: true } } }) }));
+vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: true }, editor: { autocomplete: true } } }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
 vi.mock("../_lib/record-edits.service", () => rt.service);
 vi.mock("../_lib/full-values.service", () => rt.cells);
+vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => rt.screen.on }));
 // O editor de SQL é CodeMirror, que precisa da página; aqui basta o que a aba entrega a ele.
 vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
   return null;
@@ -43,7 +47,7 @@ import { editCell, noEdits } from "../_lib/record-edits";
 import { recordsCopy } from "../_lib/records.copy";
 import { forgetExcept, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
-import { isBusyState } from "../_lib/use-query-runner";
+import { isPersonBusy } from "../_lib/use-query-runner";
 import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
@@ -52,6 +56,7 @@ import { QueryTabPanel } from "./query-tab";
 import { ResultPanel } from "./result-panel";
 import { SqlEditor } from "./sql-editor";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
+import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
 import { RecordsFilter } from "./table-tab/records-filter";
 import type { FilterRefusal } from "../_lib/use-query-runner";
 
@@ -79,7 +84,10 @@ function rowsState(over: Partial<RowsState> = {}): RowsState {
   return { status: "rows", id: 1, target: { sql: "select * from loja.pedido", offset: 0, engine: pg }, columns, rows: [["10", "aberta"]], truncated: new Map(), hasMore: true, totalRows: null, elapsedMs: 3, pages: 1, loadingMore: false, cancelling: false, cursorClosed: false, total: null, counting: false, resultId: "r1", readOnly: null, ...over };
 }
 
-/** O executor de mentira: `run` recusa calado com algo em andamento e, quando aceita, passa a "executando" na mesma chamada. */
+/**
+ * O executor de mentira: `run` recusa calado com algo da pessoa em andamento, aceita no lugar da execução automática (RN-GRADE-014) e, quando aceita,
+ * passa a "executando" na mesma chamada.
+ */
 function fakeRunner(initial: RunnerState) {
   const runner = {
     state: initial,
@@ -95,9 +103,9 @@ function fakeRunner(initial: RunnerState) {
         runner.refuse = null;
         return Promise.resolve(refusal);
       }
-      if (!isBusyState(runner.state)) {
+      if (!isPersonBusy(runner.state)) {
         runner.sent.push(target);
-        runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : null };
+        runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : runner.state.status === "running" ? runner.state.previous : null };
       }
       return Promise.resolve();
     }),
@@ -108,6 +116,8 @@ function fakeRunner(initial: RunnerState) {
     textEdited: vi.fn(),
     sessionOf: () => "s1",
     keepSaved: vi.fn(),
+    /** RN-GRADE-014: o relógio da atualização automática, desligado; a prova lê as pausas e os pedidos de ligar e desligar. */
+    autoRefresh: { subscribe: () => () => {}, getState: (): AutoRefreshState => ({ status: "off", stopped: null }), blocker: (): AutoRefreshBlocker | null => null, start: vi.fn(), stop: vi.fn(), pause: vi.fn() },
   };
   return runner;
 }
@@ -137,8 +147,10 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = 
     const filterSlot = area.filter as { type: unknown; props: ComponentProps<typeof RecordsFilter> } | undefined;
     const filter = filterSlot?.type === RecordsFilter ? filterSlot.props : null;
     const keys = found.find((element) => typeof element.props.onKeyDown === "function")!.props.onKeyDown as (event: unknown) => void;
+    const auto = elementsOf(area.autoRefresh).find((element) => element.type === AutoRefreshControl)?.props as unknown as ComponentProps<typeof AutoRefreshControl> | undefined;
+    const autoDialog = found.find((element) => element.type === AutoRefreshDialog)?.props as unknown as ComponentProps<typeof AutoRefreshDialog> | undefined;
 
-    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys };
+    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys, auto, autoDialog, toolbar };
   }
 
   return { show, props };
@@ -159,6 +171,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   forgetExcept(new Set());
   unsavedEdits.forgetExcept(new Set());
+  rt.screen.on = true;
 });
 
 afterEach(() => rt.unmount());
@@ -785,5 +798,89 @@ describe("QueryTabPanel: o campo de filtro no resultado (RN-GRADE-011)", () => {
     view.show().keys(key("F5"));
     expect(runner.rerun).not.toHaveBeenCalled();
     expect(view.show().question).toMatchObject({ count: 1 });
+  });
+});
+
+describe("QueryTabPanel: a atualização automática do resultado (RN-GRADE-014)", () => {
+  const pauses = (runner: ReturnType<typeof fakeRunner>) => runner.autoRefresh.pause.mock.calls.filter(([reason]) => reason === "hidden").map(([reason, on]) => `${String(reason)}:${String(on)}`);
+
+  it("só a aba à vista a deixa executar: a ativa com a área de trabalho na tela; atrás de outra tela, ou outra aba à frente, ela espera", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("hidden:false");
+
+    rt.screen.on = false;
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("hidden:true");
+
+    rt.screen.on = true;
+    view.props.active = false;
+    view.show();
+    expect(pauses(runner).at(-1)).toBe("hidden:true");
+  });
+
+  it("a barra do resultado recebe o controle; \"Personalizado…\" abre o diálogo com o intervalo em uso, e o texto válido troca o intervalo", () => {
+    const runner = fakeRunner(rowsState());
+    runner.autoRefresh.getState = () => ({ status: "on", everyMs: 10_000, lastAt: null, running: false, paused: null });
+    const view = mount(runner);
+    const { auto } = view.show();
+
+    expect(auto).toMatchObject({ state: { status: "on", everyMs: 10_000 } });
+    auto!.onChoose("autoRefresh:custom");
+    expect(view.show().autoDialog).toMatchObject({ everyMs: 10_000, error: null });
+
+    view.show().autoDialog!.onSubmit("90");
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(90_000);
+    expect(view.show().autoDialog).toBeUndefined();
+  });
+
+  it("a execução automática não ocupa a aba para a pessoa: \"Executar\" não vira \"Cancelar\", o banco e o filtro seguem livres, e F5 e Ctrl+Enter chegam ao executor", () => {
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: rowsState(), auto: true });
+    const view = mount(runner);
+    const shown = view.show();
+
+    expect(shown.toolbar.busy).toBe(false);
+    expect(shown.picker?.busy).toBe(false);
+    expect(shown.filter?.busy).toBe(false);
+
+    shown.keys({ key: "F5", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn() });
+    expect(runner.rerun).toHaveBeenCalledOnce();
+
+    view.show().editor.onRun(command, noFlash);
+    expect(runner.sent).toEqual([command]);
+    // O comando da pessoa, sim, ocupa: "Executar" vira "Cancelar".
+    expect(view.show().toolbar.busy).toBe(true);
+  });
+
+  it("no menu da célula, durante a execução automática, \"Atualizar\" segue valendo e editar espera por ela, com o motivo", async () => {
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: rowsState(), auto: true });
+    const view = mount(runner);
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 0, y: 0 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems);
+
+    expect(items.find((item) => item.id === "refresh")).toMatchObject({ disabled: false });
+    expect(items.find((item) => item.id === "edit")).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.refreshing) });
+    // A pergunta do alvo da edição não vai à API por um resultado que está para mudar.
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("ligada, a grade não busca a página seguinte sozinha ao rolar até o fim (RN-CONFIG-005): cada execução volta à primeira página", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    expect(view.show().area.autoLoadMore).toBe(true);
+
+    runner.autoRefresh.getState = () => ({ status: "on", everyMs: 5_000, lastAt: null, running: false, paused: null });
+    expect(view.show().area.autoLoadMore).toBe(false);
+  });
+
+  it("o menu da célula tem \"Atualizar automaticamente\" depois do \"Atualizar\" (F5)", async () => {
+    const view = mount(fakeRunner(rowsState()));
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 0, y: 0 }, false);
+    await settle();
+    const ids = view.show().menu!.groups.flatMap(groupItems).map((item) => item.id);
+
+    expect(ids.indexOf("autoRefresh")).toBe(ids.indexOf("refresh") + 1);
   });
 });

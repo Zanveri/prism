@@ -46,6 +46,7 @@ export {
   StarIcon,
   StopIcon,
   TableIcon,
+  TimerIcon,
   TrashIcon,
   WorkbenchIcon,
   WrenchIcon,

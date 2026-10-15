@@ -13,12 +13,15 @@ import { saveShortcut } from "../_lib/saved-scripts";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
-import { isBusyState, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
+import { isPersonBusy, useQueryRunner, type QueryRunner, type RunTarget } from "../_lib/use-query-runner";
 import { canClear } from "../_lib/table-view";
 import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
+import { useAutoRefresh } from "../_lib/use-auto-refresh";
 import { useConnectedIds } from "../_lib/use-connected-ids";
+import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import type { QueryTab, TableView } from "../_lib/workbench-model";
+import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
 import { ConnectionPicker } from "./connection-picker";
 import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
@@ -101,8 +104,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [layout, dispatch] = useReducer(layoutReducer, tab.id, (tabId) => recall(tabId, "layout") ?? initialLayout);
   useEffect(() => remember(tab.id, "layout", layout), [tab.id, layout]);
 
-  // "Carregar mais" também ocupa a sessão (RN-SESSAO-002), e a contagem em andamento também se cancela (RN-SQL-010).
-  const busy = state.status === "running" || (state.status === "rows" && (state.loadingMore || state.counting));
+  // "Carregar mais" também ocupa a sessão (RN-SESSAO-002), e a contagem em andamento também se cancela (RN-SQL-010). A execução da atualização automática
+  // não ocupa a aba para a pessoa (RN-GRADE-014): "Executar" não vira "Cancelar", e o comando dela toma o lugar da automática.
+  const busy = isPersonBusy(state);
   const cancelling = (state.status === "running" || state.status === "rows") && state.cancelling;
   // O erro que está na tela, inclusive enquanto um comando novo roda: a marca dele no editor dura o que ele durar.
   const shown = state.status === "running" ? state.previous : state;
@@ -152,7 +156,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
 
-  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun });
+  // RN-GRADE-014: a atualização automática do resultado, na barra dele e no menu da grade. Só a aba à vista (a ativa, com a área de trabalho na tela) a deixa
+  // executar; escondida, ela espera.
+  const onScreen = useWorkbenchOnScreen();
+  const auto = useAutoRefresh(runner, active && onScreen);
+
+  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun, autoRefresh: auto.source });
   const { guard } = edits;
   useEffect(() => {
     guardRef.current = guard;
@@ -166,7 +175,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const handleRun = useCallback(
     (target: RunTarget, flash: () => void) => {
       const go = () => {
-        if (commandWillRun(target, isBusyState(runner.getState()))) {
+        if (commandWillRun(target, isPersonBusy(runner.getState()))) {
           dispatch({ type: "run" });
           // RN-GRADE-011: o comando do editor vai sem o filtro do resultado, e o campo fica limpo.
           clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
@@ -174,7 +183,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         }
         void runner.run(target);
       };
-      if (commandWillRun(target, isBusyState(runner.getState()))) guard(go);
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(go);
       else go();
     },
     [runner, guard, hasConnection],
@@ -203,7 +212,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     // andamento, nada. O campo de edição da célula não deixa a tecla subir.
     if (!event.defaultPrevented && refreshKey(event)) {
       event.preventDefault();
-      if (!isBusyState(runner.getState())) handleRerun();
+      if (!isPersonBusy(runner.getState())) handleRerun();
       return;
     }
     // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre (ou fecha) a lista das conexões desta aba.
@@ -272,12 +281,15 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             style={{ flex: flex.result }}
             actions={<ResultActions mode={layout.mode} onAction={(type) => dispatch({ type })} />}
             nullText={preferences.results.nullText}
-            autoLoadMore={preferences.results.autoLoadMore}
+            // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão. Cada execução volta à primeira página, e a
+            // grade que ficou no fim (a rolagem fica) pediria a seguinte a cada intervalo, segurando o bloqueio por inatividade e lendo de novo à toa.
+            autoLoadMore={preferences.results.autoLoadMore && auto.state.status !== "on"}
             onLoadMore={loadMore}
             onCount={() => void runner.countTotal()}
             onRerun={handleRerun}
             editing={edits.editing}
             banner={<EditsBanner {...edits.banner} />}
+            autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} onChoose={auto.choose} />}
             filter={
               base === null ? undefined : (
                 <RecordsFilter
@@ -304,6 +316,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       </div>
       {/* Fora da caixa que trata o Ctrl+S do script: os diálogos e o menu vão por portal, e o teclado deles subiria até ela pela árvore do React. */}
       {resultEditDialogs(edits)}
+      {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
     </>
   );
 });

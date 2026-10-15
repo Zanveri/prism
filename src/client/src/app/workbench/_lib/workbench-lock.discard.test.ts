@@ -4,7 +4,7 @@ import { createQueryClient } from "@/lib/api/query-client";
 
 import { databaseSessionKey, treeKey } from "./database-sessions.service";
 import { structureKey } from "./table-structure.service";
-import { createQueryRunner } from "./use-query-runner";
+import { createQueryRunner, type QueryRunner, type RunnerState } from "./use-query-runner";
 import { anyRunnerBusy, createLockHandles, discardForLock } from "./workbench-lock";
 import type { QueryTab } from "./workbench-model";
 
@@ -113,6 +113,13 @@ describe("discardForLock: o descarte do bloqueio chega à tela mesmo sem nenhuma
     release();
     await running;
     expect(anyRunnerBusy(runners)).toBe(false);
+  });
+
+  it("a execução da atualização automática (RN-GRADE-014) não segura o bloqueio: só o comando que a pessoa pediu", () => {
+    const tab = (state: RunnerState) => ({ getState: () => state }) as unknown as QueryRunner;
+
+    expect(anyRunnerBusy(new Map([["a", tab({ status: "running", cancelling: false, previous: null, auto: true })]]))).toBe(false);
+    expect(anyRunnerBusy(new Map([["a", tab({ status: "running", cancelling: false, previous: null, auto: true })], ["b", tab({ status: "running", cancelling: false, previous: null })]]))).toBe(true);
   });
 
   it("o executor novo abre uma sessão própria na primeira execução, e o velho não abre nenhuma", async () => {

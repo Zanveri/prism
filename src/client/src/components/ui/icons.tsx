@@ -216,6 +216,16 @@ export function RefreshIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** O relógio: a atualização automática do resultado (RN-GRADE-014). */
+export function TimerIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8.5" r="5.25" />
+      <path d="M8 5.75V8.5l1.75 1.25M6.5 1.75h3" />
+    </Icon>
+  );
+}
+
 export function DownloadIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

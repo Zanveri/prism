@@ -105,6 +105,8 @@ export const recordsCopy = {
       joinRowOperations: "num resultado de junção só se alteram células",
       noRowHere: (table: string) => `${table} não tem linha aqui (junção externa)`,
       busy: "há um comando em andamento na aba",
+      // RN-GRADE-014: a atualização automática está trazendo as linhas de novo; a edição começaria sobre linhas que vão sair da tela.
+      refreshing: "a atualização automática está lendo as linhas de novo; tente outra vez em um instante",
       // RN-EDIT-009: a linha nova salva na aba de consulta, que não executa de novo.
       generated: "o valor foi gerado pelo banco; execute de novo para vê-lo",
       keyGenerated: "a chave desta linha foi gerada pelo banco; execute de novo para editá-la",

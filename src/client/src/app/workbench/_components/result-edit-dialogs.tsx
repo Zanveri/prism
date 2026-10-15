@@ -18,11 +18,13 @@ function menuItemOf(item: CellMenuItem, choose: (action: CellMenuAction) => void
     shortcut: item.shortcut,
     disabled: item.disabled,
     hint: item.hint,
+    ...(item.checked === undefined ? {} : { checked: item.checked }),
     ...(item.submenu === undefined ? { onSelect: () => choose(item.id) } : { submenu: { label: item.submenu.label, groups: item.submenu.groups.map((group) => menuGroupOf(group, choose)) } }),
   };
 }
 
-function menuGroupOf(group: CellMenuGroup, choose: (action: CellMenuAction) => void): ContextMenuGroup {
+/** Um grupo do modelo como o `ContextMenu` o desenha; serve também ao menu da atualização automática na barra do resultado (RN-GRADE-014). */
+export function menuGroupOf(group: CellMenuGroup, choose: (action: CellMenuAction) => void): ContextMenuGroup {
   return Array.isArray(group) ? group.map((item) => menuItemOf(item, choose)) : { label: group.label, items: group.items.map((item) => menuItemOf(item, choose)) };
 }
 
