@@ -497,7 +497,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   leva um comando só (RN-SQL-001): quem confere é o `run`, com `statementCount`, e a seleção com mais de um não é enviada
   (aviso de atenção; e o estado `notice`, quando não há linhas na tela). Trecho só com comentários não é comando. O botão
   pergunta "há o que enviar?" a cada tecla com `hasStatement`, que para no primeiro caractere de comando: não separe os
-  comandos a cada tecla. Ctrl+Enter é registrado com `Prec.highest`, porque o mapa padrão do CodeMirror usa a mesma tecla
+  comandos a cada tecla. O "Executar script" (Alt+X), que manda vários, é outro caminho: ver "Executar script", mais abaixo. Ctrl+Enter é registrado com `Prec.highest`, porque o mapa padrão do CodeMirror usa a mesma tecla
   para abrir uma linha.
 - **O separador conhece o banco da aba** (RN-SQL-002): o editor manda o banco junto do texto (`RunTarget.engine`). No
   PostgreSQL o comentário de bloco aceita outro dentro dele e existe o bloco `$tag$`; no Db2 e no Informix o primeiro `*/`
@@ -687,7 +687,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   coluna caberem inteiros).
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
   na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
-  seção 9 da especificação, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
+  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -1547,6 +1547,112 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   Docker**: o `initdb` e o `pg_ctl` rodam como `postgres` (`runuser -u postgres --`), que não atravessa a pasta da sessão (é do root, 700): o cluster vai numa
   pasta do `postgres` (`/var/lib/postgresql/<nome>`), com porta e soquete próprios, e sai no fim. Encerre só os PID que você iniciou: um `pkill -f` com o
   caminho da árvore mata também o shell que o roda, e outra frente pode ter um Xvfb e um `pnpm dev` de pé ao lado.
+
+## Executar script (RN-SQL-019 a 022)
+
+Seção 31 da especificação, pedido do dono em 2026-10-15 ("igual a do dbeaver do alt + x"): os comandos do editor um depois do outro, uma aba por
+resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando é um `POST …/queries`, como no Ctrl+Enter.
+
+- **Onde mora cada parte.** `_lib/script-run.ts` (puro, com teste): o atalho (`scriptShortcut`, `scriptShortcutLabel`, e `platformScriptShortcut`
+  para os textos que o ensinam), o estado do script (`ScriptRun`, `ScriptEntry`, as funções que o mudam, `entryAt` e `entriesOf`), os totais, as
+  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas e o aviso do fim; os textos em
+  `script-run.copy.ts` (não confundir com `scripts.copy.ts`, que é o dos scripts salvos). A divisão é `scriptStatements` em `sql-statements.ts`; o
+  executor é o `runScript` de `use-query-runner.ts`; a tela é `script-tabs.tsx` (as abas, a nota da aba guardada e a marca da faixa de abas,
+  `ScriptWaitingMark`), `script-statistics.tsx` (com `useCoalescedRun`), `script-error-dialog.tsx`, a marca do editor (`_lib/script-mark.ts`) e as
+  propriedades `tabs`, `progress`, `statistics` e `kept` do `ResultPanel` (o `kept` é `{ busy, onRunAlone }`: quem desenha a nota é a área, que tem o
+  resgate do foco).
+- **O atalho é Alt+X, e no macOS Cmd+Option+X.** Lá o Option+X escreve um caractere (`≈` no teclado americano, outros em outros), e o atalho o tiraria
+  do editor. A tecla vale pelo caractere ou pela posição (`code === "KeyX"`: no macOS o Option muda o caractere), e nunca com Ctrl (o AltGr do Windows
+  chega como Ctrl+Alt) nem com Shift. Quem trata é o `onKeyDown` do `QueryTabPanel`, e não um mapa do CodeMirror: assim vale no editor e em qualquer
+  ponto da aba (a barra, a grade, o campo de filtro); o campo de edição da célula para a propagação e fica com as teclas dele. Nada mais usa a tecla: o
+  mapa padrão do CodeMirror tem `Alt-l`, `Alt-u` e `Alt-A` (Shift), mas não `Alt-x`; o `before-input-event` do Electron só pega Ctrl (zoom, F5, Ctrl+R);
+  o menu de desenvolvimento não tem mnemônico X, e o app empacotado do Windows e do Linux não tem menu. O botão escreve o atalho da plataforma
+  (`aria-keyshortcuts`).
+- **A divisão é o leitor do Ctrl+Enter** (`scan`), com uma peça a mais: os `;` que estão no corpo de um bloco não separam (`innerSemicolons`, com o
+  mesmo `dialect.body()` do `statementCount`, recomeçado no `;` que fecha e em cada corte da linha em branco; o corpo que chega aberto ao fim prende os
+  `;`, menos com o `extra` do Informix, a rotina sem `END PROCEDURE`, em que todo `;` separa). O `splitStatements` e o `statementAt` seguem separando
+  em todo `;`, como antes. A garantia que o teste confere em textos dos três bancos: cada pedaço conta 1 no `statementCount` (a conta da API, que
+  repete a conferência e recusaria o pedaço com `MULTIPLE_STATEMENTS_NOT_SUPPORTED`), e o número de pedaços é a conta do texto inteiro. No script a
+  linha em branco divide também a seleção (no Ctrl+Enter a seleção vai inteira). No Db2 o bloco vai até o fim do texto, como na conta.
+- **O executor** (`runScript`). O estado do script é um observável à parte (`runner.script`, com `useScriptRun`), e não um estado novo do `RunnerState`:
+  o resto da tela (a barra, o bloqueio, a ida para outra janela, a troca do banco e da conexão) continua lendo só o estado do executor. Ele fica
+  `running` do primeiro ao último comando (ocupado para a pessoa e para o bloqueio por inatividade), com o `previous` sendo o que o comando anterior
+  deixou, e termina com o do último. **A pergunta de erro não ocupa**: o estado é o do comando que falhou (o editor marca a posição do erro, pelo
+  `offset` do comando no texto inteiro, como no Ctrl+Enter), e o bloqueio pode vir; ele aposenta o executor (`retire`), que responde "Parar" à
+  pergunta (`deciding`) e tira o script. `release` (Desconectar) para o script: o comando em andamento fica "cancelado". Cada comando passa por
+  `execute`, com as recusas do comando a mais (`scriptCommandRefusals`: o controle de transação, o comando que não roda em transação, mais de um
+  comando), que perguntam como o erro do banco, sem o aviso central; o resto (a sessão ocupada, a API fora do ar, a sessão que caiu) para o script
+  sem perguntar. A sessão que cai só é reaberta antes da primeira resposta (`!answered`): depois, o que os comandos de antes deixaram nela se perdeu.
+  **Sem resposta sobre comando nenhum** (a conexão que não abre, o cancelamento antes do primeiro), a tela fica como estava: o script de antes volta
+  (`untouched`), e o executor faz o que o Ctrl+Enter faria. O `failed` ganhou `notify`: no script os avisos de cada comando calam, e sai um no fim
+  (`scriptEndToast`), com o nome da aba (o `title` de `createQueryRunner`, lido no fim: a aba pode ter sido renomeada ou salva como script enquanto ele
+  rodava; o `WorkbenchProvider` o tira de um mapa guardado por `useState`, e não de uma ref, porque o `createRunner` vai ao `createLockHandles` durante
+  a renderização e o lint do React não deixa a ref ir junto); o de valores cortados, um por script. Os avisos da seleção com mais de um comando
+  (`tooManyStatements`, o da área e o do canto) e a área vazia (`emptyHint`) ensinam o atalho.
+- **Um script de milhares de comandos** (uma carga de `INSERT`, o caso que leva ao Alt+X em vez do Ctrl+Enter) custa o mesmo por comando do começo ao
+  fim. O script muda duas vezes por comando, e três coisas cresciam com o tamanho dele: (1) a lista dos comandos era copiada inteira a cada mudança
+  (`withEntry` e `startEntry`); agora ela vai em páginas de 256 (`ScriptRun.pages`, lida por `entryAt` e `entriesOf`), e mudar um comando copia a
+  página dele e a lista das páginas; (2) os totais percorriam o script a cada desenho; agora vão no próprio script (`totals`), acertados a cada
+  mudança (o teste confere que dão o mesmo que contar tudo de novo); (3) as Estatísticas, à frente enquanto ele roda, refaziam, mediam e pintavam a
+  tabela inteira a cada comando; agora, enquanto ele roda, só os 50 comandos em volta do que está em execução (`statisticsRange`, com ele perto do
+  alto e duas linhas dizendo quantos ficaram antes e quantos estão na fila), a tabela inteira uma vez no fim, e o redesenho no máximo a cada 250 ms
+  (`useCoalescedRun`: o relógio conta da última troca, e não do último comando; a pergunta, o fim e um script novo vêm na hora). As publicações do
+  executor e o `set` dele no mesmo trecho síncrono (o fim de um comando e o começo do seguinte) já saem num desenho só: o React junta as atualizações
+  de `useSyncExternalStore` numa microtarefa. Medido na tela (abaixo): antes, 3.000 comandos levavam 115 s no app de produção com as Estatísticas à
+  frente (contra 23 s com uma aba de resultado à frente), com a janela parada por até 27 s.
+- **As abas e o cursor.** Cada comando que devolve linhas guarda a página dele (`results`, até `scriptResultCap`, 20); no fim, o do último comando
+  executado, quando devolveu linhas, fica sempre (`live`), também depois do limite: é o do cursor aberto (RN-SQL-007: um por sessão, e cada comando
+  novo fecha o anterior), e a aba dele desenha o **estado do executor**, e não a cópia guardada, com tudo o que vale num resultado. As outras desenham a
+  cópia (`kept`): grade sem `editing` (uma tabela só para leitura, sem o menu da grade), sem contar, sem "Carregar mais", sem filtro nem atualização
+  automática, e a nota com "Executar este comando" (`runCommand`: o "executar de novo" do comando, com o lugar no texto de quando o script rodou, que
+  troca os resultados do script). Com um comando em andamento na aba o botão fica `aria-disabled`, com o porquê na dica (o executor recusaria calado),
+  e o `handleRunAlone` só pergunta das alterações, limpa o filtro e abre a área quando o comando vai rodar (`commandWillRun`, como os outros caminhos);
+  quando o comando troca os resultados do script, o botão sai da página com o foco, e a área o leva à grade nova (`onFocusLost` e `rescueFocus`, o
+  mesmo do botão de contar, RN-SQL-006). A aba à frente: as Estatísticas enquanto roda, a do último no fim, e a que a pessoa escolheu enquanto ela existe
+  (pelo `id` do script; o seguinte volta às Estatísticas). Cada executor numera os scripts dele desde o 1, e o painel continua montado quando a aba
+  ganha outro (o banco, a conexão, o bloqueio): a escolha sai junto com o filtro, no ajuste do `filterRunner`. O F5 só executa de novo com a aba do
+  último à frente, e a atualização automática espera (`hidden`) com outra aba do script à frente.
+- **A pergunta de erro só na aba à vista** (`active && onScreen`, como a atualização automática). O `Dialog` vai por portal ao `body`, fora do `hidden`
+  da aba e do `inert` da área de trabalho escondida: sem isso, o script de uma aba de trás abria a pergunta por cima da aba da frente, ou de
+  Configurações, tirava o foco de quem digitava (um Espaço ou Enter caía no "Parar") e dois scripts empilhavam dois diálogos iguais. O de outra aba
+  espera; a faixa de abas mostra a marca dele (`markOf` do `TabStrip`, que o `WorkbenchTabs` preenche com `ScriptWaitingMark`, um ponto vermelho com
+  o texto para o leitor de tela), e a pergunta aparece quando a pessoa vai até ela.
+- **Quem troca os resultados do script**: o comando aceito do `run` (o Ctrl+Enter), o `runCommand` e outro `runScript`. O filtro do resultado manda
+  `run(…, { keepScript: true })`, e o F5 e a execução automática não trocam: mudam só o resultado do último. A recusa antes de executar (a sessão
+  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`).
+- **A barra e o leitor de tela.** "Executando 3 de 12…" é o `progress` da barra (um `role="status"` só, em qualquer aba e com a área recolhida); as
+  Estatísticas marcam a linha do comando com `aria-current="step"` e não repetem o progresso. As abas são uma lista de abas (`role="tablist"`, só a
+  escolhida no Tab, setas com a volta, Home e End, o foco vai à escolhida); o corpo da área é o `tabpanel` dela, e entra no Tab nas Estatísticas, que
+  não têm o que focar. As abas dos resultados rolam numa caixa só delas, e a escolhida vem à vista a cada troca (`revealOffset`, o mesmo da faixa de
+  abas, e um `ResizeObserver` para a faixa que estava sem largura); "Estatísticas" fica fora da rolagem, na ponta direita. Sem isso, com umas oito
+  abas, a do último comando, que vem à frente sozinha no fim, e as Estatísticas ficavam fora da faixa. Cada linha das Estatísticas é memorizada: o
+  script publica um estado novo a cada comando, e só a linha que mudou é outro objeto.
+- **O que não foi feito**: as abas guardadas não têm o menu da grade nem o copiar da célula (a seleção do texto com o mouse continua); levar a aba
+  para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); o script que é uma transação só e continuar o
+  script a partir de um comando escolhido ficam para depois (seção 31). Não há atalho para "Cancelar": o botão da barra.
+- **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55481, o usuário e a conexão criados
+  por `fetch` à API com `window.prism.getApiConfig()`, o login pelo formulário): com um script de cinco comandos separados por `;` e por linha em
+  branco, o Alt+X de verdade (`xdotool key alt+x`, no `pnpm dev` com o menu padrão do Electron) rodou os três primeiros e parou no `SELECT * FORM
+  pedido` com a pergunta (o erro do PostgreSQL como veio, o SQLSTATE 42601, "Parar" com o foco) e o `FORM` marcado no texto inteiro; "Pular" seguiu,
+  o último ficou à frente com o filtro, o relógio da atualização automática e o zoom, a aba do primeiro mostrou as 200 linhas com a nota, as
+  Estatísticas mostraram o pulado com o erro na linha de baixo e os totais, e o aviso disse "Script executado com 1 erro: 4 de 5 comandos
+  executados.". Com `pg_sleep`, a barra disse "Executando 2 de 3…", o editor marcou o segundo comando, a barra do editor mostrou "Cancelar", e o
+  "Cancelar" deixou o segundo cancelado e o terceiro não executado, com "Script cancelado: 1 de 3 comandos executados."; as setas andaram nas abas, e
+  o Ctrl+Enter seguinte trocou as abas pelo resultado dele. No macOS e no Windows o atalho não foi aberto: só os testes.
+- **Conferido na tela depois da revisão** (Xvfb a 1440×900, PostgreSQL 16 local num cluster próprio na porta 55491 com `cliente` de 3.000 linhas, o
+  usuário e a conexão por `fetch`, o login pelo formulário, o texto posto no editor pela `EditorView` que o CodeMirror pendura no `.cm-content`
+  (`cmTile.view`), o tempo do clique em "Executar script" até o aviso do fim, medido na página, com a maior pausa entre dois `requestAnimationFrame`):
+  `update cliente set nome = nome where id = N;` repetido. No `pnpm dev`, com as Estatísticas à frente (antes do redesenho a cada 250 ms): 300
+  comandos em 4,2 s, 1.000 em 16,2 s, 2.000 em 28,7 s e 3.000 em 37,9 s (a revisão tinha medido 27,8 s e 98,4 s para 1.000 e 2.000). No app de
+  produção (`pnpm build` e o Electron na pasta, com `--remote-debugging-port`), 3.000 comandos: com as Estatísticas à frente, 29,5 s antes do redesenho
+  a cada 250 ms e 26,1 s e 22,7 s depois; com uma aba de resultado à frente (o mesmo script com `select 1 as a;` antes, e a aba 1 clicada), 20,9 s e
+  22,9 s. A maior pausa da janela foi de 330 a 370 ms, a tabela inteira desenhada uma vez no fim (era de 27 s). No meio dos 3.000, as Estatísticas
+  tinham 52 linhas ("510 comandos antes destes, que aparecem quando o script terminar.", "Mais 2.440 comandos na fila."), a barra dizia "Executando
+  525 de 3.000…", e "Cancelar" parou o script em 0,3 s ("Script cancelado na aba consulta-1.sql: 525 de 3.000 comandos executados."). Com 12
+  `select n`, a faixa de 706 px rolou até a aba "12 · select 12 as n12", e as Estatísticas ficaram à vista; "Executar este comando" na aba 1, com o
+  foco nele, levou o foco à grade do resultado novo ("Linhas do resultado"). Um script parado no erro com a área de trabalho por baixo de
+  Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
+  consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
 
 ## Configurações (`src/app/settings`)
 
