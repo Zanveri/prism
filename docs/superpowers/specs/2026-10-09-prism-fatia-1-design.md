@@ -305,7 +305,9 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-SQL-001.** Executar (botão ou Ctrl+Enter) envia o texto selecionado; sem seleção, envia o
   comando onde está o cursor, que acaba no `;` e também na linha em branco, nas condições da
   RN-SQL-018 (pedido do dono em 2026-10-15, issue #7). Uma execução leva um comando só: se a seleção tiver mais de um
-  (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência entra na entrega 2.
+  (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência é o "Executar script" (Alt+X, RN-SQL-019 a
+  022), que entrou pela seção 31 (pedido do dono em 2026-10-15; antes ficava para a entrega 2), e o aviso da seleção com
+  mais de um comando o aponta, com o atalho.
   Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) conta como um
   comando só. No Db2 e no Informix a API repete a conferência e responde 422
   `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, porque o driver da IBM executaria os comandos um a um
@@ -587,6 +589,10 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   tem; na densidade "Compacta" a árvore tem linhas de 22 px, e não as de 30 px do canvas, que
   continuam sendo o padrão (RN-ZOOM-001 e RN-NAV-011, seção 30). Fora de 100% o splash tem o
   tamanho do zoom, e não os 640×400 do canvas (RN-MARCA-002).
+- A barra do editor ganha "Executar script (Alt+X)" ao lado de "Executar", e a área de resultado,
+  depois de um script, ganha uma aba por resultado e as Estatísticas no lugar do título
+  "Resultado", no mesmo desenho das abas "Resultado", "Mensagens" e "Plano de execução" do canvas
+  (RN-SQL-019 e 020, seção 31). O canvas não desenha o script.
 
 ## 10. Riscos e sondas
 
@@ -650,10 +656,12 @@ e a tela de configurações, nos limites ditos lá.)
 RN-GRADE-014. A "atualização automática" da lista abaixo, ao lado da assinatura de código, é a do
 próprio app, que entrou pela seção 17.)
 
+(Em 2026-10-15 entrou pela seção 31, pedido do dono, executar vários comandos em sequência: o
+"Executar script" (Alt+X), RN-SQL-019 a 022.)
+
 Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama ER, somente
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
-troca de senha, explicar plano, formatar SQL, exportar CSV, executar vários comandos em
-sequência (script), salvar e abrir arquivos `.sql`
+troca de senha, explicar plano, formatar SQL, exportar CSV, salvar e abrir arquivos `.sql`
 (o texto das abas se perde ao fechar o app), trocar de banco dentro da mesma conexão,
 atualização automática, assinatura de código, roteiro de aceite completo em macOS e Linux
 (a seção 14 cobre só a geração dos pacotes), mais de uma janela.
@@ -1080,7 +1088,8 @@ Só da tela:
   ser desligado). Sem tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em
   nenhuma aba (o tempo conta a partir do fim do último; a execução da atualização automática,
   RN-GRADE-014, não conta como comando em andamento nem como atividade, pedido do dono em
-  2026-10-15, issue #11), o Prism avisa 60 segundos antes (30, quando o
+  2026-10-15, issue #11; o script conta enquanto roda, e não enquanto espera a resposta da
+  pergunta de erro, RN-SQL-021), o Prism avisa 60 segundos antes (30, quando o
   tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
   mostra o bloqueio, que pede a senha do MESMO usuário. Desbloquear devolve a área de trabalho
   com as abas e o texto de SQL como estavam; os resultados que estavam na tela são descartados
@@ -1898,7 +1907,9 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **Manter o "carregar mais" depois de salvar.** Salvar é um comando na sessão e fecha o cursor (RN-EDIT-009).
 - **Conferir o valor lido ao salvar** e **Commit manual na aba de uma tabela**, se o dono quiser depois.
 - **Pontos de salvamento com botão**, "commit inteligente" (passar sozinho ao manual quando um comando grava), confirmação em
-  duas fases e transação que atravessa um script de vários comandos (a execução de script ainda é da entrega 2).
+  duas fases e transação que atravessa um script de vários comandos. A execução de script entrou pela seção 31 (pedido do dono
+  em 2026-10-15) e segue o modo da aba comando a comando, como se cada um fosse executado sozinho (RN-SQL-019); o script que é uma
+  transação só, confirmada ou desfeita no fim, continua para depois.
 - **Proteções** da entrega 3 (somente leitura com senha, confirmar comando irreversível), que vão restringir a edição.
 
 ## 23. Complemento de 2026-10-13: abas que se movem, janelas e scripts salvos
@@ -2525,3 +2536,149 @@ primeiras: a área de trabalho passa de 14 px a 13 px, e quem quer menos ainda u
 - **RN-NAV-012.** A seção Scripts do navegador lembra se ficou recolhida ou aberta: volta assim ao
   entrar de novo e ao abrir o app, por usuário, como o navegador escondido (RN-NAV-008). Aberta é o
   padrão. A janela que abre depois começa como a última escolha.
+
+## 31. Complemento de 2026-10-15, versão 0.4.0: executar script (Alt+X), como no DBeaver
+
+Pedido do dono em 2026-10-15: "Crie uma nova funcionalidade igual a do dbeaver do alt + x que
+executava scripts, sabe?". No DBeaver, "Executar script" (Alt+X) executa os comandos do editor um
+depois do outro, abre uma aba para cada resultado e uma de estatísticas, e pergunta o que fazer
+quando um comando falha. No Prism uma execução levava um comando só (RN-SQL-001), e o script ficava
+para a entrega 2 (seção 13). Entra agora, com as regras do Prism para cada comando. Muda a
+RN-SQL-001, a seção 13 e o "fica para depois" da seção 22, que citam o script, e a RN-SEG-001 (o
+script parado na pergunta de erro não segura o bloqueio); a seção 9 diz o que o canvas não desenha.
+A API não muda: continua recebendo um comando por execução.
+
+- **RN-SQL-019.** Executar script.
+  - Onde: Alt+X no editor e com o foco em qualquer ponto da aba de consulta (a barra, o resultado, o
+    campo de filtro), menos no campo de edição de uma célula, que fica com as teclas dele; e o botão
+    "Executar script" na barra do editor, logo depois de "Executar", com o atalho escrito nele. No
+    macOS a tecla é Cmd+Option+X: lá o Option+X escreve um caractere (`≈` no teclado americano, outros
+    em outros teclados), e o atalho o tiraria do editor. Nenhum outro atalho do Prism, do menu do
+    Electron ou do editor usa essas teclas; no Windows e no Linux o AltGr+X continua escrevendo o que
+    escreve. A área de resultado vazia ensina o atalho ao lado do Ctrl+Enter, e o aviso da seleção com
+    mais de um comando (RN-SQL-001) também.
+  - O que vai: a seleção, quando há; sem seleção, o texto inteiro do editor. O texto é dividido em
+    comandos pelas regras do Ctrl+Enter, com o mesmo leitor: o `;` fora de texto, de nome entre aspas,
+    de comentário e de `$tag$` (RN-SQL-002) e, com "A linha em branco separa os comandos" ligada, a
+    linha em branco, nas condições da RN-SQL-018. No script a linha em branco divide também a seleção,
+    porque dividir é o que o script faz com o texto; no Ctrl+Enter a seleção continua indo inteira,
+    como um comando só. O bloco com `;` no corpo (procedimento, função, gatilho, bloco composto: os da
+    RN-SQL-001) e o `CREATE SCHEMA` com os objetos dele são um comando só. No Db2 o bloco vai até o fim
+    do texto, como na RN-SQL-001: o que vem depois dele vai junto, e para executar um bloco e depois
+    outros comandos a pessoa seleciona as partes. Trecho só com espaços, `;` ou comentários não é
+    comando e não aparece. Um comando só também é script: roda, e aparece como um script de um comando.
+  - Como roda: um comando por vez, na ordem, na sessão da aba, pelo caminho de "Executar" (cada um é
+    um `POST …/queries`, com o texto como está, RN-SQL-003). Valem as regras de uma execução: com
+    alterações não salvas na grade, a pergunta da RN-EDIT-007 vem antes; a atualização automática
+    desliga (RN-GRADE-014); o filtro do resultado sai (RN-GRADE-011); a área de resultado recolhida
+    volta (RN-PAINEL-001). Com um comando em andamento na aba, ou com a aba sem conexão
+    (RN-SCRIPT-003), nada roda, como no Ctrl+Enter.
+  - Enquanto roda: o editor marca o comando em execução, com o acento do tema, até o seguinte começar,
+    e traz o comando à vista quando ele está fora dela; a marca some no fim. Se o texto foi editado
+    depois de o script começar, a marca não aparece, porque o lugar já não é o mesmo. A barra da área
+    de resultado diz "Executando 3 de 12…", em qualquer aba dela e também com ela recolhida.
+    "Executar" vira "Cancelar", como num comando, e a aba fica ocupada para tudo o que espera um
+    comando acabar: trocar o banco ou a conexão (RN-ARVORE-007 e 008), levar a aba para outra janela
+    (RN-ABAS-002), o bloqueio por inatividade (RN-SEG-001).
+  - Transação: cada comando segue o modo da aba como se fosse executado sozinho. Hoje a aba de
+    consulta só tem o Auto-commit na tela: cada comando é confirmado quando termina, e um comando de
+    controle de transação no script (`BEGIN`, `COMMIT`, `ROLLBACK`…) é recusado como no Ctrl+Enter
+    (RN-SQL-003 e RN-TX-004), com o erro dele (RN-SQL-021). Quando o Commit manual (RN-TX-001)
+    chegar à aba de consulta, o script roda dentro da transação da aba, comando a comando, sem
+    confirmar nada sozinho, e o controle de transação digitado vale como na RN-TX-004.
+  - Não é gravado com as abas (RN-ABAS-006): elas voltam com o texto, sem os resultados do script.
+- **RN-SQL-020.** Os resultados do script, como as abas de resultado e as estatísticas do DBeaver.
+  - A área de resultado ganha abas no lugar do título "Resultado": uma para cada comando que devolveu
+    linhas, com o número dele no script e o começo do texto ("3 · SELECT * FROM pedido…", com o texto
+    inteiro na dica), e, por último, "Estatísticas". O comando que não devolve linhas (linhas
+    afetadas, DDL) aparece só nas Estatísticas. As abas andam com as setas, Home e End, como uma lista
+    de abas, e só a escolhida entra no Tab. As dos resultados rolam na horizontal quando não cabem, e a
+    escolhida (também a que vem à frente sozinha) é sempre trazida à vista; "Estatísticas" fica fixa na
+    ponta direita, fora da rolagem.
+  - Enquanto o script roda, as Estatísticas ficam à frente e se preenchem. No fim, se o último comando
+    executado devolveu linhas, a aba dele vem à frente; senão, ficam as Estatísticas. A aba que a
+    pessoa escolheu durante o script continua escolhida; o script seguinte volta às Estatísticas, também
+    depois de a aba trocar de banco ou de conexão ou passar pelo bloqueio por inatividade.
+  - Só o resultado do último comando executado tem o cursor aberto: a sessão tem um cursor só, e cada
+    comando novo fecha o anterior (RN-SQL-007). Nele vale tudo o que vale no resultado de um comando:
+    "Carregar mais", "Contar total", o filtro do resultado (RN-GRADE-011), a edição das células (seção
+    22), a atualização automática (RN-GRADE-014) e o F5, com a aba dele à frente; com outra aba do
+    script à frente, a atualização automática espera, como com outra aba do Prism à frente. As abas dos
+    outros comandos guardam as linhas que já tinham sido lidas (as primeiras 200, RN-SQL-004), só para
+    leitura, sem o menu da grade, e dizem por que o resto não vale ali: o cursor delas fechou quando o
+    comando seguinte rodou, e "Carregar mais", "Contar total", o filtro, o menu da grade, a edição e a
+    atualização automática ficam no resultado do último comando. Elas oferecem "Executar este
+    comando", que executa só aquele comando, como o Ctrl+Enter nele (com a pergunta da RN-EDIT-007
+    antes, quando há alterações não salvas). Com um comando em andamento na aba, o botão fica à vista,
+    não executa e diz por quê, sem perguntar nem mexer na área; quando o comando executado troca os
+    resultados do script, o foco vai à grade do resultado novo, e não se perde (como na RN-SQL-006).
+  - O script guarda as abas dos 20 primeiros comandos que devolvem linhas, para um script longo não
+    encher a memória de grades; a do último comando executado fica sempre, quando ele devolve linhas,
+    porque é a do cursor aberto. Os outros aparecem só nas Estatísticas, com as linhas que devolveram,
+    e elas dizem quantos resultados não foram guardados.
+  - As Estatísticas são uma tabela com cabeçalho: o número do comando, o começo do texto (inteiro na
+    dica), a situação ("na fila", "executando", "ok", "erro", "pulado", "cancelado" ou "não
+    executado"), as linhas (lidas ou devolvidas, ou afetadas) e o tempo. O erro de um comando vem na
+    linha logo abaixo dele, como o banco o deu (RN-SQL-009), com o SQLSTATE. Abaixo da tabela, os
+    totais: comandos executados (os que deram certo, de quantos o script tem), linhas alteradas (a
+    soma das linhas afetadas; o comando para o qual o banco não conta linhas não soma) e o tempo total
+    (a soma dos tempos dos comandos, sem o tempo das perguntas). Enquanto o script roda, a tabela
+    mostra os 50 comandos em volta do que está em execução, com ele perto do alto, e duas linhas dizem
+    quantos ficaram antes ("1.995 comandos antes destes, que aparecem quando o script terminar.") e
+    quantos estão na fila ("Mais 955 comandos na fila."); os totais são do script inteiro. Enquanto ele
+    roda, ela se atualiza no máximo quatro vezes por segundo (quem diz o comando em execução a cada um é
+    a barra da área); a pergunta de erro e o fim aparecem na hora. No fim, ela mostra todos. Assim um
+    script de milhares de comandos (uma carga de `INSERT`) leva o mesmo com as Estatísticas à frente e
+    com outra aba à frente, e não fica mais lento a cada comando: refazer a tabela inteira a cada um
+    fazia o tempo crescer com o quadrado do tamanho.
+  - Uma execução nova na aba substitui os resultados do script, como substitui o resultado de um
+    comando: o Ctrl+Enter, "Executar este comando" e outro script. O F5, "Executar de novo", o filtro
+    e a atualização automática do resultado do último comando mudam só ele, e as outras abas ficam.
+    Como antes, o que está na tela só sai quando a API aceita um comando novo: se o script não chega a
+    executar comando nenhum (a conexão não abre, a sessão está ocupada, o cancelamento antes do
+    primeiro), a área fica como estava. Trocar o banco ou a conexão da aba e o bloqueio por
+    inatividade tiram os resultados do script, como tiram o resultado. Levar a aba para outra janela
+    leva o resultado do último comando, como hoje; as outras abas e as Estatísticas não vão.
+  - Avisos: um no fim, e não um por comando, com o nome da aba, porque o script de uma aba que não
+    está à vista também termina. "Script executado na aba consulta-1.sql: 12 comandos." (sucesso);
+    "Script executado na aba consulta-1.sql com 2 erros: 10 de 12 comandos executados." (atenção);
+    "Script parado na aba consulta-1.sql: 4 de 12 comandos executados." e "Script cancelado na aba
+    consulta-1.sql: 4 de 12 comandos executados." (atenção). O nome é o da aba no fim do script (ela
+    pode ter sido renomeada, ou salva como script, enquanto ele rodava). O aviso de valores cortados
+    (RN-AVISO-003) sai uma vez por script, e o de sessão reaberta, como sempre.
+- **RN-SQL-021.** Erro num comando do script, como o diálogo de erro do DBeaver.
+  - O script para, e um diálogo mostra o comando (o número e o texto) e o erro como veio (RN-SQL-009),
+    com o SQLSTATE, e pergunta: "Parar" (o padrão, com o foco, e também o Esc), "Tentar de novo"
+    (executa o mesmo comando outra vez), "Pular" (segue com o próximo) e "Pular todos os erros" (segue,
+    e o resto do script pula os comandos que falharem sem perguntar). O foco volta, quando o diálogo
+    fecha, para onde estava: o editor, de onde o script saiu.
+  - O diálogo só aparece na aba à vista: a ativa, com a área de trabalho na tela (como a atualização
+    automática, RN-GRADE-014). O script de outra aba, ou o da área de trabalho escondida por baixo de
+    Configurações, Conexões ou Drivers, espera a resposta sem cobrir a tela nem tirar o foco de quem
+    está digitando em outro lugar; a aba dele leva, na faixa de abas, um ponto vermelho ("O script
+    parou num erro e espera a resposta", também para o leitor de tela), e o diálogo aparece quando a
+    pessoa vai até ela. Assim dois scripts parados em abas diferentes nunca abrem dois diálogos.
+  - É erro do comando o que o banco respondeu (`SQL_EXECUTION_FAILED`) e a recusa da API para aquele
+    comando (`TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`,
+    `MULTIPLE_STATEMENTS_NOT_SUPPORTED`). O que não é do comando (a conexão que não abre, a sessão
+    ocupada, a API fora do ar ou com erro interno, a sessão que caiu) para o script sem perguntar: o
+    aviso central diz o que houve (RN-AVISO-004), o comando fica como "erro" e os seguintes, como "não
+    executado". A sessão que cai no primeiro comando é reaberta uma vez, como no Ctrl+Enter (seção 7);
+    a que cai depois dele não é, porque o que os comandos de antes deixaram nela (uma tabela
+    temporária, um `SET`) se perdeu: as Estatísticas dizem isso, e a pessoa executa o script de novo.
+  - O editor marca a posição do erro, quando o banco a dá, no texto inteiro: no lugar do comando
+    dentro do texto do editor, como faz com o comando do Ctrl+Enter (RN-SQL-009). Se o texto foi
+    editado depois de o script começar, a marca não aparece.
+  - "Parar" deixa nos resultados e nas Estatísticas o que já rodou; o comando que falhou fica como
+    "erro", e os seguintes, como "não executado". Pulado, o comando fica como "pulado", com o erro.
+  - Enquanto o diálogo espera a resposta, o script não é comando em andamento para o bloqueio por
+    inatividade (RN-SEG-001): passado o prazo, o Prism bloqueia, e o bloqueio para o script e tira os
+    resultados dele, como tira o resultado de um comando.
+- **RN-SQL-022.** Cancelar o script: "Cancelar", na barra do editor, interrompe o comando em andamento
+  (RN-SQL-010) e para o script. O comando cancelado fica como "cancelado"; o que terminou antes de o
+  cancelamento chegar fica como "ok", e o script para mesmo assim; com o desfecho incerto ou parcial
+  da RN-SQL-010, fica como "erro", com a frase da API. Os seguintes ficam como "não executado", e o
+  que já rodou fica nos resultados e nas Estatísticas. "Desconectar" também para o script: a sessão
+  fecha com o comando em andamento, que fica como "cancelado".
+- **Fica para depois:** um script que é uma transação só (seção 22); continuar o script a partir de um
+  comando escolhido; e levar para outra janela as abas dos outros resultados e as Estatísticas.
