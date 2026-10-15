@@ -62,6 +62,9 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     public Task<UnitResult<EVaultError>> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken cancellationToken)
         => Exclusive(() => ChangePassword(currentPassword, newPassword, cancellationToken), cancellationToken);
 
+    public Task<Result<EPasswordCheck, EVaultError>> SaveWithPasswordAsync(Func<VaultDocument, VaultDocument> change, Func<VaultDocument, VaultDocument, bool> needsPassword, string? password, CancellationToken cancellationToken)
+        => Exclusive(() => SaveWithPassword(change, needsPassword, password, cancellationToken), cancellationToken);
+
     public Result<VaultDocument, EVaultError> Read()
     {
         var open = _open;
@@ -369,7 +372,8 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     /// RN-CONN-002 e 003: a única conferência da senha do usuário contra o cofre aberto, com o semáforo tomado. A senha certa é a que abre a chave do
     /// cofre gravada no cabeçalho, derivada com os parâmetros dele. Sucesso com `true` quando confere (zera a contagem de erros seguidos), com `false`
     /// quando não confere (conta o erro), e falha `Locked` no quinto erro seguido, já com o cofre fechado. Quem a usa é a revelação da senha de uma
-    /// conexão e a troca da senha do usuário: uma contagem só, e nenhum segundo jeito de conferir.
+    /// conexão, a troca da senha do usuário e a gravação que marca ou desmarca o somente leitura (RN-PROT-003, `SaveWithPassword`): uma contagem só, e
+    /// nenhum segundo jeito de conferir.
     /// </summary>
     private Result<bool, EVaultError> CheckPassword(OpenVault open, string password)
     {
@@ -422,6 +426,48 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         if (ReferenceEquals(document, open.Document))
             return UnitResult.Success<EVaultError>();
 
+        return Write(open, document, cancellationToken);
+    }
+
+    /// <summary>
+    /// RN-PROT-003. Tudo com o semáforo tomado: a alteração, a pergunta se ela pede a senha, a conferência e a gravação são do mesmo cofre aberto e do
+    /// documento mais recente. A conferência é a de sempre (`CheckPassword`, com a contagem de erros da revelação e da troca de senha); a senha que
+    /// falta não é derivada nem contada, e a que vem sem ser pedida não é conferida.
+    /// </summary>
+    private Result<EPasswordCheck, EVaultError> SaveWithPassword(Func<VaultDocument, VaultDocument> change, Func<VaultDocument, VaultDocument, bool> needsPassword, string? password, CancellationToken cancellationToken)
+    {
+        var open = _open;
+        if (open is null)
+            return EVaultError.Locked;
+
+        var document = change(open.Document);
+        if (ReferenceEquals(document, open.Document))
+            return EPasswordCheck.NotNeeded;
+
+        var check = EPasswordCheck.NotNeeded;
+        if (needsPassword(open.Document, document))
+        {
+            if (string.IsNullOrEmpty(password))
+                return EPasswordCheck.Missing;
+
+            var matched = CheckPassword(open, password);
+            if (matched.IsFailure)
+                return matched.Error;
+
+            if (!matched.Value)
+                return EPasswordCheck.Wrong;
+
+            check = EPasswordCheck.Matched;
+        }
+
+        var written = Write(open, document, cancellationToken);
+
+        return written.IsSuccess ? check : written.Error;
+    }
+
+    /// <summary>A gravação de um documento novo no cofre aberto, com o semáforo tomado: o que o `Save` e o `SaveWithPassword` fazem depois de decidir gravar.</summary>
+    private UnitResult<EVaultError> Write(OpenVault open, VaultDocument document, CancellationToken cancellationToken)
+    {
         var file = open.File with { Payload = Seal(open.Key, document, VaultCrypto.AssociatedData(open.File.Version, open.File.Kdf)) };
 
         // A gravação termina aqui, antes de o documento novo valer: se o disco falha, o que estava

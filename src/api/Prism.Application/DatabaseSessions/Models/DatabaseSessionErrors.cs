@@ -45,6 +45,9 @@ internal static class DatabaseSessionErrors
             // RN-GRADE-011: pela rota, o validator recusa antes, com o mesmo código, no campo `Filter`; esta é a do registro de sessões.
             EDatabaseFailure.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity("Filtro inválido.", "FILTER_INVALID", failure.Message),
 
+            // RN-PROT-002: nada foi ao banco, e o resultado anterior continua (sem `executed`).
+            EDatabaseFailure.ConnectionReadOnly => ApiErrorDto.CreateUnprocessableEntity("Conexão somente leitura.", "CONNECTION_READ_ONLY", failure.Message),
+
             // O cofre aberto mudou enquanto a sessão abria: para quem chamou, é o cofre que ele usava que fechou.
             EDatabaseFailure.VaultChanged => VaultErrors.From(EVaultError.Locked),
             _ => throw new NotImplementedException("O enum informado não foi mapeado pela aplicação")

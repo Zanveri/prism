@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Models;
@@ -17,11 +18,19 @@ namespace Prism.Application.Connections.Repositories;
 /// então a existência da pasta e da própria conexão, e a duplicidade de nome (RN-CONN-011), são ditas só aqui, onde
 /// o cofre fechado vira 401 `VAULT_LOCKED`. A recusa devolve o documento que recebeu, e o serviço não regrava por isso.
 /// Duplicar (RN-CONN-016) também é decidido lá dentro: a conexão de origem, o nome livre da cópia e a senha copiada saem do mesmo documento.
+///
+/// As proteções que valem (RN-PROT-004) dependem das pastas acima, e saem do documento que a gravação acabou de escrever: é o que a resposta mostra. A
+/// alteração que pede a senha do usuário (RN-PROT-003: marcar ou desmarcar o somente leitura, ou tirar o herdado movendo) a confere na mesma operação
+/// do cofre que grava (`SaveOrRefuseWithPassword`).
 /// </summary>
 internal sealed class ConnectionRepository(IVaultService vaultService) : IConnectionRepository
 {
-    public Task<UnitResult<ApiErrorDto>> Insert(Connection connection, CancellationToken cancellationToken)
-        => vaultService.SaveOrRefuse(document =>
+    public async Task<Result<EffectiveProtections, ApiErrorDto>> Insert(Connection connection, CancellationToken cancellationToken)
+    {
+        EffectiveProtections? protections = null;
+
+        // RN-PROT-003: criar uma conexão já marcada não pede a senha do usuário (nada do que existe muda).
+        var saved = await vaultService.SaveOrRefuse(document =>
         {
             // A pasta pode ter sido excluída (estava vazia) depois de o usuário abrir o formulário: sem esta regra a conexão ficaria órfã.
             if (connection.FolderID is { } folderID && !VaultFolders.ExistsByID(document, folderID))
@@ -31,11 +40,25 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
             if (NameIsTaken(document, connection))
                 return ConnectionErrors.AlreadyExists(connection.Name);
 
-            return document with { Connections = [.. document.Connections, ToRecord(connection)] };
+            var record = ConnectionRecords.ToRecord(connection);
+            var inserted = document with { Connections = [.. document.Connections, record] };
+            protections = ProtectionRules.Of(inserted, record);
+
+            return inserted;
         }, cancellationToken);
 
-    public Task<UnitResult<ApiErrorDto>> Update(Connection connection, string? password, CancellationToken cancellationToken)
-        => vaultService.SaveOrRefuse(document =>
+        if (saved.IsFailure)
+            return saved.Error;
+
+        // A gravação que deu certo rodou a função, e a função que não recusou calculou as proteções.
+        return protections!;
+    }
+
+    public async Task<Result<EffectiveProtections, ApiErrorDto>> Update(Connection connection, string? password, string? userPassword, CancellationToken cancellationToken)
+    {
+        EffectiveProtections? protections = null;
+
+        var saved = await vaultService.SaveOrRefuseWithPassword(document =>
         {
             var existing = document.Connections.FirstOrDefault(record => record.ID == connection.ID);
             if (existing is null)
@@ -55,14 +78,23 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
 
             // RN-CONN-004: senha omitida mantém a do documento que esta função recebeu, e não a que o handler leu: com duas alterações
             // simultâneas (uma trocando a senha, outra não), usar a lida antes desfaria a troca, e nenhuma ordem serial dá esse resultado.
-            var updated = ToRecord(connection) with { Password = password ?? existing.Password };
+            var updated = ConnectionRecords.ToRecord(connection) with { Password = password ?? existing.Password };
+            var changed = document with { Connections = [.. document.Connections.Select(record => record.ID == connection.ID ? updated : record)] };
+            protections = ProtectionRules.Of(changed, updated);
 
-            return document with { Connections = [.. document.Connections.Select(record => record.ID == connection.ID ? updated : record)] };
-        }, cancellationToken);
+            return changed;
+        }, userPassword, cancellationToken);
 
-    public async Task<Result<Connection, ApiErrorDto>> Duplicate(Guid id, DateTime createdAt, CancellationToken cancellationToken)
+        if (saved.IsFailure)
+            return saved.Error;
+
+        return protections!;
+    }
+
+    public async Task<Result<(Connection Copy, EffectiveProtections Protections), ApiErrorDto>> Duplicate(Guid id, DateTime createdAt, CancellationToken cancellationToken)
     {
         Connection? copy = null;
+        EffectiveProtections? protections = null;
 
         var saved = await vaultService.SaveOrRefuse(document =>
         {
@@ -72,17 +104,21 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
 
             // RN-CONN-016: na mesma pasta, com o primeiro nome de cópia livre nela (RN-CONN-011), contra este documento: outra requisição
             // pode ter gravado uma cópia depois do clique. A senha vai de registro para registro, sem sair do cofre.
+            // RN-PROT-003: a cópia nasce com as proteções da origem, sem pedir a senha do usuário.
             var name = ConnectionRules.CopyName(existing.Name, candidate => NameIsTaken(document, existing.FolderID, null, candidate));
-            copy = ToDomain(existing).Duplicate(name, createdAt);
+            copy = ConnectionRecords.ToDomain(existing).Duplicate(name, createdAt);
+            var record = ConnectionRecords.ToRecord(copy);
+            var duplicated = document with { Connections = [.. document.Connections, record] };
+            protections = ProtectionRules.Of(duplicated, record);
 
-            return document with { Connections = [.. document.Connections, ToRecord(copy)] };
+            return duplicated;
         }, cancellationToken);
 
         if (saved.IsFailure)
             return saved.Error;
 
         // A gravação que deu certo rodou a função, e a função que não recusou fez a cópia.
-        return copy!;
+        return (copy!, protections!);
     }
 
     public Task<UnitResult<ApiErrorDto>> Delete(Guid id, CancellationToken cancellationToken)
@@ -102,9 +138,4 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
     private static bool NameIsTaken(VaultDocument document, Guid? folderID, Guid? exceptID, string name)
         => document.Connections.Any(record => record.FolderID == folderID && record.ID != exceptID && string.Equals(record.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    private static Connection ToDomain(VaultConnectionRecord record)
-        => Connection.Restore(record.ID, record.FolderID, record.Name, record.Engine, record.Host, record.Port, record.Database, record.UserName, record.Password, record.EnvironmentName, record.EnvironmentColor, record.CreatedAt, record.UpdatedAt);
-
-    private static VaultConnectionRecord ToRecord(Connection connection)
-        => new(connection.ID, connection.FolderID, connection.Name, connection.Engine, connection.Host, connection.Port, connection.Database, connection.UserName, connection.Password, connection.EnvironmentName, connection.EnvironmentColor, connection.CreatedAt, connection.UpdatedAt);
 }

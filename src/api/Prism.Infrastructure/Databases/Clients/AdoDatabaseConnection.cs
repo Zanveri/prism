@@ -123,6 +123,16 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// </summary>
     private DbTransaction? _editTransaction;
 
+    /// <summary>
+    /// RN-PROT-006: o modo da sessão que o Prism pôs no banco (<see cref="SessionModeSql"/>): verdadeiro depois do primeiro comando de uma conexão
+    /// somente leitura, falso depois de ela deixar de ser. Nulo enquanto o Prism não mandou nada: a sessão de uma conexão que nunca foi somente
+    /// leitura fica com o que o banco e o usuário dele já usam.
+    /// </summary>
+    private bool? _readOnlyMode;
+
+    /// <summary>RN-PROT-002: o cursor aberto é de um comando de uma conexão somente leitura. A recusa por gravar no "carregar mais" é a resposta, como veio.</summary>
+    private bool _cursorReadOnly;
+
     public string ServerVersion { get; private set; } = string.Empty;
 
     public bool IsOpen => !_discarded && _connection?.State == ConnectionState.Open;
@@ -132,6 +142,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>A consulta de verificação do banco (RN-CONN-013).</summary>
     protected abstract string PingSql { get; }
+
+    /// <summary>
+    /// RN-PROT-006: o comando que põe a sessão no modo só de leitura do banco (ou o tira dele), para toda transação seguinte. Nulo, por padrão: o
+    /// banco que não tem esse modo fica só com a recusa pelo texto (`ReadOnlySql`). O PostgreSQL tem (`SET SESSION CHARACTERISTICS`).
+    /// </summary>
+    protected virtual string? SessionModeSql(bool readOnly)
+        => null;
 
     /// <summary>
     /// Colunas: nome, se é de sistema e quantas tabelas, visões e rotinas ele tem, contadas como a lista de objetos as lista (RN-CAT-010),
@@ -428,8 +445,29 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return opened;
     }
 
-    public async Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
-        => await QueryAsync(nameof(PingAsync), EDatabaseFailure.ConnectionFailed, PingSql, [], reader => reader.GetValue(0), cancellationToken);
+    public Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
+        => VerifyAsync(null, cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001. A consulta própria (validada antes como uma leitura só, RN-PROT-005) vai como a pessoa a escreveu, com o ajuste que o
+    /// banco pede num texto dela (<see cref="ConfigureUserCommand"/>), lida até o fim e com o prazo do driver, como o catálogo; no banco que tem
+    /// transação só de leitura ela roda numa, e nem uma função chamada por ela grava. Sem ela, a do banco (<see cref="PingSql"/>).
+    /// </summary>
+    public async Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken)
+        => await RunAsync(nameof(VerifyAsync), EDatabaseFailure.ConnectionFailed, async token =>
+        {
+            if (sql is not null)
+                await BeginReadOnlyAsync(token);
+
+            var reader = await StartAsync(sql ?? PingSql, [], userCommand: false, token, userText: sql is not null);
+            while (await reader.ReadAsync(token))
+            {
+            }
+
+            await FinishCursorAsync(token);
+
+            return true;
+        }, cancellationToken);
 
     public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
     {
@@ -443,6 +481,22 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
 
         return await ExecuteWithoutRefusalAsync(sql, pageSize, cancellationToken);
+    }
+
+    /// <summary>
+    /// RN-PROT-002 e 006: o comando de uma conexão somente leitura, que o registro de sessões já conferiu pelo texto (`ReadOnlySql`). Sempre na tentativa
+    /// paginada (no PostgreSQL, a transação só de leitura, com a sessão no modo só de leitura do banco), e a recusa do banco por gravar é a resposta:
+    /// nunca roda de novo fora da transação, como o comando de uma conexão comum. As recusas pelo texto do <see cref="ExecuteAsync"/> valem aqui também.
+    /// </summary>
+    public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
+    {
+        if (IsTransactionControl(sql))
+            return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
+
+        if (HasSeveralStatements(sql))
+            return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
+
+        return await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token, readOnly: true), cancellationToken);
     }
 
     /// <summary>
@@ -490,8 +544,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return new DatabaseFailure(EDatabaseFailure.NoOpenCursor, NoOpenCursorMessage);
 
         var sql = _cursorSql;
+        var readOnly = _cursorReadOnly;
         var page = await RunAsync(nameof(FetchNextAsync), EDatabaseFailure.ExecutionFailed, token => ReadPageAsync(Stopwatch.GetTimestamp(), toTheEnd: false, token), cancellationToken, continuesTheCursor: true);
-        if (page.IsSuccess || !IsWriteRefusal(page.Error))
+
+        // RN-PROT-002: na conexão somente leitura a recusa do banco é a resposta, e o comando não roda de novo fora da transação.
+        if (page.IsSuccess || readOnly || !IsWriteRefusal(page.Error))
             return page;
 
         // Uma função chamada pela leitura só gravou linhas adiante. A tentativa foi desfeita, e a mesma leitura, executada de novo, não
@@ -686,6 +743,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         var result = await RunAsync(nameof(ApplyEditsAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
+            // RN-PROT-006: o "Salvar" só chega aqui numa conexão que não é somente leitura; a sessão que já foi sai do modo só de leitura do banco.
+            await ApplySessionModeAsync(readOnly: false, token);
+
             if (!oneAtATime)
                 _editTransaction = await _connection!.BeginTransactionAsync(token);
 
@@ -786,10 +846,14 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// Completo: fora de transação e lido até o fim, de modo que o banco confirma o comando antes de a resposta sair. Nos dois a página
     /// tem até `pageSize` linhas (RN-SQL-016).
     /// </summary>
-    private async Task<QueryOutcome> ExecuteCommandAsync(string sql, int pageSize, bool paged, CancellationToken cancellationToken)
+    /// <param name="readOnly">RN-PROT-006: o comando é de uma conexão somente leitura, e a sessão vai para o modo só de leitura do banco antes dele (ou sai dele, no de uma conexão que deixou de ser).</param>
+    private async Task<QueryOutcome> ExecuteCommandAsync(string sql, int pageSize, bool paged, CancellationToken cancellationToken, bool readOnly = false)
     {
         _utilityCommand = false;
         var started = Stopwatch.GetTimestamp();
+
+        // Fora de transação: o modo da sessão vale para as transações seguintes, e dentro de uma seria desfeito com ela.
+        await ApplySessionModeAsync(readOnly, cancellationToken);
 
         // ponytail: abrir e fechar a transação custa duas idas ao banco a mais por leitura. Se a rede pesar, mandar o `BEGIN` junto com o
         // comando (`DbBatch`) e fechar a transação depois de devolver a página.
@@ -821,6 +885,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         var origins = ColumnOrigins(reader);
         _columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal), origins?[ordinal]))];
         _cursorSql = sql;
+        _cursorReadOnly = readOnly;
         _pageSize = pageSize;
         _utilityCommand = !paged && MayHaveOpenedATransaction(returnedRows: true, reader.RecordsAffected);
 
@@ -1050,6 +1115,20 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         await NonQueryAsync(beginReadOnlySql, cancellationToken);
     }
 
+    /// <summary>
+    /// RN-PROT-006: põe a sessão no modo da conexão daquele momento, dentro do comando em andamento e antes de qualquer transação. Só vai ao banco quando o
+    /// modo muda: no primeiro comando de uma conexão somente leitura e quando a proteção muda com a sessão aberta. A sessão em que o Prism nunca pôs o
+    /// modo não recebe nada para sair dele.
+    /// </summary>
+    private async Task ApplySessionModeAsync(bool readOnly, CancellationToken cancellationToken)
+    {
+        if (_readOnlyMode == readOnly || (_readOnlyMode is null && !readOnly) || SessionModeSql(readOnly) is not { } sql)
+            return;
+
+        await NonQueryAsync(sql, cancellationToken);
+        _readOnlyMode = readOnly;
+    }
+
     private async Task NonQueryAsync(string sql, CancellationToken cancellationToken)
     {
         await using var command = _connection!.CreateCommand();
@@ -1063,7 +1142,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// PostgreSQL não aceita outro comando na conexão. Os parâmetros são posicionais, e cada banco escreve o marcador dele (`$1`, `?`).
     /// </summary>
     /// <param name="userCommand">É comando do usuário: sem tempo limite, porque só para quando ele cancela (RN-SQL-010), e com o ajuste que o banco pede.</param>
-    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken)
+    /// <param name="userText">O texto é da pessoa, mas o comando tem o prazo do driver (a consulta de verificação própria, RN-VERIF-001): leva o ajuste que o banco pede num texto dela.</param>
+    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken, bool userText = false)
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
@@ -1071,10 +1151,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         // O padrão dos drivers é 30 segundos, e um comando do usuário pode levar horas.
         if (userCommand)
-        {
             command.CommandTimeout = 0;
+
+        if (userCommand || userText)
             ConfigureUserCommand(command);
-        }
 
         foreach (var value in parameters)
         {

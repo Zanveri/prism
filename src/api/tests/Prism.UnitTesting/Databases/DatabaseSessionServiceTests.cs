@@ -16,7 +16,7 @@ namespace Prism.UnitTesting.Databases;
 /// volta (rede morta) e o temporizador que dispara fora de hora. O comportamento com o banco de verdade é do fixture de integração
 /// de mesmo nome.
 /// </summary>
-public sealed class DatabaseSessionServiceTests
+public sealed partial class DatabaseSessionServiceTests
 {
     private static readonly ConnectionSettings Settings = new(EDatabaseEngine.PostgreSql, "banco.local", 5432, "producao", "operador", "senha-de-teste");
 
@@ -653,8 +653,6 @@ public sealed class DatabaseSessionServiceTests
 
         public bool IsOpen { get; private set; } = true;
 
-        public bool HasOpenCursor { get; set; }
-
         public bool ClosesItselfOnCloseCursor { get; set; }
 
         public bool ClosesItselfOnFetch { get; set; }
@@ -685,6 +683,27 @@ public sealed class DatabaseSessionServiceTests
         /// <summary>Roda durante a recusa, com a vez da sessão tomada: é onde o teste faz o temporizador avisar "no meio" dela.</summary>
         public Action? WhileRefusing { get; set; }
 
+        /// <summary>RN-PROT-002: os comandos que chegaram pelo caminho da conexão somente leitura, na ordem.</summary>
+        public List<string> ExecutedReadOnly { get; } = [];
+
+        /// <summary>
+        /// RN-SQL-007: há um cursor aberto na conexão. Segue o da base: a página com mais linhas o abre, e todo comando que chega à conexão, o
+        /// fim da leitura e o fechamento por ociosidade o fecham; a recusa antes de ir ao banco (<see cref="Refusal"/>) não o toca. O teste
+        /// pode dar o que quiser.
+        /// </summary>
+        public bool HasOpenCursor { get; set; }
+
+        /// <summary>RN-VERIF-002: as consultas de verificação que chegaram (nula é a do banco), na ordem.</summary>
+        public List<string?> Verified { get; } = [];
+
+        /// <summary>O que a verificação responde; sem ele, sucesso. Com <see cref="VerificationGate"/>, ela só volta quando o teste o completa.</summary>
+        public DatabaseFailure? VerificationFailure { get; set; }
+
+        public TaskCompletionSource? VerificationGate { get; set; }
+
+        /// <summary>A conexão cai na verificação, como a que o administrador derrubou.</summary>
+        public bool ClosesItselfOnVerify { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
         {
             if (Refusal is { } refusal)
@@ -699,12 +718,38 @@ public sealed class DatabaseSessionServiceTests
             if (Failure is { } failure)
                 return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
 
+            return Respond();
+        }
+
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
+        {
+            ExecutedReadOnly.Add(sql);
+            HasOpenCursor = false;
+
+            return Respond();
+        }
+
+        /// <summary>O desfecho que o teste deu, com o cursor aberto quando a página tem mais linhas; sem ele, o comando nunca volta.</summary>
+        private Task<Result<QueryOutcome, DatabaseFailure>> Respond()
+        {
             if (!Outcomes.TryDequeue(out var outcome))
                 return new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
 
             HasOpenCursor = outcome.Page?.HasMore ?? false;
 
             return Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome));
+        }
+
+        public async Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken)
+        {
+            Verified.Add(sql);
+            if (VerificationGate is { } gate)
+                await gate.Task;
+
+            if (ClosesItselfOnVerify)
+                IsOpen = false;
+
+            return VerificationFailure is { } failure ? UnitResult.Failure(failure) : UnitResult.Success<DatabaseFailure>();
         }
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)

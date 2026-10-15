@@ -92,4 +92,30 @@ public sealed class TestConnectionValidatorTests
     [Fact(DisplayName = "Erro com id e senha vazia: enviada, tem de ter conteúdo")]
     public void TestConnection_ShouldBeError_PasswordEmptyWithID()
         => AssertInvalid(Valid(id: Guid.CreateVersion7(), password: ""), nameof(TestConnectionCommand.Password));
+
+    /// <summary>RN-CONN-013 e RN-VERIF-001: a consulta de verificação do formulário tem as regras da gravação, no banco escolhido, antes de conectar.</summary>
+    [Trait("TestConnectionValidator", "TestConnectionCommand")]
+    [Fact(DisplayName = "OK com consulta de verificação de uma leitura só, ou sem ela")]
+    public void TestConnection_ShouldBeOK_WithAVerificationQuery()
+    {
+        //Act
+        var withQuery = Validator.TestValidate(Valid() with { VerificationQuery = "SELECT 1" });
+        var blank = Validator.TestValidate(Valid() with { VerificationQuery = "   " });
+
+        //Assert
+        withQuery.ShouldNotHaveAnyValidationErrors();
+        blank.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("TestConnectionValidator", "TestConnectionCommand")]
+    [Fact(DisplayName = "Erro consulta de verificação que não é leitura, no campo dela, com o motivo")]
+    public void TestConnection_ShouldBeError_WhenTheVerificationQueryIsNotARead()
+    {
+        //Act
+        var result = Validator.TestValidate(Valid(engine: EDatabaseEngine.Db2) with { VerificationQuery = "DELETE FROM PEDIDO" });
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(nameof(TestConnectionCommand.VerificationQuery)).WithErrorCode("CONNECTION_INVALID").WithErrorMessage("A consulta de verificação tem de ser uma leitura só: um DELETE não é leitura.");
+        Assert.All(result.Errors, error => Assert.Equal(nameof(TestConnectionCommand.VerificationQuery), error.PropertyName));
+    }
 }

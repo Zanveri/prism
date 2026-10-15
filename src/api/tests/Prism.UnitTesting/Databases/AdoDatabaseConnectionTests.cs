@@ -17,7 +17,7 @@ namespace Prism.UnitTesting.Databases;
 /// não deixa provocar na hora certa: a limpeza da transação que falha com a conexão viva e o cancelamento que chega enquanto o `BEGIN`
 /// da tentativa ainda está indo ao banco. O comportamento com o PostgreSQL de verdade é dos fixtures de integração.
 /// </summary>
-public sealed class AdoDatabaseConnectionTests
+public sealed partial class AdoDatabaseConnectionTests
 {
     private const string ReadQuery = "SELECT numero FROM tabela";
 
@@ -2035,6 +2035,28 @@ public sealed class AdoDatabaseConnectionTests
         Assert.True(outcome.Value.Page!.HasMore);
         Assert.True(connection.HasOpenCursor);
         Assert.Equal(["BEGIN READ ONLY", ReadQuery, "ROLLBACK", "BEGIN READ ONLY", ReadQuery], _sent);
+    }
+
+    /// <summary>RN-SQL-007: o cursor aberto é o de uma leitura com mais páginas; lida até o fim, ele fecha.</summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "OK há cursor aberto só enquanto a leitura tem mais páginas")]
+    public async Task HasOpenCursor_ShouldFollowTheCursor()
+    {
+        //Arrange
+        _rows = 250;
+        var connection = await OpenAsync();
+
+        //Act
+        var before = connection.HasOpenCursor;
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var withMore = connection.HasOpenCursor;
+        await connection.FetchNextAsync(CancellationToken.None);
+        var atTheEnd = connection.HasOpenCursor;
+
+        //Assert
+        Assert.False(before);
+        Assert.True(withMore);
+        Assert.False(atTheEnd);
     }
 
     /// <summary>A recusa de um banco de mentira, com o SQLSTATE quando o teste o dá.</summary>

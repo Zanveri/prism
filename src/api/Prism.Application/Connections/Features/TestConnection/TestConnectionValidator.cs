@@ -1,4 +1,6 @@
 using FluentValidation;
+using FluentValidation.Results;
+using Prism.Application.Connections.Models;
 
 namespace Prism.Application.Connections.Features.TestConnection;
 
@@ -15,5 +17,12 @@ public sealed class TestConnectionValidator : AbstractValidator<TestConnectionCo
 
         // RN-CONN-013: sem `id` não há senha guardada, e ela é obrigatória. Com `id`, ausente usa a do cofre; enviada é a que a pessoa digitou e tem de ter conteúdo (a regra da alteração, RN-CONN-004).
         RuleFor(request => request.Password).Must((request, password) => request.ID is null ? !string.IsNullOrEmpty(password) : password is null || password.Length > 0).WithMessage("Informe a senha do banco.").WithErrorCode("CONNECTION_INVALID");
+
+        // RN-CONN-013 e RN-VERIF-001: a consulta de verificação do formulário tem as regras da gravação, no banco escolhido, e a recusa vem antes de conectar.
+        RuleFor(request => request.VerificationQuery).Custom((query, context) =>
+        {
+            if (ConnectionRules.VerificationQueryRefusal(query, context.InstanceToValidate.Engine) is { } refusal)
+                context.AddFailure(new ValidationFailure(nameof(TestConnectionCommand.VerificationQuery), refusal) { ErrorCode = "CONNECTION_INVALID" });
+        });
     }
 }

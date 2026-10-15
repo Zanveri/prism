@@ -43,7 +43,13 @@ public enum EDatabaseFailure
     /// RN-GRADE-011: o filtro do resultado não se junta ao comando com segurança (`;`, aspas ou comentário sem fechar, comentário no fim,
     /// parênteses sem par, mais de um `ORDER BY`); nada foi ao banco. Pela rota, quem recusa antes é o validator, com o mesmo código.
     /// </summary>
-    FilterInvalid
+    FilterInvalid,
+
+    /// <summary>
+    /// RN-PROT-002: a conexão é somente leitura (por ela ou por uma pasta acima), e o comando não é uma leitura (RN-PROT-005), ou a operação é da
+    /// edição de registros. Nada foi ao banco, e o resultado anterior continua.
+    /// </summary>
+    ConnectionReadOnly
 }
 
 /// <summary>

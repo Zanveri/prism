@@ -277,4 +277,72 @@ public sealed class ConnectionValidatorsTests
     [Fact(DisplayName = "Erro cor do ambiente que não é hexadecimal")]
     public void UpdateConnection_ShouldBeError_EnvironmentColorNotHex()
         => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid(environmentColor: "#GGGGGG"), "EnvironmentColor");
+
+    /// <summary>RN-PROT-001 e RN-VERIF-001: os campos novos são opcionais, e o ausente é o padrão.</summary>
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "OK com as proteções e a verificação, nos limites, e sem elas")]
+    public void CreateConnection_ShouldBeOK_WithTheSafeguards()
+    {
+        //Act
+        var results = new[]
+        {
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid() with { ConfirmCommands = "none", ReadOnly = true, VerificationEnabled = false, VerificationInterval = 5, VerificationQuery = "SELECT 1" }),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid() with { ConfirmCommands = "irreversible", VerificationInterval = 3600 }),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid() with { ConfirmCommands = "all", VerificationQuery = "   " }),
+            CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid() with { ConfirmCommands = "" })
+        };
+
+        //Assert
+        Assert.All(results, result => result.ShouldNotHaveAnyValidationErrors());
+    }
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro confirmação fora da lista")]
+    public void CreateConnection_ShouldBeError_ConfirmCommandsNotInTheList()
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { ConfirmCommands = "sempre" }, nameof(CreateConnectionCommand.ConfirmCommands));
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Theory(DisplayName = "Erro intervalo da verificação fora de 5 a 3.600 segundos")]
+    [InlineData(4)]
+    [InlineData(0)]
+    [InlineData(3601)]
+    public void CreateConnection_ShouldBeError_VerificationIntervalOutOfRange(int interval)
+        => AssertCreateInvalid(ConnectionFakers.ReturnCreateConnectionCommandValid() with { VerificationInterval = interval }, nameof(CreateConnectionCommand.VerificationInterval));
+
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro consulta de verificação que não é leitura, com o motivo, no banco escolhido")]
+    public void CreateConnection_ShouldBeError_VerificationQueryNotARead()
+    {
+        //Act
+        var result = CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(engine: EDatabaseEngine.PostgreSql) with { VerificationQuery = "SELECT 1; DROP TABLE x" });
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(nameof(CreateConnectionCommand.VerificationQuery)).WithErrorCode("CONNECTION_INVALID").WithErrorMessage("A consulta de verificação tem de ser uma leitura só: o texto tem mais de um comando.");
+    }
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "OK com as proteções, a verificação e a senha do usuário")]
+    public void UpdateConnection_ShouldBeOK_WithTheSafeguards()
+    {
+        //Act
+        var result = UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid(userPassword: "senha-do-usuario") with { ConfirmCommands = "all", ReadOnly = true, VerificationEnabled = true, VerificationInterval = 60, VerificationQuery = "VALUES 1" });
+
+        //Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro confirmação fora da lista")]
+    public void UpdateConnection_ShouldBeError_ConfirmCommandsNotInTheList()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { ConfirmCommands = "ALL" }, nameof(UpdateConnectionCommand.ConfirmCommands));
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro intervalo da verificação abaixo de 5 segundos")]
+    public void UpdateConnection_ShouldBeError_VerificationIntervalOutOfRange()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { VerificationInterval = 1 }, nameof(UpdateConnectionCommand.VerificationInterval));
+
+    [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
+    [Fact(DisplayName = "Erro consulta de verificação com mais de 1.000 caracteres")]
+    public void UpdateConnection_ShouldBeError_VerificationQueryTooLong()
+        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { VerificationQuery = "SELECT " + new string('1', 1000) }, nameof(UpdateConnectionCommand.VerificationQuery));
 }

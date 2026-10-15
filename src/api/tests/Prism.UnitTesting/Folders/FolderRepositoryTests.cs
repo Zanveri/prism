@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Folders.Domain;
 using Prism.Application.Folders.Repositories;
 using Prism.Infrastructure.Vault.Models;
@@ -21,6 +22,7 @@ public sealed class FolderRepositoryTests
 {
     private readonly Mock<IVaultService> _vault = new();
     private VaultDocument? _saved;
+    private bool _passwordAsked;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord> folders, IReadOnlyList<VaultConnectionRecord>? connections = null)
         => new("marina.costa", folders, connections ?? [], [], VaultWorkspaceRecord.Empty);
@@ -28,8 +30,12 @@ public sealed class FolderRepositoryTests
     private static VaultFolderRecord ToRecord(Folder folder)
         => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt);
 
-    /// <summary>Roda a função do `SaveAsync` contra o documento atual, como o serviço faz, e responde o que o teste mandou (sucesso por padrão).</summary>
-    private FolderRepository CreateRepository(VaultDocument current, EVaultError? failure = null)
+    /// <summary>
+    /// Roda a função do `SaveAsync` (e a do `SaveWithPasswordAsync`, a da alteração, RN-PROT-003) contra o documento atual, como o serviço faz, e
+    /// responde o que o teste mandou (sucesso por padrão). Na alteração, `_passwordAsked` diz se a mudança pediu a senha do usuário, pela pergunta
+    /// que o repository entregou, e `check` é o que o serviço responde da conferência quando ela é pedida (conferiu, por padrão).
+    /// </summary>
+    private FolderRepository CreateRepository(VaultDocument current, EVaultError? failure = null, EPasswordCheck check = EPasswordCheck.Matched)
     {
         _vault.Setup(v => v.SaveAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), It.IsAny<CancellationToken>()))
             .Returns((Func<VaultDocument, VaultDocument> change, CancellationToken _) =>
@@ -39,12 +45,28 @@ public sealed class FolderRepositoryTests
                 return Task.FromResult(failure is null ? UnitResult.Success<EVaultError>() : UnitResult.Failure(failure.Value));
             });
 
+        _vault.Setup(v => v.SaveWithPasswordAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), It.IsAny<Func<VaultDocument, VaultDocument, bool>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns((Func<VaultDocument, VaultDocument> change, Func<VaultDocument, VaultDocument, bool> needsPassword, string? _, CancellationToken _) =>
+            {
+                _saved = change(current);
+                _passwordAsked = !ReferenceEquals(_saved, current) && needsPassword(current, _saved);
+
+                return Task.FromResult(failure is { } error ? Result.Failure<EPasswordCheck, EVaultError>(error) : Result.Success<EPasswordCheck, EVaultError>(_passwordAsked ? check : EPasswordCheck.NotNeeded));
+            });
+
         return new FolderRepository(_vault.Object);
     }
 
     private void VerifySavedOnce(CancellationToken cancellationToken)
     {
         _vault.Verify(v => v.SaveAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), cancellationToken), Times.Once);
+        _vault.VerifyNoOtherCalls();
+    }
+
+    /// <summary>A alteração grava pelo `SaveWithPasswordAsync` (RN-PROT-003), com a senha do usuário que veio.</summary>
+    private void VerifySavedWithPasswordOnce(string? userPassword, CancellationToken cancellationToken)
+    {
+        _vault.Verify(v => v.SaveWithPasswordAsync(It.IsAny<Func<VaultDocument, VaultDocument>>(), It.IsAny<Func<VaultDocument, VaultDocument, bool>>(), userPassword, cancellationToken), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
 
@@ -206,12 +228,12 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(Document([before, target, after, newParent]));
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal([before, ToRecord(folder), after, newParent], _saved!.Folders);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     /// <summary>RN-PASTA-005: o ambiente vai ao registro do cofre junto com o resto da pasta.</summary>
@@ -227,12 +249,12 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(Document([target]));
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal([new VaultFolderRecord(target.ID, null, "Produção", target.CreatedAt, target.UpdatedAt.AddDays(1), "Produção", "#FF8A7A")], _saved!.Folders);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "GetByID")]
@@ -249,8 +271,8 @@ public sealed class FolderRepositoryTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal("Produção", result.Value.EnvironmentName);
-        Assert.Equal("#FF8A7A", result.Value.EnvironmentColor);
+        Assert.Equal("Produção", result.Value.Folder.EnvironmentName);
+        Assert.Equal("#FF8A7A", result.Value.Folder.EnvironmentColor);
     }
 
     /// <summary>RN-PASTA-007: a cor da pasta vai ao registro do cofre junto com o resto da pasta, à parte do ambiente.</summary>
@@ -266,12 +288,12 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(Document([target]));
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal([new VaultFolderRecord(target.ID, null, "Produção", target.CreatedAt, target.UpdatedAt.AddDays(1), "Produção", "#FF8A7A", "#7DB2FF")], _saved!.Folders);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "GetByID")]
@@ -289,8 +311,8 @@ public sealed class FolderRepositoryTests
         var withoutColor = await repository.GetByID(before.ID, CancellationToken.None);
 
         //Assert
-        Assert.Equal("#7DB2FF", withColor.Value.Color);
-        Assert.Null(withoutColor.Value.Color);
+        Assert.Equal("#7DB2FF", withColor.Value.Folder.Color);
+        Assert.Null(withoutColor.Value.Folder.Color);
     }
 
     /// <summary>Só a caixa muda: a pasta continua sendo a mesma chave entre as irmãs, e não colide com ela mesma.</summary>
@@ -305,12 +327,12 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(Document([target]));
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal("PRODUÇÃO", _saved!.Folders.Single().Name);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "Update")]
@@ -323,13 +345,13 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(FolderFakers.Create(), cancellationToken);
+        var result = await repository.Update(FolderFakers.Create(), null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("FOLDER_NOT_FOUND", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "Update")]
@@ -344,13 +366,13 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("FOLDER_NOT_FOUND", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     /// <summary>
@@ -371,14 +393,14 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(movingAIntoB, cancellationToken);
+        var result = await repository.Update(movingAIntoB, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("FOLDER_CYCLE", result.Error.Type);
         Assert.Equal(HttpStatusCode.Conflict, result.Error.StatusCode);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "Update")]
@@ -393,13 +415,13 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("FOLDER_CYCLE", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "Update")]
@@ -415,13 +437,13 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("FOLDER_ALREADY_EXISTS", result.Error.Type);
         Assert.Same(current, _saved);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "Update")]
@@ -435,13 +457,13 @@ public sealed class FolderRepositoryTests
         var repository = CreateRepository(Document([target]), EVaultError.Locked);
 
         //Act
-        var result = await repository.Update(folder, cancellationToken);
+        var result = await repository.Update(folder, null, cancellationToken);
 
         //Assert
         Assert.True(result.IsFailure);
         Assert.Equal("VAULT_LOCKED", result.Error.Type);
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
-        VerifySavedOnce(cancellationToken);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
     }
 
     [Trait("FolderRepository", "Delete")]
@@ -558,11 +580,11 @@ public sealed class FolderRepositoryTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(record.ID, result.Value.ID);
-        Assert.Equal(record.ParentID, result.Value.ParentID);
-        Assert.Equal(record.Name, result.Value.Name);
-        Assert.Equal(record.CreatedAt, result.Value.CreatedAt);
-        Assert.Equal(record.UpdatedAt, result.Value.UpdatedAt);
+        Assert.Equal(record.ID, result.Value.Folder.ID);
+        Assert.Equal(record.ParentID, result.Value.Folder.ParentID);
+        Assert.Equal(record.Name, result.Value.Folder.Name);
+        Assert.Equal(record.CreatedAt, result.Value.Folder.CreatedAt);
+        Assert.Equal(record.UpdatedAt, result.Value.Folder.UpdatedAt);
         _vault.Verify(v => v.Read(), Times.Once);
         _vault.VerifyNoOtherCalls();
     }
@@ -603,5 +625,108 @@ public sealed class FolderRepositoryTests
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
         _vault.Verify(v => v.Read(), Times.Once);
         _vault.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-PROT-001 e 002: as proteções vão ao registro do cofre, com o padrão nulo.</summary>
+    [Trait("FolderRepository", "Update")]
+    [Fact(DisplayName = "OK grava as proteções da pasta e pede a senha por marcar o somente leitura")]
+    public async Task Update_ShouldWriteTheProtections_AndAskThePassword()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateFolder(name: "Fábrica");
+        var folder = FolderFakers.Create(iD: target.ID, name: "Fábrica", createdAt: target.CreatedAt, confirmCommands: "irreversible", readOnly: true);
+        var repository = CreateRepository(Document([target]));
+
+        //Act
+        var result = await repository.Update(folder, "senha-do-usuario", cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.True(_passwordAsked);
+        Assert.Equal([new VaultFolderRecord(target.ID, null, "Fábrica", target.CreatedAt, folder.UpdatedAt, ConfirmCommands: "irreversible", ReadOnly: true)], _saved!.Folders);
+        Assert.Equal(new EffectiveProtections(true, null, "irreversible", null), result.Value);
+        VerifySavedWithPasswordOnce("senha-do-usuario", cancellationToken);
+    }
+
+    /// <summary>RN-PROT-003: mover para fora de uma pasta somente leitura a pasta que tem conexão dentro afrouxa o herdado dela.</summary>
+    [Trait("FolderRepository", "Update")]
+    [Fact(DisplayName = "OK mover a pasta com conexão para fora da pasta somente leitura pede a senha, e a vazia não")]
+    public async Task Update_MovingOutOfAReadOnlyFolder_AsksThePasswordOnlyWithAConnectionInside()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder(name: "Fábrica") with { ReadOnly = true };
+        var line = VaultFakers.CreateFolder(parentID: factory.ID, name: "Linha 1");
+        var empty = VaultFakers.CreateFolder(parentID: factory.ID, name: "Linha 2");
+        var connection = VaultFakers.CreateConnection(folderID: line.ID);
+
+        //Act
+        var withConnection = await CreateRepository(Document([factory, line, empty], [connection])).Update(FolderFakers.Create(iD: line.ID, name: line.Name, createdAt: line.CreatedAt), null, CancellationToken.None);
+        var askedWithConnection = _passwordAsked;
+        var withoutConnection = await CreateRepository(Document([factory, line, empty], [connection])).Update(FolderFakers.Create(iD: empty.ID, name: empty.Name, createdAt: empty.CreatedAt), null, CancellationToken.None);
+        var askedWithoutConnection = _passwordAsked;
+
+        //Assert
+        Assert.True(withConnection.IsSuccess);
+        Assert.True(askedWithConnection);
+        Assert.True(withoutConnection.IsSuccess);
+        Assert.False(askedWithoutConnection);
+    }
+
+    [Trait("FolderRepository", "Update")]
+    [Theory(DisplayName = "Erro a senha do usuário que faltou ou não conferiu, no campo dela")]
+    [InlineData(EPasswordCheck.Missing, "USER_PASSWORD_REQUIRED")]
+    [InlineData(EPasswordCheck.Wrong, "INVALID_PASSWORD")]
+    public async Task Update_ShouldBeError_WhenThePasswordIsMissingOrWrong(EPasswordCheck check, string code)
+    {
+        //Arrange
+        var target = VaultFakers.CreateFolder() with { ReadOnly = true };
+        var folder = FolderFakers.Create(iD: target.ID, name: target.Name, createdAt: target.CreatedAt);
+        var repository = CreateRepository(Document([target]), check: check);
+
+        //Act
+        var result = await repository.Update(folder, null, CancellationToken.None);
+
+        //Assert
+        Assert.Equal((code, HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+        Assert.Equal(new[] { code }, ((Dictionary<string, string[]>)result.Error.Extensions["errorCodes"]!)["UserPassword"]);
+    }
+
+    /// <summary>RN-PROT-004: a pasta nova devolve as proteções que valem, com as das pastas acima; criar marcada não pede senha.</summary>
+    [Trait("FolderRepository", "Insert")]
+    [Fact(DisplayName = "OK a pasta nova devolve as proteções que valem, com as da pasta acima")]
+    public async Task Insert_ShouldReturnTheEffectiveProtections()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder() with { ConfirmCommands = "all" };
+        var folder = FolderFakers.Create(parentID: factory.ID, readOnly: true);
+        var repository = CreateRepository(Document([factory]));
+
+        //Act
+        var result = await repository.Insert(folder, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new EffectiveProtections(true, null, "all", factory.ID), result.Value);
+        Assert.True(_saved!.Folders[^1].ReadOnly);
+        VerifySavedOnce(CancellationToken.None);
+    }
+
+    [Trait("FolderRepository", "GetByID")]
+    [Fact(DisplayName = "OK devolve a pasta com as proteções gravadas e as que valem")]
+    public async Task GetByID_ShouldRestoreTheProtections()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder() with { ReadOnly = true };
+        var record = VaultFakers.CreateFolder(parentID: factory.ID) with { ConfirmCommands = "irreversible" };
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(Document([factory, record])));
+        var repository = new FolderRepository(_vault.Object);
+
+        //Act
+        var result = await repository.GetByID(record.ID, CancellationToken.None);
+
+        //Assert
+        Assert.Equal(("irreversible", false), (result.Value.Folder.ConfirmCommands, result.Value.Folder.ReadOnly));
+        Assert.Equal(new EffectiveProtections(true, factory.ID, "irreversible", null), result.Value.Protections);
     }
 }

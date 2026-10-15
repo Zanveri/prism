@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -23,8 +24,18 @@ public sealed record ApplyEditsCommand : IRequest<Result<EditsAppliedDto, ApiErr
     public override string ToString() => nameof(ApplyEditsCommand);
 }
 
-internal sealed class ApplyEditsHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<ApplyEditsCommand, Result<EditsAppliedDto, ApiErrorDto>>
+internal sealed class ApplyEditsHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService) : IRequestHandler<ApplyEditsCommand, Result<EditsAppliedDto, ApiErrorDto>>
 {
     public async Task<Result<EditsAppliedDto, ApiErrorDto>> Handle(ApplyEditsCommand request, CancellationToken cancellationToken)
-        => (await databaseSessionService.ApplyEditsAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(applied => new EditsAppliedDto(applied)).MapError(DatabaseSessionErrors.From);
+    {
+        // RN-PROT-002: a edição de registros não existe numa conexão somente leitura (a dela ou a de uma pasta acima, no cofre agora).
+        var readOnly = await connectionQueries.IsReadOnly(databaseSessionService, request.SessionID, cancellationToken);
+        if (readOnly.IsFailure)
+            return Result.Failure<EditsAppliedDto, ApiErrorDto>(readOnly.Error);
+
+        if (readOnly.Value)
+            return Result.Failure<EditsAppliedDto, ApiErrorDto>(SessionProtections.EditsRefusal());
+
+        return (await databaseSessionService.ApplyEditsAsync(request.SessionID, request.ResultID, request.Changes.ToChanges(), cancellationToken)).Map(applied => new EditsAppliedDto(applied)).MapError(DatabaseSessionErrors.From);
+    }
 }

@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Common.Protections;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Vault.Models;
 using Prism.Infrastructure.Vault.Services;
@@ -35,5 +36,39 @@ internal static class VaultSaves
             return UnitResult.Failure(VaultErrors.From(saved.Error));
 
         return UnitResult.Success<ApiErrorDto>();
+    }
+
+    /// <summary>
+    /// RN-PROT-003: o mesmo, com a senha do usuário quando a alteração a pede (`ProtectionRules.NeedsPassword`, contra o documento mais recente). A
+    /// conferência e a gravação são uma operação só do cofre (`IVaultService.SaveWithPasswordAsync`). A recusa da regra vem antes de tudo (a função não
+    /// mudou nada, e nada pede senha); depois, o cofre fechado (também pelo quinto erro seguido) e o disco; depois, a senha que faltou ou não conferiu.
+    /// </summary>
+    public static async Task<UnitResult<ApiErrorDto>> SaveOrRefuseWithPassword(this IVaultService vaultService, Func<VaultDocument, Result<VaultDocument, ApiErrorDto>> change, string? userPassword, CancellationToken cancellationToken)
+    {
+        ApiErrorDto? refusal = null;
+
+        var saved = await vaultService.SaveWithPasswordAsync(document =>
+        {
+            var changed = change(document);
+            if (changed.IsSuccess)
+                return changed.Value;
+
+            refusal = changed.Error;
+
+            return document;
+        }, ProtectionRules.NeedsPassword, userPassword, cancellationToken);
+
+        if (refusal is not null)
+            return UnitResult.Failure(refusal);
+
+        if (saved.IsFailure)
+            return UnitResult.Failure(VaultErrors.From(saved.Error));
+
+        return saved.Value switch
+        {
+            EPasswordCheck.Missing => UnitResult.Failure(ProtectionErrors.PasswordRequired()),
+            EPasswordCheck.Wrong => UnitResult.Failure(ProtectionErrors.InvalidPassword()),
+            _ => UnitResult.Success<ApiErrorDto>()
+        };
     }
 }

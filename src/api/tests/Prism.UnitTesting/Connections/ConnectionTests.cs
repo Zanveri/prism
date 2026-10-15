@@ -17,7 +17,7 @@ public sealed class ConnectionTests
         var folderID = Guid.CreateVersion7();
 
         //Act
-        var connection = Connection.Create(folderID, "  Produção   Sul ", EDatabaseEngine.Db2, "  db2.local ", 50000, " PRODUCAO ", " operador ", " senha com espaço ", "  Produção  ", " #A1b2C3 ", CreatedAt);
+        var connection = Connection.Create(folderID, "  Produção   Sul ", EDatabaseEngine.Db2, "  db2.local ", 50000, " PRODUCAO ", " operador ", " senha com espaço ", "  Produção  ", " #A1b2C3 ", new ConnectionSafeguards(), CreatedAt);
 
         //Assert
         Assert.NotEqual(Guid.Empty, connection.ID);
@@ -40,7 +40,7 @@ public sealed class ConnectionTests
     public void Create_ShouldStoreTheNameComposed()
     {
         //Act
-        var connection = Connection.Create(null, "Fábrica", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, CreatedAt);
+        var connection = Connection.Create(null, "Fábrica", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, new ConnectionSafeguards(), CreatedAt);
 
         //Assert
         Assert.Equal("Fábrica", connection.Name);
@@ -51,7 +51,7 @@ public sealed class ConnectionTests
     public void Create_ShouldTurnBlankEnvironmentIntoNull()
     {
         //Act
-        var connection = Connection.Create(null, "Produção", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", "   ", "  ", CreatedAt);
+        var connection = Connection.Create(null, "Produção", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", "   ", "  ", new ConnectionSafeguards(), CreatedAt);
 
         //Assert
         Assert.Null(connection.FolderID);
@@ -67,7 +67,7 @@ public sealed class ConnectionTests
         var id = Guid.CreateVersion7();
 
         //Act
-        var connection = Connection.Restore(id, null, "  Nome  ", EDatabaseEngine.Informix, " host ", 9089, "d", "u", "p", "Prod", "#000000", CreatedAt, UpdatedAt);
+        var connection = Connection.Restore(id, null, "  Nome  ", EDatabaseEngine.Informix, " host ", 9089, "d", "u", "p", "Prod", "#000000", new ConnectionSafeguards(), CreatedAt, UpdatedAt);
 
         //Assert
         Assert.Equal(id, connection.ID);
@@ -87,7 +87,7 @@ public sealed class ConnectionTests
         var folderID = Guid.CreateVersion7();
 
         //Act
-        connection.Update(folderID, "  Novo   Nome ", EDatabaseEngine.Informix, " novo-host ", 9089, " novo_db ", " novo_usuario ", "nova-senha", " Homologação ", "#112233", UpdatedAt);
+        connection.Update(folderID, "  Novo   Nome ", EDatabaseEngine.Informix, " novo-host ", 9089, " novo_db ", " novo_usuario ", "nova-senha", " Homologação ", "#112233", new ConnectionSafeguards(), UpdatedAt);
 
         //Assert
         Assert.Equal(id, connection.ID);
@@ -114,7 +114,7 @@ public sealed class ConnectionTests
         var connection = ConnectionFakers.Create(password: "senha-gravada");
 
         //Act
-        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, UpdatedAt);
+        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, new ConnectionSafeguards(), UpdatedAt);
 
         //Assert
         Assert.Equal("senha-gravada", connection.Password);
@@ -128,7 +128,7 @@ public sealed class ConnectionTests
         var connection = ConnectionFakers.Create(environmentName: "Produção", environmentColor: "#FF0000");
 
         //Act
-        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, UpdatedAt);
+        connection.Update(null, "Outro", EDatabaseEngine.Db2, "h", 1, "d", "u", null, null, null, new ConnectionSafeguards(), UpdatedAt);
 
         //Assert
         Assert.Null(connection.EnvironmentName);
@@ -142,7 +142,7 @@ public sealed class ConnectionTests
     {
         //Arrange
         var folderID = Guid.CreateVersion7();
-        var source = Connection.Restore(Guid.CreateVersion7(), folderID, "MES", EDatabaseEngine.Informix, "ifx.local", 9089, "mes", "informix", "segredo", "Produção", "#FF0000", CreatedAt, UpdatedAt);
+        var source = Connection.Restore(Guid.CreateVersion7(), folderID, "MES", EDatabaseEngine.Informix, "ifx.local", 9089, "mes", "informix", "segredo", "Produção", "#FF0000", new ConnectionSafeguards(), CreatedAt, UpdatedAt);
         var now = new DateTime(2026, 10, 13, 9, 0, 0, DateTimeKind.Utc);
 
         //Act
@@ -165,4 +165,57 @@ public sealed class ConnectionTests
         Assert.Equal(now, copy.UpdatedAt);
         Assert.Equal("MES", source.Name);
     }
+
+    /// <summary>RN-PROT-001 e RN-VERIF-001: "Não" e a consulta em branco se guardam nulos, e a consulta é aparada.</summary>
+    [Trait("Connection", "Create")]
+    [Fact(DisplayName = "OK as proteções e a verificação são normalizadas na criação")]
+    public void Create_ShouldNormalizeTheSafeguards()
+    {
+        //Act
+        var none = Connection.Create(null, "a", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, ConnectionSafeguards.From(" none ", false, null, null, "   "), CreatedAt);
+        var set = Connection.Create(null, "b", EDatabaseEngine.PostgreSql, "h", 5432, "d", "u", "p", null, null, ConnectionSafeguards.From(" all ", true, false, 120, "  SELECT 1 \n"), CreatedAt);
+
+        //Assert
+        Assert.Equal(new ConnectionSafeguards(), none.Safeguards);
+        Assert.Equal((null, false, true, 30, null), (none.ConfirmCommands, none.ReadOnly, none.VerificationEnabled, none.VerificationInterval, none.VerificationQuery));
+        Assert.Equal(new ConnectionSafeguards("all", true, false, 120, "SELECT 1"), set.Safeguards);
+    }
+
+    /// <summary>O `PATCH` grava as proteções e a verificação por inteiro: o ausente volta ao padrão.</summary>
+    [Trait("Connection", "Update")]
+    [Fact(DisplayName = "OK alterar grava as proteções e a verificação, e o ausente volta ao padrão")]
+    public void Update_ShouldWriteTheSafeguards()
+    {
+        //Arrange
+        var connection = ConnectionFakers.Create(safeguards: new ConnectionSafeguards("all", true, false, 60, "SELECT 1"));
+
+        //Act
+        connection.Update(null, "a", EDatabaseEngine.PostgreSql, "h", 1, "d", "u", null, null, null, ConnectionSafeguards.From(null, false, null, null, null), UpdatedAt);
+
+        //Assert
+        Assert.Equal(new ConnectionSafeguards(), connection.Safeguards);
+        Assert.Equal(UpdatedAt, connection.UpdatedAt);
+    }
+
+    /// <summary>RN-CONN-016 e RN-PROT-003: a cópia nasce com as proteções e a verificação da origem.</summary>
+    [Trait("Connection", "Duplicate")]
+    [Fact(DisplayName = "OK a cópia leva as proteções e a verificação da origem")]
+    public void Duplicate_ShouldCopyTheSafeguards()
+    {
+        //Arrange
+        var safeguards = new ConnectionSafeguards("irreversible", true, false, 90, "SELECT 1 FROM systables WHERE tabid = 1");
+        var source = ConnectionFakers.Create(safeguards: safeguards);
+
+        //Act
+        var copy = source.Duplicate("cópia", UpdatedAt);
+
+        //Assert
+        Assert.Equal(safeguards, copy.Safeguards);
+    }
+
+    /// <summary>RN-LOG-001: a consulta de verificação não vai para o log por um `ToString()`.</summary>
+    [Trait("Connection", "ConnectionSafeguards")]
+    [Fact(DisplayName = "OK o ToString das proteções não imprime a consulta de verificação")]
+    public void ConnectionSafeguards_ToString_ShouldNotPrintTheQuery()
+        => Assert.Equal("ConnectionSafeguards", new ConnectionSafeguards(VerificationQuery: "SELECT marca_secreta").ToString());
 }

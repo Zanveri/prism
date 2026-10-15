@@ -15,7 +15,7 @@ public sealed class FolderTests
         var parentID = Guid.CreateVersion7();
 
         //Act
-        var folder = Folder.Create("  Produção   Sul ", parentID, null, null, null, CreatedAt);
+        var folder = Folder.Create("  Produção   Sul ", parentID, null, null, null, null, false, CreatedAt);
 
         //Assert
         Assert.Equal("Produção Sul", folder.Name);
@@ -30,8 +30,8 @@ public sealed class FolderTests
     public void Create_ShouldGenerateAVersion7ID()
     {
         //Act
-        var first = Folder.Create("Produção", null, null, null, null, CreatedAt);
-        var second = Folder.Create("Produção", null, null, null, null, CreatedAt);
+        var first = Folder.Create("Produção", null, null, null, null, null, false, CreatedAt);
+        var second = Folder.Create("Produção", null, null, null, null, null, false, CreatedAt);
 
         //Assert
         Assert.Equal(7, first.ID.Version);
@@ -43,7 +43,7 @@ public sealed class FolderTests
     public void Create_ShouldBeRoot_WhenParentIsNull()
     {
         //Act
-        var folder = Folder.Create("Produção", null, null, null, null, CreatedAt);
+        var folder = Folder.Create("Produção", null, null, null, null, null, false, CreatedAt);
 
         //Assert
         Assert.Null(folder.ParentID);
@@ -55,7 +55,7 @@ public sealed class FolderTests
     {
         //Arrange
         var parentID = Guid.CreateVersion7();
-        var folder = Folder.Create("Antiga", parentID, null, null, null, CreatedAt);
+        var folder = Folder.Create("Antiga", parentID, null, null, null, null, false, CreatedAt);
 
         //Act
         folder.Rename("  Nova   pasta ", LaterAt);
@@ -72,7 +72,7 @@ public sealed class FolderTests
     public void MoveTo_ShouldBeOK()
     {
         //Arrange
-        var folder = Folder.Create("Linha 1", null, null, null, null, CreatedAt);
+        var folder = Folder.Create("Linha 1", null, null, null, null, null, false, CreatedAt);
         var newParentID = Guid.CreateVersion7();
 
         //Act
@@ -90,7 +90,7 @@ public sealed class FolderTests
     public void MoveTo_ShouldMoveToRoot_WhenParentIsNull()
     {
         //Arrange
-        var folder = Folder.Create("Linha 1", Guid.CreateVersion7(), null, null, null, CreatedAt);
+        var folder = Folder.Create("Linha 1", Guid.CreateVersion7(), null, null, null, null, false, CreatedAt);
 
         //Act
         folder.MoveTo(null, LaterAt);
@@ -109,7 +109,7 @@ public sealed class FolderTests
         var parentID = Guid.CreateVersion7();
 
         //Act
-        var folder = Folder.Restore(iD, parentID, "Produção", "Produção", "#FF8A7A", "#7DB2FF", CreatedAt, LaterAt);
+        var folder = Folder.Restore(iD, parentID, "Produção", "Produção", "#FF8A7A", "#7DB2FF", null, false, CreatedAt, LaterAt);
 
         //Assert
         Assert.Equal(iD, folder.ID);
@@ -128,7 +128,7 @@ public sealed class FolderTests
     public void Create_ShouldNormalizeTheEnvironment()
     {
         //Act
-        var folder = Folder.Create("Produção", null, "  Produção   Sul ", " #FF8A7A ", null, CreatedAt);
+        var folder = Folder.Create("Produção", null, "  Produção   Sul ", " #FF8A7A ", null, null, false, CreatedAt);
 
         //Assert
         Assert.Equal("Produção Sul", folder.EnvironmentName);
@@ -140,8 +140,8 @@ public sealed class FolderTests
     public void Create_ShouldBeWithoutEnvironment_WhenTheEnvironmentIsBlank()
     {
         //Act
-        var blank = Folder.Create("Produção", null, "   ", "  ", null, CreatedAt);
-        var none = Folder.Create("Produção", null, null, null, null, CreatedAt);
+        var blank = Folder.Create("Produção", null, "   ", "  ", null, null, false, CreatedAt);
+        var none = Folder.Create("Produção", null, null, null, null, null, false, CreatedAt);
 
         //Assert
         Assert.Null(blank.EnvironmentName);
@@ -156,7 +156,7 @@ public sealed class FolderTests
     {
         //Arrange
         var parentID = Guid.CreateVersion7();
-        var folder = Folder.Create("Linha 1", parentID, "QAS", "#F2B644", null, CreatedAt);
+        var folder = Folder.Create("Linha 1", parentID, "QAS", "#F2B644", null, null, false, CreatedAt);
 
         //Act
         folder.ChangeEnvironment("  Produção ", " #FF8A7A", LaterAt);
@@ -175,7 +175,7 @@ public sealed class FolderTests
     public void ChangeEnvironment_ShouldRemoveTheEnvironment_WhenBlank()
     {
         //Arrange
-        var folder = Folder.Create("Linha 1", null, "QAS", "#F2B644", null, CreatedAt);
+        var folder = Folder.Create("Linha 1", null, "QAS", "#F2B644", null, null, false, CreatedAt);
 
         //Act
         folder.ChangeEnvironment(" ", null, LaterAt);
@@ -191,8 +191,8 @@ public sealed class FolderTests
     public void Create_ShouldNormalizeTheColor()
     {
         //Act
-        var colored = Folder.Create("Produção", null, null, null, " #7DB2FF ", CreatedAt);
-        var blank = Folder.Create("Produção", null, "Produção", "#FF8A7A", "  ", CreatedAt);
+        var colored = Folder.Create("Produção", null, null, null, " #7DB2FF ", null, false, CreatedAt);
+        var blank = Folder.Create("Produção", null, "Produção", "#FF8A7A", "  ", null, false, CreatedAt);
 
         //Assert
         Assert.Equal("#7DB2FF", colored.Color);
@@ -207,7 +207,7 @@ public sealed class FolderTests
     {
         //Arrange
         var parentID = Guid.CreateVersion7();
-        var folder = Folder.Create("Linha 1", parentID, "QAS", "#F2B644", null, CreatedAt);
+        var folder = Folder.Create("Linha 1", parentID, "QAS", "#F2B644", null, null, false, CreatedAt);
 
         //Act
         folder.ChangeColor(" #B79CFF", LaterAt);
@@ -227,8 +227,8 @@ public sealed class FolderTests
     public void ChangeColor_ShouldRemoveTheColor_WhenBlank()
     {
         //Arrange
-        var blank = Folder.Create("Linha 1", null, null, null, "#7DB2FF", CreatedAt);
-        var none = Folder.Create("Linha 2", null, null, null, "#7DB2FF", CreatedAt);
+        var blank = Folder.Create("Linha 1", null, null, null, "#7DB2FF", null, false, CreatedAt);
+        var none = Folder.Create("Linha 2", null, null, null, "#7DB2FF", null, false, CreatedAt);
 
         //Act
         blank.ChangeColor(" ", LaterAt);
@@ -237,5 +237,24 @@ public sealed class FolderTests
         //Assert
         Assert.Null(blank.Color);
         Assert.Null(none.Color);
+    }
+
+    /// <summary>RN-PROT-001 e 002: a confirmação "Não" se guarda nula, e mudar as proteções carimba a data.</summary>
+    [Trait("Folder", "ChangeProtections")]
+    [Fact(DisplayName = "OK muda as proteções, com o none e o branco nulos, e carimba UpdatedAt")]
+    public void ChangeProtections_ShouldNormalizeAndStamp()
+    {
+        //Arrange
+        var created = Folder.Create("Fábrica", null, null, null, null, " irreversible ", true, CreatedAt);
+        var later = CreatedAt.AddDays(1);
+
+        //Act
+        var createdProtections = (created.ConfirmCommands, created.ReadOnly);
+        created.ChangeProtections("none", false, later);
+
+        //Assert
+        Assert.Equal(("irreversible", true), createdProtections);
+        Assert.Equal(((string?)null, false), (created.ConfirmCommands, created.ReadOnly));
+        Assert.Equal(later, created.UpdatedAt);
     }
 }

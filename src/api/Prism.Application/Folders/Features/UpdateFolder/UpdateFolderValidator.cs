@@ -1,5 +1,6 @@
 using FluentValidation;
 using Prism.Application.Common.Environments;
+using Prism.Application.Common.Protections;
 using Prism.Core.Extensions;
 
 namespace Prism.Application.Folders.Features.UpdateFolder;
@@ -17,5 +18,9 @@ public sealed class UpdateFolderValidator : AbstractValidator<UpdateFolderComman
 
         // RN-PASTA-007: a cor da pasta é `#RRGGBB`, como a do ambiente, e a recusa vai no mesmo código, no campo dela.
         RuleFor(request => request.Color).MustBeAnEnvironmentColor().WithErrorCode("FOLDER_NAME_INVALID");
+
+        // RN-PROT-001: a confirmação é uma da lista, com a regra da conexão. A senha do usuário (RN-PROT-003) não é regra daqui: quem diz se ela é
+        // pedida, e a confere, é a gravação.
+        RuleFor(request => request.ConfirmCommands).MustBeAConfirmation().WithErrorCode("FOLDER_NAME_INVALID");
     }
 }
