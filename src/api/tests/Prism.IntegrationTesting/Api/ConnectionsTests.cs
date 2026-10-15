@@ -990,6 +990,9 @@ public sealed class ConnectionsTests
 
             return Task.FromResult(Find(read, id));
         }
+
+        public Task<Result<bool?, EVaultError>> IsReadOnly(Guid id, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
     }
 
     /// <summary>
@@ -1010,6 +1013,9 @@ public sealed class ConnectionsTests
 
             return Find(read, id);
         }
+
+        public Task<Result<bool?, EVaultError>> IsReadOnly(Guid id, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
     }
 
     private static Result<VaultConnectionRecord?, EVaultError> Find(Result<VaultDocument, EVaultError> read, Guid id)

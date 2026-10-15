@@ -562,6 +562,12 @@ public sealed class DatabaseSessionServiceTests
         /// <summary>A recusa do banco que executar responde, quando o teste a dá.</summary>
         public DatabaseFailure? Failure { get; set; }
 
+        /// <summary>RN-PROT-002: os comandos que chegaram pelo caminho da conexão somente leitura, na ordem.</summary>
+        public List<string> ExecutedReadOnly { get; } = [];
+
+        /// <summary>RN-SQL-007: há um cursor aberto na conexão, o que o teste disser.</summary>
+        public bool HasOpenCursor { get; set; }
+
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
         {
             Executed.Add(sql);
@@ -570,6 +576,14 @@ public sealed class DatabaseSessionServiceTests
 
             return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
         }
+
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
+        {
+            ExecutedReadOnly.Add(sql);
+
+            return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+        }
+
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
         {

@@ -15,6 +15,13 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// <summary>`false` quando a conexão caiu (rede, banco reiniciado, sessão derrubada por um administrador): depois de uma falha, é o que diz que ela não serve mais.</summary>
     bool IsOpen { get; }
 
+    /// <summary>
+    /// RN-SQL-007: há um cursor aberto entre páginas, à espera do "carregar mais", que qualquer outro comando nesta conexão fecharia antes de ser
+    /// enviado. A recusa antes de ir ao banco (controle de transação, mais de um comando) não o toca. Lido por quem tem a vez da sessão: é por
+    /// aqui que o registro de sessões sabe, depois de uma operação, se o cursor continua aberto.
+    /// </summary>
+    bool HasOpenCursor { get; }
+
     /// <summary>RN-CONN-013: a consulta de verificação do banco. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken);
 
@@ -27,6 +34,14 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// </summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" deste cursor. Quem valida a faixa é a rota.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002 e 006: o comando de uma conexão somente leitura, que quem chama já conferiu pelo texto (`ReadOnlySql`). Roda sempre como leitura
+    /// paginada, e no PostgreSQL na transação só de leitura, com a sessão posta antes no modo só de leitura do banco: a recusa do banco por gravar
+    /// (uma função que grava, chamada pelo `SELECT`) é a resposta, também no "carregar mais", e o comando nunca roda de novo fora dela. O
+    /// <see cref="ExecuteAsync"/> seguinte, de quando a conexão deixa de ser somente leitura, tira a sessão do modo antes de rodar.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken);
 
     /// <summary>RN-SQL-005: as linhas seguintes do mesmo cursor, sem executar de novo, no tamanho com que ele foi aberto. Sem cursor aberto, `NoOpenCursor`.</summary>
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken);

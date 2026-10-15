@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using FluentValidation.TestHelper;
 using Moq;
+using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Features.ApplyEdits;
 using Prism.Application.DatabaseSessions.Features.GetEditTarget;
 using Prism.Application.DatabaseSessions.Features.PreviewEdits;
@@ -22,6 +23,7 @@ public sealed class EditHandlersTests
     private static readonly ApplyEditsValidator ApplyEditsValidator = new();
     private static readonly PreviewEditsValidator PreviewEditsValidator = new();
 
+    private readonly Mock<IConnectionQueries> _connectionQueries = new();
     private readonly Mock<IDatabaseSessionService> _databaseSessionService = new();
 
     [Trait("GetEditTargetHandler", "GetEditTargetCommand")]
@@ -35,7 +37,7 @@ public sealed class EditHandlersTests
         _databaseSessionService.Setup(s => s.GetEditTargetAsync(sessionID, resultID, treeID, cancellationToken)).ReturnsAsync(Result.Success<EditTarget, DatabaseFailure>(target));
 
         //Act
-        var result = await new GetEditTargetHandler(_databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID, CatalogSessionID = treeID }, cancellationToken);
+        var result = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID, CatalogSessionID = treeID }, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
@@ -57,7 +59,7 @@ public sealed class EditHandlersTests
         _databaseSessionService.Setup(s => s.GetEditTargetAsync(sessionID, resultID, null, cancellationToken)).ReturnsAsync(Result.Failure<EditTarget, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ResultNotEditable, "Somente leitura: DISTINCT.", Reason: "DISTINCT")));
 
         //Act
-        var result = await new GetEditTargetHandler(_databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID }, cancellationToken);
+        var result = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID }, cancellationToken);
 
         //Assert
         Assert.Equal(("RESULT_NOT_EDITABLE", HttpStatusCode.UnprocessableEntity, "DISTINCT"), (result.Error.Type, result.Error.StatusCode, result.Error.Extensions["reason"]));
@@ -85,7 +87,7 @@ public sealed class EditHandlersTests
         };
 
         //Act
-        var result = await new ApplyEditsHandler(_databaseSessionService.Object).Handle(command, cancellationToken);
+        var result = await new ApplyEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(command, cancellationToken);
 
         //Assert
         Assert.Equal(3, result.Value.Applied);
@@ -108,7 +110,7 @@ public sealed class EditHandlersTests
         _databaseSessionService.Setup(s => s.ApplyEditsAsync(sessionID, resultID, It.IsAny<IReadOnlyList<EditChange>>(), cancellationToken)).ReturnsAsync(Result.Failure<int, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditRowMismatch, "A linha não existe mais.", Change: 1, RowsAffected: 0, Applied: 1)));
 
         //Act
-        var result = await new ApplyEditsHandler(_databaseSessionService.Object).Handle(new ApplyEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = [new EditChangeDto { Kind = "delete", Key = ["1"] }] }, cancellationToken);
+        var result = await new ApplyEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new ApplyEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = [new EditChangeDto { Kind = "delete", Key = ["1"] }] }, cancellationToken);
 
         //Assert
         Assert.Equal(("EDIT_ROW_MISMATCH", HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
@@ -126,7 +128,7 @@ public sealed class EditHandlersTests
         _databaseSessionService.Setup(s => s.PreviewEditsAsync(sessionID, resultID, It.IsAny<IReadOnlyList<EditChange>>(), cancellationToken)).ReturnsAsync(Result.Success<EditPreview, DatabaseFailure>(preview));
 
         //Act
-        var result = await new PreviewEditsHandler(_databaseSessionService.Object).Handle(new PreviewEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = [new EditChangeDto { Kind = "delete", Key = ["1"] }] }, cancellationToken);
+        var result = await new PreviewEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new PreviewEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = [new EditChangeDto { Kind = "delete", Key = ["1"] }] }, cancellationToken);
 
         //Assert
         Assert.Same(preview, result.Value);

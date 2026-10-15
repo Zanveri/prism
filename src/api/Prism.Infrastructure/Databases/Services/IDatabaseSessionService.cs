@@ -20,6 +20,12 @@ public interface IDatabaseSessionService
     Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-PROT-002 e 006: a conexão de que a sessão é, para quem decide as proteções dela a cada comando (as do cofre, que a Application lê). Nulo
+    /// quando a sessão não existe: aí a operação pedida responde `SessionNotFound` por conta própria.
+    /// </summary>
+    Guid? ConnectionOf(Guid sessionID);
+
+    /// <summary>
     /// Fecha a sessão, interrompendo o comando e a contagem que estiverem rodando nela. Espera o comando parar por no máximo dez
     /// segundos; se o banco não responde, abandona a conexão e volta.
     /// </summary>
@@ -66,6 +72,15 @@ public interface IDatabaseSessionService
     /// <summary>Executar e carregar mais não esperam: com outro comando rodando na sessão, `SessionBusy` (RN-SESSAO-002).</summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" do cursor que o comando abrir.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002: o mesmo, numa conexão que pode ser somente leitura, que é como a Application executa todo comando da pessoa (as proteções vêm
+    /// do cofre a cada comando, RN-PROT-006). Com `readOnly`, o comando montado (com o filtro) que não é uma leitura (`ReadOnlySql`) é recusado com
+    /// `ConnectionReadOnly`, antes de ir ao banco e sem tirar o resultado anterior; o que é leitura roda pelo `ExecuteReadOnlyAsync` da conexão, e a
+    /// página diz que o resultado inteiro é só leitura (RN-EDIT-002). Sem `readOnly`, é o comando de sempre, e a sessão que estava no modo só de
+    /// leitura do banco sai dele.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken);
 
     /// <summary>
     /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é

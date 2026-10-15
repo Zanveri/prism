@@ -82,6 +82,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return await connection.PingAsync(cancellationToken);
     }
 
+    public Guid? ConnectionOf(Guid sessionID)
+        => _sessions.TryGetValue(sessionID, out var session) ? session.Info.ConnectionID : null;
+
     public async Task<UnitResult<DatabaseFailure>> CloseAsync(Guid sessionID)
     {
         if (!_sessions.TryRemove(sessionID, out var session))
@@ -138,6 +141,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => ExecuteAsync(sessionID, sql, null, pageSize, cancellationToken);
 
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, CancellationToken cancellationToken)
+        => ExecuteAsync(sessionID, sql, filter, pageSize, readOnly: false, cancellationToken);
+
+    public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
             var dialect = DialectOf(session);
@@ -154,7 +160,12 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             }
 
             var sent = filtered?.Sql ?? sql;
-            var outcome = await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
+
+            // RN-PROT-002: na conexão somente leitura, o comando montado que não é uma leitura nem vai ao banco, e o resultado anterior fica.
+            if (readOnly && ReadOnlySql.Refusal(sent, session.Info.Engine) is { } reason)
+                return new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, ReadOnlySql.Message(reason));
+
+            var outcome = readOnly ? await session.Connection.ExecuteReadOnlyAsync(sent, pageSize, cancellationToken) : await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
 
             // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
             if (outcome.IsFailure && filtered is not null)
@@ -168,7 +179,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
                 // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
                 // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
-                var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
+                // RN-PROT-002: na conexão somente leitura o resultado inteiro é só leitura, com o motivo que a grade mostra.
+                var source = readOnly ? ResultSource.ReadOnly(ReadOnlySql.ResultReason)
+                    : page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
                     : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
                     : EditableSql.Read(sent, dialect);
                 var result = new ResultState(source, page.Columns, filtered?.Applied);
@@ -442,8 +455,8 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return limited.IsFailure ? limited.Error : await connection.DescribeEditTablesAsync(tables, describing.Token);
     }
 
-    /// <summary>RN-SQL-007: só há cursor aberto quando a página diz que há mais linhas; qualquer outro desfecho de um comando o fechou.</summary>
-    private static bool HasOpenCursor(object? value)
+    /// <summary>RN-SQL-007: a operação leu uma página e deixou o cursor aberto, porque há mais linhas. É a única leitura que o temporizador conta.</summary>
+    private static bool LeftTheCursorOpen(object? value)
         => value switch
         {
             QueryPage page => page.HasMore,
@@ -574,17 +587,26 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     {
         using var turnEnd = new TurnEnd(session.Turn);
 
-        // O aviso pode chegar atrasado, depois de uma leitura que acabou de rearmar o temporizador, ou adiantado uns milissegundos em
-        // relação ao relógio da última leitura: quem decide é a hora da última leitura. Antes da hora, com o cursor ainda aberto, o
-        // temporizador volta a contar o que falta; sem isso, o aviso adiantado deixava o cursor aberto até a sessão fechar.
-        if (session.Closed)
+        // O aviso pode chegar atrasado: depois de uma operação que fechou o cursor (sem cursor vigiado, não há o que fechar) ou de uma
+        // página que acabou de rearmar o temporizador (quem decide é a hora dessa leitura).
+        if (session.Closed || !session.CursorOpen)
             return;
 
+        await CloseCursorIfIdleAsync(session);
+        await RemoveIfClosedAsync(session);
+    }
+
+    /// <summary>
+    /// RN-SQL-007, com a vez da sessão tomada e o cursor vigiado aberto: quem decide é a hora da última leitura, e não a do aviso nem a
+    /// da operação que acabou. O aviso pode chegar adiantado uns milissegundos em relação a esse relógio: antes da hora, o temporizador
+    /// volta a contar o que falta (sem isso, o aviso adiantado deixava o cursor aberto até a sessão fechar). Passada a hora, o cursor fecha.
+    /// </summary>
+    private async Task CloseCursorIfIdleAsync(Session session)
+    {
         var idle = _timeProvider.GetElapsedTime(session.LastReadAt);
         if (idle < QueryPaging.CursorIdleTimeout)
         {
-            if (session.CursorOpen)
-                session.IdleTimer.Change(QueryPaging.CursorIdleTimeout - idle, Timeout.InfiniteTimeSpan);
+            session.IdleTimer.Change(QueryPaging.CursorIdleTimeout - idle, Timeout.InfiniteTimeSpan);
 
             return;
         }
@@ -592,7 +614,37 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         session.CursorOpen = false;
         await session.Connection.CloseCursorAsync();
         _logger.Information("Sessão {SessionID}: cursor fechado por tempo sem leitura.", session.Info.ID);
-        await RemoveIfClosedAsync(session);
+    }
+
+    /// <summary>
+    /// RN-SQL-007, com a vez da sessão tomada, no fim de cada operação. Só a página que deixa o cursor aberto é leitura: o temporizador
+    /// recomeça a contar dela. Se a operação não leu e o cursor vigiado continua aberto na conexão, ela não chegou a ele (a recusa
+    /// antes de ir ao banco: a da conexão somente leitura, RN-PROT-002, o filtro, o controle de transação, mais de um comando; e
+    /// qualquer outra que venha a existir), e o prazo continua o da última leitura. Ele é conferido aqui, e não só deixado como estava:
+    /// o aviso que chegou enquanto esta operação tinha a vez desistiu, contando com ela (<see cref="OnCursorIdle"/>), e, se o prazo já
+    /// passou, o cursor fecha agora. O resto fechou o cursor (todo comando que vai ao banco fecha o anterior antes de ser enviado, e a
+    /// falha, o cancelamento e a queda da conexão também), e o temporizador para.
+    /// </summary>
+    private async Task WatchCursorAsync<T>(Session session, Result<T, DatabaseFailure> result)
+    {
+        if (result.IsSuccess && LeftTheCursorOpen(result.Value))
+        {
+            session.LastReadAt = _timeProvider.GetTimestamp();
+            session.CursorOpen = true;
+            session.IdleTimer.Change(QueryPaging.CursorIdleTimeout, Timeout.InfiniteTimeSpan);
+
+            return;
+        }
+
+        if (session.CursorOpen && session.Connection.HasOpenCursor)
+        {
+            await CloseCursorIfIdleAsync(session);
+
+            return;
+        }
+
+        session.CursorOpen = false;
+        session.IdleTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>
@@ -639,12 +691,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         var started = _timeProvider.GetTimestamp();
         var result = await work(session);
         Log(session, operation, started, result);
-
-        // RN-SQL-007: o temporizador recomeça a cada página que deixa o cursor aberto.
-        var cursorOpen = result.IsSuccess && HasOpenCursor(result.Value);
-        session.LastReadAt = _timeProvider.GetTimestamp();
-        session.CursorOpen = cursorOpen;
-        session.IdleTimer.Change(cursorOpen ? QueryPaging.CursorIdleTimeout : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        await WatchCursorAsync(session, result);
 
         // A tela recebe a resposta desta chamada (o erro do banco, quando a conexão caiu no meio dela); a seguinte já não encontra a sessão.
         await RemoveIfClosedAsync(session);
@@ -697,10 +744,13 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         public ITimer IdleTimer { get; set; } = null!;
 
-        /// <summary>O instante da última página lida com a vez tomada, pelo relógio do registro (RN-SQL-007).</summary>
+        /// <summary>
+        /// O instante da última página que deixou o cursor aberto, pelo relógio do registro (RN-SQL-007). Os cinco minutos contam dele: a
+        /// operação que não leu (uma recusa antes de ir ao banco) não o muda.
+        /// </summary>
         public long LastReadAt { get; set; }
 
-        /// <summary>A última operação deixou um cursor aberto, que o temporizador da RN-SQL-007 vigia.</summary>
+        /// <summary>Há um cursor aberto, que o temporizador da RN-SQL-007 vigia: uma página o abriu, e nenhuma operação depois dela o fechou.</summary>
         public bool CursorOpen { get; set; }
 
         /// <summary>

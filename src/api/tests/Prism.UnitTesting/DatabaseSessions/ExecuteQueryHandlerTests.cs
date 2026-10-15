@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Moq;
+using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Infrastructure.Databases.Models;
@@ -13,6 +14,7 @@ public sealed class ExecuteQueryHandlerTests
 {
     private const string Sql = "SELECT numero, observacao FROM loja.pedido";
 
+    private readonly Mock<IConnectionQueries> _connectionQueries = new();
     private readonly Mock<IDatabaseSessionService> _databaseSessionService = new();
 
     [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
@@ -24,8 +26,8 @@ public sealed class ExecuteQueryHandlerTests
         var sessionID = Guid.CreateVersion7();
         var resultID = Guid.CreateVersion7();
         var page = new QueryPage([new QueryColumn("numero", "integer", "number", new ColumnOrigin(16384, 1)), new QueryColumn("observacao", "text", "text")], [["1001", "Pedido 1"], ["1007", null]], false, 12, [[1, 1]], 1000, resultID, ResultEditability.ReadOnly("o comando gravou e devolveu linhas"));
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 15)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 15)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
@@ -43,7 +45,8 @@ public sealed class ExecuteQueryHandlerTests
         // RN-EDIT-002: o resultado e o que se sabe da edição dele vão com a página; a origem das colunas fica na API.
         Assert.Equal(resultID, result.Value.ResultID);
         Assert.Equal(ResultEditability.ReadOnly("o comando gravou e devolveu linhas"), result.Value.Editable);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
@@ -54,8 +57,8 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "UPDATE loja.pedido SET id = id", QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 1000, 40)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "UPDATE loja.pedido SET id = id", null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 1000, 40)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = "UPDATE loja.pedido SET id = id" }, cancellationToken);
@@ -74,8 +77,8 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionBusy, "A sessão está ocupada com outro comando.")));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionBusy, "A sessão está ocupada com outro comando.")));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
@@ -93,8 +96,8 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "syntax error at or near \"FRM\"", "42601", 10)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "syntax error at or near \"FRM\"", "42601", 10)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
@@ -116,14 +119,15 @@ public sealed class ExecuteQueryHandlerTests
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
         const string untouched = "  \n select 1 -- fim\n";
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, untouched, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, untouched, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = untouched }, cancellationToken);
 
         //Assert
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, untouched, QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, untouched, null, QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
@@ -135,15 +139,16 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, 500, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, 500, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, PageSize = JsonSerializer.SerializeToElement(500) }, cancellationToken);
 
         //Assert
         Assert.True(result.IsSuccess);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, 500, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, 500, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
@@ -155,15 +160,16 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, 200, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, 200, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql }, cancellationToken);
         await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, PageSize = JsonSerializer.SerializeToElement<object?>(null) }, cancellationToken);
 
         //Assert
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, 200, cancellationToken), Times.Exactly(2));
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, 200, false, cancellationToken), Times.Exactly(2));
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
@@ -176,8 +182,8 @@ public sealed class ExecuteQueryHandlerTests
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
         var page = new QueryPage([new QueryColumn("numero", "integer", "number")], [["1001"]], false, 2, [], FilterApplied: EFilterApplied.Merged);
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 2)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 2)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Filter = "numero > 1000 ORDER BY numero DESC" }, cancellationToken);
@@ -185,7 +191,8 @@ public sealed class ExecuteQueryHandlerTests
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal("merged", result.Value.FilterApplied);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
@@ -199,8 +206,8 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Filter = filter }, cancellationToken);
@@ -208,7 +215,8 @@ public sealed class ExecuteQueryHandlerTests
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value.FilterApplied);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, QueryPaging.DefaultPageSize, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
@@ -220,8 +228,8 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "a = 'x", QueryPaging.DefaultPageSize, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar.")));
-        var handler = new ExecuteQueryHandler(_databaseSessionService.Object);
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "a = 'x", QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar.")));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         var result = await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Filter = "a = 'x" }, cancellationToken);

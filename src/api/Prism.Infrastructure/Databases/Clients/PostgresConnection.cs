@@ -203,6 +203,13 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     protected override string BeginReadOnlySql => "BEGIN TRANSACTION READ ONLY";
 
+    /// <summary>
+    /// RN-PROT-006: o modo de toda transação seguinte da sessão (`default_transaction_read_only`). Com ele, o que rodasse fora da transação só de leitura
+    /// da tentativa também seria recusado pelo banco; a leitura de uma conexão somente leitura roda sempre nela, e o modo é a segunda trava.
+    /// </summary>
+    protected override string SessionModeSql(bool readOnly)
+        => readOnly ? "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY" : "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE";
+
     /// <summary>`TABLE`, `SHOW` e `EXPLAIN` também devolvem linhas sem gravar; um `EXPLAIN ANALYZE` de um comando que grava é recusado na tentativa, como o próprio comando.</summary>
     protected override bool MayBeRead(string firstWord)
         => base.MayBeRead(firstWord) || firstWord is "TABLE" or "SHOW" or "EXPLAIN";
