@@ -148,6 +148,9 @@ const settle = () => new Promise((done) => setTimeout(done, 0));
 
 const command: RunTarget = { sql: "select 2", offset: 0, engine: pg };
 
+/** O destaque do comando enviado (RN-SQL-018), para os testes que não olham para ele. */
+const noFlash = () => {};
+
 beforeEach(() => {
   vi.clearAllMocks();
   forgetExcept(new Set());
@@ -278,7 +281,7 @@ describe("QueryTabPanel: com alterações não salvas, executar pergunta antes (
     const runner = fakeRunner(rowsState());
     const view = mount(runner);
 
-    view.show().editor.onRun(command);
+    view.show().editor.onRun(command, noFlash);
     const { question } = view.show();
 
     expect(runner.run).not.toHaveBeenCalled();
@@ -293,7 +296,7 @@ describe("QueryTabPanel: com alterações não salvas, executar pergunta antes (
     const runner = fakeRunner(rowsState());
     const view = mount(runner);
 
-    view.show().editor.onRun(command);
+    view.show().editor.onRun(command, noFlash);
     view.show().question!.onCancel();
     const after = view.show();
 
@@ -316,7 +319,7 @@ describe("QueryTabPanel: com alterações não salvas, executar pergunta antes (
 
   it("sem alteração pendente, executar não pergunta; com o comando que o executor não vai enviar (dois comandos), também não: ele só avisa", () => {
     const free = fakeRunner(rowsState());
-    mount(free).show().editor.onRun(command);
+    mount(free).show().editor.onRun(command, noFlash);
     expect(free.run).toHaveBeenCalledWith(command);
     rt.unmount();
 
@@ -324,10 +327,71 @@ describe("QueryTabPanel: com alterações não salvas, executar pergunta antes (
     const runner = fakeRunner(rowsState());
     const view = mount(runner);
     const several = { ...command, sql: "select 1; select 2" };
-    view.show().editor.onRun(several);
+    view.show().editor.onRun(several, noFlash);
 
     expect(runner.run).toHaveBeenCalledWith(several);
     expect(view.show().question).toBeUndefined();
+  });
+});
+
+describe("QueryTabPanel: o destaque do comando enviado acende só quando ele vai ao banco (RN-SQL-018)", () => {
+  it("com a aba livre, acende uma vez, junto com o envio", () => {
+    const runner = fakeRunner(rowsState());
+    const flash = vi.fn();
+
+    mount(runner).show().editor.onRun(command, flash);
+
+    expect(runner.sent).toEqual([command]);
+    expect(flash).toHaveBeenCalledTimes(1);
+  });
+
+  it("com um comando em andamento, o executor não envia nada, e nada acende (o Ctrl+Enter no editor, com o Cancelar na barra)", () => {
+    for (const state of [{ status: "running", cancelling: false, previous: null }, rowsState({ loadingMore: true }), rowsState({ counting: true })] satisfies RunnerState[]) {
+      const runner = fakeRunner(state);
+      const flash = vi.fn();
+
+      mount(runner).show().editor.onRun(command, flash);
+
+      expect(runner.sent).toEqual([]);
+      expect(flash).not.toHaveBeenCalled();
+      rt.unmount();
+    }
+  });
+
+  it("com mais de um comando ou nenhum, o executor só avisa, e nada acende", () => {
+    for (const sql of ["select 1; select 2", "", "-- só um comentário"]) {
+      const flash = vi.fn();
+      mount(fakeRunner(rowsState())).show().editor.onRun({ ...command, sql }, flash);
+      expect(flash, JSON.stringify(sql)).not.toHaveBeenCalled();
+      rt.unmount();
+    }
+  });
+
+  it("na aba sem conexão, o executor só pede uma, e nada acende (RN-SCRIPT-003)", () => {
+    const runner = fakeRunner({ status: "idle" });
+    const flash = vi.fn();
+
+    mount(runner, { connectionId: null, sessionId: null }).show().editor.onRun(command, flash);
+
+    expect(runner.run).toHaveBeenCalledWith(command);
+    expect(flash).not.toHaveBeenCalled();
+  });
+
+  it("com alterações não salvas, acende só depois da pergunta, e só se ela não foi cancelada (RN-EDIT-007)", () => {
+    withPending();
+    const cancelled = vi.fn();
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().editor.onRun(command, cancelled);
+    expect(cancelled).not.toHaveBeenCalled();
+    view.show().question!.onCancel();
+    expect(cancelled).not.toHaveBeenCalled();
+
+    const discarded = vi.fn();
+    view.show().editor.onRun(command, discarded);
+    expect(discarded).not.toHaveBeenCalled();
+    view.show().question!.onDiscard();
+    expect(discarded).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -358,7 +422,7 @@ describe("QueryTabPanel: o Salvar deixa a grade com o que foi salvo, sem executa
     const runner = fakeRunner(rowsState());
     const view = mount(runner);
 
-    view.show().editor.onRun(command);
+    view.show().editor.onRun(command, noFlash);
     view.show().question!.onSave();
     await settle();
 
@@ -564,7 +628,7 @@ describe("QueryTabPanel: o campo de filtro no resultado (RN-GRADE-011)", () => {
     await settle();
     runner.state = rowsState({ target: filtered("id > 0") });
 
-    view.show().editor.onRun(command);
+    view.show().editor.onRun(command, noFlash);
     runner.state = rowsState({ target: command });
 
     expect(runner.sent.at(-1)).toEqual(command);

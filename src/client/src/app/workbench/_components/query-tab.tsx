@@ -139,20 +139,23 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // O botão e o Ctrl+Enter passam pelo editor: um lugar só para a área recolhida voltar ao executar. Só volta quando o executor vai
   // enviar o comando: sem nada a executar, com mais de um comando ou com a aba ocupada ele só avisa, e não há resultado a caminho.
   // RN-EDIT-007: o comando que vai ser enviado, com alterações não salvas, espera a resposta da pergunta; o que o executor recusaria não pergunta nada.
+  // RN-SQL-018: o destaque do comando enviado acende só aqui, quando ele vai mesmo ao banco: sem conexão o executor só pede uma (RN-SCRIPT-003).
+  const hasConnection = tab.connectionId !== null;
   const handleRun = useCallback(
-    (target: RunTarget) => {
+    (target: RunTarget, flash: () => void) => {
       const go = () => {
         if (commandWillRun(target, isBusyState(runner.getState()))) {
           dispatch({ type: "run" });
           // RN-GRADE-011: o comando do editor vai sem o filtro do resultado, e o campo fica limpo.
           clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+          if (hasConnection) flash();
         }
         void runner.run(target);
       };
       if (commandWillRun(target, isBusyState(runner.getState()))) guard(go);
       else go();
     },
-    [runner, guard],
+    [runner, guard, hasConnection],
   );
   const handleRerun = useCallback(() => guard(() => void runner.rerun()), [runner, guard]);
   useEffect(() => {
