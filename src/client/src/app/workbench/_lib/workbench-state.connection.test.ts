@@ -12,9 +12,10 @@ const rt = await vi.hoisted(async () => {
 
   type Fake = {
     options: { connectionId: string | null; database?: string; onSession: (sessionId: string | null) => void };
-    state: { status: string };
+    /** `auto`: a execução da atualização automática (RN-GRADE-014). */
+    state: { status: string; auto?: true };
     session: string | null;
-    getState: () => { status: string };
+    getState: () => { status: string; auto?: true };
     run: ReturnType<typeof vi.fn>;
     retire: ReturnType<typeof vi.fn>;
     release: ReturnType<typeof vi.fn>;
@@ -133,6 +134,29 @@ describe("WorkbenchProvider.switchConnection: a aba de consulta passa a outra co
     value = render();
     expect(value.tabs[0].connectionId).toBe("c1");
     expect(runner.retire).not.toHaveBeenCalled();
+  });
+
+  it("a execução da atualização automática (RN-GRADE-014) não segura a troca: o executor de antes é aposentado (o que a desliga), e a sessão dele fecha", async () => {
+    render().openQueryTab("c1", "select * from fila");
+    let value = render();
+    const tab = value.tabs[0];
+    const before = fake(value.runnerOf(tab.id));
+    before.session = "s-erp";
+    before.options.onSession("s-erp");
+    before.state = { status: "running", auto: true };
+    value = render();
+
+    value.switchConnection(tab.id, "c2");
+    value = render();
+    await settle();
+    const after = fake(value.runnerOf(tab.id));
+
+    expect(after).not.toBe(before);
+    expect(after.options).toMatchObject({ connectionId: "c2", database: undefined });
+    expect(before.retire).toHaveBeenCalledOnce();
+    expect(rt.sessions.close).toHaveBeenCalledWith("s-erp");
+    expect(after.run).not.toHaveBeenCalled();
+    expect(value.tabs[0].connectionId).toBe("c2");
   });
 
   it("a aba de uma tabela não troca de conexão", () => {
