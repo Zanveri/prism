@@ -957,8 +957,9 @@ aparece, seção 9), e deixa trocá-la.
 - **A troca** (`switchConnection` no provedor, sobre `withConnection`, puro e testado; substitui o antigo `assignConnection`): passa pela pergunta das alterações
   não salvas da grade (o `guard` da edição, como a troca do banco), e então a aba ganha um executor novo na conexão escolhida, no banco padrão dela; o de antes
   sai de cena (`retire`) e a sessão dele fecha em segundo plano (`endInBackground`). Nada executa, o texto fica (o do editor deste instante) e o resultado sai.
-  A mesma conexão, a aba de uma tabela e a aba ocupada não trocam; com comando em andamento a lista abre, mas as conexões ficam desabilitadas (`aria-disabled`)
-  com o motivo numa região viva, e "Mostrar no navegador" continua. A aba sem conexão recebe a escolhida pelo mesmo caminho (a faixa dela também). A barra de
+  A mesma conexão, a aba de uma tabela e a aba com um comando da pessoa em andamento (`isPersonBusy`) não trocam; com ele a lista abre, mas as conexões ficam
+  desabilitadas (`aria-disabled`) com o motivo numa região viva, e "Mostrar no navegador" continua. A execução da atualização automática (RN-GRADE-014) não
+  segura a troca: o `retire()` do executor de antes a desliga, e a sessão dela fecha com ele (o teste espelha o da troca do banco). A aba sem conexão recebe a escolhida pelo mesmo caminho (a faixa dela também). A barra de
   status, a etiqueta da faixa, o editor (a gramática do banco novo, sem recriar) e a lista dos bancos (`DatabasePicker` com `key` pela conexão) acompanham.
 - **Conferido sob Xvfb** (a API de desenvolvimento, sem banco: as conexões apontam para servidores que não existem): o botão com a sigla, o nome, o ambiente
   herdado da pasta e a dica; a lista aberta com o foco na busca, a busca pelo servidor, o Enter que troca (a barra de status e o botão acompanham), Ctrl+9 e
@@ -990,7 +991,8 @@ que a aba roda ("Banco", um `Select` com rótulo visível ligado a ele) e deixa 
   próxima execução, como a aba aberta pela "Nova consulta" do banco), e o de antes sai de cena (`retire`) antes de a sessão dele fechar na API (pelo mesmo
   caminho de fechar a aba, `endInBackground`, que a janela que fecha espera). **Nada é executado, o texto fica** (o do editor deste instante, `liveEditors`),
   e **o resultado que estava na tela sai**: era do banco anterior, e o cursor dele fecha com a sessão (como ao dar uma conexão à aba de um script sem
-  conexão). O mesmo banco, a aba de uma tabela, a aba sem conexão e a aba ocupada não trocam. O editor segue o banco com ele montado: o completar e os
+  conexão). O mesmo banco, a aba de uma tabela, a aba sem conexão e a aba com um comando da pessoa em andamento não trocam (a execução da atualização
+  automática não segura a troca: o `retire()` a desliga, RN-GRADE-014). O editor segue o banco com ele montado: o completar e os
   links de tabela leem o cache da árvore do banco novo.
 - **Pergunta antes** com alterações não salvas na grade (RN-EDIT-007): a troca passa pelo `guard` da edição, o mesmo diálogo de executar outro comando
   ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). A aba de consulta ainda não tem o Commit manual
@@ -1451,7 +1453,7 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   elemento) e o foco que volta; a runtime de ganchos (`lib/testing/react-hooks.ts`) trata `useLayoutEffect` como `useEffect`.
 - **O relógio é do executor** (`runner.autoRefresh`, montado por `createAutoRefresh` em `_lib/auto-refresh.ts`, sem React, com os temporizadores e o relógio
   injetáveis e com teste de temporizadores falsos). Por ser do executor, ele sobrevive a trocar de aba, de vista e de tela, e o que tira o executor de cena
-  o desliga sem mais nada: `release()` (desconectar) e `retire()` (fechar a aba, trocar de banco, ir para outra janela, o bloqueio, sair do cofre) chamam
+  o desliga sem mais nada: `release()` (desconectar) e `retire()` (fechar a aba, trocar de banco ou de conexão, ir para outra janela, o bloqueio, sair do cofre) chamam
   `halt()`. Ele **observa** o executor (`subscribe`), e não o contrário: o fim de qualquer ocupação da aba (a execução automática, o F5, "Carregar mais",
   "Contar total") recomeça o tempo, e o fim de uma EXECUÇÃO diz se ela trouxe um resultado de leitura novo (`outcomeOf`: o mesmo objeto de linhas de volta é
   "não rodou"; erro, cancelado, gravou). Sem leitura nova, ele para com o motivo (`stopped`), que a barra mostra numa nota curta até a próxima execução da
@@ -1471,7 +1473,7 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   execução automática repetem o comando com o lugar no texto de quando ele foi enviado, e o erro deles não marca o texto que a pessoa já mudou.
 - **A execução automática não toma a aba da pessoa.** Há dois "ocupados": `isBusyState` (tudo, inclusive ela: o relógio e o executor, que mandam um comando
   por vez na sessão) e `isPersonBusy` (sem ela: a tela e o bloqueio por inatividade). Tudo o que a pessoa vê e aciona usa `isPersonBusy`: a barra do editor
-  ("Executar" não vira "Cancelar"), o seletor de banco e `switchDatabase`, o rodapé dos Registros ("Atualizar" e "Exportar CSV"), o campo de filtro, a ordem
+  ("Executar" não vira "Cancelar"), o seletor de banco e `switchDatabase`, o botão da conexão e `switchConnection`, o rodapé dos Registros ("Atualizar" e "Exportar CSV"), o campo de filtro, a ordem
   pelo cabeçalho, o F5 das duas abas, os planos dos Registros (`table-view.ts`; o `isBusy` de `result-paging.ts` saiu) e `applyResultFilter`. O que a
   pessoa pede enquanto ela roda é atendido: o comando da pessoa (`run`, `rerun`) **a abandona** (`abandonAuto`: `epoch++`, então a resposta dela não muda a
   tela nem avisa; `yielded()` no relógio, que não conta o desfecho dela; e o cancelamento à API, calado), mostra o comando da pessoa rodando desde já (o
