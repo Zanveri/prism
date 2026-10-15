@@ -267,8 +267,8 @@ public sealed class ScriptValidatorsTests
     /// teste de lá, `saved-scripts.test.ts`, que lê este `ScriptRules.cs`.
     /// </summary>
     [Trait("ScriptRules", "Icons")]
-    [Fact(DisplayName = "OK a lista dos ícones é a da tela, com o documento como padrão")]
-    public void Icons_ShouldBeTheClosedListOfTheScreen()
+    [Fact(DisplayName = "OK a lista dos ícones é a fechada, na ordem, com o documento como padrão")]
+    public void Icons_ShouldBeTheClosedListInOrder_WithDocumentAsDefault()
     {
         //Assert
         Assert.Equal(["document", "code", "database", "table", "chart", "clock", "lightning", "bug", "wrench", "star", "flag"], ScriptRules.Icons);
