@@ -11,6 +11,8 @@ import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
+import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
+import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
@@ -19,12 +21,13 @@ import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, e
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
+import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { refreshKey } from "../_lib/grid-editing";
-import { measureRendered, observeRenderedOffset } from "../_lib/row-measure";
+import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { isConnected } from "../_lib/workbench-model";
@@ -34,7 +37,7 @@ import { workbenchCopy } from "../_lib/workbench.copy";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
 import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
-import { NavigatorRow, rowHeight, type ConnectionStatus } from "./navigator-row";
+import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
 import { NavigatorToolbar } from "./navigator-toolbar";
 
 const copy = workbenchCopy.navigator;
@@ -137,6 +140,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const folders = useQuery(foldersQuery);
   const connections = useQuery(connectionsQuery);
   const { tabs, expanded, setNodeOpen, openQueryTab, openTableTab, disconnect, disconnecting } = useWorkbench();
+  // RN-NAV-011: a densidade da árvore, que muda ao vivo com a escolha em Configurações › Aparência.
+  const density = usePreferences().preferences.ui.navigatorDensity;
   // As pastas começam abertas; só as recolhidas são estado. Ao ir para Conexões e voltar, elas reabrem.
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<OpenMenu | null>(null);
@@ -576,6 +581,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         )}
         <NavigatorList
           rows={rows}
+          density={density}
           open={search === null ? open : search.open}
           matches={search?.matches}
           searching={search !== null}
@@ -642,6 +648,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
 type NavigatorListProps = {
   rows: NavNode[];
+  /** RN-NAV-011: a altura das linhas (e a estimativa da lista virtual), o recuo e os botões de ação. */
+  density: NavigatorDensity;
   open: ReadonlySet<string>;
   connectionById: ReadonlyMap<string, Connection>;
   environments: EnvironmentLookup;
@@ -676,7 +684,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, density, open, connectionById, environments, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -689,8 +697,19 @@ function NavigatorList({ rows, open, connectionById, environments, statuses, dis
   // As linhas são medidas (a de erro é mais alta que as outras), e a área de trabalho fica escondida por baixo das outras telas: a linha sem caixa não mede
   // zero (`measureRendered`), senão as primeiras linhas somem ao voltar; e a rolagem lida sem caixa não é posição (`observeRenderedOffset`), senão quem rola e
   // sai logo em seguida volta para uma lista em branco.
+  const rowHeight = navigatorMetrics[density].rowHeight;
   // eslint-disable-next-line react-hooks/incompatible-library -- o virtualizador devolve funções que não se memorizam; nada aqui depende disso.
   const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scrollRef.current, estimateSize: () => rowHeight, overscan: 12, getItemKey: (index) => rows[index].key, measureElement: measureRendered, observeElementOffset: observeRenderedOffset });
+
+  // RN-NAV-011: a densidade mudou (em Configurações, com a árvore escondida por baixo, ou noutra janela, com ela à mostra). As alturas guardadas são as da
+  // outra, inclusive as das linhas que rolaram para fora e não vão se medir de novo: a lista esquece todas, e cada uma vale a estimativa nova até ser medida.
+  // As desenhadas são medidas de novo na hora (`remeasureRendered`): a de erro não muda de caixa com a densidade, e nada mais a mediria.
+  const measuredDensity = useRef(density);
+  useLayoutEffect(() => {
+    if (measuredDensity.current === density) return;
+    measuredDensity.current = density;
+    remeasureRendered(virtualizer);
+  }, [density, virtualizer]);
 
   // A conexão que o formulário acabou de salvar: rola até ela e lhe dá o foco, uma vez por pedido. A linha pode ainda não estar desenhada (a lista
   // virtual só desenha o que se vê, e o navegador pode estar voltando a aparecer, sem caixa ainda): a cada quadro pede a rolagem até ela e tenta de
@@ -815,6 +834,7 @@ function NavigatorList({ rows, open, connectionById, environments, statuses, dis
             >
               <NavigatorRow
                 node={node}
+                density={density}
                 index={item.index}
                 open={open.has(node.key)}
                 tabbable={node.key === tabbable}

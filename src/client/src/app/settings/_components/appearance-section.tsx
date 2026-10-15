@@ -4,16 +4,19 @@ import { Field, FieldLabel } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { fontStack } from "../_lib/fonts";
+import { navigatorDensities } from "../_lib/preferences";
 import { appliedTheme, subscribeSystemScheme, systemPrefersLight } from "../_lib/theme";
 import { settingsCopy } from "../_lib/settings.copy";
 import { themeOptions, themePreviews, type ThemeOption } from "../_lib/themes";
 import { usePreferences } from "../_lib/use-preferences";
+import { AppZoomControl } from "./app-zoom-control";
 import { FontPicker } from "./font-picker";
 import { SettingsCard } from "./settings-card";
 import { appliedPalette, fontSample, SqlSample, themeSample } from "./sql-sample";
 
 const copy = settingsCopy.appearance;
 const fontCopy = copy.fonts;
+const densityCopy = copy.density;
 
 /**
  * O cartão de um tema: uma faixa com as cores dele e o nome. As cores são as da prévia do tema, e não as do que está aplicado. A faixa é
@@ -51,6 +54,9 @@ function ThemeCard({ option, selected, onPick }: { option: ThemeOption; selected
  *
  * As fontes: a da interface e a do editor SQL, cada uma a do app ou uma instalada (`FontPicker`). Quem as aplica é o `FontSync`, na hora; a
  * interface inteira é a prévia da primeira, e uma linha de SQL, a da segunda.
+ *
+ * O zoom do programa (RN-ZOOM-001) é o único daqui que não é preferência do usuário: mora no processo principal, para a instalação (`AppZoomControl`). A
+ * densidade do navegador (RN-NAV-011) é, como o tema, e a árvore e a lista de scripts a seguem na hora.
  */
 export function AppearanceSection({ anchor }: { anchor: string }) {
   const { preferences, update } = usePreferences();
@@ -98,6 +104,31 @@ export function AppearanceSection({ anchor }: { anchor: string }) {
           </p>
           <SqlSample lines={fontSample} palette={appliedPalette} font={{ fontFamily: fontStack("editor", preferences.editor.fontFamily) }} className="rounded-md border border-border" />
         </Field>
+      </div>
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(260px,100%),1fr))] gap-4">
+        <AppZoomControl />
+        <fieldset aria-describedby="cfg-densidade-dica" className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
+          <legend className="mb-1.5 p-0 text-sm text-muted">{densityCopy.label}</legend>
+          <div className="flex min-h-9 flex-wrap items-center gap-x-5 gap-y-2">
+            {navigatorDensities.map((density) => (
+              <label key={density} className="flex cursor-pointer items-center gap-2.5">
+                <input
+                  type="radio"
+                  name="cfg-densidade"
+                  value={density}
+                  checked={preferences.ui.navigatorDensity === density}
+                  onChange={() => update({ ui: { navigatorDensity: density } })}
+                  className="m-0 size-[18px] flex-none cursor-pointer accent-accent"
+                />
+                <span>{densityCopy[density]}</span>
+              </label>
+            ))}
+          </div>
+          <p id="cfg-densidade-dica" className="text-xs text-muted">
+            {densityCopy.hint}
+          </p>
+        </fieldset>
       </div>
     </SettingsCard>
   );
