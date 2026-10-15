@@ -100,7 +100,7 @@ export const scriptsCopy = {
     label: "Conexão",
     placeholder: "Escolha a conexão",
     use: "Usar esta conexão",
-    none: "Não há conexão cadastrada. Crie uma em Conexões.",
+    none: "Não há conexão cadastrada. Crie uma pelo “Nova conexão” da barra do navegador.",
     status: "Sem conexão",
   },
   // RN-SCRIPT-003: a seção "Scripts" do navegador.

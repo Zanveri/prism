@@ -10,8 +10,8 @@ export const workbenchCopy = {
     loadingList: "Carregando as conexões…",
     loadFailed: "Não foi possível carregar as conexões.",
     retry: "Tentar de novo",
-    empty: { title: "Nenhuma conexão salva.", hint: "Salve a primeira em Conexões para ver os objetos do banco aqui." },
-    emptyAction: "Ir para Conexões",
+    // RN-NAV-007: a dica embaixo é a do navegador (`navigatorCopy.empty`), que aponta o "Nova conexão" da barra dele: a tela de Conexões não existe mais.
+    empty: { title: "Nenhuma conexão salva." },
 
     // As linhas que o modelo cria no lugar de um nível ainda sem filhos.
     loading: "Carregando…",
@@ -144,7 +144,7 @@ export const workbenchCopy = {
       current: "a desta aba",
       root: "Sem pasta",
       noMatch: (query: string) => `Nenhuma conexão encontrada para “${query}”.`,
-      empty: "Não há conexão cadastrada. Crie uma em Conexões.",
+      empty: "Não há conexão cadastrada. Crie uma pelo “Nova conexão” da barra do navegador.",
       busy: "Espere o comando terminar, ou cancele-o, para trocar a conexão.",
       reveal: "Mostrar no navegador",
     },
