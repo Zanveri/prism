@@ -1170,3 +1170,220 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
     expect(view.show().scriptError).toMatchObject({ number: 1, total: 3 });
   });
 });
+
+describe("QueryTabPanel: o aviso antes de executar, na conexão que confirma (RN-PROT-001)", () => {
+  const drop: RunTarget = { sql: "DELETE FROM loja.pedido", offset: 0, engine: pg };
+  const irreversible = () => (rt.protections = { readOnly: null, confirm: { level: "irreversible", from: null } });
+  const all = () => (rt.protections = { readOnly: null, confirm: { level: "all", from: null } });
+
+  it("sem proteção nada pergunta, e o comando sai na mesma chamada", () => {
+    const runner = fakeRunner(rowsState());
+    mount(runner).show().editor.onRun(drop, noFlash);
+
+    expect(rt.asked).toEqual([]);
+    expect(runner.sent).toEqual([drop]);
+  });
+
+  it("“Só comandos irreversíveis”: o DELETE sem WHERE espera o “Executar mesmo assim”, e o destaque só acende quando ele sai; a leitura não pergunta", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const flash = vi.fn();
+    const view = mount(runner);
+
+    view.show().editor.onRun(drop, flash);
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: drop.sql, irreversible: { kind: "delete", target: "loja.pedido" } } }]);
+    expect(runner.sent).toEqual([]);
+    expect(flash).not.toHaveBeenCalled();
+
+    rt.asked[0].proceed();
+    expect(runner.sent).toEqual([drop]);
+    expect(flash).toHaveBeenCalledOnce();
+
+    rt.unmount();
+    const reader = fakeRunner(rowsState());
+    mount(reader).show().editor.onRun(command, noFlash);
+    expect(rt.asked).toHaveLength(1);
+    expect(reader.sent).toEqual([command]);
+  });
+
+  it("cancelar não executa nada e deixa a aba como estava, com o resultado de antes", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRun(drop, noFlash);
+    rt.asked[0].cancelled?.();
+
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(view.show().area.state).toMatchObject({ status: "rows", resultId: "r1" });
+  });
+
+  it("numa conexão somente leitura, “Só comandos irreversíveis” não pergunta (a API recusa); “Todos os comandos” continua perguntando", () => {
+    rt.protections = { readOnly: { from: null }, confirm: { level: "irreversible", from: null } };
+    const runner = fakeRunner(rowsState());
+    mount(runner).show().editor.onRun(drop, noFlash);
+    expect(rt.asked).toEqual([]);
+    expect(runner.sent).toEqual([drop]);
+
+    rt.unmount();
+    rt.protections = { readOnly: { from: null }, confirm: { level: "all", from: null } };
+    const other = fakeRunner(rowsState());
+    mount(other).show().editor.onRun(command, noFlash);
+    expect(rt.asked.map(({ question }) => question.kind)).toEqual(["command"]);
+    expect(other.sent).toEqual([]);
+  });
+
+  it("com alterações não salvas, a pergunta delas vem antes, e o aviso depois, logo antes de o comando sair", () => {
+    all();
+    withPending();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRun(command, noFlash);
+    expect(view.show().question).toBeDefined();
+    expect(rt.asked).toEqual([]);
+
+    view.show().question!.onDiscard();
+    expect(rt.asked.map(({ question }) => question.kind)).toEqual(["command"]);
+    rt.asked[0].proceed();
+    expect(runner.sent).toEqual([command]);
+  });
+
+  it("o que o executor não enviaria (dois comandos na seleção) não pergunta: ele só avisa", () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const several: RunTarget = { sql: "select 1; select 2", offset: 0, engine: pg };
+    mount(runner).show().editor.onRun(several, noFlash);
+
+    expect(rt.asked).toEqual([]);
+    expect(runner.run).toHaveBeenCalledWith(several);
+  });
+
+  it("o script pergunta uma vez, antes do primeiro comando, com a lista dos irreversíveis e o número de cada; confirmado, roda inteiro", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const targets: RunTarget[] = [command, drop, { sql: "TRUNCATE loja.item", offset: 40, engine: pg }];
+    mount(runner).show().editor.onRunScript!(targets);
+
+    expect(rt.asked).toHaveLength(1);
+    expect(rt.asked[0].question).toMatchObject({ kind: "script", total: 3, commands: [{ number: 2, sql: drop.sql }, { number: 3, sql: "TRUNCATE loja.item" }] });
+    expect(runner.scripts).toEqual([]);
+
+    rt.asked[0].proceed();
+    expect(runner.scripts).toEqual([targets]);
+  });
+
+  it("o script cancelado não roda nada; o sem nenhum irreversível roda sem perguntar", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRunScript!([drop]);
+    rt.asked[0].cancelled?.();
+    expect(runner.runScript).not.toHaveBeenCalled();
+
+    view.show().editor.onRunScript!([command]);
+    expect(rt.asked).toHaveLength(1);
+    expect(runner.scripts).toEqual([[command]]);
+  });
+
+  it("F5 e “Executar de novo” perguntam pelo comando do resultado, como qualquer execução", () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().keys({ key: "F5", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn() });
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select * from loja.pedido", irreversible: null } }]);
+    expect(runner.rerun).not.toHaveBeenCalled();
+    rt.asked[0].proceed();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+
+    view.show().area.onRerun();
+    expect(rt.asked).toHaveLength(2);
+    rt.asked[1].cancelled?.();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("aplicar o filtro pergunta pelo comando que vai ao banco, com o filtro junto; cancelado, o campo e o filtro em vigor ficam", async () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().filter!.onDraft(`"status" = 'aberta'`);
+    view.show().filter!.onApply();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select * from loja.pedido", filter: `"status" = 'aberta'`, irreversible: null } }]);
+    rt.asked[0].cancelled?.();
+    await settle();
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(view.show().filter).toMatchObject({ applied: "", draft: `"status" = 'aberta'` });
+
+    view.show().filter!.onApply();
+    rt.asked[1].proceed();
+    await settle();
+    expect(runner.sent).toEqual([{ sql: "select * from loja.pedido", offset: 0, engine: pg, filter: `"status" = 'aberta'` }]);
+  });
+
+  it("“Todos os comandos”: ligar a atualização automática pergunta uma vez; trocar só o intervalo, com ela ligada, não", () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().auto!.onChoose("autoRefresh:every:10000");
+    expect(rt.asked.map(({ question }) => question.kind)).toEqual(["autoRefresh"]);
+    expect(runner.autoRefresh.start).not.toHaveBeenCalled();
+    rt.asked[0].proceed();
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(10_000);
+
+    runner.autoRefresh.getState = () => ({ status: "on", everyMs: 10_000, lastAt: null, running: false, paused: null });
+    view.show().auto!.onChoose("autoRefresh:every:30000");
+    expect(rt.asked).toHaveLength(1);
+    expect(runner.autoRefresh.start).toHaveBeenLastCalledWith(30_000);
+  });
+
+  it("“Só comandos irreversíveis” não pergunta ao ligar a atualização automática: ela só repete uma leitura", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    mount(runner).show().auto!.onChoose("autoRefresh:every:10000");
+
+    expect(rt.asked).toEqual([]);
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(10_000);
+  });
+
+  it("“Todos os comandos”: o Salvar da grade pergunta uma vez, com quantas alterações vão; cancelado, nada é gravado e a alteração fica", async () => {
+    all();
+    withPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().banner!.props.onSave();
+    await settle();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "save", count: 1 }]);
+    rt.asked[0].cancelled?.();
+    await settle();
+    expect(rt.service.saveEditsOrRefuse).not.toHaveBeenCalled();
+    expect(view.show().banner?.props.pending).toBe(1);
+
+    view.show().banner!.props.onSave();
+    await settle();
+    rt.asked[1].proceed();
+    await settle();
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledOnce();
+    expect(runner.keepSaved).toHaveBeenCalledOnce();
+  });
+
+  it("“Só comandos irreversíveis”: o Salvar não pergunta (cada comando dele é pela chave da linha, com WHERE)", async () => {
+    irreversible();
+    withPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().banner!.props.onSave();
+    await settle();
+
+    expect(rt.asked).toEqual([]);
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledOnce();
+  });
+});
