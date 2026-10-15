@@ -8,7 +8,8 @@ type Deps = readonly unknown[] | undefined;
  *
  * - `useState`, `useReducer`, `useRef`, `useId`, `useMemo` e `useCallback` guardam por posição, como o React. Um `setState` durante a renderização pede outra, e os efeitos da
  *   que foi descartada não rodam. `useEffectEvent` devolve uma função que chama a versão mais recente do que recebeu.
- * - `useEffect` roda depois da renderização que valeu, só com as dependências trocadas e com a limpeza do anterior antes.
+ * - `useEffect` roda depois da renderização que valeu, só com as dependências trocadas e com a limpeza do anterior antes. `useLayoutEffect` é o mesmo:
+ *   sem DOM, não há o que medir entre um e outro, e a ordem entre os dois não é simulada.
  * - `useSyncExternalStore` lê a foto na hora e NÃO assina: a troca de uma loja não redesenha sozinha, e quem redesenha é o teste, chamando `render` de
  *   novo. É o que deixa conferir o que faz o `onClick` de uma renderização antiga depois de a loja ter mudado.
  *
@@ -112,5 +113,5 @@ export function createHookRuntime() {
     effectSlots = [];
   }
 
-  return { hooks: { useState, useReducer, useRef, useId, useMemo, useCallback, useEffect, useEffectEvent, useSyncExternalStore }, render, unmount };
+  return { hooks: { useState, useReducer, useRef, useId, useMemo, useCallback, useEffect, useLayoutEffect: useEffect, useEffectEvent, useSyncExternalStore }, render, unmount };
 }

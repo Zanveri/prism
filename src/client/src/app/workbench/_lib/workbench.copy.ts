@@ -148,6 +148,9 @@ export const workbenchCopy = {
     count: "Contar total",
     counting: "Contando…",
     total: (total: number) => `Total: ${formatCount(total, "linha", "linhas")}`,
+    // RN-SQL-006 (issue #10): com o total contado, o mesmo botão conta outra vez; o total de antes fica à vista, marcado, até chegar o novo.
+    recount: "Contar de novo",
+    recounting: "contando de novo…",
     // RN-SQL-007.
     cursorClosed: "O cursor foi fechado. Execute de novo para continuar.",
     rerun: "Executar de novo",
