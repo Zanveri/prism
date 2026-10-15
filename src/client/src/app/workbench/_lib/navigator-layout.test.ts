@@ -2,14 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createNavigatorLayoutStore, hideFocusTarget, rememberedTreeScroll, navigatorLayoutKey, navigatorShortcut, navigatorShortcutLabels, parseNavigatorLayout } from "./navigator-layout";
 
+const shown = { hidden: false, scriptsCollapsed: false };
+
 describe("parseNavigatorLayout: o que está gravado pode ser qualquer coisa, e a leitura nunca lança", () => {
   it("o gravado vale", () => {
-    expect(parseNavigatorLayout('{"hidden":true}')).toEqual({ hidden: true });
-    expect(parseNavigatorLayout('{"hidden":false}')).toEqual({ hidden: false });
+    expect(parseNavigatorLayout('{"hidden":true,"scriptsCollapsed":false}')).toEqual({ hidden: true, scriptsCollapsed: false });
+    expect(parseNavigatorLayout('{"hidden":false,"scriptsCollapsed":true}')).toEqual({ hidden: false, scriptsCollapsed: true });
+    expect(parseNavigatorLayout('{"hidden":true,"scriptsCollapsed":true}')).toEqual({ hidden: true, scriptsCollapsed: true });
   });
 
-  it("nada gravado, JSON quebrado, outra forma ou valor fora do esperado: o padrão (à mostra)", () => {
-    for (const raw of [null, "", "{", "[]", "1", '{"hidden":"sim"}', '{"outro":true}', "null"]) expect(parseNavigatorLayout(raw)).toEqual({ hidden: false });
+  it("o gravado antes da seção Scripts lembrar (só `hidden`) continua valendo, com a seção aberta", () => {
+    expect(parseNavigatorLayout('{"hidden":true}')).toEqual({ hidden: true, scriptsCollapsed: false });
+    expect(parseNavigatorLayout('{"hidden":false}')).toEqual(shown);
+  });
+
+  it("nada gravado, JSON quebrado, outra forma ou valor fora do esperado: o padrão (à mostra, a seção Scripts aberta), campo a campo", () => {
+    for (const raw of [null, "", "{", "[]", "1", '{"hidden":"sim"}', '{"outro":true}', "null", '{"scriptsCollapsed":1}', '{"scriptsCollapsed":"true"}']) expect(parseNavigatorLayout(raw)).toEqual(shown);
+    expect(parseNavigatorLayout('{"hidden":"sim","scriptsCollapsed":true}')).toEqual({ hidden: false, scriptsCollapsed: true });
   });
 });
 
@@ -34,11 +43,66 @@ describe("createNavigatorLayoutStore: a escolha lembrada por usuário (RN-NAV-00
 
     store.set("ana", { hidden: true });
 
-    expect(store.get("ana")).toEqual({ hidden: true });
-    expect(store.get("bruno")).toEqual({ hidden: false });
+    expect(store.get("ana")).toEqual({ hidden: true, scriptsCollapsed: false });
+    expect(store.get("bruno")).toEqual(shown);
     expect(store.get("ana")).not.toBe(before);
-    expect(items.get("prism:navigator:ana")).toBe('{"hidden":true}');
+    expect(items.get("prism:navigator:ana")).toBe('{"hidden":true,"scriptsCollapsed":false}');
     expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("a seção Scripts recolhida (RN-NAV-012) mora na mesma chave: mudar um campo não mexe no outro", () => {
+    const { items, storage } = memoryStorage();
+    const store = createNavigatorLayoutStore(() => storage);
+
+    store.set("ana", { hidden: true });
+    store.set("ana", { scriptsCollapsed: true });
+    expect(store.get("ana")).toEqual({ hidden: true, scriptsCollapsed: true });
+
+    store.set("ana", { hidden: false });
+    expect(store.get("ana")).toEqual({ hidden: false, scriptsCollapsed: true });
+    expect(items.get("prism:navigator:ana")).toBe('{"hidden":false,"scriptsCollapsed":true}');
+
+    // A próxima entrada (outro armazém, o mesmo armazenamento) abre a seção como ficou.
+    expect(createNavigatorLayoutStore(() => storage).get("ana").scriptsCollapsed).toBe(true);
+  });
+
+  it("duas janelas (dois armazéns, o mesmo armazenamento) não desfazem a escolha uma da outra: cada uma grava o seu campo sobre o que está gravado agora", () => {
+    const windows = () => {
+      const { items, storage } = memoryStorage();
+      const first = createNavigatorLayoutStore(() => storage);
+      const second = createNavigatorLayoutStore(() => storage);
+      expect(first.get("ana")).toEqual(shown);
+      expect(second.get("ana")).toEqual(shown);
+      return { stored: () => items.get("prism:navigator:ana"), first, second };
+    };
+
+    // A primeira recolhe a seção Scripts; a segunda, que leu antes, esconde o navegador (Ctrl+B): a seção continua recolhida.
+    const one = windows();
+    one.first.set("ana", { scriptsCollapsed: true });
+    one.second.set("ana", { hidden: true });
+    expect(one.stored()).toBe('{"hidden":true,"scriptsCollapsed":true}');
+
+    // Ao contrário: a primeira esconde o navegador; a segunda recolhe a seção e a abre de novo: o navegador continua escondido.
+    const other = windows();
+    other.first.set("ana", { hidden: true });
+    other.second.set("ana", { scriptsCollapsed: true });
+    expect(other.stored()).toBe('{"hidden":true,"scriptsCollapsed":true}');
+    other.second.set("ana", { scriptsCollapsed: false });
+    expect(other.stored()).toBe('{"hidden":true,"scriptsCollapsed":false}');
+  });
+
+  it("a janela aberta fica como está quando a outra muda; a que abre depois começa como a última escolha de cada campo (RN-NAV-012)", () => {
+    const { storage } = memoryStorage();
+    const first = createNavigatorLayoutStore(() => storage);
+    const second = createNavigatorLayoutStore(() => storage);
+    second.get("ana");
+
+    first.set("ana", { scriptsCollapsed: true });
+    second.set("ana", { hidden: true });
+
+    expect(first.get("ana")).toEqual({ hidden: false, scriptsCollapsed: true });
+    expect(second.get("ana")).toEqual({ hidden: true, scriptsCollapsed: false });
+    expect(createNavigatorLayoutStore(() => storage).get("ana")).toEqual({ hidden: true, scriptsCollapsed: true });
   });
 
   it("o MESMO objeto enquanto nada muda (é o que o React compara); gravar o mesmo valor não avisa", () => {
@@ -49,6 +113,8 @@ describe("createNavigatorLayoutStore: a escolha lembrada por usuário (RN-NAV-00
 
     expect(store.get("ana")).toBe(store.get("ana"));
     store.set("ana", { hidden: false });
+    store.set("ana", { scriptsCollapsed: false });
+    store.set("ana", {});
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -56,16 +122,16 @@ describe("createNavigatorLayoutStore: a escolha lembrada por usuário (RN-NAV-00
     const { items, storage } = memoryStorage();
     items.set("prism:navigator:ana", '{"hidden":true}');
 
-    expect(createNavigatorLayoutStore(() => storage).get("Ana")).toEqual({ hidden: true });
+    expect(createNavigatorLayoutStore(() => storage).get("Ana")).toEqual({ hidden: true, scriptsCollapsed: false });
   });
 
   it("sem armazenamento, com ele recusando o acesso ou lançando ao gravar: a escolha vive na memória da sessão, e nada lança", () => {
     for (const getStorage of [() => null, () => { throw new Error("negado"); }, () => ({ getItem: () => { throw new Error("x"); }, setItem: () => { throw new Error("cheio"); } })]) {
       const store = createNavigatorLayoutStore(getStorage);
 
-      expect(store.get("ana")).toEqual({ hidden: false });
-      store.set("ana", { hidden: true });
-      expect(store.get("ana")).toEqual({ hidden: true });
+      expect(store.get("ana")).toEqual(shown);
+      store.set("ana", { hidden: true, scriptsCollapsed: true });
+      expect(store.get("ana")).toEqual({ hidden: true, scriptsCollapsed: true });
     }
   });
 });
