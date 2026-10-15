@@ -262,7 +262,10 @@ public sealed class ScriptValidatorsTests
         }
     }
 
-    /// <summary>A mesma lista da tela, na mesma ordem: `scriptIcons`, em `src/client/src/app/workbench/_lib/saved-scripts.ts`.</summary>
+    /// <summary>
+    /// A lista que a regra tem, na ordem do diálogo. A conferência com a da tela (`scriptIcons`, em `src/client/src/app/workbench/_lib/saved-scripts.ts`) é do
+    /// teste de lá, `saved-scripts.test.ts`, que lê este `ScriptRules.cs`.
+    /// </summary>
     [Trait("ScriptRules", "Icons")]
     [Fact(DisplayName = "OK a lista dos ícones é a da tela, com o documento como padrão")]
     public void Icons_ShouldBeTheClosedListOfTheScreen()

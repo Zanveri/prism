@@ -900,9 +900,9 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   árvore em cache e as abas com sessão) para `scriptPlace`. Essa ligação e a do lugar têm teste com os ganchos simulados (`scripts-section.wiring.test.ts`).
 - **O ícone e a cor** (RN-SCRIPT-006, seção 28, issue #8). Cada script tem um ícone da lista fechada `scriptIcons` (`saved-scripts.ts`: `document`, o padrão,
   o de antes, `code`, `database`, `table`, `chart`, `clock`, `lightning`, `bug`, `wrench`, `star`, `flag`), **a mesma da API** (`ScriptRules.Icons`, na mesma
-  ordem; os testes das duas pontas a conferem: ícone novo entra nas duas), e uma cor opcional. Os desenhos são os do app (`components/ui/icons.tsx`: os novos
-  no mesmo traço, 16×16 e linha de 1,5), e `ScriptIconView` (`_components/script-icon.tsx`) os pinta com a cor pelo `iconColorStyle` (o contraste de 3:1 em
-  todos os temas, ver "Conexões"); sem cor, o `currentColor` de sempre. O ícone aparece em cada linha da seção e na aba do script, no lugar do documento: a
+  ordem; o `saved-scripts.test.ts` lê o `ScriptRules.cs` da API e confere a lista e a ordem: ícone novo entra nas duas), e uma cor opcional. Os desenhos são
+  os do app (`components/ui/icons.tsx`: os novos no mesmo traço, 16×16 e linha de 1,5), e `ScriptIconView` (`_components/script-icon.tsx`) os pinta com a
+  cor pelo `iconColorStyle` (o contraste de 3:1 em todos os temas, ver "Conexões"); sem cor, o `currentColor` de sempre. O ícone aparece em cada linha da seção e na aba do script, no lugar do documento: a
   faixa o lê da lista dos scripts (`TabStrip.scriptOf`, do `scriptsQuery` no `WorkbenchTabs`; sem a lista ou com o script excluído, o documento), e o
   `ScriptRef` da aba não o guarda (as abas que voltam e as que mudam de janela não mudam). O schema aceita o ícone como texto, e `scriptIconOf` troca o que
   esta versão não conhece pelo padrão, sem derrubar a lista. **"Editar script…"** (a ação `edit` do `scriptMenu`, logo depois do Renomear, sem atalho: o F2

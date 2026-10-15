@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -252,9 +253,32 @@ describe("o menu de um script e as teclas da linha (RN-SCRIPT-003)", () => {
   });
 });
 
+/**
+ * A lista dos ícones como a API a tem, lida do código dela (`src/api/Prism.Application/Scripts/Models/ScriptRules.cs`): o `Icons` e o `DefaultIcon`. Assim a
+ * conferência é entre as duas pontas, e não contra uma cópia da lista escrita aqui.
+ */
+function apiScriptIcons(): { icons: string[]; defaultIcon: string } {
+  const source = readFileSync(new URL("../../../../../api/Prism.Application/Scripts/Models/ScriptRules.cs", import.meta.url), "utf8");
+  const defaultIcon = /\bDefaultIcon\s*=\s*"([^"]+)"/.exec(source)?.[1];
+  const list = /\bIcons\s*=\s*\[([^\]]*)\]/.exec(source)?.[1];
+  if (defaultIcon === undefined || list === undefined) throw new Error("ScriptRules.cs não tem mais o DefaultIcon ou o Icons como este teste os lê.");
+
+  const icons = list.split(",").map((item) => {
+    const entry = item.trim();
+    if (entry === "DefaultIcon") return defaultIcon;
+    const quoted = /^"([^"]*)"$/.exec(entry);
+    if (quoted === null) throw new Error(`Item do ScriptRules.Icons que este teste não lê: ${entry}`);
+    return quoted[1];
+  });
+  return { icons, defaultIcon };
+}
+
 describe("o ícone e a cor do script (RN-SCRIPT-006)", () => {
-  it("a lista fechada é a da API (ScriptRules.Icons), na mesma ordem, com o documento de antes como padrão", () => {
-    expect(scriptIcons).toEqual(["document", "code", "database", "table", "chart", "clock", "lightning", "bug", "wrench", "star", "flag"]);
+  it("a lista fechada é a da API (ScriptRules.Icons, lida do código dela), na mesma ordem, com o documento de antes como padrão", () => {
+    const api = apiScriptIcons();
+
+    expect(api.icons).toEqual([...scriptIcons]);
+    expect(api.defaultIcon).toBe(defaultScriptIcon);
     expect(defaultScriptIcon).toBe("document");
   });
 

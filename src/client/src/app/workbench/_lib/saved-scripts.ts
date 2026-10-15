@@ -191,7 +191,8 @@ export function scriptMenu(script: { generic: boolean; bindable: boolean }): { a
 
 /**
  * RN-SCRIPT-006: a lista fechada dos ícones de um script, no traço dos ícones do app, na ordem em que o diálogo os mostra. É a mesma da API
- * (`ScriptRules.Icons`), e os testes das duas pontas conferem a lista e a ordem: ícone novo entra nas duas. O primeiro é o padrão, o documento de antes.
+ * (`ScriptRules.Icons`): o `saved-scripts.test.ts` lê o `ScriptRules.cs` e confere a lista e a ordem, então ícone novo entra nas duas. O primeiro é o padrão,
+ * o documento de antes.
  */
 export const scriptIcons = ["document", "code", "database", "table", "chart", "clock", "lightning", "bug", "wrench", "star", "flag"] as const;
 
