@@ -26,7 +26,7 @@ internal sealed class FolderRepository(IVaultService vaultService) : IFolderRepo
         if (record is null)
             return Task.FromResult(Result.Failure<Folder, ApiErrorDto>(FolderErrors.NotFound(id)));
 
-        return Task.FromResult(Result.Success<Folder, ApiErrorDto>(Folder.Restore(record.ID, record.ParentID, record.Name, record.EnvironmentName, record.EnvironmentColor, record.CreatedAt, record.UpdatedAt)));
+        return Task.FromResult(Result.Success<Folder, ApiErrorDto>(Folder.Restore(record.ID, record.ParentID, record.Name, record.EnvironmentName, record.EnvironmentColor, record.Color, record.CreatedAt, record.UpdatedAt)));
     }
 
     public Task<UnitResult<ApiErrorDto>> Insert(Folder folder, CancellationToken cancellationToken)
@@ -80,5 +80,5 @@ internal sealed class FolderRepository(IVaultService vaultService) : IFolderRepo
         }, cancellationToken);
 
     private static VaultFolderRecord ToRecord(Folder folder)
-        => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt, folder.EnvironmentName, folder.EnvironmentColor);
+        => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt, folder.EnvironmentName, folder.EnvironmentColor, folder.Color);
 }

@@ -109,7 +109,7 @@ public sealed class ScriptRepositoryTests
         var repository = CreateRepository(Document(before, target, after));
 
         //Act
-        var result = await repository.Update(target.ID, script => script.Change(null, "SELECT 2", null, null, Now), CancellationToken.None);
+        var result = await repository.Update(target.ID, script => script.Change(null, "SELECT 2", null, null, false, null, null, Now), CancellationToken.None);
 
         //Assert
         Assert.True(result.IsSuccess);
@@ -118,6 +118,25 @@ public sealed class ScriptRepositoryTests
         Assert.Equal(Now, result.Value.UpdatedAt);
         Assert.NotNull(_saved);
         Assert.Equal([before, target with { Sql = "SELECT 2", UpdatedAt = Now }, after], _saved.Scripts);
+    }
+
+    /// <summary>RN-SCRIPT-006: o ícone e a cor vão ao registro do cofre; o registro de antes deles (sem os campos) é lido com os dois nulos.</summary>
+    [Trait("ScriptRepository", "Update")]
+    [Fact(DisplayName = "OK grava o ícone e a cor no registro do script")]
+    public async Task Update_ShouldWriteTheIconAndTheColor()
+    {
+        //Arrange
+        var target = VaultFakers.CreateScript(name: "Relatório", sql: "SELECT 1");
+        var repository = CreateRepository(Document(target));
+
+        //Act
+        var result = await repository.Update(target.ID, script => script.Change(null, null, null, null, false, "clock", "#5ED3A3", Now), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(("clock", "#5ED3A3"), (result.Value.Icon, result.Value.Color));
+        Assert.NotNull(_saved);
+        Assert.Equal([target with { Icon = "clock", Color = "#5ED3A3", UpdatedAt = Now }], _saved.Scripts);
     }
 
     [Trait("ScriptRepository", "Update")]
@@ -130,7 +149,7 @@ public sealed class ScriptRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(target.ID, script => script.Change("Relatório", target.Sql, null, null, Now), CancellationToken.None);
+        var result = await repository.Update(target.ID, script => script.Change("Relatório", target.Sql, null, null, false, null, null, Now), CancellationToken.None);
 
         //Assert
         Assert.True(result.IsSuccess);
@@ -148,7 +167,7 @@ public sealed class ScriptRepositoryTests
         var id = Guid.CreateVersion7();
 
         //Act
-        var result = await repository.Update(id, script => script.Change("Outro", null, null, null, Now), CancellationToken.None);
+        var result = await repository.Update(id, script => script.Change("Outro", null, null, null, false, null, null, Now), CancellationToken.None);
 
         //Assert
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
@@ -167,7 +186,7 @@ public sealed class ScriptRepositoryTests
         var repository = CreateRepository(current);
 
         //Act
-        var result = await repository.Update(target.ID, script => script.Change("FECHAMENTO", null, null, null, Now), CancellationToken.None);
+        var result = await repository.Update(target.ID, script => script.Change("FECHAMENTO", null, null, null, false, null, null, Now), CancellationToken.None);
 
         //Assert
         Assert.Equal(HttpStatusCode.Conflict, result.Error.StatusCode);
@@ -184,7 +203,7 @@ public sealed class ScriptRepositoryTests
         var repository = CreateRepository(Document(target));
 
         //Act
-        var result = await repository.Update(target.ID, script => script.Change("Relatório", null, null, null, Now), CancellationToken.None);
+        var result = await repository.Update(target.ID, script => script.Change("Relatório", null, null, null, false, null, null, Now), CancellationToken.None);
 
         //Assert
         Assert.True(result.IsSuccess);
@@ -200,7 +219,7 @@ public sealed class ScriptRepositoryTests
         var repository = new ScriptRepository(_vault.Object);
 
         //Act
-        var result = await repository.Update(Guid.CreateVersion7(), script => script.Change("Outro", null, null, null, Now), CancellationToken.None);
+        var result = await repository.Update(Guid.CreateVersion7(), script => script.Change("Outro", null, null, null, false, null, null, Now), CancellationToken.None);
 
         //Assert
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);

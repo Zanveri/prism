@@ -36,7 +36,7 @@ internal sealed class ScriptRepository(IVaultService vaultService) : IScriptRepo
             if (existing is null)
                 return ScriptErrors.NotFound(id);
 
-            var script = Script.Restore(existing.ID, existing.Name, existing.Sql, existing.ConnectionID, existing.Database, existing.CreatedAt, existing.UpdatedAt);
+            var script = Script.Restore(existing.ID, existing.Name, existing.Sql, existing.ConnectionID, existing.Database, existing.Icon, existing.Color, existing.CreatedAt, existing.UpdatedAt);
             changed = script;
 
             // Nada mudou: a mesma instância é "nada a gravar", e o `.bak` continua guardando a versão anterior de verdade.
@@ -73,5 +73,5 @@ internal sealed class ScriptRepository(IVaultService vaultService) : IScriptRepo
         => document.Scripts.Any(record => record.ID != script.ID && string.Equals(record.Name, script.Name, StringComparison.OrdinalIgnoreCase));
 
     private static VaultScriptRecord ToRecord(Script script)
-        => new(script.ID, script.Name, script.Sql, script.ConnectionID, script.Database, script.CreatedAt, script.UpdatedAt);
+        => new(script.ID, script.Name, script.Sql, script.ConnectionID, script.Database, script.CreatedAt, script.UpdatedAt, script.Icon, script.Color);
 }

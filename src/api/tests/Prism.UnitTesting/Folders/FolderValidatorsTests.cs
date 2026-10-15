@@ -7,7 +7,8 @@ namespace Prism.UnitTesting.Folders;
 
 /// <summary>
 /// RN-PASTA-001: o nome tem de 1 a 60 caracteres depois de normalizado; RN-PASTA-005: o ambiente, opcional, segue as regras do ambiente da conexão, com a
-/// recusa em `FOLDER_NAME_INVALID` no campo dele. A pasta pai e o ID inexistentes são 404 do handler, e não regra de validator.
+/// recusa em `FOLDER_NAME_INVALID` no campo dele; RN-PASTA-007: a cor da pasta, opcional, é `#RRGGBB` como a do ambiente, e a recusa vai no mesmo código, no
+/// campo dela. A pasta pai e o ID inexistentes são 404 do handler, e não regra de validator.
 /// </summary>
 public sealed class FolderValidatorsTests
 {
@@ -182,6 +183,48 @@ public sealed class FolderValidatorsTests
 
         //Assert
         result.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK com cor da pasta #RRGGBB, em branco e sem ela")]
+    public void CreateFolder_ShouldBeOK_WithAndWithoutColor()
+    {
+        //Arrange
+        var validator = new CreateFolderValidator();
+
+        //Act
+        var with = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(color: "#7db2ff"));
+        var blank = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(color: " "));
+        var without = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid());
+
+        //Assert
+        with.ShouldNotHaveAnyValidationErrors();
+        blank.ShouldNotHaveAnyValidationErrors();
+        without.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "Erro cor da pasta fora do formato #RRGGBB")]
+    public void CreateFolder_ShouldBeError_ColorInvalid()
+    {
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(color: "azul"), "Color");
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(color: "7DB2FF"), "Color");
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(color: "#7DB2FG"), "Color");
+    }
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "Erro cor da pasta fora do formato #RRGGBB, e OK com ela válida")]
+    public void UpdateFolder_ShouldValidateTheColor()
+    {
+        //Arrange
+        var validator = new UpdateFolderValidator();
+
+        //Act
+        var valid = validator.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(color: "#B79CFF"));
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(color: "#B79"), "Color");
     }
 
     [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
