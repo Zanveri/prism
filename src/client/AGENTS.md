@@ -2092,13 +2092,16 @@ Electron não ganhou canal novo.
   pedido uma vez, com a área de trabalho na tela, e não abre por cima de um diálogo de conexão já aberto. O formulário, aberto assim ou pelo menu, diz no
   topo o que falta e põe o foco no campo (`missingCredentials`); salvar a edição de uma conexão sem senha gravada exige a senha
   (`editWithoutPasswordSchema`), e "Testar conexão" com a senha em branco leva a recusa da API ao campo da senha.
-- **O contrato que a tela assume** (a API foi feita ao mesmo tempo, pela seção 34): `POST api/user/connections/export` com `{ folderIDs, connections: [{ id,
-  credentials }], passphrase, userPassword? }` → `{ content, folders, connections, withUser, withPassword }`; `POST api/user/connections/import/preview` com
-  `{ content, passphrase, targetFolderID }` → `{ folders, connections }` (os campos da tabela da seção 34); `POST api/user/connections/import` com `{ content,
-  passphrase, targetFolderID, items, onConflict, keepVerificationQueries }` → `{ folderIDs, connectionIDs, mergedFolders, renamed, skipped }`. Os testes
-  simulam a API.
-- **O que não foi feito**: a conferência na tela (só os testes; a API das rotas não estava pronta), e o diálogo de salvar do sistema concluído por uma
-  pessoa, como no "Exportar CSV".
+- **O contrato** (conferido, campo a campo, com o `UserConnectionTransfersController` e os DTOs da API desta versão): `POST api/user/connections/export` com
+  `{ folderIDs, connections: [{ id, credentials }], passphrase, userPassword? }` → `{ content, folders, connections, withUser, withPassword }`; `POST
+  api/user/connections/import/preview` com `{ content, passphrase, targetFolderID }` → `{ folders, connections }` (os campos da tabela da seção 34); `POST
+  api/user/connections/import` com `{ content, passphrase, targetFolderID, items, onConflict, keepVerificationQueries }` → `{ folderIDs, connectionIDs,
+  mergedFolders, renamed, skipped }`. As recusas de campo vêm com o nome da propriedade em PascalCase (`Passphrase`, `UserPassword`, `Content`, `Items`,
+  `UserName`, `Password`), como em toda a API, e o `apiRequest` as entrega com a primeira letra minúscula (`toFieldErrors`). Os diálogos decidem pelo código;
+  o campo diz qual falta na `CONNECTION_CREDENTIALS_MISSING`, e dá o texto da API só onde a tela não tem frase própria. `IMPORT_FILE_NEWER` é 409, e as
+  demais recusas da leitura, 422. Os testes simulam a API.
+- **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
+  salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
 
 ## Configurações (`src/app/settings`)
 
