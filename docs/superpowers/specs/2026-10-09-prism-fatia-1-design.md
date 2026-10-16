@@ -472,6 +472,10 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `POST api/user/folders` | 201 | 404 `FOLDER_NOT_FOUND` (pai); 409 `FOLDER_ALREADY_EXISTS`; 422 `FOLDER_NAME_INVALID` |
 | `PATCH api/user/folders` | 200 | 404 `FOLDER_NOT_FOUND`; 409 `FOLDER_ALREADY_EXISTS`, `FOLDER_CYCLE`; 422 `FOLDER_NAME_INVALID`, `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (a senha do somente leitura, RN-PROT-003); 401 `VAULT_LOCKED` no quinto erro |
 | `DELETE api/user/folders/{id}` | 204 | 404 `FOLDER_NOT_FOUND`; 409 `FOLDER_NOT_EMPTY` |
+| `GET api/user/script-folders` | 200 lista de `{ id, parentID, name, createdAt, updatedAt }`, as pastas de scripts de todos os níveis (RN-SCRIPT-007, seção 33; as rotas dos scripts estão na seção 23) | |
+| `POST api/user/script-folders` `{ name, parentID? }` | 201 a pasta | 404 `SCRIPT_FOLDER_NOT_FOUND` (a pasta pai); 409 `SCRIPT_FOLDER_ALREADY_EXISTS`; 422 `SCRIPT_FOLDER_NAME_INVALID` |
+| `PATCH api/user/script-folders` `{ id, name, parentID? }` (a pasta inteira: sem `parentID`, ela vai para a raiz) | 200 a pasta | 404 `SCRIPT_FOLDER_NOT_FOUND` (a pasta ou a pasta pai); 409 `SCRIPT_FOLDER_ALREADY_EXISTS`, `SCRIPT_FOLDER_CYCLE`; 422 `SCRIPT_FOLDER_NAME_INVALID` |
+| `DELETE api/user/script-folders/{id}` | 204 | 404 `SCRIPT_FOLDER_NOT_FOUND`; 409 `SCRIPT_FOLDER_NOT_EMPTY` (com `folders` e `scripts`) |
 | `GET api/user/connections` | 200 lista (cada conexão com as proteções próprias e as que valem, `protections`, e a verificação: seção 32) | |
 | `GET api/user/connections/{id}` | 200 | 404 `CONNECTION_NOT_FOUND` |
 | `POST api/user/connections` | 201 | 404 `FOLDER_NOT_FOUND`; 409 `CONNECTION_ALREADY_EXISTS`; 422 `CONNECTION_INVALID` |
@@ -495,15 +499,15 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET .../schemas/{schema}/views/{view}/definition` | 200 `{ definition }` (RN-CAT-006) | as mesmas |
 | `GET .../schemas/{schema}/diagram` | 200 `{ tables, foreignKeys }` (RN-CAT-008) | as mesmas |
 | `GET api/user/database-sessions/{id}/properties` | 200 lista de `{ name, value }` (RN-CAT-010) | as mesmas |
-| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem), `CONNECTION_READ_ONLY` (RN-PROT-002: o comando não é uma leitura) |
+| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter?, keep? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`; `keep`: os resultados que continuam guardados para a edição, RN-SQL-024) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio; `keep` com mais de 20 resultados ou com uma entrada que não é um identificador), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem), `CONNECTION_READ_ONLY` (RN-PROT-002: o comando não é uma leitura) |
 | `POST .../queries/next` | 200 página | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_CURSOR`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/count` | 200 `{ total }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_QUERY_TO_COUNT`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `POST api/user/database-sessions/{id}/transaction/commit` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone` quando o banco desfez) |
 | `POST api/user/database-sessions/{id}/transaction/rollback` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone`: a conexão caiu, e a transação já estava perdida) |
-| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
-| `POST .../queries/edits` `{ resultID, changes }` | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`), `CONNECTION_READ_ONLY` (RN-PROT-002) |
-| `POST .../queries/edits/preview` `{ resultID, changes }` | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` (`resultID`: o do resultado atual ou o de um guardado, RN-SQL-024) | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST .../queries/edits` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`), `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST .../queries/edits/preview` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
 
 Página de resultado: `{ columns: [{ name, type, kind }], rows: string|null [][], hasMore,
 elapsedMs, truncatedCells: [linha, coluna][], totalRows }`, com `kind` em `text`, `number`,
@@ -525,7 +529,12 @@ Commit e do Rollback leva `transactionUndone` quando a transação foi desfeita 
 RN-TX-008); e, no Informix sem log, as recusas de `queries/edits` levam `applied`, as alterações
 já gravadas antes da que falhou (RN-EDIT-012). Com a seção 32: `CONNECTION_READ_ONLY` é a recusa,
 antes de ir ao banco, do que não é leitura numa conexão somente leitura, e não leva `executed` (o
-resultado anterior continua); os campos novos das pastas e das conexões estão nas notas dela.
+resultado anterior continua); os campos novos das pastas e das conexões estão nas notas dela. Com a
+seção 33: `POST .../queries` aceita `keep`, e as três rotas da edição aceitam o `resultID` de um
+resultado que o script mantém na tela (RN-SQL-024); `RESULT_CHANGED` passa a dizer que o resultado não
+está mais guardado na sessão e, no Db2 e no Informix, é também a recusa da tabela sem esquema depois de
+um `SET`, `CALL` ou `EXECUTE` (no Informix, também `DATABASE`); e `SCRIPT_FOLDER_NOT_EMPTY` leva
+`folders` e `scripts`, quantas subpastas e quantos scripts a pasta tem.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -588,7 +597,8 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
 - O diálogo da pasta do canvas (`PastaAmbiente`) não tem a cor da pasta, e o ícone da pasta na
   árvore do canvas é sempre neutro: no "Editar pasta…" a "Cor da pasta" vem antes da seção
   Ambiente, e pinta o ícone da pasta (RN-PASTA-007). O canvas também não desenha a seção "Scripts",
-  nem o ícone e a cor de cada script (RN-SCRIPT-006).
+  nem o ícone e a cor de cada script (RN-SCRIPT-006), nem as pastas de scripts, com a árvore, os menus
+  e os diálogos delas (RN-SCRIPT-007 a 010, seção 33).
 - A aba de tabela e a aba de diagrama entraram pela seção 18 (o DDL e o salto por chave
   estrangeira ainda não).
 - A Estrutura da tabela não empilha cartões como o canvas (`TabelaDetalhe`): mostra uma seção
@@ -614,6 +624,14 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   depois de um script, ganha uma aba por resultado e as Estatísticas no lugar do título
   "Resultado", no mesmo desenho das abas "Resultado", "Mensagens" e "Plano de execução" do canvas
   (RN-SQL-019 e 020, seção 31). O canvas não desenha o script.
+- A grade ganha a barra de edição ("Editar célula", "Adicionar linha", "Duplicar linha" e "Excluir
+  linha", RN-EDIT-013, seção 33), que o canvas não tem: nos Registros ela entra no rodapé de
+  `TabelaDados`, depois de "Exportar CSV"; no resultado da aba de consulta e em cada aba de resultado
+  do script, numa linha abaixo da grade. O lápis e as duas folhas não estão entre os ícones do canvas
+  e seguem o traço deles (16 px, traço 1,5); o mais e o X são os do canvas. O conjunto de ícones do
+  app já tem o lápis e as duas folhas (os do menu do navegador): só o X no tom de erro é novo.
+  "Salvar", "Descartar" e "Ver SQL" continuam na faixa sobre a grade (RN-EDIT-004), e não nessa
+  barra.
 
 ## 10. Riscos e sondas
 
@@ -1058,7 +1076,8 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   2026-10-09), então a regra é uma só. Nenhum nome vindo do catálogo pode virar um segundo
   comando nem mudar o que é consultado. Valem as regras de resultado da seção de SQL: páginas de
   200, "carregar mais", contar o total, cancelar. Os registros são editáveis pelas RN-EDIT-001 a
-  012.
+  016. *Alterada a pedido do dono em 2026-10-16 (seção 33): entraram a barra de edição e o duplicar
+  linha (RN-EDIT-013 a 016).*
 - **RN-TABELA-003.** Estrutura: colunas (nome, tipo, nulo, chave; o padrão entra quando a API o devolver), chaves estrangeiras
   (nome, colunas, tabela e colunas referenciadas) e índices (nome, colunas, único), pelas três
   consultas de catálogo que a API já tem. O DDL da tabela fica para depois.
@@ -1249,7 +1268,10 @@ Navegação:
   dentro da pasta escolhida na árvore, ou na pasta do item escolhido, ou na raiz do navegador
   quando nada está escolhido. Conectar, Desconectar e Atualizar agem sobre o item escolhido na
   árvore; a ação que não se aplica aparece desabilitada, não some. Cada botão tem nome para
-  leitor de tela e dica com o atalho, quando há.
+  leitor de tela e dica com o atalho, quando há. A barra é da árvore das conexões: "Nova conexão",
+  "Nova pasta", "Conectar", "Desconectar", "Atualizar" e "Recolher tudo" não agem sobre a seção
+  Scripts, que tem as pastas de scripts e os menus dela (RN-SCRIPT-008 e 009). *Alterada a pedido do
+  dono em 2026-10-16 (seção 33): com a árvore da seção Scripts, a barra diz de qual árvore é.*
 - **RN-NAV-003.** Tudo o que a tela de Conexões fazia passa a ser feito no navegador, pela barra
   de ações e pelo menu de contexto (RN-MENU-001): criar, renomear, mover e excluir pasta; criar,
   editar, mover e excluir conexão; testar a conexão e revelar a senha (no formulário). As regras
@@ -1316,7 +1338,9 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   avançado, Copiar nome da coluna, Filtrar, Ordenar, Gerar SQL, Exportar e, numa chave
   estrangeira, Ir para o registro referenciado. O clique direito numa célula fora da seleção a
   escolhe antes. O menu ganha também os itens da edição de célula (RN-EDIT-001): Editar célula,
-  Definir como nulo, Linha nova, Excluir linha e Desfazer alteração.
+  Definir como nulo, Desfazer alteração, Adicionar linha, Duplicar linha e Excluir linha. *Alterada a
+  pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha", e entrou
+  "Duplicar linha" (RN-EDIT-016).*
 - **RN-GRADE-005.** Filtrar pelo valor (Registros), como no DBeaver: sobre uma célula, o menu
   oferece igual ao valor (`=`), diferente (`<>`), maior (`>`), menor (`<`), contém (`LIKE`, em
   colunas de texto), "É nulo", "Não é nulo" e "Remover filtro". A condição escolhida entra no
@@ -1689,13 +1713,17 @@ até lá, o que depende delas está a provar.
 
 ### Edição de célula
 
-- **RN-EDIT-001.** **Onde e como.** Na grade dos Registros de uma tabela e na grade do resultado de um comando da aba de
-  consulta, quando o resultado é editável (RN-EDIT-002). A edição parte da célula ativa da grade (RN-GRADE-001): F2, Enter,
-  duplo clique, ou começar a digitar (o que substitui o valor). O campo de edição fica na própria célula, com "Confirmar edição
-  (Enter)" e "Cancelar edição (Esc)", como no canvas; Tab e Shift+Tab confirmam e passam para a próxima célula editável. O
-  menu de contexto (RN-GRADE-004) ganha "Editar célula" (F2), "Definir como nulo", "Linha nova" (Alt+Insert), "Excluir linha"
-  (também Delete, com linhas inteiras escolhidas pelo número da linha) e "Desfazer alteração". O que não se aplica aparece
-  desabilitado, com o motivo.
+- **RN-EDIT-001.** **Onde e como.** Na grade dos Registros de uma tabela, na grade do resultado de um comando da aba de
+  consulta e na de cada aba de resultado do "Executar script" (RN-SQL-020 e 023), quando o resultado é editável (RN-EDIT-002).
+  A edição parte da célula ativa da grade (RN-GRADE-001): F2, Enter, duplo clique, ou começar a digitar (o que substitui o
+  valor). O campo de edição fica na própria célula, com "Confirmar edição (Enter)" e "Cancelar edição (Esc)", como no canvas;
+  Tab e Shift+Tab confirmam e passam para a próxima célula editável. O menu de contexto (RN-GRADE-004) ganha "Editar célula"
+  (F2), "Definir como nulo", "Desfazer alteração", "Adicionar linha" (Alt+Insert), "Duplicar linha" (Ctrl+Alt+Insert,
+  RN-EDIT-016) e "Excluir linha" (Alt+Delete, na linha da célula ativa; e também Delete, com linhas inteiras escolhidas pelo
+  número da linha). A barra de edição (RN-EDIT-013) deixa à vista "Editar célula", "Adicionar linha", "Duplicar linha" e
+  "Excluir linha", com os mesmos atalhos (RN-EDIT-015). O que não se aplica aparece desabilitado, com o motivo. *Alterada a
+  pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha" (as marcas da linha nova na grade
+  continuam), e entraram "Duplicar linha", o Alt+Delete, a barra de edição e as abas do script.*
 - **RN-EDIT-002.** **Quando um resultado é editável.** A edição vale **coluna por coluna, na tabela de onde a coluna veio**,
   também num resultado de junção.
 
@@ -1717,9 +1745,9 @@ até lá, o que depende delas está a provar.
   **célula** é só leitura quando foi cortada (RN-SQL-011), quando a chave da tabela dela tem valor cortado ou binário naquela
   linha, e, numa junção externa, quando a tabela dela não tem linha ali (a chave veio nula).
 
-  Num resultado de **uma tabela só**, valem também "Linha nova" e "Excluir linha", e as colunas da chave são editáveis. Num
-  resultado de **junção**, só se alteram células: uma linha de uma tabela que aparece repetida no resultado (a mesma chave em
-  várias linhas da grade) muda em todas elas de uma vez, e conta como uma alteração.
+  Num resultado de **uma tabela só**, valem também "Adicionar linha", "Duplicar linha" e "Excluir linha", e as colunas da
+  chave são editáveis. Num resultado de **junção**, só se alteram células: uma linha de uma tabela que aparece repetida no
+  resultado (a mesma chave em várias linhas da grade) muda em todas elas de uma vez, e conta como uma alteração.
 
   Os motivos ficam à vista: os do resultado inteiro na barra do resultado ("Somente leitura: união de consultas", "DISTINCT",
   "agrupamento", "SELECT ... FOR UPDATE", "subconsulta ou WITH no FROM", "o comando gravou e devolveu linhas", "o Prism não
@@ -1727,7 +1755,8 @@ até lá, o que depende delas está a provar.
   pessoa tenta editar e na dica do cabeçalho da coluna ("<tabela> é uma visão", "<tabela> aparece mais de uma vez no
   comando", "a chave de <tabela> não está inteira no resultado: faltam <colunas>", "<tabela> não tem chave primária nem chave
   única de colunas não nulas", "coluna calculada", "gerada pelo banco", "coluna da chave numa junção", "o Prism ainda não
-  edita este tipo neste banco").
+  edita este tipo neste banco"). *Alterada a pedido do dono em 2026-10-16 (seção 33): entrou "Duplicar linha", e "Linha nova"
+  passou a se chamar "Adicionar linha".*
 - **RN-EDIT-003.** **De onde vem cada coluna.** No **PostgreSQL**, o próprio banco diz, na resposta do comando, de que tabela e
   de que coluna vem cada coluna do resultado (e que ela é calculada, quando não vem de nenhuma); o Prism só guarda isso, e
   descobre os nomes, a chave e o tipo de cada tabela no catálogo (RN-EDIT-010). A leitura do texto do comando entra só para as
@@ -1744,25 +1773,31 @@ até lá, o que depende delas está a provar.
     "o Prism não conseguiu saber de onde vêm as colunas";
   - a tabela sem esquema é a do esquema atual da sessão da aba (Db2) ou a do dono que o banco resolver (Informix). O "Salvar"
     confere isso na própria sessão da aba antes do primeiro comando; se o esquema atual mudou desde a consulta, nada é
-    executado e a tela diz por quê.
+    executado e a tela diz por quê. Numa aba do script que não é a do último comando, outros comandos já rodaram na sessão
+    depois da leitura: o que pode trocar o esquema atual (`SET`, `CALL`, `EXECUTE` e, no Informix, `DATABASE`), executado
+    depois dela, tranca a edição da tabela sem esquema (RN-SQL-024).
 
   Um sinônimo ou apelido de tabela do Db2 e do Informix no `FROM` não é reconhecido como tabela, e as colunas dele ficam só
-  leitura ("não é uma tabela").
-- **RN-EDIT-004.** **Pendências** (dois passos: "Salvar" e, no Commit manual, Commit). Editar, definir nulo, criar linha e
-  excluir linha não vão ao banco: ficam pendentes na tela e destacados — a célula alterada mostra o valor lido riscado ao lado
-  do novo (como no canvas), a linha nova é marcada no número da linha, e a linha excluída aparece riscada. Uma faixa sobre a
-  grade diz quantas alterações há ("3 alterações não salvas") e tem "Ver SQL", "Descartar" e "Salvar" (Ctrl+S com o foco na
-  grade). "Descartar" joga fora só o que não foi salvo, sem mexer na transação. "Desfazer alteração" tira uma pendência. As
-  pendências atravessam a rolagem e o "carregar mais".
+  leitura ("não é uma tabela"). *Alterada a pedido do dono em 2026-10-16 (seção 33): entrou a tabela sem esquema nas abas do
+  script que se editam.*
+- **RN-EDIT-004.** **Pendências** (dois passos: "Salvar" e, no Commit manual, Commit). Editar, definir nulo, criar linha,
+  duplicar linha e excluir linha não vão ao banco: ficam pendentes na tela e destacados — a célula alterada mostra o valor lido
+  riscado ao lado do novo (como no canvas), a linha nova (também a duplicada, RN-EDIT-016) é marcada no número da linha, e a
+  linha excluída aparece riscada. Uma faixa sobre a grade diz quantas alterações há ("3 alterações não salvas") e tem "Ver
+  SQL", "Descartar" e "Salvar" (Ctrl+S com o foco na grade). "Descartar" joga fora só o que não foi salvo, sem mexer na
+  transação. "Desfazer alteração" tira uma pendência. As pendências atravessam a rolagem e o "carregar mais". A barra de edição
+  (RN-EDIT-013) só cria e tira pendências: "Salvar", "Descartar" e "Ver SQL" ficam nesta faixa, que não muda. *Alterada a
+  pedido do dono em 2026-10-16 (seção 33): entraram o duplicar e a barra de edição.*
 - **RN-EDIT-005.** **Salvar** executa todas as pendências **numa transação só**, na sessão da aba: primeiro as exclusões,
   depois as alterações, depois as linhas novas, cada grupo na ordem em que foi feito. Cada alteração e cada exclusão é um
   comando pela chave da tabela dela (RN-EDIT-002), com os valores que a grade leu, e tem de afetar **exatamente uma linha**; se
   afetar zero ou mais de uma, ou se o banco recusar, tudo o que este "Salvar" fez é desfeito, e a tela diz qual linha falhou (e
   a destaca), quantas linhas o comando afetou ("a linha não existe mais, ou a chave dela mudou" para zero) e a mensagem do
-  banco, como veio. A linha nova leva só as colunas que a pessoa preencheu; as outras ficam com o padrão da tabela. Os valores
-  vão ao banco como parâmetros, nunca dentro do texto, e os nomes entre aspas duplas (RN-TABELA-002). Antes do primeiro
-  comando o Prism confere no catálogo, dentro da mesma transação, que cada chave é a da tabela e que as colunas alteradas são
-  editáveis; se uma tabela mudou, nada é executado e a tela diz por quê.
+  banco, como veio. A linha nova leva só as colunas que a pessoa preencheu (a duplicada, também as que a duplicação copiou,
+  RN-EDIT-016); as outras ficam com o padrão da tabela. Os valores vão ao banco como parâmetros, nunca dentro do texto, e os
+  nomes entre aspas duplas (RN-TABELA-002). Antes do primeiro comando o Prism confere no catálogo, dentro da mesma transação,
+  que cada chave é a da tabela e que as colunas alteradas são editáveis; se uma tabela mudou, nada é executado e a tela diz por
+  quê. *Alterada a pedido do dono em 2026-10-16 (seção 33): entrou a linha duplicada.*
   - **Em Auto-commit** (e na aba de uma tabela, sempre), o "Salvar" é uma transação própria, confirmada quando a resposta chega,
     e a falha desfaz tudo o que ele fez.
   - **No Commit manual**, o "Salvar" entra na transação da aba e fica pendente até o Commit. Para que a falha de um "Salvar"
@@ -1780,11 +1815,13 @@ até lá, o que depende delas está a provar.
   leitura. Texto que não converte é recusado antes de qualquer comando ir ao banco, apontando a célula.
 - **RN-EDIT-007.** **Com alterações pendentes**, executar outro comando na aba, executar de novo ou "Atualizar", filtrar,
   ordenar (pelo cabeçalho, pelo menu ou pelo campo de filtro), filtrar pelo valor, chegar à aba por uma chave estrangeira
-  (RN-TABELA-007, que filtra a aba de destino), trocar o modo ou o nível, Commit, Rollback, fechar a aba, desconectar, excluir a
-  conexão, "Sair" e fechar o app perguntam antes: "Há N alterações não salvas" com "Salvar", "Descartar" e "Cancelar" (nas
-  saídas que atingem várias abas, só "Descartar" e "Cancelar"). Rolar, "carregar mais", copiar e exportar não perguntam;
-  copiar leva o que está na tela, e exportar avisa que há alterações não salvas. O bloqueio por inatividade as descarta
-  (RN-TX-007).
+  (RN-TABELA-007, que filtra a aba de destino), trocar o modo ou o nível, Commit, Rollback, fechar a aba, trocar de aba de
+  resultado do script (RN-SQL-023), levar a aba para outra janela (RN-ABAS-002 e 003), desconectar, excluir a conexão, "Sair"
+  e fechar o app perguntam antes: "Há N alterações não salvas" com "Salvar", "Descartar" e "Cancelar" (nas saídas que atingem
+  várias abas, só "Descartar" e "Cancelar"). Rolar, "carregar mais", copiar e exportar não perguntam; copiar leva o que está
+  na tela, e exportar avisa que há alterações não salvas. O bloqueio por inatividade as descarta (RN-TX-007). *Alterada a
+  pedido do dono em 2026-10-16 (seção 33): entrou a troca de aba de resultado do script, e a lista passou a dizer o levar a aba
+  para outra janela, que já perguntava.*
 - **RN-EDIT-008.** **Ver SQL** mostra, na ordem em que serão executados, os comandos que o "Salvar" vai executar, com os
   valores escritos como literais do banco para leitura; o valor que não tem literal (caractere de controle) aparece como `?`,
   com o valor ao lado. Diz que na execução os valores vão como parâmetros e, no Informix sem log, que cada comando é gravado
@@ -1792,8 +1829,10 @@ até lá, o que depende delas está a provar.
 - **RN-EDIT-009.** **Depois de salvar**, a grade continua com as linhas que tinha, com os valores salvos (numa junção, em todas
   as linhas que mostram a mesma linha da tabela); as excluídas saem; a linha nova mostra o que foi digitado e, nas colunas que
   o banco preenche, "gerado pelo banco — execute de novo para ver". O cursor aberto fecha (salvar é um comando na sessão), e
-  "carregar mais" dá lugar ao "executar de novo" da RN-SQL-007. O aviso diz "N alterações salvas" (Auto-commit) ou "N
-  alterações salvas, sem commit" (Commit manual).
+  "carregar mais" dá lugar ao "executar de novo" da RN-SQL-007. Numa aba do script que não é a do último comando, o cursor que
+  fecha é o do último, e é a aba dele que passa ao "executar de novo" (RN-SQL-023). O aviso diz "N alterações salvas"
+  (Auto-commit) ou "N alterações salvas, sem commit" (Commit manual). *Alterada a pedido do dono em 2026-10-16 (seção 33):
+  entrou o "Salvar" das abas do script.*
 - **RN-EDIT-010.** **Custo.** Executar um comando não custa nenhuma consulta a mais ao banco por causa da edição: no PostgreSQL
   a origem das colunas vem na própria resposta, e no Db2 e no Informix o Prism lê o texto do comando. A primeira tentativa de
   editar um resultado consulta o catálogo uma vez, para todas as tabelas do `FROM` juntas — na sessão da árvore daquela
@@ -1820,16 +1859,17 @@ Novas, no padrão da seção 6:
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
 | `POST api/user/database-sessions/{id}/transaction/commit` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone` quando o banco desfez) |
 | `POST api/user/database-sessions/{id}/transaction/rollback` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone`: a conexão caiu, e a transação já estava perdida) |
-| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED` |
-| `POST .../queries/edits` `{ resultID, changes }` | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`) |
-| `POST .../queries/edits/preview` `{ resultID, changes }` | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` |
+| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` (`resultID`: seção 33, RN-SQL-024) | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED` |
+| `POST .../queries/edits` `{ resultID, changes }` (`resultID`: seção 33, RN-SQL-024) | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`) |
+| `POST .../queries/edits/preview` `{ resultID, changes }` (`resultID`: seção 33, RN-SQL-024) | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` |
 
 Notas:
 
 - `edit-target` devolve `tables` (cada tabela do `FROM`: `{ schema, name, key: [coluna do resultado], editable, reason }`),
   `columns` (cada coluna do resultado: `{ table, baseColumn, editable, reason, nullable, generated }`, com `table` nulo na
-  coluna calculada), `rowOperations` (verdadeiro só no resultado de uma tabela: "Linha nova" e "Excluir linha") e `oneAtATime`
-  (Informix sem log, RN-EDIT-012).
+  coluna calculada, e `generated` `always`, `byDefault` ou nulo; no PostgreSQL, a coluna cujo padrão é `nextval(...)`, o
+  `serial`, também é `byDefault`, seção 33, RN-EDIT-016), `rowOperations` (verdadeiro só no resultado de uma tabela:
+  "Adicionar linha", "Duplicar linha" e "Excluir linha") e `oneAtATime` (Informix sem log, RN-EDIT-012).
 - `catalogSessionID` é a sessão da árvore da mesma conexão, que só a tela conhece; a API a usa se ela existe, é da mesma
   conexão e do mesmo cofre, e espera a vez nela como qualquer consulta de catálogo. Sem ela (ausente, inexistente, de outra
   conexão), a consulta vai numa conexão à parte, com prazo de espera de trava; não há recusa a mais.
@@ -1920,7 +1960,7 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 
 ### Fica para depois
 
-- **Linha nova e excluir linha num resultado de junção** (qual tabela recebe a linha, e o que fazer com as outras), e
+- **Adicionar, duplicar e excluir linha num resultado de junção** (qual tabela recebe a linha, e o que fazer com as outras), e
   **"Gerar SQL" de `UPDATE` e `DELETE` por tabela** num resultado de junção.
 - **A mesma tabela duas vezes** (auto-junção) editável, com cada ocorrência separada pelo apelido.
 - **Subconsulta e `WITH` no `FROM`**, `NATURAL JOIN` e `USING` com `*` no Db2 e no Informix, o `OUTER (...)` com parênteses do
@@ -1979,18 +2019,23 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 
 - **RN-SCRIPT-001.** Ctrl+S numa aba de consulta salva o SQL dela como script: na primeira vez pede
   o nome (sugerido "Script 1", "Script 2"…); depois grava por cima. "Salvar como" (Ctrl+Shift+S)
-  grava com outro nome. O diálogo do nome, na primeira vez e no "Salvar como", tem a caixa "Script
-  genérico (sem conexão)" (RN-SCRIPT-005). A aba mostra o nome do script, e um ponto enquanto há
-  mudança não salva; fechá-la assim pergunta se salva. *Alterada a pedido do dono em 2026-10-15,
-  issue #9: entrou a caixa do script genérico.*
+  grava com outro nome. O diálogo do nome, na primeira vez e no "Salvar como", tem o campo "Pasta"
+  (RN-SCRIPT-010) e a caixa "Script genérico (sem conexão)" (RN-SCRIPT-005). A aba mostra o nome do
+  script, e um ponto enquanto há mudança não salva; fechá-la assim pergunta se salva. *Alterada a
+  pedido do dono em 2026-10-15, issue #9: entrou a caixa do script genérico; e em 2026-10-16 (seção
+  33): entrou o campo "Pasta".*
 - **RN-SCRIPT-002.** Os scripts são do usuário e moram no cofre dele, cifrados como o resto do cofre
   (RN-COFRE): só quem tem a senha do usuário os lê, nada vai em texto aberto para o disco, e o log
-  nunca leva o texto do SQL. Acrescentar os scripts ao cofre sobe o número do formato dele; um
-  cofre antigo é migrado ao abrir (RN-VERSAO-005).
-- **RN-SCRIPT-003.** O navegador tem a seção "Scripts", com os scripts do usuário em ordem de nome:
-  abrir (duplo clique ou Enter), renomear, excluir (com confirmação), "Copiar SQL" e, conforme o
-  script, "Tornar genérico" ou "Vincular à conexão da aba" (RN-SCRIPT-005). O script lembra a
-  conexão e o banco da aba em que foi salvo, menos o genérico, que não lembra nenhum
+  nunca leva o texto do SQL. Acrescentar os scripts ao cofre subiu o número do formato dele (para o
+  2), a área de trabalho o subiu para o 3 (RN-ABAS-006) e as pastas de scripts o sobem para o 4
+  (RN-SCRIPT-011); um cofre antigo é migrado ao abrir (RN-VERSAO-005). *Alterada a pedido do dono
+  em 2026-10-16 (seção 33): entraram as pastas de scripts.*
+- **RN-SCRIPT-003.** O navegador tem a seção "Scripts", com as pastas de scripts e os scripts do
+  usuário numa árvore (RN-SCRIPT-007 e 008): em cada pasta, e na raiz, as subpastas e depois os
+  scripts, cada grupo em ordem de nome. Cada script se abre (duplo clique ou Enter), se renomeia, vai
+  para outra pasta ("Mover para…", RN-SCRIPT-009), se exclui (com confirmação), tem "Copiar SQL" e,
+  conforme o script, "Tornar genérico" ou "Vincular à conexão da aba" (RN-SCRIPT-005). O script
+  lembra a conexão e o banco da aba em que foi salvo, menos o genérico, que não lembra nenhum
   (RN-SCRIPT-005); aberto, vira uma aba de consulta já nessa conexão e nesse banco. Se a conexão
   não existe mais, a aba abre sem conexão e pede para escolher uma.
   - Mudança não salva é o texto, a conexão (RN-ARVORE-008) ou o banco (RN-ARVORE-007) da aba
@@ -2000,6 +2045,8 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
     lembrando a conexão com que ele está gravado.
   - *Alterada a pedido do dono em 2026-10-15, issue #9: antes todo script lembrava uma conexão, e a
     mudança não salva era só o texto e o banco.*
+  - *Alterada a pedido do dono em 2026-10-16 (seção 33): a lista virou a árvore das pastas de
+    scripts, e o script ganhou "Mover para…".*
 - **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
   (sem diferenciar maiúsculas); SQL de até 1 MB.
 
@@ -2007,10 +2054,10 @@ Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`
 
 | Rota | Sucesso | Recusas |
 | --- | --- | --- |
-| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, icon, color, updatedAt }`, sem o SQL (`icon` e `color`: RN-SCRIPT-006) | |
-| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, icon, color, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
-| `POST api/user/scripts` `{ name, sql, connectionID?, database? }` | 201 | 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
-| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database?, generic?, icon?, color? }` (`generic`: RN-SCRIPT-005; `icon` e `color`: RN-SCRIPT-006) | 200 | 404 `SCRIPT_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE`, `SCRIPT_PLACE_INVALID` (`generic` com `connectionID` ou `database`), `SCRIPT_ICON_INVALID` (ícone fora da lista, cor fora de `#RRGGBB`) |
+| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, folderID, icon, color, updatedAt }`, sem o SQL (`icon` e `color`: RN-SCRIPT-006; `folderID`, nulo na raiz: RN-SCRIPT-007) | |
+| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, folderID, icon, color, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
+| `POST api/user/scripts` `{ name, sql, connectionID?, database?, folderID? }` (`folderID` ausente ou nulo: a raiz) | 201 | 404 `SCRIPT_FOLDER_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
+| `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database?, generic?, icon?, color?, folderID?, root? }` (`generic`: RN-SCRIPT-005; `icon` e `color`: RN-SCRIPT-006; `folderID` e `root`: RN-SCRIPT-009, seção 33) | 200 | 404 `SCRIPT_NOT_FOUND`, `SCRIPT_FOLDER_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE`, `SCRIPT_PLACE_INVALID` (`generic` com `connectionID` ou `database`, ou `root: true` com um `folderID` não nulo), `SCRIPT_ICON_INVALID` (ícone fora da lista, cor fora de `#RRGGBB`) |
 | `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
 
 ### Ir do editor para a tabela
@@ -2506,10 +2553,11 @@ nos dados que estão sendo acompanhados".
     frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
     Configurações): só a aba à vista fala com o banco sozinha. Ao sair da pausa, se o prazo já
     passou, executa na hora; senão, espera o que falta. A pausa da grade vale desde o começo da
-    ação que abre a célula ou o menu, exclui, cola ou acrescenta uma linha (que antes pergunta à
-    API o que se edita), e não só depois: a ação nunca cai em outra linha. Se as linhas mudam
-    mesmo assim (a execução que já rodava quando o menu abriu), o menu fecha, e a escolha sobre a
-    célula não age.
+    ação que abre a célula ou o menu, exclui, cola, acrescenta ou duplica uma linha (pelo menu, pela
+    barra de edição ou pelo atalho, RN-EDIT-013 a 016; a ação antes pergunta à API o que se edita), e
+    não só depois: a ação nunca cai em outra linha. Se as linhas mudam mesmo assim (a execução que
+    já rodava quando o menu abriu), o menu fecha, e a escolha sobre a célula não age. *Alterada a
+    pedido do dono em 2026-10-16 (seção 33): entraram o duplicar e a barra de edição.*
   - Para sozinha quando uma execução não traz um resultado de leitura novo: o erro do banco aparece
     uma vez, como sempre (RN-SQL-009), e o controle diz numa nota curta que a atualização
     automática parou e por quê (o erro, o cancelamento, o comando que não pôde ser executado, o
@@ -2566,8 +2614,9 @@ primeiras: a área de trabalho passa de 14 px a 13 px, e quem quer menos ainda u
   - "Compacta" tem linhas de 22 px e 12 px de recuo a cada nível, para caber mais itens na mesma
     altura, como no DBeaver. O texto continua 13/20 (RN-CONFIG-009), e os botões de ação da linha,
     o ponto de estado, a etiqueta do banco, a do ambiente e as marcas (PK) cabem sem corte.
-  - Vale para a árvore e para a lista da seção Scripts. A linha de erro de um nó continua da
-    altura que a mensagem pede.
+  - Vale para a árvore e para a da seção Scripts, que tem pastas (RN-SCRIPT-008), com o mesmo
+    recuo a cada nível. A linha de erro de um nó continua da altura que a mensagem pede. *Alterada a
+    pedido do dono em 2026-10-16 (seção 33): a lista dos scripts virou árvore.*
   - A escolha vale na hora, em todas as janelas, sem fechar os nós abertos nem perder o item
     escolhido, e fica nas preferências desta instalação, por usuário (RN-CONFIG-001), como o tema e
     as fontes.
@@ -2584,7 +2633,8 @@ quando um comando falha. No Prism uma execução levava um comando só (RN-SQL-0
 para a entrega 2 (seção 13). Entra agora, com as regras do Prism para cada comando. Muda a
 RN-SQL-001, a seção 13 e o "fica para depois" da seção 22, que citam o script, e a RN-SEG-001 (o
 script parado na pergunta de erro não segura o bloqueio); a seção 9 diz o que o canvas não desenha.
-A API não muda: continua recebendo um comando por execução.
+A API não muda: continua recebendo um comando por execução (a seção 33 acrescenta a ele o `keep`,
+RN-SQL-024, para as abas do script se editarem).
 
 - **RN-SQL-019.** Executar script.
   - Onde: Alt+X no editor e com o foco em qualquer ponto da aba de consulta (a barra, o resultado, o
@@ -2646,14 +2696,15 @@ A API não muda: continua recebendo um comando por execução.
     "Carregar mais", "Contar total", o filtro do resultado (RN-GRADE-011), a edição das células (seção
     22), a atualização automática (RN-GRADE-014) e o F5, com a aba dele à frente; com outra aba do
     script à frente, a atualização automática espera, como com outra aba do Prism à frente. As abas dos
-    outros comandos guardam as linhas que já tinham sido lidas (as primeiras 200, RN-SQL-004), só para
-    leitura, sem o menu da grade, e dizem por que o resto não vale ali: o cursor delas fechou quando o
-    comando seguinte rodou, e "Carregar mais", "Contar total", o filtro, o menu da grade, a edição e a
-    atualização automática ficam no resultado do último comando. Elas oferecem "Executar este
-    comando", que executa só aquele comando, como o Ctrl+Enter nele (com a pergunta da RN-EDIT-007
-    antes, quando há alterações não salvas). Com um comando em andamento na aba, o botão fica à vista,
-    não executa e diz por quê, sem perguntar nem mexer na área; quando o comando executado troca os
-    resultados do script, o foco vai à grade do resultado novo, e não se perde (como na RN-SQL-006).
+    outros comandos guardam as linhas que já tinham sido lidas (as primeiras 200, RN-SQL-004) e se
+    editam como a do último, com o menu da célula e a barra de edição (seção 22 e RN-SQL-023), mas
+    dizem por que o resto não vale ali: o cursor delas fechou quando o comando seguinte rodou, e
+    "Carregar mais", "Contar total", o filtro e a atualização automática ficam no resultado do último
+    comando. Elas oferecem "Executar este comando", que executa só aquele comando, como o Ctrl+Enter
+    nele (com a pergunta da RN-EDIT-007 antes, quando há alterações não salvas). Com um comando em
+    andamento na aba, o botão fica à vista, não executa e diz por quê, sem perguntar nem mexer na área;
+    quando o comando executado troca os resultados do script, o foco vai à grade do resultado novo, e
+    não se perde (como na RN-SQL-006).
   - O script guarda as abas dos 20 primeiros comandos que devolvem linhas, para um script longo não
     encher a memória de grades; a do último comando executado fica sempre, quando ele devolve linhas,
     porque é a do cursor aberto. Os outros aparecem só nas Estatísticas, com as linhas que devolveram,
@@ -2679,12 +2730,14 @@ A API não muda: continua recebendo um comando por execução.
     fazia o tempo crescer com o quadrado do tamanho.
   - Uma execução nova na aba substitui os resultados do script, como substitui o resultado de um
     comando: o Ctrl+Enter, "Executar este comando" e outro script. O F5, "Executar de novo", o filtro
-    e a atualização automática do resultado do último comando mudam só ele, e as outras abas ficam.
+    e a atualização automática do resultado do último comando mudam só ele, e as outras abas ficam,
+    e continuam se editando (RN-SQL-024).
     Como antes, o que está na tela só sai quando a API aceita um comando novo: se o script não chega a
     executar comando nenhum (a conexão não abre, a sessão está ocupada, o cancelamento antes do
     primeiro), a área fica como estava. Trocar o banco ou a conexão da aba e o bloqueio por
     inatividade tiram os resultados do script, como tiram o resultado. Levar a aba para outra janela
-    leva o resultado do último comando, como hoje; as outras abas e as Estatísticas não vão.
+    leva o resultado do último comando, como hoje; as outras abas e as Estatísticas não vão (e a
+    alteração não salva numa delas faz a mudança perguntar antes, RN-SQL-023).
   - Avisos: um no fim, e não um por comando, com o nome da aba, porque o script de uma aba que não
     está à vista também termina. "Script executado na aba consulta-1.sql: 12 comandos." (sucesso);
     "Script executado na aba consulta-1.sql com 2 erros: 10 de 12 comandos executados." (atenção);
@@ -2692,6 +2745,8 @@ A API não muda: continua recebendo um comando por execução.
     consulta-1.sql: 4 de 12 comandos executados." (atenção). O nome é o da aba no fim do script (ela
     pode ter sido renomeada, ou salva como script, enquanto ele rodava). O aviso de valores cortados
     (RN-AVISO-003) sai uma vez por script, e o de sessão reaberta, como sempre.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 33): as abas dos outros comandos, que eram só
+    para leitura e sem o menu da grade, passaram a se editar (RN-SQL-023 e 024).*
 - **RN-SQL-021.** Erro num comando do script, como o diálogo de erro do DBeaver.
   - O script para, e um diálogo mostra o comando (o número e o texto) e o erro como veio (RN-SQL-009),
     com o SQLSTATE, e pergunta: "Parar" (o padrão, com o foco, e também o Esc), "Tentar de novo"
@@ -2839,7 +2894,9 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - A tela mostra o cadeado do canvas ao lado do nome da conexão na árvore, na lista do botão da
     conexão da aba (RN-ARVORE-008) e na barra de status, e a dica diz de onde ele vem ("Somente
     leitura, herdado da pasta Fábrica"). A grade de uma conexão somente leitura não oferece a edição
-    de células: os itens ficam desabilitados, com o motivo (RN-EDIT-001).
+    de células: os itens do menu e os botões da barra de edição ficam desabilitados, com o motivo
+    (RN-EDIT-001 e 014). *Alterada a pedido do dono em 2026-10-16 (seção 33): entrou a barra de
+    edição.*
 - **RN-PROT-003.** A senha do somente leitura. Marcar ou desmarcar "Somente leitura" numa conexão ou
   numa pasta que já existe pede a senha do usuário (a do Prism), como revelar a senha de uma conexão
   (RN-CONN-002). Também pede a senha a mudança que tira de uma conexão que já existe o somente
@@ -3065,3 +3122,517 @@ Cada mudança está escrita na própria regra; aqui fica só a lista.
 - Proteções por esquema ou por tabela, e a lista de comandos irreversíveis escolhida pela pessoa.
 - A verificação de cada banco aberto da conexão (RN-ARVORE-006): hoje uma sessão qualquer da conexão
   responde por ela.
+
+## 33. Complemento de 2026-10-16, versão 0.4.0: a barra de edição da grade, duplicar linha, as abas do script que se editam e as pastas de scripts
+
+Pedidos do dono em 2026-10-16: "editar célula, adicionar linha, duplicar linha e excluir linha nos
+resultados de scripts sql e na tab dos registros de uma tabela", como a barra de baixo do resultado do
+DBeaver (quatro botões com ícones: o lápis, o mais, as duas folhas e o X vermelho); e "nos scripts de
+SQL também, adicione a possibilidade de criar pastas para mantê-los organizados". O dono escolheu
+entregar o que pediu naquele dia em partes, e esta é a primeira; exportar e importar conexões, exportar
+os dados em vários formatos e importar dados terão complementos próprios.
+
+A edição já existia (seção 22), mas sem botões à vista e sem duplicar; no "Executar script" (seção 31)
+só a aba do último comando se editava, porque a API guardava um resultado só por sessão; e a seção
+Scripts era uma lista. A seleção de várias linhas da grade (RN-GRADE-001) continua especificada e por
+construir: os botões agem na linha da célula ativa. Muda a RN-EDIT-001, 002, 003, 004, 005, 007 e 009,
+a RN-GRADE-004 e 014, a RN-SQL-020, a RN-SCRIPT-001, 002 e 003, a RN-TABELA-002, a RN-PROT-002, a
+RN-NAV-002 e 011, e as seções 6, 9, 22, 23 e 31. O canvas não desenha a barra de edição nem as pastas
+de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
+
+### Barra de edição
+
+- **RN-EDIT-013.** A barra de edição, como a de baixo do resultado do DBeaver.
+  - Onde:
+    - nos Registros de uma tabela, no rodapé que já existe, logo depois de "Exportar CSV" (antes da
+      contagem das linhas carregadas e do "Carregar mais");
+    - no resultado da aba de consulta e em cada aba de resultado do "Executar script" (RN-SQL-020),
+      numa linha própria dentro da área de resultado, alinhada à esquerda, entre a grade e os rodapés
+      dela ("Carregar mais"; "O cursor foi fechado" com "Executar de novo"; a nota da aba de um resultado
+      guardado, RN-SQL-023).
+  - Só com a grade na tela: não aparece nas Estatísticas do script, nem sem grade (antes do primeiro
+    resultado, com "Executando…" no lugar dela, nas linhas afetadas, no erro, na Estrutura e no
+    Diagrama da aba de tabela), nem com a área de resultado recolhida (RN-PAINEL-001), que esconde o
+    corpo dela. O resultado sem nenhuma linha tem grade (as colunas), e a barra aparece: é onde
+    "Adicionar linha" mais serve.
+  - É um grupo com papel de barra de ferramentas e o nome "Edição da grade", com quatro botões, nesta
+    ordem, cada um com ícone e texto, no desenho dos botões da área de resultado ("Atualizar",
+    "Exportar CSV": 28 px de altura e ícone de 16 px, no traço 1,5 do canvas):
+    1. o lápis, "Editar célula", com a dica "Editar célula (F2)";
+    2. o mais, "Adicionar linha", com a dica "Adicionar linha (Alt+Insert)";
+    3. as duas folhas, "Duplicar linha", com a dica "Duplicar linha (Ctrl+Alt+Insert)";
+    4. o X, no tom de erro do tema, "Excluir linha", com a dica "Excluir linha (Alt+Delete)".
+  - Cada botão declara o atalho para o leitor de tela (`aria-keyshortcuts`), o da plataforma (no
+    macOS, os da RN-EDIT-015, que a dica também escreve).
+  - A barra é uma parada só do Tab, como a barra de ações do navegador: o Tab chega ao botão que teve
+    o foco por último (de começo, "Editar célula"), e as setas para os lados, Home e End andam entre
+    os quatro.
+  - O botão que não se aplica fica à vista e desabilitado sem sair do caminho das setas (`aria-disabled`,
+    como o "Contar total"): não age, e diz por quê na dica e para o leitor de tela (por
+    `aria-describedby`, num texto só para ele, como o "Exportar CSV"). A dica é a do botão seguida do
+    motivo, o mesmo que o item do menu da célula mostra: "Adicionar linha (Alt+Insert). Somente
+    leitura: num resultado de junção só se alteram células."
+  - Os botões só criam e tiram pendências (RN-EDIT-004): nada vai ao banco, e nenhum pergunta nada (a
+    confirmação da RN-PROT-001 continua só no "Salvar"). "Salvar", "Descartar" e "Ver SQL" continuam
+    na faixa de pendências sobre a grade, que não muda.
+  - Com o campo de edição de uma célula aberto, clicar num botão confirma antes o que foi digitado (o
+    campo confirma ao perder o foco, como hoje), e só então o botão age.
+- **RN-EDIT-014.** Quando cada botão vale, e o que acontece depois dele.
+  - Cada botão faz o que o item de mesmo nome do menu da célula faz sobre a célula ativa
+    (RN-GRADE-001), e só sobre ela: "Editar célula" abre o campo de edição nela, com o valor, como o
+    F2; "Adicionar linha" cria uma linha nova em branco; "Duplicar linha" duplica a linha da célula
+    ativa (RN-EDIT-016); "Excluir linha" marca para exclusão a linha da célula ativa, que fica riscada,
+    ou, quando ela é uma linha nova, a tira da grade.
+  - Habilitar não custa consulta (RN-EDIT-010): enquanto o Prism não perguntou ao catálogo o que se
+    edita naquele resultado, os botões ficam habilitados, e a primeira tentativa pergunta. Se a ação não
+    vale, a faixa diz o motivo, como o menu e o Alt+Insert já fazem, e dali em diante o botão fica
+    desabilitado com ele.
+  - Ficam desabilitados desde o começo, com o motivo, quando ele já é sabido:
+    - os quatro, quando o resultado inteiro é só leitura pelo que a página do resultado já diz
+      (RN-EDIT-002, e a conexão somente leitura, RN-PROT-002), com o motivo da barra do resultado;
+    - os quatro, com a aba ocupada (um comando, o "Salvar", o script rodando ou parado na pergunta de
+      erro, RN-SQL-021): "há um comando em andamento na aba"; e enquanto a atualização automática lê
+      as linhas de novo: "a atualização automática está lendo as linhas de novo; tente outra vez em um
+      instante" (RN-GRADE-014);
+    - "Adicionar linha", "Duplicar linha" e "Excluir linha", quando o catálogo já respondeu que o
+      resultado não aceita linha nova nem exclusão (`rowOperations` falso): numa junção, "num
+      resultado de junção só se alteram células"; senão, o motivo da tabela, ou "este resultado não
+      aceita linha nova nem exclusão";
+    - "Editar célula", pelo que vale na célula ativa (RN-EDIT-002): a tabela da coluna que não se
+      edita, com o motivo da tabela ("<tabela> é uma visão" e os outros), e a coluna que não se edita,
+      com o motivo da coluna (essas duas, quando o catálogo já disse); a linha marcada para exclusão; a
+      célula cortada; a chave da linha cortada ou gerada pelo banco; a tabela sem linha ali numa
+      junção externa (a chave dela veio nula); a célula que o banco preencheu numa linha nova salva
+      (RN-EDIT-009);
+    - "Excluir linha", na linha cuja chave não se sabe (cortada, ou gerada pelo banco numa linha nova
+      salva) e na linha que já está marcada para exclusão: "a linha já está marcada para exclusão;
+      Desfazer alteração a devolve" (o item do menu também);
+    - sem célula ativa, "Editar célula" diz "Escolha uma célula na grade.", e "Duplicar linha" e
+      "Excluir linha" dizem "Escolha uma linha na grade."; na grade sem nenhuma linha (nem lida, nem
+      nova), os três dizem "O resultado não tem linhas.", e "Adicionar linha" continua valendo.
+  - Quando mais de um motivo vale, a dica, o leitor de tela e a faixa dizem só o primeiro, na ordem da
+    lista acima (e, dentro de um item, na ordem em que ele os escreve). Os motivos entram na frase
+    "Somente leitura: <motivo>." como os de hoje, também o da aba ocupada e o da linha marcada para
+    exclusão; os três da falta de célula ou de linha não são de só leitura e vêm sozinhos: "Editar
+    célula (F2). Escolha uma célula na grade."
+  - Depois do botão, o foco volta à grade, como volta quando o botão que o tinha sai da tela
+    (RN-SQL-006), menos no "Editar célula", em que ele vai para o campo de edição e volta à grade
+    quando o campo confirma ou cancela.
+    - "Adicionar linha" e "Duplicar linha" põem a linha nova no fim da grade, depois das lidas e das
+      novas de antes, como o Alt+Insert faz hoje; a grade rola até ela, e a célula ativa vai para ela,
+      na primeira coluna editável (na duplicada que copiou a chave, na coluna da chave mais à
+      esquerda na grade, RN-EDIT-016).
+    - "Excluir linha" deixa a célula ativa na mesma linha, riscada. Tirada uma linha nova, a célula
+      ativa passa à linha que ficou no lugar dela, ou à de cima, quando ela era a última; sem linha
+      nenhuma, não há célula ativa.
+  - A atualização automática fica em pausa desde o começo da ação, como no menu, e a ação cujo
+    resultado mudou no meio não age (RN-GRADE-014).
+- **RN-EDIT-015.** Os atalhos, com o foco na grade (e não no campo de edição de uma célula, que fica
+  com as teclas dele).
+  - F2 (e Enter) edita a célula ativa; Alt+Insert adiciona uma linha; Ctrl+Alt+Insert duplica a linha
+    da célula ativa; Alt+Delete exclui a linha da célula ativa, como no DBeaver. O menu da célula e as
+    dicas da barra escrevem os mesmos atalhos.
+  - Os modificadores são exatos: Alt+Insert sem Ctrl, Shift nem Cmd; Ctrl+Alt+Insert sem Shift;
+    Alt+Delete sem Ctrl, Shift nem Cmd. A grade confere o Ctrl+Alt+Insert antes do Alt+Insert, que
+    está dentro dele (hoje o Alt+Insert também casa com o Ctrl+Alt+Insert e com o Shift+Alt+Insert).
+    Com Shift nada acontece: o Shift+Alt+Insert e o Ctrl+Shift+Alt+Insert que o DBeaver ganhou na
+    26.1 (a linha nova e a duplicada antes da atual) ficam para depois.
+  - O Delete sozinho não exclui a linha da célula ativa: o dele é o da RN-EDIT-001, o das linhas
+    inteiras escolhidas pelo número da linha, que espera a seleção de linhas da RN-GRADE-001.
+  - No Windows, o Alt da direita do teclado ABNT2 (e dos outros teclados que têm AltGr) é o AltGr, e
+    chega como Ctrl+Alt: com ele, Insert duplica, e Delete não faz nada. Os atalhos valem com o Alt da
+    esquerda; os botões e o menu cobrem o resto. O Insert não escreve caractere, e por isso o
+    Ctrl+Alt+Insert não deixa o AltGr de fora, como o Alt+X deixa (RN-SQL-019).
+  - No macOS, como nos outros atalhos da grade (o Cmd+S, o Cmd+C), o Option faz o papel do Alt e o Cmd
+    o do Ctrl: Option+Insert, Cmd+Option+Insert e Option+Delete, e a dica e o menu os escrevem assim.
+    Control+Option+Insert, o do DBeaver no macOS, também duplica (sem Shift nem Cmd).
+    Ao contrário do Alt+X do script (RN-SQL-019), nenhum deles escreve caractere (o foco está na
+    grade, não num campo de texto, e o Insert e o Delete não são teclas de caractere), então não há
+    troca de tecla. A tecla "delete" do Mac é a de apagar para trás: Option+delete exclui a linha, e
+    Option+fn+delete (apagar para a frente) também. O teclado do Mac não tem Insert: ali "Adicionar
+    linha" e "Duplicar linha" ficam na barra e no menu, e o atalho vale para quem usa um teclado que
+    tem a tecla.
+
+### Duplicar linha
+
+- **RN-EDIT-016.** "Duplicar linha" cria uma linha nova pendente com os valores da linha da célula
+  ativa.
+  - Vale onde "Adicionar linha" vale: no resultado de uma tabela só que aceita linha nova e exclusão
+    (`rowOperations`, RN-EDIT-002). Numa junção fica desabilitado, com o motivo de hoje ("num
+    resultado de junção só se alteram células").
+  - A linha de origem pode ser uma lida (com alterações pendentes ou sem elas), uma marcada para
+    exclusão (copia os valores lidos), uma nova pendente (copia o que foi preenchido nela, também numa
+    duplicada) ou uma nova já salva na aba de consulta (RN-EDIT-009).
+  - A cópia vai para o fim da grade, como a linha de "Adicionar linha" (RN-EDIT-014): as linhas novas
+    vêm sempre depois das lidas. Pôr a cópia logo abaixo da linha de origem, como o DBeaver, fica para
+    depois.
+  - O que copia: o valor que a tela mostra (com a pendência, quando há; o nulo, como nulo), como o
+    copiar (RN-EDIT-007), de cada coluna do resultado que se edita na tabela. Não copia, e essas
+    colunas ficam com o padrão da tabela, como na linha em branco:
+    - as que o banco gera, "sempre" e "por padrão", para ele gerar o valor da linha nova: a
+      identidade (as duas formas, no PostgreSQL e no Db2), o `SERIAL`, o `SERIAL8` e o `BIGSERIAL` do
+      Informix e, no PostgreSQL, a coluna cujo padrão é o próximo valor de uma sequência
+      (`nextval(...)`: o `serial` e o `bigserial`). Para isso, o `edit-target` diz
+      `generated: "byDefault"` também nessa coluna do PostgreSQL; o catálogo continua a mostrá-la como
+      padrão, e não como coluna gerada (RN-CAT-001 não muda);
+    - as que não se editam: a calculada, a binária, a de um tipo que o Prism não converte
+      (RN-EDIT-006);
+    - numa linha nova já salva, as que o banco preencheu ("gerado pelo banco — execute de novo para
+      ver", RN-EDIT-009), cujo valor a tela não sabe.
+
+    As colunas da tabela que o comando não trouxe também ficam com o padrão dela.
+  - A célula cortada (RN-SQL-011) de uma coluna que se copia vai com o valor completo, que a tela busca
+    antes na API (RN-SQL-017), como o copiar e o exportar: enquanto busca, a faixa diz "Buscando os
+    valores completos…", com "Cancelar". Se um valor não vem inteiro (passou do teto de 256 MB, é o
+    resultado de uma aba guardada do script, que não guarda valor completo, RN-SQL-024, ou a sessão
+    mudou ou caiu), nada é duplicado, e a faixa diz: "A linha não foi duplicada: o valor completo de
+    <coluna> não pôde vir. Execute o comando de novo para duplicá-la." Nos Registros, que não têm
+    comando: "A linha não foi duplicada: o valor completo de <coluna> não pôde vir. Atualize os
+    registros para duplicá-la." Cancelada a busca: "A linha não foi duplicada: a busca dos valores
+    completos foi cancelada."
+  - A chave: quando todas as colunas da chave da tabela (a da RN-EDIT-002) foram copiadas, a faixa
+    avisa "A linha duplicada copiou a chave de <tabela> (<colunas>): troque-a antes de salvar, ou o
+    banco vai recusar a linha repetida.", e a célula ativa vai para a coluna da chave mais à esquerda
+    na grade. A chave com uma coluna gerada pelo banco não é copiada inteira e não pede o aviso. Salvar
+    sem trocar a chave dá a recusa do banco, como veio (RN-EDIT-005).
+  - Quando uma coluna da tabela que está no resultado não foi copiada, a faixa diz quais: "Não
+    copiadas (ficam com o padrão da tabela): id, foto." (com uma só, "Não copiada (fica com o padrão
+    da tabela): id."). Na linha nova de origem, as colunas que ela não tinha preenchido não entram na
+    lista: já estavam com o padrão. As duas frases podem vir juntas, e ficam até a próxima ação de
+    edição, o "Salvar" ou o "Descartar".
+  - A linha duplicada é uma linha nova (RN-EDIT-004): tem as marcas dela ("Linha nova" no número da
+    linha, "linha nova N" na faixa), conta como uma alteração, e entra no "Ver SQL" e no "Salvar" como
+    um `INSERT` com as colunas copiadas e as que a pessoa preencheu depois (RN-EDIT-005). "Excluir
+    linha" a tira da grade; "Desfazer alteração" numa célula dela tira o valor daquela célula, que
+    volta ao padrão da tabela, como numa linha em branco.
+  - A duplicada sem nenhuma coluna copiada é a linha em branco: se nada for preenchido, o "Salvar"
+    recusa como recusa a linha em branco ("A linha nova não tem nenhuma coluna preenchida.").
+
+### As abas do script que se editam
+
+- **RN-SQL-023.** Toda aba de resultado que o script mantém se edita.
+  - As abas dos outros comandos que o script guarda (RN-SQL-020: as dos 20 primeiros que devolvem
+    linhas, além da do último) se editam como a do último comando: valem as regras de edição da seção 22
+    inteiras (RN-EDIT-001 a 012), a barra de edição e o duplicar (RN-EDIT-013 a 016), e o menu da
+    célula, com copiar (também o Ctrl+C), colar, editar, definir como nulo, desfazer, adicionar,
+    duplicar e excluir linha. "Filtrar" (F11), "Atualizar" (F5) e "Atualizar automaticamente" não
+    estão no menu delas: são do resultado do último comando, que tem o cursor e executa de novo.
+  - Continuam só leitura, com o motivo na faixa e nos botões, as que a RN-EDIT-002 tranca, como antes:
+    a do comando que gravou e devolveu linhas, a de união, de `DISTINCT`, de agrupamento e as demais, e
+    todas as de uma conexão somente leitura (RN-PROT-002).
+  - A nota da aba de um resultado guardado passa a dizer: "O cursor deste resultado fechou quando o
+    comando seguinte rodou. Carregar mais, Contar total, o filtro e a atualização automática valem no
+    resultado do último comando." "Executar este comando" continua nela, como antes: executa só aquele
+    comando e substitui os resultados do script.
+  - Copiar uma célula cortada numa aba guardada leva o valor cortado, com o aviso de quantos vieram
+    cortados (RN-GRADE-002, RN-SQL-017): o valor completo fica só com o resultado do último comando.
+    Duplicar uma linha que precisa dele não acontece (RN-EDIT-016).
+  - As pendências são de uma aba por vez. Trocar de aba de resultado (clique, setas, Home, End,
+    também para as Estatísticas) com alterações não salvas pergunta antes: "Há N alterações não
+    salvas", com "Salvar", "Descartar" e "Cancelar" (RN-EDIT-007). "Salvar" grava e então troca de aba;
+    se o "Salvar" falha, a aba fica, com a falha na faixa. "Descartar" joga fora e troca. "Cancelar"
+    fica onde estava, sem mudar nada. O resto da RN-EDIT-007 vale em qualquer aba do script como na do
+    último comando.
+  - Enquanto o script roda, ou espera a resposta da pergunta de erro (RN-SQL-021), a aba está ocupada
+    para a edição em todas as abas de resultado: os botões e os itens de edição ficam desabilitados,
+    com "há um comando em andamento na aba" (RN-EDIT-014).
+  - Salvar numa aba que não é a do último comando é um comando na sessão (RN-EDIT-009): fecha o
+    cursor aberto do último (RN-SQL-007). Se a aba do último ainda tinha linhas a ler, o "Carregar
+    mais" dela dá lugar a "O cursor foi fechado", com "Executar de novo", como depois de salvar nela
+    mesma. Ela continua se editando, o "Contar total" dela continua valendo (RN-SQL-006), e os valores
+    completos das células cortadas dela continuam na API (RN-SQL-017).
+  - Depois de salvar, a aba guardada segue a RN-EDIT-009: as linhas com os valores salvos, as
+    excluídas fora, e a linha nova com "gerado pelo banco — execute de novo para ver" nas colunas que o
+    banco preencheu. Executar de novo, ali, é o "Executar este comando".
+  - As Estatísticas não contam as alterações salvas à mão, que não são comandos do script: as linhas
+    de cada comando continuam as que ele leu, devolveu ou afetou, e "Linhas alteradas" continua a soma
+    dos comandos.
+  - A sessão que cai depois do script leva com ela o que a API guardava: as abas continuam na tela, com
+    as linhas, e a primeira tentativa de editar (ou o "Salvar") responde como no resultado do último
+    comando, com "Não foi possível saber o que se edita neste resultado." e o motivo da API na faixa (a
+    sessão com o banco não existe mais). Nada reabre sozinho (seção 7 e RN-SQL-021): "Executar este
+    comando" executa de novo numa sessão nova.
+  - Levar a aba para outra janela leva só o resultado do último comando (RN-SQL-020). Com alterações
+    não salvas numa aba guardada, a mudança pergunta antes, como a de qualquer aba com alterações não
+    salvas, porque essa aba não vai. A API esquece os guardados no primeiro comando da aba na outra
+    janela (RN-SQL-024).
+- **RN-SQL-024.** O que a API guarda dos resultados do script.
+  - A sessão guarda, além do resultado atual (o do último comando, com o cursor), o que a edição
+    precisa de cada resultado que a tela pede para guardar, pelo `resultID` dele: as colunas (o nome, o
+    tipo e, no PostgreSQL, a origem, RN-EDIT-003, que o "Salvar" e a conversão da RN-EDIT-006 usam), a
+    leitura do texto do comando (Db2 e Informix) e o alvo da edição, quando já foi perguntado
+    (RN-EDIT-010). Nunca as linhas, nem cursor, nem os valores completos das células cortadas: os
+    256 MB da RN-SQL-017 continuam só do resultado atual, e a rota das células responde 404
+    `RESULT_NOT_FOUND` para um guardado. O que fica é pouco (não tem linhas) e morre com a sessão:
+    ao fechar, ao cair e no bloqueio do cofre.
+  - `POST …/queries` ganha `keep`, opcional: os `resultID` que a aba continua mostrando, e editando,
+    depois deste comando, até 20 (o teto da RN-SQL-020). Mais que isso, ou uma entrada que não é um
+    identificador (nula, texto qualquer, número), é 422 `QUERY_INVALID` no campo `keep`, como o
+    `pageSize` fora da forma, e nada vai ao banco. Quando o comando vai ao banco (dê certo ou não,
+    também quando é desfeito com `executed`, RN-SESSAO-005), a API guarda, entre o resultado atual e
+    os já guardados, os da lista, e esquece os outros; um `resultID` que ela não conhece é ignorado, e
+    o repetido conta uma vez. Sem `keep`, ou com a lista vazia, ela esquece todos. A recusa antes de ir
+    ao banco (as do texto e do filtro, a do somente leitura, a sessão ocupada: as que não levam
+    `executed`) não muda nada: o resultado atual continua o atual, e os guardados continuam guardados.
+  - Quem manda o quê:
+    - cada comando do script manda os `resultID` das abas de resultado que o script já tem (a do
+      comando anterior inclusive, quando ele ganhou aba), e o "Tentar de novo" (RN-SQL-021) manda a
+      mesma lista;
+    - o F5, "Executar de novo", aplicar o filtro, ordenar pela coluna e a atualização automática do
+      resultado do último comando mandam os das outras abas do script, que ficam (RN-SQL-020) e
+      continuam se editando;
+    - o Ctrl+Enter, "Executar este comando", o primeiro comando de outro script e toda execução de uma
+      aba sem abas de script não mandam nenhum, e a API esquece os guardados.
+  - `edit-target`, `edits` e `edits/preview` aceitam o `resultID` do resultado atual ou o de um
+    guardado. Outro `resultID` é 409 `RESULT_CHANGED`, agora com o detalhe "O resultado não está mais
+    guardado na sessão: outro comando foi executado nela depois dele. Execute o comando de novo para
+    editar."
+  - O "Salvar" de um guardado toma a vez da sessão como qualquer "Salvar" (409 `SESSION_BUSY`) e fecha
+    o cursor do resultado atual (RN-EDIT-009). O resultado atual continua o atual, com o `resultID` e os
+    valores completos dele, e os guardados continuam guardados.
+  - A tabela sem esquema no Db2 e no Informix (RN-EDIT-003). O texto de um guardado diz a tabela como
+    foi escrita, e quem a resolve, na hora de editar, é a sessão: pelo esquema atual dela (Db2) ou pelo
+    usuário dela (Informix) naquele momento, e não no da leitura. O driver da IBM não diz o esquema
+    atual sem uma consulta (o `CurrentSchema` dele é só o da abertura da conexão), e perguntá-lo a cada
+    comando seria a consulta a mais que a RN-EDIT-010 proíbe. Por isso a API conta, na sessão, os
+    comandos executados que podem mudar essa resolução: os que começam, depois dos comentários e dos
+    parênteses de abertura (o leitor da RN-PROT-005), por `SET` (`SET SCHEMA`, `SET CURRENT SCHEMA`,
+    `SET CURRENT SQLID`, `SET SESSION AUTHORIZATION`…), `CALL` ou `EXECUTE` (a rotina pode mudá-la por
+    dentro) e, no Informix, `DATABASE`. O guardado que tem uma tabela sem esquema no `FROM` deixa de se
+    editar quando um deles foi executado depois dele: `edit-target`, `edits/preview` e `edits` respondem
+    409 `RESULT_CHANGED`, sem executar nada, com o detalhe "Um comando executado depois deste resultado
+    (como um SET ou um CALL) pode ter trocado o esquema atual da sessão, e <tabela>, escrita sem
+    esquema, pode ser outra tabela agora. Nada foi gravado; escreva o esquema no comando
+    (esquema.tabela), ou execute-o de novo." A tabela com o esquema escrito não depende disso. Na
+    dúvida, recusa: o script que troca o esquema e volta ao de antes também tranca as abas de antes. O
+    resultado atual nunca tem comando depois dele (o comando seguinte o substitui), e o "Salvar" dele
+    continua conferindo o esquema na própria sessão (RN-EDIT-003).
+  - No PostgreSQL a origem de cada coluna é a tabela pelo identificador interno dela (o OID), que vem
+    na resposta do comando, e não pelo nome: o que um guardado edita é sempre a tabela que ele leu. Se o
+    nome escrito sem esquema leva agora a outra tabela (um `SET search_path` depois dele), ou se a
+    tabela foi apagada e criada de novo (o OID é outro), as colunas dele ficam só leitura, e nada vai
+    para a outra tabela. Isso vale na primeira pergunta do alvo; quando o alvo já tinha sido perguntado
+    antes da mudança, quem a descobre é a conferência de dentro da transação do "Salvar" (RN-EDIT-005):
+    409 `RESULT_CHANGED`, com o detalhe da tabela que mudou ("A tabela <nome> mudou desde a
+    consulta…"), e nada é gravado.
+  - No Db2 e no Informix, a tabela recriada com o mesmo nome, a mesma chave e as mesmas colunas e tipos
+    passa pela conferência do "Salvar" (RN-EDIT-005), e a alteração vai à tabela nova pela chave, como
+    iria se outra sessão a tivesse recriado (RN-EDIT-011).
+
+### Pastas de scripts
+
+- **RN-SCRIPT-007.** Pastas de scripts.
+  - São da seção Scripts, e não as pastas de conexões (RN-PASTA-001 a 007): não têm cor, ambiente nem
+    proteções, não aparecem na árvore das conexões, as de conexões não aparecem entre elas, e nada
+    herda delas. Campos: o nome, a pasta pai (opcional: sem ela, a pasta fica na raiz da seção
+    Scripts) e as datas de criação e de alteração.
+  - Aninham sem limite de profundidade. O nome tem de 1 a 60 caracteres, contados depois de
+    normalizado como o da pasta de conexões (os espaços das pontas tirados, os de dentro juntados num
+    só); não tem caractere de controle no texto que veio, conferido antes de normalizar (a
+    normalização trocaria a tabulação e a quebra de linha por espaço), como o nome do script
+    (RN-SCRIPT-004); e é único entre as irmãs, sem diferenciar maiúsculas (409
+    `SCRIPT_FOLDER_ALREADY_EXISTS`), sem contar a própria pasta: mudar só as maiúsculas do nome dela
+    não é repetição. Uma pasta e um script podem ter o mesmo nome no mesmo lugar.
+  - Mover uma pasta para dentro dela mesma ou de uma descendente é recusado (409
+    `SCRIPT_FOLDER_CYCLE`). Só a pasta vazia, sem subpastas e sem scripts, se exclui (409
+    `SCRIPT_FOLDER_NOT_EMPTY`, que diz quantas subpastas e quantos scripts ela tem). A pasta, ou a
+    pasta pai, que não existe é 404 `SCRIPT_FOLDER_NOT_FOUND`.
+  - Cada script tem uma pasta, opcional: sem ela, ele fica na raiz da seção. O nome do script continua
+    único entre todos os scripts do usuário, de qualquer pasta (a RN-SCRIPT-004 não muda), porque a aba
+    mostra só o nome; mover um script não confere nome.
+  - Mover não muda mais nada: o script leva a conexão, o banco, o genérico, o ícone e a cor
+    (RN-SCRIPT-005 e 006), e as abas abertas com ele continuam, com o mesmo nome; a pasta leva o que tem
+    dentro.
+  - As conferências (o nome, o ciclo, a pasta vazia, a pasta que existe) são feitas na própria gravação
+    do cofre, contra o documento mais recente: duas janelas não criam duas pastas irmãs de mesmo nome,
+    nem uma exclui a pasta em que a outra acabou de pôr um script.
+- **RN-SCRIPT-008.** A seção Scripts é uma árvore.
+  - Com papel de árvore e o nome "Scripts salvos", com as pastas e os scripts como itens dela, cada um
+    com o nível dele, e a pasta dizendo se está aberta. Em cada nível vêm primeiro as subpastas e depois
+    os scripts, cada grupo por nome (na ordem do português, sem diferenciar maiúsculas), como as pastas
+    e as conexões do navegador. A pasta tem o ícone de pasta, neutro, aberto ou fechado; o script, o
+    ícone e a cor dele (RN-SCRIPT-006) e a marca do genérico (RN-SCRIPT-005), com as dicas de hoje. A
+    pasta vazia não tem a seta de abrir.
+  - Uma linha só fica na ordem do Tab, a escolhida. As setas para cima e para baixo andam pelas linhas à
+    vista; Home e End vão à primeira e à última. A seta para a direita abre a pasta fechada e, na
+    aberta, vai à primeira linha dentro dela. A seta para a esquerda fecha a pasta aberta e, na fechada
+    ou num script, vai à pasta pai (na raiz, não faz nada). Enter e o duplo clique abrem e fecham a
+    pasta, e abrem o script, como hoje. F2 renomeia a pasta ou o script; Delete exclui (RN-SCRIPT-009);
+    Shift+F10 e a tecla de menu abrem o menu.
+  - As pastas começam abertas, e abrir e fechar vale enquanto a janela está aberta, como as pastas de
+    conexões: não se grava. Recolher a seção inteira continua lembrado (RN-NAV-012).
+  - A densidade do navegador vale para ela (RN-NAV-011): as linhas de 30 ou de 22 px, e o recuo de 16
+    ou de 12 px a cada nível.
+  - Sem pasta e sem script, a seção diz o que diz hoje ("Nenhum script salvo. Ctrl+S numa aba de
+    consulta salva o SQL dela aqui."). Com pastas e sem script, mostra as pastas.
+  - A pasta ou o script cuja pasta não está na lista (outra janela a excluiu entre duas leituras)
+    aparece na raiz, até a leitura seguinte.
+  - Depois de criar, renomear ou mover uma pasta ou um script pela seção, ele fica à vista (as pastas
+    acima dele abrem) e escolhido, com o foco.
+- **RN-SCRIPT-009.** Os menus e os diálogos das pastas de scripts.
+  - O botão direito no título da seção ou no espaço vazio dela, e Shift+F10 ou a tecla de menu com o
+    foco no título, abrem um menu com "Nova pasta", que cria na raiz.
+  - O menu de uma pasta tem "Nova subpasta"; "Renomear" (F2) e "Mover para…"; e "Excluir" (Delete).
+  - O menu de um script é o de hoje (RN-SCRIPT-003, 005 e 006), com "Mover para…" logo depois de
+    "Editar script…".
+  - "Nova pasta" e "Nova subpasta" abrem um diálogo com o título "Nova pasta" ou "Nova subpasta", o
+    campo "Nome da pasta" e onde ela vai ficar ("Na raiz da seção Scripts." ou "Dentro de Fechamento /
+    Mensal.", o caminho da pasta pai), com "Cancelar" e "Criar pasta" ("Criando…"). O aviso: "Pasta
+    criada."
+  - O "Renomear" (F2) da pasta abre o diálogo "Renomear pasta", só com o nome, e "Renomear"
+    ("Renomeando…"); o nome igual ao de antes (depois de normalizado, e com as mesmas maiúsculas)
+    fecha sem gravar, e mudar só as maiúsculas grava. O aviso: "Pasta renomeada."
+  - As recusas do nome ficam no campo, sem aviso de erro (RN-AVISO-004): "Dê um nome à pasta.", "O
+    nome pode ter até 60 caracteres.", "O nome não pode ter tabulação, quebra de linha nem outro
+    caractere de controle." e "Já existe uma pasta com este nome aqui." A pasta pai que outra janela
+    excluiu no meio (404 `SCRIPT_FOLDER_NOT_FOUND`) não é do campo: vai ao aviso de erro
+    (RN-AVISO-004), com o detalhe da API ("A pasta pai não existe mais."), o diálogo fica aberto, e a
+    lista é lida de novo.
+  - "Mover para…", da pasta e do script, abre o diálogo "Mover pasta" ou "Mover script", com "Escolha a
+    pasta de destino de <nome>." e o campo "Pasta": "Sem pasta" (a raiz) e as pastas de scripts, cada
+    uma com o caminho inteiro ("Fechamento / Mensal"), na ordem da árvore, com a de agora já escolhida.
+    Para uma pasta, a lista não traz ela mesma nem as subpastas dela. "Cancelar" e "Mover"
+    ("Movendo…"); o destino igual ao de agora fecha sem gravar. As recusas da API são de regra, e não
+    do campo: vão ao aviso de erro (RN-AVISO-004), com o detalhe dela, e o diálogo fica aberto, como no
+    "Mover" das conexões: "Já existe uma pasta chamada <nome> em <destino>." (o nome repetido entre as
+    irmãs do destino); "A pasta de destino não existe mais."; e, quando outra janela mexeu nas pastas
+    no meio, "Uma pasta não pode ir para dentro dela mesma nem de uma subpasta dela." Depois de cada
+    recusa a lista é lida de novo. Os avisos: "Pasta movida." e "Script movido."
+  - "Excluir" na pasta vazia (e o Delete nela) pergunta "Excluir a pasta <nome>?", com "A pasta está
+    vazia e sai da seção Scripts.", "Cancelar" (o foco começa nele) e "Excluir pasta", no tom de perigo.
+    O aviso: "Pasta excluída."
+  - Na pasta que tem alguma coisa dentro, "Excluir" fica desabilitado no menu, com o motivo ("a pasta
+    tem 2 subpastas e 3 scripts: mova ou exclua antes o que está dentro dela", no singular "1 subpasta"
+    e "1 script", e só com a parte que existe), e o Delete nela não abre a pergunta: um aviso de erro
+    (RN-AVISO-004) diz o mesmo. A recusa 409 `SCRIPT_FOLDER_NOT_EMPTY` da API (outra janela pôs algo
+    nela depois da leitura) fecha a pergunta e vai ao aviso de erro, com o detalhe dela ("A pasta
+    <nome> tem 1 script. Só uma pasta vazia pode ser excluída: mova ou exclua antes o que está dentro
+    dela."), e a lista é lida de novo, como no "Excluir" das pastas de conexões.
+  - Arrastar e soltar não existe no navegador: mover é pelo diálogo, como o "Mover" das conexões
+    (RN-NAV-003).
+- **RN-SCRIPT-010.** A pasta ao salvar.
+  - O diálogo do nome do primeiro Ctrl+S e do "Salvar como" (RN-SCRIPT-001) ganha o campo "Pasta",
+    depois do nome e antes da caixa do script genérico, com as escolhas do "Mover para…" ("Sem pasta" e
+    as pastas, com o caminho). No "Salvar como", vem escolhida a pasta em que o script de onde a aba
+    veio está na lista. No Ctrl+S do script que outra janela excluiu, que pede o nome de novo, o script
+    não está mais na lista, e vem a pasta que ele tinha quando a aba o abriu ou o gravou pela última
+    vez, que a aba lembra sem gravar no cofre (a aba que voltou numa entrada nova, RN-ABAS-006, não a
+    sabe). Vem "Sem pasta" na aba que não veio de um script, quando a pasta não é sabida, ou quando
+    ela não existe mais.
+  - O Ctrl+S que grava por cima, o "Renomear", o "Editar script…", "Tornar genérico" e "Vincular à
+    conexão da aba" não mudam a pasta.
+  - A pasta escolhida que outra janela excluiu antes de gravar é recusada no campo ("A pasta escolhida
+    não existe mais."), a lista é lida de novo, e o script não é gravado.
+  - O aviso diz onde o script ficou: "Script <nome> salvo em Fechamento / Mensal." (na raiz, "Script
+    <nome> salvo.", como hoje). O Ctrl+S que grava por cima continua dizendo "Script <nome> salvo.",
+    em qualquer pasta. A árvore não abre a pasta sozinha nem tira o foco do editor.
+- **RN-SCRIPT-011.** O cofre no formato 4.
+  - O documento do cofre ganha a lista das pastas de scripts, e o registro do script ganha a pasta (no
+    fim dele, nula na raiz). A lista nova sobe o formato do cofre de 3 para 4 (RN-VERSAO-005), como os
+    scripts o subiram para o 2 e a área de trabalho para o 3 (RN-SCRIPT-002, RN-ABAS-006).
+  - O cofre do formato 3 (e o do 1 e o do 2, passo a passo, em ordem) é migrado ao abrir: a lista de
+    pastas de scripts vem vazia, e todo script fica na raiz; o resto passa como está. O arquivo de antes
+    fica no `.bak` (RN-COFRE-005), e a falha do disco na migração não impede a entrada, como nos
+    formatos 2 e 3.
+  - Uma amostra do formato 3, gravada pelo código do formato 3 antes desta mudança (dados inventados,
+    a mesma senha fictícia das amostras do 1 e do 2), fica no repositório e não se regera. O teste a abre
+    e prova a migração (tudo o que ela tem continua, as pastas de scripts vêm vazias, os scripts ficam na
+    raiz, o `.bak` é o arquivo de antes), a entrada seguinte sem regravar e a primeira pasta gravada
+    depois. Os testes das amostras do 1 e do 2, que fixam `VaultCrypto.Version` em 3, passam a 4, e o
+    documento esperado deles ganha a lista vazia; os que fingem um formato mais novo usam
+    `VaultCrypto.Version + 1` e passam sozinhos ao 5.
+  - O Prism anterior (a 0.3.0, e os pré-lançamentos da 0.4.0 de antes desta mudança) recusa o cofre do
+    formato 4 com 409 `VAULT_FORMAT_UNSUPPORTED`, com a instrução de atualizar (RN-VERSAO-005). O
+    formato do cofre é contrato (RN-VERSAO-002), e a 0.4.0 já sobe o segundo número. A seção da 0.4.0
+    no `CHANGELOG.md` (RN-VERSAO-007) traz, como a da 0.3.0, o "Antes de atualizar": na primeira
+    entrada o Prism converte o cofre para um formato novo, a versão anterior não o abre mais, e quem
+    quiser poder voltar copia antes a pasta de dados do Prism.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `POST .../queries` `{ sql, pageSize?, filter?, keep? }` | como antes | as de antes; 422 `QUERY_INVALID` também com `keep` de mais de 20 resultados ou com uma entrada que não é um identificador |
+| `POST .../queries/edit-target`, `.../queries/edits` e `.../queries/edits/preview` `{ resultID, ... }` | como antes; `resultID` é o do resultado atual ou o de um guardado | as de antes; 409 `RESULT_CHANGED` com o detalhe novo, e também, no Db2 e no Informix, na tabela sem esquema de um guardado depois de um `SET`, `CALL` ou `EXECUTE` (no Informix, também `DATABASE`) |
+| `GET api/user/script-folders` | 200 lista de `{ id, parentID, name, createdAt, updatedAt }`, as pastas de todos os níveis | |
+| `POST api/user/script-folders` `{ name, parentID? }` | 201 a pasta | 404 `SCRIPT_FOLDER_NOT_FOUND` (a pasta pai); 409 `SCRIPT_FOLDER_ALREADY_EXISTS`; 422 `SCRIPT_FOLDER_NAME_INVALID` |
+| `PATCH api/user/script-folders` `{ id, name, parentID? }` | 200 a pasta | 404 `SCRIPT_FOLDER_NOT_FOUND` (a pasta ou a pasta pai); 409 `SCRIPT_FOLDER_ALREADY_EXISTS`, `SCRIPT_FOLDER_CYCLE`; 422 `SCRIPT_FOLDER_NAME_INVALID` |
+| `DELETE api/user/script-folders/{id}` | 204 | 404 `SCRIPT_FOLDER_NOT_FOUND`; 409 `SCRIPT_FOLDER_NOT_EMPTY` (com `folders` e `scripts`) |
+| `GET api/user/scripts` e `GET api/user/scripts/{id}` | como antes; cada script ganha `folderID` | as de antes |
+| `POST api/user/scripts` `{ ..., folderID? }` | 201 | as de antes; 404 `SCRIPT_FOLDER_NOT_FOUND` |
+| `PATCH api/user/scripts` `{ ..., folderID?, root? }` | 200 | as de antes; 404 `SCRIPT_FOLDER_NOT_FOUND`; 422 `SCRIPT_PLACE_INVALID` também com `root: true` e um `folderID` não nulo |
+
+Notas:
+
+- `keep`: lista de `resultID` (RN-SQL-024). Ausente, nula ou vazia, a API esquece os resultados
+  guardados quando o comando vai ao banco. Uma entrada que não é um identificador é 422
+  `QUERY_INVALID` no campo `keep`.
+- `parentID` ausente ou nulo é a raiz. O `PATCH` das pastas de scripts grava a pasta por inteiro, o nome
+  e a pasta pai, como o das pastas de conexões: sem `parentID`, ela vai para a raiz, e quem só renomeia
+  manda a pasta pai que ela já tem. Consequência aceita, a mesma das pastas de conexões: a janela com a
+  lista velha que só renomeia manda a pasta pai que leu, e desfaz o "Mover" que outra janela fez no
+  meio; a lista lida de novo depois da gravação mostra onde a pasta ficou.
+- `folderID` do script: nulo na raiz. No `POST`, ausente ou nulo é a raiz. O `PATCH` dos scripts
+  continua parcial (o ausente fica como está, RN-SCRIPT-005): `folderID` move o script para a pasta, e
+  `root: true` o leva para a raiz, porque o nulo não diz nada: `folderID: null` conta como ausente, e
+  `root: false`, ou ausente, não faz nada. `root: true` com um `folderID` não nulo é 422
+  `SCRIPT_PLACE_INVALID`.
+- `SCRIPT_FOLDER_NAME_INVALID` vai no campo `name`. `SCRIPT_FOLDER_NOT_EMPTY` leva `folders` e
+  `scripts`, quantas subpastas e quantos scripts a pasta tem, e o detalhe diz o mesmo em palavras.
+- Todas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais). O log das
+  rotas das pastas de scripts registra os IDs e as contagens, nunca o nome nem o SQL (RN-LOG-001).
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-EDIT-001**: "Linha nova" passa a se chamar "Adicionar linha" (as marcas da linha nova na grade
+  continuam), e entram "Duplicar linha" (Ctrl+Alt+Insert), o Alt+Delete do "Excluir linha", a barra de
+  edição e as abas do script.
+- **RN-EDIT-002**: "Adicionar linha", "Duplicar linha" e "Excluir linha" no resultado de uma tabela só.
+- **RN-EDIT-003**: a tabela sem esquema numa aba do script que não é a do último comando segue a guarda
+  da RN-SQL-024.
+- **RN-EDIT-004**: duplicar linha também é pendência; a barra de edição só cria e tira pendências, e
+  "Salvar", "Descartar" e "Ver SQL" ficam na faixa.
+- **RN-EDIT-005**: a linha duplicada leva as colunas copiadas e as preenchidas.
+- **RN-EDIT-007**: trocar de aba de resultado do script com alterações não salvas pergunta antes, e a
+  lista diz o levar a aba para outra janela, que já perguntava.
+- **RN-EDIT-009**: o "Salvar" numa aba do script que não é a do último comando fecha o cursor do último.
+- **RN-GRADE-004**: os itens de edição do menu da grade, com os nomes novos.
+- **RN-GRADE-014**: a pausa vale também desde o começo do duplicar e dos botões da barra.
+- **RN-SQL-020**: as abas dos outros comandos se editam, com o menu da célula e a barra; a nota delas
+  muda; o F5, o filtro e a atualização automática do último as mantêm editáveis.
+- **RN-TABELA-002**: os registros se editam pelas RN-EDIT-001 a 016.
+- **RN-PROT-002**: na conexão somente leitura, os botões da barra de edição também ficam
+  desabilitados.
+- **RN-SCRIPT-001**: o campo "Pasta" no diálogo do nome.
+- **RN-SCRIPT-002**: as pastas de scripts sobem o formato do cofre para o 4.
+- **RN-SCRIPT-003**: a seção é uma árvore de pastas, e o menu do script ganha "Mover para…".
+- **RN-NAV-002**: a barra de ações do navegador é da árvore das conexões e não age sobre a seção
+  Scripts.
+- **RN-NAV-011**: a densidade vale para a árvore da seção Scripts, com o recuo a cada nível.
+- **Seção 6**: o `keep` das consultas, o `resultID` dos guardados nas rotas da edição, o detalhe novo de
+  `RESULT_CHANGED`, e as rotas e os códigos das pastas de scripts.
+- **Seção 9**: a barra de edição e as pastas de scripts não estão no canvas.
+- **Seção 22**: o `resultID` das três rotas da edição, a nota do `edit-target` (`generated: "byDefault"`
+  na coluna do PostgreSQL cujo padrão é `nextval(...)`, e os nomes novos em `rowOperations`), e o
+  primeiro item do "fica para depois", com o duplicar.
+- **Seção 23**: as rotas dos scripts ganham `folderID` e, no `PATCH`, `root`.
+- **Seção 31**: a introdução diz que a seção 33 acrescenta o `keep` ao pedido de execução.
+
+### Fica para depois
+
+- Pôr a linha nova e a duplicada logo abaixo da linha atual (ou acima dela, o Shift+Alt+Insert e o
+  Ctrl+Shift+Alt+Insert da 26.1 do DBeaver), em vez do fim da grade.
+- Duplicar e excluir várias linhas de uma vez, e o Delete com as linhas escolhidas pelo número da linha:
+  dependem da seleção de várias linhas (RN-GRADE-001), que vem com a exportação da seleção.
+- Duplicar copiando no próprio banco o binário e o valor maior que o corte (um `INSERT ... SELECT` pela
+  chave da linha de origem), em vez de pelo que a grade tem.
+- "Editar célula" num editor à parte, para o valor grande (o Shift+Enter do DBeaver), e copiar o valor
+  da linha de cima (o Ctrl+D dele).
+- Guardar as pendências de várias abas do script ao mesmo tempo, e o valor completo das células cortadas
+  nas abas guardadas.
+- Saber o esquema atual em que cada resultado do Db2 e do Informix foi lido, se o driver um dia o disser
+  sem consulta, no lugar da guarda dos comandos que podem trocá-lo (RN-SQL-024).
+- Na seção Scripts: arrastar e soltar, busca e filtro, lembrar as pastas abertas, a cor e o ícone da
+  pasta, e as pastas por conexão que o DBeaver pode criar sozinho.
