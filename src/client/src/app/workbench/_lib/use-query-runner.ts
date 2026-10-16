@@ -389,8 +389,13 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   let script: ScriptRun | null = null;
   const scriptListeners = new Set<() => void>();
   let scriptSerial = 0;
-  /** A pergunta de erro do script espera a resposta (RN-SQL-021): quem a resolve é a tela (`decide`) ou a aba solta (`release`, que para o script). */
+  /**
+   * A pergunta de erro do script espera a resposta (RN-SQL-021): quem a resolve é a tela (`decide`), a aba solta (`release`, que para o script) ou uma
+   * execução nova na aba (`stopPausedScript`, que a responde "Parar").
+   */
   let deciding: ((choice: ScriptChoice) => void) | null = null;
+  /** O laço do script em andamento (`runScript`), para quem precisa esperar o fim dele: a execução nova que para o script parado na pergunta de erro. */
+  let scriptLoop: Promise<void> | null = null;
 
   function publishScript(next: ScriptRun | null) {
     if (next === script) return;
@@ -788,7 +793,28 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     return refusal;
   };
 
-  const run = (target: RunTarget, options?: { keepScript?: boolean }) => runWith(target, "person", options?.keepScript !== true);
+  /**
+   * RN-SQL-020 e 021: uma execução nova na aba (o Ctrl+Enter, "Executar este comando", outro script, o F5) com a pergunta de erro do script esperando a
+   * resposta é a resposta "Parar": o script para com o que já rodou (as Estatísticas e o aviso do fim, como no "Parar" da pergunta), e só depois de ele
+   * terminar a execução nova segue, e troca os resultados dele quando a API a aceitar. Sem isso o laço do script esperava para sempre uma resposta que a
+   * tela, sem o script na tela, não daria mais, e uma resposta atrasada o retomaria por cima do comando novo. `sends` diz se a execução vai mesmo sair: a
+   * que o executor recusaria antes de enviar (nada a enviar, mais de um comando, a aba sem conexão) só avisa, e a pergunta continua esperando. Sem pergunta
+   * esperando, nada muda: quem chama vê a aba ocupada na mesma chamada, como antes.
+   */
+  function afterPausedScript<T>(sends: boolean, next: () => Promise<T>): Promise<T> {
+    const answer = deciding;
+    if (answer === null || !sends) return next();
+
+    deciding = null;
+    answer("stop");
+    const loop = scriptLoop ?? Promise.resolve();
+    return loop.then(next);
+  }
+
+  /** O comando vai mesmo à API: um comando só, e a aba com conexão (o resto o executor recusa antes, só com o aviso). */
+  const sends = (target: RunTarget) => connectionId !== null && statementCount(target.sql, target.engine) === 1;
+
+  const run = (target: RunTarget, options?: { keepScript?: boolean }) => afterPausedScript(sends(target), () => runWith(target, "person", options?.keepScript !== true));
 
   /**
    * O "Executar script" (seção 31, RN-SQL-019 a 022): os comandos, um por vez, na ordem, pela sessão da aba e pelo mesmo caminho de `run` (`execute`: a
@@ -800,8 +826,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * antes do primeiro), deixa a tela como estava: o script de antes volta, e o executor faz o que faria com o Ctrl+Enter. Depois do primeiro, a sessão que
    * cai não é reaberta: o que os comandos de antes deixaram nela (uma tabela temporária, um SET) se perdeu.
    */
-  const runScript = async (commands: readonly RunTarget[]): Promise<void> => {
-    await guarded(async () => {
+  const runScript = (commands: readonly RunTarget[]): Promise<void> => afterPausedScript(connectionId !== null && commands.length > 0, () => runScriptNow(commands));
+
+  const runScriptNow = async (commands: readonly RunTarget[]): Promise<void> => {
+    const loop = guarded(async () => {
       if (retired) return refuse("runScript");
       if (isPersonBusy(state)) return;
 
@@ -984,6 +1012,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         if (started === epoch && script !== null && (script.phase === "running" || script.phase === "paused")) publishScript(finishRun(script, "stopped", "error"));
       }
     });
+    scriptLoop = loop;
+    await loop;
+    if (scriptLoop === loop) scriptLoop = null;
   };
 
   /** RN-GRADE-014: o que a pessoa pede sobre o resultado na tela espera a execução automática em andamento, e segue sobre o resultado novo. */
@@ -1146,9 +1177,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     getState: () => state,
     run,
     runScript,
-    runCommand: async (target) => {
-      await runWith(target, "again", true);
-    },
+    runCommand: (target) => afterPausedScript(sends(target), () => runWith(target, "again", true).then(() => undefined)),
     script: {
       subscribe: (listener) => {
         scriptListeners.add(listener);
@@ -1161,10 +1190,17 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         answer?.(choice);
       },
     },
-    rerun: async () => {
+    rerun: () => {
       // Com a execução automática em andamento, o resultado na tela é o de antes dela, e o comando dele é o que se executa de novo.
-      const shown = state.status === "running" ? state.previous : state;
-      if (shown?.status === "rows") await runWith(shown.target, "again");
+      const shownTarget = () => {
+        const shown = state.status === "running" ? state.previous : state;
+        return shown?.status === "rows" ? shown.target : null;
+      };
+      const before = shownTarget();
+      return afterPausedScript(before !== null && sends(before), async () => {
+        const target = shownTarget();
+        if (target !== null) await runWith(target, "again");
+      });
     },
     cancel,
     autoRunSettled: afterAuto,
