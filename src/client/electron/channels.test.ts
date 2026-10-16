@@ -65,6 +65,22 @@ describe("os canais entre a tela e o processo principal", () => {
     expect(handlers.sort()).toEqual(workspaceChannels);
   });
 
+  it("o destino e a entrega das exportações de dados (RN-EXPORT-019 e 020): cinco pedidos, sem dígito no nome, cada um confere a origem e passa ao `transferDesk`, que confere o schema e a janela; nenhum devolve aviso à tela", () => {
+    const transferChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:transfer-"));
+    const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:transfer-[a-z-]+)", \(event, request: unknown\) => \{\s*assertFromApp\(event\);\s*(?:return )?transferDesk\.[a-zA-Z]+\((?:windowIdOf\(event\.sender\), )?request\);\s*\}\);/g)].map((match) => match[1]);
+
+    expect(transferChannels).toEqual(["prism:transfer-copy", "prism:transfer-deliver", "prism:transfer-destination", "prism:transfer-release", "prism:transfer-reveal"]);
+    expect(handlers.sort()).toEqual(transferChannels);
+    // O destino, a entrega, o "Mostrar na pasta" e o soltar são da janela que os pediu: o processo principal passa o número dela, e não o que a tela diz.
+    for (const channel of ["prism:transfer-destination", "prism:transfer-deliver", "prism:transfer-reveal", "prism:transfer-release"]) {
+      expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*(?:return )?transferDesk\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));
+    }
+    // A ponte só repassa o pedido, sem caminho: cada canal leva um argumento, o objeto que o schema do processo principal confere.
+    for (const channel of transferChannels) expect(preload).toMatch(new RegExp(`\\(request\\) => ipcRenderer\\.invoke\\("${channel}", request\\)`));
+    expect(channelsOf(main, "webContents.send").some((channel) => channel.startsWith("prism:transfer-"))).toBe(false);
+    expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
+  });
+
   it("a vez da verificação periódica (RN-VERIF-002): os dois pedidos conferem a origem e passam ao centro das janelas, que os confere com o schema", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:verification-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?hub\.[a-zA-Z]+Verification\(windowIdOf\(event\.sender\), /g)].map((match) => match[1]);
     const verificationChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:verification-"));
