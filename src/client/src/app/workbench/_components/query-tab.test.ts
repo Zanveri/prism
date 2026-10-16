@@ -1009,6 +1009,22 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
     expect(shifted.preventDefault).not.toHaveBeenCalled();
   });
 
+  it("segurar Alt+X não começa o script de novo: só o primeiro evento o começa, e a repetição (`repeat`) só é consumida", () => {
+    const view = mount(fakeRunner(rowsState()));
+    const runScript = vi.fn();
+    (view.show().editor.ref as { current: unknown }).current = { runScript, focus: vi.fn() };
+    const { keys } = view.show();
+
+    const first = key({ altKey: true });
+    const held = key({ altKey: true, repeat: true });
+    keys(first);
+    keys(held);
+    keys(key({ altKey: true, repeat: true }));
+
+    expect(runScript).toHaveBeenCalledOnce();
+    expect(held.preventDefault).toHaveBeenCalledOnce();
+  });
+
   it("o editor manda os comandos ao executor; com alterações não salvas, pergunta antes (RN-EDIT-007), e Descartar roda o script", () => {
     const free = fakeRunner(rowsState());
     mount(free).show().editor.onRunScript!(targets);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hasStatement, splitStatements, statementAt, statementCount, utf16IndexOf } from "./sql-statements";
+import { commandStart, hasStatement, splitStatements, statementAt, statementCount, utf16IndexOf } from "./sql-statements";
 
 const texts = (sql: string) => splitStatements(sql).map((statement) => statement.text);
 
@@ -616,6 +616,21 @@ describe("statementCount: bloco com `;` no corpo é um comando só (RN-SQL-001)"
         for (const sql of plain) expect(statementCount(sql, engine), `${engine ?? "sem banco"}: ${JSON.stringify(sql)}`).toBe(splitStatements(sql, engine).length);
       }
     });
+  });
+});
+
+describe("commandStart (RN-SQL-020: onde o texto do comando começa, depois dos comentários de cima)", () => {
+  it("pula espaços e comentários pelas regras de cada banco, e o `;` não é pulado (ele é do texto)", () => {
+    expect(commandStart("  -- a\n/* b /* c */ d */\tselect 1", 1)).toBe("  -- a\n/* b /* c */ d */\t".length);
+    expect(commandStart("/* b /* c */ select 1", 3)).toBe("/* b /* c */ ".length);
+    expect(commandStart("{ x }\nselect 1", 3)).toBe("{ x }\n".length);
+    expect(commandStart("{ x }\nselect 1", 1)).toBe(0);
+    expect(commandStart(";select 1", 1)).toBe(0);
+  });
+
+  it("só espaço e comentário: o tamanho do texto", () => {
+    expect(commandStart("  -- nada", 2)).toBe("  -- nada".length);
+    expect(commandStart("")).toBe(0);
   });
 });
 

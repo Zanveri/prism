@@ -327,6 +327,75 @@ describe("a pergunta de erro (RN-SQL-021)", () => {
     expect(runner.getState()).toMatchObject({ status: "error", source: "connection", message: "connection refused" });
   });
 
+  it("uma execução nova na aba com a pergunta esperando é o “Parar”: o script para com o que já rodou, e só então o comando novo sai e troca os resultados dele (RN-SQL-020)", async () => {
+    const { api, runner, toast, done } = await failingSecond();
+    api.on(queries, affected(1));
+
+    const ran = runner.run({ sql: "update t set a = 1", offset: 0, engine: 1 });
+    // O laço do script terminou: a promessa dele não fica esperando para sempre uma resposta que ninguém mais daria.
+    await done;
+    expect(toast.warning.mock.calls).toEqual([[copy.toasts.stopped(tabTitle, 1, 3)]]);
+
+    await ran;
+    expect(api.sent()).toEqual(["select 1", "select * form t", "update t set a = 1"]);
+    expect(runner.script.getState()).toBeNull();
+    expect(runner.getState()).toMatchObject({ status: "affected", rowsAffected: 1 });
+    // A resposta atrasada da pergunta que já não está na tela não retoma nada.
+    runner.script.decide("retry");
+    await settle();
+    expect(api.sent()).toHaveLength(3);
+  });
+
+  it("o mesmo com outro script, com “Executar este comando” e com o F5 no resultado que ficou na tela: o laço do script parado termina antes", async () => {
+    const other = await failingSecond();
+    other.api.on(queries, affected(2));
+    const next = other.runner.runScript(commands("delete from t"));
+    await other.done;
+    await next;
+    expect(other.api.sent().at(-1)).toBe("delete from t");
+    expect(statuses(script(other.runner))).toEqual(["ok"]);
+
+    const alone = await failingSecond();
+    alone.api.on(queries, page([["1"]]));
+    const first = script(alone.runner).results[0].rows.target;
+    const command = alone.runner.runCommand(first);
+    await alone.done;
+    await command;
+    expect(alone.api.sent().at(-1)).toBe("select 1");
+    expect(alone.runner.script.getState()).toBeNull();
+
+    // A recusa do somente leitura deixa na tela o resultado do comando anterior (RN-PROT-002): o F5 o executa de novo, depois de parar o script.
+    const again = setup();
+    again.api.on(`POST ${sessions}`, session("s1"));
+    again.api.on(queries, page([["1"]]));
+    again.api.on(queries, problem(422, "CONNECTION_READ_ONLY", { detail: "Nada foi enviado ao banco." }));
+    const paused = again.runner.runScript(commands("select 1", "delete from t"));
+    await settle();
+    expect(again.runner.getState()).toMatchObject({ status: "rows" });
+    again.api.on(queries, page([["1"]]));
+    const rerun = again.runner.rerun();
+    await paused;
+    await rerun;
+    expect(again.api.sent()).toEqual(["select 1", "delete from t", "select 1"]);
+    expect(script(again.runner)).toMatchObject({ phase: "stopped" });
+  });
+
+  it("o que o executor recusaria antes de enviar (mais de um comando, nada a enviar) só avisa: a pergunta continua esperando, e a resposta dela vale", async () => {
+    const { api, runner, toast, done } = await failingSecond();
+
+    await runner.run({ sql: "select 1; select 2", offset: 0, engine: 1 });
+    await runner.run({ sql: "  ", offset: 0, engine: 1 });
+    await runner.runScript([]);
+    await runner.rerun();
+    expect(script(runner)).toMatchObject({ phase: "paused", current: 1 });
+    expect(toast.warning).toHaveBeenCalled();
+
+    api.on(queries, page([["3"]]));
+    runner.script.decide("skip");
+    await done;
+    expect(statuses(script(runner))).toEqual(["ok", "skipped", "ok"]);
+  });
+
   it("soltar a aba durante a pergunta para o script (Desconectar); aposentar o executor o tira (o bloqueio)", async () => {
     const { runner, done } = await failingSecond();
 
