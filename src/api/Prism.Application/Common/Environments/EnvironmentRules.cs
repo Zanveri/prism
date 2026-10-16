@@ -1,6 +1,7 @@
 using FluentValidation;
 using Prism.Application.Common.Texts;
 using Prism.Core.Extensions;
+using Prism.Infrastructure.Vault.Models;
 
 namespace Prism.Application.Common.Environments;
 
@@ -59,4 +60,35 @@ internal static class EnvironmentRules
     /// <summary>A cor é aparada e guardada com as letras como vieram.</summary>
     public static string? NormalizeColor(string? environmentColor)
         => string.IsNullOrWhiteSpace(environmentColor) ? null : environmentColor.Trim();
+
+    /// <summary>
+    /// RN-PASTA-005: o ambiente que a conexão mostra. O próprio sempre ganha; sem ele, o da pasta mais próxima acima que tenha um (só o nome faz um ambiente:
+    /// a cor sozinha não conta, e a pasta só com cor passa adiante o de cima). É a herança que a tela aplica (`environmentLookup`), e que a exportação grava
+    /// no `effective` da conexão e a importação confere no lugar escolhido (RN-TRANSF-006 e 013). Nulo é "sem ambiente".
+    /// </summary>
+    public static ShownEnvironment? ShownBy(IReadOnlyDictionary<Guid, VaultFolderRecord> folders, Guid? folderID, string? environmentName, string? environmentColor)
+        => string.IsNullOrEmpty(environmentName) ? InheritedIn(folders, folderID) : new ShownEnvironment(environmentName, environmentColor);
+
+    /// <summary>
+    /// RN-PASTA-005: o que uma conexão sem ambiente próprio herda na pasta `folderID` (nula é a raiz, que não dá nada): o ambiente da pasta mais próxima, a
+    /// partir dela e subindo, que tenha um. O registro das visitadas limita a subida, como nas proteções (`ProtectionRules.Of`).
+    /// </summary>
+    public static ShownEnvironment? InheritedIn(IReadOnlyDictionary<Guid, VaultFolderRecord> folders, Guid? folderID)
+    {
+        var visited = new HashSet<Guid>();
+        var current = folderID;
+
+        while (current is { } id && visited.Add(id) && folders.TryGetValue(id, out var folder))
+        {
+            if (!string.IsNullOrEmpty(folder.EnvironmentName))
+                return new ShownEnvironment(folder.EnvironmentName, folder.EnvironmentColor);
+
+            current = folder.ParentID;
+        }
+
+        return null;
+    }
 }
+
+/// <summary>RN-PASTA-005: o ambiente que uma conexão mostra numa etiqueta, o nome e a cor (que pode faltar).</summary>
+internal sealed record ShownEnvironment(string Name, string? Color);
