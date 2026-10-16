@@ -69,7 +69,7 @@ import { elementsOf } from "@/lib/testing/react-tree";
 
 import { editCell, noEdits } from "../_lib/record-edits";
 import { recordsCopy } from "../_lib/records.copy";
-import { forgetExcept, remember } from "../_lib/tab-memory";
+import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isPersonBusy } from "../_lib/use-query-runner";
 import { ConnectionPicker } from "./connection-picker";
@@ -1246,6 +1246,225 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
     rt.screen.on = true;
     view.props.active = true;
     expect(view.show().scriptError).toMatchObject({ number: 1, total: 3 });
+  });
+});
+
+describe("QueryTabPanel: as abas guardadas do script se editam (seção 33, RN-SQL-023)", () => {
+  const first: RunTarget = { sql: "select * from loja.pedido where id < 5", offset: 0, engine: pg };
+  const last: RunTarget = { sql: "select * from loja.pedido", offset: 40, engine: pg };
+  const kept = () => rowsState({ id: 7, target: first, rows: [["1", "a"]], hasMore: false, resultId: "r0" });
+  const tabsOf = (view: ReturnType<typeof mount>) => (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props;
+
+  /** O script terminado com duas abas: a do primeiro comando, guardada (o resultado `r0`), e a do último, que é o executor (`r1`, com o cursor aberto). */
+  function twoTabs(runner: ReturnType<typeof fakeRunner>): ScriptRun {
+    let run = createScriptRun(1, [first, last]);
+    run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
+    run = withEntry(run, 1, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    run = { ...finishRun(run, "done"), results: [{ entry: 0, rows: kept() }, { entry: 1, rows: runner.state as RowsState }], live: 1 };
+    runner.scriptState = run;
+    return run;
+  }
+
+  it("a aba guardada recebe a edição e a faixa; o alvo é o do resultado dela, e o menu da célula não tem Filtrar, Atualizar nem Atualizar automaticamente", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+    const { area, banner } = view.show();
+
+    expect(area.editing?.rows).toEqual([["1", "a"]]);
+    expect(banner?.type).toBe(EditsBanner);
+    // O F11 do "Filtrar" é do resultado do último comando.
+    expect(area.editing?.onFilter).toBeUndefined();
+
+    area.editing!.onMenu({ row: 0, column: 1 }, { x: 0, y: 0 }, false);
+    await settle();
+    const ids = view.show().menu!.groups.flatMap(groupItems).map((item) => item.id);
+
+    expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
+    expect(ids).toEqual(expect.arrayContaining(["copy", "paste", "edit", "setNull", "undo", "newRow", "duplicateRow", "deleteRow"]));
+    expect(ids).not.toContain("filter");
+    expect(ids).not.toContain("refresh");
+    expect(ids).not.toContain("autoRefresh");
+  });
+
+  it("a aba guardada tem a barra de edição (RN-EDIT-013), e Duplicar linha põe a cópia no fim da grade dela; a célula cortada, cujo valor completo a API não guarda para ela, não duplica nada (RN-EDIT-016)", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.cells.resultCells.mockResolvedValue({ ok: false, error: { status: 404, code: "RESULT_NOT_FOUND", title: "Resultado não localizado.", detail: null, errors: null, extensions: {} } });
+    const runner = fakeRunner(rowsState({ target: last }));
+    const run = twoTabs(runner);
+    runner.scriptState = { ...run, results: [{ entry: 0, rows: rowsState({ id: 7, target: first, rows: [["1", "a"], ["2", "corta"]], truncated: new Map([[1, new Set([1])]]), hasMore: false, resultId: "r0" }) }, run.results[1]] };
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+
+    expect(view.show().area.editing!.bar.buttons.map((button) => button.id)).toEqual(["edit", "newRow", "duplicateRow", "deleteRow"]);
+
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.bar.onAction("duplicateRow");
+    await settle();
+    expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
+    expect(view.show().area.editing!.rows[2]).toEqual(["1", "a"]);
+    expect(view.show().banner!.props.notice).toBe(copy.duplicate.keyCopied("pedido", ["id"]));
+
+    view.show().area.editing!.onActivate({ row: 1, column: 0 });
+    view.show().area.editing!.onDuplicateRow();
+    await settle();
+    await settle();
+    expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r0", [{ row: 1, column: 1 }], expect.any(AbortSignal));
+    expect(view.show().area.editing!.rows).toHaveLength(3);
+    expect(view.show().banner!.props.notice).toBe(copy.duplicate.fullValueMissing("status", "result"));
+  });
+
+  it("o Salvar de uma aba guardada grava pelo resultado dela e entrega ao executor o que foi salvo (que fecha o cursor do último), sem executar nada", async () => {
+    keptPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+
+    view.show().banner!.props.onSave();
+    await settle();
+
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledWith("s1", "r0", [{ kind: "update", table: 0, key: ["1"], set: [{ column: 1, value: "b" }] }]);
+    expect(runner.keepSaved).toHaveBeenCalledWith("r0", { rows: [["1", "b"]], truncated: new Map(), generated: new Map() });
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(runner.runCommand).not.toHaveBeenCalled();
+    expect(rt.toast.success).toHaveBeenCalledWith(copy.saved(1));
+  });
+
+  it("com alterações não salvas, trocar de aba pergunta antes: Cancelar fica onde estava, Descartar joga fora e troca; a aba que já está à frente não pergunta", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+
+    expect(tabsOf(view).onChoose(1)).toBe(true);
+    expect(view.show().question).toBeUndefined();
+
+    expect(tabsOf(view).onChoose(0)).toBe(false);
+    expect(view.show().question).toMatchObject({ count: 1 });
+    view.show().question!.onCancel();
+    expect(view.show().question).toBeUndefined();
+    expect(tabsOf(view).shown).toBe(1);
+    expect(view.show().area.editing?.pending).toBe(1);
+
+    // Também para as Estatísticas.
+    expect(tabsOf(view).onChoose("statistics")).toBe(false);
+    view.show().question!.onDiscard();
+    expect(tabsOf(view).shown).toBe("statistics");
+    expect(unsavedEdits.countOf("q1")).toBe(0);
+  });
+
+  it("com alterações não salvas numa aba guardada, trocar dela para outra (a do último comando, as Estatísticas) também pergunta; Descartar joga fora e troca", () => {
+    keptPending();
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+    expect(tabsOf(view).onChoose(0)).toBe(true);
+    expect(view.show().area.editing?.pending).toBe(1);
+
+    expect(tabsOf(view).onChoose(1)).toBe(false);
+    expect(view.show().question).toMatchObject({ count: 1 });
+    view.show().question!.onCancel();
+    expect(tabsOf(view).shown).toBe(0);
+
+    expect(tabsOf(view).onChoose("statistics")).toBe(false);
+    view.show().question!.onDiscard();
+    expect(tabsOf(view).shown).toBe("statistics");
+    expect(unsavedEdits.countOf("q1")).toBe(0);
+  });
+
+  it("a ação numa aba guardada que esperava o alvo não age quando o script sai no meio (o Ctrl+Enter troca o executor de resultados)", async () => {
+    let respond!: () => void;
+    rt.service.editTargetOrRefuse.mockImplementationOnce(() => new Promise((resolve) => (respond = () => resolve({ ok: true, data: target }))) as never);
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+
+    view.show().area.editing!.bar.onAction("newRow");
+    // O script sai enquanto o alvo é perguntado, sem a tela redesenhar antes da resposta: quem decide é o executor, lido na hora.
+    runner.scriptState = null;
+    respond();
+    await settle();
+
+    expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
+    // Nenhuma linha nova: nem nas linhas que a aba guardava, que saíram, nem nas do executor.
+    expect(recall("q1", "edits")?.edits.added ?? []).toEqual([]);
+    expect(view.show().area.editing?.rows).toEqual([["10", "aberta"]]);
+    expect(unsavedEdits.countOf("q1")).toBe(0);
+  });
+
+  it("a edição de uma aba guardada vai à sessão em que ela foi lida: depois de o F5 reabrir a sessão que caiu, a faixa diz que a sessão não existe mais", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: false, error: { status: 404, code: "DATABASE_SESSION_NOT_FOUND", title: "Sessão não localizada.", detail: "A sessão com o banco não existe ou já foi fechada.", errors: null, extensions: {} } });
+    const runner = fakeRunner(rowsState({ target: last }));
+    const run = twoTabs(runner);
+    // A aba guardada foi lida na sessão `s0`, que caiu; o F5 do último abriu a `s1`, que é a da aba agora.
+    runner.scriptState = { ...run, results: [{ entry: 0, rows: { ...kept(), sessionId: "s0" } }, run.results[1]] };
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+
+    view.show().area.editing!.onEdit({ row: 0, column: 1 });
+    await settle();
+
+    expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s0", "r0", null);
+    expect(view.show().banner!.props.failure).toMatchObject({ headline: copy.checkResultFailed, detail: "A sessão com o banco não existe ou já foi fechada." });
+    expect(view.show().area.editing?.editor).toBeNull();
+  });
+
+  it("Salvar na pergunta grava e então troca; se o Salvar falha, a aba fica, com a falha na faixa", async () => {
+    withPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValueOnce({ ok: false, error: { status: 422, code: "SQL_EXECUTION_FAILED", title: "Falha ao executar o comando.", detail: "duplicate key value", errors: null, extensions: { change: 0 } } });
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+
+    tabsOf(view).onChoose(0);
+    view.show().question!.onSave();
+    await settle();
+    expect(tabsOf(view).shown).toBe(1);
+    expect(view.show().banner?.props.failure).not.toBeNull();
+
+    rt.service.saveEditsOrRefuse.mockResolvedValueOnce({ ok: true, data: { applied: 1 } });
+    tabsOf(view).onChoose(0);
+    view.show().question!.onSave();
+    await settle();
+    expect(runner.keepSaved).toHaveBeenCalledWith("r1", expect.anything());
+    expect(tabsOf(view).shown).toBe(0);
+  });
+
+  it("enquanto o script espera a resposta da pergunta de erro, a edição fica ocupada em todas as abas de resultado, com o motivo", async () => {
+    const runner = fakeRunner({ status: "error", source: "database", title: "Erro do banco", message: "boom", sqlState: "42601", errorAt: null });
+    let run = withEntry(createScriptRun(1, [first, last]), 0, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
+    run = { ...withEntry(run, 1, { status: "error", error: { title: "Erro do banco", message: "boom", sqlState: "42601" } }), phase: "paused", current: 1, results: [{ entry: 0, rows: kept() }] };
+    runner.scriptState = run;
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+
+    view.show().area.editing!.onEdit({ row: 0, column: 1 });
+    await settle();
+
+    expect(view.show().banner?.props.notice).toBe(copy.readOnly(copy.reasons.busy));
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+    // Os quatro botões da barra também, com o mesmo motivo (RN-EDIT-014).
+    expect(view.show().area.editing!.bar.buttons.map((button) => button.reason)).toEqual(Array(4).fill(copy.readOnly(copy.reasons.busy)));
+  });
+
+  it("as alterações não salvas de uma aba guardada vão ao registro da aba: levar a aba para outra janela, ou fechá-la, pergunta antes (RN-EDIT-007)", () => {
+    keptPending();
+    const runner = fakeRunner(rowsState({ target: last }));
+    twoTabs(runner);
+    const view = mount(runner);
+    tabsOf(view).onChoose(0);
+    view.show();
+
+    expect(unsavedEdits.countOf("q1")).toBe(1);
+    expect(unsavedEdits.saveOf("q1")).not.toBeNull();
   });
 });
 

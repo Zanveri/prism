@@ -1,6 +1,7 @@
-import type { ReactElement } from "react";
+import { createElement, type ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { GridEditing } from "../_lib/grid-editing";
 import type { RowsState } from "../_lib/use-query-runner";
 
 // As peças das abas do script (RN-SQL-020 e 021) que dependem dos ganchos do React, simulados (`createHookRuntime`), como o teste do botão de contar: o
@@ -23,6 +24,8 @@ import { elementsOf } from "@/lib/testing/react-tree";
 import { createScriptRun, finishRun, startEntry, withEntry, type ScriptRun } from "../_lib/script-run";
 import { scriptRunCopy } from "../_lib/script-run.copy";
 import type { QueryRunner } from "../_lib/use-query-runner";
+import { EditBar } from "./edit-bar";
+import { ResultGrid } from "./result-grid";
 import { ResultPanel } from "./result-panel";
 import { KeptResultNote, ScriptTabs, ScriptWaitingMark } from "./script-tabs";
 
@@ -114,6 +117,29 @@ describe("Executar este comando, na aba guardada do script (RN-SQL-020)", () => 
   });
 });
 
+describe("a aba guardada do script se edita (seção 33, RN-SQL-023)", () => {
+  it("a área entrega a edição à grade e mostra a faixa da edição sobre ela, a barra de edição embaixo (RN-EDIT-013) e, depois dela, a nota com “Executar este comando”", () => {
+    const bar = { buttons: [], onAction: noop };
+    const editing = { bar } as unknown as GridEditing;
+    const banner = createElement("div", { "data-banner": true });
+
+    const tree = rt.render(() => ResultPanel({ state: rows, connected: false, onLoadMore: noop, onCount: noop, onRerun: noop, kept: { busy: false, onRunAlone: noop }, editing, banner }));
+    const found = elementsOf(tree);
+    const at = (type: unknown) => found.findIndex((element) => element.type === type);
+
+    expect(found.find((element) => element.type === ResultGrid)?.props.editing).toBe(editing);
+    expect(found.some((element) => element.props["data-banner"] === true)).toBe(true);
+    expect(found.find((element) => element.type === EditBar)?.props).toMatchObject({ buttons: bar.buttons, onAction: bar.onAction });
+    expect(at(EditBar)).toBeGreaterThan(at(ResultGrid));
+    expect(at(KeptResultNote)).toBeGreaterThan(at(EditBar));
+    rt.unmount();
+  });
+
+  it("a nota diz que o que é do cursor fica no resultado do último comando, e não fala mais de menu nem de edição", () => {
+    expect(copy.note).toBe("O cursor deste resultado fechou quando o comando seguinte rodou. Carregar mais, Contar total, o filtro e a atualização automática valem no resultado do último comando.");
+  });
+});
+
 describe("a faixa das abas do script (RN-SQL-020)", () => {
   /** Um script de 12 comandos que devolveram linhas, todos com aba. */
   function twelve(): ScriptRun {
@@ -121,6 +147,53 @@ describe("a faixa das abas do script (RN-SQL-020)", () => {
     for (let index = 0; index < 12; index++) run = withEntry(run, index, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
     return { ...finishRun(run, "done"), results: Array.from({ length: 12 }, (_, entry) => ({ entry, rows })), live: 11 };
   }
+
+  it("as setas levam o foco à aba escolhida, e não quando a troca espera a pergunta das alterações não salvas (RN-SQL-023)", () => {
+    const chosen = { focus: vi.fn() };
+    const choose = vi.fn((): boolean => true);
+    const tree = rt.render(() => ScriptTabs({ run: twelve(), shown: 0, idPrefix: "t", panelId: "t-panel", onChoose: choose }));
+    const list = elementsOf(tree).find((element) => element.props.role === "tablist")!;
+    (list.props.ref as { current: unknown }).current = { querySelector: vi.fn(() => chosen) };
+    const press = () => (list.props.onKeyDown as (event: unknown) => void)({ key: "ArrowRight", preventDefault: vi.fn() });
+
+    press();
+    expect(choose).toHaveBeenLastCalledWith(1);
+    expect(chosen.focus).toHaveBeenCalledOnce();
+
+    choose.mockReturnValue(false);
+    press();
+    expect(choose).toHaveBeenCalledTimes(2);
+    expect(chosen.focus).toHaveBeenCalledOnce();
+    rt.unmount();
+  });
+
+  it("a troca pelo teclado que esperou a pergunta leva o foco à aba escolhida quando a pergunta troca de aba; Cancelar, ou outra escolha no meio, não (RN-SQL-023)", () => {
+    const chosen = { focus: vi.fn() };
+    const choose = vi.fn((): boolean => false);
+    const props = { run: twelve(), shown: 0 as number | "statistics", idPrefix: "t", panelId: "t-panel", onChoose: choose };
+    const listOf = () => elementsOf(rt.render(() => ScriptTabs(props))).find((element) => element.props.role === "tablist")!;
+    const list = listOf();
+    const selector = vi.fn((selector: string) => (selector.startsWith("[data-script-tab=") ? chosen : null));
+    (list.props.ref as { current: unknown }).current = { querySelector: selector };
+    const press = (key: string) => (listOf().props.onKeyDown as (event: unknown) => void)({ key, preventDefault: vi.fn() });
+
+    // "Descartar" (ou o "Salvar" que gravou): a aba troca para a escolhida, e o foco vai a ela.
+    press("ArrowRight");
+    expect(chosen.focus).not.toHaveBeenCalled();
+    props.shown = 1;
+    listOf();
+    expect(selector).toHaveBeenLastCalledWith('[data-script-tab="1"]');
+    expect(chosen.focus).toHaveBeenCalledOnce();
+
+    // "Cancelar": a aba fica; a escolha seguinte, pelo clique, esquece a que esperava, e a troca para outra aba não leva o foco.
+    press("ArrowRight");
+    const statistics = elementsOf(rt.render(() => ScriptTabs(props))).find((element) => element.props["data-script-tab"] === "statistics")!;
+    (statistics.props.onClick as () => void)();
+    props.shown = 2;
+    listOf();
+    expect(chosen.focus).toHaveBeenCalledOnce();
+    rt.unmount();
+  });
 
   it("as abas dos resultados rolam, e as Estatísticas ficam fixas na ponta, fora da rolagem", () => {
     const tree = rt.render(() => ScriptTabs({ run: twelve(), shown: 11, idPrefix: "t", panelId: "t-panel", onChoose: noop }));
