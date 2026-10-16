@@ -164,7 +164,10 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 ### 4.2 Cofre por usuário
 
 - **RN-COFRE-001.** Cada usuário tem um arquivo, `<PRISM_DATA_DIR>/vaults/<usuario>.vault.json`.
-  Pastas e conexões (inclusive nomes, hosts e senhas) ficam dentro dele, cifradas.
+  Pastas e conexões (inclusive nomes, hosts e senhas) ficam dentro dele, cifradas. Elas só saem
+  dele para outro arquivo pela exportação (RN-TRANSF-007), sempre cifradas com a senha de
+  exportação, nunca em claro; o arquivo exportado não depende mais do cofre, e é de quem o guarda.
+  *Alterada a pedido do dono em 2026-10-16 (seção 34): entrou o arquivo da exportação.*
 - **RN-COFRE-002.** A senha do usuário não é gravada em lugar nenhum. Dela sai, por Argon2id
   (64 MiB de memória, 3 passadas, paralelismo 4, sal aleatório de 16 bytes por usuário), a
   chave que protege a chave do cofre.
@@ -193,14 +196,20 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 ### 4.3 Senha das conexões
 
 - **RN-CONN-001.** A senha de uma conexão nunca sai nas respostas de listagem ou detalhe; elas
-  trazem só `hasPassword`.
+  trazem só `hasPassword`. Fora da revelação (RN-CONN-002), ela só sai da API dentro do arquivo
+  cifrado da exportação, que a tela recebe e grava sem conseguir ler (RN-TRANSF-005 e 007); a
+  prévia da importação diz só se a conexão tem senha (RN-TRANSF-011). *Alterada a pedido do dono em
+  2026-10-16 (seção 34): entrou a exportação.*
 - **RN-CONN-002.** Para ver a senha de uma conexão o usuário digita a própria senha. A API
   deriva a chave de novo e tenta abrir com ela a chave do cofre gravada no cabeçalho. Senha
   errada responde 422 `INVALID_PASSWORD` e não devolve nada.
 - **RN-CONN-003.** O quinto erro seguido em RN-CONN-002 fecha o cofre (RN-COFRE-008) e responde
   401 `VAULT_LOCKED` no lugar do 422. Acertar zera a contagem. Com transação aberta, o diálogo
   de senha da RN-CONN-002 avisa que cinco erros seguidos fecham o cofre e desfazem as transações
-  abertas (RN-TX-008).
+  abertas (RN-TX-008). A contagem é uma só para revelar a senha, trocar a senha (RN-COFRE-013), o
+  somente leitura (RN-PROT-003) e a exportação com senhas de banco (RN-TRANSF-005): os erros das
+  quatro somam. A senha de exportação errada, na importação, não conta (RN-TRANSF-010). *Alterada a
+  pedido do dono em 2026-10-16 (seção 34): entrou a exportação.*
 - **RN-CONN-004.** Ao editar uma conexão, senha omitida mantém a senha gravada, desde que o
   host e a porta continuem os mesmos. Mudar o host ou a porta sem informar a senha da conexão
   responde 422 `CONNECTION_INVALID`: a senha gravada só é enviada ao servidor para o qual foi
@@ -216,14 +225,24 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   desenhado como texto, nunca como HTML.
 - **RN-LOG-001.** O log (arquivo em `<PRISM_DATA_DIR>/logs/`, rotação diária, 7 dias) não
   registra senha, string de conexão, texto de SQL nem dados de resultado. Registra sessão,
-  duração, quantidade de linhas e a classe do erro.
+  duração, quantidade de linhas e a classe do erro. Também não registra a senha de exportação, o
+  arquivo da exportação nem a prévia da importação: da exportação e da importação, só as contagens,
+  os IDs e a classe da recusa (RN-TRANSF-008, 010 e 014). *Alterada a pedido do dono em 2026-10-16
+  (seção 34): entraram a exportação e a importação.*
 
 ## 5. Regras de negócio
 
 ### 5.1 Pastas
 
 - **RN-PASTA-001.** Pastas aninham sem limite de profundidade. Campos: nome (1 a 60) e pasta
-  pai (opcional).
+  pai (opcional). O nome e o do ambiente não têm caractere de controle nem de direção do texto
+  (U+0000 a U+001F, U+007F a U+009F, U+200E, U+200F, U+202A a U+202E, U+2066 a U+2069), conferido
+  depois da normalização (que já troca a tabulação e a quebra de linha por um espaço), na tela e na
+  API: "O nome da pasta não pode ter caractere de controle nem de direção do texto." *Alterada a
+  pedido do dono em 2026-10-16 (seção 34): a profundidade segue sem limite, mas a exportação leva
+  até 32 níveis contados da raiz do navegador (RN-TRANSF-006), e a importação, até 32 níveis dentro
+  do arquivo (RN-TRANSF-010); e entrou a recusa dos caracteres de controle e de direção do texto,
+  que a importação também aplica.*
 - **RN-PASTA-002.** Nome único entre as irmãs, sem diferenciar maiúsculas: 409
   `FOLDER_ALREADY_EXISTS`.
 - **RN-PASTA-003.** Mover uma pasta para dentro dela mesma ou de uma descendente: 409
@@ -234,13 +253,26 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 ### 5.2 Conexões
 
 - **RN-CONN-010.** Campos: nome (1 a 80), pasta (opcional), banco (`PostgreSql` = 1, `Db2` = 2,
-  `Informix` = 3), host, porta, nome do banco de dados, usuário, senha, nome do ambiente
+  `Informix` = 3), host, porta, nome do banco de dados, usuário e senha (obrigatórios no
+  formulário; vazios só na conexão que a importação trouxe sem eles, RN-TRANSF-015), nome do ambiente
   (opcional, até 30) e cor do ambiente (opcional, `#RRGGBB`); as proteções, "Confirmar antes de
   executar" ("Não", o padrão, "Só comandos irreversíveis" ou "Todos os comandos", RN-PROT-001) e
   "Somente leitura" (desmarcada por padrão, RN-PROT-002); e a sessão da conexão, "Verificar a cada N
   segundos" (ligada, 30 segundos, de 5 a 3.600) e a consulta de verificação (opcional, até 1.000
-  caracteres, RN-VERIF-001). *Alterada a pedido do dono em 2026-10-15 (seção 32): entraram as
-  proteções e a sessão da conexão.*
+  caracteres, RN-VERIF-001). O host tem até 255 caracteres, o banco de dados até 128, o usuário
+  até 128 (os três contados em unidades UTF-16 depois de aparados, que é o que se grava) e a senha
+  até 1.024 (contada como veio: ela não é aparada); o nome, o host, o banco de dados, o usuário e o
+  nome do ambiente não têm caractere de controle nem de direção do texto (os da RN-PASTA-001),
+  conferido depois da normalização de cada campo. As recusas são 422 `CONNECTION_INVALID` no campo:
+  "O host pode ter até 255 caracteres.", "O banco de dados pode ter até 128 caracteres.", "O usuário
+  do banco pode ter até 128 caracteres.", "A senha do banco pode ter até 1.024 caracteres." e "O
+  host não pode ter caractere de controle nem de direção do texto." (com o nome do campo). São as
+  mesmas regras, num lugar só, no formulário de criar e de editar, no "Testar conexão" e na
+  importação (RN-TRANSF-014). *Alterada a pedido do dono em 2026-10-15 (seção 32): entraram as
+  proteções e a sessão da conexão. Alterada a pedido do dono em 2026-10-16 (seção 34): a conexão
+  importada pode vir sem usuário e senha; e entraram os tetos do host, do banco de dados, do usuário
+  e da senha e a recusa dos caracteres de controle e de direção do texto, para o arquivo que o Prism
+  exporta voltar pela importação dele.*
 - **RN-CONN-011.** Nome único dentro da mesma pasta: 409 `CONNECTION_ALREADY_EXISTS`.
 - **RN-CONN-012.** Portas sugeridas no formulário: PostgreSQL 5432, Db2 50000, Informix 9089.
 - **RN-CONN-013.** "Testar conexão" abre, executa a consulta de verificação do banco e fecha,
@@ -250,8 +282,11 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   Informix `SELECT 1 FROM systables WHERE tabid = 1`. Quando o formulário tem uma consulta de
   verificação própria (RN-VERIF-001), o teste executa a dela no lugar da do banco, com as mesmas
   regras da verificação periódica, e a recusa da consulta é 422 `CONNECTION_INVALID` no campo dela,
-  antes de conectar. *Alterada a pedido do dono em 2026-10-15 (seção 32): antes valia só a consulta
-  do banco.*
+  antes de conectar. Com o `id`, sem a senha no pedido e sem senha gravada (a conexão que a
+  importação trouxe sem ela, RN-TRANSF-015), a resposta é 422 `CONNECTION_CREDENTIALS_MISSING` no
+  campo da senha, sem conectar (RN-TRANSF-016). *Alterada a pedido do dono em 2026-10-15 (seção 32):
+  antes valia só a consulta do banco. Alterada a pedido do dono em 2026-10-16 (seção 34): entrou a
+  conexão sem senha gravada.*
 - **RN-CONN-014.** Excluir uma conexão encerra as sessões abertas dela. Antes de encerrar
   sessões com transação aberta, vale a RN-TX-006.
 - **RN-CONN-015.** O ambiente aparece como etiqueta colorida ao lado do nome da conexão, na
@@ -270,7 +305,10 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   ocupa a sessão (RN-TX-012). As consultas de catálogo da árvore não recusam: esperam a vez na
   sessão, porque a árvore pede vários níveis ao mesmo tempo.
 - **RN-SESSAO-003.** Falha ao abrir (host fora do ar, usuário ou senha do banco errados, banco
-  inexistente): 422 `DATABASE_CONNECTION_FAILED`, com a mensagem original do banco no detalhe.
+  inexistente): 422 `DATABASE_CONNECTION_FAILED`, com a mensagem original do banco no detalhe. A
+  conexão sem usuário ou sem senha (a que a importação trouxe sem eles, RN-TRANSF-015) nem chega ao
+  driver: 422 `CONNECTION_CREDENTIALS_MISSING`, e a tela abre o "Editar conexão" (RN-TRANSF-016).
+  *Alterada a pedido do dono em 2026-10-16 (seção 34): entrou a conexão sem usuário e senha.*
 - **RN-SESSAO-004.** Sessões fecham ao fechar a aba, ao desconectar a conexão, ao fechar o
   cofre e ao encerrar a API; quando há transação aberta, depois da pergunta da RN-TX-006, nas
   saídas que ela lista.
@@ -297,7 +335,9 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-ARVORE-004.** Esquemas de sistema vêm depois dos demais. No Informix, "esquema" é o dono
   do objeto.
 - **RN-ARVORE-005.** Falha ao abrir a conexão aparece no próprio nó, com a mensagem do banco e
-  "Tentar de novo".
+  "Tentar de novo". A recusa da conexão sem usuário ou sem senha não aparece no nó: ela abre o
+  "Editar conexão", e o nó fica como estava (RN-TRANSF-016). *Alterada a pedido do dono em
+  2026-10-16 (seção 34): entrou a conexão sem usuário e senha.*
 - **RN-ARVORE-006.** Bancos do servidor (pedido do dono em 2026-10-13, como o DBeaver): ao expandir a
   conexão, a árvore lista os bancos do servidor a que a conta pode se conectar, em ordem de nome, com
   o banco da conexão primeiro e marcado como o padrão. No PostgreSQL são os de `pg_database` que
@@ -479,13 +519,16 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET api/user/connections` | 200 lista (cada conexão com as proteções próprias e as que valem, `protections`, e a verificação: seção 32) | |
 | `GET api/user/connections/{id}` | 200 | 404 `CONNECTION_NOT_FOUND` |
 | `POST api/user/connections` | 201 | 404 `FOLDER_NOT_FOUND`; 409 `CONNECTION_ALREADY_EXISTS`; 422 `CONNECTION_INVALID` |
-| `PATCH api/user/connections` | 200 | as mesmas, mais 404 `CONNECTION_NOT_FOUND`, 422 `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (a senha do somente leitura, RN-PROT-003) e 401 `VAULT_LOCKED` no quinto erro |
+| `PATCH api/user/connections` | 200 | as mesmas, mais 404 `CONNECTION_NOT_FOUND`, 422 `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (a senha do somente leitura, RN-PROT-003) e 401 `VAULT_LOCKED` no quinto erro; o usuário vazio só passa na conexão gravada já sem usuário (RN-TRANSF-015) |
 | `DELETE api/user/connections/{id}` | 204 | 404 `CONNECTION_NOT_FOUND` |
-| `POST api/user/connections/test` | 204 | 404 `CONNECTION_NOT_FOUND` (com `id` e sem senha, quando a conexão não existe); 422 `CONNECTION_INVALID`, `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED` |
+| `POST api/user/connections/test` | 204 | 404 `CONNECTION_NOT_FOUND` (com `id` e sem senha, quando a conexão não existe); 422 `CONNECTION_INVALID`, `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `CONNECTION_CREDENTIALS_MISSING` (com `id`, sem senha no pedido e sem senha gravada, RN-TRANSF-016) |
 | `POST api/user/connections/{id}/password/reveal` | 200 `{ password }` | 404 `CONNECTION_NOT_FOUND`; 422 `INVALID_PASSWORD`; 401 `VAULT_LOCKED` no quinto erro |
 | `POST api/user/connections/{id}/verification` | 200 `{ status, checkedAt, elapsedMs, message, sqlState }` (a verificação periódica, RN-VERIF-002; a falha do banco é `status: failed`, e não um erro) | 404 `CONNECTION_NOT_FOUND` |
+| `POST api/user/connections/export` `{ folderIDs, connections: [{ id, credentials }], passphrase, userPassword? }` | 200 `{ content, folders, connections, withUser, withPassword }`, o texto do arquivo já cifrado (RN-TRANSF-007 e 008, seção 34) | 404 `FOLDER_NOT_FOUND`, `CONNECTION_NOT_FOUND`; 422 `EXPORT_EMPTY`, `EXPORT_INVALID`, `EXPORT_PASSPHRASE_INVALID`, `EXPORT_LIMITS_EXCEEDED`, `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (RN-TRANSF-005); 401 `VAULT_LOCKED` no quinto erro e quando o cofre muda durante a derivação (RN-TRANSF-008) |
+| `POST api/user/connections/import/preview` `{ content, passphrase, targetFolderID? }` | 200 `{ folders, connections }`, a árvore do arquivo com o que a importação faria (RN-TRANSF-011) | 404 `FOLDER_NOT_FOUND` (o lugar escolhido); 409 `IMPORT_FILE_NEWER`; 422 `IMPORT_FILE_INVALID`, `IMPORT_PASSPHRASE_INVALID`, `IMPORT_PASSPHRASE_WRONG`, `IMPORT_LIMITS_EXCEEDED` |
+| `POST api/user/connections/import` `{ content, passphrase, targetFolderID?, items, onConflict, keepVerificationQueries? }` | 200 `{ folderIDs, connectionIDs, mergedFolders, renamed, skipped }` (RN-TRANSF-014) | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
 | `PUT api/user/password` `{ currentPassword, newPassword }` | 204 (troca a senha e recifra o cofre, RN-COFRE-013) | 422 `INVALID_PASSWORD` (a atual não confere), `PASSWORD_INVALID` (a nova), `PASSWORD_UNCHANGED`; 401 `VAULT_LOCKED` no quinto erro |
-| `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013) |
+| `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013), `CONNECTION_CREDENTIALS_MISSING` (a conexão sem usuário ou sem senha, RN-TRANSF-016) |
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
 | `GET api/user/database-sessions/{id}/databases` | 200 lista de `{ name, isCurrent }` (RN-ARVORE-006; espera a vez na sessão, como as consultas de catálogo) | 404 `DATABASE_SESSION_NOT_FOUND`; 422 `SQL_EXECUTION_FAILED` |
 | `DELETE api/user/database-sessions/{id}` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
@@ -534,7 +577,11 @@ seção 33: `POST .../queries` aceita `keep`, e as três rotas da edição aceit
 resultado que o script mantém na tela (RN-SQL-024); `RESULT_CHANGED` passa a dizer que o resultado não
 está mais guardado na sessão e, no Db2 e no Informix, é também a recusa da tabela sem esquema depois de
 um `SET`, `CALL` ou `EXECUTE` (no Informix, também `DATABASE`); e `SCRIPT_FOLDER_NOT_EMPTY` leva
-`folders` e `scripts`, quantas subpastas e quantos scripts a pasta tem.
+`folders` e `scripts`, quantas subpastas e quantos scripts a pasta tem. Com a seção 34: as rotas da
+exportação e da importação das conexões, com os campos e as recusas nas notas dela; e
+`CONNECTION_CREDENTIALS_MISSING` (422), a recusa, antes do driver, de abrir uma sessão com a conexão
+sem usuário ou sem senha e de testá-la sem senha gravada, vem na forma do erro de campo (`errors` e
+`errorCodes`), no campo que falta (`userName` ou `password`).
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -632,6 +679,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   app já tem o lápis e as duas folhas (os do menu do navegador): só o X no tom de erro é novo.
   "Salvar", "Descartar" e "Ver SQL" continuam na faixa sobre a grade (RN-EDIT-004), e não nessa
   barra.
+- O canvas não desenha a exportação e a importação das conexões (RN-TRANSF-001 a 016, seção 34): os
+  diálogos "Exportar conexões" e "Importar conexões" seguem o desenho dos que ele tem (o da pasta,
+  `PastaAmbiente`, para as seções e os campos; o `RevelarSenha`, para a senha do Prism), e a árvore
+  de marcar segue as linhas do navegador do `Workbench`. No menu do navegador, "Exportar…" usa a seta
+  de baixar que o app já tem, e "Importar…" ganha a seta para cima, no mesmo traço (16 px, traço
+  1,5). A frase da conexão sem usuário e senha no topo do "Editar conexão" (RN-TRANSF-016) também
+  não está no `Conexoes` do canvas.
 
 ## 10. Riscos e sondas
 
@@ -787,12 +841,14 @@ com as fontes, está em os registros internos do projeto.
   de uma versão é `vX.Y.Z`; pré-lançamento é `vX.Y.Z-beta.N` (o formato `-rc.N` é aceito, mas não
   é usado nesta entrega). Não há ramo por versão (RN-VERSAO-008).
 - **RN-VERSAO-002.** O contrato que o número protege, já que um aplicativo não tem API pública:
-  o formato do cofre e a estrutura da pasta de dados, os arquivos de configuração e de
-  exportação quando existirem, e os atalhos e comandos documentados. A API HTTP local e a
+  o formato do cofre e a estrutura da pasta de dados, os arquivos de configuração quando
+  existirem, o arquivo da exportação das conexões (com o número de formato próprio, RN-TRANSF-007),
+  e os atalhos e comandos documentados. A API HTTP local e a
   aparência ficam fora. Enquanto a versão for `0.x`, uma mudança que quebra esse contrato sobe
   o segundo número; a partir da `1.0.0`, sobe o primeiro. Funcionalidade nova sobe o segundo
   número e correção sobe o terceiro, antes e depois da `1.0.0`. A `1.0.0` sai quando o contrato
-  estiver estável e o Prism estiver em uso no dia a dia.
+  estiver estável e o Prism estiver em uso no dia a dia. *Alterada a pedido do dono em 2026-10-16
+  (seção 34): o arquivo da exportação passou a existir.*
 - **RN-VERSAO-003.** A versão mora em um lugar só: o campo `version` de
   `src/client/package.json`. A API recebe o mesmo número na publicação (`-p:Version=`), e
   nenhum `.csproj` declara versão. A tag de uma versão é sempre `v` + esse número, criada pelo lançamento (RN-VERSAO-008); a
@@ -1061,12 +1117,14 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   carrega nível que o usuário não abriu.
 - **RN-MENU-001.** O botão direito (e Shift+F10, e a tecla de menu) sobre um item do navegador
   abre um menu de contexto com o tema do app, com as ações daquele tipo de item. Conexão: conectar
-  ou desconectar, nova consulta, atualizar, editar conexão, copiar nome. Esquema: nova consulta,
-  atualizar, copiar nome. Tabela e visão: abrir registros, ver estrutura, ver diagrama, gerar
-  `SELECT` numa consulta nova, copiar nome e copiar nome qualificado. Rotina, coluna, índice e
-  chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela. O menu tem
-  papel de menu, anda pelas setas, executa com Enter, fecha com Esc e com clique fora, e devolve o
-  foco ao item. Ação que não se aplica no estado atual aparece desabilitada, não some.
+  ou desconectar, nova consulta, atualizar, editar conexão, exportar conexão, copiar nome. Esquema:
+  nova consulta, atualizar, copiar nome. Tabela e visão: abrir registros, ver estrutura, ver
+  diagrama, gerar `SELECT` numa consulta nova, copiar nome e copiar nome qualificado. Rotina, coluna,
+  índice e chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela, e exportar
+  as conexões dela e importar conexões nela (RN-TRANSF-001). O menu tem papel de menu, anda pelas
+  setas, executa com Enter, fecha com Esc e com clique fora, e devolve o foco ao item. Ação que não se
+  aplica no estado atual aparece desabilitada, não some. *Alterada a pedido do dono em 2026-10-16
+  (seção 34): entraram exportar e importar conexões.*
 - **RN-TABELA-001.** Duplo clique (ou Enter) numa tabela ou visão do navegador abre a aba dela,
   uma por tabela: abrir de novo volta para a aba que já existe. A aba tem a sessão dela, como uma
   aba de consulta (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama.
@@ -1278,7 +1336,9 @@ Navegação:
   de pasta e de conexão (seções 5.1 e 5.2) não mudam, e nenhuma capacidade da tela antiga se
   perde. O menu de contexto de uma pasta tem "Nova conexão" e "Nova pasta", que criam dentro
   dela, e o botão direito no espaço vazio do navegador abre um menu com as duas, que criam na
-  raiz (pedido do dono em 2026-10-12).
+  raiz (pedido do dono em 2026-10-12), e, num grupo depois delas, "Exportar conexões…" e "Importar
+  conexões…" (RN-TRANSF-001). *Alterada a pedido do dono em 2026-10-16 (seção 34): o menu do espaço
+  vazio ganhou exportar e importar.*
 - **RN-NAV-004.** O formulário de conexão, nova e edição, é um DIÁLOGO sobre a área de trabalho,
   como o do DBeaver (pedido do dono em 2026-10-12: "eu não quero mais aquela tela; deixar
   unificado na tela padrão da área de trabalho"). Não existe mais tela de Conexões: o endereço
@@ -1287,7 +1347,10 @@ Navegação:
   resultados continuam por baixo, intactos. Salvar fecha o diálogo e deixa a conexão à vista na
   árvore (os ancestrais abertos) e escolhida; cancelar (e Esc; com algo digitado, confirma antes)
   fecha sem mudar nada. Testar a conexão e revelar a senha ficam no diálogo, como na tela antiga,
-  com as mesmas regras e mensagens. O bloqueio por inatividade descarta o diálogo (RN-SEG-001).
+  com as mesmas regras e mensagens. O bloqueio por inatividade descarta o diálogo (RN-SEG-001). O
+  diálogo de edição também abre sozinho quando a pessoa tenta conectar uma conexão sem usuário ou
+  sem senha, com a frase que diz o que falta e o foco no campo (RN-TRANSF-016). *Alterada a pedido do
+  dono em 2026-10-16 (seção 34): entrou a conexão sem usuário e senha.*
 - **RN-NAV-005.** "Nova conexão" começa pela escolha do banco, como no DBeaver: o diálogo abre numa
   grade com a logo e o nome de cada banco do catálogo de drivers (RN-DRIVER-002), com o estado do
   driver de cada um. O embutido e o instalado são escolhidos direto; o que pode ser baixado e
@@ -1598,11 +1661,14 @@ até lá, o que depende delas está a provar.
   encerrar, e a tela de bloqueio diz isso.
 - **RN-TX-008.** **Transação perdida sem pedido.** Quando a sessão cai (rede, banco reiniciado, servidor que encerra sessão
   parada em transação, serviço do Prism que caiu ou reiniciou) ou o cofre fecha por qualquer motivo (bloqueio, quinto erro
-  seguido de senha ao revelar a de uma conexão ou ao trocar a própria, entrar com outro usuário, "Sair"), o banco ou o Prism
+  seguido de senha ao revelar a de uma conexão, ao trocar a própria, ao mudar o somente leitura ou ao exportar conexões com
+  senha, entrar com outro usuário, "Sair"), o banco ou o Prism
   desfazem a transação. A aba diz isso, em tom de atenção, com o número de comandos do último estado que recebeu. **No Commit
   manual a sessão perdida não é reaberta em silêncio, e o comando que descobriu a perda não é repetido:** a aba diz o que se
-  perdeu, e a pessoa executa de novo, numa sessão e transação novas. Com transação aberta, os diálogos de senha (revelar e
-  trocar) dizem que cinco erros seguidos fecham o cofre e desfazem as N transações abertas.
+  perdeu, e a pessoa executa de novo, numa sessão e transação novas. Com transação aberta, os diálogos de senha (revelar,
+  trocar, somente leitura e exportar) dizem que cinco erros seguidos fecham o cofre e desfazem as N transações abertas.
+  *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram o diálogo do somente leitura (RN-PROT-003, seção 32), que
+  faltava aqui, e o da exportação com senhas de banco (RN-TRANSF-005).*
 - **RN-TX-009.** **Erro dentro da transação: vale o que o banco faz**, e a tela diz em que pé a transação ficou:
   - **PostgreSQL**: qualquer erro de um comando — também o cancelamento (RN-TX-010), o impasse entre sessões e a falha de
     serialização — deixa a **transação inteira com erro**, como o banco faz; o Prism não marca ponto de salvamento por comando.
@@ -2901,15 +2967,20 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   numa pasta que já existe pede a senha do usuário (a do Prism), como revelar a senha de uma conexão
   (RN-CONN-002). Também pede a senha a mudança que tira de uma conexão que já existe o somente
   leitura herdado: mover a conexão, ou uma pasta acima dela, para fora de uma pasta somente leitura.
-  - A conferência e a contagem de erros são as de revelar a senha e de trocar a senha (RN-CONN-003 e
-    RN-COFRE-013). A senha errada responde 422 `INVALID_PASSWORD` no campo `userPassword`, e o quinto
-    erro seguido, somando os das três, fecha o cofre e responde 401 `VAULT_LOCKED`. Sem a senha,
+  - A conferência e a contagem de erros são as de revelar a senha, de trocar a senha e da exportação
+    com senhas de banco (RN-CONN-003, RN-COFRE-013 e RN-TRANSF-005). A senha errada responde 422
+    `INVALID_PASSWORD` no campo `userPassword`, e o quinto erro seguido, somando os das quatro, fecha
+    o cofre e responde 401 `VAULT_LOCKED`. Sem a senha,
     quando ela é pedida, a resposta é 422 `USER_PASSWORD_REQUIRED` no mesmo campo, sem conferir nada
-    e sem contar erro. A senha que vem sem ser pedida não é conferida.
+    e sem contar erro. A senha que vem sem ser pedida não é conferida. *Alterada a pedido do dono em
+    2026-10-16 (seção 34): a exportação com senhas de banco entrou na contagem.*
   - Não pedem a senha: criar uma conexão ou uma pasta já marcada (nada do que existe muda), duplicar
-    uma conexão (a cópia nasce com as proteções dela, RN-CONN-016), mover para dentro de uma pasta
+    uma conexão (a cópia nasce com as proteções dela, RN-CONN-016), importar conexões e pastas, mesmo
+    somente leitura (RN-TRANSF-012: a importação só cria, e a proteção fica igual ou mais forte,
+    RN-TRANSF-013), exportar (nada muda no cofre), mover para dentro de uma pasta
     somente leitura (a proteção só aumenta), excluir, e mudar a confirmação (RN-PROT-001) ou a
-    verificação (RN-VERIF-001).
+    verificação (RN-VERIF-001). *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram
+    importar e exportar.*
   - A conferência da senha e a gravação são uma operação só do cofre: quem decide se a senha é
     pedida é o documento mais recente, e não o que a tela leu antes.
   - A tela pede a senha ao salvar (o formulário da conexão, o "Editar pasta…", o "Mover" e o
@@ -3639,3 +3710,702 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   sem consulta, no lugar da guarda dos comandos que podem trocá-lo (RN-SQL-024).
 - Na seção Scripts: arrastar e soltar, busca e filtro, lembrar as pastas abertas, a cor e o ícone da
   pasta, e as pastas por conexão que o DBeaver pode criar sozinho.
+
+## 34. Complemento de 2026-10-16, versão 0.4.0: exportar e importar conexões com as pastas
+
+Pedido do dono em 2026-10-16: "a possibilidade de exportar e importar conexões, junto com a estrutura
+de pastas … as vezes pode ser que entre alguém novo na nossa squad de desenvolvimento, ele não tem os
+bancos configurados ainda, então, queria poder compartilhar alguns dos bancos ou todos os bancos e eu
+decidir se deve ir o usuário e senha junto, pois … nós temos usuários de data fix que são compartilhados
+entre nós do time e temos nossos usuários nominais. Queria que tivesse uma forma de exportar e me
+pedisse se eu quero exportar uma ou mais conexões, junto com o usuário e senha, só o usuário, etc...". O
+exemplo dele é uma pasta por sistema, com uma subpasta por ambiente (Desenvolvimento DEV, Homologação
+HML, Production PRD, Quality Assurence [sic] QAS) e, em cada uma, as conexões Informix "DATA FIX" (o usuário
+que o time divide), "[PERIGO] DATA FIX", "NOMINAL" (o usuário de cada um), "MIGRATION USER" e
+"API_USER". É a segunda parte do que o dono pediu naquele dia (a primeira é a seção 33).
+
+Perguntado, o dono escolheu que o arquivo sai SEMPRE cifrado com uma senha de exportação, mesmo sem
+nenhuma senha de banco dentro: os nomes, os servidores e as portas também ficam protegidos, como no
+cofre (RN-COFRE-001). O DBeaver exporta o projeto inteiro, e as credenciais vão cifradas com uma chave
+fixa, que está no próprio código dele; no Prism quem exporta escolhe conexão por conexão o que vai, e a
+cifra é a do cofre, com uma senha que ele cria na hora.
+
+Quem monta e quem lê o arquivo é a API: a tela nunca recebe uma senha de banco (RN-CONN-001). Na
+exportação ela recebe o arquivo já cifrado e o entrega ao diálogo de salvar do sistema, como o "Exportar
+CSV" (RN-TABELA-006); na importação ela lê o arquivo escolhido e o manda à API, que o abre, mostra a
+prévia e grava. A conexão pode chegar sem usuário e senha, um estado novo, que conectar e testar recusam
+com uma frase que leva ao "Editar conexão". O cofre não muda de formato, e o Electron não ganha canal
+novo. Muda a RN-COFRE-001, a RN-PASTA-001, a RN-CONN-001, 003, 010 e 013, a RN-SESSAO-003, a
+RN-ARVORE-005, a RN-TX-008, a RN-PROT-003, a RN-LOG-001, a RN-VERSAO-002, a RN-MENU-001, a RN-NAV-003
+e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
+
+### Onde se exporta e se importa
+
+- **RN-TRANSF-001.** As entradas, no menu de contexto do navegador (RN-MENU-001).
+  - Na conexão, "Exportar conexão…", num grupo próprio antes de "Copiar nome": abre o "Exportar
+    conexões" (RN-TRANSF-002) com só ela marcada.
+  - Na pasta, "Exportar conexões…" e "Importar conexões aqui…", num grupo próprio antes de "Copiar
+    nome". O primeiro abre o "Exportar conexões" com a pasta e tudo o que está dentro dela marcados, a
+    qualquer profundidade, também quando não há nenhuma conexão dentro (vão as pastas, RN-TRANSF-006). O
+    segundo abre o "Importar conexões" (RN-TRANSF-009) com ela já escolhida como o lugar onde o que vem
+    do arquivo vai ficar.
+  - No espaço vazio do navegador, depois de "Nova conexão" e "Nova pasta", um grupo com "Exportar
+    conexões…" (nada marcado) e "Importar conexões…" (na raiz). Sem nenhuma pasta e nenhuma conexão no
+    cofre, "Exportar conexões…" fica desabilitado, com o motivo ("Não há pastas nem conexões para
+    exportar.").
+  - Valem em qualquer estado da conexão, conectada ou não, somente leitura ou não: exportar não mexe em
+    sessão, em proteção nem no cofre.
+  - A barra de ações do navegador não ganha botão: os sete de hoje são o que cabe na largura mínima
+    dele (RN-NAV-002). A seção Scripts não tem estas entradas: scripts não se exportam (fica para
+    depois).
+  - Os dois diálogos são da janela em que abriram, e cada um abre uma vez só por janela. O bloqueio por
+    inatividade, o "Sair" e o quinto erro de senha os fecham (RN-SEG-001), e o que estava neles (as
+    marcas, as senhas digitadas, o arquivo lido, a prévia) não sobrevive: nada disso fica guardado fora
+    do diálogo, nem no navegador, nem nas preferências. As chamadas que levam senha ou arquivo
+    (exportar, a prévia e importar) não ficam no cache de mutações da tela (`variables` e `data`):
+    `gcTime: 0` e `reset()` assim que a resposta chega, como no "Revelar senha"
+    (`RevealPasswordDialog`); um teste confere o cache vazio depois de cada chamada, também da recusa.
+
+### Exportar
+
+- **RN-TRANSF-002.** O diálogo "Exportar conexões" (o grande).
+  - O título é "Exportar conexões", com "Escolha as conexões e o que vai de cada uma. O arquivo sai
+    cifrado com uma senha de exportação, que você cria aqui."
+  - A árvore mostra TODAS as pastas e conexões do cofre, na ordem do navegador e sem os filtros dele (a
+    busca, o ambiente, "Só as conectadas"): o que o filtro esconde também pode ir. As pastas começam
+    abertas, cada uma com a seta de abrir e fechar. Aberto pela entrada de uma conexão ou de uma pasta, o
+    diálogo rola até ela.
+  - Cada linha tem a caixa de marcar. A da pasta mostra o estado de tudo o que está dentro dela, a
+    qualquer profundidade: marcada (tudo), desmarcada (nada) ou mista (parte). Clicar nela marca tudo o
+    que está dentro, ou desmarca tudo quando tudo já estava marcado. A pasta vazia, sem subpastas e sem
+    conexões, tem a caixa dela própria.
+  - A linha da pasta mostra o ícone com a cor dela (RN-PASTA-007), o nome, a etiqueta do ambiente dela e
+    o cadeado do somente leitura dela. A da conexão mostra a etiqueta do banco, o nome, o ambiente que
+    vale nela (próprio ou herdado, RN-PASTA-005), o cadeado quando ela é somente leitura (pela opção dela
+    ou de uma pasta acima, RN-PROT-004), o usuário gravado (ou "sem usuário") e a escolha do que vai dela
+    (RN-TRANSF-003).
+  - Acima da árvore, o campo "Buscar pastas e conexões", que filtra pelo nome como a busca do navegador,
+    sem diferenciar maiúsculas nem acentos (RN-BUSCA-001): a conexão que casa aparece com as pastas do
+    caminho, e a pasta que casa aparece com tudo o que está dentro dela. Ao lado, "Marcar todas" e
+    "Desmarcar todas".
+  - Com a busca, "Marcar todas", "Desmarcar todas" e a caixa da pasta agem só no que a busca mostra. O
+    estado da caixa da pasta continua sendo o de tudo o que está dentro dela, à vista ou não: a pasta com
+    algo escondido e desmarcado fica mista, e o clique nela marca o que está à vista, ou desmarca o que
+    está à vista quando tudo o que está à vista já estava marcado.
+  - A conexão marcada leva as pastas do caminho até a raiz, marcadas ou não (RN-TRANSF-006): a pasta de
+    uma conexão marcada fica mista, e não há como deixá-la de fora.
+  - No rodapé, a conta, com papel de estado: "3 conexões marcadas, 1 com a senha · 5 pastas no arquivo"
+    (as pastas contam as do caminho, e "com a senha" conta as marcadas em "Usuário e senha" que têm senha
+    gravada); sem conexão, "Nenhuma conexão marcada · 2 pastas no arquivo"; no singular, "1 conexão
+    marcada, com a senha · 1 pasta no arquivo"; sem nada, "Nada marcado". E
+    os botões "Cancelar" e "Exportar…" ("Exportando…"); sem nada marcado, "Exportar…" fica desabilitado,
+    com a dica "Marque ao menos uma conexão ou pasta."
+  - A árvore é feita das listas que a tela já tem, as do navegador: a pasta ou a conexão que outra janela
+    cria com o diálogo aberto aparece desmarcada quando a lista é lida de novo, e a que outra janela
+    exclui some, com a marca.
+  - O Tab anda pelas caixas e pelas escolhas, e o Espaço marca e desmarca. Com o limite de 2.000
+    conexões e 2.000 pastas (RN-TRANSF-006), o diálogo responde sem travar.
+  - Cancelar e Esc fecham sem perguntar: nada foi gravado. Durante "Exportando…" o diálogo não fecha,
+    como em toda gravação.
+
+- **RN-TRANSF-003.** O que vai de cada conexão.
+  - Cada conexão marcada tem a escolha "Sem usuário e senha" (o padrão, o mais seguro), "Só o usuário"
+    ou "Usuário e senha", com o nome acessível "O que vai de <nome>". Desmarcada, a conexão tem a
+    escolha desabilitada, que guarda o que estava até o diálogo fechar.
+  - A escolha só oferece o que a conexão tem gravado: a conexão sem usuário (RN-TRANSF-015) só tem "Sem
+    usuário e senha", desabilitada, com a dica "A conexão não tem usuário gravado."; a que tem usuário e
+    não tem senha não oferece "Usuário e senha".
+  - Abaixo da árvore, "Para as marcadas:" e três botões, "Sem usuário e senha", "Só o usuário" e "Usuário
+    e senha", que põem essa escolha em todas as conexões marcadas de uma vez. Com a busca, o texto vira
+    "Para as marcadas que a busca mostra:", e eles agem só nas que ela mostra: o dono busca "DATA FIX",
+    escolhe "Usuário e senha" para todas elas, e as "NOMINAL" continuam "Sem usuário e senha". Na conexão
+    que não tem o que o botão pede, fica o mais perto que ela tem ("Usuário e senha" vira "Só o usuário"
+    na conexão sem senha, e "Sem usuário e senha" na sem usuário). Sem nenhuma conexão marcada à vista,
+    os botões ficam desabilitados.
+  - A pasta não tem escolha própria. O que decide o que vai é o papel do usuário (o que o time divide, ou
+    o nominal), que se repete em cada pasta de ambiente; a busca junta as conexões do mesmo papel melhor
+    que a pasta, e uma escolha a mais em cada linha de pasta poluiria a árvore.
+  - Com ao menos uma conexão marcada em "Usuário e senha" que tem senha gravada, aparece, no tom de
+    atenção, acima dos botões do rodapé: "As senhas de banco de 2 conexões vão no arquivo. Quem tiver o
+    arquivo e a senha de exportação entra nesses bancos com elas. Para exportá-las, o Prism pede a sua
+    senha do Prism." (no singular, "de 1 conexão").
+
+- **RN-TRANSF-004.** A senha de exportação.
+  - É obrigatória sempre, também sem nenhuma senha de banco no arquivo (a escolha do dono). São dois
+    campos, "Senha de exportação" e "Repita a senha de exportação", com "Mostrar senha", que mostra os
+    dois, e o texto: "Não é a sua senha do Prism. Quem importar o arquivo vai precisar dela: passe-a por
+    outro caminho, e nunca na mesma mensagem do arquivo. Sem ela o arquivo não abre, e não há como
+    recuperá-la."
+  - Tem de 12 a 128 caracteres, contados em unidades UTF-16 como a senha do Prism (RN-COFRE-010), sem
+    regra de composição. Antes de contar e de usar, a senha passa à forma composta do Unicode (NFC), na
+    tela e na API: o "é" digitado de uma vez e o "é" colado como "e" mais o acento são a mesma senha, e o
+    arquivo exportado num Windows abre num macOS, cujo teclado e área de transferência podem mandar a
+    outra forma.
+  - Não começa nem termina com espaço, que aqui é um destes: U+0009 a U+000D, U+0020, U+0085,
+    U+00A0, U+1680, U+2000 a U+200A, U+2028, U+2029, U+202F, U+205F e U+3000. A tela e a API usam esta
+    lista, e não o `trim()` do JavaScript nem o `Trim()` do .NET (o primeiro tira o U+FEFF e deixa o
+    U+0085); os mesmos casos de teste valem nos dois lados. Os espaços de dentro contam. Assim a
+    importação pode tirar os das pontas, que a cópia de uma mensagem traz sem ninguém ver
+    (RN-TRANSF-009), sem mudar nenhuma senha que a exportação aceitou. Também não tem caractere de
+    controle.
+  - As recusas aparecem no campo, sem aviso de erro (RN-AVISO-004), conferidas pela tela antes do pedido
+    e pela API do mesmo jeito (422 `EXPORT_PASSPHRASE_INVALID`, no campo `passphrase`): "Crie uma senha
+    de exportação."; "A senha de exportação precisa ter pelo menos 12 caracteres."; "A senha de
+    exportação pode ter até 128 caracteres."; "A senha de exportação não pode começar nem terminar com
+    espaço."; e "A senha de exportação não pode ter caractere de controle." No segundo campo, "As duas
+    senhas não são iguais.", que só a tela confere (a API recebe uma), comparando os dois campos na
+    forma NFC: o "é" de uma vez num e o "e" mais o acento no outro são iguais.
+  - Quando o pedido leva a sua senha do Prism (RN-TRANSF-005) e ela confere, a senha de exportação igual
+    a ela (as duas na forma NFC) é recusada com 422 `EXPORT_PASSPHRASE_INVALID` no campo: "Use uma senha
+    de exportação diferente da sua senha do Prism." A recusa fecha o "Confirme a sua senha" e aparece no
+    campo da senha de exportação. A comparação é só com a senha que veio no pedido: sem ela, a API teria
+    de derivar a chave do cofre para comparar, e isso seria um jeito de testar a senha do Prism sem
+    contar erro (RN-CONN-003).
+  - A senha de exportação nunca é gravada (nem no cofre, nem nas preferências, nem no arquivo) e nunca
+    vai a log (RN-LOG-001). O diálogo a esquece ao fechar.
+
+- **RN-TRANSF-005.** A senha do Prism na exportação.
+  - Exportar a senha de uma conexão é revelá-la. O Prism pede a senha do usuário (a do Prism) quando ao
+    menos uma conexão marcada vai com "Usuário e senha" e tem senha gravada, uma vez por exportação,
+    quantas forem as conexões. Sem senha de banco no arquivo, não pede. "Só o usuário" não pede: o
+    usuário já aparece no navegador e no formulário, e a RN-CONN-001 protege a senha.
+  - A tela pede no diálogo "Confirme a sua senha" da RN-PROT-003, depois do "Exportar…" e das recusas da
+    senha de exportação, com "Para exportar as senhas de banco, digite a sua senha do Prism." Ele diz o
+    que vai acontecer ("Exportar 3 conexões com a senha"; com uma só, "Exportar DATA FIX com a senha"),
+    avisa que cinco erros seguidos fecham o cofre (e, com transação aberta, que desfazem as transações,
+    RN-TX-008), mostra o erro no campo, e tem "Cancelar" e "Confirmar e exportar" ("Verificando…").
+    Cancelar volta ao "Exportar conexões" como estava. Uma recusa que não é da senha do Prism (a senha de
+    exportação igual a ela, o item que sumiu, o tamanho) fecha o "Confirme a sua senha" e aparece no
+    "Exportar conexões", onde ela aparece sem ele.
+  - A conferência e a contagem de erros são as de revelar a senha, trocar a senha e do somente leitura
+    (RN-CONN-003, RN-COFRE-013 e RN-PROT-003), na mesma conta. Errada, 422 `INVALID_PASSWORD` no campo
+    `userPassword`, que volta vazio. O quinto erro seguido, somando todos, fecha o cofre e responde 401
+    `VAULT_LOCKED`: o Prism volta à entrada com o aviso de sempre ("Cofre fechado depois de cinco
+    tentativas."), e nenhum arquivo sai. Sem a senha, quando ela é pedida, 422 `USER_PASSWORD_REQUIRED`
+    no mesmo campo ("Para exportar senhas de banco, informe a sua senha do Prism."), sem conferir e sem
+    contar. A senha que vem sem ser pedida não é conferida.
+  - As recusas que não dependem da senha (o pedido malformado, o que foi marcado e não existe mais, as
+    contagens e os níveis da RN-TRANSF-006) vêm antes de ela ser conferida, e não gastam tentativa; só o
+    tamanho, que se sabe com o arquivo montado, vem depois. O arquivo sai do documento que a conferência
+    devolve, e nunca de uma leitura de antes dela, como na revelação (RN-CONN-002): o cofre aberto pode
+    ter mudado no meio. O que foi marcado e não existe mais, as contagens, os níveis e as escolhas são
+    conferidos de novo nesse documento (a recusa, aí, já depois da senha conferida).
+  - A senha não fica guardada depois da resposta: a exportação seguinte pede de novo.
+
+- **RN-TRANSF-006.** O que vai no arquivo.
+  - As conexões marcadas, cada uma com TODAS as pastas do caminho até a raiz do navegador, marcadas ou
+    não: a estrutura chega inteira, e com ela as proteções e o ambiente que vêm de cima. E as pastas
+    marcadas, mesmo vazias, também com as do caminho. Cada pasta vai uma vez só.
+  - Da pasta: o nome, a cor (RN-PASTA-007), o ambiente dela (nome e cor, RN-PASTA-005), as proteções dela
+    ("Confirmar antes de executar" e "Somente leitura", RN-PROT-001 e 002) e as que valem nela
+    (RN-PROT-004).
+  - Da conexão: o nome; o banco, pelo nome (`PostgreSql`, `Db2` ou `Informix`, e não pelo número da
+    API); o host, a porta e o banco de dados; o usuário e a senha, conforme a escolha (RN-TRANSF-003: o
+    que não vai não aparece no arquivo, nem vazio); o ambiente dela; as proteções dela; a verificação
+    (ligada ou não, o intervalo e a consulta, RN-VERIF-001); e, por segurança, o que vale nela na origem:
+    o somente leitura e a confirmação (RN-PROT-004), e o ambiente que ela mostra, próprio ou herdado, com
+    a cor (RN-PASTA-005). A importação não a deixa mais fraca que isso (RN-TRANSF-013).
+  - Não vão: os IDs do cofre (o arquivo tem chaves próprias, só para ligar cada item à pasta dele), as
+    datas de criação e de alteração, os scripts e as pastas de scripts, as abas, as preferências, o nome
+    do usuário do Prism, as sessões e os drivers.
+  - Os limites do arquivo são os da importação (RN-TRANSF-010): até 2.000 conexões, 2.000 pastas (as do
+    caminho contam), 32 níveis de pastas e 5 MiB. Os níveis contam da raiz do navegador, porque o
+    caminho inteiro vai no arquivo: a conexão que está a mais de 32 níveis da raiz não sai nem sozinha
+    (o cofre não limita a profundidade, RN-PASTA-001). A exportação que passaria deles é recusada com
+    422 `EXPORT_LIMITS_EXCEEDED` (as contagens e os níveis antes de conferir a senha do Prism, o tamanho
+    com o arquivo montado, RN-TRANSF-005), e o diálogo mostra, acima dos botões: "O arquivo passaria
+    dos limites da importação: até 2.000 conexões, 2.000 pastas, 5 MiB e 32 níveis de pastas a partir
+    da raiz. Exporte em partes; o que está a mais de 32 níveis da raiz só sai se for movido para mais
+    perto dela." Uma frase só, para um código só: exportar em partes resolve as contagens e o tamanho,
+    e mover resolve os níveis. Assim todo arquivo que o Prism gera passa pelos limites da importação
+    dele; e, com as regras dos campos (RN-PASTA-001, RN-CONN-010), o mesmo Prism o importa. O item
+    gravado antes dessas regras com um valor que elas recusam vai no arquivo assim mesmo, e a
+    importação o mostra como não importável, com o motivo (RN-TRANSF-014).
+
+- **RN-TRANSF-007.** O arquivo.
+  - O nome sugerido é `conexoes-prism-AAAA-MM-DD.prismconexoes`, com a data do dia na máquina
+    (`conexoes-prism-2026-10-16.prismconexoes`); a tela o monta. Ele nunca leva nome de pasta, de
+    conexão ou de servidor: o nome do arquivo fica à vista em todo lugar por onde ele passa (a conversa,
+    o e-mail, a pasta da rede).
+  - É um JSON em UTF-8, sem BOM, com o cabeçalho em claro e o conteúdo cifrado: `kind`
+    (`"prism-connections"`), `version` (o formato do arquivo, 1), `kdf` (`algorithm` `"argon2id"`,
+    `memoryKiB` 65536, `iterations` 3, `parallelism` 4 e `salt`) e `payload` (`nonce`, `ciphertext` e
+    `tag`), com os bytes em base64, nos nomes e na forma do cabeçalho do cofre.
+  - A cifra é a do cofre (RN-COFRE-002 e 003), sem a chave do cofre no meio: a chave sai da senha de
+    exportação por Argon2id (64 MiB, 3 passadas, paralelismo 4, sal aleatório de 16 bytes, novo a cada
+    exportação, chave de 32 bytes) e cifra o conteúdo direto com AES-256-GCM (nonce aleatório de 12
+    bytes, tag de 16). Um arquivo, uma chave, uma cifragem.
+  - O cabeçalho entra como dado autenticado, no texto
+    `prism-connections|<versão>|<algoritmo>|<memória em KiB>|<passadas>|<paralelismo>|<sal em base64>`,
+    que começa diferente do do cofre (`prism-vault|`): um arquivo de exportação nunca abre como cofre, nem
+    um cofre como arquivo de exportação, mesmo com a mesma senha. Mudar um valor do cabeçalho ou um byte
+    do conteúdo faz a abertura falhar; mudar só os espaços e as quebras de linha do JSON, não.
+  - O conteúdo, antes de cifrado, é um JSON em camelCase com `folders` e `connections`. Cada pasta tem
+    `key`, `parentKey`, `name`, `color`, `environmentName`, `environmentColor`, `confirmCommands`,
+    `readOnly` e `effective` (`{ readOnly, confirmCommands }`, as que valem nela). Cada conexão tem
+    `key`, `folderKey`, `name`, `engine`, `host`, `port`, `database`, `userName` e `password` (só quando
+    vão), `environmentName`, `environmentColor`, `confirmCommands`, `readOnly`, `verificationEnabled`,
+    `verificationInterval`, `verificationQuery` e `effective` (`{ readOnly, confirmCommands,
+    environmentName, environmentColor }`, o que vale nela). As chaves são textos de 1 a 64 caracteres
+    (o Prism gera `f1`, `c1`…), únicas no conjunto das pastas e das conexões; `parentKey` e `folderKey`
+    nulos são a raiz. Os tipos e os valores: `name`, `host`, `database`, `userName`, `password`,
+    `environmentName` e `verificationQuery`, textos; `engine`, o nome do banco, `"PostgreSql"`, `"Db2"`
+    ou `"Informix"`, escrito assim; `port` e `verificationInterval`, inteiros; `color` e
+    `environmentColor`, `#RRGGBB`; `confirmCommands`, `"none"`, `"irreversible"` ou `"all"`, os valores
+    da API; `readOnly` e `verificationEnabled`, verdadeiro ou falso. Os nulos são os do cofre:
+    `confirmCommands` nulo (ou em branco) é "Não", `readOnly` nulo é desmarcado, a verificação nula é o
+    padrão (ligada, 30 segundos, a consulta do banco), e o `effective` nulo ou ausente não acrescenta
+    nada ao que as pastas do arquivo dão (RN-TRANSF-013). O `password` só vem com o `userName`.
+  - Quem monta é a API. A tela pede a exportação, recebe o texto do arquivo já cifrado e o entrega ao
+    diálogo de salvar do sistema pelo download da própria página (o `saveText` do "Exportar CSV"), com o
+    tipo `application/octet-stream`, para o sistema não trocar a extensão. O Electron não ganha canal
+    novo. Nem a tela, nem o log, nem o disco veem o conteúdo em claro: a API zera o texto em claro e a
+    chave depois de cifrar, como no cofre.
+  - O arquivo não depende do cofre nem da senha do Prism: trocar a senha (RN-COFRE-013) não o invalida,
+    e ele abre com a senha de exportação enquanto existir. Para que ele deixe de valer, é preciso apagar
+    as cópias e trocar as senhas de banco que foram nele.
+  - O formato do arquivo é contrato (RN-VERSAO-002), com o número próprio em `version`, independente da
+    versão do app e do formato do cofre. Um campo novo e opcional, que um Prism mais antigo pode ignorar
+    sem ler nada errado, não muda o número, e a leitura ignora o campo que não conhece; o número sobe
+    quando um Prism mais antigo leria o arquivo errado. Um campo novo vai dentro do conteúdo cifrado,
+    nunca no cabeçalho em claro: do cabeçalho, só os campos do texto autenticado acima são conferidos
+    pela cifra, e um campo a mais nele poderia ser mudado sem a abertura falhar. Os limites do
+    cabeçalho que a leitura confere (RN-TRANSF-010) moram num lugar só, com os do cofre, e a derivação
+    da chave é injetável, como a do cofre, para os testes rodarem com parâmetros baratos. Uma amostra
+    do formato 1 (dados inventados, com os hosts no domínio reservado `.invalid`, e uma senha de
+    exportação fictícia) fica no repositório e não se regera: o teste a abre.
+
+- **RN-TRANSF-008.** O pedido de exportação, e o que a tela faz com a resposta.
+  - `POST api/user/connections/export` leva as pastas marcadas, as conexões marcadas com a escolha de
+    cada uma, a senha de exportação e, quando pedida, a senha do Prism. A API lê o cofre uma vez (o
+    documento daquele instante; com a senha do Prism, o que a conferência devolve, RN-TRANSF-005: o que
+    outra janela gravar depois não entra), confere tudo nele, monta o arquivo e o cifra. Exportar não
+    grava o cofre (nada muda, nenhum `.bak` novo) e não pede a senha do somente leitura: a proteção vai
+    no arquivo, e nada nela muda aqui.
+  - A derivação da chave do arquivo (um Argon2id de 64 MiB, perto de um segundo) roda fora da trava do
+    cofre: as outras janelas não esperam por ela. A conferência da senha do Prism, quando há, é a de
+    sempre, dentro da trava (RN-PROT-003). As derivações do arquivo, na exportação, na prévia e na
+    importação, rodam uma por vez na API, numa fila própria, fora da trava do cofre: a de outra janela
+    espera a vez, e a memória de duas não se soma.
+  - A API lê a geração do cofre (`IVaultService.Generation`) antes de ler o documento e a confere
+    depois da derivação e da cifra: se mudou (o cofre fechou, ou outro usuário entrou), responde 401
+    `VAULT_LOCKED` e descarta o arquivo, como já fazem o teste da conexão e a abertura de sessão. O
+    descarte da tela, abaixo, é a segunda defesa, e não a única.
+  - A pasta ou a conexão marcada que não existe mais (outra janela a excluiu) é 404 `FOLDER_NOT_FOUND`
+    ou `CONNECTION_NOT_FOUND`, e não é pulada em silêncio: a tela lê as listas de novo, o item some da
+    árvore com a marca, o diálogo fica aberto, e um aviso de erro diz "Uma pasta ou conexão marcada não
+    existe mais. A lista foi lida de novo: confira o que está marcado e exporte de novo."
+  - Feita a exportação, o diálogo fecha, o arquivo vai ao diálogo de salvar do sistema, e um aviso de
+    sucesso diz o que foi: "3 conexões exportadas." ("1 conexão exportada."); com senhas, ", 1 com a
+    senha" antes do ponto (", todas com a senha" quando todas levam, e ", com a senha" quando é uma só:
+    "1 conexão exportada, com a senha."); sem conexão, "2 pastas exportadas, sem conexões." ("1 pasta
+    exportada, sem conexões."). O aviso vem quando o
+    arquivo é entregue ao diálogo de salvar: a tela não sabe se a pessoa desistiu dele, como no
+    "Exportar CSV".
+  - A resposta que chega depois de o cofre fechar (o bloqueio, o "Sair", o quinto erro noutra janela) é
+    descartada: o arquivo não vai ao diálogo de salvar. O que já foi entregue a ele é da pessoa, e está
+    cifrado.
+  - O log registra a exportação com as contagens (pastas, conexões, quantas com usuário, quantas com a
+    senha) e os IDs, nunca nomes, hosts, usuários, senhas ou o arquivo (RN-LOG-001).
+
+### Importar
+
+- **RN-TRANSF-009.** O diálogo "Importar conexões" (o grande), numa página só.
+  - O título é "Importar conexões", com "Escolha um arquivo exportado pelo Prism e digite a senha de
+    exportação que quem o exportou passou a você."
+  - "Arquivo": o botão "Escolher arquivo…" abre o diálogo de abrir do sistema (um `<input type="file">`,
+    sem canal novo no Electron), que mostra os `.prismconexoes` e aceita "Todos os arquivos". Escolhido,
+    o nome e o tamanho dele aparecem ao lado ("conexoes-prism-2026-10-16.prismconexoes, 14 KB"). A tela
+    lê o arquivo como texto e o guarda só no diálogo. O de mais de 5 MiB é recusado pela tela antes de
+    ser lido, no próprio campo, com a frase de `IMPORT_LIMITS_EXCEEDED` (RN-TRANSF-010); o que o sistema
+    não deixa ler, com "Não foi possível ler este arquivo."
+  - "Senha de exportação", com "Mostrar senha". Antes de ir, a senha perde os espaços das pontas (os da
+    lista da RN-TRANSF-004) e passa à forma NFC, na tela e na API.
+  - "Onde colocar": "Na raiz do navegador" (o padrão) ou uma das pastas, cada uma com o caminho inteiro
+    ("Estoque / Production PRD"), na ordem da árvore. Aberto por "Importar conexões aqui…", vem
+    escolhida a pasta de onde ele veio.
+  - "Abrir arquivo" ("Abrindo…") pede a prévia (RN-TRANSF-011), que aparece embaixo, no lugar de
+    "Escolha o arquivo e digite a senha para ver o que ele traz." Trocar o arquivo ou a senha apaga a
+    prévia, e é preciso abrir de novo. Trocar "Onde colocar" com a prévia à vista a refaz sozinho
+    ("Atualizando a prévia…"), e as marcas continuam. É um pedido de cada vez: a troca feita durante
+    "Atualizando a prévia…" espera o fim dele e refaz uma vez só, com o último lugar escolhido.
+  - No rodapé, "Cancelar" e "Importar" ("Importando…"), este desabilitado até haver prévia com algo
+    marcado.
+  - Enquanto "Abrindo…" ou "Atualizando a prévia…", Cancelar e Esc fecham o diálogo, e a resposta que
+    chegar é ignorada: a prévia não grava nada. Enquanto "Importando…", o diálogo não fecha.
+  - As recusas da leitura aparecem no diálogo, no campo a que se referem, sem aviso de erro
+    (RN-AVISO-004, o erro de campo): as do arquivo no "Arquivo", as da senha na "Senha de exportação", a
+    do lugar no "Onde colocar". A senha recusada fica no campo, selecionada: é a senha que um colega
+    passou, e o "Mostrar senha" ajuda a achar o erro de digitação; recusá-la não conta erro nenhum
+    (RN-TRANSF-010).
+
+- **RN-TRANSF-010.** A leitura do arquivo, na API, nesta ordem, nos dois pedidos (a prévia e a
+  importação). Na importação, antes da etapa 1 e sem derivar nada, vêm `IMPORT_EMPTY` e as formas de
+  `IMPORT_INVALID` que não dependem do arquivo (`onConflict` fora da lista, chave repetida, mais de
+  4.000 chaves, RN-TRANSF-014); só a chave que o arquivo não tem se sabe depois de abri-lo.
+  1. O texto tem até 5 MiB (5.242.880 bytes em UTF-8); além disso, 422 `IMPORT_LIMITS_EXCEEDED`. A
+     recusa tem uma frase só, aqui e na etapa 7, e a tela a mostra também quando recusa o arquivo grande
+     antes de lê-lo (RN-TRANSF-009): "Este arquivo passa dos limites da importação: até 5 MiB, 2.000
+     conexões, 2.000 pastas e 32 níveis de pastas."
+  2. A senha de exportação, sem os espaços das pontas, não é vazia nem passa de 128 caracteres; senão,
+     422 `IMPORT_PASSPHRASE_INVALID` no campo `passphrase` ("Informe a senha de exportação." ou "A senha
+     de exportação tem até 128 caracteres."), sem derivar nada.
+  3. O texto é um JSON com `kind` igual a `prism-connections`; senão, 422 `IMPORT_FILE_INVALID`, "Este
+     arquivo não é uma exportação de conexões do Prism, ou está danificado." O arquivo vazio também.
+  4. O `version` é lido antes do resto do cabeçalho: um inteiro maior que o formato que este Prism conhece
+     (1) é 409 `IMPORT_FILE_NEWER`, "Este arquivo foi exportado por uma versão mais nova do Prism.
+     Atualize o Prism para importá-lo.", sem derivar a chave, como no cofre (RN-VERSAO-005); o que não
+     é um inteiro de 1 até ele é `IMPORT_FILE_INVALID`.
+  5. O cabeçalho tem a forma e os limites do cabeçalho do cofre, conferidos antes de derivar: o
+     algoritmo `argon2id`; a memória até 256 MiB e de ao menos 8 KiB por linha de paralelismo; de 1 a 8
+     passadas; o paralelismo de 1 a 8; o sal de 16 bytes, o nonce de 12 e a tag de 16, em base64 que
+     decodifica (o `ciphertext` também). Fora disso, `IMPORT_FILE_INVALID`. Sem esses tetos, um arquivo
+     com uma memória absurda faria a derivação tentar alocar terabytes antes de qualquer conferência.
+  6. A chave é derivada da senha e o conteúdo é aberto. A senha errada e o arquivo alterado (um byte do
+     conteúdo, da tag ou do nonce, ou um valor do cabeçalho que ainda passe pelas etapas 4 e 5, como a
+     memória de 65.536 para 65.537 KiB ou outro sal de 16 bytes; um valor fora dos limites ou um base64
+     que não decodifica é `IMPORT_FILE_INVALID`, e um `version` maior é `IMPORT_FILE_NEWER`) dão a MESMA
+     recusa, 422 `IMPORT_PASSPHRASE_WRONG` no campo `passphrase`: "A senha de exportação não confere, ou
+     o arquivo foi alterado." O AES-GCM não distingue os dois, e dizer qual seria ajudar quem altera.
+  7. O conteúdo aberto é um JSON na forma da RN-TRANSF-007; senão, `IMPORT_FILE_INVALID`. Ele tem até
+     2.000 conexões e 2.000 pastas, com as pastas aninhadas até 32 níveis (a pasta da raiz do arquivo é
+     o nível 1); além disso, 422 `IMPORT_LIMITS_EXCEEDED`, com a frase da etapa 1. E a estrutura fecha:
+     as chaves são textos de 1 a 64 caracteres, únicos no conjunto das pastas e das conexões (comparação
+     exata); toda `parentKey` e toda `folderKey` aponta para uma pasta do arquivo; e nenhuma pasta fica
+     dentro dela mesma nem de uma descendente dela (ciclo de qualquer tamanho); senão,
+     `IMPORT_FILE_INVALID`. As contagens e a estrutura são conferidas antes de qualquer caminho pela
+     árvore, que custaria a profundidade a cada item.
+     - Só é `IMPORT_FILE_INVALID` a falta ou o tipo errado de `folders` ou `connections` (listas), de um
+       item delas (um objeto), ou de `key`, `parentKey` ou `folderKey` num item (a `key` é texto; a
+       `parentKey` e a `folderKey`, texto ou nulo, e vêm sempre): sem eles a árvore não se monta. Qualquer outro campo com o tipo errado, ou obrigatório e ausente (o nome; na conexão,
+       também o banco, o host, a porta e o banco de dados), torna só aquele item não importável, com o
+       motivo (RN-TRANSF-014): o texto onde se espera número, o `readOnly` que não é verdadeiro, falso
+       nem nulo, o `engine` em número ou fora de `PostgreSql`, `Db2` e `Informix`, o `password` sem o
+       `userName`. É o que deixa o resto de um arquivo de um Prism mais novo importável.
+  - A senha de exportação errada não conta no contador de cinco erros do cofre (RN-CONN-003): a
+    conferência não toca o cofre, e contá-la daria a qualquer arquivo o poder de fechar o cofre de quem o
+    abre. A defesa contra quem tenta senhas é o custo do Argon2id, o mesmo para quem tem o arquivo e tenta
+    fora do Prism.
+  - A derivação e a abertura rodam fora da trava do cofre, na fila das derivações do arquivo, uma por
+    vez (RN-TRANSF-008). Cada pedido (a prévia, cada atualização dela, a importação) deriva de novo,
+    perto de um segundo cada: a API não guarda nada da importação de um pedido para o outro, e a tela
+    manda o arquivo e a senha de novo.
+  - A chave derivada, os bytes da senha de exportação e o texto em claro aberto são zerados assim que o
+    JSON é lido, na prévia e na importação, como no cofre e na exportação (RN-TRANSF-007). A falha ao
+    ler o JSON decifrado vai ao log só com o tipo da exceção: a mensagem de um `JsonException` traz um
+    pedaço do texto, como já trata o `Send` do client do cofre.
+  - O arquivo que alguém abriu, mudou e cifrou de novo com a senha, fora do Prism, passa pela cifra, e o
+    que ele traz é tratado como o de qualquer arquivo: tudo é conferido de novo (RN-TRANSF-012 a 014), e
+    nada é confiado por ter vindo cifrado.
+  - A tela mostra a frase dela, e não o detalhe da API. O log recebe a classe da recusa, nunca o conteúdo
+    nem a senha (RN-LOG-001).
+
+- **RN-TRANSF-011.** A prévia.
+  - `POST api/user/connections/import/preview` lê o arquivo (RN-TRANSF-010) e devolve a árvore dele e o
+    que a importação faria no lugar escolhido, sem gravar nada. Ela é calculada com tudo o que pode ser
+    importado marcado.
+  - Em cima, o resumo: "O arquivo tem 12 conexões em 6 pastas: 9 com usuário, 3 com a senha." As partes
+    que são zero saem ("O arquivo tem 12 conexões em 6 pastas, sem usuário nem senha."; "O arquivo tem 2
+    pastas, sem conexões."). Sem pasta e sem conexão: "O arquivo não tem pastas nem conexões.", e
+    "Importar" fica desabilitado.
+  - Logo abaixo, sempre: "Confira os servidores antes de importar. A senha que você digitar numa destas
+    conexões vai para o servidor que o arquivo indica." Um arquivo pode apontar uma conexão chamada "PRD"
+    para um servidor de quem o fez, e é na prévia que isso aparece.
+  - A árvore do arquivo, como a do "Exportar conexões" (as pastas abertas, as caixas com o estado misto,
+    a busca, "Marcar todas" e "Desmarcar todas", nas mesmas regras), tudo marcado, menos o que não pode
+    ser importado. A pasta mostra o nome, o ícone com a cor e o ambiente e o cadeado dela; a conexão, a
+    etiqueta do banco, o nome, o ambiente e o cadeado que valiam nela na origem e, numa segunda linha, o
+    servidor e as credenciais: "informix-prd.exemplo.invalid:9089 / estoque · usuário datafix · com
+    senha", "… · usuário nominal · sem senha" ou "… · sem usuário e senha".
+  - À direita da linha, as marcas do que a importação faz, com a explicação na dica:
+    - a pasta que já existe no lugar: "já existe" ("Já existe uma pasta com este nome neste lugar: o que
+      vem dentro entra nela, e ela fica como está, com a cor, o ambiente e as proteções dela.");
+    - a conexão cujo nome já está tomado no lugar (RN-TRANSF-012): "já existe" e, conforme a escolha dos
+      conflitos, "entra como DATA FIX (cópia)" ou "não será importada";
+    - a proteção ou o ambiente que a importação grava na própria conexão, ou na pasta que ela cria, para
+      não ficarem mais fracos (RN-TRANSF-013): "fica somente leitura", "confirma os irreversíveis",
+      "confirma todos os comandos" ou "ambiente Production", com a dica do porquê ("No arquivo ela era
+      somente leitura pela pasta Estoque. No lugar escolhido nada a protegeria: a importação grava o
+      somente leitura nela mesma.");
+    - a conexão com consulta de verificação própria (RN-VERIF-001): "consulta própria" ("consulta
+      própria, não mantida" com a caixa abaixo desmarcada), com a dica "O Prism executa esta consulta
+      sozinho, a cada 30 segundos, enquanto a conexão estiver conectada, e também no "Testar conexão":
+      <a consulta>. O Prism só confere o texto: uma função chamada dentro de um SELECT pode gravar sem
+      que o texto mostre. Confira antes de importar." (com a verificação desligada no arquivo, "O Prism
+      executa esta consulta no "Testar conexão", e sozinho, a cada 30 segundos, se a verificação for
+      ligada: …"). No PostgreSQL, em que a consulta roda numa transação só de leitura (RN-VERIF-001), a
+      frase do meio não aparece; no Db2 e no Informix só o texto a segura (RN-PROT-005). O intervalo é o
+      do arquivo, e a consulta aparece inteira, como texto puro: ela tem até 1.000 caracteres, ou o item
+      não seria importável, e cortá-la esconderia justamente o que é para conferir;
+    - o que não pode ser importado: a caixa desmarcada e desabilitada, e "não pode ser importada", com o
+      motivo (RN-TRANSF-014).
+  - Desmarcar não refaz a prévia (cada pedido deriva a senha de novo): as marcas da prévia são as de tudo
+    marcado, e a importação refaz tudo com o que ficou marcado (RN-TRANSF-014). Desmarcar uma pasta que
+    tem algo marcado dentro não a tira: ela vai como caminho, e a caixa fica mista, como na exportação.
+  - Com algum conflito de nome, aparece depois da árvore "Quando já existir uma conexão com o mesmo nome
+    no mesmo lugar:", com "Importar com outro nome" (o padrão) e "Não importar", e quantas são ("2
+    conexões já existem no lugar escolhido."; "1 conexão já existe…"). Sem conflito, a escolha não
+    aparece.
+  - Com alguma conexão de consulta de verificação própria que pode ser importada, aparece depois da
+    árvore a caixa "Manter as consultas de verificação do arquivo", desmarcada (o padrão, o mais
+    seguro), com "3 conexões trazem uma consulta de verificação própria, que o Prism executa sozinho.
+    Desmarcada, elas entram com a consulta do banco." ("1 conexão traz…"). Desmarcada, essas conexões
+    entram com a consulta do banco, e a verificação, ligada ou não, e o intervalo continuam os do
+    arquivo; marcada, entram com a consulta do arquivo. A caixa só muda a marca "consulta própria" e não
+    refaz a prévia. A consulta que não passa na regra deixa a conexão não importável, com a caixa
+    marcada ou não (RN-TRANSF-014). Sem consulta própria no arquivo, a caixa não aparece.
+  - No rodapé, a conta, com papel de estado: "10 conexões e 6 pastas marcadas" ("1 conexão e 1 pasta
+    marcadas"; "Nada marcado"), em que as pastas contam as que vão como caminho.
+  - A prévia mostra o host, o usuário e se há senha; a senha nunca vai à tela (RN-CONN-001), nem na
+    prévia, nem depois.
+  - O texto do arquivo que volta na prévia vem inteiro quando o item é importável (ele já cabe nos
+    limites dos campos, RN-PASTA-001 e RN-CONN-010, e é o que se confere); do item que não pode ser
+    importado, cada texto, e o que o motivo cita dele ("Este Prism não conhece o banco …"), vem cortado
+    em 200 caracteres.
+
+- **RN-TRANSF-012.** Onde fica, e os conflitos.
+  - O que está na raiz do arquivo vai para o lugar escolhido em "Onde colocar" (a raiz do navegador ou
+    uma pasta), com a estrutura do arquivo embaixo dele.
+  - Pasta: a pasta do arquivo com o mesmo nome de uma pasta que já existe no mesmo lugar é essa pasta (sem
+    diferenciar maiúsculas, com o nome normalizado como na criação, RN-PASTA-002). O que vem dentro dela
+    no arquivo entra na que existe, e a que existe fica como está, com a cor, o ambiente e as proteções
+    dela. As que não existem são criadas com o que o arquivo traz.
+  - Conexão: a conexão do arquivo com o mesmo nome de uma conexão que já está no mesmo lugar
+    (RN-CONN-011) segue a escolha única do diálogo. "Importar com outro nome" lhe dá o nome da cópia do
+    "Duplicar conexão" ("DATA FIX (cópia)", "(cópia 2)"…, com o nome cortado para caber, RN-CONN-016);
+    "Não importar" a deixa de fora. A importação nunca muda nem sobrescreve uma conexão ou uma pasta que
+    já existe.
+  - As conferências valem contra o que já existe E contra o que a mesma importação já pôs. Duas pastas
+    irmãs com o mesmo nome dentro do arquivo viram uma só, e duas conexões com o mesmo nome na mesma
+    pasta do arquivo são um conflito como outro qualquer: a segunda vai com outro nome, ou fica de fora.
+    O arquivo que o Prism gera não tem isso (o cofre não deixa), mas um editado pode ter.
+  - O lugar pode ser uma pasta somente leitura, ou com confirmação: o que entra nela herda a proteção
+    (RN-PROT-004), que só aumenta.
+  - Criar pela importação uma pasta ou uma conexão somente leitura não pede a senha do Prism
+    (RN-PROT-003): a importação só cria, e a proteção fica igual ou mais forte (RN-TRANSF-013).
+
+- **RN-TRANSF-013.** A importação nunca deixa uma conexão mais fraca do que ela era na origem.
+  - Posta no lugar, a conexão tem as proteções que valeriam ali (RN-PROT-004: a dela e as das pastas
+    acima, as que já existiam e as que a importação criou). Se o somente leitura valia na origem e não
+    valeria ali, a importação grava o somente leitura na própria conexão; e se a confirmação que valeria
+    ali é mais baixa que a da origem, grava a da origem na própria conexão. O mesmo vale para a pasta que
+    a importação cria. A pasta que já existia não muda.
+  - O que valia na origem é o mais forte entre o `effective` do arquivo e o que as pastas do arquivo dão.
+    No arquivo que o Prism gerou os dois são iguais; num editado, ganha o mais forte.
+  - O ambiente: se a conexão não tem ambiente próprio e o que ela herdaria ali (RN-PASTA-005, o da pasta
+    mais próxima acima que tem um) é outro, pelo nome sem diferenciar maiúsculas, ou nenhum, a importação
+    grava na própria conexão o ambiente que ela mostrava na origem, com a cor. Assim a "DATA FIX" de
+    "Production PRD" continua dizendo Production quando a pasta que já existia no lugar não tem
+    ambiente, ou tem outro. A conexão que na origem não tinha ambiente fica com o que o lugar lhe der. A
+    pasta criada não ganha ambiente além do que o arquivo traz nela: o ambiente de uma pasta não passa
+    às subpastas (RN-PASTA-005), e a etiqueta que ela mostra é só a dela.
+  - A prévia diz quando isso acontece (RN-TRANSF-011).
+
+- **RN-TRANSF-014.** A gravação.
+  - `POST api/user/connections/import` manda o arquivo, a senha de exportação, o lugar, as chaves
+    marcadas, a escolha dos conflitos e a da caixa "Manter as consultas de verificação do arquivo". A
+    API lê o arquivo de novo (RN-TRANSF-010) e confere TUDO de novo, com as regras da criação e a
+    normalização dela, as mesmas do formulário e num lugar só com elas: o nome da pasta (1 a 60,
+    RN-PASTA-001) e o da conexão (1 a 80); o banco, um dos três que este Prism conhece; o host e o banco
+    de dados, não vazios; o host até 255 caracteres, o banco de dados até 128, o usuário até 128 (os
+    três depois de aparados) e a senha até 1.024 (como veio); nenhum nome, host, banco de dados, usuário
+    ou nome de ambiente com caractere de controle ou de direção do texto (RN-PASTA-001 e RN-CONN-010: um
+    U+202E faria o host que a prévia manda conferir parecer outro); a porta, de 1 a 65.535; o ambiente
+    (o nome até 30, a cor `#RRGGBB`) e a cor da pasta; a confirmação, uma das três; o intervalo da
+    verificação, de 5 a 3.600; e a consulta de verificação, até 1.000 caracteres e uma leitura só no
+    banco da conexão (RN-VERIF-001), porque ela roda sozinha a cada intervalo depois de conectar, com as
+    credenciais da conexão. O usuário e a senha podem faltar (RN-TRANSF-015). Com a caixa desmarcada (o
+    padrão), a conexão de consulta própria entra com a consulta do banco (RN-TRANSF-011). O banco sem
+    driver instalado não impede: a conexão se grava como pelo formulário, e conectar pede o driver
+    (RN-NAV-005).
+  - O item que não passa não é importado, e a prévia diz por quê, com a frase da regra ("A consulta de
+    verificação tem de ser uma leitura só: um UPDATE não é leitura.", "Informe uma porta de 1 a 65535.",
+    "Este Prism não conhece o banco MySql."). A pasta que não passa leva junto o que está dentro dela ("A
+    pasta Production PRD não pode ser importada."). Um item assim nunca fica marcado, e a chave dele, se
+    vier, é ignorada. O resto do arquivo continua importável: um arquivo de uma versão mais nova do
+    Prism, num formato que esta lê, pode trazer um banco ou um valor que esta não conhece.
+  - Tudo de uma vez: a importação é UMA gravação do cofre (RN-COFRE-005), tudo ou nada, e o `.bak` fica
+    com o cofre de antes dela. Todos os IDs são novos, as datas são as da importação, e cada pasta é
+    posta antes do que está dentro dela. O cofre que fecha durante "Importando…" (o bloqueio, o "Sair")
+    tem a importação inteira, se a gravação veio antes, ou nada dela; a tela não sabe qual, e o navegador
+    mostra o que há ao entrar de novo.
+  - A conferência do lugar, dos nomes e das proteções é feita na própria gravação, contra o documento
+    mais recente, como a das pastas de scripts (RN-SCRIPT-007): o que outra janela fez entre a prévia e a
+    importação conta, e a prévia diz só o que aconteceria no momento dela. A leitura e a abertura do
+    arquivo vêm antes, fora da trava do cofre (RN-TRANSF-010).
+  - A API lê a geração do cofre (`IVaultService.Generation`) antes de abrir o arquivo e a confere dentro
+    da própria gravação, com a trava do cofre: se mudou (o cofre fechou durante a derivação, ou outro
+    usuário entrou), 401 `VAULT_LOCKED`, e nada é gravado; sem isso, a importação iria para o cofre de
+    outra pessoa.
+  - O lugar escolhido que outra janela excluiu é 404 `FOLDER_NOT_FOUND`, na prévia e na importação: nada
+    é gravado, as listas são lidas de novo, e o "Onde colocar" fica sem escolha, com "A pasta escolhida
+    não existe mais. Escolha outro lugar." A pasta do arquivo que ia se juntar a uma que outra janela
+    excluiu no meio é simplesmente criada.
+  - Sem nenhuma chave marcada, 422 `IMPORT_EMPTY` ("Marque ao menos uma conexão ou pasta para
+    importar."). A escolha dos conflitos fora da lista, uma chave que o arquivo não tem ou repetida, e
+    mais de 4.000 chaves são 422 `IMPORT_INVALID`. A tela não deixa chegar a nenhuma das duas.
+  - Feita a importação, o diálogo fecha, o navegador lê as listas de novo, abre as pastas até o que
+    entrou e escolhe a primeira linha importada, na ordem da árvore, com o foco. Se um filtro do
+    navegador (a busca, o ambiente, "Só as conectadas") esconde essa linha, o foco vai à pasta de
+    destino, ou, quando o destino é a raiz ou também está escondido, à primeira linha à vista; os
+    filtros ficam como estavam, e o aviso diz quantas entraram, como sempre. Nada conecta sozinho. As
+    outras janelas veem o que entrou quando leem as listas de novo, como depois de qualquer mudança
+    feita noutra janela.
+  - O aviso diz o que aconteceu de fato:
+    - de sucesso: "5 conexões e 2 pastas importadas." ("1 conexão e 1 pasta importadas."), só com a parte
+      que não é zero ("3 conexões importadas.", "2 pastas importadas."), e as pastas são as criadas, não
+      as que já existiam; com conexões que mudaram de nome, ", 1 com outro nome" ou ", 2 com outro nome"
+      antes do ponto;
+    - de atenção, quando o "Não importar" deixou conexões de fora: o mesmo texto, seguido de "2 conexões
+      não importadas: já existiam no lugar escolhido." ("1 conexão não importada: já existia…");
+    - de atenção, quando nada entrou (as conexões marcadas já existiam, com "Não importar", e as pastas
+      também): "Nada foi importado: tudo o que estava marcado já existia no lugar escolhido." Nada é
+      gravado.
+  - O log registra a importação com as contagens (criadas, juntadas às que existiam, com outro nome,
+    deixadas de fora, não importáveis, com a proteção ou o ambiente gravados, com a consulta de
+    verificação própria mantida ou trocada pela do banco) e os IDs criados, nunca o
+    arquivo, nomes, hosts, usuários, senhas ou a senha de exportação (RN-LOG-001).
+
+### Conexão sem usuário e senha
+
+- **RN-TRANSF-015.** O estado novo.
+  - A conexão importada sem usuário e senha fica no cofre com os dois vazios, e a que veio só com o
+    usuário, com a senha vazia: o registro do cofre já aceita o texto vazio, e `hasPassword` já é falso
+    para a senha vazia (RN-CONN-001). A lista e o detalhe a devolvem com `userName` vazio, ou com o
+    usuário, e `hasPassword` falso. O cofre não muda de formato.
+  - Só a importação cria uma conexão assim. O formulário continua exigindo usuário e senha para criar
+    (RN-CONN-010); e, para salvar a edição de uma conexão sem senha gravada, exige a senha: o campo não
+    diz "Deixe vazio para manter", porque não há o que manter, e vazio é "Informe a senha do banco.".
+  - Renomear (RN-NAV-009), mover e duplicar continuam valendo nela, sem preencher nada; mudar as
+    proteções e a verificação, que são do formulário, só com o usuário e a senha preenchidos. O `PATCH`
+    aceita o usuário vazio quando a conexão gravada já está sem usuário (o "Renomear" e o "Mover" mandam
+    o que ela tem), e a senha ausente continua mantendo a gravada, que é a vazia. Tirar o usuário de uma
+    conexão que tem um continua sendo 422 `CONNECTION_INVALID` no campo ("Informe o usuário do banco.").
+    A cópia de uma conexão sem usuário e senha (RN-CONN-016) nasce sem eles.
+  - A exportação de uma conexão assim só oferece o que ela tem (RN-TRANSF-003).
+  - Na árvore, a conexão não ganha marca. A dica da linha ganha " · sem usuário e senha" ou " · sem
+    senha" no fim ("Informix · informix-prd.exemplo.invalid:9089 / estoque · sem usuário e senha"). Uma
+    marca a
+    mais em cada linha que veio sem credenciais poluiria a árvore de quem importou dezenas delas, e o
+    aviso de verdade vem ao conectar (RN-TRANSF-016).
+
+- **RN-TRANSF-016.** Conectar e testar a conexão sem usuário e senha.
+  - Abrir uma sessão com a conexão sem usuário, ou com usuário e sem senha, é recusado pela API antes do
+    driver (conectar pela árvore ou pela barra, expandir a conexão, executar numa aba ou o script dela,
+    abrir os Registros de uma tabela, abrir outro banco do servidor, RN-ARVORE-006): 422
+    `CONNECTION_CREDENTIALS_MISSING`, no campo que falta, `userName` sem usuário e `password` com o
+    usuário e sem a senha. Sem a recusa, o driver tentaria o usuário vazio (o do PostgreSQL usaria o do
+    sistema operacional) e a mensagem do banco não diria o que fazer. A recusa vem antes da do driver não
+    instalado.
+  - A tela não mostra o erro no nó nem na aba, nem faz aviso de erro: abre o "Editar conexão" dela
+    (RN-NAV-004) com, no topo, "Esta conexão chegou sem usuário e senha. Preencha para conectar." (sem o
+    usuário) ou "Esta conexão chegou sem a senha. Preencha para conectar." (com o usuário), e o foco no
+    campo que falta ("Usuário do banco" ou "Senha do banco"). O lugar de onde a pessoa pediu fica como
+    estava (o nó desconectado, a aba com o resultado de antes, o comando sem executar). Salvar fecha o
+    diálogo, e nada conecta sozinho: a pessoa repete o que pediu. Com o diálogo dessa conexão já aberto,
+    não abre outro.
+  - O "Editar conexão" aberto pelo menu mostra a mesma frase e põe o foco no mesmo campo, enquanto a
+    conexão gravada estiver sem usuário ou sem senha.
+  - "Testar conexão" no diálogo usa o que está nos campos (RN-CONN-013). Com o usuário preenchido e a
+    senha em branco, numa conexão sem senha gravada, a API responde 422
+    `CONNECTION_CREDENTIALS_MISSING` no campo `password`, "Esta conexão não tem senha gravada. Informe a
+    senha do banco para testar.", em vez de testar com a senha vazia. O usuário em branco continua sendo
+    o 422 `CONNECTION_INVALID` de sempre ("Informe o usuário do banco.").
+  - A verificação periódica (RN-VERIF-002) não muda: ela nunca abre sessão, e uma conexão assim nunca
+    teve uma.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `POST api/user/connections/export` `{ folderIDs, connections: [{ id, credentials }], passphrase, userPassword? }` | 200 `{ content, folders, connections, withUser, withPassword }` | 404 `FOLDER_NOT_FOUND`, `CONNECTION_NOT_FOUND`; 422 `EXPORT_EMPTY`, `EXPORT_INVALID`, `EXPORT_PASSPHRASE_INVALID` (no campo `passphrase`), `EXPORT_LIMITS_EXCEEDED`, `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (no campo `userPassword`); 401 `VAULT_LOCKED` no quinto erro seguido e quando o cofre muda durante a derivação |
+| `POST api/user/connections/import/preview` `{ content, passphrase, targetFolderID? }` | 200 `{ folders, connections }` | 404 `FOLDER_NOT_FOUND` (o lugar); 409 `IMPORT_FILE_NEWER`; 422 `IMPORT_FILE_INVALID`, `IMPORT_LIMITS_EXCEEDED`, `IMPORT_PASSPHRASE_INVALID` e `IMPORT_PASSPHRASE_WRONG` (no campo `passphrase`) |
+| `POST api/user/connections/import` `{ content, passphrase, targetFolderID?, items, onConflict, keepVerificationQueries? }` | 200 `{ folderIDs, connectionIDs, mergedFolders, renamed, skipped }` | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
+| `PATCH api/user/connections` | como antes | as de antes; o usuário vazio só passa quando a conexão gravada já está sem usuário |
+| `POST api/user/connections/test` | 204 | as de antes, mais 422 `CONNECTION_CREDENTIALS_MISSING` no campo `password` (com `id`, sem senha no pedido e sem senha gravada) |
+| `POST api/user/database-sessions` | 201 | as de antes, mais 422 `CONNECTION_CREDENTIALS_MISSING` no campo `userName` ou `password` (o que falta na conexão gravada) |
+
+Notas:
+
+- `credentials`: `none`, `user` ou `userAndPassword`; ausente ou nulo é `none`. Fora da lista, e o mesmo
+  ID duas vezes em `connections`, são 422 `EXPORT_INVALID`. `userAndPassword` numa conexão sem senha
+  gravada leva só o usuário, e numa sem usuário não leva nada: não é erro.
+- `folderIDs`: as pastas marcadas; as do caminho de cada item vêm sozinhas. Até 2.000 IDs em cada lista
+  (além disso, `EXPORT_LIMITS_EXCEEDED`). Nenhuma pasta e nenhuma conexão: `EXPORT_EMPTY` ("Marque ao
+  menos uma conexão ou pasta para exportar.").
+- `content`: o texto do arquivo (RN-TRANSF-007), o que a tela grava e o que ela manda na importação.
+  `folders` e `connections`, na resposta da exportação, são as contagens do que foi no arquivo (as pastas
+  do caminho contam); `withUser` e `withPassword`, quantas conexões levam o usuário e quantas levam a
+  senha.
+- `passphrase` é a senha de exportação; `userPassword`, a do Prism, só quando a RN-TRANSF-005 a pede.
+  Nenhuma das duas volta numa resposta ou vai a log, e os comandos e as respostas que levam o arquivo,
+  uma senha ou a prévia escrevem só o nome do tipo no `ToString()` (RN-LOG-001).
+- A prévia: `folders` traz, de cada pasta, `key`, `parentKey`, `name`, `color`, `environmentName`,
+  `environmentColor`, `confirmCommands`, `readOnly`, `existing` (já existe no lugar: o conteúdo entra
+  nela), `strengthened` e `invalid`. `connections` traz, de cada conexão, `key`, `folderKey`, `name`,
+  `engine` (o número de sempre; nulo quando este Prism não conhece o banco do arquivo), `host`, `port`,
+  `database`, `userName` (vazio quando não veio), `hasPassword`, `verificationEnabled`,
+  `verificationInterval`, `verificationQuery` (a do arquivo, nula quando é a do banco, RN-TRANSF-011),
+  `effective` (o que valia na origem), `conflict` (o nome está tomado no lugar), `copyName` (o nome
+  que ela recebe com "Importar com outro nome"), `strengthened` e `invalid`. `strengthened` é
+  `{ readOnly, confirmCommands, environmentName, environmentColor }`, o que a importação gravaria no
+  item (RN-TRANSF-013), com os campos nulos quando nada muda; `invalid` é o motivo, ou nulo. A senha
+  nunca vem.
+- `targetFolderID`: ausente ou nulo é a raiz. `items`: as chaves marcadas do arquivo, de pastas e de
+  conexões, até 4.000; as pastas do caminho de cada uma vão sozinhas. `onConflict`: `rename` ou `skip`;
+  ausente ou nulo é `rename`. `keepVerificationQueries`: booleano, a caixa "Manter as consultas de
+  verificação do arquivo"; ausente ou nulo é falso, e a conexão de consulta própria entra com a do
+  banco (RN-TRANSF-011).
+- Resposta da importação: `folderIDs` e `connectionIDs`, os IDs criados; `mergedFolders`, quantas pastas
+  do arquivo entraram numa que já existia; `renamed` e `skipped`, quantas conexões foram com outro nome e
+  quantas ficaram de fora.
+- `CONNECTION_CREDENTIALS_MISSING` vem na forma do erro de campo (`errors` e `errorCodes`): é o campo que
+  diz à tela qual falta.
+- As duas rotas da importação aceitam um corpo de até 6 MiB, e a da exportação, de até 1 MiB
+  (`RequestSizeLimit`). Acima disso a resposta hoje é 500, e não 413 (o defeito conhecido de toda rota
+  que lê corpo); a tela nunca manda tanto, porque recusa antes o arquivo de mais de 5 MiB.
+- Todas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais). A falha do
+  disco na importação não grava nada.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-COFRE-001**: as pastas e as conexões só saem do cofre para o arquivo da exportação, sempre
+  cifradas.
+- **RN-PASTA-001**: a profundidade segue sem limite, mas a exportação e a importação aceitam até 32
+  níveis; o nome e o ambiente da pasta não têm caractere de controle nem de direção do texto.
+- **RN-CONN-001**: fora da revelação, a senha só sai da API dentro do arquivo cifrado da exportação.
+- **RN-CONN-003**: a exportação com senhas de banco entra na contagem dos cinco erros; a senha de
+  exportação errada não.
+- **RN-CONN-010**: o usuário e a senha são obrigatórios no formulário, e vazios só na conexão importada
+  sem eles; o host, o banco de dados, o usuário e a senha ganham teto, e os textos da conexão recusam o
+  caractere de controle e o de direção do texto, no formulário, no teste e na importação.
+- **RN-CONN-013**: o teste da conexão gravada sem senha é recusado com `CONNECTION_CREDENTIALS_MISSING`.
+- **RN-SESSAO-003**: a conexão sem usuário ou sem senha não chega ao driver.
+- **RN-ARVORE-005**: essa recusa não aparece no nó; ela abre o "Editar conexão".
+- **RN-TX-008**: o quinto erro de senha ao exportar com senhas de banco também fecha o cofre, e o
+  diálogo da exportação (e o do somente leitura, que faltava) avisa das transações.
+- **RN-PROT-003**: a exportação com senhas de banco entra na contagem; importar e exportar não pedem a
+  senha do somente leitura.
+- **RN-LOG-001**: a senha de exportação, o arquivo e a prévia não vão a log.
+- **RN-VERSAO-002**: o arquivo da exportação é contrato, com o número de formato próprio.
+- **RN-MENU-001**: o menu da conexão e o da pasta ganham exportar e importar.
+- **RN-NAV-003**: o menu do espaço vazio do navegador ganha "Exportar conexões…" e "Importar
+  conexões…".
+- **RN-NAV-004**: o "Editar conexão" abre sozinho na conexão sem usuário ou sem senha.
+- **Seção 6**: as rotas da exportação e da importação, e `CONNECTION_CREDENTIALS_MISSING` no teste e na
+  abertura de sessão.
+- **Seção 9**: a exportação, a importação e a frase da conexão sem usuário e senha não estão no canvas.
+
+### Fica para depois
+
+- Exportar e importar scripts e pastas de scripts.
+- Atualizar pelo arquivo uma conexão que já existe: hoje ela nunca é tocada, e a do arquivo vai com
+  outro nome ou fica de fora.
+- Arrastar o arquivo para o navegador para importar.
+- Exportar sem cifrar.
+- Um medidor da força da senha de exportação, e um botão que gera uma.
+- Importar as conexões e as pastas do DBeaver (o `data-sources.json` dele).
+- Escolher, na importação, outro lugar para cada pasta do arquivo, ou trazer o conteúdo de uma pasta do
+  arquivo sem ela.
