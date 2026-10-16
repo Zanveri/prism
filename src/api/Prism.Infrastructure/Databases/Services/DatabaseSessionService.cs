@@ -262,11 +262,13 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                     : page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
                     : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
                     : EditableSql.Read(sent, dialect);
-                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied);
+                // RN-EXPORT-001 e 002: exportar executa o comando de novo, numa conexão à parte; só vale para a leitura só, pelo comando montado, que não gravou.
+                var read = page.TotalRows is null && ReadOnlySql.ExportRefusal(sent, session.Info.Engine) is null;
+                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read);
                 var withoutFullValue = result.Cells.Add(page);
                 ReplaceResult(session, result);
 
-                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue, FilterApplied = result.FilterApplied } };
+                return outcome.Value with { Page = page with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = withoutFullValue, FilterApplied = result.FilterApplied, Read = result.Read } };
             }
 
             // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
@@ -289,7 +291,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             // RN-SQL-017: a página continua a contagem das linhas do resultado, e o valor completo das cortadas fica com ele.
             return session.CurrentResult is { } result
-                ? page.Value with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = result.Cells.Add(page.Value), FilterApplied = result.FilterApplied }
+                ? page.Value with { ResultID = result.ID, Editable = result.Editability, FullValues = null, CellsWithoutFullValue = result.Cells.Add(page.Value), FilterApplied = result.FilterApplied, Read = result.Read }
                 : page.Value with { FullValues = null, CellsWithoutFullValue = page.Value.TruncatedCells };
         }, cancellationToken);
 
@@ -951,8 +953,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// </summary>
     /// <param name="schemaChanges">RN-SQL-024: o <see cref="Session.SchemaChanges"/> da sessão quando o resultado foi lido.</param>
     /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null)
+    /// <param name="read">RN-EXPORT-002: o comando do resultado, com o filtro, é uma leitura só e não gravou: o resultado inteiro se exporta.</param>
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false)
     {
+        public bool Read => read;
+
         public int SchemaChanges => schemaChanges;
 
         private volatile EditTarget? _target;

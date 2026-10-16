@@ -57,6 +57,24 @@ public static class ReadOnlySql
     public static string Message(string reason)
         => $"A conexão é somente leitura, e só leituras são executadas nela: {reason}. Nada foi enviado ao banco.";
 
+    /// <summary>
+    /// RN-EXPORT-002: por que o comando não se exporta, ou nulo quando se exporta. Exportar executa o comando de novo, numa conexão à parte, e só vale para
+    /// uma leitura só, pela mesma lista do somente leitura: é o que diz o `read` da página do resultado e o que o começo da exportação confere de novo.
+    /// </summary>
+    public static string? ExportRefusal(string sql, EDatabaseEngine engine)
+        => Refusal(sql, DialectOf(engine), singleStatement: true);
+
+    /// <summary>
+    /// RN-EXPORT-016: o texto tem mais de um comando, separados por `;` fora de aspas e de comentário, como o banco os lê (no Db2, em qualquer das duas
+    /// leituras do comentário de bloco). Os `;` soltos nas pontas não contam. É a recusa `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, que vem antes da de leitura.
+    /// </summary>
+    public static bool HasSeveralStatements(string sql, EDatabaseEngine engine)
+    {
+        var dialect = DialectOf(engine);
+
+        return StatementsOf(Lex(sql, dialect)).Count > 1 || (dialect == ESqlDialect.Db2 && StatementsOf(Lex(sql, dialect, asTheDriver: true)).Count > 1);
+    }
+
     internal static string? Refusal(string sql, ESqlDialect dialect, bool singleStatement = false)
         => Read(Lex(sql, dialect), dialect, singleStatement) ?? (dialect == ESqlDialect.Db2 ? Read(Lex(sql, dialect, asTheDriver: true), dialect, singleStatement) : null);
 
@@ -70,6 +88,16 @@ public static class ReadOnlySql
 
     private static string? Read(IEnumerable<Token> tokens, ESqlDialect dialect, bool singleStatement)
     {
+        var statements = StatementsOf(tokens);
+        if (singleStatement && statements.Count > 1)
+            return SeveralStatementsMessage;
+
+        return statements.Select(statement => StatementRefusal(statement, dialect)).FirstOrDefault(reason => reason is not null);
+    }
+
+    /// <summary>Os comandos do texto, divididos nos `;` do nível de código, sem os vazios.</summary>
+    private static List<List<Token>> StatementsOf(IEnumerable<Token> tokens)
+    {
         var statements = new List<List<Token>> { new() };
         foreach (var token in tokens)
         {
@@ -80,10 +108,8 @@ public static class ReadOnlySql
         }
 
         statements.RemoveAll(statement => statement.Count == 0);
-        if (singleStatement && statements.Count > 1)
-            return SeveralStatementsMessage;
 
-        return statements.Select(statement => StatementRefusal(statement, dialect)).FirstOrDefault(reason => reason is not null);
+        return statements;
     }
 
     private static string? StatementRefusal(List<Token> tokens, ESqlDialect dialect)
