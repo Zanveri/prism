@@ -13,7 +13,7 @@ import type { EngineChoice } from "../_lib/engine-choices";
 const copy = connectionsCopy.form.driver;
 
 /** O que o aviso pede ao fluxo dos drivers (`useDriverActions`): o mesmo de Configurações › Drivers. */
-export type DriverNoticeActions = Pick<DriverActions, "install" | "cancel" | "restart" | "cancellingId">;
+export type DriverNoticeActions = Pick<DriverActions, "install" | "cancel" | "restart" | "cancellingId" | "exportsNote">;
 
 /** A caixa do aviso: o tom diz se é o que falta (âmbar) ou o que falhou (vermelho). Não é região viva: o progresso mudaria a cada segundo. */
 function Box({ tone = "neutral", children }: { tone?: "neutral" | "warning" | "error"; children: ReactNode }) {
@@ -33,7 +33,7 @@ export function DriverNotice({ choice, actions }: { choice: EngineChoice; action
   if (driver === null) return null;
 
   const cancelling = actions.cancellingId === driver.id;
-  const restart = choice.restartPending ? <RestartBanner onRestart={actions.restart} /> : null;
+  const restart = choice.restartPending ? <RestartBanner onRestart={actions.restart} exportsNote={actions.exportsNote} /> : null;
 
   switch (choice.state) {
     case "missing":

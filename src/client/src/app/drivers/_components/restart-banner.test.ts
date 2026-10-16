@@ -16,6 +16,12 @@ describe("a faixa de reinício pendente (item E)", () => {
     expect(markup).toMatch(/<button[^>]*>Reiniciar agora<\/button>/);
   });
 
+  it("com exportações em andamento, a frase delas entra na faixa (RN-EXPORT-023)", () => {
+    const markup = renderToStaticMarkup(createElement(RestartBanner, { onRestart: () => {}, exportsNote: "A exportação em andamento será cancelada." }));
+
+    expect(markup).toContain("serão fechadas. A exportação em andamento será cancelada.");
+  });
+
   it("'Reiniciar agora' chama o reinício", () => {
     const onRestart = vi.fn();
 

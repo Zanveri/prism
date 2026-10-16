@@ -30,6 +30,13 @@ describe("o diálogo de reinício (item E, RN-DRIVER-005)", () => {
     expect(markup).toContain("As abas de SQL abertas serão fechadas.");
   });
 
+  it("com exportações em andamento, a frase delas entra no aviso (RN-EXPORT-023); sem nenhuma, nada", () => {
+    const markup = renderToStaticMarkup(createElement(RestartDialog, { kind: "installed", onRestart: noop, onLater: noop, exportsNote: "As 2 exportações em andamento serão canceladas." }));
+
+    expect(markup).toContain("As abas de SQL abertas serão fechadas. As 2 exportações em andamento serão canceladas.");
+    expect(renderToStaticMarkup(createElement(RestartDialog, { kind: "installed", onRestart: noop, onLater: noop }))).not.toContain("exportaç");
+  });
+
   it("'Reiniciar agora' chama o reinício da API e 'Depois' só o fecha", () => {
     const onRestart = vi.fn();
     const onLater = vi.fn();
