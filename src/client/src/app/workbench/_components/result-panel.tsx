@@ -16,6 +16,7 @@ import { recall, remember } from "../_lib/tab-memory";
 import type { RecordsSort } from "../_lib/table-sql";
 import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { EditBar } from "./edit-bar";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
 import { KeptResultNote } from "./script-tabs";
@@ -152,7 +153,11 @@ type ResultPanelProps = {
    * lembradas por ele (`tab-memory.ts`) e voltam com a vista. A área da aba de consulta não desmonta com a aba aberta, e as guarda só no próprio estado.
    */
   tabId?: string;
-  /** RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros e na aba de consulta). */
+  /**
+   * RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros e na aba de consulta). Com ela vem a barra de edição (RN-EDIT-013), que a área
+   * desenha só com a grade na tela: no rodapé dos Registros, logo depois de "Exportar CSV", e, no resultado de um comando, numa linha própria entre a grade e
+   * os rodapés dela.
+   */
   editing?: GridEditing;
   /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
   banner?: ReactNode;
@@ -242,6 +247,12 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
     area.querySelector<HTMLElement>('[role="grid"], [role="table"]')?.focus();
     if (page.activeElement === null || page.activeElement === page.body) area.focus();
   });
+
+  // RN-EDIT-013 e 014: a barra de edição, onde a grade tem a edição (a aba guardada do script, sem ela, não tem barra) e com a grade na tela. Depois do
+  // botão, o foco volta à grade, como volta quando o botão que o tinha sai da tela; o "Editar célula" abre o campo, que o toma.
+  const gridEditing = kept === undefined ? editing : undefined;
+  const focusGrid = useCallback(() => section.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true }), []);
+  const editBar = rows === null || gridEditing === undefined ? null : <EditBar buttons={gridEditing.bar.buttons} onAction={gridEditing.bar.onAction} onDone={focusGrid} />;
 
   return (
     // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
@@ -333,9 +344,12 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
                 onZoom={zoomTo}
-                editing={kept === undefined ? editing : undefined}
+                editing={gridEditing}
               />
             </div>
+
+            {/* RN-EDIT-013: no resultado de um comando, a barra de edição numa linha própria, alinhada à esquerda, entre a grade e os rodapés dela. */}
+            {records || editBar === null ? null : <div className="flex flex-none items-center border-t border-border bg-panel px-3 py-1.5">{editBar}</div>}
 
             {kept !== undefined ? (
               // O botão sai da página com o foco quando o comando executado troca os resultados do script: o foco vai à grade nova (RN-SQL-006).
@@ -443,6 +457,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 </span>
               </>
             )}
+            {/* RN-EDIT-013: nos Registros, a barra de edição logo depois de "Exportar CSV", antes das linhas carregadas e do "Carregar mais". */}
+            {editBar}
             {rows === null || running ? null : rows.cursorClosed ? (
               <span className="flex items-baseline gap-2 text-ink">
                 <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />

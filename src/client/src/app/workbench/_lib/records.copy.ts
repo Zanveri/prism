@@ -105,6 +105,16 @@ export const recordsCopy = {
       deleteRow: "Alt+Delete",
       deleteRowMac: "Option+Delete",
     },
+    // RN-EDIT-013 e 014: a barra de edição, como a de baixo do resultado do DBeaver. A dica é a do botão com o atalho e, desabilitado, o motivo; os três
+    // da falta de célula ou de linha não são de só leitura e vêm sozinhos.
+    bar: {
+      label: "Edição da grade",
+      title: (label: string, shortcut: string) => `${label} (${shortcut})`,
+      disabledTitle: (label: string, shortcut: string, reason: string) => `${label} (${shortcut}). ${reason}`,
+      chooseCell: "Escolha uma célula na grade.",
+      chooseRow: "Escolha uma linha na grade.",
+      noRows: "O resultado não tem linhas.",
+    },
     // RN-EDIT-016: o que a faixa diz depois de "Duplicar linha", e por que a linha não foi duplicada.
     duplicate: {
       keyCopied: (table: string, columns: readonly string[]) => `A linha duplicada copiou a chave de ${table} (${columns.join(", ")}): troque-a antes de salvar, ou o banco vai recusar a linha repetida.`,

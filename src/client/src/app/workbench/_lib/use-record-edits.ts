@@ -13,6 +13,7 @@ import { cellMenu, type CellMenuAction, type CellMenuItem } from "./cell-menu";
 import type { DatabaseSession } from "./database-sessions.schema";
 import { databaseSessionKey } from "./database-sessions.service";
 import { duplicatePlan, type DuplicateSource } from "./duplicate-row";
+import { editBar, type EditBarAction, type EditBarButton } from "./edit-bar";
 import { customPlan, filterMenuItem, filterPlan, isFilterAction, valuesPlan, type FilterMenuContext, type FilterPlan } from "./filter-menu";
 import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullValues, type GridPosition } from "./full-values";
 import { resultCells } from "./full-values.service";
@@ -107,6 +108,21 @@ const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notic
 /** As linhas na tela: com outro comando rodando, as de antes (esmaecidas), sobre as quais nada se edita. */
 function shownOf(state: RunnerState): RowsState | null {
   return state.status === "rows" ? state : state.status === "running" && state.previous?.status === "rows" ? state.previous : null;
+}
+
+/** A linha da grade: uma lida (com o corte, a exclusão, o que o banco preencheu num Salvar e os valores lidos) ou uma nova. */
+function rowContextOf(shown: RowsState | null, edits: PendingEdits, row: number): RowContext {
+  const read = shown?.rows.length ?? 0;
+  return row < read ? { kind: "read", truncated: shown?.truncated.get(row), deleted: edits.deleted.includes(row), generated: shown?.generated?.get(row), values: shown?.rows[row] } : { kind: "new" };
+}
+
+/**
+ * RN-EDIT-013 e 014: os quatro botões da barra de edição, pelo que a tela já sabe agora (sem perguntar ao catálogo, RN-EDIT-010): o resultado, o alvo
+ * quando já foi perguntado, a aba ocupada (o Salvar também) e a célula ativa, que só vale numa linha que existe.
+ */
+function barOf({ shown, edits, readOnlyReason, target, busy, saving, active }: { shown: RowsState | null; edits: PendingEdits; readOnlyReason: string | null; target: EditTarget | null; busy: boolean | "refresh"; saving: boolean; active: GridCell | null }): EditBarButton[] {
+  const rows = (shown?.rows.length ?? 0) + edits.added.length;
+  return editBar({ readOnly: readOnlyReason, target, busy: saving || busy, active: active !== null && active.row < rows ? { cell: active, row: rowContextOf(shown, edits, active.row) } : null, rows, platform });
 }
 
 /** RN-SQL-017: as recusas com que as células pedidas ficam cortadas, sem o aviso central: o resultado mudou, a sessão caiu, a célula está fora dele. */
@@ -306,11 +322,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const moved = useCallback((from: string | null) => latest.current.resultId !== from || (shownOf(runner.getState())?.resultId ?? null) !== from, [runner]);
 
   /** A linha da grade: uma lida (com o corte e a exclusão) ou uma nova. */
-  const rowOf = useCallback((row: number): RowContext => {
-    const { shown: current, edits: pending } = latest.current;
-    const read = current?.rows.length ?? 0;
-    return row < read ? { kind: "read", truncated: current?.truncated.get(row), deleted: pending.deleted.includes(row), generated: current?.generated?.get(row), values: current?.rows[row] } : { kind: "new" };
-  }, []);
+  const rowOf = useCallback((row: number): RowContext => rowContextOf(latest.current.shown, latest.current.edits, row), []);
 
   const accessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target): EditAccess => {
     const { readOnlyReason: reason, busy: running, saving: writing } = latest.current;
@@ -567,6 +579,17 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       release();
     }
   }, [ensureTarget, valueAt, completeValues, putEdits, setActive, say, hold, moved, subject]);
+
+  /**
+   * RN-EDIT-015: Ctrl+Alt+Insert e Alt+Delete, na linha da célula ativa. O que a barra mostraria desabilitado (sem célula ativa, o resultado só leitura,
+   * a aba ocupada…) vai à faixa, com o motivo dela; o resto a ação confere, e a primeira tentativa pergunta o alvo.
+   */
+  const rowAction = useCallback((id: "duplicateRow" | "deleteRow") => {
+    const reason = barOf(latest.current).find((button) => button.id === id)?.reason ?? null;
+    const cell = latest.current.active;
+    if (reason !== null || cell === null) return say(reason);
+    void (id === "duplicateRow" ? duplicateRow(cell.row) : removeRow(cell.row));
+  }, [say, duplicateRow, removeRow]);
 
   const undo = useCallback((cell: GridCell) => {
     // O recado da faixa é da última tentativa (o aviso do "Duplicar linha" fica até a próxima ação de edição, RN-EDIT-016).
@@ -853,13 +876,19 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCopy: (cell) => void copyCell(cell),
           onSave: () => void save(),
           onNewRow: () => void newRow(),
-          onDuplicateRow: () => {
-            const cell = latest.current.active;
-            if (cell !== null) void duplicateRow(cell.row);
-          },
-          onDeleteRow: () => {
-            const cell = latest.current.active;
-            if (cell !== null) void removeRow(cell.row);
+          onDuplicateRow: () => rowAction("duplicateRow"),
+          onDeleteRow: () => rowAction("deleteRow"),
+          bar: {
+            buttons: barOf({ shown, edits, readOnlyReason, target, busy, saving, active }),
+            onAction: (id: EditBarAction) => {
+              // RN-EDIT-014: cada botão faz o que o item de mesmo nome do menu faz, sobre a célula ativa ("Editar célula" é o F2).
+              const cell = latest.current.active;
+              if (id === "newRow") return void newRow();
+              if (cell === null) return;
+              if (id === "edit") openEditor(cell);
+              else if (id === "duplicateRow") void duplicateRow(cell.row);
+              else void removeRow(cell.row);
+            },
           },
           ...(filter === undefined
             ? {}

@@ -1,3 +1,4 @@
+import type { EditBarAction, EditBarButton } from "./edit-bar";
 import type { GridCell } from "./grid-cursor";
 import type { QueryRow } from "./query.schema";
 import type { ChangeOrigin, EditValue, PendingEdits } from "./record-edits";
@@ -58,6 +59,11 @@ export type GridEditing = {
    * "Filtrar por valor…" (`values`). Só existe na grade que tem campo de filtro.
    */
   onFilter?: (cell: GridCell, point: { x: number; y: number }, mode: "menu" | "values") => void;
+  /**
+   * RN-EDIT-013 e 014: a barra de edição, com os quatro botões (`editBar`) e o que cada um faz sobre a célula ativa. A área de resultado a desenha onde a
+   * grade tem a edição: no rodapé dos Registros e numa linha própria sob a grade do resultado da aba de consulta e das abas do script.
+   */
+  bar: { buttons: readonly EditBarButton[]; onAction: (id: EditBarAction) => void };
 };
 
 /**

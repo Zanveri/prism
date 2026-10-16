@@ -67,21 +67,23 @@ function tableAccess(readOnly: string | null, target: EditTarget | null, busy: b
 /**
  * RN-EDIT-002: a célula se edita quando o resultado e a tabela da coluna se editam, a coluna se edita, a linha não está marcada para exclusão e,
  * na linha lida, nem a célula nem a chave da tabela dela chegaram cortadas, foram preenchidas pelo banco num Salvar (RN-EDIT-009) ou vieram
- * nulas (junção externa sem linha). Sem o alvo (ainda não perguntado) a resposta é "pode", e quem decide de verdade é a primeira tentativa, que
- * pergunta.
+ * nulas (junção externa sem linha). Sem o alvo (ainda não perguntado), o que depende do catálogo (a tabela, a coluna e a chave) é "pode", e quem
+ * decide de verdade é a primeira tentativa, que pergunta; o que a linha já diz (marcada para exclusão, a célula cortada, a célula que o banco
+ * preencheu) vale desde o começo (RN-EDIT-014), sem a consulta.
  */
 export function cellAccess({ readOnly, target, busy, column, row }: CellContext): EditAccess {
   const table = target === null ? null : tableOf(target, column);
   const access = tableAccess(readOnly, target, busy, table);
-  if (access === null) return allowed;
-  if (!access.editable) return access;
+  if (access !== null && !access.editable) return access;
 
-  const info = target!.columns[column];
-  if (info === undefined || !info.editable || table === null) return denied(info?.reason ?? copy.reasons.noRowOperations);
+  if (target !== null) {
+    const info = target.columns[column];
+    if (info === undefined || !info.editable || table === null) return denied(info?.reason ?? copy.reasons.noRowOperations);
+  }
   if (row.kind === "new") return allowed;
   if (row.deleted) return denied(copy.reasons.deleted);
   if (row.truncated?.has(column) === true) return denied(copy.reasons.truncated);
-  const key = keyUnknown(target!, table, row);
+  const key = target === null || table === null ? null : keyUnknown(target, table, row);
   if (key !== null) return denied(key);
   if (row.generated?.has(column) === true) return denied(copy.reasons.generated);
 
