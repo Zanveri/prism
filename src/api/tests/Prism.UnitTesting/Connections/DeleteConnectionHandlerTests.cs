@@ -6,6 +6,7 @@ using Prism.Application.Connections.Models;
 using Prism.Application.Connections.Repositories;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Databases.Services;
+using Prism.Infrastructure.Transfers.Services;
 using Prism.Infrastructure.Vault.Models;
 using System.Net;
 
@@ -15,10 +16,11 @@ public sealed class DeleteConnectionHandlerTests
 {
     private readonly Mock<IConnectionRepository> _connectionRepository = new();
     private readonly Mock<IDatabaseSessionService> _databaseSessionService = new();
+    private readonly Mock<ITransferService> _transferService = new();
 
-    /// <summary>RN-CONN-014: a conexão excluída tem as sessões abertas dela encerradas, depois de a exclusão estar gravada.</summary>
+    /// <summary>RN-CONN-014: a conexão excluída tem as sessões abertas dela encerradas e as exportações dela canceladas (RN-EXPORT-016), depois de a exclusão estar gravada.</summary>
     [Trait("DeleteConnectionHandler", "DeleteConnectionCommand")]
-    [Fact(DisplayName = "OK exclui a conexão e encerra as sessões dela")]
+    [Fact(DisplayName = "OK exclui a conexão, encerra as sessões dela e cancela as exportações dela")]
     public async Task Handle_ShouldBeOK()
     {
         //Arrange
@@ -26,7 +28,7 @@ public sealed class DeleteConnectionHandlerTests
         var command = new DeleteConnectionCommand(Guid.CreateVersion7());
         _connectionRepository.Setup(r => r.Delete(command.ID, cancellationToken)).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
         _databaseSessionService.Setup(s => s.CloseByConnectionAsync(command.ID)).Returns(Task.CompletedTask);
-        var handler = new DeleteConnectionHandler(_connectionRepository.Object, _databaseSessionService.Object);
+        var handler = new DeleteConnectionHandler(_connectionRepository.Object, _databaseSessionService.Object, _transferService.Object);
 
         //Act
         var result = await handler.Handle(command, cancellationToken);
@@ -35,8 +37,10 @@ public sealed class DeleteConnectionHandlerTests
         Assert.True(result.IsSuccess);
         _connectionRepository.Verify(r => r.Delete(command.ID, cancellationToken), Times.Once);
         _databaseSessionService.Verify(s => s.CloseByConnectionAsync(command.ID), Times.Once);
+        _transferService.Verify(s => s.CancelByConnection(command.ID), Times.Once);
         _connectionRepository.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();
+        _transferService.VerifyNoOtherCalls();
     }
 
     /// <summary>Que a conexão exista é dito só pela gravação, onde o cofre fechado vira 401, e não 404.</summary>
@@ -48,7 +52,7 @@ public sealed class DeleteConnectionHandlerTests
         var cancellationToken = new CancellationToken();
         var command = new DeleteConnectionCommand(Guid.CreateVersion7());
         _connectionRepository.Setup(r => r.Delete(command.ID, cancellationToken)).ReturnsAsync(UnitResult.Failure(ConnectionErrors.NotFound(command.ID)));
-        var handler = new DeleteConnectionHandler(_connectionRepository.Object, _databaseSessionService.Object);
+        var handler = new DeleteConnectionHandler(_connectionRepository.Object, _databaseSessionService.Object, _transferService.Object);
 
         //Act
         var result = await handler.Handle(command, cancellationToken);
@@ -61,6 +65,7 @@ public sealed class DeleteConnectionHandlerTests
         _databaseSessionService.Verify(s => s.CloseByConnectionAsync(It.IsAny<Guid>()), Times.Never);
         _connectionRepository.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();
+        _transferService.VerifyNoOtherCalls();
     }
 
     [Trait("DeleteConnectionHandler", "DeleteConnectionCommand")]
@@ -71,7 +76,7 @@ public sealed class DeleteConnectionHandlerTests
         var cancellationToken = new CancellationToken();
         var command = new DeleteConnectionCommand(Guid.CreateVersion7());
         _connectionRepository.Setup(r => r.Delete(command.ID, cancellationToken)).ReturnsAsync(UnitResult.Failure(VaultErrors.From(EVaultError.Locked)));
-        var handler = new DeleteConnectionHandler(_connectionRepository.Object, _databaseSessionService.Object);
+        var handler = new DeleteConnectionHandler(_connectionRepository.Object, _databaseSessionService.Object, _transferService.Object);
 
         //Act
         var result = await handler.Handle(command, cancellationToken);
@@ -84,5 +89,6 @@ public sealed class DeleteConnectionHandlerTests
         _databaseSessionService.Verify(s => s.CloseByConnectionAsync(It.IsAny<Guid>()), Times.Never);
         _connectionRepository.VerifyNoOtherCalls();
         _databaseSessionService.VerifyNoOtherCalls();
+        _transferService.VerifyNoOtherCalls();
     }
 }
