@@ -128,9 +128,31 @@ export function engineOption(engine: Engine) {
 
 const portMessage = "Informe uma porta de 1 a 65535.";
 
+/**
+ * RN-PASTA-001 e RN-CONN-010: os caracteres de controle (U+0000 a U+001F e U+007F a U+009F) e os de direção do texto (U+200E, U+200F, U+202A a U+202E e U+2066
+ * a U+2069), que um nome, um host, um banco de dados, um usuário ou um ambiente não têm: um U+202E faria o host que a prévia da importação manda conferir
+ * parecer outro (RN-TRANSF-014). A tela e a API conferem do mesmo jeito.
+ */
+const controlOrBidi = /[\p{Cc}\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
+/** O espaço que a normalização de um nome (a da API, `NormalizeName`) junta num espaço só: a tabulação e a quebra de linha num nome viram espaço, e não são recusadas. */
+const nameSpaces = /[\t\n\v\f\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]+/gu;
+
+/** O texto passa, quanto aos caracteres de controle e de direção, depois da normalização do campo (`asName`: a do nome, que junta os espaços). */
+export function withoutControl(value: string, asName = false): boolean {
+  return !controlOrBidi.test(asName ? value.replace(nameSpaces, " ") : value);
+}
+
+/** A frase da recusa, com o nome do campo (RN-CONN-010). */
+const controlMessage = (field: string) => `${field} não pode ter caractere de controle nem de direção do texto.`;
+
 /** O ambiente do formulário (RN-CONN-010), o mesmo na conexão e na pasta (RN-PASTA-005): o nome em branco e a cor vazia viram `null`. */
 const environmentFields = {
-  environmentName: z.string().trim().max(30, "O ambiente pode ter no máximo 30 caracteres.").transform(emptyToNull),
+  environmentName: z
+    .string()
+    .trim()
+    .max(30, "O ambiente pode ter no máximo 30 caracteres.")
+    .refine((value) => withoutControl(value, true), controlMessage("O nome do ambiente"))
+    .transform(emptyToNull),
   environmentColor: z.string().regex(/^(#[0-9a-fA-F]{6})?$/, "Use uma cor no formato #RRGGBB.").transform(emptyToNull),
 };
 
@@ -165,25 +187,37 @@ const verificationFields = {
   verificationQuery: z.string().trim().max(1000, "A consulta de verificação pode ter no máximo 1.000 caracteres.").transform(emptyToNull),
 };
 
-/** Os campos do formulário de conexão (RN-CONN-010), como o `FormData` os entrega: tudo texto. */
+/**
+ * Os campos do formulário de conexão (RN-CONN-010), como o `FormData` os entrega: tudo texto. O host tem até 255 caracteres, o banco de dados e o usuário até
+ * 128 (contados depois de aparados, que é o que se grava), e nenhum deles, nem o nome, tem caractere de controle ou de direção do texto: são as regras da
+ * importação também (RN-TRANSF-014), para o arquivo que o Prism exporta voltar por ela.
+ */
 const connectionFields = z.object({
   engine: z.coerce.number().pipe(engineSchema),
-  name: z.string().trim().min(1, "Informe o nome da conexão.").max(80, "O nome pode ter no máximo 80 caracteres."),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Informe o nome da conexão.")
+    .max(80, "O nome pode ter no máximo 80 caracteres.")
+    .refine((value) => withoutControl(value, true), controlMessage("O nome da conexão")),
   folderID: z.string().transform(emptyToNull),
-  host: z.string().trim().min(1, "Informe o host."),
+  host: z.string().trim().min(1, "Informe o host.").max(255, "O host pode ter até 255 caracteres.").refine((value) => withoutControl(value), controlMessage("O host")),
   port: z.string().trim().regex(/^\d+$/, portMessage).transform(Number).pipe(z.number().min(1, portMessage).max(65535, portMessage)),
-  database: z.string().trim().min(1, "Informe o banco de dados."),
-  userName: z.string().trim().min(1, "Informe o usuário do banco."),
+  database: z.string().trim().min(1, "Informe o banco de dados.").max(128, "O banco de dados pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O banco de dados")),
+  userName: z.string().trim().min(1, "Informe o usuário do banco.").max(128, "O usuário do banco pode ter até 128 caracteres.").refine((value) => withoutControl(value), controlMessage("O usuário do banco")),
   ...environmentFields,
   ...protectionFields,
   ...verificationFields,
 });
 
+/** A senha do banco tem até 1.024 caracteres, contados como veio (RN-CONN-010): ela não é aparada. */
+const passwordMessage = "A senha do banco pode ter até 1.024 caracteres.";
+
 /** Na criação a senha é obrigatória. Não é aparada: espaço nas pontas faz parte dela. */
-export const createConnectionSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.") });
+export const createConnectionSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.").max(1024, passwordMessage) });
 
 /** Na edição a senha vazia vira `null`, e a API mantém a gravada (RN-CONN-004). */
-export const editConnectionSchema = connectionFields.extend({ password: z.string().transform(emptyToNull) });
+export const editConnectionSchema = connectionFields.extend({ password: z.string().max(1024, passwordMessage).transform(emptyToNull) });
 
 /** RN-NAV-009: o diálogo de renomear conexão, só com o nome, na regra do formulário. */
 export const renameConnectionSchema = connectionFields.pick({ name: true });
@@ -211,7 +245,13 @@ export type ConnectionInput = z.output<typeof editConnectionSchema>;
 /** A senha do usuário no diálogo de revelar. Como no login, não se apara nem se impõe regra de criação. */
 export const revealPasswordSchema = z.object({ password: z.string().min(1, "Informe a sua senha do Prism.") });
 
-const folderName = z.string().trim().min(1, "Informe o nome da pasta.").max(60, "O nome pode ter no máximo 60 caracteres.");
+/** RN-PASTA-001: o nome da pasta, de 1 a 60, sem caractere de controle nem de direção do texto (depois da normalização, que junta os espaços). */
+const folderName = z
+  .string()
+  .trim()
+  .min(1, "Informe o nome da pasta.")
+  .max(60, "O nome pode ter no máximo 60 caracteres.")
+  .refine((value) => withoutControl(value, true), "O nome da pasta não pode ter caractere de controle nem de direção do texto.");
 
 /**
  * Criar uma pasta: o nome, onde ela fica (`""` é a raiz), a cor do ícone dela (RN-PASTA-007, no formato da cor do ambiente), o ambiente (RN-PASTA-005) e as
