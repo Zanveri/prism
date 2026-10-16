@@ -1386,7 +1386,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
   `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
   `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
-  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Linha nova e Excluir linha, os rótulos da RN-EDIT-001; o que não se aplica vem desabilitado,
+  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Adicionar linha, Duplicar linha e Excluir linha, os rótulos da RN-EDIT-001 (até a
+  seção 33, "Adicionar linha" se chamava "Linha nova"; as marcas da linha nova na grade continuam com esse nome); o que não se aplica vem desabilitado,
   com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, Tab) e `grid-editing.ts` (as linhas e as
   marcas que a grade desenha). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
   central pelo cache de mutações) e os esquemas, `record-edits.schema.ts`. A página traz `resultID` e o motivo de só leitura (`QueryPage.resultId` e
@@ -1398,7 +1399,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: setas, Home e End (com Ctrl,
     da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
     as alterações quando há alguma (`savesEdits`; sem nenhuma, ou com Shift, a tecla segue para o script da aba de consulta, RN-SCRIPT-001),
-    Alt+Insert cria a linha. A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
+    Alt+Insert adiciona a linha, Ctrl+Alt+Insert a duplica e Alt+Delete a exclui (ver "A barra de edição, o duplicar e os atalhos da linha", abaixo). A grade
+    rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
@@ -1429,7 +1431,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     ficam como estavam): o `edit-target` diz a tabela de cada coluna (`columns[].table`) e a chave de cada tabela, e cada coluna se edita na
     tabela de onde veio (`cell-editing.ts`: `cellAccess` olha a tabela DA COLUNA, e numa tabela só, sempre a 0, como antes; a chave cortada,
     gerada ou NULA vale por tabela, e a nula é a junção externa sem linha ali, "<tabela> não tem linha aqui (junção externa)", pelos valores
-    da linha em `RowContext.values`). "Linha nova" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
+    da linha em `RowContext.values`). "Adicionar linha", "Duplicar linha" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
     (`isJoin`: mais de uma tabela). **A linha repetida** (a mesma linha de uma tabela em várias linhas da grade): a célula alterada guarda
     `change`, a linha da tabela (`changeKeyOf`: a tabela e os textos da chave, em JSON), e `editCell`/`undoCell` com `change` acham a pendência
     por ela em qualquer linha que a mostre; `linkedCells` repete a pendência nas outras linhas para a grade, o valor da célula, o menu e a
@@ -1445,6 +1447,60 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     `pallets_items` do pedido): o SELECT do dono (`pallets_items.*` numa junção de três) com `id` "somente leitura" e "Linha nova"/"Excluir
     linha" desabilitados no menu; uma junção com colunas de duas tabelas, a edição de uma célula de cada (a descrição do item repetido mudou nas
     duas linhas dele), o "Ver SQL" com os dois `UPDATE`, o Salvar ("2 alterações salvas.") e a releitura com os valores novos.
+  - **A barra de edição, o duplicar e os atalhos da linha** (seção 33, RN-EDIT-013 a 016; o canvas não desenha a barra, seção 9). As decisões são puras, com
+    teste: `edit-bar.ts` (`editBar`: os quatro botões, "Editar célula", "Adicionar linha", "Duplicar linha" e "Excluir linha", cada um com o atalho da
+    plataforma e o motivo de não valer, o primeiro na ordem da RN-EDIT-014: o resultado inteiro só leitura, pelo `resultReadOnly` (a página, a conexão
+    somente leitura e o catálogo que diz que nenhuma tabela se edita: os três são "o resultado inteiro só leitura" da regra, e desabilitam os quatro com o
+    motivo da barra do resultado, também sem célula ativa, em vez de "Editar célula" pedir uma célula); a aba ocupada (o Salvar também) e a atualização automática; o `rowOperations` falso para os três
+    de linha (`newRowAccess`); a célula ativa para "Editar célula" (`cellAccess`); a chave que não se sabe e a linha já marcada para "Excluir linha"
+    (`deleteRowAccess`, que passou a recusar a linha riscada, também sem o alvo); e, por último, a grade sem linhas e a falta de célula ativa, que não são de
+    só leitura e vêm sem o "Somente leitura:"), `duplicate-row.ts` (`duplicatePlan`: o que a duplicada copia, o que fica com o padrão e a chave copiada) e
+    `grid-editing.ts` (`rowShortcut` e `editShortcuts`). **Habilitar não custa consulta** (RN-EDIT-010): sem o alvo, o que depende do catálogo (a tabela, a
+    coluna, a chave, o `rowOperations`) vale, e a primeira tentativa pergunta, como o menu; a recusa vai à faixa e, com o alvo guardado, o botão passa a
+    dizê-la. O que a linha já diz não espera o catálogo (RN-EDIT-014: "desde o começo, com o motivo, quando ele já é sabido"): `cellAccess` recusa sem o
+    alvo a linha marcada para exclusão, a célula cortada e a que o banco preencheu numa linha nova salva, e `deleteRowAccess`, a linha já marcada. A barra é desenhada pelo contrato da edição
+    (`GridEditing.bar`: os botões e a ação), que `useRecordEdits` monta a cada renderização (`barOf`, sobre o estado da tela, com a célula ativa só numa
+    linha que existe); quem a põe na tela é a `ResultPanel`, só onde a grade recebe a edição e com a grade no corpo (também sem nenhuma linha, e com outro
+    comando rodando, desabilitada): nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, numa linha própria (`border-t`,
+    alinhada à esquerda) entre a grade e os rodapés ("Carregar mais", o cursor fechado, a nota da aba guardada). A aba guardada do script não recebe a
+    edição (`kept`), e por isso hoje não tem barra: quando ela passar a receber, a barra vem junto. Recolhida, a área esconde a barra com o corpo (`inert`).
+    - **O componente** (`edit-bar.tsx`, `EditBar`): `role="toolbar"` com o nome "Edição da grade", uma parada de tabulação só (o último botão com o foco,
+      de começo "Editar célula") e as setas, Home e End pelo `stripKeyTarget`, como a barra de ações do navegador. Os botões são os da área de resultado
+      (`Button` `secondary` `compact`, `h-7 px-2.5 text-xs`), com o ícone do traço do canvas (`PencilIcon`, `PlusIcon`, `DuplicateIcon` e o `CloseIcon` em
+      `text-danger`) e o texto; o que não vale usa `aria-disabled` (fica nas setas e com o foco), com a dica `"<botão> (<atalho>). <motivo>"` e o motivo num
+      `sr-only` ligado por `aria-describedby`; cada um declara `aria-keyshortcuts`. Depois do clique o foco volta à grade (`onDone`, que a área liga ao
+      `[role="grid"]` dela); no "Editar célula" o campo nasce com o foco e o devolve à grade ao fechar. Clicar com o campo aberto o confirma antes (o campo
+      confirma ao perder o foco, no `mousedown` do botão).
+    - **O que cada botão faz** é o item de mesmo nome do menu, sobre a célula ativa (`bar.onAction`): `openEditor`, `newRow`, `duplicateRow` e `removeRow`,
+      com a mesma pausa da atualização automática desde o começo (`hold`) e o mesmo descarte quando o resultado mudou no meio (`moved`). Tirada uma linha
+      nova, a célula ativa passa à que ficou no lugar dela, ou à de cima quando ela era a última, e some sem linha nenhuma (`removeRow`). A linha nova que
+      `removeRow` tira é seguida pelo id, e não pela posição: dois "Excluir linha" seguidos enquanto o alvo é perguntado (o duplo clique), o "Descartar"
+      ou o "Carregar mais" no meio mudam a linha daquela posição, e a segunda exclusão não tira a linha nova que passou ao lugar da primeira.
+    - **Os atalhos** (`rowShortcut`, conferido no `handleKeyDown` da grade antes das setas): Alt+Insert adiciona, Ctrl+Alt+Insert duplica (a mesma tecla, o
+      Ctrl decide: antes o ramo do Alt+Insert casava também o Ctrl+Alt+Insert e o Shift+Alt+Insert) e Alt+Delete exclui a linha da célula ativa, com os
+      modificadores exatos; com Shift, nada. O AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica e o Delete não faz nada. No macOS (`navigator.platform`)
+      o Option faz o papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o
+      Backspace (a tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
+      `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
+      (`rowAction`). O Delete sozinho continua sem excluir: espera a seleção de linhas (RN-GRADE-001).
+    - **Duplicar linha** (`duplicateRow`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), uma linha nova no fim da grade
+      (`addRow` com as colunas copiadas), com o valor que a tela mostra de cada coluna da tabela que se edita (a pendência também, o nulo como nulo; na
+      linha marcada para exclusão, o lido; numa linha nova de origem, só o que ela tinha). Não copia a que o banco gera, "sempre" ou "por padrão"
+      (`generated`, que no PostgreSQL a API passou a dar também ao `serial`), a que não se edita e, na linha nova já salva, a que o banco preencheu; a
+      calculada no comando não é da tabela e não entra na lista. A coluna da tabela que o resultado traz duas vezes (`SELECT id, id AS copia`) se copia uma
+      vez, pela primeira que se copia, e a repetição não entra na lista: o `INSERT` não leva a mesma coluna duas vezes (o `EditPlanner` da API recusa). A
+      célula cortada vai com o valor completo (`completeValues`, a faixa com "Buscando os valores completos…" e "Cancelar"); o valor que não vem (o teto, a
+      sessão que caiu, `RESULT_NOT_FOUND`) e a busca cancelada não duplicam nada, e a faixa diz por quê ("Atualize os registros" nos Registros,
+      `subject: "table"`; "Execute o comando de novo" no resultado). A busca de um "Duplicar linha" seguinte (o duplo clique no botão) cancela a do
+      anterior, que sai calado (`duplicating`): só o "Cancelar" da pessoa diz que a busca foi cancelada. Depois da busca valem as
+      pendências e as linhas de AGORA (a grade ficou livre). A célula ativa vai à primeira coluna editável, ou, com a chave copiada inteira, à coluna dela
+      mais à esquerda. **Os avisos da faixa** (a chave copiada e as colunas que ficaram com o padrão) e as recusas do duplicar usam o tom de atenção
+      (`say(…, "warning")`, `EditsBanner.noticeTone`: o triângulo `AlertIcon` no lugar do cadeado, que fica para os motivos de só leitura) e duram até a
+      próxima ação de edição, o Salvar ou o Descartar (o "Desfazer alteração" passou a limpar o recado, como as outras ações).
+    - **Não conferido na tela**: nada disto foi visto numa janela (não há Xvfb nem banco nesta máquina), só nos testes. A linha da barra no resultado de um
+      comando fica ACIMA do rodapé ("Carregar mais", "Executar de novo"), entre 69 e 110 px da borda de baixo da janela, e a pilha de avisos (`bottom-20`, 380 px
+      à direita) começa a 80 px: numa janela estreita um aviso pode cobrir "Duplicar linha" ou "Excluir linha" enquanto dura. Medir com o
+      `document.elementFromPoint`, como em "Avisos e mensagens", e, se cobrir, subir a pilha quando a barra está na tela.
 - **Valor completo das células cortadas** (RN-SQL-017, RN-GRADE-002): a grade continua mostrando o valor cortado (RN-SQL-011), e copiar e
   exportar levam o completo, que a API guarda em memória e devolve por `POST .../results/{resultID}/cells` (`full-values.service.ts`,
   `resultCells`: nunca lança, e acha cada valor pela posição que a resposta diz). As decisões são de `_lib/full-values.ts`, pura, com teste:
@@ -1456,8 +1512,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   central; o resto (a API fora do ar) passa pelo cache de mutações (RN-AVISO-004). O valor sem completo vai cortado, e o aviso diz quantos
   (`recordsCopy.edit.menu.copiedCut` na cópia, `workbenchCopy.tableTab.records.exportedCut` no CSV).
   - **Onde vale**: Ctrl+C com o foco na grade copia a célula ativa (`copiesCell`, em `grid-editing.ts`; com Shift é o copiar avançado e segue),
-    "Copiar valor" do menu da célula, e "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
-    como antes). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
+    "Copiar valor" do menu da célula, "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
+    como antes) e "Duplicar linha" (as cortadas das colunas que ela copia; o que não vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
     nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
     passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
   - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
@@ -1628,7 +1684,8 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   desmontada (a aba de consulta lê `useWorkbenchOnScreen` ela mesma, para não mexer em `workbench-tabs.tsx`; a de tabela recebe `visible`); `useRecordEdits`
   põe a da edição com alteração não salva, célula aberta, menu da célula, "Filtrar por valor…" ou o campo do "Personalizado" abertos; `handOffTab` põe a da
   ida para outra janela. Ao sair da pausa, executa na hora se o prazo passou. **A pausa da edição vale desde o começo da ação**: o duplo clique, o menu, a
-  linha nova, "Excluir linha" e o "Colar" (com a leitura da área de transferência) perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
+  linha nova, "Duplicar linha" (também durante a busca dos valores completos), "Excluir linha" e o "Colar" (com a leitura da área de transferência), pelo
+  menu, pela barra de edição ou pelo atalho (seção 33), perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
   saísse nesse meio-tempo trocava as linhas e a ação caía em OUTRA linha do banco. `hold()` põe a pausa na hora e a solta por um estado (`released`), numa
   renderização em que o campo ou o menu já contam, sem um instante livre; depois da pergunta, `moved(from)` (a última renderização e o executor lido na
   hora) descarta a ação se o resultado mudou; `ensureTarget` não põe o alvo de um resultado que saiu no `latest`; e o menu é do resultado em que abriu
