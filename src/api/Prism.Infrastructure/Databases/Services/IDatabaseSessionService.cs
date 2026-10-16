@@ -98,6 +98,15 @@ public interface IDatabaseSessionService
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-SQL-024: o mesmo, com os resultados que a aba continua mostrando (`keep`, os `resultID` das abas do script). Quando o comando vai ao
+    /// banco (dê certo ou não, também desfeito com `Executed`), a sessão guarda, entre o resultado atual e os já guardados, os da lista, só com o
+    /// que a edição precisa (as colunas, a leitura do texto e o alvo, nunca as linhas nem os valores completos), e esquece os outros; o
+    /// identificador que ela não conhece é ignorado. A recusa antes de ir ao banco não muda nada. É o que a Application usa; as sobrecargas sem
+    /// `keep` esquecem os guardados, como a execução que não é do script.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, CancellationToken cancellationToken);
+
+    /// <summary>
     /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é
     /// um `SELECT` que a leitura do comando reconheça; a página diz como (`FilterApplied`), e o comando embrulhado é só leitura. O
     /// comando montado é o que roda, o que o "contar total" conta e o que a edição lê; a falha do banco vem sem a posição do erro, que
@@ -132,19 +141,22 @@ public interface IDatabaseSessionService
     UnitResult<DatabaseFailure> Cancel(Guid sessionID);
 
     /// <summary>
-    /// RN-EDIT-002, 003 e 010: o que se edita no resultado `resultID` da sessão, pelo catálogo, uma vez por resultado. A consulta vai na
-    /// sessão `catalogSessionID` (a da árvore da mesma conexão e do mesmo banco), esperando a vez nela, ou numa conexão à parte, com
-    /// prazo de espera de trava; nunca na sessão do resultado, cujo cursor continua aberto. Outro resultado na sessão: `ResultChanged`;
-    /// o resultado inteiro só leitura: `ResultNotEditable`, com o motivo.
+    /// RN-EDIT-002, 003 e 010: o que se edita no resultado `resultID` da sessão (o atual ou um guardado, RN-SQL-024), pelo catálogo, uma vez
+    /// por resultado. A consulta vai na sessão `catalogSessionID` (a da árvore da mesma conexão e do mesmo banco), esperando a vez nela, ou
+    /// numa conexão à parte, com prazo de espera de trava; nunca na sessão do resultado, cujo cursor continua aberto. Um resultado que não é o
+    /// atual nem um guardado: `ResultChanged`; no Db2 e no Informix, também o guardado com uma tabela sem esquema depois de um comando que pode
+    /// trocar o esquema atual da sessão (RN-SQL-024); o resultado inteiro só leitura: `ResultNotEditable`, com o motivo.
     /// </summary>
     Task<Result<EditTarget, DatabaseFailure>> GetEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, CancellationToken cancellationToken);
 
-    /// <summary>RN-EDIT-008: os comandos que o "Salvar" executaria, com os valores como literais, sem executar nada.</summary>
+    /// <summary>RN-EDIT-008: os comandos que o "Salvar" executaria, com os valores como literais, sem executar nada. O resultado é o atual ou um guardado, como no `edit-target`.</summary>
     Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 
     /// <summary>
     /// RN-EDIT-005, 011 e 012: o "Salvar", na sessão do resultado, sem esperar a vez (`SessionBusy`). Confere o catálogo dentro da
-    /// transação: se a tabela mudou desde o `edit-target`, `ResultChanged`, e nada é executado. Devolve quantas alterações gravou.
+    /// transação: se a tabela mudou desde o `edit-target`, `ResultChanged`, e nada é executado. Devolve quantas alterações gravou. O resultado é
+    /// o atual ou um guardado, como no `edit-target` (RN-SQL-024): o de um guardado fecha o cursor do atual, que continua o atual, com os
+    /// valores completos dele, e os guardados continuam guardados.
     /// </summary>
     Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 }

@@ -719,7 +719,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>RN-ARVORE-006: o banco da sessão sobe para o começo; os outros ficam na ordem de nome em que o banco os devolveu.</summary>
     public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken)
-        => RunAsync(nameof(DescribeEditTablesAsync), EDatabaseFailure.ExecutionFailed, token => DescribeCoreAsync(tables, token), cancellationToken);
+        => RunAsync(nameof(DescribeEditTablesAsync), EDatabaseFailure.ExecutionFailed, token => DescribeCoreAsync(tables, inTheSession: false, token), cancellationToken);
 
     public async Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
         => await RunAsync(nameof(LimitLockWaitAsync), EDatabaseFailure.ExecutionFailed, async token =>
@@ -749,7 +749,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             if (!oneAtATime)
                 _editTransaction = await _connection!.BeginTransactionAsync(token);
 
-            var planned = plan(await DescribeCoreAsync(tables, token));
+            var planned = plan(await DescribeCoreAsync(tables, inTheSession: true, token));
             if (planned.IsFailure)
                 return Result.Failure<int, DatabaseFailure>(planned.Error);
 
@@ -922,7 +922,14 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// nome dela (e o esquema, quando o comando o escreveu): o caminho de busca que valeu foi o da sessão da aba, e não o desta conexão.
     /// A que não está entre elas (nenhuma coluna do resultado vem dela) é procurada pelo nome; a escrita duas vezes do mesmo jeito, uma vez.
     /// </summary>
-    private async Task<IReadOnlyList<EditCatalogTable?>> DescribeCoreAsync(EditTables tables, CancellationToken cancellationToken)
+    /// <param name="inTheSession">
+    /// É a sessão do resultado (o "Salvar", dentro da transação). RN-SQL-024: no PostgreSQL, a tabela escrita sem esquema achada pelo
+    /// identificador tem de ser a mesma a que o nome leva AGORA pelo caminho de busca desta sessão; se ele leva a outra (um `SET search_path`
+    /// depois de um resultado guardado), ou a nenhuma, ela vem como <see cref="EditCatalogTable.Elsewhere"/>, e as colunas dela ficam só
+    /// leitura. Fora da sessão (o catálogo do `edit-target`, na sessão da árvore ou numa conexão à parte) o caminho de busca é outro, e o
+    /// nome não diz nada.
+    /// </param>
+    private async Task<IReadOnlyList<EditCatalogTable?>> DescribeCoreAsync(EditTables tables, bool inTheSession, CancellationToken cancellationToken)
     {
         var reported = new List<EditCatalogTable>();
         foreach (var id in tables.Relations.Distinct())
@@ -936,6 +943,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         foreach (var table in tables.Names)
         {
             var found = reported.FirstOrDefault(relation => relation.Name == table.Name && (table.Schema is null || relation.Schema == table.Schema));
+            if (found is not null && inTheSession && table.Schema is null && await RelationIdAsync(table, cancellationToken) != found.Id)
+                found = found with { Kind = EditCatalogTable.Elsewhere };
+
             if (found is null && !described.TryGetValue(table, out found))
                 described[table] = found = await DescribeCoreAsync(EditRelationQuery(table), cancellationToken);
 
@@ -943,6 +953,15 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         }
 
         return catalogs;
+    }
+
+    /// <summary>O identificador da tabela a que o nome leva agora, nesta sessão (<see cref="EditRelationQuery"/>); nulo quando não leva a nenhuma.</summary>
+    private async Task<long?> RelationIdAsync(EditTableName table, CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = EditRelationQuery(table);
+        var ids = await ReadAllAsync(sql, parameters, reader => reader.IsDBNull(3) ? (long?)null : Convert.ToInt64(reader.GetValue(3), CultureInfo.InvariantCulture), cancellationToken);
+
+        return ids.Count == 0 ? null : ids[0];
     }
 
     private async Task<EditCatalogTable?> DescribeCoreAsync((string Sql, IReadOnlyList<object> Parameters) query, CancellationToken cancellationToken)

@@ -52,6 +52,7 @@ internal static class EditTargetResolver
                 "view" => $"{name} é uma visão",
                 "materializedView" => $"{name} é uma visão materializada",
                 "foreign" => $"{name} é uma tabela estrangeira",
+                EditCatalogTable.Elsewhere => $"{name}, escrita sem esquema, leva agora a outra tabela na sessão",
                 _ => $"{name} não é uma tabela"
             };
 
