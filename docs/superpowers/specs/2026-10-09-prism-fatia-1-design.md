@@ -1115,8 +1115,9 @@ Só da tela:
   nenhuma aba (o tempo conta a partir do fim do último; a execução da atualização automática,
   RN-GRADE-014, não conta como comando em andamento nem como atividade, pedido do dono em
   2026-10-15, issue #11; o script conta enquanto roda, e não enquanto espera a resposta da
-  pergunta de erro, RN-SQL-021), o Prism avisa 60 segundos antes (30, quando o
-  tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
+  pergunta de erro, RN-SQL-021; a verificação periódica das conexões, RN-VERIF-002, não conta como
+  comando em andamento nem como atividade, e não roda com o cofre bloqueado), o Prism avisa 60
+  segundos antes (30, quando o tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
   mostra o bloqueio, que pede a senha do MESMO usuário. Desbloquear devolve a área de trabalho
   com as abas e o texto de SQL como estavam; os resultados que estavam na tela são descartados
   no bloqueio. O aviso antes do bloqueio diz quantas transações serão desfeitas e quantas
@@ -1131,6 +1132,7 @@ Só da tela:
   mesmo jeito e tenta de novo com espera crescente (cada tentativa com prazo); enquanto tenta,
   "Desbloquear" espera, e a tela diz o que está acontecendo. Se desistir, avisa que o cofre pode
   continuar aberto no serviço, e o desbloqueio continua conferindo a senha lá.
+  *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a verificação periódica.*
 - **RN-TABELA-005.** Registros: um campo de filtro recebe a condição (`WHERE`) que o usuário
   escreve, e clicar no cabeçalho de uma coluna ordena por ela (crescente, decrescente, sem
   ordem). A tela monta o `SELECT` com a condição e a ordem e mostra o comando que executou. A
@@ -1937,7 +1939,8 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   duas fases e transação que atravessa um script de vários comandos. A execução de script entrou pela seção 31 (pedido do dono
   em 2026-10-15) e segue o modo da aba comando a comando, como se cada um fosse executado sozinho (RN-SQL-019); o script que é uma
   transação só, confirmada ou desfeita no fim, continua para depois.
-- **Proteções** da entrega 3 (somente leitura com senha, confirmar comando irreversível), que vão restringir a edição.
+- **Proteções** da entrega 3: entraram pela seção 32 (pedido do dono em 2026-10-15). A restrição da edição é a da RN-PROT-002
+  (nenhuma edição na conexão somente leitura) e a da RN-PROT-001 (o "Salvar" pergunta em "Todos os comandos").
 
 ## 23. Complemento de 2026-10-13: abas que se movem, janelas e scripts salvos
 
@@ -2741,8 +2744,8 @@ ociosidade, que o dono não pediu e continua na seção 13 (o ambiente herdado d
 entrado pela RN-PASTA-005). O canvas desenha os painéis "Proteções" e "Sessão da conexão" do
 formulário da conexão (`Conexoes.dc.html`), as proteções do diálogo da pasta (`PastaAmbiente.dc.html`)
 e o aviso de confirmação (`ConfirmarComando.dc.html`); a seção 9 diz onde esta seção se afasta deles.
-Muda a RN-CONN-010, a RN-CONN-013, a RN-PASTA-005, a RN-EDIT-002, a RN-GRADE-014, a RN-SQL-019 e a
-RN-SQL-021, e as seções 2, 6, 9 e 13.
+Muda a RN-CONN-010, a RN-CONN-013, a RN-PASTA-005, a RN-EDIT-002, a RN-GRADE-014, a RN-SQL-019, a
+RN-SQL-021 e a RN-SEG-001, e as seções 2, 6, 9, 13 e 22.
 
 Quem impõe o somente leitura é a API: ela recusa, antes de qualquer coisa ir ao banco, o comando que
 não é uma leitura. A confirmação é da tela, que pergunta antes de enviar; a API guarda a escolha e
