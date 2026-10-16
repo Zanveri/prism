@@ -198,13 +198,13 @@ describe("a área de resultado do script (RN-SQL-020)", () => {
 describe("a pergunta de erro (RN-SQL-021)", () => {
   const entry = { ...entryAt(finished(), 1), status: "error" as const };
 
-  it("mostra o comando e o erro como veio, e Parar é o padrão (o foco, o Esc e o X)", () => {
+  it("mostra o comando e o erro como veio, e Parar é o padrão (o foco e o Esc); sem o X e sem o clique fora, que parariam o script calados", () => {
     const onChoose = vi.fn();
     const dialog = ScriptErrorDialog({ entry, number: 2, total: 3, onChoose });
     const found = elementsOf(dialog);
-    const props = dialog.props as { title: string; role: string; onClose: () => void };
+    const props = dialog.props as { title: string; role: string; dismissible: unknown; onClose: () => void };
 
-    expect(props).toMatchObject({ title: copy.error.title(2, 3), role: "alertdialog" });
+    expect(props).toMatchObject({ title: copy.error.title(2, 3), role: "alertdialog", dismissible: "escape" });
     expect(found.some((element) => element.props.children === entry.target.sql)).toBe(true);
     expect(found.some((element) => element.props.children === entry.error!.message)).toBe(true);
     expect(found.find((element) => element.props.children === copy.error.stop)?.props.autoFocus).toBe(true);

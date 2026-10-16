@@ -5,6 +5,9 @@ import { cn } from "@/lib/utils/cn";
 
 export type DialogSize = "sm" | "md" | "lg";
 
+/** Como o diálogo se fecha por fora: pelo Esc, pelo clique fora e pelo X (`true`, o padrão), só pelo Esc (`"escape"`) ou por nenhum (`false`). */
+export type DialogDismissal = boolean | "escape";
+
 export type DialogProps = {
   open: boolean;
   title: string;
@@ -17,9 +20,10 @@ export type DialogProps = {
   pending?: boolean;
   /**
    * `false` para o diálogo que só se resolve por um botão dele (o reinício dos drivers): sem o X, e Esc e clique fora não
-   * fecham. A saída, se houver, é um botão do rodapé.
+   * fecham. A saída, se houver, é um botão do rodapé. `"escape"` para o que se fecha só pelo Esc, que tem um sentido dito
+   * (a pergunta de erro do script, RN-SQL-021, em que o Esc é "Parar"): sem o X, e o clique fora não faz nada.
    */
-  dismissible?: boolean;
+  dismissible?: DialogDismissal;
   /** Ações fixas na base; o corpo rola e elas continuam à mão. */
   footer?: ReactNode;
   /** `alertdialog` para a pergunta que interrompe (`ConfirmDialog`). */
@@ -42,20 +46,21 @@ const sizes: Record<DialogSize, string> = {
 };
 
 /**
- * O que fecha um diálogo por fora (Esc, clique fora e o X): nada enquanto a ação roda, e nada nos diálogos que só se resolvem por
- * um botão deles (`dismissible={false}`, o reinício dos drivers).
+ * O que fecha um diálogo por fora (`via`: o Esc, o clique fora ou o X): nada enquanto a ação roda, nada nos diálogos que só se resolvem por um botão
+ * deles (`dismissible={false}`, o reinício dos drivers), e só o Esc nos que se fecham só por ele (`dismissible="escape"`, a pergunta de erro do script).
  */
-export function canClose({ pending, dismissible }: { pending: boolean; dismissible: boolean }): boolean {
-  return !pending && dismissible;
+export function canClose({ pending, dismissible }: { pending: boolean; dismissible: DialogDismissal }, via: "escape" | "backdrop" | "button" = "button"): boolean {
+  if (pending || dismissible === false) return false;
+  return dismissible === true || via === "escape";
 }
 
 /**
  * O clique no fundo escurecido fecha o diálogo só com o botão principal, e só se foi no fundo mesmo (e não num filho dele) e o diálogo se deixa
- * fechar por fora (`canClose`). Com o botão direito ou o do meio ele fica: fechando no `pointerdown`, o diálogo sumiria e o `contextmenu` que vem
+ * fechar por ele (`canClose`). Com o botão direito ou o do meio ele fica: fechando no `pointerdown`, o diálogo sumiria e o `contextmenu` que vem
  * logo depois cairia no que estava por baixo dele (o menu de contexto da linha do navegador).
  */
-export function closesFromBackdrop(event: { button: number; target: unknown; currentTarget: unknown }, state: { pending: boolean; dismissible: boolean }): boolean {
-  return event.button === 0 && event.target === event.currentTarget && canClose(state);
+export function closesFromBackdrop(event: { button: number; target: unknown; currentTarget: unknown }, state: { pending: boolean; dismissible: DialogDismissal }): boolean {
+  return event.button === 0 && event.target === event.currentTarget && canClose(state, "backdrop");
 }
 
 /** O `aria-describedby` do painel: a `description` do cabeçalho, quando há, e o que o corpo aponta (`describedBy`), nessa ordem; sem nenhum, nada. */
@@ -108,7 +113,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
       // Um `Select` aberto dentro do diálogo já usou o Esc para fechar a lista.
       if (event.defaultPrevented) return;
       event.preventDefault();
-      if (canClose({ pending, dismissible })) onClose();
+      if (canClose({ pending, dismissible }, "escape")) onClose();
       return;
     }
 
@@ -164,7 +169,7 @@ export function Dialog({ open, title, icon, description, size = "md", pending = 
               <h2 id={titleID} className="text-lg font-semibold">{title}</h2>
               {icon === undefined ? descriptionBlock : null}
             </div>
-            {dismissible ? (
+            {dismissible === true ? (
               <button type="button" aria-label="Fechar" title="Fechar" onClick={onClose} disabled={pending} className={cn("-mr-2 inline-flex size-9 flex-none cursor-pointer items-center justify-center rounded-md text-muted transition-colors enabled:hover:bg-selected enabled:hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", icon === undefined && "-mt-2")}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
                   <path d="M4 4l8 8M12 4l-8 8" />

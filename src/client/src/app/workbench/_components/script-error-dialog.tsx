@@ -17,7 +17,8 @@ type ScriptErrorDialogProps = {
 /**
  * A pergunta de erro do script (RN-SQL-021), como o diálogo de erro do DBeaver: o comando, o erro como veio (RN-SQL-009), com o SQLSTATE, e "Parar",
  * "Tentar de novo", "Pular" e "Pular todos os erros". "Parar" é o padrão: nasce com o foco, como o "Cancelar" do `ConfirmDialog` (um Enter solto não
- * segue o script), e é também o Esc, o X e o clique fora. O foco volta, ao fechar, ao que o tinha quando ela abriu: o editor, de onde o script saiu.
+ * segue o script), e é também o Esc, como a especificação diz. Sem o X e sem o clique fora (`dismissible="escape"`): a resposta é uma das quatro, e um
+ * clique fora, sem querer, pararia o script calado. O foco volta, ao fechar, ao que o tinha quando ela abriu: o editor, de onde o script saiu.
  */
 export function ScriptErrorDialog({ entry, number, total, onChoose }: ScriptErrorDialogProps) {
   const error = entry.error;
@@ -27,6 +28,7 @@ export function ScriptErrorDialog({ entry, number, total, onChoose }: ScriptErro
       open
       role="alertdialog"
       size="lg"
+      dismissible="escape"
       title={copy.title(number, total)}
       description={copy.description}
       onClose={() => onChoose("stop")}
