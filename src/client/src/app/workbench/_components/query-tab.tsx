@@ -112,8 +112,9 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
  * a grade com o que foi salvo, sem executar de novo, e o cursor que estava aberto fecha (RN-EDIT-009).
  *
  * Depois de um script (seção 31, RN-SQL-019 a 022), a área de resultado tem abas: uma por resultado guardado e as Estatísticas. A do último comando é o
- * resultado do executor, com tudo o que vale nele; as outras mostram as linhas guardadas, só para leitura. A pergunta de erro do script fica fora da
- * caixa do teclado, como os outros diálogos.
+ * resultado do executor, com tudo o que vale nele; as outras mostram as linhas guardadas, que se editam como as dele (RN-SQL-023), sem o que é do cursor
+ * (carregar mais, contar, o filtro, atualizar). As pendências são de uma aba por vez: trocar de aba com alterações não salvas pergunta antes. A pergunta
+ * de erro do script fica fora da caixa do teclado, como os outros diálogos.
  *
  * Na conexão que confirma antes de executar (RN-PROT-001), o aviso vem antes de o comando sair, depois da pergunta das alterações não salvas: no
  * "Executar" e no Ctrl+Enter, no "Executar este comando", no "Executar script" (uma vez, com a lista), no F5 e no "Executar de novo", no filtro e na ordem do
@@ -213,7 +214,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // O resultado do executor está à vista: sem script, ou com a aba do último comando à frente (a do cursor aberto).
   const liveShown = script === null || shownTab === script.live;
   const tabIds = useId();
-  // A aba guardada à frente (não a do último comando): as linhas dela, só para leitura.
+  // A aba guardada à frente (não a do último comando): as linhas dela, que se editam como as do último (RN-SQL-023).
   const kept = script === null || typeof shownTab !== "number" || shownTab === script.live ? null : (script.results.find((result) => result.entry === shownTab) ?? null);
   // RN-SQL-019: o comando do script em execução, que o editor marca.
   const runningAt = script !== null && script.phase === "running" && script.current !== null ? entryAt(script, script.current).target : null;
@@ -234,7 +235,24 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // RN-PROT-001: o "Salvar" da grade, em "Todos os comandos", pergunta uma vez, com quantas alterações vão.
   const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
 
-  const edits = useRecordEdits({ tabId: tab.id, runner, state, connectionId: tab.connectionId, database: tab.database, subject: "result", onSaved: keepSaved, filter: filterSource, refresh: menuRerun, autoRefresh: auto.source, confirmSave });
+  // RN-SQL-023: numa aba guardada do script a edição é a das linhas dela, e o menu da célula fica sem "Filtrar", "Atualizar" e "Atualizar automaticamente",
+  // que são do resultado do último comando. Enquanto o script roda ou espera a pergunta de erro, a edição fica ocupada em todas as abas de resultado.
+  const scriptBusy = script !== null && (script.phase === "running" || script.phase === "paused");
+  const edits = useRecordEdits({
+    tabId: tab.id,
+    runner,
+    state,
+    connectionId: tab.connectionId,
+    database: tab.database,
+    subject: "result",
+    onSaved: keepSaved,
+    filter: kept === null ? filterSource : undefined,
+    refresh: kept === null ? menuRerun : undefined,
+    autoRefresh: kept === null ? auto.source : undefined,
+    confirmSave,
+    kept: kept?.rows ?? null,
+    scriptBusy,
+  });
   const { guard } = edits;
   useEffect(() => {
     guardRef.current = guard;
@@ -311,6 +329,24 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   useEffect(() => {
     rerunRef.current = handleRerun;
   });
+
+  // RN-SQL-023: as pendências são de uma aba de resultado por vez. Trocar de aba (clique, setas, Home, End, também para as Estatísticas) com alterações não
+  // salvas pergunta antes (RN-EDIT-007): "Salvar" grava e troca, "Descartar" joga fora e troca, "Cancelar" fica onde estava. Devolve se trocou já: a lista
+  // das abas leva o foco à escolhida só então.
+  const pending = edits.pending;
+  const chooseScriptTab = useCallback(
+    (chosen: ScriptTab) => {
+      if (script === null || chosen === shownTab) return true;
+      const choose = () => setChosenTab({ run: script.id, tab: chosen });
+      if (pending === 0) {
+        choose();
+        return true;
+      }
+      guard(choose);
+      return false;
+    },
+    [script, shownTab, pending, guard],
+  );
 
   // RN-TABELA-011: o campo completa as colunas do resultado. Um filtro que dá erro deixa a área sem grade: as colunas continuam as da última.
   const shownRows = shown?.status === "rows" ? shown : null;
@@ -444,7 +480,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
                 />
               )
             }
-            tabs={script === null || shownTab === null ? undefined : { list: <ScriptTabs run={script} shown={shownTab} idPrefix={tabIds} panelId={`${tabIds}-panel`} onChoose={(chosen) => setChosenTab({ run: script.id, tab: chosen })} />, panelId: `${tabIds}-panel`, labelledBy: scriptTabId(tabIds, shownTab) }}
+            tabs={script === null || shownTab === null ? undefined : { list: <ScriptTabs run={script} shown={shownTab} idPrefix={tabIds} panelId={`${tabIds}-panel`} onChoose={chooseScriptTab} />, panelId: `${tabIds}-panel`, labelledBy: scriptTabId(tabIds, shownTab) }}
             progress={scriptProgress(script)}
             statistics={script === null || shownTab !== "statistics" ? undefined : { body: <ScriptStatistics run={script} />, summary: statisticsSummary(script) }}
             kept={kept === null ? undefined : { busy, onRunAlone: () => handleRunAlone(kept.rows.target) }}

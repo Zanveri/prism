@@ -21,7 +21,11 @@ type ScriptTabsProps = {
   idPrefix: string;
   /** O id do corpo da área, que as abas controlam. */
   panelId: string;
-  onChoose: (tab: ScriptTab) => void;
+  /**
+   * Escolhe a aba; `false` quando a troca espera uma resposta (as alterações não salvas, RN-SQL-023), e o foco fica onde está até ela: trocada a aba depois
+   * ("Salvar" ou "Descartar"), o foco vai à escolhida pelo teclado.
+   */
+  onChoose: (tab: ScriptTab) => boolean | void;
 };
 
 /**
@@ -63,13 +67,28 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
     return () => observer.disconnect();
   }, [reveal]);
 
+  // A aba escolhida pelo teclado cuja troca esperou a pergunta das alterações não salvas (RN-SQL-023). Quando a pergunta troca de aba ("Salvar" ou
+  // "Descartar"), o foco vai a ela: o diálogo, ao fechar, o devolve à aba de antes, que já saiu da ordem do Tab, e as setas seguintes contariam a partir da
+  // escolhida. Este efeito roda depois da limpeza do diálogo, na mesma troca. "Cancelar" não troca a aba, e outra escolha, ou outra troca, a esquece.
+  const awaiting = useRef<ScriptTab | null>(null);
+  useEffect(() => {
+    const wanted = awaiting.current;
+    awaiting.current = null;
+    if (wanted === shown) list.current?.querySelector<HTMLElement>(`[data-script-tab="${shown}"]`)?.focus();
+  }, [shown]);
+
+  const choose = (next: ScriptTab) => {
+    awaiting.current = null;
+    return onChoose(next);
+  };
+
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const next = scriptTabKeyTarget(event.key, tabs, shown);
     if (next === null) return;
     event.preventDefault();
-    onChoose(next);
-    // As abas estão todas na página: o foco vai já à escolhida.
-    list.current?.querySelector<HTMLElement>(`[data-script-tab="${next}"]`)?.focus();
+    // As abas estão todas na página: o foco vai já à escolhida, quando a troca não espera a pergunta das alterações não salvas.
+    if (choose(next) !== false) list.current?.querySelector<HTMLElement>(`[data-script-tab="${next}"]`)?.focus();
+    else awaiting.current = next;
   }
 
   const tab = (item: ScriptTab) => {
@@ -86,7 +105,7 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
         aria-controls={panelId}
         tabIndex={selected ? 0 : -1}
         title={item === "statistics" ? undefined : commandHint(entryAt(run, item).target.sql)}
-        onClick={() => onChoose(item)}
+        onClick={() => choose(item)}
         className={cn("flex h-9 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2.5 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
       >
         <span className="truncate">{label}</span>

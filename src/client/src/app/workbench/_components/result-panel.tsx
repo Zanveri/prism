@@ -154,9 +154,9 @@ type ResultPanelProps = {
    */
   tabId?: string;
   /**
-   * RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros e na aba de consulta). Com ela vem a barra de edição (RN-EDIT-013), que a área
-   * desenha só com a grade na tela: no rodapé dos Registros, logo depois de "Exportar CSV", e, no resultado de um comando, numa linha própria entre a grade e
-   * os rodapés dela.
+   * RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros, na aba de consulta e nas abas guardadas do script, RN-SQL-023). Com ela vem a
+   * barra de edição (RN-EDIT-013), que a área desenha só com a grade na tela: no rodapé dos Registros, logo depois de "Exportar CSV", e, no resultado de um
+   * comando, numa linha própria entre a grade e os rodapés dela (também acima da nota da aba guardada).
    */
   editing?: GridEditing;
   /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
@@ -181,9 +181,10 @@ type ResultPanelProps = {
   /** RN-SQL-020: as Estatísticas do script no corpo, no lugar do resultado; `summary` é o que a barra recolhida diz delas. */
   statistics?: { body: ReactNode; summary: string };
   /**
-   * RN-SQL-020: uma aba guardada do script. As linhas lidas, só para leitura (sem contar, sem "Carregar mais", sem filtro, sem menu nem edição), e a nota
-   * dela (`KeptResultNote`), com "Executar este comando", no lugar do rodapé do cursor. `busy`: há comando da pessoa em andamento na aba (o `state` desta
-   * área é a cópia guardada, que não sabe disso), e o botão não executa.
+   * RN-SQL-020 e 023: uma aba guardada do script. As linhas lidas, que se editam como as do último comando (a faixa e a edição, com a barra dela, vêm de
+   * quem usa a área), sem contar, sem "Carregar mais", sem filtro nem atualização automática, e a nota dela (`KeptResultNote`), com "Executar este comando",
+   * no lugar do rodapé do cursor. `busy`: há comando da pessoa em andamento na aba (o `state` desta área é a cópia guardada, que não sabe disso), e o botão
+   * não executa.
    */
   kept?: { busy: boolean; onRunAlone: () => void };
 };
@@ -248,11 +249,10 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
     if (page.activeElement === null || page.activeElement === page.body) area.focus();
   });
 
-  // RN-EDIT-013 e 014: a barra de edição, onde a grade tem a edição (a aba guardada do script, sem ela, não tem barra) e com a grade na tela. Depois do
+  // RN-EDIT-013 e 014: a barra de edição, onde a grade tem a edição (também numa aba guardada do script, RN-SQL-023) e com a grade na tela. Depois do
   // botão, o foco volta à grade, como volta quando o botão que o tinha sai da tela; o "Editar célula" abre o campo, que o toma.
-  const gridEditing = kept === undefined ? editing : undefined;
   const focusGrid = useCallback(() => section.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true }), []);
-  const editBar = rows === null || gridEditing === undefined ? null : <EditBar buttons={gridEditing.bar.buttons} onAction={gridEditing.bar.onAction} onDone={focusGrid} />;
+  const editBar = rows === null || editing === undefined ? null : <EditBar buttons={editing.bar.buttons} onAction={editing.bar.onAction} onDone={focusGrid} />;
 
   return (
     // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
@@ -323,7 +323,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           </p>
         ) : rows !== null ? (
           <>
-            {kept === undefined ? (banner ?? null) : null}
+            {banner ?? null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
             <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
               <ResultGrid
@@ -344,7 +344,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
                 onZoom={zoomTo}
-                editing={gridEditing}
+                editing={editing}
               />
             </div>
 

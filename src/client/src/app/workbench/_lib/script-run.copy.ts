@@ -54,9 +54,9 @@ export const scriptRunCopy = {
     after: (count: number) => `Mais ${formatCount(count, "comando", "comandos")} na fila.`,
   },
 
-  // A aba de um resultado guardado (RN-SQL-020): as linhas lidas, só para leitura, e por que o resto não vale ali.
+  // A aba de um resultado guardado (RN-SQL-020 e 023): as linhas lidas, que se editam como as do último comando, e por que o que é do cursor não vale ali.
   kept: {
-    note: "O cursor deste resultado fechou quando o comando seguinte rodou. Carregar mais, Contar total, o filtro, o menu da grade, a edição e a atualização automática valem no resultado do último comando.",
+    note: "O cursor deste resultado fechou quando o comando seguinte rodou. Carregar mais, Contar total, o filtro e a atualização automática valem no resultado do último comando.",
     runAlone: "Executar este comando",
     // Com um comando em andamento na aba, o botão fica à vista e não executa: diz por quê.
     runAloneBusy: "Executar este comando. Indisponível: há um comando em andamento na aba.",

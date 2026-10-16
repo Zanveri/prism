@@ -26,6 +26,7 @@ vi.mock("@/app/settings/_lib/use-preferences", async () => {
   return { usePreferences: () => ({ preferences: defaultPreferences, update: () => {} }) };
 });
 
+import { scriptRunCopy } from "../_lib/script-run.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { ResultPanel } from "./result-panel";
 
@@ -81,9 +82,18 @@ describe("onde fica a barra de edição (RN-EDIT-013)", () => {
     expect(render(rows, { statistics: { body: null, summary: "3 comandos" } })).not.toContain(bar);
   });
 
-  it("só onde a grade tem a edição: sem ela, e na aba guardada do script, que hoje a grade não edita, não há barra", () => {
+  it("só onde a grade tem a edição: sem ela não há barra", () => {
     expect(render(rows, { editing: undefined })).not.toContain(bar);
-    expect(render(rows, { kept: { busy: false, onRunAlone: noop } })).not.toContain(bar);
+  });
+
+  it("na aba guardada do script, que se edita (RN-SQL-023), a barra fica na linha própria, entre a grade e a nota com \"Executar este comando\"", () => {
+    const markup = render(rows, { kept: { busy: false, onRunAlone: noop } });
+    const at = markup.indexOf(bar);
+
+    expect(at).toBeGreaterThan(markup.indexOf("data-grid"));
+    expect(at).toBeLessThan(markup.indexOf(scriptRunCopy.kept.note));
+    expect(at).toBeLessThan(markup.indexOf(scriptRunCopy.kept.runAlone));
+    expect(markup.split(bar)).toHaveLength(2);
   });
 
   it("recolhida a área (RN-PAINEL-001), a barra vai junto com o corpo, que fica inerte", () => {

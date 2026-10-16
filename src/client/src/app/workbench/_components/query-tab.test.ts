@@ -200,6 +200,9 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = 
 /** Uma alteração pendente na coluna `status` da primeira linha do resultado `r1`. */
 const withPending = () => remember("q1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "paga", "aberta") });
 
+/** RN-SQL-023: uma alteração pendente na aba guardada do script (o resultado `r0`, o do primeiro comando). */
+const keptPending = () => remember("q1", "edits", { resultId: "r0", edits: editCell(noEdits, 0, 1, "b", "a") });
+
 /** Deixa as promessas em andamento chegarem ao fim. */
 const settle = () => new Promise((done) => setTimeout(done, 0));
 
@@ -1012,9 +1015,9 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
   const key = (over: Record<string, unknown>) => ({ key: "x", code: "KeyX", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn(), ...over });
   const pauses = (runner: ReturnType<typeof fakeRunner>) => runner.autoRefresh.pause.mock.calls.filter(([reason]) => reason === "hidden").map(([, on]) => on);
 
-  /** O script terminado: o primeiro e o último devolveram linhas, e o último tem o cursor aberto (a aba dele é o executor). */
+  /** O script terminado: o primeiro e o último devolveram linhas, e o último tem o cursor aberto (a aba dele é o executor). O primeiro é o resultado `r0`. */
   function finished(runner: ReturnType<typeof fakeRunner>): ScriptRun {
-    const first = rowsState({ id: 7, target: targets[0], rows: [["1", "a"]] });
+    const first = rowsState({ id: 7, target: targets[0], rows: [["1", "a"]], resultId: "r0" });
     let run = createScriptRun(1, targets);
     run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
     run = withEntry(run, 1, { status: "ok", affected: 3 });
@@ -1116,15 +1119,19 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
     expect(pauses(runner).at(-1)).toBe(false);
   });
 
-  it("uma aba guardada mostra as linhas dela, só para leitura, com a nota; Executar este comando executa só ele, depois da pergunta das alterações", () => {
-    withPending();
+  it("uma aba guardada mostra as linhas dela, que se editam (RN-SQL-023), com a nota; Executar este comando executa só ele, depois da pergunta das alterações", () => {
+    keptPending();
     const runner = fakeRunner(rowsState({ target: targets[2] }));
     const run = finished(runner);
     const view = mount(runner);
-    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
-    const { area } = view.show();
+    // Sem alterações no resultado do último comando, a troca de aba não pergunta nada.
+    expect((view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0)).toBe(true);
+    const { area, banner } = view.show();
 
     expect(area.state).toBe(run.results[0].rows);
+    // As alterações são as da aba guardada, no resultado dela.
+    expect(area.editing?.pending).toBe(1);
+    expect(banner?.props.pending).toBe(1);
     expect(area.connected).toBe(false);
     expect(area.autoLoadMore).toBe(false);
     expect(area.kept).toMatchObject({ busy: false });
@@ -1155,7 +1162,7 @@ describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => 
   });
 
   it("com um comando em andamento na aba, Executar este comando diz que está ocupado e não pergunta, não limpa o filtro nem abre a área recolhida", () => {
-    withPending();
+    keptPending();
     const runner = fakeRunner(rowsState({ target: targets[2] }));
     finished(runner);
     const view = mount(runner);

@@ -101,6 +101,13 @@ type Params = {
    * quando a pessoa cancela: nada é gravado e as alterações ficam. Sem ele, o Salvar não pergunta.
    */
   confirmSave?: (count: number) => true | Promise<boolean>;
+  /**
+   * RN-SQL-023: a aba guardada do script que está à frente (não a do último comando): a edição é a das linhas dela, e não a do resultado do executor. O
+   * resultado é um dos que a API guarda (RN-SQL-024), e o Salvar fecha o cursor do último (`onSaved`).
+   */
+  kept?: RowsState | null;
+  /** RN-SQL-023: o script roda ou espera a resposta da pergunta de erro (RN-SQL-021): a edição fica ocupada em todas as abas de resultado. */
+  scriptBusy?: boolean;
 };
 
 const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notice: null };
@@ -149,7 +156,8 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 
  * faixa, o menu, o "Ver SQL" e a pergunta) e as chamadas.
  *
  * - As pendências são do resultado da página (`resultId`): outra execução começa sem nenhuma, e quem executa de novo com pendências
- *   pergunta antes (`guard`, RN-EDIT-007). Ficam na memória da aba (`tab-memory.ts`): ir à Estrutura e voltar não as perde.
+ *   pergunta antes (`guard`, RN-EDIT-007). Ficam na memória da aba (`tab-memory.ts`): ir à Estrutura e voltar não as perde. Depois de um script, são da aba
+ *   de resultado à frente (`kept`, RN-SQL-023): uma por vez, e trocar de aba com pendências pergunta antes.
  * - O catálogo é consultado na primeira tentativa de editar (RN-EDIT-010), pela sessão da árvore da mesma conexão quando ela existe.
  * - O Salvar grava pela sessão da aba, numa transação própria (a aba de uma tabela é sempre Auto-commit, e a de consulta ainda não tem o
  *   Commit manual na tela, RN-TX-001); se gravou tudo, quem usa decide (`onSaved`): os Registros leem de novo, e a aba de consulta fica com a
@@ -157,16 +165,16 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 
  *   pendências (RN-EDIT-012). Sem o alvo (as pendências lembradas com a aba voltam sem ele), o Salvar e o "Ver SQL" o perguntam antes.
  * - As alterações não salvas vão ao registro da aba (`unsaved-edits.ts`), de onde quem fecha abas pergunta.
  */
-export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave }: Params) {
+export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave, kept = null, scriptBusy = false }: Params) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  const shown = shownOf(state);
+  const shown = kept ?? shownOf(state);
   const resultId = shown?.resultId ?? null;
   // RN-SESSAO-002: algo em andamento na aba. "Atualizar" e "Filtrar" seguem o comando da PESSOA (`personBusy`): a execução da atualização automática não os
   // segura, e o comando toma o lugar dela (RN-GRADE-014). A edição espera também por ela (`"refresh"`, com o motivo próprio): as linhas e o resultado da API
   // vão mudar, e o que se editasse agora sumiria com eles.
-  const personBusy = isPersonBusy(state);
+  const personBusy = isPersonBusy(state) || scriptBusy;
   const busy: boolean | "refresh" = personBusy || (isBusyState(state) ? "refresh" : false);
 
   const [stored, setStored] = useState(() => recall(tabId, "edits") ?? null);
@@ -254,10 +262,13 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     [],
   );
 
+  /** RN-SQL-024: a sessão em que o resultado da tela foi lido (a da aba, sem ela): a edição pergunta e grava nela. */
+  const sessionOfShown = useCallback(() => latest.current.shown?.sessionId ?? runner.sessionOf(), [runner]);
+
   /** RN-EDIT-010: o alvo da edição, perguntado uma vez por resultado; nulo quando o resultado é só leitura ou a pergunta falhou (a faixa diz). */
   const ensureTarget = useCallback(async (): Promise<EditTarget | null> => {
     const { resultId: id, target: current, readOnlyReason: reason } = latest.current;
-    const sessionId = runner.sessionOf();
+    const sessionId = sessionOfShown();
     if (id === null || reason !== null || sessionId === null) return null;
     if (current !== null) return current;
     if (asking.current?.resultId === id) return asking.current.promise;
@@ -293,7 +304,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     });
 
     return promise;
-  }, [runner, queryClient, connectionId, database, subject, say]);
+  }, [sessionOfShown, queryClient, connectionId, database, subject, say]);
 
   /**
    * RN-GRADE-014: segura a atualização automática desde o COMEÇO de uma ação que pergunta o alvo à API antes de agir (abrir o campo ou o menu, a linha
@@ -315,11 +326,22 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     };
   }, [runner]);
 
+  // RN-SQL-023: a aba guardada do script está à frente: as linhas dela são as de um resultado guardado, e não as do executor.
+  const keptNow = useRef(kept !== null);
+  useEffect(() => {
+    keptNow.current = kept !== null;
+  });
+
   /**
    * O resultado da tela já não é `from`, o de quando a ação começou: as linhas são outras, e a ação que era sobre as de antes não vale nelas. Lê também o
-   * executor na hora, e não só a última renderização.
+   * executor na hora, e não só a última renderização: o resultado dele, ou, numa aba guardada do script, se o script ainda a tem.
    */
-  const moved = useCallback((from: string | null) => latest.current.resultId !== from || (shownOf(runner.getState())?.resultId ?? null) !== from, [runner]);
+  const moved = useCallback(
+    (from: string | null) =>
+      latest.current.resultId !== from ||
+      (keptNow.current ? !(runner.script.getState()?.results.some((result) => result.rows.resultId === from) ?? false) : (shownOf(runner.getState())?.resultId ?? null) !== from),
+    [runner],
+  );
 
   /** A linha da grade: uma lida (com o corte e a exclusão) ou uma nova. */
   const rowOf = useCallback((row: number): RowContext => rowContextOf(latest.current.shown, latest.current.edits, row), []);
@@ -349,7 +371,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     async (cells: Iterable<GridPosition>, from: RowsState | null = latest.current.shown): Promise<FullValues | null> => {
       const cut = from === null ? [] : cutCellsOf(cells, from.truncated, from.sourceRows);
       if (cut.length === 0) return noFullValues;
-      const sessionId = runner.sessionOf();
+      const sessionId = from?.sessionId ?? runner.sessionOf();
       const id = from?.resultId ?? null;
       if (sessionId === null || id === null) return { valueOf: () => undefined, missing: cut.length };
 
@@ -620,7 +642,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const save = useCallback(async (reread = true): Promise<boolean> => {
     const before = latest.current;
     if (pendingCount(before.edits) === 0) return true;
-    if (before.saving || before.shown === null || before.resultId === null || runner.sessionOf() === null || confirming.current) return false;
+    if (before.saving || before.shown === null || before.resultId === null || sessionOfShown() === null || confirming.current) return false;
 
     // Sem a pergunta, a resposta vem na hora (`true`), e o Salvar segue na mesma chamada, como antes.
     const answer = sources.current.confirmSave?.(pendingCount(before.edits)) ?? true;
@@ -633,7 +655,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
 
     const { shown: current, resultId: id, edits: pending, saving: writing } = latest.current;
-    const sessionId = runner.sessionOf();
+    const sessionId = sessionOfShown();
     if (pendingCount(pending) === 0) return true;
     if (writing || current === null || id === null || sessionId === null) return false;
 
@@ -669,12 +691,12 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       setSaving(false);
       latest.current = { ...latest.current, saving: false };
     }
-  }, [runner, queryClient, toast, putEdits, ensureTarget, onSaved]);
+  }, [sessionOfShown, queryClient, toast, putEdits, ensureTarget, onSaved]);
 
   /** RN-EDIT-008: "Ver SQL", pela API, sem executar nada. */
   const viewSql = useCallback(async () => {
     const { shown: current, resultId: id, edits: pending } = latest.current;
-    const sessionId = runner.sessionOf();
+    const sessionId = sessionOfShown();
     if (current === null || id === null || sessionId === null) return;
     const known = latest.current.target ?? (await ensureTarget());
     if (known === null || latest.current.resultId !== id) return;
@@ -684,7 +706,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (result === null) return;
     if (result.ok) setPreview(result.data);
     else setBanner({ resultId: id, failure: failureOf(result.error, plan, known.oneAtATime), failedRow: null, notice: null });
-  }, [runner, queryClient, ensureTarget]);
+  }, [sessionOfShown, queryClient, ensureTarget]);
 
   /**
    * O que o "Filtrar" sabe da célula agora (RN-GRADE-013): o valor LIDO (a pendência ainda não está no banco), se chegou cortado, a linha nova, o

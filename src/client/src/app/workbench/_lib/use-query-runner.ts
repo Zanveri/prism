@@ -11,7 +11,7 @@ import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/
 import { createAutoRefresh, type AutoRefreshControl } from "./auto-refresh";
 import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
-import { createScriptRun, finishRun, platformScriptShortcut, scriptEndToast, scriptResultCap, startEntry, withEntry, type ScriptChoice, type ScriptError, type ScriptRun } from "./script-run";
+import { createScriptRun, finishRun, keptResultIds, platformScriptShortcut, scriptEndToast, scriptResultCap, startEntry, withEntry, withSavedResult, type ScriptChoice, type ScriptError, type ScriptRun } from "./script-run";
 import { scriptRunCopy } from "./script-run.copy";
 import { scriptsCopy } from "./scripts.copy";
 import { gridFilterCopy } from "./grid-filter.copy";
@@ -108,6 +108,12 @@ export type RowsState = {
   counting: boolean;
   /** RN-EDIT-002: o resultado da API a que estas linhas pertencem; é por ele que a edição dos Registros pergunta e grava. */
   resultId?: string | null;
+  /**
+   * RN-SQL-024: a sessão da API em que o resultado foi lido, e em que a edição dele pergunta e grava. A sessão que o F5 ou o filtro reabriram depois (a de
+   * antes tinha caído) não conhece os resultados da anterior: a aba guardada do script responde, ao editar, que a sessão com o banco não existe mais, como
+   * a sessão que caiu, e não que outro comando rodou depois dela. Sem ela (os testes), vale a sessão da aba.
+   */
+  sessionId?: string | null;
   /** RN-EDIT-002: o motivo de o resultado inteiro ser só leitura, quando a página já o trouxe. */
   readOnly?: string | null;
   /** RN-EDIT-009: as colunas de cada linha nova salva na aba de consulta que o banco preencheu, e cujo valor a tela não sabe. */
@@ -272,7 +278,8 @@ export type QueryRunner = {
   /**
    * RN-EDIT-009: um Salvar da edição gravou tudo no resultado `resultId`, e a grade fica com o que foi salvo, sem executar de novo (a aba de
    * consulta). Salvar é um comando na sessão: o cursor que estava aberto fechou, e "carregar mais" dá lugar a "executar de novo". Com outro
-   * resultado na tela, ou um comando em andamento, nada muda.
+   * resultado na tela, ou um comando em andamento, nada muda. RN-SQL-023: o resultado pode ser o de uma aba guardada do script, que fica com o que foi
+   * salvo; o cursor que fecha é o do resultado do último comando, e a aba dele passa ao "executar de novo".
    */
   keepSaved: (resultId: string, saved: { rows: QueryRow[]; truncated: ReadonlyMap<number, ReadonlySet<number>>; generated: ReadonlyMap<number, ReadonlySet<number>>; sourceRows?: readonly (number | null)[] }) => void;
   /**
@@ -488,9 +495,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * conhece a sessão (ela caiu), abre outra e repete uma vez (seção 7). `null` quando não há o que
    * mostrar: a aba foi solta, ou o comando foi cancelado antes de ser enviado. `reopen` falso é a execução automática (RN-GRADE-014) e o script depois
    * do primeiro comando respondido (RN-SQL-021): a sessão que caiu fica caída, e a resposta é a da API. `handled`: as recusas que quem chama trata a mais
-   * (as do comando, no script).
+   * (as do comando, no script). `keep`: os resultados das abas do script que ficam na tela, e que a API continua guardando para a edição (RN-SQL-024).
    */
-  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = []): Promise<ApiResult<QueryResult> | null> {
+  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = []): Promise<ApiResult<QueryResult> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
@@ -519,7 +526,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const session = id;
       // RN-PROT-002: a recusa do somente leitura é tratada no lugar, como a do controle de transação: a frase da API, e o resultado de antes fica.
       const result = await call(
-        () => executeQuery(session, sql, filter),
+        () => executeQuery(session, sql, filter, keep),
         codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", "CONNECTION_READ_ONLY", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
       );
       if (started !== epoch) return null;
@@ -735,7 +742,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         if (cancelRequested) return settle();
       }
 
-      const result = await execute(connectionId, target.sql, started, target.filter, !auto);
+      // RN-SQL-024: o comando que troca os resultados do script não guarda nenhum; o F5, o filtro e a execução automática do resultado do último comando
+      // guardam os das outras abas, que continuam se editando.
+      const result = await execute(connectionId, target.sql, started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script));
       if (result === null) return;
       // RN-GRADE-011: a API recusou o filtro antes de executar: o resultado e o cursor de antes ficam como estavam, e a frase vai ao campo de filtro.
       if (!result.ok && result.error.code === "FILTER_INVALID" && target.filter !== undefined) {
@@ -781,6 +790,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         total: null,
         counting: false,
         resultId: data.resultId ?? null,
+        sessionId,
         // RN-GRADE-011: o resultado embrulhado pelo filtro é só leitura, e diz por quê (a API pode já dizer; senão, a frase da tela).
         readOnly: data.readOnly ?? (data.filterApplied === "wrapped" ? gridFilterCopy.result.wrapped : null),
         filterApplied: data.filterApplied ?? null,
@@ -900,7 +910,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
           patch((run) => startEntry(run, index));
           set({ status: "running", cancelling: false, previous: shown });
 
-          const result = await execute(connectionId, target.sql, started, undefined, !answered, scriptCommandRefusals);
+          // RN-SQL-024: cada comando (e o "Tentar de novo") manda os resultados das abas que o script já tem: a API continua guardando o que a edição deles
+          // precisa. O primeiro comando de um script novo não manda nenhum, e a API esquece os do script de antes quando ele vai ao banco.
+          const result = await execute(connectionId, target.sql, started, undefined, !answered, scriptCommandRefusals, keptResultIds(script));
           // A aba foi solta (desconectar, fechar, trocar de banco, o bloqueio): `release` já parou o script.
           if (started !== epoch) return;
           // Cancelado antes de o comando sair (a sessão abria): nada dele rodou, e o executor já voltou ao que mostrava.
@@ -934,6 +946,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
                 total: null,
                 counting: false,
                 resultId: data.resultId ?? null,
+                sessionId,
                 readOnly: data.readOnly ?? null,
                 filterApplied: data.filterApplied ?? null,
               };
@@ -1214,8 +1227,16 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     },
     sessionOf: () => sessionId,
     keepSaved: (savedIn, { rows, truncated, generated, sourceRows }) => {
-      if (state.status !== "rows" || state.resultId !== savedIn || isBusy()) return;
-      set({ ...state, rows, truncated, generated, ...(sourceRows === undefined ? {} : { sourceRows }), cursorClosed: state.cursorClosed || state.hasMore });
+      const saved = { rows, truncated, generated, ...(sourceRows === undefined ? {} : { sourceRows }) };
+      if (state.status === "rows" && state.resultId === savedIn) {
+        if (!isBusy()) set({ ...state, ...saved, cursorClosed: state.cursorClosed || state.hasMore });
+        return;
+      }
+      // RN-SQL-023: o Salvar de uma aba guardada do script. Ele foi um comando na sessão, e o cursor aberto do resultado do último comando fechou.
+      const next = script === null ? null : withSavedResult(script, savedIn, saved);
+      if (next === null || next === script) return;
+      publishScript(next);
+      if (state.status === "rows" && state.hasMore && !state.cursorClosed && !isBusy()) set({ ...state, cursorClosed: true });
     },
     release,
     retire,
