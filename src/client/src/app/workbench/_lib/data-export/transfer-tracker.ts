@@ -167,7 +167,6 @@ const errorDescription = (error: Transfer["error"]) => (error === null || error 
 export function createTransferTracker(deps: TrackerDeps) {
   let entries: readonly TrackedExport[] = [];
   let seq = 0;
-  let disposed = false;
   const listeners = new Set<() => void>();
   const inFlight = new Set<string>();
   const failures = new Map<string, number>();
@@ -208,7 +207,7 @@ export function createTransferTracker(deps: TrackerDeps) {
       unschedule = null;
       return;
     }
-    if (disposed || unschedule !== null) return;
+    if (unschedule !== null) return;
     unschedule = deps.schedule(() => {
       unschedule = null;
       tick();
@@ -246,7 +245,7 @@ export function createTransferTracker(deps: TrackerDeps) {
 
   function onPolled(id: string, result: ApiResult<Transfer>) {
     const entry = find(id);
-    if (disposed || entry === null) return;
+    if (entry === null) return;
 
     if (!result.ok) {
       // O cofre fechou (o login vem em seguida, e a área de trabalho desmonta): nada a dizer. O cancelamento pedido decide pela resposta dele.
@@ -438,7 +437,6 @@ export function createTransferTracker(deps: TrackerDeps) {
     snapshot: () => entries,
     /** Uma exportação aceita pela API (o 202): entra na barra, e a consulta começa. */
     start(added: NewExport) {
-      if (disposed) return;
       publish([...entries, { ...added, seq: ++seq, stage: "running", phase: null, rows: 0, total: null, bytes: 0, failure: null, busy: false }]);
     },
     cancel,
@@ -454,12 +452,18 @@ export function createTransferTracker(deps: TrackerDeps) {
     count: () => entries.length,
     /** Os trabalhos que esta janela acompanha: a limpeza das que caíram não os cancela. */
     has: (id: string) => find(id) !== null,
-    /** A área de trabalho desmontou (o cofre fechou): para a consulta e solta os destinos. */
-    dispose() {
-      disposed = true;
+    /**
+     * A área de trabalho desmontou (o cofre fechou, outro usuário vai entrar): para a consulta, solta os destinos e esquece tudo, sem avisos. A resposta que
+     * ainda chegar de antes não acha a entrada e não faz nada; a próxima entrada começa do zero.
+     */
+    reset() {
       unschedule?.();
       unschedule = null;
       const all = entries;
+      inFlight.clear();
+      failures.clear();
+      cancelWanted.clear();
+      done.clear();
       entries = [];
       for (const listener of listeners) listener();
       void Promise.all(all.map(releaseOf));

@@ -299,14 +299,17 @@ describe("cancelar e sair (RN-EXPORT-021 e 023)", () => {
     expect(h.tracker.snapshot()).toEqual([]);
   });
 
-  it("depois de desmontada (o cofre fechou), nada mais entra nem é consultado", async () => {
+  it("a área de trabalho que desmonta (o cofre fechou) esquece tudo e para a consulta; a resposta que chega depois não age, e a próxima entrada começa do zero", async () => {
     const h = harness();
     h.tracker.start(added());
-    h.tracker.dispose();
+    h.tracker.reset();
     await settle();
     expect(h.calls).toEqual(["release dest-1"]);
-    h.tracker.start(added());
     expect(h.tracker.snapshot()).toEqual([]);
+    expect(h.scheduled()).toBe(false);
+
+    h.tracker.start(added({ id: other }));
+    expect(h.tracker.snapshot().map((entry) => entry.id)).toEqual([other]);
   });
 });
 
