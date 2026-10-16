@@ -147,7 +147,7 @@ export function pendingCount(edits: PendingEdits): number {
  * RN-EDIT-005: o pedido do Salvar. Primeiro as exclusões, depois as alterações (uma por linha, na ordem em que a linha foi editada pela
  * primeira vez; numa junção, uma por linha de cada tabela, pela chave dela, e as alterações de uma linha da grade em duas tabelas são duas),
  * depois as linhas novas, cada grupo na ordem em que foi feito. A chave é a que a grade leu (a linha como veio do banco, mesmo com a coluna
- * da chave editada). Linha nova e exclusão só existem no resultado de uma tabela só, a de posição 0.
+ * da chave editada). Linha nova (também a duplicada) e exclusão só existem no resultado de uma tabela só, a de posição 0.
  */
 export function changesOf(edits: PendingEdits, rows: readonly QueryRow[], target: EditTarget): PlannedChanges {
   const key = (row: number, table: number) => (target.tables[table]?.key ?? []).map((column) => rows[row][column] ?? "");

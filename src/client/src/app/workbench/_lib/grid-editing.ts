@@ -1,6 +1,9 @@
 import type { GridCell } from "./grid-cursor";
 import type { QueryRow } from "./query.schema";
 import type { ChangeOrigin, EditValue, PendingEdits } from "./record-edits";
+import { recordsCopy } from "./records.copy";
+
+const shortcutCopy = recordsCopy.edit.shortcuts;
 
 /**
  * O que uma linha da grade mostra das pendências (RN-EDIT-004): lida do banco ou nova, marcada para exclusão (riscada), as células
@@ -44,8 +47,10 @@ export type GridEditing = {
   onCopy: (cell: GridCell) => void;
   /** Ctrl+S com o foco na grade. */
   onSave: () => void;
-  /** Alt+Insert com o foco na grade. */
+  /** Alt+Insert com o foco na grade (RN-EDIT-015). */
   onNewRow: () => void;
+  /** Alt+Delete com o foco na grade: exclui a linha da célula ativa (RN-EDIT-015). */
+  onDeleteRow: () => void;
   /**
    * RN-GRADE-013: F11 com o foco na grade abre o menu da célula ativa com o submenu "Filtrar" aberto (`menu`), e Ctrl+F11 abre direto o
    * "Filtrar por valor…" (`values`). Só existe na grade que tem campo de filtro.
@@ -84,6 +89,45 @@ export function filterKey(event: { key: string; ctrlKey: boolean; metaKey: boole
  */
 export function refreshKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return event.key === "F5" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+}
+
+const isMacPlatform = (platform: string) => /mac|iphone|ipad/i.test(platform);
+
+/** As ações da linha que têm atalho com o foco na grade (RN-EDIT-015): adicionar, duplicar e excluir. */
+export type RowShortcut = "newRow" | "duplicateRow" | "deleteRow";
+
+/**
+ * RN-EDIT-015: os atalhos da linha com o foco na grade, como no DBeaver, com os modificadores exatos. Alt+Insert adiciona (sem Ctrl, Shift nem Cmd);
+ * Ctrl+Alt+Insert duplica a linha da célula ativa (sem Shift), conferido antes do Alt+Insert, que está dentro dele; Alt+Delete exclui a linha da célula
+ * ativa (sem Ctrl, Shift nem Cmd). No Windows o AltGr chega como Ctrl+Alt: com ele o Insert duplica, e o Delete não faz nada. No macOS o Option faz o
+ * papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert (e o Control+Option+Insert do DBeaver, sem Cmd) e Option+Delete, que é também a
+ * tecla "delete" do Mac (a de apagar para trás, `Backspace`) e o fn+delete. Com Shift nada acontece: o Shift+Alt+Insert e o Ctrl+Shift+Alt+Insert do
+ * DBeaver 26.1 ficam para depois. O Delete sozinho não exclui: espera a seleção de linhas (RN-GRADE-001).
+ */
+export function rowShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }, platform: string): RowShortcut | null {
+  if (!event.altKey || event.shiftKey) return null;
+  const mac = isMacPlatform(platform);
+
+  if (event.key === "Insert") {
+    if (!event.ctrlKey && !event.metaKey) return "newRow";
+    return (mac ? event.ctrlKey !== event.metaKey : event.ctrlKey && !event.metaKey) ? "duplicateRow" : null;
+  }
+  const deletes = event.key === "Delete" || (mac && event.key === "Backspace");
+  return deletes && !event.ctrlKey && !event.metaKey ? "deleteRow" : null;
+}
+
+/** Um atalho como a tela o escreve (`label`, no menu e na dica) e como o leitor de tela o recebe (`aria`, o `aria-keyshortcuts`, nos nomes das teclas da web). */
+export type EditShortcut = { label: string; aria: string };
+
+/** RN-EDIT-013 e 015: os atalhos da edição como a plataforma os escreve: os mesmos no menu da célula e nas dicas da barra de edição (`navigator.platform`). */
+export function editShortcuts(platform: string): Record<"edit" | RowShortcut, EditShortcut> {
+  const mac = isMacPlatform(platform);
+  return {
+    edit: { label: shortcutCopy.edit, aria: "F2" },
+    newRow: { label: mac ? shortcutCopy.newRowMac : shortcutCopy.newRow, aria: "Alt+Insert" },
+    duplicateRow: mac ? { label: shortcutCopy.duplicateRowMac, aria: "Meta+Alt+Insert Control+Alt+Insert" } : { label: shortcutCopy.duplicateRow, aria: "Control+Alt+Insert" },
+    deleteRow: mac ? { label: shortcutCopy.deleteRowMac, aria: "Alt+Backspace Alt+Delete" } : { label: shortcutCopy.deleteRow, aria: "Alt+Delete" },
+  };
 }
 
 /** As linhas que a grade desenha: as lidas e, depois, as novas, com o que foi preenchido (o resto vazio, para o padrão da tabela). */

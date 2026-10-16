@@ -18,7 +18,7 @@ import { resultCells } from "./full-values.service";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { customPrefix, distinctValues, type CompareOperator, type DistinctValue } from "./grid-export/value-filter";
 import { gridFilterCopy } from "./grid-filter.copy";
-import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
+import { editShortcuts, gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
 import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
 import { editErrorDetails, type EditPreview, type EditTarget } from "./record-edits.schema";
 import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
@@ -28,6 +28,9 @@ import { unsavedEdits } from "./unsaved-edits";
 import { isBusyState, isPersonBusy, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
 
 const copy = recordsCopy.edit;
+
+/** A plataforma, para os atalhos que o menu da célula escreve (RN-EDIT-015): Option e Cmd no macOS. */
+const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 
 /** O que o catálogo respondeu para um resultado: o alvo, ou o motivo de o resultado inteiro ser só leitura. */
 type TargetAnswer = { resultId: string; target: EditTarget | null; readOnly: string | null };
@@ -188,9 +191,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const columnReadOnly = useMemo(() => (subject === "result" && target !== null ? target.columns.map((column) => !column.editable) : null), [subject, target]);
 
   // Tudo o que as ações leem depois de um `await`: o estado de agora, e não o da renderização em que a ação começou.
-  const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving });
+  const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active });
   useEffect(() => {
-    latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving };
+    latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active };
   });
 
   /** As pendências como a grade as mostra agora (numa junção, repetidas nas linhas que mostram a mesma linha da tabela). */
@@ -453,22 +456,44 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
   }, [ensureTarget, putEdits, say, setActive, hold, moved]);
 
-  /** Exclui a linha (ou tira a nova). `from` é o resultado da linha (por padrão, o da tela): se ele saiu antes de a exclusão valer, nada muda. */
+  /**
+   * Exclui a linha (ou tira a nova). `from` é o resultado da linha (por padrão, o da tela): se ele saiu antes de a exclusão valer, nada muda. A linha nova é
+   * seguida pelo id dela, e não pela posição: enquanto o alvo é perguntado, outra ação (o segundo clique em "Excluir linha", o "Descartar", o "Carregar
+   * mais") pode tirá-la ou mudá-la de lugar, e a posição passa a ser de outra linha; tirada no meio, nada muda.
+   */
   const removeRow = useCallback(async (row: number, from: string | null = latest.current.resultId) => {
     if (moved(from)) return;
     const early = deleteRowAccess(rowOf(row), latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
     if (!early.editable) return say(early.reason);
+    const before = latest.current.shown?.rows.length ?? 0;
+    const added = row < before ? null : (latest.current.edits.added[row - before]?.id ?? null);
+    if (row >= before && added === null) return;
     const release = hold();
     try {
       const known = await ensureTarget();
       if (moved(from)) return;
       const { readOnlyReason: reason, busy: running, saving: writing, shown: current, edits: pending } = latest.current;
-      const access = deleteRowAccess(rowOf(row), reason, known, writing || running);
+      const access = deleteRowAccess(added === null ? rowOf(row) : { kind: "new" }, reason, known, writing || running);
       if (!access.editable) return say(access.reason);
       if (known === null || current === null) return;
 
       const read = current.rows.length;
-      putEdits(row < read ? deleteRow(pending, row) : removeNewRow(pending, pending.added[row - read].id));
+      if (added === null) putEdits(deleteRow(pending, row));
+      else {
+        const index = pending.added.findIndex((pendingRow) => pendingRow.id === added);
+        if (index < 0) return;
+        const at = read + index;
+        const next = removeNewRow(pending, added);
+        putEdits(next);
+        // RN-EDIT-014: tirada a linha nova, a célula ativa passa à linha que ficou no lugar dela, ou à de cima quando ela era a última; sem linha nenhuma,
+        // não há célula ativa. A ativa de uma linha de depois sobe junto com ela.
+        const total = read + next.added.length;
+        setActiveState((held) => {
+          if (held === null || held.resultId !== from || held.cell.row < at) return held;
+          if (total === 0) return null;
+          return { resultId: from, cell: { row: held.cell.row === at ? Math.min(at, total - 1) : held.cell.row - 1, column: held.cell.column } };
+        });
+      }
       say(null);
     } finally {
       release();
@@ -640,6 +665,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         nullable: known?.columns[cell.column]?.nullable ?? true,
         newRow: newRowAccess(reason, known, writing || running),
         deleteRow: deleteRowAccess(rowOf(cell.row), reason, known, writing || running),
+        shortcuts: editShortcuts(platform),
         ...(filterContext === null ? {} : { filter: filterMenuItem(filterContext) }),
         ...(sources.current.refresh === undefined ? {} : { refresh: personBusy || writing ? { editable: false, reason: gridFilterCopy.menu.unavailable(gridFilterCopy.reasons.busy) } : { editable: true } }),
         ...(sources.current.autoRefresh === undefined ? {} : { autoRefresh: sources.current.autoRefresh.item() }),
@@ -753,6 +779,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCopy: (cell) => void copyCell(cell),
           onSave: () => void save(),
           onNewRow: () => void newRow(),
+          onDeleteRow: () => {
+            const cell = latest.current.active;
+            if (cell !== null) void removeRow(cell.row);
+          },
           ...(filter === undefined
             ? {}
             : {

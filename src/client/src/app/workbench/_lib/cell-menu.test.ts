@@ -222,7 +222,7 @@ describe("a linha nova depois do Salvar, com o que o banco preencheu (RN-EDIT-00
 });
 
 describe("os rótulos do menu da célula são os da especificação (RN-EDIT-001)", () => {
-  it("Editar célula, Definir como nulo, Linha nova, Excluir linha e Desfazer alteração", () => {
-    expect([menu.edit, menu.setNull, menu.newRow, menu.deleteRow, menu.undo]).toEqual(["Editar célula", "Definir como nulo", "Linha nova", "Excluir linha", "Desfazer alteração"]);
+  it("Editar célula, Definir como nulo, Adicionar linha (seção 33: era \"Linha nova\"), Excluir linha e Desfazer alteração", () => {
+    expect([menu.edit, menu.setNull, menu.newRow, menu.deleteRow, menu.undo]).toEqual(["Editar célula", "Definir como nulo", "Adicionar linha", "Excluir linha", "Desfazer alteração"]);
   });
 });

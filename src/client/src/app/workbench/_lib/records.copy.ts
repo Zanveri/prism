@@ -78,11 +78,11 @@ export const recordsCopy = {
       label: "Ações da célula",
       copyValue: "Copiar valor",
       paste: "Colar",
-      // Os rótulos da RN-EDIT-001.
+      // Os rótulos da RN-EDIT-001 (seção 33: "Linha nova" passou a se chamar "Adicionar linha"; as marcas da linha nova na grade continuam).
       edit: "Editar célula",
       setNull: "Definir como nulo",
       undo: "Desfazer alteração",
-      newRow: "Linha nova",
+      newRow: "Adicionar linha",
       deleteRow: "Excluir linha",
       // RN-GRADE-012: o "Atualizar" da grade (F5), que lê de novo os Registros ou executa de novo o comando do resultado, com o filtro.
       refresh: "Atualizar",
@@ -93,6 +93,16 @@ export const recordsCopy = {
       // RN-SQL-017: a célula cortada é copiada inteira; esta é a que a API não tinha inteira (passou do teto, ou o resultado mudou).
       copiedCut: (count: number) => (count === 1 ? "Copiado, mas 1 valor não pôde vir inteiro e foi cortado." : `Copiado, mas ${formatCount(count, "valor", "valores")} não puderam vir inteiros e foram cortados.`),
     },
+    // RN-EDIT-015: os atalhos da edição como o menu da célula (e a barra de edição) os escrevem. No macOS o Option faz o papel do Alt e o Cmd o do Ctrl.
+    shortcuts: {
+      edit: "F2",
+      newRow: "Alt+Insert",
+      newRowMac: "Option+Insert",
+      duplicateRow: "Ctrl+Alt+Insert",
+      duplicateRowMac: "Cmd+Option+Insert",
+      deleteRow: "Alt+Delete",
+      deleteRowMac: "Option+Delete",
+    },
     // RN-SQL-017: enquanto copiar ou exportar busca na API o valor completo das células cortadas.
     fullValues: { fetching: "Buscando os valores completos…", cancel: "Cancelar" },
     // Por que uma célula ou uma linha não se edita (além dos motivos que a API manda).
@@ -100,6 +110,8 @@ export const recordsCopy = {
       truncated: "o valor chegou cortado",
       keyTruncated: "a chave desta linha chegou cortada",
       deleted: "a linha está marcada para exclusão",
+      // RN-EDIT-014: "Excluir linha" na linha que já está riscada.
+      alreadyDeleted: "a linha já está marcada para exclusão; Desfazer alteração a devolve",
       noRowOperations: "este resultado não aceita linha nova nem exclusão",
       // RN-EDIT-002: num resultado de junção só se alteram células, e a tabela que não tem linha ali (junção externa) não se edita.
       joinRowOperations: "num resultado de junção só se alteram células",

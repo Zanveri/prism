@@ -88,7 +88,7 @@ export function cellAccess({ readOnly, target, busy, column, row }: CellContext)
   return allowed;
 }
 
-/** "Nova linha": só num resultado de uma tabela só que se edita (`rowOperations`); numa junção, só se alteram células. */
+/** "Adicionar linha" (e "Duplicar linha", RN-EDIT-016): só num resultado de uma tabela só que se edita (`rowOperations`); numa junção, só se alteram células. */
 export function newRowAccess(readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
   const table = tableAccess(readOnly, target, busy, isJoin(target) ? null : 0);
   if (table === null) return allowed;
@@ -98,13 +98,17 @@ export function newRowAccess(readOnly: string | null, target: EditTarget | null,
   return target!.rowOperations ? allowed : denied(copy.reasons.noRowOperations);
 }
 
-/** "Excluir linha": como a linha nova, e a linha lida precisa da chave inteira. A linha nova sai da grade. */
+/**
+ * "Excluir linha": como a linha nova, e a linha lida precisa da chave inteira. A linha nova sai da grade. A linha que já está marcada para exclusão não se
+ * exclui de novo (RN-EDIT-014): "Desfazer alteração" a devolve. Isso se sabe sem o alvo (as pendências lembradas com a aba voltam sem ele).
+ */
 export function deleteRowAccess(row: RowContext, readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
   const access = newRowAccess(readOnly, target, busy);
-  if (!access.editable || target === null) return access;
+  if (!access.editable) return access;
 
-  const key = keyUnknown(target, 0, row);
-  return key === null ? allowed : denied(key);
+  const key = target === null ? null : keyUnknown(target, 0, row);
+  if (key !== null) return denied(key);
+  return row.kind === "read" && row.deleted ? denied(copy.reasons.alreadyDeleted) : allowed;
 }
 
 /**

@@ -548,7 +548,7 @@ describe("QueryTabPanel: num resultado de junção cada coluna se edita na tabel
     expect(runner.keepSaved).toHaveBeenCalledWith("r1", { rows: [["1", "aberta", "7", "Ana Maria"], ["2", "paga", "7", "Ana Maria"]], truncated: new Map(), generated: new Map() });
   });
 
-  it("Linha nova e Excluir linha ficam desabilitados no menu, com o motivo; a coluna da chave também", async () => {
+  it("Adicionar linha e Excluir linha ficam desabilitados no menu, com o motivo; a coluna da chave também", async () => {
     rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: joinTarget });
     const view = mount(fakeRunner(joined()));
 
