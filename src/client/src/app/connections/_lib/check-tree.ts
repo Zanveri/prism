@@ -6,8 +6,9 @@ import { byName } from "./connection-tree";
  * A árvore de marcar dos diálogos de exportar e de importar conexões (RN-TRANSF-002 e 011): pastas e conexões, com uma caixa em cada linha. Pura e
  * testada; os diálogos só desenham e guardam as marcas.
  *
- * **O que se marca são as folhas**: as conexões e as pastas vazias (sem subpastas e sem conexões), que têm a caixa delas próprias. A caixa de uma pasta com
- * algo dentro mostra o estado do que está dentro dela, a qualquer profundidade, e o clique nela marca ou desmarca esse conteúdo. Toda pasta com algo dentro
+ * **O que se marca são as folhas**: as conexões e as pastas vazias (sem subpastas e sem conexões), que têm a caixa delas próprias; na prévia da importação,
+ * também a pasta que só tem dentro o que não pode ser importado (RN-TRANSF-014), que vai sozinha como a vazia. A caixa de uma pasta com algo que se marca
+ * dentro mostra o estado do que está dentro dela, a qualquer profundidade, e o clique nela marca ou desmarca esse conteúdo. Toda pasta com algo dentro
  * está no caminho de alguma folha, então marcar tudo o que está dentro de uma pasta leva todas as pastas dela ao arquivo. A pasta de uma folha marcada vai
  * como caminho, marcada ou não (RN-TRANSF-006): desmarcá-la não a tira, e a caixa dela fica mista.
  *
@@ -46,6 +47,8 @@ export function checkTree(items: readonly CheckItem[]): CheckTree {
 
   const nodes: CheckNode[] = [];
   const visited = new Set<string>();
+  // Quantas linhas que podem ser marcadas já entraram: a pasta sem nenhuma dentro dela é folha, com a caixa dela própria.
+  let selectables = 0;
 
   function walk(parent: string | null, depth: number, parentSelectable: boolean) {
     const children = (childrenOf.get(parent) ?? []).sort((a, b) => (a.kind === b.kind ? byName(a, b) : a.kind === "folder" ? -1 : 1));
@@ -55,10 +58,14 @@ export function checkTree(items: readonly CheckItem[]): CheckTree {
 
       const node: CheckNode = { ...child, selectable: parentSelectable && child.selectable, depth, index: nodes.length, end: nodes.length + 1, leaf: true };
       nodes.push(node);
+      if (node.selectable) selectables++;
       if (child.kind === "folder") {
+        const before = selectables;
         walk(child.key, depth + 1, node.selectable);
         node.end = nodes.length;
-        node.leaf = node.end === node.index + 1;
+        // A pasta que pode ser importada e só tem dentro o que não pode (RN-TRANSF-014) é importável sozinha, como a vazia: a prévia a conta marcada
+        // (RN-TRANSF-011), e sem a caixa dela própria não haveria como levá-la.
+        node.leaf = selectables === before;
       }
     }
   }

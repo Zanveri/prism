@@ -64,6 +64,19 @@ describe("checkTree: a árvore de marcar (RN-TRANSF-002)", () => {
     ]);
     expect(leavesOf(invalid, "p")).toEqual([]);
   });
+
+  it("a pasta que pode ser marcada e só tem dentro o que não pode é folha, com a caixa dela própria, como a vazia (RN-TRANSF-011 e 014)", () => {
+    const onlyInvalid = checkTree([folder("p", null, "P"), connection("bad", "p", "Bad", false), folder("q", "p", "Q", false)]);
+    const p = onlyInvalid.byKey.get("p")!;
+
+    expect([p.leaf, p.selectable, p.end - p.index]).toEqual([true, true, 3]);
+    expect(keys(leavesOf(onlyInvalid, "p"))).toEqual(["p"]);
+    expect([...toggle(onlyInvalid, "p", new Set())]).toEqual(["p"]);
+    expect([...markAll(onlyInvalid, new Set())]).toEqual(["p"]);
+    expect(checkStates(onlyInvalid, new Set(["p"])).get("p")).toBe("checked");
+    expect(keys(foldersInFile(onlyInvalid, new Set(["p"])))).toEqual(["p"]);
+    expect(keys(markedLeaves(onlyInvalid, new Set(["p", "bad"])))).toEqual(["p"]);
+  });
 });
 
 describe("checkStates: marcada, desmarcada ou mista", () => {

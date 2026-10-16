@@ -78,7 +78,8 @@ type CheckRowFrameProps = {
  * com 2.000 conexões e 2.000 pastas (RN-TRANSF-006) a lista não é virtual, para o Tab andar por todas as caixas e escolhas (RN-TRANSF-002).
  */
 export function CheckRowFrame({ node, state, open, disabled, name, description = null, onToggleOpen, onMark, children, trailing, detail, note }: CheckRowFrameProps) {
-  const opensAndCloses = node.kind === "folder" && !node.leaf;
+  // A seta é da pasta com alguma linha dentro, que se marque ou não: a pasta só com o que não pode ser importado é folha (tem a caixa dela) e abre e fecha.
+  const opensAndCloses = node.kind === "folder" && node.end > node.index + 1;
 
   return (
     <li data-key={node.key} style={{ paddingLeft: 4 + node.depth * 18 }} className="flex min-h-9 items-center gap-2 rounded-sm py-1 pr-2 [contain-intrinsic-size:auto_36px] [content-visibility:auto] hover:bg-selected">
