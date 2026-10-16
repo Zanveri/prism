@@ -21,6 +21,7 @@ import { connectionReveal } from "../_lib/connection-intent";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
+import { filterConnected } from "../_lib/navigator-connected";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
@@ -31,11 +32,12 @@ import { refreshKey } from "../_lib/grid-editing";
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
-import { isConnected } from "../_lib/workbench-model";
+import { connectedConnectionIds, isConnected } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
 import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
+import { NavigatorConnectedFilter, NavigatorFilteredEmpty } from "./navigator-connected-filter";
 import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
 import { NavigatorSearchField } from "./navigator-search-field";
 import { NavigatorRow, type ConnectionStatus } from "./navigator-row";
@@ -162,6 +164,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   // RN-NAV-010: o seletor de ambiente. É estado daqui: a área de trabalho fica montada enquanto o cofre está aberto, então a escolha vale enquanto a
   // janela está aberta, e sair do cofre a apaga, como o resto.
   const [environmentChoice, setEnvironmentChoice] = useState<EnvironmentChoice>(allEnvironments);
+  // RN-NAV-013: "Só as conectadas", estado daqui pelo mesmo motivo: vale enquanto a janela está aberta, como a do ambiente.
+  const [onlyConnected, setOnlyConnected] = useState(false);
   // O filtro roda sobre o texto adiado: a digitação não espera a lista de milhares de linhas.
   const searchText = useDeferredValue(query);
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
@@ -185,15 +189,25 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   // só com as duas listas já na tela).
   const savedEnvironments = useMemo(() => userEnvironments(folders.data ?? [], connectionList), [folders.data, connectionList]);
   if (folders.data !== undefined && connections.data !== undefined && !choiceAvailable(environmentChoice, savedEnvironments)) setEnvironmentChoice(allEnvironments);
-  const shown = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
-  const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
-
-  const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
   // Um observador por conexão: o ponto de estado mostra a sessão mesmo com o nó recolhido, e só um nó aberto a abre.
   const sessions = useQueries({ queries: connectionList.map((connection) => ({ ...databaseSessionQuery(connection.id), enabled: expanded.has(navKey({ type: "connection", connectionId: connection.id })) })) });
   const sessionById = new Map(connectionList.map((connection, index) => [connection.id, sessions[index]]));
   const statuses = new Map(connectionList.map((connection, index) => [connection.id, statusOf(sessions[index], isConnected(connection.id, tabs, sessions[index].isSuccess))]));
+  // RN-NAV-013: as conectadas, na definição única (`isConnected`, a do ponto de estado), numa chave de texto: a árvore filtrada só se refaz quando elas mudam.
+  const connectedIds = connectedConnectionIds(
+    connectionList.map((connection) => connection.id),
+    tabs,
+    (connectionId) => sessionById.get(connectionId)?.isSuccess === true,
+  );
+  const connectedKey = onlyConnected ? connectedIds.join(" ") : null;
+
+  // RN-NAV-010 e 013: o seletor de ambiente e "Só as conectadas" se combinam; a busca filtra depois, sobre a árvore que sai daqui.
+  const inEnvironment = useMemo(() => filterByEnvironment(folders.data ?? [], connectionList, environmentChoice, environments), [folders.data, connectionList, environmentChoice, environments]);
+  const shown = useMemo(() => filterConnected(inEnvironment.folders, inEnvironment.connections, connectedKey === null ? null : new Set(connectedKey.split(" "))), [inEnvironment, connectedKey]);
+  const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
+
+  const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
   const paths = [...expanded].map(parseNavKey);
   const fetchedPaths = paths.filter(isFetched);
@@ -237,8 +251,11 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     setSelectedKey(plan.key);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
-    // O filtro de ambiente que a esconde também sai (RN-NAV-010): a conexão salva ou duplicada sem o ambiente escolhido tem de aparecer.
-    if (!shown.connections.includes(revealTarget)) setEnvironmentChoice(allEnvironments);
+    // Os filtros que a escondem também saem (RN-NAV-010 e 013): a conexão salva ou duplicada sem o ambiente escolhido, ou desconectada, tem de aparecer.
+    if (!shown.connections.includes(revealTarget)) {
+      setEnvironmentChoice(allEnvironments);
+      setOnlyConnected(false);
+    }
   }
 
   const announcedReveal = useRef(0);
@@ -559,8 +576,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     }
 
     // Primeiro uso (RN-NAV-007): a barra de ações continua acima, e o "Nova conexão" grande fica na área das abas (a página). A árvore vazia pelo
-    // filtro de ambiente não é o primeiro uso: há o que mostrar, só não nesse ambiente.
-    const filtering = environmentChoice.type !== "all";
+    // filtro de ambiente ou pelo "Só as conectadas" não é o primeiro uso: há o que mostrar, só não com esses filtros.
+    const filtering = environmentChoice.type !== "all" || onlyConnected;
     if (tree.roots.length === 0 && (!filtering || (connectionList.length === 0 && (folders.data ?? []).length === 0))) {
       return (
         <div className="flex flex-col gap-1 px-3 py-2">
@@ -572,16 +589,15 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
     return (
       <>
-        {/* RN-NAV-010: o seletor de ambiente ao lado do campo de busca; no navegador estreito ele desce para a linha de baixo. */}
+        {/* RN-NAV-010 e 013: o seletor de ambiente e "Só as conectadas" ao lado do campo de busca; no navegador estreito eles descem para a linha de baixo. */}
         <div className="mx-2 mb-2 flex flex-none flex-wrap gap-1.5">
           <NavigatorSearchField value={query} onChange={setQuery} onFocusList={focusList} inputRef={searchInput} />
           <NavigatorEnvironmentFilter environments={savedEnvironments} value={environmentChoice} onChange={setEnvironmentChoice} />
+          <NavigatorConnectedFilter count={connectedIds.length} on={onlyConnected} onToggle={() => setOnlyConnected((current) => !current)} />
         </div>
         {/* A lista fica sempre montada: a rolagem da árvore mora nela, e "nada encontrado" não pode levá-la embora. */}
         {filtering && tree.roots.length === 0 ? (
-          <p role="status" className="px-3 py-2 text-muted">
-            {environmentChoice.type === "environment" ? navigatorCopy.environmentFilter.nothingIn(savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : navigatorCopy.environmentFilter.nothingWithout}
-          </p>
+          <NavigatorFilteredEmpty environment={environmentChoice.type === "environment" ? (savedEnvironments.find((environment) => environment.key === environmentChoice.key)?.name ?? "") : environmentChoice.type === "none" ? null : undefined} onlyConnected={onlyConnected} onShowAll={() => setOnlyConnected(false)} />
         ) : search === null ? null : search.rows.length === 0 ? (
           <div role="status" className="flex flex-col gap-1 px-3 py-2">
             <p className="text-ink">{copy.search.nothingFound(searchText.trim())}</p>
