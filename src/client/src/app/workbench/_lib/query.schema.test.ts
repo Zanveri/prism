@@ -11,7 +11,13 @@ describe("queryResultSchema (seção 6: página de resultado)", () => {
   it("página com linhas", () => {
     const parsed = queryResultSchema.parse({ columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], rowsAffected: null });
 
-    expect(parsed).toEqual({ kind: "rows", columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], totalRows: null, resultId: null, readOnly: null, filterApplied: null });
+    expect(parsed).toEqual({ kind: "rows", columns, rows: [["1", "EXT-04"], ["2", "INJ-02"]], hasMore: true, elapsedMs: 42, truncatedCells: [[1, 1]], totalRows: null, resultId: null, readOnly: null, filterApplied: null, read: null });
+  });
+
+  it("RN-EXPORT-002: `read` diz se o comando é só leitura e não gravou; sem ele, ou fora do formato, nulo (na dúvida, não é leitura), sem recusar a página", () => {
+    expect(queryResultSchema.parse({ columns, rows: [["1", "a"]], hasMore: false, elapsedMs: 1, read: true })).toMatchObject({ kind: "rows", read: true });
+    expect(queryResultSchema.parse({ columns, rows: [["1", "a"]], hasMore: false, elapsedMs: 1, read: false })).toMatchObject({ kind: "rows", read: false });
+    expect(queryResultSchema.parse({ columns, rows: [["1", "a"]], hasMore: false, elapsedMs: 1, read: "sim" })).toMatchObject({ kind: "rows", read: null });
   });
 
   it("totalRows presente: o comando gravou, foi até o fim e esse é o total que devolveu (RN-SQL-013)", () => {

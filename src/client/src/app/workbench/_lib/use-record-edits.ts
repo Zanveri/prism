@@ -108,6 +108,11 @@ type Params = {
   kept?: RowsState | null;
   /** RN-SQL-023: o script roda ou espera a resposta da pergunta de erro (RN-SQL-021): a edição fica ocupada em todas as abas de resultado. */
   scriptBusy?: boolean;
+  /**
+   * RN-EXPORT-001 e RN-GRADE-004: o "Exportar dados…" do menu da célula, com a origem desta grade: o motivo de não valer agora (lido ao abrir o menu) e o que
+   * abre o assistente. Sem ele, o menu não o tem.
+   */
+  exportData?: { blocker: () => string | null; open: () => void };
 };
 
 const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notice: null };
@@ -131,6 +136,9 @@ function barOf({ shown, edits, readOnlyReason, target, busy, saving, active }: {
   const rows = (shown?.rows.length ?? 0) + edits.added.length;
   return editBar({ readOnly: readOnlyReason, target, busy: saving || busy, active: active !== null && active.row < rows ? { cell: active, row: rowContextOf(shown, edits, active.row) } : null, rows, platform });
 }
+
+/** O motivo de "Exportar dados…" não valer, como o acesso de um item do menu. */
+const accessOfBlocker = (blocker: string | null): EditAccess => (blocker === null ? { editable: true } : { editable: false, reason: blocker });
 
 /** RN-SQL-017: as recusas com que as células pedidas ficam cortadas, sem o aviso central: o resultado mudou, a sessão caiu, a célula está fora dele. */
 const cellRefusals = ["RESULT_NOT_FOUND", "DATABASE_SESSION_NOT_FOUND", "CELLS_INVALID"];
@@ -165,7 +173,7 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 
  *   pendências (RN-EDIT-012). Sem o alvo (as pendências lembradas com a aba voltam sem ele), o Salvar e o "Ver SQL" o perguntam antes.
  * - As alterações não salvas vão ao registro da aba (`unsaved-edits.ts`), de onde quem fecha abas pergunta.
  */
-export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave, kept = null, scriptBusy = false }: Params) {
+export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave, kept = null, scriptBusy = false, exportData }: Params) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -200,9 +208,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   // RN-GRADE-013: o diálogo "Filtrar por valor…" e o campo do "Personalizado", com o que cada um precisa para juntar a condição ao campo.
   const [valueFilter, setValueFilter] = useState<{ cell: GridCell; values: DistinctValue[]; rows: number; more: boolean } | null>(null);
   const [customFilter, setCustomFilter] = useState<{ cell: GridCell; operator: CompareOperator; point: { x: number; y: number }; problem: string | null } | null>(null);
-  const sources = useRef({ filter, refresh, autoRefresh, confirmSave });
+  const sources = useRef({ filter, refresh, autoRefresh, confirmSave, exportData });
   useEffect(() => {
-    sources.current = { filter, refresh, autoRefresh, confirmSave };
+    sources.current = { filter, refresh, autoRefresh, confirmSave, exportData };
   });
   // RN-SQL-017: a busca dos valores completos em andamento, que a faixa mostra e deixa cancelar.
   const [fetching, setFetching] = useState<AbortController | null>(null);
@@ -785,6 +793,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         ...(filterContext === null ? {} : { filter: filterMenuItem(filterContext) }),
         ...(sources.current.refresh === undefined ? {} : { refresh: personBusy || writing ? { editable: false, reason: gridFilterCopy.menu.unavailable(gridFilterCopy.reasons.busy) } : { editable: true } }),
         ...(sources.current.autoRefresh === undefined ? {} : { autoRefresh: sources.current.autoRefresh.item() }),
+        ...(sources.current.exportData === undefined ? {} : { exportData: accessOfBlocker(sources.current.exportData.blocker()) }),
       });
 
       setMenu({
@@ -797,6 +806,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           setMenu(null);
           if (isAutoRefreshAction(action)) return sources.current.autoRefresh?.choose(action);
           if (action === "refresh") return sources.current.refresh?.();
+          // RN-EXPORT-001: o assistente abre com a origem da grade; a escolha não depende da célula.
+          if (action === "exportData") return sources.current.exportData?.open();
           // As linhas mudaram com o menu aberto (a execução automática que já rodava quando ele abriu): a célula escolhida é de uma linha que não está mais ali.
           if (moved(from)) return;
           if (isFilterAction(action)) {
@@ -925,6 +936,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   return {
     editing,
     pending: count,
+    /**
+     * RN-EXPORT-011: a tabela única do resultado, quando o alvo da edição já disse que ele é de uma tabela só (RN-EDIT-002, `rowOperations`); preenche a
+     * tabela de destino do SQL e do DbUnit ao exportar, sem perguntar ao banco. Nula antes de o alvo chegar e numa junção.
+     */
+    singleTable: target !== null && target.rowOperations && target.tables.length === 1 ? { schema: target.tables[0].schema, name: target.tables[0].name } : null,
     banner: {
       pending: count,
       oneAtATime: target?.oneAtATime === true,

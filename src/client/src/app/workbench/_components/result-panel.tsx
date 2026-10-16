@@ -10,6 +10,7 @@ import type { GridZoom } from "@/app/settings/_lib/preferences";
 import type { ColumnLink } from "../_lib/foreign-key-links";
 import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
+import { dataExportCopy } from "../_lib/data-export/data-export.copy";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
@@ -72,6 +73,40 @@ export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsSt
     </Button>
   );
 }
+
+/**
+ * RN-EXPORT-001: "Exportar…", que abre o assistente "Exportar dados" com a origem desta área. Está sempre lá, também sem resultado: o que não se aplica fica
+ * desabilitado sem sair do caminho do Tab (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela.
+ */
+export function ExportButton({ exporter, hint }: { exporter: ExportEntry; hint: string }) {
+  const reasonId = useId();
+  const blocked = exporter.blocker !== null;
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="compact"
+        aria-disabled={blocked || undefined}
+        aria-describedby={reasonId}
+        title={exporter.blocker ?? hint}
+        onClick={() => {
+          if (!blocked) exporter.onExport();
+        }}
+        className="h-7 px-2.5 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+      >
+        <DownloadIcon />
+        {dataExportCopy.entry.button}
+      </Button>
+      <span id={reasonId} className="sr-only">
+        {exporter.blocker ?? hint}
+      </span>
+    </>
+  );
+}
+
+/** O "Exportar…" da área (RN-EXPORT-001): o motivo de não valer agora (nulo quando vale) e o que abre o assistente. */
+export type ExportEntry = { blocker: string | null; onExport: () => void };
 
 /**
  * RN-SQL-004: o que está na tela e o tempo do comando. Sem mais linhas a ler, o que está na tela é
@@ -187,6 +222,11 @@ type ResultPanelProps = {
    * não executa.
    */
   kept?: { busy: boolean; onRunAlone: () => void };
+  /**
+   * RN-EXPORT-001: "Exportar…". Nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, na barra da área (que fica à vista com a
+   * área recolhida), depois do zoom da grade e antes de recolher e maximizar.
+   */
+  exporter?: ExportEntry;
 };
 
 /**
@@ -194,7 +234,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter }: ResultPanelProps) {
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -300,6 +340,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
         {records || kept !== undefined || statistics !== undefined ? null : (autoRefresh ?? null)}
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
         {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} /> : null}
+        {records || exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.resultHint} />}
         {actions}
       </div>
 
@@ -457,7 +498,9 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 </span>
               </>
             )}
-            {/* RN-EDIT-013: nos Registros, a barra de edição logo depois de "Exportar CSV", antes das linhas carregadas e do "Carregar mais". */}
+            {/* RN-EXPORT-001: todas as linhas, com o filtro e a ordem da aba, pelo assistente; sempre lá, também sem resultado. */}
+            {exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.recordsHint} />}
+            {/* RN-EDIT-013: nos Registros, a barra de edição logo depois de "Exportar CSV" e "Exportar…", antes das linhas carregadas e do "Carregar mais". */}
             {editBar}
             {rows === null || running ? null : rows.cursorClosed ? (
               <span className="flex items-baseline gap-2 text-ink">

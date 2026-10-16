@@ -5,6 +5,8 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { useToast, type Engine } from "@/components/ui";
 
 import { csvExportOf } from "../../_lib/csv";
+import { openExportWizard } from "../../_lib/data-export/data-exports";
+import { exportRows, recordsSource, runnerExportBlocker } from "../../_lib/data-export/export-entry";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
 import { allCutCells, noFullValues, withFullValues, type FullValues } from "../../_lib/full-values";
@@ -145,6 +147,9 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   );
   const refreshRef = useRef<() => void>(() => {});
   const menuRefresh = useCallback(() => refreshRef.current(), []);
+  // RN-EXPORT-001: o "Exportar dados…" do menu da célula lê o motivo e abre o assistente pelo que está abaixo (o "Salvar" em andamento vem da edição).
+  const exportRef = useRef<{ blocker: string | null; open: () => void }>({ blocker: null, open: () => {} });
+  const menuExport = useMemo(() => ({ blocker: () => exportRef.current.blocker, open: () => exportRef.current.open() }), []);
 
   // RN-GRADE-014: a atualização automática dos registros, na barra do resultado e no menu da grade; repete o comando em vigor (o do "Atualizar"). Só com a
   // aba à vista: escondida, ou com a vista desmontada (a Estrutura, o Diagrama), ela espera.
@@ -156,7 +161,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const { confirmed } = confirmation;
   const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave });
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, exportData: menuExport });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {
@@ -195,6 +200,21 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
     if (isAutoRun(runner.getState())) void runner.autoRunSettled().then(exportNow);
     else exportNow();
   }, [runner, exportNow]);
+
+  /**
+   * "Exportar…" (RN-EXPORT-001): todas as linhas pelo assistente, com a origem do comando que a grade mostra (o filtro e a ordem aplicados, e não o texto só
+   * digitado no campo). Desabilitado, com o motivo, sem resultado, com um comando da pessoa ou o "Salvar" em andamento; a execução da atualização automática
+   * não desabilita, e a origem é a grade que está na tela.
+   */
+  const exportBlocker = runnerExportBlocker(state, { busy: isPersonBusy(state) || edits.banner.saving });
+  const pending = edits.pending;
+  const openExport = useCallback(() => {
+    const rows = exportRows(runner.getState());
+    if (rows !== null) openExportWizard(recordsSource(rows, { connectionId, ...inDatabase(database), schema, name, filter, unsavedEdits: pending }));
+  }, [runner, connectionId, database, schema, name, filter, pending]);
+  useEffect(() => {
+    exportRef.current = { blocker: exportBlocker, open: openExport };
+  });
 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
@@ -321,6 +341,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         banner={<EditsBanner {...edits.banner} />}
         // No rodapé, ao lado de "Atualizar": o menu dos intervalos abre para cima.
         autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} opensUp onChoose={auto.choose} />}
+        exporter={{ blocker: exportBlocker, onExport: openExport }}
         nullText={preferences.results.nullText}
         // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão (cada execução volta à primeira página).
         autoLoadMore={preferences.results.autoLoadMore && auto.state.status !== "on"}

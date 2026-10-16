@@ -123,6 +123,8 @@ export type RowsState = {
   sourceRows?: readonly (number | null)[];
   /** RN-GRADE-011: como o filtro do resultado entrou no comando (`merged` ou `wrapped`); nulo sem filtro. */
   filterApplied?: FilterApplied | null;
+  /** RN-EXPORT-002: o comando deste resultado, com o filtro, é só leitura e não gravou: o "Exportar…" vale. Nulo quando a página não o disse. */
+  read?: boolean | null;
 };
 
 export type AffectedState = { status: "affected"; rowsAffected: number; elapsedMs: number };
@@ -798,6 +800,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         // RN-GRADE-011: o resultado embrulhado pelo filtro é só leitura, e diz por quê (a API pode já dizer; senão, a frase da tela).
         readOnly: data.readOnly ?? (data.filterApplied === "wrapped" ? gridFilterCopy.result.wrapped : null),
         filterApplied: data.filterApplied ?? null,
+        read: data.read ?? null,
       });
       // RN-SQL-013 e RN-AVISO-002: o comando gravou e está confirmado; as linhas são o que ele devolveu.
       if (data.totalRows !== null) toast.success(copy.commandCompleted(data.totalRows));
@@ -953,6 +956,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
                 sessionId,
                 readOnly: data.readOnly ?? null,
                 filterApplied: data.filterApplied ?? null,
+                read: data.read ?? null,
               };
               shown = rows;
               live = index;
