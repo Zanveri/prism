@@ -2660,8 +2660,12 @@ A API não muda: continua recebendo um comando por execução.
     executado"), as linhas (lidas ou devolvidas, ou afetadas) e o tempo. O erro de um comando vem na
     linha logo abaixo dele, como o banco o deu (RN-SQL-009), com o SQLSTATE. Abaixo da tabela, os
     totais: comandos executados (os que deram certo, de quantos o script tem), linhas alteradas (a
-    soma das linhas afetadas; o comando para o qual o banco não conta linhas não soma) e o tempo total
-    (a soma dos tempos dos comandos, sem o tempo das perguntas). Enquanto o script roda, a tabela
+    soma das linhas afetadas; o comando para o qual o banco não conta linhas não soma, nem o que grava
+    e devolve linhas, como o `INSERT ... RETURNING` (RN-SQL-013): dele a API diz quantas linhas
+    devolveu, e não quantas alterou, e as duas contas só coincidem no `INSERT`, no `UPDATE` e no
+    `DELETE` com `RETURNING` sozinhos; o total diz quantos ficaram de fora, "Linhas alteradas: 12 (sem
+    contar 1 comando que gravou e devolveu linhas)") e o tempo total (a soma dos tempos dos comandos,
+    sem o tempo das perguntas). Enquanto o script roda, a tabela
     mostra os 50 comandos em volta do que está em execução, com ele perto do alto, e duas linhas dizem
     quantos ficaram antes ("1.995 comandos antes destes, que aparecem quando o script terminar.") e
     quantos estão na fila ("Mais 955 comandos na fila."); os totais são do script inteiro. Enquanto ele
