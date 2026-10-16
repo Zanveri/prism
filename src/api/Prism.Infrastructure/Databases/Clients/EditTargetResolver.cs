@@ -15,8 +15,8 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// `FROM` (pelo nome: a mesma tabela duas vezes, ou duas de mesmo nome em esquemas diferentes, ficam só leitura) e tem uma chave inteira
 /// no resultado, como colunas dela: a primária, ou uma restrição ou índice único sem condição, só de colunas e com todas elas não nulas. A
 /// coluna se edita quando vem de uma tabela que se edita e não é calculada no comando, gerada sempre pelo banco, binária, de um tipo que o
-/// Prism ainda não converte naquele banco nem, num resultado de junção, uma coluna da chave. Linha nova e exclusão, só no resultado de
-/// uma tabela só.
+/// Prism ainda não converte naquele banco nem, num resultado de junção, uma coluna da chave. Adicionar, duplicar e excluir linha, só no
+/// resultado de uma tabela só.
 /// </summary>
 internal static class EditTargetResolver
 {
@@ -82,7 +82,7 @@ internal static class EditTargetResolver
             if (reason is null && join && tables[position].Key.Any(key => origins[key].Column?.Name == origin.Name))
                 reason = KeyInAJoin;
 
-            return new EditColumn(position, origin.Name, reason is null, reason, origin.IsNullable, origin.Generated, origin.Type);
+            return new EditColumn(position, origin.Name, reason is null, reason, origin.IsNullable, GenerationOf(dialect, origin), origin.Type);
         });
 
         return new EditTarget(tables, [.. editColumns], !join && tables[0].Editable, catalogs.Any(catalog => catalog?.OneAtATime == true));
@@ -259,6 +259,18 @@ internal static class EditTargetResolver
             ? ([], $"a chave de {name} não está inteira no resultado: faltam {string.Join(", ", missing)}")
             : ([], $"a chave de {name} tem coluna de um tipo que o Prism ainda não edita neste banco");
     }
+
+    /// <summary>
+    /// RN-EDIT-016: quem preenche o valor da coluna na linha nova, que o "Duplicar linha" da tela não copia. No PostgreSQL, a coluna cujo padrão é o
+    /// próximo valor de uma sequência (`nextval(...)`: o `serial` e o `bigserial`) é "por padrão", como a identidade "por padrão": o banco a preenche
+    /// quando o valor não vem. Só no alvo da edição: o catálogo continua a mostrá-la como padrão, e não como coluna gerada (RN-CAT-001).
+    /// </summary>
+    private static string? GenerationOf(ESqlDialect dialect, ColumnInfo origin)
+        => origin.Generated is null && dialect == ESqlDialect.PostgreSql && IsNextValue(origin.DefaultValue) ? ColumnGeneration.ByDefault : origin.Generated;
+
+    /// <summary>O padrão é uma chamada de `nextval`, como o `pg_get_expr` o escreve (`nextval('loja.pedido_id_seq'::regclass)`).</summary>
+    private static bool IsNextValue(string? expression)
+        => expression?.Trim() is { } text && text.StartsWith("nextval(", StringComparison.OrdinalIgnoreCase) && text.EndsWith(')');
 
     private static string? ColumnReason(ESqlDialect dialect, ColumnInfo origin, QueryColumn column)
     {
