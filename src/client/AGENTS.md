@@ -288,7 +288,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `SQL_EXECUTION_FAILED` de uma execução vira o aviso curto "O comando falhou. Veja o erro no resultado." e a mensagem do
   banco, com o SQLSTATE, fica na área de resultado (RN-AVISO-005); o `TRANSACTION_CONTROL_NOT_SUPPORTED` (`BEGIN`,
   `COMMIT` e afins, RN-SQL-003) tem o mesmo aviso, com a frase da API (`title` e `detail`) na área de resultado, ou,
-  havendo linhas na tela (que ficam), a frase da API vai no próprio aviso. Depois de "Cancelar", o comando que terminou por
+  havendo linhas na tela (que ficam), a frase da API vai no próprio aviso; a recusa do somente leitura (`CONNECTION_READ_ONLY`, RN-PROT-002)
+  é tratada do mesmo jeito (ver "Proteções da conexão e da pasta"). Depois de "Cancelar", o comando que terminou por
   causa disso é "Comando cancelado." (ver "Uma coisa por vez"), e **não** gera o aviso de falha.
 - **Avisos dos scripts** (`scripts.copy.ts`): gravar por cima um script com o SQL grande demais vira o aviso de erro com a frase da tela, porque não há
   diálogo aberto para mostrá-lo (a tela confere o tamanho antes de enviar, e o `SCRIPT_TOO_LARGE` da API só chega se as duas contas divergirem); salvar, renomear
@@ -390,9 +391,40 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `icon-color.test.ts` confere que são as fichas do `globals.css`), e senão a mistura com o preto (claros) ou o branco (escuros) com a menor
   parte, de 1 em 1%, que passa. As seis do canvas são claras: nos escuros ficam como são, e nos claros escurecem (o Âmbar dá 1,7:1 sobre o
   fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa.
-- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente e a cor inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
-  diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela). As recusas do ambiente e da cor da
-  pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`, `environmentColor`, `color`), que o diálogo já mostra no lugar.
+- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente, a cor e as proteções inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
+  diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela, voltariam a confirmação a "Não" e tirariam
+  o somente leitura, com a API pedindo a senha). As recusas do ambiente e da cor da pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`,
+  `environmentColor`, `color`), que o diálogo já mostra no lugar.
+- **O `PATCH` da conexão também grava a conexão por inteiro** (seção 32): as proteções próprias (`confirmCommands`, `readOnly`) e a verificação
+  (`verificationEnabled`, `verificationInterval`, `verificationQuery`) vão sempre. Renomear e mover mandam as da conexão (`movedConnectionInput`, que
+  o `renamedConnectionInput` usa); o formulário manda as proteções pelos campos escondidos da seção Proteções e a verificação gravada
+  (`verificationOf`, na nova o `newVerification`: o formulário ainda não tem o painel "Sessão da conexão"). As herdadas (`protections`) nunca vão: elas
+  mudam com a pasta. O `connectionSchema` e o `folderSchema` exigem os campos: a resposta sem eles, ou com uma confirmação que a tela não conhece, é
+  recusada, em vez de o PATCH seguinte gravar a proteção mais fraca sem ninguém pedir (o `none` da API vale nulo, "Não"). Os testes dos corpos
+  (`folder-input`, `move-connection`, `rename-connection`, `rename-folder`) conferem que renomear e mover levam as proteções e a verificação, e os dos
+  diálogos, com os ganchos simulados (`connection-dialog.save`, `folder-dialog.save`, `move-connection-dialog`, `rename-connection-dialog`,
+  `rename-folder-dialog.save`), o `PATCH` que cada um manda de fato, por inteiro, e quando a senha é pedida. **Quem passar a gravar uma conexão ou uma
+  pasta por outro caminho** (o arrastar na árvore, que a especificação cita e a árvore ainda não tem, ou um atalho que troque só a cor) monta o corpo
+  pelo `movedConnectionInput` ou pelo `folderInputOf` e trata o `USER_PASSWORD_REQUIRED` pelo `passwordAsked`, como o "Mover".
+- **A seção Proteções** (`protections-section.tsx`, RN-PROT-001 a 004), a mesma no formulário da conexão e nos diálogos de nova pasta e de "Editar
+  pasta…", depois da seção Ambiente (o "Mover" não a mostra), como no canvas, com a escolha de três no lugar da caixa: "Confirmar antes de executar"
+  ("Não", "Só comandos irreversíveis", "Todos os comandos", rádios) e "Somente leitura" (caixa, com o cadeado). As escolhas PRÓPRIAS são estado do
+  diálogo e vão por dois campos escondidos (`confirmCommands`: `none`, `irreversible` ou `all`; `readOnly`: `true` ou `false`), e os controles
+  mostram o que vale. **A herdada não se afrouxa**: `inheritedProtections(folders, pasta)` (`_lib/protections.ts`, pura e testada) diz o que a pasta
+  impõe a quem está dentro dela, pelo `protections` que a API devolve de cada pasta (as dela e as de cima, com a origem); na conexão é a pasta
+  escolhida no campo (antes de gravar, como o ambiente herdado), na pasta é a pasta pai. O somente leitura herdado fica marcado e desabilitado, as
+  escolhas abaixo da confirmação herdada ficam desabilitadas, e as duas dizem "Herdado da pasta X" e por que não se afrouxa ali. A herdada não vira
+  própria: o campo escondido continua com a própria, e sair da pasta tira a proteção junto.
+- **A senha do somente leitura** (RN-PROT-003, `user-password-dialog.tsx`, no molde do de revelar a senha): marcar ou desmarcar "Somente leitura"
+  numa conexão ou numa pasta que já existe abre "Confirme a sua senha" ao salvar (`readOnlyChange`), com o que muda ("Desmarcar “Somente leitura” de
+  MES Produção") e o aviso de que cinco senhas erradas seguidas fecham o cofre, e o mesmo `PATCH` vai com `userPassword` (`updateConnection` e
+  `updateFolder` só põem a chave quando ela veio). O 422 `USER_PASSWORD_REQUIRED` que a tela não previu (mover a conexão, ou a pasta acima dela,
+  para fora de uma pasta somente leitura: pelo formulário, pelo "Mover" da conexão ou pelo "Mover" da pasta; a árvore não se arrasta) abre o mesmo diálogo (`passwordAsked`)
+  e grava de novo; o Renomear não pede, e a recusa que chegasse nele iria ao aviso central. No diálogo, a senha errada (`INVALID_PASSWORD`) e a que
+  faltou ficam no campo, que volta vazio; o 401 `VAULT_LOCKED` do quinto erro dá o aviso de atenção na `onSuccess` da própria mutação, e o
+  `VaultGuard` leva ao login; o resto volta a quem abriu (`onDone`: o 422 dos campos vai a eles; `null` quando a falha já foi ao aviso central). A
+  senha não fica guardada (`gcTime: 0` e `reset`). Não há transação aberta a avisar: a tela ainda não tem o Commit manual (RN-TX-001). O diálogo
+  fica fora do `<form>` de quem o abre, como o de revelar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
 - **`?connection=<id>`** (o "Editar conexão" do navegador de bancos): a página abre aquela conexão no formulário ao chegar,
@@ -444,7 +476,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   sessão: sem isso, o comando que rodava receberia `DATABASE_SESSION_NOT_FOUND` e abriria outra sessão, que ficaria órfã.
 - **As chamadas da aba passam pelo cache de mutações** (`throughMutationCache`, sem hook): a recusa que a aba não trata no
   lugar lança e chega ao aviso central, como em qualquer `mutationFn`. As que ela trata (`SQL_EXECUTION_FAILED`,
-  `TRANSACTION_CONTROL_NOT_SUPPORTED`, `NO_OPEN_CURSOR`, `DATABASE_SESSION_NOT_FOUND`) voltam como valor por `allowRefusal`.
+  `TRANSACTION_CONTROL_NOT_SUPPORTED`, `CONNECTION_READ_ONLY`, `NO_OPEN_CURSOR`, `DATABASE_SESSION_NOT_FOUND`) voltam como valor por `allowRefusal`.
   **Um `MutationObserver` usado fora de hook tem de ser solto** (`observer.reset()` num `finally`): `mutate()` prende o
   observador à mutação, e presa ela nunca sai do cache, nem com `gcTime: 0`. Cada execução ficaria guardada com as linhas
   da resposta e o SQL até o cofre fechar. Há teste do cache vazio depois de cada tipo de chamada.
@@ -505,8 +537,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   PostgreSQL.
 - **A linha em branco separa o comando do cursor** (RN-SQL-018, issue #7; `blankLineCuts` em `sql-statements.ts`, testes em
   `sql-statements.blank-line.test.ts`). Com a preferência ligada (o padrão), sem seleção, a linha em branco (só espaços) também termina o
-  comando, como o "Smart" do DBeaver. A regra é **"na dúvida, não separa"**: o Prism ainda não confirma comando irreversível, e separar onde
-  não devia executa a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`), enquanto não separar só faz o banco
+  comando, como o "Smart" do DBeaver. A regra é **"na dúvida, não separa"**: só a conexão que pede confirma o comando irreversível (RN-PROT-001), e
+  separar onde não devia executa a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`), enquanto não separar só faz o banco
   recusar o texto inteiro. Separa só quando as duas condições valem: o pedaço logo depois da linha em branco começa um comando
   (`startsCommand`: `commandWords`, mais os casos que olham a palavra seguinte, `WITH` com `nome [ ( … ) ] AS (` em `opensQueries`, `ALTER`
   e `DROP` com o tipo do objeto em `objectKinds`, `COMMENT ON`, `LOCK TABLE`, `REFRESH MATERIALIZED|TABLE` e `DO` com o corpo) e o comando
@@ -1581,7 +1613,7 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   `offset` do comando no texto inteiro, como no Ctrl+Enter), e o bloqueio pode vir; ele aposenta o executor (`retire`), que responde "Parar" à
   pergunta (`deciding`) e tira o script. `release` (Desconectar) para o script: o comando em andamento fica "cancelado". Cada comando passa por
   `execute`, com as recusas do comando a mais (`scriptCommandRefusals`: o controle de transação, o comando que não roda em transação, mais de um
-  comando), que perguntam como o erro do banco, sem o aviso central; o resto (a sessão ocupada, a API fora do ar, a sessão que caiu) para o script
+  comando e, na conexão somente leitura, o que não é leitura, `CONNECTION_READ_ONLY`), que perguntam como o erro do banco, sem o aviso central; o resto (a sessão ocupada, a API fora do ar, a sessão que caiu) para o script
   sem perguntar. A sessão que cai só é reaberta antes da primeira resposta (`!answered`): depois, o que os comandos de antes deixaram nela se perdeu.
   **Sem resposta sobre comando nenhum** (a conexão que não abre, o cancelamento antes do primeiro), a tela fica como estava: o script de antes volta
   (`untouched`), e o executor faz o que o Ctrl+Enter faria. O `failed` ganhou `notify`: no script os avisos de cada comando calam, e sai um no fim
@@ -1653,6 +1685,69 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   foco nele, levou o foco à grade do resultado novo ("Linhas do resultado"). Um script parado no erro com a área de trabalho por baixo de
   Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
   consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
+
+## Proteções da conexão e da pasta (RN-PROT-001 a 006)
+
+Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
+pasta que o usuário desejar", e a conexão "apenas readonly, ou seja, permite apenas select"). Quem impõe o somente leitura é a API, que recusa o que não é
+leitura antes de ir ao banco; a confirmação é da tela, que pergunta antes de enviar. A seção Proteções do formulário, a senha do somente leitura e o PATCH
+que leva tudo estão em "Conexões", acima. O painel "Sessão da conexão" (a verificação periódica, RN-VERIF-001 a 003) e o "Só as conectadas" do navegador
+(RN-NAV-013) ainda não estão na tela.
+
+- **O que é irreversível** (`_lib/irreversible.ts`, `irreversibleOf`, com teste nos três bancos). Lido pelo leitor único do projeto (`sqlTokens`): texto,
+  nomes entre aspas, comentários de cada banco (o `{ … }` do Informix, o aninhado do PostgreSQL e do Db2) e `$tag$` não contam. É irreversível o `DROP`
+  de qualquer objeto, o `ALTER` com um `DROP` dentro (`ALTER TABLE … DROP COLUMN`, também `DROP DEFAULT`: na dúvida, pergunta), o `TRUNCATE`, e o
+  `DELETE` e o `UPDATE` sem `WHERE` no nível de fora: o `WHERE` de uma subconsulta não conta (o `UPDATE t SET a = (SELECT … WHERE …)` altera todas as
+  linhas), e quem diz o nível é a profundidade de parênteses do comando. Contam as palavras que podem começar um comando: a primeira, a de depois de um
+  `;`, de um `BEGIN` ou de um `ATOMIC` (o bloco do Db2), e, para `DELETE` e `UPDATE`, a de depois de `(` e de `)`: o comando principal depois do `WITH`,
+  o `DELETE` de dentro das consultas dele (o `WITH` que grava, do PostgreSQL) e o `FINAL TABLE (UPDATE …)` do Db2. Na dúvida, pergunta: a coluna
+  `update` sem aspas logo depois de um parêntese conta. Não contam: o `CREATE` (criar uma rotina ou um gatilho não executa o corpo dele), o `EXPLAIN`
+  sem `ANALYZE` (só planeja; com `ANALYZE` vale o comando explicado), o `UPDATE STATISTICS` do Informix, o `ON CONFLICT DO UPDATE`, o `FOR UPDATE`, o
+  `GRANT … UPDATE` e o `THEN UPDATE` do `MERGE`, que não começam um comando. O motivo volta com o objeto como foi escrito (`producao.apontamento`, com as
+  aspas), que o aviso usa na frase ("Este DELETE não tem WHERE: ele apaga todas as linhas de producao.apontamento.").
+- **Quando pergunta** (`_lib/command-confirmation.ts`, puro e testado): `commandQuestion` (o comando: em "Todos os comandos", sempre, com o motivo quando é
+  irreversível; em "Só comandos irreversíveis", só o irreversível, e nunca na conexão somente leitura, em que a API o recusa antes do banco),
+  `scriptQuestion` (uma vez, com os comandos que pedem e o número de cada um no script, e o total), `saveQuestion` (só em "Todos os comandos": cada
+  comando do Salvar é pela chave da linha, com `WHERE`) e `autoRefreshQuestion` (só em "Todos os comandos": ela só repete uma leitura). As proteções
+  vêm de `shownProtections` (`connections/_lib/protections.ts`): o `protections` da API, com a pasta de onde vem cada uma.
+- **Quem pergunta** (`_lib/use-command-confirmation.ts`): a aba, pela conexão e pelo banco dela, com as proteções da lista de conexões do cache
+  (`connectionsQuery`): mudar a proteção vale para o comando seguinte, depois do `invalidateLists` (outra janela tem o cache dela, e relê a lista quando
+  ganha o foco). `confirm(monta, segue, cancelou)` monta a pergunta na hora do pedido; **sem pergunta, `segue` roda na mesma chamada**, e tudo fica como
+  era sem a proteção (o destaque do comando, os testes que esperam o envio na hora). Com ela, o aviso abre (`open`), e só "Executar mesmo assim" chama
+  `segue`. Um aviso por vez: o pedido novo cancela o de antes; desmontar a vista cancela o que esperava. `confirmed` é o mesmo como valor (verdadeiro na
+  hora, ou a promessa da resposta), para o Salvar, que espera. Sem a conexão na lista, nada pergunta.
+- **Onde** (`query-tab.tsx`): depois da pergunta das alterações não salvas (RN-EDIT-007) e logo antes de o comando sair, só quando o executor vai mesmo
+  enviar (`commandWillRun`, `scriptWillRun`: com mais de um comando, ou a aba ocupada, ele só avisa, e nada pergunta). No "Executar" e no Ctrl+Enter
+  (o destaque do comando acende só quando ele sai), no "Executar este comando", no "Executar script" (confirmado, roda inteiro, também o "Tentar de
+  novo" da pergunta de erro), no F5, no "Executar de novo" e no "Atualizar" do menu da grade (pelo comando das linhas na tela, `rowsTargetOf`), no
+  filtro e na ordem do resultado (pelo comando com o filtro junto; cancelado, o campo e o filtro em vigor ficam), no Salvar da grade (`confirmSave` de
+  `useRecordEdits`, que espera a resposta e segue só se o resultado ainda é o mesmo; também nos Registros, que montam o aviso deles) e ao ligar a
+  atualização automática (`confirmStart` de `useAutoRefresh`, só com ela desligada e livre para ligar: trocar o intervalo não pergunta). Os Registros
+  (com o filtro e a ordem deles), a Estrutura, os diagramas, "Carregar mais" e "Contar total" não perguntam: é o que o Prism monta para mostrar o que a
+  pessoa abriu.
+- **O aviso** (`confirm-command-dialog.tsx`, o `ConfirmarComando` do canvas): um `alertdialog`, com a faixa do ambiente (o próprio ou o herdado) na cor
+  dele e o texto em contraste (`environmentTextColor`), com a conexão e o banco da aba; sem ambiente, a faixa neutra. O título é "Executar comando
+  irreversível?" quando ele é (também em "Todos os comandos": dizer que é irreversível é mais do que dizer que vai executar), senão "Executar
+  comando?"; no script, "Executar script com comandos irreversíveis?" ou "Executar script?"; no Salvar, "Salvar as alterações?", com quantas vão e o "Ver
+  SQL", que abre os comandos (`EditSqlDialog`) por cima do aviso; ao ligar, "Ligar a atualização automática?". O comando vai em código, que rola, com o
+  filtro do resultado embaixo quando há; no script, a lista. Embaixo, por que o aviso aparece: a proteção da conexão, ou a herdada da pasta, com o nome
+  dela. Os botões são os do canvas: "Executar mesmo assim" ("Executar script", "Salvar mesmo assim", "Ligar mesmo assim") só com o contorno do erro, e
+  "Cancelar" cheio, com o foco. Esc, o X e o clique fora cancelam. O leitor de tela ouve, com o título, o que o comando faz e o comando (o
+  `aria-describedby` do canvas, pelo `describedBy` do `Dialog` e os ids de `describedIds`), e não só o título e o "Cancelar"; no script e no Salvar, o
+  resumo ("2 comandos de 12 são irreversíveis…"), sem a lista, que ele percorre no corpo. O script de um comando só em "Todos os comandos" diz "O comando do
+  script pede confirmação", e não "Todos os 1 comando".
+- **O somente leitura na tela** (RN-PROT-002). O cadeado do canvas (`ReadOnlyMark`) fica ao lado do nome da conexão na árvore (`NavigatorRow.readOnly`,
+  do mapa que o `Navigator` monta), no botão da conexão da aba e na lista dele (`ConnectionButtonView.readOnly`, `ConnectionListView.readOnlyOf`), e a
+  barra de status diz "Somente leitura". A dica é `readOnlyHintOf` ("Somente leitura" ou "Somente leitura, herdado da pasta Fábrica"), que é também o
+  nome acessível do cadeado e entra no do botão da conexão. A grade não se edita: a página já vem com `editable: { known: true, reason: "a conexão é
+  somente leitura" }`, e os itens ficam desabilitados com "Somente leitura: a conexão é somente leitura."; a conexão que passou a ser somente leitura
+  depois do resultado responde o `edit-target` com `CONNECTION_READ_ONLY`, tratado como o resultado só leitura, com o mesmo motivo
+  (`recordsCopy.edit.reasons.connectionReadOnly`), e o Salvar recusado assim mostra a frase na faixa.
+- **A recusa do comando** (`CONNECTION_READ_ONLY`, 422): o executor a trata no lugar, como o controle de transação recusado antes de executar (`failed`):
+  nada foi ao banco, então com linhas na tela elas e o cursor ficam ("Carregar mais" continua), e a frase da API vai no aviso de erro; sem resultado, ela
+  vai à área de resultado, com o aviso curto. No script, ela é o erro do comando (`scriptCommandRefusals`), e o script pergunta o que fazer.
+- **O que não foi feito**: o painel "Sessão da conexão" e o indicador da verificação (RN-VERIF-001 a 003) e o "Só as conectadas" (RN-NAV-013); o
+  cadeado na faixa de abas; e a conferência na tela (só os testes).
 
 ## Configurações (`src/app/settings`)
 
@@ -2248,7 +2343,9 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
   que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
   a desenha no lugar do rótulo, na lista e no controle fechado: a etiqueta de ambiente do navegador; o rótulo segue sendo o da busca pela inicial), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
-  ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
+  ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título e uma faixa no topo do painel (`banner`, a do
+  ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
+  corpo, o leitor de tela lê com o título (`describedByOf`: a `description` do cabeçalho vem antes, quando há). O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que
