@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import { currentAppZoom } from "@/lib/api/bridge";
+import { isMacPlatform } from "@/lib/utils/platform";
 
 /**
  * O zoom do programa inteiro (RN-ZOOM-001), que o processo principal guarda e aplica, para Configurações › Aparência mostrar e mudar. Lido de novo a cada
@@ -16,5 +17,5 @@ export const appZoomQuery = queryOptions({
 
 /** A tecla do atalho como a plataforma a escreve, para a dica: Cmd no macOS, Ctrl nas outras (`navigator.platform`). */
 export function zoomShortcutModifier(platform: string): "Cmd" | "Ctrl" {
-  return /mac|iphone|ipad/i.test(platform) ? "Cmd" : "Ctrl";
+  return isMacPlatform(platform) ? "Cmd" : "Ctrl";
 }

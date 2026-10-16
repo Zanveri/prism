@@ -91,6 +91,60 @@ public sealed class DatabaseSessionValidatorsTests
         result.ShouldNotHaveValidationErrorFor(command => command.Sql);
     }
 
+    /// <summary>RN-SQL-024: `keep` ausente, nulo, vazio ou com até 20 identificadores de resultado (o repetido também passa: conta uma vez na sessão).</summary>
+    [Trait("ExecuteQueryValidator", "ExecuteQueryCommand")]
+    [Theory(DisplayName = "OK keep ausente, nulo, vazio ou com até 20 identificadores")]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("[\"0199ef3a-7c2b-7d4e-8f10-2a3b4c5d6e7f\"]")]
+    [InlineData("[\"0199ef3a-7c2b-7d4e-8f10-2a3b4c5d6e7f\", \"0199ef3a-7c2b-7d4e-8f10-2a3b4c5d6e7f\"]")]
+    public void ExecuteQuery_Keep_ShouldBeOK(string? json)
+    {
+        //Act
+        var result = ExecuteQueryValidator.TestValidate(new ExecuteQueryCommand { SessionID = Guid.CreateVersion7(), Sql = "SELECT 1", Keep = json is null ? null : JsonDocument.Parse(json).RootElement });
+        var twenty = ExecuteQueryValidator.TestValidate(new ExecuteQueryCommand { SessionID = Guid.CreateVersion7(), Sql = "SELECT 1", Keep = JsonSerializer.SerializeToElement(Enumerable.Range(0, 20).Select(_ => Guid.CreateVersion7())) });
+
+        //Assert
+        result.ShouldNotHaveAnyValidationErrors();
+        twenty.ShouldNotHaveAnyValidationErrors();
+    }
+
+    /// <summary>
+    /// RN-SQL-024: mais de 20 resultados, ou uma entrada que não é um identificador (nula, texto qualquer, número), ou o `keep` que não é uma
+    /// lista é `QUERY_INVALID` no campo `Keep`, como o `pageSize` fora da forma, e não um 400 do MVC.
+    /// </summary>
+    [Trait("ExecuteQueryValidator", "ExecuteQueryCommand")]
+    [Theory(DisplayName = "Erro keep com entrada que não é identificador, ou que não é lista")]
+    [InlineData("[null]")]
+    [InlineData("[\"texto\"]")]
+    [InlineData("[42]")]
+    [InlineData("[\"0199ef3a-7c2b-7d4e-8f10-2a3b4c5d6e7f\", 1]")]
+    [InlineData("[[\"0199ef3a-7c2b-7d4e-8f10-2a3b4c5d6e7f\"]]")]
+    [InlineData("\"0199ef3a-7c2b-7d4e-8f10-2a3b4c5d6e7f\"")]
+    [InlineData("{}")]
+    [InlineData("true")]
+    public void ExecuteQuery_Keep_ShouldBeError(string json)
+    {
+        //Act
+        var result = ExecuteQueryValidator.TestValidate(new ExecuteQueryCommand { SessionID = Guid.CreateVersion7(), Sql = "SELECT 1", Keep = JsonDocument.Parse(json).RootElement });
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(command => command.Keep).WithErrorCode("QUERY_INVALID");
+        result.ShouldNotHaveValidationErrorFor(command => command.Sql);
+    }
+
+    [Trait("ExecuteQueryValidator", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "Erro keep com mais de 20 resultados")]
+    public void ExecuteQuery_Keep_ShouldBeError_MoreThan20()
+    {
+        //Act
+        var result = ExecuteQueryValidator.TestValidate(new ExecuteQueryCommand { SessionID = Guid.CreateVersion7(), Sql = "SELECT 1", Keep = JsonSerializer.SerializeToElement(Enumerable.Range(0, 21).Select(_ => Guid.CreateVersion7())) });
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(command => command.Keep).WithErrorCode("QUERY_INVALID").WithErrorMessage("Guarde no máximo 20 resultados (keep).");
+    }
+
     /// <summary>
     /// RN-GRADE-011: quem lê o filtro é o registro de sessões, com as aspas e os comentários do banco da sessão; a recusa dele é
     /// `FILTER_INVALID` no campo `Filter`, com o motivo. Sem recusa (ou sem a sessão), o filtro passa.

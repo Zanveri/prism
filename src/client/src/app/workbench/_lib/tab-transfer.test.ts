@@ -143,6 +143,19 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(readTransfer({ ...good, tab: { ...good.tab, script: { ...good.tab.script, generic: false } } })).toBeNull();
   });
 
+  it("o script leva a pasta que a aba lembra, e sem ela vai sem; o que não é um id é aba fora do formato (RN-SCRIPT-010)", () => {
+    const folderId = "0199ec00-0000-7000-8000-000000000001";
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedConnectionId: tab.connectionId!, folderId, dirty: false };
+    const moved = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+    const withoutFolder = { id: script.id, name: script.name, savedSql: script.savedSql, savedConnectionId: script.savedConnectionId, dirty: false };
+    const unknown = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script: withoutFolder }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+
+    expect(moved?.tab.script).toEqual(script);
+    expect(unknown?.tab.script).not.toHaveProperty("folderId");
+    const good = serializeTab(snapshot({ tab: { ...tab, script } }))!;
+    expect(readTransfer({ ...good, tab: { ...good.tab, script: { ...good.tab.script, folderId: "../pasta" } } })).toBeNull();
+  });
+
   it("a aba sem conexão (o script cuja conexão sumiu, RN-SCRIPT-003) passa sem conexão", () => {
     const adopted = roundTrip(serializeTab(snapshot({ tab: { ...tab, connectionId: null, sessionId: null } })));
 

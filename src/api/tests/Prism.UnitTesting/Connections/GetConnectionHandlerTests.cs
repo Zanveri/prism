@@ -15,7 +15,7 @@ public sealed class GetConnectionHandlerTests
     private readonly Mock<IVaultService> _vault = new();
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord> folders, params VaultConnectionRecord[] connections)
-        => new("marina.costa", folders, connections, [], VaultWorkspaceRecord.Empty);
+        => new("marina.costa", folders, connections, [], VaultWorkspaceRecord.Empty, []);
 
     [Trait("GetConnectionHandler", "GetConnectionCommand")]
     [Fact(DisplayName = "OK devolve a conexão sem a senha")]

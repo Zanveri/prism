@@ -208,6 +208,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => ExecuteAsync(sessionID, sql, filter, pageSize, readOnly: false, cancellationToken);
 
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken)
+        => ExecuteAsync(sessionID, sql, filter, pageSize, readOnly, [], cancellationToken);
+
+    public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
             var dialect = DialectOf(session);
@@ -235,6 +238,17 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             if (outcome.IsFailure && filtered is not null)
                 outcome = outcome.Error with { Position = null };
 
+            // RN-SQL-024: o comando que foi ao banco (deu certo, o banco recusou, ou rodou e foi desfeito) guarda os resultados da lista, entre o
+            // atual e os já guardados, antes de o atual ser trocado, e conta, no Db2 e no Informix, o que pode ter trocado o esquema atual da
+            // sessão. A recusa pelo texto, antes de executar, não muda nada.
+            var ran = outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed;
+            if (ran)
+            {
+                Keep(session, keep);
+                if (dialect != ESqlDialect.PostgreSql && EditableSql.MayChangeTheCurrentSchema(sent, dialect))
+                    session.SchemaChanges++;
+            }
+
             // RN-SQL-006: "contar total" vale para o último comando que devolveu linhas, mesmo que outros sem linhas venham depois.
             if (outcome.IsSuccess && outcome.Value.Page is { } page)
             {
@@ -248,7 +262,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                     : page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
                     : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
                     : EditableSql.Read(sent, dialect);
-                var result = new ResultState(source, page.Columns, filtered?.Applied);
+                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied);
                 var withoutFullValue = result.Cells.Add(page);
                 ReplaceResult(session, result);
 
@@ -257,7 +271,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
             // O comando que rodou deixa a sessão sem resultado (RN-SQL-017: e larga os valores completos dele); a recusa pelo texto, antes
             // de executar, deixa o anterior como estava.
-            if (outcome.IsSuccess || outcome.Error.Kind == EDatabaseFailure.ExecutionFailed || outcome.Error.Executed)
+            if (ran)
                 ReplaceResult(session, null);
 
             return outcome;
@@ -357,10 +371,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         if (!_sessions.TryGetValue(sessionID, out var session))
             return SessionNotFound();
 
-        if (session.CurrentResult is not { } result || result.ID != resultID)
-            return ResultChanged();
+        var result = EditableResult(session, resultID);
+        if (result.IsFailure)
+            return result.Error;
 
-        return await TargetOfAsync(session, result, catalogSessionID, cancellationToken);
+        return await TargetOfAsync(session, result.Value, catalogSessionID, cancellationToken);
     }
 
     public async Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
@@ -368,9 +383,11 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         if (!_sessions.TryGetValue(sessionID, out var session))
             return SessionNotFound();
 
-        if (session.CurrentResult is not { } result || result.ID != resultID)
-            return ResultChanged();
+        var found = EditableResult(session, resultID);
+        if (found.IsFailure)
+            return found.Error;
 
+        var result = found.Value;
         var target = await TargetOfAsync(session, result, catalogSessionID: null, cancellationToken);
 
         return target.IsFailure ? target.Error : EditPlanner.Preview(DialectOf(session), target.Value, result.Columns, changes);
@@ -380,13 +397,16 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// RN-EDIT-005: o alvo de antes é o que o `edit-target` respondeu (sem ele, o catálogo é consultado aqui, na própria sessão, cujo
     /// cursor o "Salvar" fecha de qualquer jeito). As pendências são conferidas contra ele antes de ir ao banco; dentro da transação, o
     /// catálogo é consultado de novo, e um alvo diferente (a tabela mudou, ou o esquema atual da sessão leva a outra) não executa nada.
+    /// RN-SQL-024: o resultado pode ser um guardado; o "Salvar" dele fecha o cursor do atual como qualquer comando, e não troca nenhum dos dois.
     /// </summary>
     public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ApplyEditsAsync), waitsForTurn: false, async session =>
         {
-            if (session.CurrentResult is not { } result || result.ID != resultID)
-                return ResultChanged();
+            var found = EditableResult(session, resultID);
+            if (found.IsFailure)
+                return found.Error;
 
+            var result = found.Value;
             var dialect = DialectOf(session);
             if (result.Source.Tables.Count == 0)
                 return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null).Error;
@@ -431,7 +451,45 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => new(EDatabaseFailure.SessionNotFound, "A sessão com o banco não existe ou já foi fechada.");
 
     private static DatabaseFailure ResultChanged()
-        => new(EDatabaseFailure.ResultChanged, "O resultado mudou: a sessão executou outro comando depois dele. Execute o comando de novo para editar.");
+        => new(EDatabaseFailure.ResultChanged, "O resultado não está mais guardado na sessão: outro comando foi executado nela depois dele. Execute o comando de novo para editar.");
+
+    /// <summary>
+    /// RN-SQL-024: o resultado que a edição pede, o atual ou um dos guardados. Um que não é nenhum dos dois é `ResultChanged`. No Db2 e no
+    /// Informix, o guardado que lê uma tabela escrita sem esquema também é, quando a sessão executou depois dele um comando que pode ter
+    /// trocado o esquema atual (ou o banco, no Informix): a tabela que o nome leva agora pode ser outra, e o driver não diz o esquema sem uma
+    /// consulta. Na dúvida, recusa. O atual nunca tem comando depois dele: o seguinte o substitui.
+    /// </summary>
+    private static Result<ResultState, DatabaseFailure> EditableResult(Session session, Guid resultID)
+    {
+        var result = session.CurrentResult is { } current && current.ID == resultID ? current : session.Kept.GetValueOrDefault(resultID);
+        if (result is null)
+            return ResultChanged();
+
+        if (DialectOf(session) == ESqlDialect.PostgreSql || result.SchemaChanges == session.SchemaChanges)
+            return result;
+
+        return result.Source.Tables.FirstOrDefault(table => table.Name.Schema is null) is { } unqualified
+            ? new DatabaseFailure(EDatabaseFailure.ResultChanged, $"Um comando executado depois deste resultado (como um SET ou um CALL) pode ter trocado o esquema atual da sessão, e {unqualified.Name.Name}, escrita sem esquema, pode ser outra tabela agora. Nada foi gravado; escreva o esquema no comando (esquema.tabela), ou execute-o de novo.")
+            : result;
+    }
+
+    /// <summary>
+    /// RN-SQL-024: com a vez da sessão tomada, quando o comando foi ao banco. Ficam guardados, entre o resultado atual e os já guardados, os da
+    /// lista (o identificador que a sessão não conhece é ignorado, e o repetido conta uma vez); os outros são esquecidos. Os valores completos
+    /// do atual saem da memória quando ele é trocado (<see cref="ReplaceResult"/>): o guardado leva só o que a edição precisa.
+    /// </summary>
+    private static void Keep(Session session, IReadOnlyCollection<Guid> keep)
+    {
+        var kept = new Dictionary<Guid, ResultState>();
+        foreach (var resultID in keep)
+        {
+            var result = session.CurrentResult is { } current && current.ID == resultID ? current : session.Kept.GetValueOrDefault(resultID);
+            if (result is not null)
+                kept.TryAdd(resultID, result);
+        }
+
+        session.Kept = kept;
+    }
 
     /// <summary>
     /// RN-EDIT-005: o catálogo de dentro da transação não é o da consulta. Nada foi executado. Diz a primeira tabela do `FROM` que mudou
@@ -815,6 +873,18 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         /// <summary>RN-EDIT-002: o resultado do último comando que devolveu linhas, enquanto nenhum outro rodou. Lido pelo `edit-target` sem a vez da sessão.</summary>
         public volatile ResultState? CurrentResult;
 
+        /// <summary>
+        /// RN-SQL-024: os resultados de antes que a tela pediu para continuar editando (as abas do script), pelo `resultID`, sem as linhas, sem
+        /// cursor e sem os valores completos. Trocado inteiro, com a vez tomada, por quem executa; lido pelo `edit-target` sem a vez.
+        /// </summary>
+        public volatile IReadOnlyDictionary<Guid, ResultState> Kept = new Dictionary<Guid, ResultState>();
+
+        /// <summary>
+        /// RN-SQL-024: quantos comandos que podem trocar o esquema atual da sessão (`SET`, `CALL`, `EXECUTE` e, no Informix, `DATABASE`) ela
+        /// executou, no Db2 e no Informix. Cada resultado guarda o número de quando foi lido; um guardado com número menor teve um deles depois.
+        /// </summary>
+        public volatile int SchemaChanges;
+
         /// <summary>O último comando que devolveu linhas (RN-SQL-006). Lido pela contagem sem a vez da sessão.</summary>
         public volatile RowQuery? LastRowQuery;
 
@@ -868,19 +938,23 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             Closed = true;
             _ = Volatile.Read(ref CountCancellation).CancelAsync();
 
-            // RN-SQL-017: a sessão que fecha larga os valores completos do resultado dela.
+            // RN-SQL-017: a sessão que fecha larga os valores completos do resultado dela; RN-SQL-024: e os guardados morrem com ela.
             CurrentResult?.Cells.Clear();
+            Kept = new Dictionary<Guid, ResultState>();
         }
     }
 
     /// <summary>
     /// RN-EDIT-002: um resultado da sessão, com o identificador que a página leva (muda a cada execução), o que o texto do comando diz da
     /// edição e as colunas que o banco devolveu. O alvo da edição é consultado na primeira tentativa de editar e fica com ele. RN-SQL-017:
-    /// guarda também o valor completo das células cortadas das páginas entregues.
+    /// guarda também o valor completo das células cortadas das páginas entregues, enquanto é o atual.
     /// </summary>
+    /// <param name="schemaChanges">RN-SQL-024: o <see cref="Session.SchemaChanges"/> da sessão quando o resultado foi lido.</param>
     /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, EFilterApplied? filterApplied = null)
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null)
     {
+        public int SchemaChanges => schemaChanges;
+
         private volatile EditTarget? _target;
 
         public Guid ID { get; } = Guid.CreateVersion7();

@@ -27,7 +27,7 @@ public sealed class ScriptHandlersTests
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 13, 12, 0, 0, TimeSpan.Zero));
 
     private void SetDocument(params VaultScriptRecord[] scripts)
-        => _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], scripts, VaultWorkspaceRecord.Empty)));
+        => _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], scripts, VaultWorkspaceRecord.Empty, [])));
 
     [Trait("GetScriptsHandler", "GetScriptsCommand")]
     [Fact(DisplayName = "OK a lista vem em ordem de nome, sem diferenciar maiúsculas, e sem o SQL")]
@@ -48,7 +48,7 @@ public sealed class ScriptHandlersTests
         var first = result.Value[0];
         Assert.Equal((alfa.ID, alfa.ConnectionID, alfa.Database, alfa.UpdatedAt), (first.ID, first.ConnectionID, first.Database, first.UpdatedAt));
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, JsonSerializerOptions.Web));
-        Assert.Equal(["id", "name", "connectionID", "database", "icon", "color", "updatedAt"], json.RootElement[0].EnumerateObject().Select(property => property.Name));
+        Assert.Equal(["id", "name", "connectionID", "database", "folderID", "icon", "color", "updatedAt"], json.RootElement[0].EnumerateObject().Select(property => property.Name));
     }
 
     /// <summary>RN-SCRIPT-006: o ícone e a cor gravados chegam à lista, e o script gravado antes deles volta com os dois nulos (o padrão, sem cor).</summary>
@@ -272,5 +272,46 @@ public sealed class ScriptHandlersTests
 
         //Assert
         Assert.All(printed, text => Assert.DoesNotContain("segredo", text, StringComparison.Ordinal));
+    }
+
+    /// <summary>RN-SCRIPT-009: o "Mover para…" chega à alteração, com a pasta ou com a raiz, e o que mais veio no corpo também.</summary>
+    [Trait("UpdateScriptHandler", "UpdateScriptCommand")]
+    [Fact(DisplayName = "OK a pasta e a raiz chegam à alteração")]
+    public async Task UpdateScript_Move_ShouldBeOK()
+    {
+        //Arrange
+        var folderID = Guid.CreateVersion7();
+        var stored = ScriptFakers.Create(name: "Mensal");
+        _repository.Setup(r => r.Update(stored.ID, It.IsAny<Func<Script, bool>>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<Script, bool> change, CancellationToken _) => Task.FromResult(change(stored) ? Result.Success<Script, ApiErrorDto>(stored) : Result.Failure<Script, ApiErrorDto>(ApiErrorDto.CreateConflict("x", "NOTHING_CHANGED", "x"))));
+        var handler = new UpdateScriptHandler(_repository.Object, _timeProvider);
+
+        //Act
+        var moved = await handler.Handle(ScriptFakers.ReturnUpdateScriptCommandValid(iD: stored.ID, folderID: folderID), CancellationToken.None);
+        var renamedAndRoot = await handler.Handle(ScriptFakers.ReturnUpdateScriptCommandValid(iD: stored.ID, name: "Mensal 2026", root: true), CancellationToken.None);
+
+        //Assert
+        Assert.True(moved.IsSuccess);
+        Assert.Equal(folderID, moved.Value.FolderID);
+        Assert.True(renamedAndRoot.IsSuccess);
+        Assert.Equal(("Mensal 2026", (Guid?)null), (renamedAndRoot.Value.Name, renamedAndRoot.Value.FolderID));
+    }
+
+    [Trait("CreateScriptHandler", "CreateScriptCommand")]
+    [Fact(DisplayName = "OK cria dentro da pasta do campo Pasta, e a resposta a traz")]
+    public async Task CreateScript_InAFolder_ShouldBeOK()
+    {
+        //Arrange
+        var folderID = Guid.CreateVersion7();
+        Script? inserted = null;
+        _repository.Setup(r => r.Insert(It.IsAny<Script>(), It.IsAny<CancellationToken>())).Callback<Script, CancellationToken>((script, _) => inserted = script).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+
+        //Act
+        var result = await new CreateScriptHandler(_repository.Object, _timeProvider).Handle(ScriptFakers.ReturnCreateScriptCommandValid(folderID: folderID), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(folderID, inserted!.FolderID);
+        Assert.Equal(folderID, result.Value.FolderID);
     }
 }

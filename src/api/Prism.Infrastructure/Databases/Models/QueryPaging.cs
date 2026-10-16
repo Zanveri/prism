@@ -19,6 +19,9 @@ public static class QueryPaging
     /// <summary>RN-SQL-017: as células que um pedido de valores completos leva, no máximo.</summary>
     public const int MaxCellsPerRequest = 10000;
 
+    /// <summary>RN-SQL-024: os resultados que um comando pede para a sessão continuar guardando para a edição, no máximo (as abas que o script guarda, RN-SQL-020).</summary>
+    public const int MaxKeptResults = 20;
+
     /// <summary>RN-SQL-007: o cursor fecha depois deste tempo sem leitura.</summary>
     public static readonly TimeSpan CursorIdleTimeout = TimeSpan.FromMinutes(5);
 }

@@ -12,16 +12,17 @@ namespace Prism.UnitTesting.Vault;
 /// <summary>
 /// RN-PASTA-007, RN-SCRIPT-006 e RN-VERSAO-005: a cor da pasta (`VaultFolderRecord.Color`) e o ícone e a cor do script (`VaultScriptRecord.Icon` e `Color`)
 /// entraram nos registros SEM subir o formato do cofre, como o ambiente da pasta (`VaultFolderEnvironmentTests`). A leitura do documento entrega nulo ao campo
-/// que o JSON não tem, e é isso que este teste prova: um cofre do formato atual gravado antes da mudança, com a pasta e o script sem os campos novos, abre com
-/// a pasta sem cor e o script com o ícone padrão e sem cor, e a gravação seguinte o regrava com eles, que voltam na entrada seguinte. O conteúdo é escrito à
-/// mão, com os campos que os dois registros tinham até então, cifrado como o serviço cifra.
+/// que o JSON não tem, e é isso que este teste prova: um cofre do formato 3 (o atual quando a mudança foi feita) gravado antes dela, com a pasta e o script sem
+/// os campos novos, abre com a pasta sem cor e o script com o ícone padrão e sem cor, e a gravação seguinte o regrava com eles, que voltam na entrada seguinte.
+/// O conteúdo é escrito à mão, com os campos que os dois registros tinham até então, cifrado como o serviço cifra. Ele escreve o número 3 de propósito (e não
+/// `VaultCrypto.Version`): com o formato 4 (RN-SCRIPT-011) ele passa a provar também a migração desse cofre.
 /// </summary>
 public sealed class VaultFolderColorAndScriptIconTests : IDisposable
 {
     private const string UserName = "marina.costa";
     private const string Password = "senha-do-teste-da-cor";
 
-    /// <summary>O formato do cofre quando a mudança foi feita: ela não o sobe.</summary>
+    /// <summary>O formato do cofre quando a mudança foi feita: ela não o subiu. O 4, que veio depois, o migra ao abrir.</summary>
     private const int FormatBeforeTheColors = 3;
 
     private static readonly Guid FolderID = Guid.Parse("0199e0a0-0000-7000-8000-0000000000a1");
@@ -97,7 +98,6 @@ public sealed class VaultFolderColorAndScriptIconTests : IDisposable
         Assert.True(reopened.IsSuccess);
         Assert.Equal(openedFolder with { Color = "#7DB2FF" }, rewrittenFolder);
         Assert.Equal(openedScript with { Icon = "chart", Color = "#F2B644" }, rewrittenScript);
-        Assert.Equal(FormatBeforeTheColors, header.RootElement.GetProperty("version").GetInt32());
         Assert.Equal(VaultCrypto.Version, header.RootElement.GetProperty("version").GetInt32());
     }
 }

@@ -1,3 +1,5 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
 /**
  * O navegador retrátil (RN-NAV-008): esconder e mostrar pelo botão da barra de ações, pelo botão da barra superior (sempre à vista), por
  * Ctrl+B, e Ctrl+Shift+E mostra e leva o foco à busca. O que decide é daqui, em funções puras; a página (`workbench/page.tsx`) só executa.
@@ -148,7 +150,7 @@ export function hideFocusTarget(origin: "toolbar" | "toggle" | "shortcut", { foc
 
 /** Os atalhos como a plataforma os escreve, para as dicas dos botões: Cmd no macOS, Ctrl nas outras (`navigator.platform`). */
 export function navigatorShortcutLabels(platform: string): { toggle: string; reveal: string } {
-  const mod = /mac|iphone|ipad/i.test(platform) ? "Cmd" : "Ctrl";
+  const mod = isMacPlatform(platform) ? "Cmd" : "Ctrl";
   return { toggle: `${mod}+B`, reveal: `${mod}+Shift+E` };
 }
 

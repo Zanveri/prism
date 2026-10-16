@@ -49,7 +49,8 @@ public sealed class UserScriptsController(IMediator mediator) : ControllerBase
 
     /// <summary>
     /// O corpo leva `id` e só o que muda: `name`, `sql`, o lugar (`connectionID` com `database`), o ícone e a cor (`icon` e `color`, RN-SCRIPT-006); o ausente
-    /// fica como está. `generic: true` tira o lugar (RN-SCRIPT-005).
+    /// fica como está. `generic: true` tira o lugar (RN-SCRIPT-005). O "Mover para…" (RN-SCRIPT-009) manda `folderID`, a pasta de destino, ou `root: true`, a
+    /// raiz da seção Scripts (os dois juntos são 422 `SCRIPT_PLACE_INVALID`).
     /// </summary>
     [HttpPatch]
     public async Task<IActionResult> UpdateScript([FromBody] UpdateScriptCommand command, CancellationToken cancellationToken)

@@ -8,8 +8,9 @@ namespace Prism.Application.Scripts.Domain;
 /// RN-SCRIPT-001 a 004: um script salvo é um nome (1 a 200 caracteres, sem caractere de controle e único por usuário: regras do validator e do repository),
 /// o texto do SQL (até 1 MB) e o lugar em que foi salvo, a conexão e o banco da aba. O lugar é um par: o banco só existe com a conexão, e o banco nulo é o
 /// banco da própria conexão. Sem conexão o script é genérico (RN-SCRIPT-005): a tela o abre na conexão conectada, ou pergunta qual. RN-SCRIPT-006: e um ícone
-/// da lista fechada (`ScriptRules.Icons`; nulo é o padrão) e uma cor opcional, que nascem nulos. O ID nasce aqui, e não no cofre: a tela o recebe na resposta
-/// da criação.
+/// da lista fechada (`ScriptRules.Icons`; nulo é o padrão) e uma cor opcional, que nascem nulos. RN-SCRIPT-007: e a pasta de scripts em que ele está, nula na
+/// raiz da seção Scripts; o nome continua único entre todos os scripts do usuário, de qualquer pasta. O ID nasce aqui, e não no cofre: a tela o recebe na
+/// resposta da criação.
 /// </summary>
 internal sealed class Script
 {
@@ -20,10 +21,11 @@ internal sealed class Script
     public string? Database { get; private set; }
     public string? Icon { get; private set; }
     public string? Color { get; private set; }
+    public Guid? FolderID { get; private set; }
     public DateTime CreatedAt { get; }
     public DateTime UpdatedAt { get; private set; }
 
-    private Script(Guid id, string name, string sql, Guid? connectionID, string? database, string? icon, string? color, DateTime createdAt, DateTime updatedAt)
+    private Script(Guid id, string name, string sql, Guid? connectionID, string? database, string? icon, string? color, Guid? folderID, DateTime createdAt, DateTime updatedAt)
     {
         ID = id;
         Name = name;
@@ -32,20 +34,21 @@ internal sealed class Script
         Database = database;
         Icon = icon;
         Color = color;
+        FolderID = folderID;
         CreatedAt = createdAt;
         UpdatedAt = updatedAt;
     }
 
     /// <summary>
     /// O SQL fica como veio, com os espaços e as quebras de linha: é o texto do editor. Só o nome é normalizado. O script novo tem o ícone padrão e não tem
-    /// cor (RN-SCRIPT-006): os dois só mudam pelo "Editar script…".
+    /// cor (RN-SCRIPT-006): os dois só mudam pelo "Editar script…". A pasta é a do campo "Pasta" do diálogo do nome (RN-SCRIPT-010), nula na raiz.
     /// </summary>
-    public static Script Create(string name, string sql, Guid? connectionID, string? database, DateTime createdAt)
-        => new(Guid.CreateVersion7(), name.NormalizeName(), sql, connectionID, DatabaseOf(connectionID, database), null, null, createdAt, createdAt);
+    public static Script Create(string name, string sql, Guid? connectionID, string? database, Guid? folderID, DateTime createdAt)
+        => new(Guid.CreateVersion7(), name.NormalizeName(), sql, connectionID, DatabaseOf(connectionID, database), null, null, folderID, createdAt, createdAt);
 
     /// <summary>O script como o cofre o guarda, para o repository. Nada é normalizado nem carimbado: o que está gravado já passou pelo `Create`.</summary>
-    public static Script Restore(Guid id, string name, string sql, Guid? connectionID, string? database, string? icon, string? color, DateTime createdAt, DateTime updatedAt)
-        => new(id, name, sql, connectionID, database, icon, color, createdAt, updatedAt);
+    public static Script Restore(Guid id, string name, string sql, Guid? connectionID, string? database, string? icon, string? color, Guid? folderID, DateTime createdAt, DateTime updatedAt)
+        => new(id, name, sql, connectionID, database, icon, color, folderID, createdAt, updatedAt);
 
     /// <summary>
     /// A alteração do `PATCH`: o que vem nulo fica como está. Renomear manda só o nome; gravar a aba por cima manda o SQL e o lugar dela. Com
@@ -75,6 +78,24 @@ internal sealed class Script
         Database = newDatabase;
         Icon = newIcon;
         Color = newColor;
+        UpdatedAt = updatedAt;
+
+        return true;
+    }
+
+    /// <summary>
+    /// O "Mover para…" do script (RN-SCRIPT-009), no mesmo `PATCH` parcial: <paramref name="folderID"/> leva o script para a pasta, e <paramref name="root"/>
+    /// para a raiz, porque o nulo é "fica como está". O validator recusa os dois juntos; aqui a raiz ganha. Mover não muda mais nada (RN-SCRIPT-007): o nome, o
+    /// lugar, o ícone e a cor ficam. Devolve se a pasta mudou; o mesmo destino não carimba a data. Quem confere que a pasta existe é o repository, dentro da
+    /// gravação.
+    /// </summary>
+    public bool MoveTo(Guid? folderID, bool root, DateTime updatedAt)
+    {
+        var newFolderID = root ? null : folderID ?? FolderID;
+        if (newFolderID == FolderID)
+            return false;
+
+        FolderID = newFolderID;
         UpdatedAt = updatedAt;
 
         return true;

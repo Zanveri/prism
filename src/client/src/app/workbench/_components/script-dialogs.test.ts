@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { Select } from "@/components/ui";
 import { buttonLabeled, elementsOf } from "@/lib/testing/react-tree";
 
 import { scriptsCopy as copy } from "../_lib/scripts.copy";
@@ -56,6 +57,26 @@ describe("o diálogo do nome do script (RN-SCRIPT-001 e 004)", () => {
       ["Fechamento", false],
     ]);
     expect(box(dialog({ generic: { initial: true, locked: false } }))?.props.defaultChecked).toBe(true);
+  });
+
+  it("ao salvar, o campo \"Pasta\" vem depois do nome e antes da caixa do genérico, com \"Sem pasta\" e as pastas, e a recusa dele no campo (RN-SCRIPT-010)", () => {
+    const onChange = vi.fn();
+    const options = [{ value: "f1", label: "Fechamento" }];
+    const tree = elementsOf(dialog({ generic: { initial: false, locked: false }, folder: { value: "f1", options, error: copy.save.folderGone, onChange } }));
+    const select = tree.find((element) => element.type === Select);
+    const order = tree.filter((element) => element.props.name === "name" || element.type === Select || element.props.name === "generic").map((element) => (element.type === Select ? "folder" : element.props.name));
+
+    expect(select?.props).toMatchObject({ id: "script-folder", value: "f1", options, placeholder: copy.save.noFolder, invalid: true, "aria-describedby": "script-folder-error" });
+    expect(tree.find((element) => element.props.htmlFor === "script-folder")?.props.children).toBe(copy.save.folder);
+    // A recusa chega com o foco no nome: o papel de alerta a anuncia.
+    expect(tree.find((element) => element.props.id === "script-folder-error")?.props).toMatchObject({ role: "alert", children: copy.save.folderGone });
+    expect(order).toEqual(["name", "folder", "generic"]);
+    (select?.props.onChange as (value: string) => void)("");
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
+  it("o renomear não tem o campo \"Pasta\"", () => {
+    expect(elementsOf(dialog()).some((element) => element.type === Select)).toBe(false);
   });
 
   it("na aba sem conexão a caixa vem marcada e presa, diz por quê, e o script vai genérico", () => {

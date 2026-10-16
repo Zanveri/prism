@@ -12,7 +12,8 @@ internal static class VaultMigration
     /// <summary>
     /// O documento de um cofre do formato <paramref name="format"/> como o formato atual o lê. O JSON de um formato anterior não tem os campos que vieram
     /// depois, e a leitura os entrega nulos. Do 1 para o 2 (RN-SCRIPT-002): os scripts não existiam, e viram a lista vazia. Do 2 para o 3 (RN-ABAS-006): a
-    /// área de trabalho não existia, e vira a vazia (nada volta na entrada seguinte). O resto passa como está.
+    /// área de trabalho não existia, e vira a vazia (nada volta na entrada seguinte). Do 3 para o 4 (RN-SCRIPT-011): as pastas de scripts não existiam, e
+    /// viram a lista vazia; a pasta de cada script, que o JSON de antes não tem, já chega nula, e todo script fica na raiz. O resto passa como está.
     /// </summary>
     public static VaultDocument Upgrade(VaultDocument document, int format)
     {
@@ -22,6 +23,9 @@ internal static class VaultMigration
 
         if (format < 3)
             upgraded = upgraded with { Workspace = VaultWorkspaceRecord.Empty };
+
+        if (format < 4)
+            upgraded = upgraded with { ScriptFolders = [] };
 
         return upgraded;
     }

@@ -274,4 +274,35 @@ public sealed class ScriptValidatorsTests
         Assert.Equal(["document", "code", "database", "table", "chart", "clock", "lightning", "bug", "wrench", "star", "flag"], ScriptRules.Icons);
         Assert.Equal("document", ScriptRules.DefaultIcon);
     }
+
+    /// <summary>RN-SCRIPT-009: o "Mover para…" manda a pasta ou a raiz; as duas juntas são contradição.</summary>
+    [Trait("UpdateScriptValidator", "UpdateScriptCommand")]
+    [Fact(DisplayName = "OK a pasta sozinha e a raiz sozinha")]
+    public void Update_FolderOrRoot_ShouldBeOK()
+    {
+        //Arrange
+        var validator = new UpdateScriptValidator();
+
+        //Act
+        var folder = validator.TestValidate(ScriptFakers.ReturnUpdateScriptCommandValid(folderID: Guid.CreateVersion7()));
+        var root = validator.TestValidate(ScriptFakers.ReturnUpdateScriptCommandValid(root: true));
+
+        //Assert
+        folder.ShouldNotHaveAnyValidationErrors();
+        root.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("UpdateScriptValidator", "UpdateScriptCommand")]
+    [Fact(DisplayName = "Erro a raiz com uma pasta responde SCRIPT_PLACE_INVALID no campo da pasta")]
+    public void Update_RootWithAFolder_ReturnsScriptPlaceInvalid()
+    {
+        //Arrange
+        var validator = new UpdateScriptValidator();
+
+        //Act
+        var result = validator.TestValidate(ScriptFakers.ReturnUpdateScriptCommandValid(folderID: Guid.CreateVersion7(), root: true));
+
+        //Assert
+        result.ShouldHaveValidationErrorFor(command => command.FolderID).WithErrorCode("SCRIPT_PLACE_INVALID");
+    }
 }

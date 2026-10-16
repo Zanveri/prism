@@ -13,17 +13,18 @@ namespace Prism.UnitTesting.Vault;
 /// <summary>
 /// RN-PROT-001 e 002, RN-VERIF-001 e RN-VERSAO-005: as proteções da pasta (`VaultFolderRecord.ConfirmCommands` e `ReadOnly`) e as da conexão, com a
 /// verificação periódica (`VaultConnectionRecord.ConfirmCommands`, `ReadOnly`, `VerificationEnabled`, `VerificationInterval` e `VerificationQuery`),
-/// entraram nos registros SEM subir o formato do cofre, como a cor da pasta (`VaultFolderColorAndScriptIconTests`). Um cofre do formato atual gravado
-/// antes da mudança, com a pasta e a conexão sem os campos novos, abre com eles nulos (a pasta e a conexão sem proteção, e a verificação no padrão), e a
-/// gravação seguinte o regrava com eles, que voltam na entrada seguinte. O conteúdo é escrito à mão, com os campos que os dois registros tinham até então,
-/// cifrado como o serviço cifra.
+/// entraram nos registros SEM subir o formato do cofre, como a cor da pasta (`VaultFolderColorAndScriptIconTests`). Um cofre do formato 3 (o atual quando a
+/// mudança foi feita) gravado antes dela, com a pasta e a conexão sem os campos novos, abre com eles nulos (a pasta e a conexão sem proteção, e a verificação
+/// no padrão), e a gravação seguinte o regrava com eles, que voltam na entrada seguinte. O conteúdo é escrito à mão, com os campos que os dois registros tinham
+/// até então, cifrado como o serviço cifra. Ele escreve o número 3 de propósito (e não `VaultCrypto.Version`): com o formato 4 (RN-SCRIPT-011) ele passa a
+/// provar também a migração desse cofre.
 /// </summary>
 public sealed class VaultProtectionsTests : IDisposable
 {
     private const string UserName = "marina.costa";
     private const string Password = "senha-do-teste-das-protecoes";
 
-    /// <summary>O formato do cofre quando a mudança foi feita: ela não o sobe.</summary>
+    /// <summary>O formato do cofre quando a mudança foi feita: ela não o subiu. O 4, que veio depois, o migra ao abrir.</summary>
     private const int FormatBeforeTheProtections = 3;
 
     private static readonly Guid FolderID = Guid.Parse("0199e0a0-0000-7000-8000-0000000000c1");
@@ -103,7 +104,6 @@ public sealed class VaultProtectionsTests : IDisposable
         Assert.True(reopened.IsSuccess);
         Assert.Equal(openedFolder with { ConfirmCommands = "irreversible", ReadOnly = true }, rewrittenFolder);
         Assert.Equal(openedConnection with { ConfirmCommands = "all", ReadOnly = true, VerificationEnabled = false, VerificationInterval = 120, VerificationQuery = "SELECT 1" }, rewrittenConnection);
-        Assert.Equal(FormatBeforeTheProtections, header.RootElement.GetProperty("version").GetInt32());
         Assert.Equal(VaultCrypto.Version, header.RootElement.GetProperty("version").GetInt32());
     }
 }

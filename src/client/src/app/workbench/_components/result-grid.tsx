@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { moveCell, type GridCell } from "../_lib/grid-cursor";
-import { copiesCell, filterKey, savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesCell, filterKey, rowShortcut, savesEdits, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
@@ -21,6 +21,9 @@ import { ColumnResizer } from "./column-resizer";
 
 const copy = workbenchCopy.result;
 const editCopy = recordsCopy.edit;
+
+/** A plataforma, para os atalhos da linha (RN-EDIT-015): no macOS o Option faz o papel do Alt e o Cmd o do Ctrl. */
+const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 
 /** Sem largura escolhida: todas as colunas com a de saída. */
 const noWidths: Readonly<Record<number, number>> = Object.freeze({});
@@ -391,7 +394,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     lineHeight: `calc(var(--text-sm--line-height) * ${metrics.factor})`,
   } as CSSProperties;
 
-  // A célula ativa fica à vista quando muda: a linha nova entra depois das lidas, e o "Nova linha" a ativa lá no fim.
+  // A célula ativa fica à vista quando muda: a linha nova entra depois das lidas, e "Adicionar linha" a ativa lá no fim.
   const activeRow = editing?.active?.row ?? null;
   const activeColumn = editing?.active?.column ?? null;
   useEffect(() => {
@@ -452,9 +455,13 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       editing.onSave();
       return;
     }
-    if (event.altKey && event.key === "Insert") {
+    // RN-EDIT-015: Alt+Insert adiciona, Ctrl+Alt+Insert duplica e Alt+Delete exclui a linha da célula ativa, com os modificadores exatos.
+    const row = rowShortcut(event, platform);
+    if (row !== null) {
       event.preventDefault();
-      editing.onNewRow();
+      if (row === "newRow") editing.onNewRow();
+      else if (row === "duplicateRow") editing.onDuplicateRow();
+      else editing.onDeleteRow();
       return;
     }
 

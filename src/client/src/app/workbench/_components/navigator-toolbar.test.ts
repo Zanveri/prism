@@ -35,7 +35,7 @@ describe("a barra de ações do navegador (RN-NAV-002)", () => {
     const markup = markupOf(buttons);
     const tags = [...markup.matchAll(/<button [^>]*>/g)].map((match) => match[0]);
 
-    expect(markup).toMatch(/<div[^>]*role="toolbar"[^>]*aria-label="Ações do navegador"/);
+    expect(markup).toMatch(/<div[^>]*role="toolbar"[^>]*aria-label="Ações da árvore de conexões"/);
     expect(tags.map((tag) => /aria-label="([^"]*)"/.exec(tag)?.[1])).toEqual(buttons.map((button) => button.label));
     expect(tags.map((tag) => /title="([^"]*)"/.exec(tag)?.[1])).toEqual(buttons.map((button) => button.title));
     // Só o desenho dentro do botão, escondido do leitor de tela: o nome é o `aria-label`.

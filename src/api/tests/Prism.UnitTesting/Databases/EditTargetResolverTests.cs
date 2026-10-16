@@ -52,12 +52,77 @@ public sealed class EditTargetResolverTests
         Assert.False(target.OneAtATime);
     }
 
+    /// <summary>
+    /// RN-EDIT-016: no PostgreSQL o `serial` e o `bigserial` são só um padrão (`nextval(...)`), e o catálogo não os diz gerados (RN-CAT-001); o alvo
+    /// da edição os diz "por padrão", como a identidade "por padrão", para o "Duplicar linha" deixar o banco gerar o valor da linha nova.
+    /// </summary>
     [Trait("EditTargetResolver", "Resolve")]
-    [Theory(DisplayName = "OK a visão, a tabela estrangeira e o que não é tabela ficam só leitura, com o motivo em cada coluna")]
+    [Fact(DisplayName = "OK no PostgreSQL a coluna cujo padrão é nextval(...) é gerada por padrão, e continua editável")]
+    public void Resolve_ShouldTellAPostgresColumnWhoseDefaultIsNextvalIsGeneratedByDefault()
+    {
+        //Arrange
+        ColumnInfo[] columns =
+        [
+            new("id", "integer", false, true, 1, "nextval('loja.pedido_id_seq'::regclass)", null),
+            new("numero", "bigint", false, false, 2, "  NEXTVAL('pedido_numero_seq'::regclass) ", null),
+            new("status", "text", true, false, 3, "'nextval(x)'::text", null),
+            new("quantidade", "integer", false, false, 4, "0", null),
+            new("codigo", "integer", false, false, 5, null, ColumnGeneration.ByDefault),
+            new("total", "numeric(12,2)", false, false, 6, "(quantidade * 2)", ColumnGeneration.Always)
+        ];
+        var result = new[] { Origin("id", 1), Origin("numero", 2), Origin("status", 3), Origin("quantidade", 4), Origin("codigo", 5), Origin("total", 6) };
+
+        //Act
+        var target = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", columns));
+
+        //Assert
+        Assert.Equal([ColumnGeneration.ByDefault, ColumnGeneration.ByDefault, null, null, ColumnGeneration.ByDefault, ColumnGeneration.Always], target.Columns.Select(column => column.Generated));
+        Assert.Equal([true, true, true, true, true, false], target.Columns.Select(column => column.Editable));
+        Assert.True(target.RowOperations);
+    }
+
+    /// <summary>RN-EDIT-016: só o PostgreSQL tem o padrão `nextval`; no Db2 e no Informix vale o que o catálogo diz (o `SERIAL` do Informix já é "por padrão").</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK no Db2 e no Informix o padrão não muda o que o catálogo diz da geração")]
+    public void Resolve_ShouldKeepTheGenerationTheCatalogGivesOutsidePostgres()
+    {
+        //Arrange
+        var table = new EditCatalogTable("LOJA", "PEDIDO", "table", null, false, [new("ID", "INTEGER", false, true, 1, "nextval('x')", null), new("STATUS", "VARCHAR(20)", true, false, 2, null, null)], [new EditKey("PK_PEDIDO", true, ["ID"])]);
+        var source = new ResultSource(null, [new FromTable(new EditTableName("LOJA", "PEDIDO", "\"LOJA\".\"PEDIDO\""), null)], [new SelectItem.All()]);
+
+        //Act
+        var target = Resolve(ESqlDialect.Db2, source, [Ibm("ID"), Ibm("STATUS")], table);
+
+        //Assert
+        Assert.Equal([null, null], target.Columns.Select(column => column.Generated));
+    }
+
+    /// <summary>RN-EDIT-005: o "Salvar" confere que o alvo de dentro da transação é o mesmo; a coluna `serial` sai igual nas duas consultas.</summary>
+    [Trait("EditTargetResolver", "Same")]
+    [Fact(DisplayName = "OK o alvo com a coluna serial é o mesmo quando o catálogo responde igual")]
+    public void Same_ShouldHoldForTheSameSerialColumn()
+    {
+        //Arrange
+        ColumnInfo[] columns = [new("id", "integer", false, true, 1, "nextval('loja.pedido_id_seq'::regclass)", null), new("status", "text", true, false, 2, null, null)];
+        var result = new[] { Origin("id", 1), Origin("status", 2) };
+
+        //Act
+        var before = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", columns));
+        var now = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", columns));
+        var withoutDefault = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", [columns[0] with { DefaultValue = null }, columns[1]]));
+
+        //Assert
+        Assert.True(EditTargetResolver.Same(before, now));
+        Assert.False(EditTargetResolver.Same(before, withoutDefault));
+    }
+
+    [Trait("EditTargetResolver", "Resolve")]
+    [Theory(DisplayName = "OK a visão, a tabela estrangeira, o que não é tabela e a tabela a que o nome sem esquema não leva mais ficam só leitura, com o motivo em cada coluna")]
     [InlineData("view", "pedido é uma visão")]
     [InlineData("materializedView", "pedido é uma visão materializada")]
     [InlineData("foreign", "pedido é uma tabela estrangeira")]
     [InlineData("other", "pedido não é uma tabela")]
+    [InlineData(EditCatalogTable.Elsewhere, "pedido, escrita sem esquema, leva agora a outra tabela na sessão")]
     public void Resolve_ShouldKeepWhatIsNotATableReadOnly(string kind, string reason)
     {
         //Act

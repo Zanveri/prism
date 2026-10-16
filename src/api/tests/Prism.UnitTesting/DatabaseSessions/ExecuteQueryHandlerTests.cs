@@ -18,6 +18,9 @@ public sealed class ExecuteQueryHandlerTests
     private readonly Mock<IConnectionQueries> _connectionQueries = new();
     private readonly Mock<IDatabaseSessionService> _databaseSessionService = new();
 
+    /// <summary>RN-SQL-024: o comando sem `keep`, que esquece os resultados guardados da sessão.</summary>
+    private static IReadOnlyCollection<Guid> NoKeep => Match.Create<IReadOnlyCollection<Guid>>(keep => keep.Count == 0);
+
     [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
     [Fact(DisplayName = "OK devolve a primeira página, com as colunas, o tempo e o total que o comando devolveu")]
     public async Task Handle_ShouldBeOK_WithRows()
@@ -27,7 +30,7 @@ public sealed class ExecuteQueryHandlerTests
         var sessionID = Guid.CreateVersion7();
         var resultID = Guid.CreateVersion7();
         var page = new QueryPage([new QueryColumn("numero", "integer", "number", new ColumnOrigin(16384, 1)), new QueryColumn("observacao", "text", "text")], [["1001", "Pedido 1"], ["1007", null]], false, 12, [[1, 1]], 1000, resultID, ResultEditability.ReadOnly("o comando gravou e devolveu linhas"));
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 15)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 15)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -46,7 +49,7 @@ public sealed class ExecuteQueryHandlerTests
         // RN-EDIT-002: o resultado e o que se sabe da edição dele vão com a página; a origem das colunas fica na API.
         Assert.Equal(resultID, result.Value.ResultID);
         Assert.Equal(ResultEditability.ReadOnly("o comando gravou e devolveu linhas"), result.Value.Editable);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken), Times.Once);
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
@@ -58,7 +61,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "UPDATE loja.pedido SET id = id", null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 1000, 40)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "UPDATE loja.pedido SET id = id", null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 1000, 40)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -78,7 +81,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionBusy, "A sessão está ocupada com outro comando.")));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionBusy, "A sessão está ocupada com outro comando.")));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -97,7 +100,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "syntax error at or near \"FRM\"", "42601", 10)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "syntax error at or near \"FRM\"", "42601", 10)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -120,14 +123,14 @@ public sealed class ExecuteQueryHandlerTests
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
         const string untouched = "  \n select 1 -- fim\n";
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, untouched, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, untouched, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
         await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = untouched }, cancellationToken);
 
         //Assert
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, untouched, null, QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, untouched, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken), Times.Once);
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
@@ -140,7 +143,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, 500, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, 500, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -148,7 +151,7 @@ public sealed class ExecuteQueryHandlerTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, 500, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, 500, false, NoKeep, cancellationToken), Times.Once);
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
@@ -161,7 +164,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, 200, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, 200, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -169,9 +172,38 @@ public sealed class ExecuteQueryHandlerTests
         await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, PageSize = JsonSerializer.SerializeToElement<object?>(null) }, cancellationToken);
 
         //Assert
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, 200, false, cancellationToken), Times.Exactly(2));
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, 200, false, NoKeep, cancellationToken), Times.Exactly(2));
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// RN-SQL-024: os `resultID` de `keep` vão ao registro de sessões, o repetido uma vez só; `keep` nulo, ausente ou vazio é a lista vazia, que
+    /// esquece os guardados.
+    /// </summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "OK envia os resultados de keep, sem repetir, e nenhum com keep nulo ou vazio")]
+    public async Task Handle_ShouldSendTheKeptResults()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        var (first, second) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        IReadOnlyCollection<Guid>? sent = null;
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, It.Is<IReadOnlyCollection<Guid>>(keep => keep.Count > 0), cancellationToken))
+            .Callback((Guid _, string _, string? _, int _, bool _, IReadOnlyCollection<Guid> keep, CancellationToken _) => sent = keep)
+            .ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Keep = JsonSerializer.SerializeToElement(new[] { first, second, first }) }, cancellationToken);
+        await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Keep = JsonSerializer.SerializeToElement<object?>(null) }, cancellationToken);
+        await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Keep = JsonSerializer.SerializeToElement(Array.Empty<Guid>()) }, cancellationToken);
+
+        //Assert
+        Assert.Equal([first, second], sent);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken), Times.Exactly(2));
     }
 
     /// <summary>RN-GRADE-011: com filtro, o registro de sessões recebe o comando e o filtro como vieram, e a página diz como ele entrou.</summary>
@@ -183,7 +215,7 @@ public sealed class ExecuteQueryHandlerTests
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
         var page = new QueryPage([new QueryColumn("numero", "integer", "number")], [["1001"]], false, 2, [], FilterApplied: EFilterApplied.Merged);
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 2)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(page, null, 2)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -192,7 +224,7 @@ public sealed class ExecuteQueryHandlerTests
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Equal("merged", result.Value.FilterApplied);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, "numero > 1000 ORDER BY numero DESC", QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken), Times.Once);
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
@@ -207,7 +239,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -216,7 +248,7 @@ public sealed class ExecuteQueryHandlerTests
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value.FilterApplied);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken), Times.Once);
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.AtLeastOnce);
         _databaseSessionService.VerifyNoOtherCalls();
     }
@@ -229,7 +261,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "a = 'x", QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar.")));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, "a = 'x", QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.FilterInvalid, "O filtro tem aspas sem fechar.")));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -251,7 +283,7 @@ public sealed class ExecuteQueryHandlerTests
         var connectionID = Guid.CreateVersion7();
         _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
         _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, true, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, true, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -259,7 +291,7 @@ public sealed class ExecuteQueryHandlerTests
 
         //Assert
         Assert.True(result.IsSuccess);
-        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, true, cancellationToken), Times.Once);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, true, NoKeep, cancellationToken), Times.Once);
     }
 
     /// <summary>RN-PROT-002: a recusa do registro de sessões é 422 `CONNECTION_READ_ONLY`, sem `executed`.</summary>
@@ -273,7 +305,7 @@ public sealed class ExecuteQueryHandlerTests
         var connectionID = Guid.CreateVersion7();
         _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
         _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "DELETE FROM loja.pedido", null, QueryPaging.DefaultPageSize, true, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, "A conexão é somente leitura.")));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, "DELETE FROM loja.pedido", null, QueryPaging.DefaultPageSize, true, NoKeep, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, "A conexão é somente leitura.")));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act
@@ -316,7 +348,7 @@ public sealed class ExecuteQueryHandlerTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var sessionID = Guid.CreateVersion7();
-        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionNotFound, "A sessão com o banco não existe ou já foi fechada.")));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Failure<QueryOutcome, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.SessionNotFound, "A sessão com o banco não existe ou já foi fechada.")));
         var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
 
         //Act

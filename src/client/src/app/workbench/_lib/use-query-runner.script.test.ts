@@ -529,3 +529,128 @@ describe("o script numa conexão somente leitura (RN-PROT-002 e RN-SQL-021)", ()
     await done;
   });
 });
+
+describe("as abas do script continuam se editando: quem manda o keep, e o Salvar de uma aba guardada (seção 33, RN-SQL-023 e 024)", () => {
+  /** Uma página do resultado `id` da API (o `resultID` dela). */
+  const pageOf = (id: string, rows: string[][], hasMore = true) => json({ columns, rows, hasMore, elapsedMs: 40, truncatedCells: [], rowsAffected: null, resultID: id });
+  /** O `keep` de cada comando enviado, na ordem: ausente é a lista vazia, que a API lê como "esqueça os guardados". */
+  const keeps = (api: ReturnType<typeof setup>["api"]) => api.calls.filter((call) => `${call.method} ${call.path}` === queries).map((call) => (call.body as { keep?: string[] }).keep ?? []);
+
+  /** O script de dois comandos com linhas: o primeiro (`r1`) é aba guardada, o último (`r2`) é o do executor, com o cursor aberto. */
+  async function finished() {
+    const context = setup();
+    context.api.on(`POST ${sessions}`, session("s1"));
+    context.api.on(queries, pageOf("r1", [["1"]]));
+    context.api.on(queries, pageOf("r2", [["2"]]));
+    await context.runner.runScript(commands("select 1", "select 2"));
+    return context;
+  }
+
+  it("cada comando do script manda os resultados das abas que o script já tem; o primeiro, nenhum", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, pageOf("r1", [["1"]]));
+    api.on(queries, affected(2));
+    api.on(queries, pageOf("r2", [["2"]]));
+    api.on(queries, pageOf("r3", [["3"]]));
+
+    await runner.runScript(commands("select 1", "update t set a = 1", "select 2", "select 3"));
+
+    expect(keeps(api)).toEqual([[], ["r1"], ["r1"], ["r1", "r2"]]);
+  });
+
+  it("“Tentar de novo” manda a mesma lista", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, pageOf("r1", [["1"]]));
+    api.on(queries, sqlError("boom"));
+    api.on(queries, affected(1));
+    api.on(queries, pageOf("r3", [["3"]]));
+    const done = runner.runScript(commands("select 1", "select * form t", "select 3"));
+    await settle();
+
+    runner.script.decide("retry");
+    await done;
+
+    expect(keeps(api)).toEqual([[], ["r1"], ["r1"], ["r1"]]);
+  });
+
+  it("o resultado que passou do limite de abas não ganha aba, e não vai na lista: ela nunca passa de 20 (RN-SQL-020)", async () => {
+    const { api, runner } = setup();
+    const total = scriptResultCap + 2;
+    api.on(`POST ${sessions}`, session("s1"));
+    for (let index = 1; index <= total; index++) api.on(queries, pageOf(`r${index}`, [[String(index)]]));
+
+    await runner.runScript(commands(...Array.from({ length: total }, (_, index) => `select ${index + 1}`)));
+
+    const firstTwenty = Array.from({ length: scriptResultCap }, (_, index) => `r${index + 1}`);
+    expect(keeps(api).at(-1)).toEqual(firstTwenty);
+    expect(Math.max(...keeps(api).map((keep) => keep.length))).toBe(scriptResultCap);
+  });
+
+  it("o F5 e o filtro do resultado do último mandam os das outras abas; o Ctrl+Enter, “Executar este comando” e outro script, nenhum", async () => {
+    const { api, runner } = await finished();
+    api.on(queries, pageOf("r3", [["2"]]));
+    api.on(queries, pageOf("r4", [["2"]]));
+
+    await runner.rerun();
+    await runner.run({ sql: "select 2", offset: 10, filter: "id > 1" }, { keepScript: true });
+    expect(keeps(api).slice(-2)).toEqual([["r1"], ["r1"]]);
+
+    api.on(queries, pageOf("r5", [["1"]]));
+    await runner.runCommand(script(runner).results[0].rows.target);
+    expect(keeps(api).at(-1)).toEqual([]);
+
+    const other = await finished();
+    other.api.on(queries, affected(1));
+    await other.runner.run({ sql: "update t set a = 1", offset: 0 });
+    expect(keeps(other.api).at(-1)).toEqual([]);
+
+    const again = await finished();
+    again.api.on(queries, affected(1));
+    await again.runner.runScript(commands("delete from t"));
+    expect(keeps(again.api).at(-1)).toEqual([]);
+  });
+
+  it("cada resultado lembra a sessão em que foi lido: o F5 que reabre a sessão que caiu deixa as abas guardadas com a de antes, que a edição delas usa", async () => {
+    const { api, runner, toast } = await finished();
+    expect(script(runner).results.map((result) => result.rows.sessionId)).toEqual(["s1", "s1"]);
+
+    api.on(queries, problem(404, "DATABASE_SESSION_NOT_FOUND"));
+    api.on(`POST ${sessions}`, session("s2"));
+    api.on(`POST ${sessions}/s2/queries`, pageOf("r3", [["2"]]));
+    await runner.rerun();
+
+    expect(toast.warning).toHaveBeenCalledWith(workbenchCopy.toasts.sessionReopened);
+    expect(runner.sessionOf()).toBe("s2");
+    expect(runner.getState()).toMatchObject({ status: "rows", resultId: "r3", sessionId: "s2" });
+    expect(script(runner).results[0].rows).toMatchObject({ resultId: "r1", sessionId: "s1" });
+  });
+
+  it("o Salvar de uma aba guardada deixa nela o que foi salvo, sem mexer nas Estatísticas, e fecha o cursor aberto do último", async () => {
+    const { runner } = await finished();
+    const before = script(runner);
+    const live = runner.getState();
+
+    runner.keepSaved("r1", { rows: [["9"]], truncated: new Map(), generated: new Map([[0, new Set([0])]]) });
+
+    const after = script(runner);
+    expect(after.results[0].rows).toMatchObject({ resultId: "r1", rows: [["9"]], generated: new Map([[0, new Set([0])]]) });
+    expect(after.results[1]).toBe(before.results[1]);
+    expect(entriesOf(after)).toEqual(entriesOf(before));
+    expect(scriptTotals(after)).toEqual(scriptTotals(before));
+    // RN-EDIT-009: o "Salvar" foi um comando na sessão; o resultado do último fica com o que tinha, e o "Carregar mais" dá lugar ao "Executar de novo".
+    expect(runner.getState()).toEqual({ ...live, cursorClosed: true });
+  });
+
+  it("o Salvar de um resultado que o script já não tem não muda nada", async () => {
+    const { runner } = await finished();
+    const before = script(runner);
+    const live = runner.getState();
+
+    runner.keepSaved("r9", { rows: [["9"]], truncated: new Map(), generated: new Map() });
+
+    expect(script(runner)).toBe(before);
+    expect(runner.getState()).toBe(live);
+  });
+});

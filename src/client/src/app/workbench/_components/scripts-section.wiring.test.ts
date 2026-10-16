@@ -5,8 +5,9 @@ import type { QueryTab } from "../_lib/workbench-model";
 
 // A seção "Scripts" com os ganchos do React simulados (`createHookRuntime`, em `lib/testing/react-hooks.ts`): o que se confere AQUI é a LIGAÇÃO do script
 // genérico (RN-SCRIPT-005). Abrir lê as conectadas deste instante (a sessão da árvore em cache e as abas) para a aba nascer na única conectada, e "Tornar
-// genérico" e "Vincular à conexão da aba" mandam o lugar à API e às abas do script. O desenho da lista é de `scripts-section.test.ts`, as decisões de
-// `saved-scripts.ts` (`scriptPlace`, `scriptMenu`), com teste próprio; a API e o provedor são de mentira.
+// genérico" e "Vincular à conexão da aba" mandam o lugar à API e às abas do script. O desenho da árvore é de `scripts-section.test.ts`, as decisões de
+// `saved-scripts.ts` (`scriptPlace`, `scriptMenu`), com teste próprio, e as pastas de scripts de `scripts-section.folders.test.ts`; a API e o provedor são de
+// mentira.
 const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
 
@@ -40,17 +41,27 @@ import { elementsOf } from "@/lib/testing/react-tree";
 
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { Script, ScriptSummary } from "../_lib/scripts.schema";
-import { EditScriptDialog } from "./script-dialogs";
-import { ScriptsListView, ScriptsSection } from "./scripts-section";
+import { ContextMenu } from "@/components/ui";
 
-const generic: ScriptSummary = { id: "s1", name: "Fechamento", connectionID: null, database: null, icon: null, color: null, updatedAt: "2026-10-15T00:00:00Z" };
+import { scriptKey, type ScriptTreeRow } from "../_lib/script-tree";
+import { EditScriptDialog } from "./script-dialogs";
+import { ScriptsSection, ScriptsTreeView } from "./scripts-section";
+
+const generic: ScriptSummary = { id: "s1", name: "Fechamento", connectionID: null, database: null, folderID: null, icon: null, color: null, updatedAt: "2026-10-15T00:00:00Z" };
 const bound: ScriptSummary = { ...generic, id: "s2", name: "Pedidos", connectionID: "c1", database: "vendas" };
 const full = (summary: ScriptSummary): Script => ({ ...summary, sql: "select 1" });
 
-/** A ação de uma linha da lista (abrir, o menu…), como a seção a recebe. */
-function act(script: ScriptSummary, action: Parameters<ComponentProps<typeof ScriptsListView>["onAction"]>[1]) {
-  const list = elementsOf(rt.render(() => ScriptsSection())).find((element) => element.type === ScriptsListView)!;
-  (list.props as unknown as ComponentProps<typeof ScriptsListView>).onAction(script, action);
+const rowOf = (script: ScriptSummary): ScriptTreeRow => ({ node: { kind: "script", key: scriptKey(script.id), script, depth: 0, parentKey: null }, expanded: null });
+
+/** A ação de uma linha da árvore, como a seção a recebe: abrir é o Enter da linha; o resto vem do menu dela, aberto pelo botão direito. */
+function act(script: ScriptSummary, action: "open" | "edit" | "makeGeneric" | "bind") {
+  const view = () => elementsOf(rt.render(() => ScriptsSection())).find((element) => element.type === ScriptsTreeView)!.props as unknown as ComponentProps<typeof ScriptsTreeView>;
+  if (action === "open") return view().onRequest(rowOf(script), "enter");
+
+  view().onMenu(rowOf(script), { x: 1, y: 1 }, "menu");
+  const menu = elementsOf(rt.render(() => ScriptsSection())).find((element) => element.type === ContextMenu)!.props as unknown as ComponentProps<typeof ContextMenu>;
+  const item = menu.groups.flatMap((group) => (Array.isArray(group) ? group : group.items)).find((candidate) => candidate.id === action)!;
+  item.onSelect?.();
 }
 
 /** Deixa as promessas em andamento chegarem ao fim. */

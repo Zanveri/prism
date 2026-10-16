@@ -14,7 +14,7 @@ namespace Prism.UnitTesting.Common;
 public sealed class ProtectionRulesTests
 {
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord> folders, params VaultConnectionRecord[] connections)
-        => new("marina.costa", folders, connections, [], VaultWorkspaceRecord.Empty);
+        => new("marina.costa", folders, connections, [], VaultWorkspaceRecord.Empty, []);
 
     [Trait("ProtectionRules", "NormalizeConfirmation")]
     [Theory(DisplayName = "OK o branco e o none se gravam nulos, e os outros valores aparados")]

@@ -98,13 +98,13 @@ public sealed class ScriptsTests
         var id = body.GetProperty("id").GetGuid();
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
         Assert.That(response.Headers.Location?.ToString(), Is.EqualTo($"{ScriptsPath}/{id}"));
-        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "icon", "color", "updatedAt" }));
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "updatedAt" }));
         Assert.That(body.GetProperty("name").GetString(), Is.EqualTo("Fechamento do mês"));
         Assert.That(body.GetProperty("connectionID").GetGuid(), Is.EqualTo(connectionID));
         Assert.That(body.GetProperty("database").GetString(), Is.EqualTo("vendas"));
         var listed = await ListAsync(host);
         Assert.That(listed, Has.Count.EqualTo(1));
-        Assert.That(listed[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "icon", "color", "updatedAt" }));
+        Assert.That(listed[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "updatedAt" }));
         Assert.That(listed[0].GetProperty("id").GetGuid(), Is.EqualTo(id));
     }
 
@@ -116,7 +116,7 @@ public sealed class ScriptsTests
 
         var body = await GetAsync(host, id);
 
-        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "icon", "color", "sql", "updatedAt" }));
+        Assert.That(body.EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "id", "name", "connectionID", "database", "folderID", "icon", "color", "sql", "updatedAt" }));
         Assert.That(body.GetProperty("sql").GetString(), Is.EqualTo("SELECT *\n  FROM pedidos;\n"));
         Assert.That(body.GetProperty("connectionID").ValueKind, Is.EqualTo(JsonValueKind.Null));
         Assert.That(body.GetProperty("database").ValueKind, Is.EqualTo(JsonValueKind.Null));
@@ -346,6 +346,56 @@ public sealed class ScriptsTests
         Assert.That((await ListAsync(host)).Select(script => script.GetProperty("id").GetGuid()), Is.EqualTo(new[] { keep }));
     }
 
+    /// <summary>RN-SCRIPT-010: o script nasce na pasta do campo "Pasta", e a pasta que não existe mais é 404, sem gravar.</summary>
+    [Test]
+    public async Task Create_InAFolder_Returns201WithTheFolder_AndAMissingFolderIs404()
+    {
+        await using var host = await StartWithUserAsync();
+        var folder = await host.Client.PostAsJsonAsync("/api/user/script-folders", new { name = "Fechamento" });
+        var folderID = (await ReadJsonAsync(folder)).GetProperty("id").GetGuid();
+
+        var response = await host.Client.PostAsJsonAsync(ScriptsPath, new { name = "Mensal", sql = "SELECT 1", folderID });
+        var missing = await AssertProblemAsync(await host.Client.PostAsJsonAsync(ScriptsPath, new { name = "Outro", sql = "SELECT 1", folderID = Guid.CreateVersion7() }), HttpStatusCode.NotFound, "SCRIPT_FOLDER_NOT_FOUND");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        Assert.That((await ReadJsonAsync(response)).GetProperty("folderID").GetGuid(), Is.EqualTo(folderID));
+        Assert.That(missing.GetProperty("detail").GetString(), Is.EqualTo("A pasta escolhida não existe mais."));
+        var listed = await ListAsync(host);
+        Assert.That(listed, Has.Count.EqualTo(1));
+        Assert.That(listed[0].GetProperty("folderID").GetGuid(), Is.EqualTo(folderID));
+    }
+
+    /// <summary>
+    /// RN-SCRIPT-009: o "Mover para…" leva o script para a pasta (`folderID`) e para a raiz (`root: true`), sem mudar mais nada; o `folderID` nulo fica, a pasta
+    /// que não existe é 404, e as duas juntas são 422 `SCRIPT_PLACE_INVALID`, sem mudar nada.
+    /// </summary>
+    [Test]
+    public async Task Patch_MovesToAFolderAndToTheRoot_AndTheRefusals()
+    {
+        await using var host = await StartWithUserAsync();
+        var folderID = (await ReadJsonAsync(await host.Client.PostAsJsonAsync("/api/user/script-folders", new { name = "Fechamento" }))).GetProperty("id").GetGuid();
+        var connectionID = Guid.CreateVersion7();
+        var id = await CreateAsync(host, "Mensal", "SELECT 1", connectionID, "vendas");
+
+        var moved = await PatchAsync(host, new { id, folderID });
+        Assert.That(moved.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var body = await ReadJsonAsync(moved);
+        Assert.That(body.GetProperty("folderID").GetGuid(), Is.EqualTo(folderID));
+        Assert.That((body.GetProperty("name").GetString(), body.GetProperty("connectionID").GetGuid(), body.GetProperty("database").GetString()), Is.EqualTo(("Mensal", connectionID, "vendas")));
+
+        Assert.That((await PatchAsync(host, new { id, name = "Mensal 2026", folderID = (Guid?)null })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await GetAsync(host, id)).GetProperty("folderID").GetGuid(), Is.EqualTo(folderID));
+
+        var both = await AssertProblemAsync(await PatchAsync(host, new { id, folderID, root = true }), HttpStatusCode.UnprocessableEntity, "SCRIPT_PLACE_INVALID");
+        Assert.That(both.GetProperty("errors").TryGetProperty("FolderID", out _), Is.True, both.ToString());
+        var missing = await AssertProblemAsync(await PatchAsync(host, new { id, folderID = Guid.CreateVersion7() }), HttpStatusCode.NotFound, "SCRIPT_FOLDER_NOT_FOUND");
+        Assert.That(missing.GetProperty("detail").GetString(), Is.EqualTo("A pasta de destino não existe mais."));
+        Assert.That((await GetAsync(host, id)).GetProperty("folderID").GetGuid(), Is.EqualTo(folderID));
+
+        Assert.That((await PatchAsync(host, new { id, root = true })).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await GetAsync(host, id)).GetProperty("folderID").ValueKind, Is.EqualTo(JsonValueKind.Null));
+    }
+
     /// <summary>RN-API-005: com o cofre fechado (o "Sair"), toda rota dos scripts responde 401 `VAULT_LOCKED`.</summary>
     [Test]
     public async Task Routes_WithTheVaultClosed_Return401()
@@ -393,8 +443,8 @@ public sealed class ScriptsTests
 
     /// <summary>
     /// RN-VERSAO-005: o cofre do formato 1, gravado antes dos scripts, abre pela rota de entrada e é migrado. A lista de scripts vem vazia, as pastas e as
-    /// conexões continuam lá, o arquivo passa a declarar o formato atual (o 3, que trouxe a área de trabalho, RN-ABAS-006: ela também vem vazia), e o de antes
-    /// fica no `.bak`, byte a byte. O primeiro script já se grava.
+    /// conexões continuam lá, o arquivo passa a declarar o formato atual (o 4, que trouxe as pastas de scripts, RN-SCRIPT-011, depois do 3, que trouxe a área de
+    /// trabalho, RN-ABAS-006: as duas também vêm vazias), e o de antes fica no `.bak`, byte a byte. O primeiro script já se grava.
     /// </summary>
     [Test]
     public async Task SignIn_VaultOfFormatOne_IsMigrated()
@@ -414,7 +464,8 @@ public sealed class ScriptsTests
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/folders"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/connections"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/workspace"))).GetProperty("tabs").GetArrayLength(), Is.Zero);
-        Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(3));
+        Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/script-folders"))).GetArrayLength(), Is.Zero);
+        Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(4));
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.EqualTo(before));
         await CreateAsync(host, "Primeiro script");
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.Not.EqualTo(before), "A gravação seguinte põe a versão migrada no .bak, como sempre.");

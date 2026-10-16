@@ -77,6 +77,20 @@ describe("as pendências da grade (RN-EDIT-004)", () => {
   });
 });
 
+describe("a linha duplicada (RN-EDIT-016)", () => {
+  it("é uma linha nova que já vem com as colunas copiadas: conta uma alteração, e o Salvar manda um INSERT com elas e as que a pessoa preencheu depois", () => {
+    const copied = { 0: "4", 1: null };
+    const duplicated = addRow(noEdits, copied);
+    const edits = editNewCell(duplicated.edits, duplicated.id, 1, "paga");
+
+    expect(duplicated.edits.added[0].values).not.toBe(copied);
+    expect(pendingCount(edits)).toBe(1);
+    expect(changesOf(edits, rows, target).changes).toEqual([{ kind: "insert", table: 0, values: [{ column: 0, value: "4" }, { column: 1, value: "paga" }] }]);
+    // "Desfazer alteração" numa célula dela tira o valor daquela célula, que volta ao padrão da tabela, como numa linha em branco.
+    expect(undoNewCell(edits, duplicated.id, 0).added).toEqual([{ id: duplicated.id, values: { 1: "paga" } }]);
+  });
+});
+
 describe("as alterações do Salvar (RN-EDIT-005)", () => {
   it("primeiro as exclusões, depois as alterações, depois as linhas novas, cada grupo na ordem em que foi feito, pela chave lida", () => {
     let edits: PendingEdits = editCell(noEdits, 2, 1, "x", "fechada");

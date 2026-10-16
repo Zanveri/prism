@@ -67,28 +67,30 @@ function tableAccess(readOnly: string | null, target: EditTarget | null, busy: b
 /**
  * RN-EDIT-002: a célula se edita quando o resultado e a tabela da coluna se editam, a coluna se edita, a linha não está marcada para exclusão e,
  * na linha lida, nem a célula nem a chave da tabela dela chegaram cortadas, foram preenchidas pelo banco num Salvar (RN-EDIT-009) ou vieram
- * nulas (junção externa sem linha). Sem o alvo (ainda não perguntado) a resposta é "pode", e quem decide de verdade é a primeira tentativa, que
- * pergunta.
+ * nulas (junção externa sem linha). Sem o alvo (ainda não perguntado), o que depende do catálogo (a tabela, a coluna e a chave) é "pode", e quem
+ * decide de verdade é a primeira tentativa, que pergunta; o que a linha já diz (marcada para exclusão, a célula cortada, a célula que o banco
+ * preencheu) vale desde o começo (RN-EDIT-014), sem a consulta.
  */
 export function cellAccess({ readOnly, target, busy, column, row }: CellContext): EditAccess {
   const table = target === null ? null : tableOf(target, column);
   const access = tableAccess(readOnly, target, busy, table);
-  if (access === null) return allowed;
-  if (!access.editable) return access;
+  if (access !== null && !access.editable) return access;
 
-  const info = target!.columns[column];
-  if (info === undefined || !info.editable || table === null) return denied(info?.reason ?? copy.reasons.noRowOperations);
+  if (target !== null) {
+    const info = target.columns[column];
+    if (info === undefined || !info.editable || table === null) return denied(info?.reason ?? copy.reasons.noRowOperations);
+  }
   if (row.kind === "new") return allowed;
   if (row.deleted) return denied(copy.reasons.deleted);
   if (row.truncated?.has(column) === true) return denied(copy.reasons.truncated);
-  const key = keyUnknown(target!, table, row);
+  const key = target === null || table === null ? null : keyUnknown(target, table, row);
   if (key !== null) return denied(key);
   if (row.generated?.has(column) === true) return denied(copy.reasons.generated);
 
   return allowed;
 }
 
-/** "Nova linha": só num resultado de uma tabela só que se edita (`rowOperations`); numa junção, só se alteram células. */
+/** "Adicionar linha" (e "Duplicar linha", RN-EDIT-016): só num resultado de uma tabela só que se edita (`rowOperations`); numa junção, só se alteram células. */
 export function newRowAccess(readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
   const table = tableAccess(readOnly, target, busy, isJoin(target) ? null : 0);
   if (table === null) return allowed;
@@ -98,13 +100,17 @@ export function newRowAccess(readOnly: string | null, target: EditTarget | null,
   return target!.rowOperations ? allowed : denied(copy.reasons.noRowOperations);
 }
 
-/** "Excluir linha": como a linha nova, e a linha lida precisa da chave inteira. A linha nova sai da grade. */
+/**
+ * "Excluir linha": como a linha nova, e a linha lida precisa da chave inteira. A linha nova sai da grade. A linha que já está marcada para exclusão não se
+ * exclui de novo (RN-EDIT-014): "Desfazer alteração" a devolve. Isso se sabe sem o alvo (as pendências lembradas com a aba voltam sem ele).
+ */
 export function deleteRowAccess(row: RowContext, readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
   const access = newRowAccess(readOnly, target, busy);
-  if (!access.editable || target === null) return access;
+  if (!access.editable) return access;
 
-  const key = keyUnknown(target, 0, row);
-  return key === null ? allowed : denied(key);
+  const key = target === null ? null : keyUnknown(target, 0, row);
+  if (key !== null) return denied(key);
+  return row.kind === "read" && row.deleted ? denied(copy.reasons.alreadyDeleted) : allowed;
 }
 
 /**

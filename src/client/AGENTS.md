@@ -858,7 +858,8 @@ suas abas ao processo principal, que junta as de todas e grava.
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
   só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), na conexão em que estava e lembrando o lugar com que o
   script está gravado (o da lista de scripts, por `scriptPlace(...).saved`: a conexão e o banco, o genérico, ou nada se a conexão dele não existe mais; a aba
-  que trocou de conexão volta nela, marcada, e o Ctrl+S grava a conexão nova), a de um script excluído como consulta comum, a de consulta
+  que trocou de conexão volta nela, marcada, e o Ctrl+S grava a conexão nova; a pasta do script que a aba lembrava, `folderId`, não volta, RN-SCRIPT-010),
+  a de um script excluído como consulta comum, a de consulta
   cuja conexão foi excluída sem conexão (`NoConnectionBarView` com `reason` `restored`: "A conexão desta aba não existe mais"; aviso `restoredWithoutConnection`),
   e a de tabela cuja conexão foi excluída **não volta**, e a entrada avisa (a regra, RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; aviso
   `restoredTablesDropped`). A ativa que não voltou
@@ -906,9 +907,9 @@ suas abas ao processo principal, que junta as de todas e grava.
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
   voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
 
-## Scripts salvos (RN-SCRIPT-001 a 006)
+## Scripts salvos (RN-SCRIPT-001 a 010)
 
-Seções 23, 27 e 28 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
+Seções 23, 27, 28 e 33 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
 (`scriptsQuery`, sem o SQL: o schema recusa a lista que o traga) e lê o SQL só para abrir e para copiar, pela rota do item, pelo cache de mutações (não fica
 guardado). As regras que a tela confere antes de enviar (`saved-scripts.ts`, puro e testado) são as da API: o nome normalizado como a API o grava, de 1 a 200
 caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL de até 1 MB em bytes de UTF-8. Os textos estão em `scripts.copy.ts`.
@@ -922,6 +923,20 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   janela excluiu (404) pede o nome, como na primeira vez. O "Salvar como" faz da aba o script novo. As recusas do nome e do tamanho ficam no campo
   (`refusalProblem`); o resto vai ao aviso central. As chamadas têm o prazo das ações da pessoa. A ligação (o que vai à API, como a caixa nasce e o lugar que a
   aba guarda) é testada com os ganchos simulados (`use-script-saving.test.ts`).
+- **O campo "Pasta" ao salvar** (RN-SCRIPT-010, seção 33). O diálogo do nome do primeiro Ctrl+S e do "Salvar como" tem o campo "Pasta" depois do nome e antes
+  da caixa do genérico (a propriedade `folder` do `ScriptNameDialog`, controlada por quem chama; renomear não o tem): o `Select` com "Sem pasta" (o
+  placeholder, de valor vazio: a raiz) e as pastas com o caminho, na ordem da árvore (`scriptFolderOptions`), lidas pelo `useQuery(scriptFoldersQuery)` do
+  `useScriptSaving`. A pasta que ele traz é a do `initialSaveFolder` (`_lib/script-tree.ts`): no "Salvar como", a do script de onde a aba veio, como está na
+  lista; no Ctrl+S do script que outra janela excluiu (o 404 que pede o nome de novo), a que a aba lembra (`ScriptRef.folderId`, posto pelo `openScriptTab`
+  com a pasta do script aberto e pelo `setTabScript` com a da resposta da gravação; não vai ao cofre, a aba que voltou numa entrada nova não a sabe, e a
+  que passa para outra janela a leva, no `folderId` opcional do `tabTransferSchema`); "Sem pasta" no resto e quando a pasta não está mais na lista. O `POST`
+  leva `folderID` (nulo na raiz). A pasta que outra janela excluiu antes de gravar (404 `SCRIPT_FOLDER_NOT_FOUND`, que o `createScriptOrRefuse` devolve como
+  valor) fica no campo dela ("A pasta escolhida não existe mais.", num `FieldError` com `role="alert"`: o foco está no nome, e o alerta a anuncia), a lista
+  das pastas é lida de novo, e nada se grava. Depois disso o `Select` mostra "Sem pasta" (não acha a escolhida entre as opções), mas o valor continua o da
+  pasta excluída: o "Salvar" seguinte, e o de uma escolha que saiu da lista lida de novo sozinha, recusa no campo do mesmo jeito sem ir à API, até a pessoa
+  escolher de novo (a escolha tira o erro). O aviso do script novo numa pasta diz
+  onde ele ficou (`savedIn`: "Script X salvo em Fechamento / Mensal."); na raiz, e no Ctrl+S que grava por cima, o "Script X salvo." de sempre. Gravar por cima
+  não muda a pasta, e a árvore não abre a pasta nem tira o foco do editor.
 - **A aba de um script** tem o nome dele como título e, com mudança não salva, um ponto na faixa (desenho; o leitor de tela ouve "alterações não salvas", e o
   `title` diz o mesmo: `tabTitleOf`). Só a aba de um script tem o ponto e a pergunta: a consulta que nunca foi salva fecha como antes. O ponto acende na
   primeira tecla (`markScriptEdited`, pelo `onEdited` do editor, sem atraso; as teclas seguintes devolvem a mesma lista de abas e não redesenham nada) e é
@@ -935,13 +950,15 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
   script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
   aberta. Mover a aba para outra janela não pergunta: o texto vai com ela.
-- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a lista é `ScriptsListView`, sem estado, testada sem DOM), abaixo da árvore e recolhível
+- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a árvore é `ScriptsTreeView`, sem estado, testada sem DOM; ver também "Pastas de scripts",
+  abaixo), abaixo da árvore das conexões e recolhível
   (**lembra se ficou recolhida**, RN-NAV-012: `useScriptsCollapsed`, na chave `prism:navigator:<usuário>` ao lado do navegador escondido, `NavigatorLayout`
   com `hidden` e `scriptsCollapsed`; a loja muda só o campo pedido, e o gravado antes, só com `hidden`, vale com a seção aberta. Cada janela tem o seu
   armazém, que não ouve as outras (a janela aberta fica como está, a que abre depois começa como a última escolha): por isso o `set` grava o pedido sobre o
-  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): em ordem de
-  nome, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem, F2 renomeia, Delete exclui (com a confirmação), Shift+F10 e a tecla de menu abrem o
-  menu (Abrir; Renomear, Editar script…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do script; excluir deixa as abas com o texto, como consultas sem script.
+  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): uma árvore, com as
+  pastas de scripts e os scripts, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem o script, F2 renomeia, Delete exclui (com a confirmação),
+  Shift+F10 e a tecla de menu abrem o menu (Abrir; Renomear, Editar script…, Mover para…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do
+  script; excluir deixa as abas com o texto, como consultas sem script.
   O lugar (RN-SCRIPT-005, `scriptMenu`): o script com conexão oferece "Tornar genérico" (`PATCH` com `generic`); o genérico, "Vincular à conexão da aba" (a
   conexão e o banco da aba aberta com ele nesta janela; sem ela, ou com ela sem conexão, o item fica apagado com o motivo). Os dois passam por
   `changeScriptPlace` (`scripts.service.ts`), e as abas do script guardam o lugar novo (`setScriptPlace`, sobre `withSavedPlace`). O genérico (`connectionID`
@@ -975,6 +992,58 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
   mantém o lugar antigo (o `PATCH` sem `connectionID`). **O editor segue o banco da aba com ele montado** (a gramática, o separador de comandos, as maiúsculas e o
   completar, por compartimentos): a aba que recebe uma conexão de outro banco não recria o editor, e o texto e o desfazer ficam.
+
+## Pastas de scripts (RN-SCRIPT-007 a 010)
+
+Seção 33 da especificação. As pastas da seção Scripts são as da API `api/user/script-folders` (ver o guia da API), à parte das pastas de conexões: não têm
+cor, ambiente nem proteções. A tela tem a lista em cache (`scriptFoldersQuery`, chave `["script-folders"]`, em `_lib/script-folders.service.ts`), e cada script
+da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de uma API anterior é recusada). O que a tela decide é puro e testado, em
+`_lib/script-tree.ts`; os textos estão em `scripts.copy.ts` (`folders`).
+
+- **A árvore** (`buildScriptTree`): em cada nível as subpastas e depois os scripts, por nome, com o `byName` da árvore das conexões (o português, sem caixa
+  nem acento); a pasta ou o script cuja pasta não está na lista vai à raiz até a leitura seguinte, e as pastas em ciclo não aparecem. As chaves levam o tipo
+  (`folder:<id>`, `script:<id>`), porque uma pasta e um script podem ter o mesmo nome no mesmo lugar, e cada pasta sabe o que tem direto dentro
+  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista: as pastas começam abertas, e as fechadas são estado da `ScriptsSection`
+  (`closedFolders`), desta janela, sem gravar; a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
+  salvos") com `treeitem`s planos, cada um com o `aria-level`, a altura e o recuo da densidade (RN-NAV-011), o ícone de pasta neutro ou o do script
+  (RN-SCRIPT-006) e a marca do genérico.
+- **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
+  aberta, vai à primeira linha de dentro; a esquerda fecha a aberta e, na fechada ou no script, vai à pasta pai. Enter e o duplo clique abrem e fecham a pasta
+  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha.
+- **Os menus** (`scriptFolderMenu` e `scriptMenu`, em `saved-scripts.ts`): o botão direito no título da seção ou no espaço vazio dela (a seção tem a altura
+  do que mostra, até 40% do navegador: o espaço vazio é a faixa sob a lista e as margens das linhas, e o texto da seção vazia), e Shift+F10 ou a tecla
+  de menu no título, dão "Nova pasta" (na raiz); a pasta, "Nova subpasta", "Renomear" (F2), "Mover para…" e "Excluir" (Delete), este desabilitado na pasta que
+  tem alguma coisa dentro, com o motivo ("A pasta tem 2 subpastas e 3 scripts: mova ou exclua antes o que está dentro dela.", `folders.notEmpty`, no singular
+  e só com a parte que existe; a especificação o escreve entre parênteses, em minúscula e sem ponto, e aqui ele vale sozinho, na dica e no aviso, e vai como
+  frase, como as outras dicas e avisos), e o Delete nela dá esse mesmo aviso de erro sem perguntar; o script ganha "Mover para…" logo depois do "Editar script…".
+- **Os diálogos e as chamadas** (`useScriptFolderActions`, `_components/use-script-folder-actions.tsx`, que a `ScriptsSection` monta; as vistas sem estado
+  em `script-folder-dialogs.tsx`). "Nova pasta" e "Nova subpasta" (`ScriptFolderNameDialog`, com o lugar na descrição: "Na raiz da seção Scripts." ou
+  "Dentro de Fechamento / Mensal.") e o "Renomear" da pasta (o mesmo nome, com as mesmas maiúsculas, fecha sem gravar; mudar só as maiúsculas grava, com a
+  pasta pai que ela tem: o `PATCH` é a pasta inteira) conferem o nome antes (`scriptFolderNameProblem`: as regras da API, e o repetido entre as irmãs na
+  lista) e mostram as recusas do nome no campo (`scriptFolderRefusal`, para o `SCRIPT_FOLDER_NAME_INVALID` e o `SCRIPT_FOLDER_ALREADY_EXISTS` da API, que voltam
+  por `allowRefusal`). "Mover para…" (`MoveToFolderDialog`: "Sem pasta" e as pastas, com a de agora escolhida; a da pasta sem ela nem as subpastas dela) não
+  chama a API para o mesmo destino, e o do script manda `folderID` ou `root: true` (`moveScript`). As recusas de regra (a pasta pai ou a de destino que outra
+  janela excluiu, o nome repetido no destino, o ciclo) lançam e vão ao aviso central com o detalhe da API, o diálogo fica aberto e as duas listas são lidas
+  de novo (`afterRefusal`): o destino que saiu da lista volta a "Sem pasta" (o que o campo já mostrava; o "Mover" seguinte faz o que ele diz, em vez de
+  mandar de novo a pasta excluída), e o diálogo do item que outra janela excluiu (renomear ou mover a pasta, mover o script) fecha, porque a regra só o deixa
+  aberto pela pasta pai e pela de destino. O `PATCH` da pasta (a pasta inteira) leva o nome e a pasta pai da lista mais recente (`currentOf`), e não os de
+  quando o diálogo abriu: a janela cuja lista já foi lida de novo não desfaz o "Mover" da outra (a que ainda não leu continua na consequência aceita da
+  especificação). "Excluir" na pasta vazia pergunta (`ConfirmDialog`, no tom de perigo, "Excluir pasta"); a recusa `SCRIPT_FOLDER_NOT_EMPTY` (outra janela pôs algo
+  nela) fecha a pergunta, vai ao aviso central e as listas são lidas de novo. Os avisos de sucesso: "Pasta criada.", "Pasta renomeada.", "Pasta movida.",
+  "Script movido." e "Pasta excluída.".
+- **A linha à vista** (RN-SCRIPT-008): depois de criar, renomear ou mover uma pasta ou um script (o renomear do script também), a `ScriptsSection` lê as
+  listas de novo, abre as pastas acima dele (`ancestorKeys`, sobre a lista que acabou de chegar), abre a seção recolhida e escolhe a linha. A linha que já
+  está na página (nada acima dela a abrir, a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
+  pedido armado esperaria uma renderização qualquer depois (a primeira tecla no editor) para tirar o foco de lá. A que ainda vai aparecer fica numa
+  referência; um efeito sem dependências, depois de cada renderização, dá o foco a ela quando ela está na página e esquece a chave. Uma referência, e não um
+  estado, porque o `setState` num efeito é recusado pelo lint (renderizações em cascata).
+- **A barra de ações do navegador é da árvore das conexões** (RN-NAV-002): o nome dela diz isso ("Ações da árvore de conexões"), e nada nela age sobre a
+  seção Scripts, que tem os menus dela.
+- **Testes**: `script-tree.test.ts` (a árvore, as linhas, o teclado, o nome, o caminho, as escolhas e a pasta do diálogo do nome), `script-folders.service.test.ts`
+  (as rotas e as recusas), `scripts-section.test.ts` (a vista), `scripts-section.folders.test.ts` (a ligação, com os ganchos simulados: os menus, os
+  diálogos, o que vai à API, as recusas e a linha escolhida depois), `script-folder-dialogs.test.ts`, e, no salvar, `use-script-saving.test.ts`,
+  `script-dialogs.test.ts`, `tab-transfer.test.ts` e `workbench-state.connection.test.ts`. O que não tem teste: o foco de verdade na linha depois de criar
+  (o vitest não tem DOM; o efeito sai cedo sem `document`), e o app não foi aberto nesta mudança.
 
 ## A conexão da aba de consulta (RN-ARVORE-008)
 
@@ -1126,11 +1195,12 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
   "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
 - **Densidade** (RN-NAV-011; `_lib/navigator-density.ts`, com teste). `navigatorMetrics` tem as medidas de cada uma, com as classes escritas por inteiro
-  para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px, a linha da lista de
-  scripts de 28 px); a compacta tem linha de 22 px, recuo de 6 px e 12 por nível, botões de 20 px e a linha de script de 22 px. O texto é o 13/20 nas
+  para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px); a compacta tem linha de
+  22 px, recuo de 6 px e 12 por nível e botões de 20 px. A árvore da seção Scripts (RN-SCRIPT-008) usa a mesma linha (`rowClass`) e o mesmo recuo
+  (`rowIndent`): até a seção 33 a lista de scripts tinha a linha de 28 px na confortável (`scriptRowClass`, que saiu). O texto é o 13/20 nas
   duas, e as etiquetas (18 px) e o ponto de estado cabem (conferido sob Xvfb: as 16 linhas de uma árvore de teste e os 8 scripts à vista numa janela de
   900 px, com os três botões de ação dentro da linha). O `Navigator` lê a preferência e a passa à `NavigatorList` e a cada `NavigatorRow` (`density`;
-  sem ela, a confortável), e a `ScriptsSection` à `ScriptsListView`. A lista virtual estima a linha pela densidade e, quando ela muda (em
+  sem ela, a confortável), e a `ScriptsSection` à `ScriptsTreeView`. A lista virtual estima a linha pela densidade e, quando ela muda (em
   Configurações, com a árvore escondida por baixo, ou noutra janela, com ela à mostra: as preferências chegam pelo evento `storage`), **esquece as
   alturas medidas na outra e mede de novo as desenhadas** (`remeasureRendered`, em `_lib/row-measure.ts`, num `useLayoutEffect` que só roda na troca):
   as linhas que rolaram para fora não se medem de novo, e ficariam com a altura antiga. Só `virtualizer.measure()` não basta: a linha de erro não muda
@@ -1316,7 +1386,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
   `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
   `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
-  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Linha nova e Excluir linha, os rótulos da RN-EDIT-001; o que não se aplica vem desabilitado,
+  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Adicionar linha, Duplicar linha e Excluir linha, os rótulos da RN-EDIT-001 (até a
+  seção 33, "Adicionar linha" se chamava "Linha nova"; as marcas da linha nova na grade continuam com esse nome); o que não se aplica vem desabilitado,
   com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, Tab) e `grid-editing.ts` (as linhas e as
   marcas que a grade desenha). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
   central pelo cache de mutações) e os esquemas, `record-edits.schema.ts`. A página traz `resultID` e o motivo de só leitura (`QueryPage.resultId` e
@@ -1328,7 +1399,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: setas, Home e End (com Ctrl,
     da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
     as alterações quando há alguma (`savesEdits`; sem nenhuma, ou com Shift, a tecla segue para o script da aba de consulta, RN-SCRIPT-001),
-    Alt+Insert cria a linha. A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
+    Alt+Insert adiciona a linha, Ctrl+Alt+Insert a duplica e Alt+Delete a exclui (ver "A barra de edição, o duplicar e os atalhos da linha", abaixo). A grade
+    rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
@@ -1349,7 +1421,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
     só avisa). O Salvar que gravou tudo NÃO executa de novo (RN-EDIT-009): `savedResultOf` (`record-edits.ts`) monta a grade que fica (os valores
     salvos, as excluídas fora, a linha nova no fim com o que foi digitado) e `runner.keepSaved` a põe no executor, com `cursorClosed` quando havia
-    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"). As colunas da linha nova que a
+    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"; numa aba guardada do script, a cópia
+    dela fica com o que foi salvo, e o cursor que fecha é o do último, RN-SQL-023). As colunas da linha nova que a
     pessoa não preencheu ficam em `RowsState.generated` ("gerado pelo banco — execute de novo para ver", em itálico e `text-subtle`): a célula não
     se edita e, com a chave entre elas, a linha também não (`cellAccess`, `deleteRowAccess`). `generated` viaja com a aba para outra janela
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
@@ -1359,7 +1432,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     ficam como estavam): o `edit-target` diz a tabela de cada coluna (`columns[].table`) e a chave de cada tabela, e cada coluna se edita na
     tabela de onde veio (`cell-editing.ts`: `cellAccess` olha a tabela DA COLUNA, e numa tabela só, sempre a 0, como antes; a chave cortada,
     gerada ou NULA vale por tabela, e a nula é a junção externa sem linha ali, "<tabela> não tem linha aqui (junção externa)", pelos valores
-    da linha em `RowContext.values`). "Linha nova" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
+    da linha em `RowContext.values`). "Adicionar linha", "Duplicar linha" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
     (`isJoin`: mais de uma tabela). **A linha repetida** (a mesma linha de uma tabela em várias linhas da grade): a célula alterada guarda
     `change`, a linha da tabela (`changeKeyOf`: a tabela e os textos da chave, em JSON), e `editCell`/`undoCell` com `change` acham a pendência
     por ela em qualquer linha que a mostre; `linkedCells` repete a pendência nas outras linhas para a grade, o valor da célula, o menu e a
@@ -1375,6 +1448,61 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     `pallets_items` do pedido): o SELECT do dono (`pallets_items.*` numa junção de três) com `id` "somente leitura" e "Linha nova"/"Excluir
     linha" desabilitados no menu; uma junção com colunas de duas tabelas, a edição de uma célula de cada (a descrição do item repetido mudou nas
     duas linhas dele), o "Ver SQL" com os dois `UPDATE`, o Salvar ("2 alterações salvas.") e a releitura com os valores novos.
+  - **A barra de edição, o duplicar e os atalhos da linha** (seção 33, RN-EDIT-013 a 016; o canvas não desenha a barra, seção 9). As decisões são puras, com
+    teste: `edit-bar.ts` (`editBar`: os quatro botões, "Editar célula", "Adicionar linha", "Duplicar linha" e "Excluir linha", cada um com o atalho da
+    plataforma e o motivo de não valer, o primeiro na ordem da RN-EDIT-014: o resultado inteiro só leitura, pelo `resultReadOnly` (a página, a conexão
+    somente leitura e o catálogo que diz que nenhuma tabela se edita: os três são "o resultado inteiro só leitura" da regra, e desabilitam os quatro com o
+    motivo da barra do resultado, também sem célula ativa, em vez de "Editar célula" pedir uma célula); a aba ocupada (o Salvar também) e a atualização automática; o `rowOperations` falso para os três
+    de linha (`newRowAccess`); a célula ativa para "Editar célula" (`cellAccess`); a chave que não se sabe e a linha já marcada para "Excluir linha"
+    (`deleteRowAccess`, que passou a recusar a linha riscada, também sem o alvo); e, por último, a grade sem linhas e a falta de célula ativa, que não são de
+    só leitura e vêm sem o "Somente leitura:"), `duplicate-row.ts` (`duplicatePlan`: o que a duplicada copia, o que fica com o padrão e a chave copiada) e
+    `grid-editing.ts` (`rowShortcut` e `editShortcuts`). **Habilitar não custa consulta** (RN-EDIT-010): sem o alvo, o que depende do catálogo (a tabela, a
+    coluna, a chave, o `rowOperations`) vale, e a primeira tentativa pergunta, como o menu; a recusa vai à faixa e, com o alvo guardado, o botão passa a
+    dizê-la. O que a linha já diz não espera o catálogo (RN-EDIT-014: "desde o começo, com o motivo, quando ele já é sabido"): `cellAccess` recusa sem o
+    alvo a linha marcada para exclusão, a célula cortada e a que o banco preencheu numa linha nova salva, e `deleteRowAccess`, a linha já marcada. A barra é desenhada pelo contrato da edição
+    (`GridEditing.bar`: os botões e a ação), que `useRecordEdits` monta a cada renderização (`barOf`, sobre o estado da tela, com a célula ativa só numa
+    linha que existe); quem a põe na tela é a `ResultPanel`, só onde a grade recebe a edição e com a grade no corpo (também sem nenhuma linha, e com outro
+    comando rodando, desabilitada): nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, numa linha própria (`border-t`,
+    alinhada à esquerda) entre a grade e os rodapés ("Carregar mais", o cursor fechado, a nota da aba guardada). A aba guardada do script recebe a
+    edição (`kept`, RN-SQL-023), e a barra vem com ela, antes da nota. Recolhida, a área esconde a barra com o corpo (`inert`).
+    - **O componente** (`edit-bar.tsx`, `EditBar`): `role="toolbar"` com o nome "Edição da grade", uma parada de tabulação só (o último botão com o foco,
+      de começo "Editar célula") e as setas, Home e End pelo `stripKeyTarget`, como a barra de ações do navegador. Os botões são os da área de resultado
+      (`Button` `secondary` `compact`, `h-7 px-2.5 text-xs`), com o ícone do traço do canvas (`PencilIcon`, `PlusIcon`, `DuplicateIcon` e o `CloseIcon` em
+      `text-danger`) e o texto; o que não vale usa `aria-disabled` (fica nas setas e com o foco), com a dica `"<botão> (<atalho>). <motivo>"` e o motivo num
+      `sr-only` ligado por `aria-describedby`; cada um declara `aria-keyshortcuts`. Depois do clique o foco volta à grade (`onDone`, que a área liga ao
+      `[role="grid"]` dela); no "Editar célula" o campo nasce com o foco e o devolve à grade ao fechar. Clicar com o campo aberto o confirma antes (o campo
+      confirma ao perder o foco, no `mousedown` do botão).
+    - **O que cada botão faz** é o item de mesmo nome do menu, sobre a célula ativa (`bar.onAction`): `openEditor`, `newRow`, `duplicateRow` e `removeRow`,
+      com a mesma pausa da atualização automática desde o começo (`hold`) e o mesmo descarte quando o resultado mudou no meio (`moved`). Tirada uma linha
+      nova, a célula ativa passa à que ficou no lugar dela, ou à de cima quando ela era a última, e some sem linha nenhuma (`removeRow`). A linha nova que
+      `removeRow` tira é seguida pelo id, e não pela posição: dois "Excluir linha" seguidos enquanto o alvo é perguntado (o duplo clique), o "Descartar"
+      ou o "Carregar mais" no meio mudam a linha daquela posição, e a segunda exclusão não tira a linha nova que passou ao lugar da primeira.
+    - **Os atalhos** (`rowShortcut`, conferido no `handleKeyDown` da grade antes das setas): Alt+Insert adiciona, Ctrl+Alt+Insert duplica (a mesma tecla, o
+      Ctrl decide: antes o ramo do Alt+Insert casava também o Ctrl+Alt+Insert e o Shift+Alt+Insert) e Alt+Delete exclui a linha da célula ativa, com os
+      modificadores exatos; com Shift, nada. O AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica e o Delete não faz nada. No macOS
+      (`navigator.platform`, pelo `isMacPlatform` de `src/lib/utils/platform.ts`, a conferência que todos os atalhos e dicas da tela usam) o Option faz o
+      papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
+      tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
+      `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
+      (`rowAction`). O Delete sozinho continua sem excluir: espera a seleção de linhas (RN-GRADE-001).
+    - **Duplicar linha** (`duplicateRow`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), uma linha nova no fim da grade
+      (`addRow` com as colunas copiadas), com o valor que a tela mostra de cada coluna da tabela que se edita (a pendência também, o nulo como nulo; na
+      linha marcada para exclusão, o lido; numa linha nova de origem, só o que ela tinha). Não copia a que o banco gera, "sempre" ou "por padrão"
+      (`generated`, que no PostgreSQL a API passou a dar também ao `serial`), a que não se edita e, na linha nova já salva, a que o banco preencheu; a
+      calculada no comando não é da tabela e não entra na lista. A coluna da tabela que o resultado traz duas vezes (`SELECT id, id AS copia`) se copia uma
+      vez, pela primeira que se copia, e a repetição não entra na lista: o `INSERT` não leva a mesma coluna duas vezes (o `EditPlanner` da API recusa). A
+      célula cortada vai com o valor completo (`completeValues`, a faixa com "Buscando os valores completos…" e "Cancelar"); o valor que não vem (o teto, a
+      sessão que caiu, `RESULT_NOT_FOUND`) e a busca cancelada não duplicam nada, e a faixa diz por quê ("Atualize os registros" nos Registros,
+      `subject: "table"`; "Execute o comando de novo" no resultado). A busca de um "Duplicar linha" seguinte (o duplo clique no botão) cancela a do
+      anterior, que sai calado (`duplicating`): só o "Cancelar" da pessoa diz que a busca foi cancelada. Depois da busca valem as
+      pendências e as linhas de AGORA (a grade ficou livre). A célula ativa vai à primeira coluna editável, ou, com a chave copiada inteira, à coluna dela
+      mais à esquerda. **Os avisos da faixa** (a chave copiada e as colunas que ficaram com o padrão) e as recusas do duplicar usam o tom de atenção
+      (`say(…, "warning")`, `EditsBanner.noticeTone`: o triângulo `AlertIcon` no lugar do cadeado, que fica para os motivos de só leitura) e duram até a
+      próxima ação de edição, o Salvar ou o Descartar (o "Desfazer alteração" passou a limpar o recado, como as outras ações).
+    - **Não conferido na tela**: nada disto foi visto numa janela (não há Xvfb nem banco nesta máquina), só nos testes. A linha da barra no resultado de um
+      comando fica ACIMA do rodapé ("Carregar mais", "Executar de novo"), entre 69 e 110 px da borda de baixo da janela, e a pilha de avisos (`bottom-20`, 380 px
+      à direita) começa a 80 px: numa janela estreita um aviso pode cobrir "Duplicar linha" ou "Excluir linha" enquanto dura. Medir com o
+      `document.elementFromPoint`, como em "Avisos e mensagens", e, se cobrir, subir a pilha quando a barra está na tela.
 - **Valor completo das células cortadas** (RN-SQL-017, RN-GRADE-002): a grade continua mostrando o valor cortado (RN-SQL-011), e copiar e
   exportar levam o completo, que a API guarda em memória e devolve por `POST .../results/{resultID}/cells` (`full-values.service.ts`,
   `resultCells`: nunca lança, e acha cada valor pela posição que a resposta diz). As decisões são de `_lib/full-values.ts`, pura, com teste:
@@ -1386,8 +1514,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   central; o resto (a API fora do ar) passa pelo cache de mutações (RN-AVISO-004). O valor sem completo vai cortado, e o aviso diz quantos
   (`recordsCopy.edit.menu.copiedCut` na cópia, `workbenchCopy.tableTab.records.exportedCut` no CSV).
   - **Onde vale**: Ctrl+C com o foco na grade copia a célula ativa (`copiesCell`, em `grid-editing.ts`; com Shift é o copiar avançado e segue),
-    "Copiar valor" do menu da célula, e "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
-    como antes). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
+    "Copiar valor" do menu da célula, "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
+    como antes) e "Duplicar linha" (as cortadas das colunas que ela copia; o que não vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
     nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
     passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
   - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
@@ -1558,7 +1686,8 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   desmontada (a aba de consulta lê `useWorkbenchOnScreen` ela mesma, para não mexer em `workbench-tabs.tsx`; a de tabela recebe `visible`); `useRecordEdits`
   põe a da edição com alteração não salva, célula aberta, menu da célula, "Filtrar por valor…" ou o campo do "Personalizado" abertos; `handOffTab` põe a da
   ida para outra janela. Ao sair da pausa, executa na hora se o prazo passou. **A pausa da edição vale desde o começo da ação**: o duplo clique, o menu, a
-  linha nova, "Excluir linha" e o "Colar" (com a leitura da área de transferência) perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
+  linha nova, "Duplicar linha" (também durante a busca dos valores completos), "Excluir linha" e o "Colar" (com a leitura da área de transferência), pelo
+  menu, pela barra de edição ou pelo atalho (seção 33), perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
   saísse nesse meio-tempo trocava as linhas e a ação caía em OUTRA linha do banco. `hold()` põe a pausa na hora e a solta por um estado (`released`), numa
   renderização em que o campo ou o menu já contam, sem um instante livre; depois da pergunta, `moved(from)` (a última renderização e o executor lido na
   hora) descarta a ação se o resultado mudou; `ensureTarget` não põe o alvo de um resultado que saiu no `latest`; e o menu é do resultado em que abriu
@@ -1597,14 +1726,16 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   pasta do `postgres` (`/var/lib/postgresql/<nome>`), com porta e soquete próprios, e sai no fim. Encerre só os PID que você iniciou: um `pkill -f` com o
   caminho da árvore mata também o shell que o roda, e outra frente pode ter um Xvfb e um `pnpm dev` de pé ao lado.
 
-## Executar script (RN-SQL-019 a 022)
+## Executar script (RN-SQL-019 a 024)
 
 Seção 31 da especificação, pedido do dono em 2026-10-15 ("igual a do dbeaver do alt + x"): os comandos do editor um depois do outro, uma aba por
-resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando é um `POST …/queries`, como no Ctrl+Enter.
+resultado, as Estatísticas e a pergunta no erro. Cada comando é um `POST …/queries`, como no Ctrl+Enter, com o `keep` da seção 33 (abaixo, "As abas
+guardadas se editam").
 
 - **Onde mora cada parte.** `_lib/script-run.ts` (puro, com teste): o atalho (`scriptShortcut`, `scriptShortcutLabel`, e `platformScriptShortcut`
   para os textos que o ensinam), o estado do script (`ScriptRun`, `ScriptEntry`, as funções que o mudam, `entryAt` e `entriesOf`), os totais, as
-  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas e o aviso do fim; os textos em
+  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas, o aviso do fim, o `keep` de cada
+  execução (`keptResultIds`) e a aba guardada que fica com o que foi salvo (`withSavedResult`); os textos em
   `script-run.copy.ts` (não confundir com `scripts.copy.ts`, que é o dos scripts salvos). A divisão é `scriptStatements` em `sql-statements.ts`; o
   executor é o `runScript` de `use-query-runner.ts`; a tela é `script-tabs.tsx` (as abas, a nota da aba guardada e a marca da faixa de abas,
   `ScriptWaitingMark`), `script-statistics.tsx` (com `useCoalescedRun`), `script-error-dialog.tsx`, a marca do editor (`_lib/script-mark.ts`) e as
@@ -1664,7 +1795,7 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
 - **As abas e o cursor.** Cada comando que devolve linhas guarda a página dele (`results`, até `scriptResultCap`, 20); no fim, o do último comando
   executado, quando devolveu linhas, fica sempre (`live`), também depois do limite: é o do cursor aberto (RN-SQL-007: um por sessão, e cada comando
   novo fecha o anterior), e a aba dele desenha o **estado do executor**, e não a cópia guardada, com tudo o que vale num resultado. As outras desenham a
-  cópia (`kept`): grade sem `editing` (uma tabela só para leitura, sem o menu da grade), sem contar, sem "Carregar mais", sem filtro nem atualização
+  cópia (`kept`), que se edita (ver "As abas guardadas se editam"), sem contar, sem "Carregar mais", sem filtro nem atualização
   automática, e a nota com "Executar este comando" (`runCommand`: o "executar de novo" do comando, com o lugar no texto de quando o script rodou, que
   troca os resultados do script). Com um comando em andamento na aba o botão fica `aria-disabled`, com o porquê na dica (o executor recusaria calado),
   e o `handleRunAlone` só pergunta das alterações, limpa o filtro e abre a área quando o comando vai rodar (`commandWillRun`, como os outros caminhos);
@@ -1682,7 +1813,8 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   o texto para o leitor de tela), e a pergunta aparece quando a pessoa vai até ela.
 - **Quem troca os resultados do script**: o comando aceito do `run` (o Ctrl+Enter), o `runCommand` e outro `runScript`. O filtro do resultado manda
   `run(…, { keepScript: true })`, e o F5 e a execução automática não trocam: mudam só o resultado do último. A recusa antes de executar (a sessão
-  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`).
+  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`), e a API também não esquece os
+  guardados nela (RN-SQL-024: a recusa antes do banco não aplica o `keep`).
 - **A barra e o leitor de tela.** "Executando 3 de 12…" é o `progress` da barra (um `role="status"` só, em qualquer aba e com a área recolhida); as
   Estatísticas marcam a linha do comando com `aria-current="step"` e não repetem o progresso. As abas são uma lista de abas (`role="tablist"`, só a
   escolhida no Tab, setas com a volta, Home e End, o foco vai à escolhida); o corpo da área é o `tabpanel` dela, e entra no Tab nas Estatísticas, que
@@ -1690,9 +1822,36 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   abas, e um `ResizeObserver` para a faixa que estava sem largura); "Estatísticas" fica fora da rolagem, na ponta direita. Sem isso, com umas oito
   abas, a do último comando, que vem à frente sozinha no fim, e as Estatísticas ficavam fora da faixa. Cada linha das Estatísticas é memorizada: o
   script publica um estado novo a cada comando, e só a linha que mudou é outro objeto.
-- **O que não foi feito**: as abas guardadas não têm o menu da grade nem o copiar da célula (a seleção do texto com o mouse continua); levar a aba
-  para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); o script que é uma transação só e continuar o
-  script a partir de um comando escolhido ficam para depois (seção 31). Não há atalho para "Cancelar": o botão da barra.
+- **As abas guardadas se editam** (seção 33, RN-SQL-023 e 024). A API guardava um resultado só por sessão; agora ela guarda o que a edição precisa
+  dos resultados que a tela lista em `keep` no `POST …/queries` (`executeQuery`, que só põe o campo no corpo com a lista cheia), e as rotas da edição
+  aceitam o `resultID` deles. **Quem manda o quê** (`runWith` e `runScriptNow`, pelo `keptResultIds`): cada comando do script manda os das abas que o
+  script já tem (enquanto ele roda não há `live`, e vão todas, a do comando anterior também), e o "Tentar de novo" a mesma lista; o F5, "Executar de
+  novo", o filtro e a execução automática do resultado do último (`clearsScript` falso) mandam os das outras abas, menos a do `live`, que eles
+  substituem; o Ctrl+Enter, "Executar este comando" e o primeiro comando de outro script não mandam nenhum, e a API esquece os guardados. A lista
+  nunca passa de 20: a aba do último que passou do limite (`live` além dos 20) não vai. **A edição** é a mesma `useRecordEdits` da aba, com `kept` (as
+  linhas da aba guardada à frente, no lugar das do executor) e `scriptBusy` (o script roda ou espera a pergunta de erro: com a pergunta, o executor
+  não está ocupado, e a edição está, em todas as abas); o `moved` de uma aba guardada confere se o script ainda a tem, e não o resultado do executor (a
+  cópia do `live` em `results` guarda o `resultID` de antes do F5, e por isso a aba do último segue conferindo pelo executor). O menu da aba guardada não
+  tem "Filtrar", "Atualizar" nem "Atualizar automaticamente" (a aba de consulta não passa `filter`, `refresh` nem `autoRefresh`), e a área mostra a faixa
+  e passa a edição à grade também com `kept`, e com ela a barra de edição (RN-EDIT-013), entre a grade e a nota; a barra e o menu têm o "Duplicar
+  linha", e os quatro botões ficam ocupados com o mesmo motivo enquanto o script roda (`personBusy` conta o `scriptBusy`). Copiar a célula cortada
+  leva o valor cortado, com o aviso: a rota das células responde 404 para um guardado, que `cellRefusals` já tratava; pela mesma resposta, duplicar
+  a linha que tem célula cortada numa coluna que se copia não duplica nada, e a faixa diz "Execute o comando de novo para duplicá-la." (RN-EDIT-016).
+  **O Salvar** passa pelo `onSaved` de sempre: `runner.keepSaved` acha o resultado na cópia guardada
+  (`withSavedResult`, sem mexer nas Estatísticas, que continuam com as linhas que cada comando leu) e, como o Salvar foi um comando na sessão, fecha o
+  cursor do resultado do executor (`cursorClosed`, calado, como no Salvar dele mesmo). **Trocar de aba** (`chooseScriptTab`) com alterações não
+  salvas pergunta antes, pelo `guard` (a pendência é uma só por aba de consulta, a do resultado à frente): a aba que já está à frente não pergunta, e
+  `ScriptTabs` leva o foco à escolhida na hora quando `onChoose` não devolve `false`; a troca pelo teclado que espera a pergunta fica guardada
+  (`awaiting`), e o foco vai à escolhida quando a pergunta troca de aba ("Salvar" ou "Descartar"), num efeito sobre `shown` que roda depois de o diálogo
+  devolver o foco à aba de antes (que já saiu da ordem do Tab); "Cancelar" não troca a aba, e outra escolha a esquece. A sessão que caiu responde como no
+  resultado do último ("Não foi possível saber o que se edita neste resultado." com o motivo da API). **Cada resultado lembra a sessão em que foi lido**
+  (`RowsState.sessionId`), e a edição dele pergunta e grava nela (`sessionOfShown`, em `use-record-edits.ts`; sem ela, a da aba): depois de o F5 ou o
+  filtro reabrirem a sessão que caiu, a sessão nova não conhece os guardados da de antes, e a aba guardada responde que a sessão com o banco não existe
+  mais, como a que caiu, e não o 409 de "outro comando foi executado nela depois dele". Levar a aba para outra janela pergunta pelo
+  registro `unsaved-edits.ts`, que conta as pendências da aba guardada também.
+- **O que não foi feito**: levar a aba para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); guardar as
+  pendências de várias abas do script ao mesmo tempo e o valor completo das células cortadas nas abas guardadas, o script que é uma transação só e
+  continuar o script a partir de um comando escolhido ficam para depois (seções 31 e 33). Não há atalho para "Cancelar": o botão da barra.
 - **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55481, o usuário e a conexão criados
   por `fetch` à API com `window.prism.getApiConfig()`, o login pelo formulário): com um script de cinco comandos separados por `;` e por linha em
   branco, o Alt+X de verdade (`xdotool key alt+x`, no `pnpm dev` com o menu padrão do Electron) rodou os três primeiros e parou no `SELECT * FORM

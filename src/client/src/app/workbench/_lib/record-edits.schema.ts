@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * As respostas das rotas da edição (seção 22, "Rotas e respostas"). `edit-target`: cada tabela do `FROM` com a chave (pela posição da
  * coluna no resultado) e o motivo de não se editar; cada coluna do resultado com a tabela de onde vem (nula na calculada), se se edita
- * e por quê; "Linha nova" e "Excluir linha" (`rowOperations`); e o banco sem log de transação (`oneAtATime`, RN-EDIT-012).
+ * e por quê; "Adicionar linha", "Duplicar linha" e "Excluir linha" (`rowOperations`); e o banco sem log de transação (`oneAtATime`, RN-EDIT-012).
  */
 export const editTargetSchema = z.object({
   tables: z.array(z.object({ schema: z.string(), name: z.string(), key: z.array(z.number().int()), editable: z.boolean(), reason: z.string().nullable() })),

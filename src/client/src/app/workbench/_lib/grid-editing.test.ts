@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { copiesCell, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarksOf, savesEdits } from "./grid-editing";
+import { copiesCell, editShortcuts, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarksOf, rowShortcut, savesEdits } from "./grid-editing";
 import { addRow, deleteRow, editCell, editNewCell, noEdits } from "./record-edits";
 
 const rows = [
@@ -88,5 +88,65 @@ describe("as teclas do Filtrar e do Atualizar (RN-GRADE-013 e RN-GRADE-012)", ()
     expect(refreshKey(key("F5"))).toBe(true);
     for (const over of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }]) expect(refreshKey(key("F5", over)), JSON.stringify(over)).toBe(false);
     expect(refreshKey(key("r", { ctrlKey: true }))).toBe(false);
+  });
+});
+
+describe("os atalhos da linha com o foco na grade (RN-EDIT-015)", () => {
+  const key = (name: string, over: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) => ({ key: name, ctrlKey: false, metaKey: false, shiftKey: false, altKey: true, ...over });
+  const windows = "Win32";
+  const mac = "MacIntel";
+
+  it("Alt+Insert adiciona, Ctrl+Alt+Insert duplica e Alt+Delete exclui a linha da célula ativa", () => {
+    expect(rowShortcut(key("Insert"), windows)).toBe("newRow");
+    expect(rowShortcut(key("Insert", { ctrlKey: true }), windows)).toBe("duplicateRow");
+    expect(rowShortcut(key("Delete"), windows)).toBe("deleteRow");
+    expect(rowShortcut(key("Insert"), "Linux x86_64")).toBe("newRow");
+  });
+
+  it("os modificadores são exatos: o Ctrl+Alt+Insert não cria linha (é o duplicar, conferido antes), e com Shift ou Cmd nada acontece", () => {
+    expect(rowShortcut(key("Insert", { shiftKey: true }), windows)).toBeNull();
+    expect(rowShortcut(key("Insert", { ctrlKey: true, shiftKey: true }), windows)).toBeNull();
+    expect(rowShortcut(key("Insert", { metaKey: true }), windows)).toBeNull();
+    expect(rowShortcut(key("Insert", { ctrlKey: true, metaKey: true }), windows)).toBeNull();
+    expect(rowShortcut(key("Delete", { shiftKey: true }), windows)).toBeNull();
+    expect(rowShortcut(key("Delete", { metaKey: true }), windows)).toBeNull();
+  });
+
+  it("o AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica, e o Delete não faz nada", () => {
+    expect(rowShortcut(key("Insert", { ctrlKey: true }), windows)).toBe("duplicateRow");
+    expect(rowShortcut(key("Delete", { ctrlKey: true }), windows)).toBeNull();
+  });
+
+  it("sem Alt não é atalho da linha: o Insert e o Delete sozinhos (o Delete espera a seleção de linhas) e o Backspace fora do macOS", () => {
+    expect(rowShortcut(key("Insert", { altKey: false }), windows)).toBeNull();
+    expect(rowShortcut(key("Delete", { altKey: false }), windows)).toBeNull();
+    expect(rowShortcut(key("Backspace"), windows)).toBeNull();
+    expect(rowShortcut(key("x"), windows)).toBeNull();
+  });
+
+  it("no macOS o Option faz o papel do Alt e o Cmd o do Ctrl; o Control+Option+Insert do DBeaver também duplica, e o delete do Mac (o Backspace) exclui", () => {
+    expect(rowShortcut(key("Insert"), mac)).toBe("newRow");
+    expect(rowShortcut(key("Insert", { metaKey: true }), mac)).toBe("duplicateRow");
+    expect(rowShortcut(key("Insert", { ctrlKey: true }), mac)).toBe("duplicateRow");
+    expect(rowShortcut(key("Insert", { ctrlKey: true, metaKey: true }), mac)).toBeNull();
+    expect(rowShortcut(key("Insert", { metaKey: true, shiftKey: true }), mac)).toBeNull();
+    expect(rowShortcut(key("Backspace"), mac)).toBe("deleteRow");
+    expect(rowShortcut(key("Delete"), mac)).toBe("deleteRow");
+    expect(rowShortcut(key("Backspace", { metaKey: true }), mac)).toBeNull();
+  });
+
+  it("o menu e a barra escrevem os atalhos da plataforma, e o leitor de tela recebe os nomes das teclas da web", () => {
+    expect(editShortcuts(windows)).toEqual({
+      edit: { label: "F2", aria: "F2" },
+      newRow: { label: "Alt+Insert", aria: "Alt+Insert" },
+      duplicateRow: { label: "Ctrl+Alt+Insert", aria: "Control+Alt+Insert" },
+      deleteRow: { label: "Alt+Delete", aria: "Alt+Delete" },
+    });
+    expect(editShortcuts(mac)).toEqual({
+      edit: { label: "F2", aria: "F2" },
+      newRow: { label: "Option+Insert", aria: "Alt+Insert" },
+      duplicateRow: { label: "Cmd+Option+Insert", aria: "Meta+Alt+Insert Control+Alt+Insert" },
+      deleteRow: { label: "Option+Delete", aria: "Alt+Backspace Alt+Delete" },
+    });
   });
 });

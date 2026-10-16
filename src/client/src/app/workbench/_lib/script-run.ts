@@ -1,3 +1,5 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
 import { scriptRunCopy } from "./script-run.copy";
 import { commandStart } from "./sql-statements";
 import type { RowsState, RunTarget } from "./use-query-runner";
@@ -11,8 +13,6 @@ const copy = scriptRunCopy;
 
 /** Quantas abas de resultado o script guarda (RN-SQL-020): as dos 20 primeiros comandos que devolvem linhas, e a do último, que tem o cursor aberto. */
 export const scriptResultCap = 20;
-
-const isMacPlatform = (platform: string) => /mac|iphone|ipad/i.test(platform);
 
 /**
  * Alt+X, como no DBeaver (RN-SQL-019); no macOS, Cmd+Option+X, porque lá o Option+X escreve um caractere (`≈` no teclado americano) e o atalho o
@@ -222,6 +222,29 @@ export function commandHead(target: Pick<RunTarget, "sql" | "engine">, length = 
 export function commandHint(sql: string): string {
   const limit = 2_000;
   return sql.length <= limit ? sql : `${sql.slice(0, limit)}…`;
+}
+
+/**
+ * RN-SQL-024: os `resultID` que o comando seguinte manda à API (`keep`), para ela continuar guardando o que a edição precisa deles: os das abas do script
+ * que ficam na tela depois dele, todas menos a do último comando (`live`), cujo resultado o comando substitui (o F5, o filtro, a atualização automática).
+ * Enquanto o script roda não há `live`, e vão todas: a do comando anterior também, quando ele ganhou aba. Sem script, nenhum.
+ */
+export function keptResultIds(run: ScriptRun | null): string[] {
+  if (run === null) return [];
+  return run.results.flatMap((result) => (result.entry === run.live || result.rows.resultId == null ? [] : [result.rows.resultId]));
+}
+
+/**
+ * RN-SQL-023 e RN-EDIT-009: o "Salvar" de uma aba guardada deixa nela o que foi salvo (`patch`: as linhas, as excluídas fora, o que o banco preencheu),
+ * sem executar de novo. As Estatísticas não mudam: o "Salvar" não é comando do script, e as linhas de cada comando continuam as que ele leu. Sem a aba
+ * (o script já é outro), o mesmo script.
+ */
+export function withSavedResult(run: ScriptRun, resultId: string, patch: Partial<RowsState>): ScriptRun {
+  const at = run.results.findIndex((result) => result.entry !== run.live && result.rows.resultId === resultId);
+  if (at < 0) return run;
+  const results = run.results.slice();
+  results[at] = { ...results[at], rows: { ...results[at].rows, ...patch } };
+  return { ...run, results };
 }
 
 /** As abas da área de resultado, na ordem: os resultados guardados e, por último, as Estatísticas. */

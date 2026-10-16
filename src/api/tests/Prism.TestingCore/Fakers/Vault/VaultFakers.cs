@@ -43,6 +43,15 @@ public static class VaultFakers
         return new VaultScriptRecord(iD ?? Guid.CreateVersion7(), name ?? faker.Random.String2(length: 12), sql ?? $"SELECT {faker.Random.Int(min: 1, max: 9999)}", connectionID, database, createdAt, createdAt);
     }
 
+    /// <summary>Uma pasta de scripts (RN-SCRIPT-007), na raiz quando o teste não dá a pasta pai.</summary>
+    public static VaultScriptFolderRecord CreateScriptFolder(string? name = null, Guid? parentID = null, Guid? iD = null)
+    {
+        var faker = new Faker("pt_BR");
+        var createdAt = faker.Date.Recent().ToUniversalTime();
+
+        return new VaultScriptFolderRecord(iD ?? Guid.CreateVersion7(), parentID, name ?? faker.Random.String2(length: 12), createdAt, createdAt);
+    }
+
     /// <summary>Uma aba de consulta da área de trabalho gravada (RN-ABAS-006), com o texto sorteado quando o teste não fixa um.</summary>
     public static VaultWorkspaceTabRecord CreateQueryTab(Guid? connectionID = null, string? database = null, string? sql = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false)
         => new("query", connectionID, database, sql ?? $"SELECT {new Faker().Random.Int(min: 1, max: 9999)}", scriptID, dirty, sqlTooLarge, null, null, null);

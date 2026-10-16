@@ -12,13 +12,15 @@ import type { Engine } from "@/components/ui/engine-tag";
 import { cellMenu, type CellMenuAction, type CellMenuItem } from "./cell-menu";
 import type { DatabaseSession } from "./database-sessions.schema";
 import { databaseSessionKey } from "./database-sessions.service";
+import { duplicatePlan, type DuplicateSource } from "./duplicate-row";
+import { editBar, type EditBarAction, type EditBarButton } from "./edit-bar";
 import { customPlan, filterMenuItem, filterPlan, isFilterAction, valuesPlan, type FilterMenuContext, type FilterPlan } from "./filter-menu";
 import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullValues, type GridPosition } from "./full-values";
 import { resultCells } from "./full-values.service";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { customPrefix, distinctValues, type CompareOperator, type DistinctValue } from "./grid-export/value-filter";
 import { gridFilterCopy } from "./grid-filter.copy";
-import { gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
+import { editShortcuts, gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
 import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
 import { editErrorDetails, type EditPreview, type EditTarget } from "./record-edits.schema";
 import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
@@ -29,11 +31,17 @@ import { isBusyState, isPersonBusy, type QueryRunner, type RowsState, type Runne
 
 const copy = recordsCopy.edit;
 
+/** A plataforma, para os atalhos que o menu da célula escreve (RN-EDIT-015): Option e Cmd no macOS. */
+const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+
 /** O que o catálogo respondeu para um resultado: o alvo, ou o motivo de o resultado inteiro ser só leitura. */
 type TargetAnswer = { resultId: string; target: EditTarget | null; readOnly: string | null };
 
-/** A faixa: o último Salvar recusado (com a linha dele na grade) e o recado da última tentativa. */
-type Banner = { resultId: string | null; failure: SaveFailure | null; failedRow: number | null; notice: string | null };
+/**
+ * A faixa: o último Salvar recusado (com a linha dele na grade) e o recado da última tentativa; `tone` `warning` é o recado que não é motivo de só leitura
+ * (o de "Duplicar linha", RN-EDIT-016).
+ */
+type Banner = { resultId: string | null; failure: SaveFailure | null; failedRow: number | null; notice: string | null; tone?: "warning" };
 
 export type OpenCellMenu = {
   groups: CellMenuItem[][];
@@ -93,6 +101,13 @@ type Params = {
    * quando a pessoa cancela: nada é gravado e as alterações ficam. Sem ele, o Salvar não pergunta.
    */
   confirmSave?: (count: number) => true | Promise<boolean>;
+  /**
+   * RN-SQL-023: a aba guardada do script que está à frente (não a do último comando): a edição é a das linhas dela, e não a do resultado do executor. O
+   * resultado é um dos que a API guarda (RN-SQL-024), e o Salvar fecha o cursor do último (`onSaved`).
+   */
+  kept?: RowsState | null;
+  /** RN-SQL-023: o script roda ou espera a resposta da pergunta de erro (RN-SQL-021): a edição fica ocupada em todas as abas de resultado. */
+  scriptBusy?: boolean;
 };
 
 const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notice: null };
@@ -100,6 +115,21 @@ const noBanner: Banner = { resultId: null, failure: null, failedRow: null, notic
 /** As linhas na tela: com outro comando rodando, as de antes (esmaecidas), sobre as quais nada se edita. */
 function shownOf(state: RunnerState): RowsState | null {
   return state.status === "rows" ? state : state.status === "running" && state.previous?.status === "rows" ? state.previous : null;
+}
+
+/** A linha da grade: uma lida (com o corte, a exclusão, o que o banco preencheu num Salvar e os valores lidos) ou uma nova. */
+function rowContextOf(shown: RowsState | null, edits: PendingEdits, row: number): RowContext {
+  const read = shown?.rows.length ?? 0;
+  return row < read ? { kind: "read", truncated: shown?.truncated.get(row), deleted: edits.deleted.includes(row), generated: shown?.generated?.get(row), values: shown?.rows[row] } : { kind: "new" };
+}
+
+/**
+ * RN-EDIT-013 e 014: os quatro botões da barra de edição, pelo que a tela já sabe agora (sem perguntar ao catálogo, RN-EDIT-010): o resultado, o alvo
+ * quando já foi perguntado, a aba ocupada (o Salvar também) e a célula ativa, que só vale numa linha que existe.
+ */
+function barOf({ shown, edits, readOnlyReason, target, busy, saving, active }: { shown: RowsState | null; edits: PendingEdits; readOnlyReason: string | null; target: EditTarget | null; busy: boolean | "refresh"; saving: boolean; active: GridCell | null }): EditBarButton[] {
+  const rows = (shown?.rows.length ?? 0) + edits.added.length;
+  return editBar({ readOnly: readOnlyReason, target, busy: saving || busy, active: active !== null && active.row < rows ? { cell: active, row: rowContextOf(shown, edits, active.row) } : null, rows, platform });
 }
 
 /** RN-SQL-017: as recusas com que as células pedidas ficam cortadas, sem o aviso central: o resultado mudou, a sessão caiu, a célula está fora dele. */
@@ -126,7 +156,8 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 
  * faixa, o menu, o "Ver SQL" e a pergunta) e as chamadas.
  *
  * - As pendências são do resultado da página (`resultId`): outra execução começa sem nenhuma, e quem executa de novo com pendências
- *   pergunta antes (`guard`, RN-EDIT-007). Ficam na memória da aba (`tab-memory.ts`): ir à Estrutura e voltar não as perde.
+ *   pergunta antes (`guard`, RN-EDIT-007). Ficam na memória da aba (`tab-memory.ts`): ir à Estrutura e voltar não as perde. Depois de um script, são da aba
+ *   de resultado à frente (`kept`, RN-SQL-023): uma por vez, e trocar de aba com pendências pergunta antes.
  * - O catálogo é consultado na primeira tentativa de editar (RN-EDIT-010), pela sessão da árvore da mesma conexão quando ela existe.
  * - O Salvar grava pela sessão da aba, numa transação própria (a aba de uma tabela é sempre Auto-commit, e a de consulta ainda não tem o
  *   Commit manual na tela, RN-TX-001); se gravou tudo, quem usa decide (`onSaved`): os Registros leem de novo, e a aba de consulta fica com a
@@ -134,16 +165,16 @@ async function copyText(text: string, toast: ReturnType<typeof useToast>, cut = 
  *   pendências (RN-EDIT-012). Sem o alvo (as pendências lembradas com a aba voltam sem ele), o Salvar e o "Ver SQL" o perguntam antes.
  * - As alterações não salvas vão ao registro da aba (`unsaved-edits.ts`), de onde quem fecha abas pergunta.
  */
-export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave }: Params) {
+export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave, kept = null, scriptBusy = false }: Params) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  const shown = shownOf(state);
+  const shown = kept ?? shownOf(state);
   const resultId = shown?.resultId ?? null;
   // RN-SESSAO-002: algo em andamento na aba. "Atualizar" e "Filtrar" seguem o comando da PESSOA (`personBusy`): a execução da atualização automática não os
   // segura, e o comando toma o lugar dela (RN-GRADE-014). A edição espera também por ela (`"refresh"`, com o motivo próprio): as linhas e o resultado da API
   // vão mudar, e o que se editasse agora sumiria com eles.
-  const personBusy = isPersonBusy(state);
+  const personBusy = isPersonBusy(state) || scriptBusy;
   const busy: boolean | "refresh" = personBusy || (isBusyState(state) ? "refresh" : false);
 
   const [stored, setStored] = useState(() => recall(tabId, "edits") ?? null);
@@ -188,9 +219,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const columnReadOnly = useMemo(() => (subject === "result" && target !== null ? target.columns.map((column) => !column.editable) : null), [subject, target]);
 
   // Tudo o que as ações leem depois de um `await`: o estado de agora, e não o da renderização em que a ação começou.
-  const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving });
+  const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active });
   useEffect(() => {
-    latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving };
+    latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active };
   });
 
   /** As pendências como a grade as mostra agora (numa junção, repetidas nas linhas que mostram a mesma linha da tabela). */
@@ -226,12 +257,18 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     [tabId],
   );
 
-  const say = useCallback((notice: string | null) => setBanner((current) => ({ ...(current.resultId === latest.current.resultId ? current : noBanner), resultId: latest.current.resultId, notice })), []);
+  const say = useCallback(
+    (notice: string | null, tone?: "warning") => setBanner((current) => ({ ...(current.resultId === latest.current.resultId ? current : noBanner), resultId: latest.current.resultId, notice, tone })),
+    [],
+  );
+
+  /** RN-SQL-024: a sessão em que o resultado da tela foi lido (a da aba, sem ela): a edição pergunta e grava nela. */
+  const sessionOfShown = useCallback(() => latest.current.shown?.sessionId ?? runner.sessionOf(), [runner]);
 
   /** RN-EDIT-010: o alvo da edição, perguntado uma vez por resultado; nulo quando o resultado é só leitura ou a pergunta falhou (a faixa diz). */
   const ensureTarget = useCallback(async (): Promise<EditTarget | null> => {
     const { resultId: id, target: current, readOnlyReason: reason } = latest.current;
-    const sessionId = runner.sessionOf();
+    const sessionId = sessionOfShown();
     if (id === null || reason !== null || sessionId === null) return null;
     if (current !== null) return current;
     if (asking.current?.resultId === id) return asking.current.promise;
@@ -267,7 +304,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     });
 
     return promise;
-  }, [runner, queryClient, connectionId, database, subject, say]);
+  }, [sessionOfShown, queryClient, connectionId, database, subject, say]);
 
   /**
    * RN-GRADE-014: segura a atualização automática desde o COMEÇO de uma ação que pergunta o alvo à API antes de agir (abrir o campo ou o menu, a linha
@@ -289,18 +326,25 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     };
   }, [runner]);
 
+  // RN-SQL-023: a aba guardada do script está à frente: as linhas dela são as de um resultado guardado, e não as do executor.
+  const keptNow = useRef(kept !== null);
+  useEffect(() => {
+    keptNow.current = kept !== null;
+  });
+
   /**
    * O resultado da tela já não é `from`, o de quando a ação começou: as linhas são outras, e a ação que era sobre as de antes não vale nelas. Lê também o
-   * executor na hora, e não só a última renderização.
+   * executor na hora, e não só a última renderização: o resultado dele, ou, numa aba guardada do script, se o script ainda a tem.
    */
-  const moved = useCallback((from: string | null) => latest.current.resultId !== from || (shownOf(runner.getState())?.resultId ?? null) !== from, [runner]);
+  const moved = useCallback(
+    (from: string | null) =>
+      latest.current.resultId !== from ||
+      (keptNow.current ? !(runner.script.getState()?.results.some((result) => result.rows.resultId === from) ?? false) : (shownOf(runner.getState())?.resultId ?? null) !== from),
+    [runner],
+  );
 
   /** A linha da grade: uma lida (com o corte e a exclusão) ou uma nova. */
-  const rowOf = useCallback((row: number): RowContext => {
-    const { shown: current, edits: pending } = latest.current;
-    const read = current?.rows.length ?? 0;
-    return row < read ? { kind: "read", truncated: current?.truncated.get(row), deleted: pending.deleted.includes(row), generated: current?.generated?.get(row), values: current?.rows[row] } : { kind: "new" };
-  }, []);
+  const rowOf = useCallback((row: number): RowContext => rowContextOf(latest.current.shown, latest.current.edits, row), []);
 
   const accessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target): EditAccess => {
     const { readOnlyReason: reason, busy: running, saving: writing } = latest.current;
@@ -327,7 +371,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     async (cells: Iterable<GridPosition>, from: RowsState | null = latest.current.shown): Promise<FullValues | null> => {
       const cut = from === null ? [] : cutCellsOf(cells, from.truncated, from.sourceRows);
       if (cut.length === 0) return noFullValues;
-      const sessionId = runner.sessionOf();
+      const sessionId = from?.sessionId ?? runner.sessionOf();
       const id = from?.resultId ?? null;
       if (sessionId === null || id === null) return { valueOf: () => undefined, missing: cut.length };
 
@@ -453,29 +497,125 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
   }, [ensureTarget, putEdits, say, setActive, hold, moved]);
 
-  /** Exclui a linha (ou tira a nova). `from` é o resultado da linha (por padrão, o da tela): se ele saiu antes de a exclusão valer, nada muda. */
+  /**
+   * Exclui a linha (ou tira a nova). `from` é o resultado da linha (por padrão, o da tela): se ele saiu antes de a exclusão valer, nada muda. A linha nova é
+   * seguida pelo id dela, e não pela posição: enquanto o alvo é perguntado, outra ação (o segundo clique em "Excluir linha", o "Descartar", o "Carregar
+   * mais") pode tirá-la ou mudá-la de lugar, e a posição passa a ser de outra linha; tirada no meio, nada muda.
+   */
   const removeRow = useCallback(async (row: number, from: string | null = latest.current.resultId) => {
     if (moved(from)) return;
     const early = deleteRowAccess(rowOf(row), latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
     if (!early.editable) return say(early.reason);
+    const before = latest.current.shown?.rows.length ?? 0;
+    const added = row < before ? null : (latest.current.edits.added[row - before]?.id ?? null);
+    if (row >= before && added === null) return;
     const release = hold();
     try {
       const known = await ensureTarget();
       if (moved(from)) return;
       const { readOnlyReason: reason, busy: running, saving: writing, shown: current, edits: pending } = latest.current;
-      const access = deleteRowAccess(rowOf(row), reason, known, writing || running);
+      const access = deleteRowAccess(added === null ? rowOf(row) : { kind: "new" }, reason, known, writing || running);
       if (!access.editable) return say(access.reason);
       if (known === null || current === null) return;
 
       const read = current.rows.length;
-      putEdits(row < read ? deleteRow(pending, row) : removeNewRow(pending, pending.added[row - read].id));
+      if (added === null) putEdits(deleteRow(pending, row));
+      else {
+        const index = pending.added.findIndex((pendingRow) => pendingRow.id === added);
+        if (index < 0) return;
+        const at = read + index;
+        const next = removeNewRow(pending, added);
+        putEdits(next);
+        // RN-EDIT-014: tirada a linha nova, a célula ativa passa à linha que ficou no lugar dela, ou à de cima quando ela era a última; sem linha nenhuma,
+        // não há célula ativa. A ativa de uma linha de depois sobe junto com ela.
+        const total = read + next.added.length;
+        setActiveState((held) => {
+          if (held === null || held.resultId !== from || held.cell.row < at) return held;
+          if (total === 0) return null;
+          return { resultId: from, cell: { row: held.cell.row === at ? Math.min(at, total - 1) : held.cell.row - 1, column: held.cell.column } };
+        });
+      }
       say(null);
     } finally {
       release();
     }
   }, [ensureTarget, rowOf, putEdits, say, hold, moved]);
 
+  /** Cada "Duplicar linha" que busca os valores completos ganha uma vez: a busca nova cancela a anterior, que não é o "Cancelar" da pessoa. */
+  const duplicating = useRef(0);
+
+  /**
+   * RN-EDIT-016: "Duplicar linha" põe no fim da grade uma linha nova pendente com o valor que a tela mostra em cada coluna da tabela que se copia
+   * (`duplicatePlan`), onde "Adicionar linha" vale. A célula cortada vai com o valor completo, buscado antes na API (RN-SQL-017, com "Buscando os valores
+   * completos…" e "Cancelar" na faixa); o valor que não vem inteiro, ou a busca cancelada, não duplica nada, e a faixa diz por quê. Depois, a célula ativa vai
+   * para a linha nova, na primeira coluna editável (na que copiou a chave, na coluna da chave mais à esquerda), e a faixa avisa a chave copiada e as colunas
+   * que ficaram de fora. A atualização automática fica em pausa desde o começo, também durante a busca, e o resultado que mudou no meio não recebe a linha
+   * (RN-GRADE-014). `from` é o resultado da linha (por padrão, o da tela).
+   */
+  const duplicateRow = useCallback(async (row: number, from: string | null = latest.current.resultId) => {
+    if (moved(from)) return;
+    const early = newRowAccess(latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
+    if (!early.editable) return say(early.reason);
+    const release = hold();
+    try {
+      const known = await ensureTarget();
+      if (moved(from)) return;
+      const { readOnlyReason: reason, busy: running, saving: writing, shown: current, edits: pending } = latest.current;
+      const access = newRowAccess(reason, known, writing || running);
+      if (!access.editable) return say(access.reason);
+      if (known === null || current === null) return;
+
+      const read = current.rows.length;
+      const source: DuplicateSource | null =
+        row < read
+          ? { kind: "read", values: current.columns.map((_, column) => valueAt({ row, column })), truncated: current.truncated.get(row), generated: current.generated?.get(row) }
+          : pending.added[row - read] === undefined
+            ? null
+            : { kind: "new", values: pending.added[row - read].values };
+      if (source === null) return;
+
+      const plan = duplicatePlan(known, source);
+      const values = { ...plan.values };
+      if (plan.cut.length > 0) {
+        const turn = ++duplicating.current;
+        const full = await completeValues(plan.cut.map((column) => ({ row, column })), current);
+        if (moved(from)) return;
+        // A busca de um "Duplicar linha" seguinte (o duplo clique no botão) cancela esta: quem duplica e diz o que houve é o seguinte, e esta sai calada.
+        if (full === null && duplicating.current !== turn) return;
+        if (full === null) return say(copy.duplicate.fetchCancelled, "warning");
+        const missing = plan.cut.find((column) => full.valueOf(row, column) === undefined);
+        if (missing !== undefined) return say(copy.duplicate.fullValueMissing(current.columns[missing]?.name ?? "", subject), "warning");
+        for (const column of plan.cut) values[column] = full.valueOf(row, column) ?? null;
+      }
+
+      // As pendências e as linhas de agora: a busca deixa a grade livre, e o que foi feito nela enquanto isso (uma célula editada, o "Carregar mais") fica.
+      const { edits: next } = addRow(latest.current.edits, values);
+      putEdits(next);
+      const first = known.columns.findIndex((info) => info.editable);
+      setActive({ row: (latest.current.shown?.rows.length ?? read) + next.added.length - 1, column: plan.key === null ? Math.max(first, 0) : plan.key[0] });
+
+      const names = (columns: readonly number[]) => columns.map((column) => current.columns[column]?.name ?? "");
+      const notes = [plan.key === null ? null : copy.duplicate.keyCopied(known.tables[0]?.name ?? "", names(plan.key)), plan.skipped.length === 0 ? null : copy.duplicate.notCopied(names(plan.skipped))].filter((note) => note !== null);
+      say(notes.length === 0 ? null : notes.join(" "), "warning");
+    } finally {
+      release();
+    }
+  }, [ensureTarget, valueAt, completeValues, putEdits, setActive, say, hold, moved, subject]);
+
+  /**
+   * RN-EDIT-015: Ctrl+Alt+Insert e Alt+Delete, na linha da célula ativa. O que a barra mostraria desabilitado (sem célula ativa, o resultado só leitura,
+   * a aba ocupada…) vai à faixa, com o motivo dela; o resto a ação confere, e a primeira tentativa pergunta o alvo.
+   */
+  const rowAction = useCallback((id: "duplicateRow" | "deleteRow") => {
+    const reason = barOf(latest.current).find((button) => button.id === id)?.reason ?? null;
+    const cell = latest.current.active;
+    if (reason !== null || cell === null) return say(reason);
+    void (id === "duplicateRow" ? duplicateRow(cell.row) : removeRow(cell.row));
+  }, [say, duplicateRow, removeRow]);
+
   const undo = useCallback((cell: GridCell) => {
+    // O recado da faixa é da última tentativa (o aviso do "Duplicar linha" fica até a próxima ação de edição, RN-EDIT-016).
+    say(null);
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
     if (cell.row < read) putEdits(pending.deleted.includes(cell.row) ? undoDelete(pending, cell.row) : undoCell(pending, cell.row, cell.column, changeAt(cell)));
@@ -483,7 +623,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       const row = pending.added[cell.row - read];
       if (row !== undefined) putEdits(undoNewCell(pending, row.id, cell.column));
     }
-  }, [putEdits, changeAt]);
+  }, [putEdits, changeAt, say]);
 
   const discard = useCallback(() => {
     setEditor(null);
@@ -502,7 +642,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const save = useCallback(async (reread = true): Promise<boolean> => {
     const before = latest.current;
     if (pendingCount(before.edits) === 0) return true;
-    if (before.saving || before.shown === null || before.resultId === null || runner.sessionOf() === null || confirming.current) return false;
+    if (before.saving || before.shown === null || before.resultId === null || sessionOfShown() === null || confirming.current) return false;
 
     // Sem a pergunta, a resposta vem na hora (`true`), e o Salvar segue na mesma chamada, como antes.
     const answer = sources.current.confirmSave?.(pendingCount(before.edits)) ?? true;
@@ -515,7 +655,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
 
     const { shown: current, resultId: id, edits: pending, saving: writing } = latest.current;
-    const sessionId = runner.sessionOf();
+    const sessionId = sessionOfShown();
     if (pendingCount(pending) === 0) return true;
     if (writing || current === null || id === null || sessionId === null) return false;
 
@@ -551,12 +691,12 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       setSaving(false);
       latest.current = { ...latest.current, saving: false };
     }
-  }, [runner, queryClient, toast, putEdits, ensureTarget, onSaved]);
+  }, [sessionOfShown, queryClient, toast, putEdits, ensureTarget, onSaved]);
 
   /** RN-EDIT-008: "Ver SQL", pela API, sem executar nada. */
   const viewSql = useCallback(async () => {
     const { shown: current, resultId: id, edits: pending } = latest.current;
-    const sessionId = runner.sessionOf();
+    const sessionId = sessionOfShown();
     if (current === null || id === null || sessionId === null) return;
     const known = latest.current.target ?? (await ensureTarget());
     if (known === null || latest.current.resultId !== id) return;
@@ -566,7 +706,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (result === null) return;
     if (result.ok) setPreview(result.data);
     else setBanner({ resultId: id, failure: failureOf(result.error, plan, known.oneAtATime), failedRow: null, notice: null });
-  }, [runner, queryClient, ensureTarget]);
+  }, [sessionOfShown, queryClient, ensureTarget]);
 
   /**
    * O que o "Filtrar" sabe da célula agora (RN-GRADE-013): o valor LIDO (a pendência ainda não está no banco), se chegou cortado, a linha nova, o
@@ -639,7 +779,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         deletedRow: cell.row < read && pending.deleted.includes(cell.row),
         nullable: known?.columns[cell.column]?.nullable ?? true,
         newRow: newRowAccess(reason, known, writing || running),
+        duplicateRow: newRowAccess(reason, known, writing || running),
         deleteRow: deleteRowAccess(rowOf(cell.row), reason, known, writing || running),
+        shortcuts: editShortcuts(platform),
         ...(filterContext === null ? {} : { filter: filterMenuItem(filterContext) }),
         ...(sources.current.refresh === undefined ? {} : { refresh: personBusy || writing ? { editable: false, reason: gridFilterCopy.menu.unavailable(gridFilterCopy.reasons.busy) } : { editable: true } }),
         ...(sources.current.autoRefresh === undefined ? {} : { autoRefresh: sources.current.autoRefresh.item() }),
@@ -692,6 +834,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
             case "newRow":
               void newRow();
               break;
+            case "duplicateRow":
+              void duplicateRow(cell.row, from);
+              break;
             case "deleteRow":
               void removeRow(cell.row, from);
               break;
@@ -701,7 +846,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     } finally {
       release();
     }
-  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, removeRow, copyCell, toast, viewNow, filterContextOf, runFilterPlan, hold, moved]);
+  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, duplicateRow, removeRow, copyCell, toast, viewNow, filterContextOf, runFilterPlan, hold, moved]);
 
   /** RN-EDIT-007: com pendências, a ação (filtrar, ordenar, atualizar, executar de novo) espera a resposta da pergunta. */
   const guard = useCallback((proceed: () => void) => {
@@ -753,6 +898,20 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCopy: (cell) => void copyCell(cell),
           onSave: () => void save(),
           onNewRow: () => void newRow(),
+          onDuplicateRow: () => rowAction("duplicateRow"),
+          onDeleteRow: () => rowAction("deleteRow"),
+          bar: {
+            buttons: barOf({ shown, edits, readOnlyReason, target, busy, saving, active }),
+            onAction: (id: EditBarAction) => {
+              // RN-EDIT-014: cada botão faz o que o item de mesmo nome do menu faz, sobre a célula ativa ("Editar célula" é o F2).
+              const cell = latest.current.active;
+              if (id === "newRow") return void newRow();
+              if (cell === null) return;
+              if (id === "edit") openEditor(cell);
+              else if (id === "duplicateRow") void duplicateRow(cell.row);
+              else void removeRow(cell.row);
+            },
+          },
           ...(filter === undefined
             ? {}
             : {
@@ -772,6 +931,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       saving,
       readOnly: resultReadOnly(readOnlyReason, target),
       notice: banner.notice,
+      noticeTone: banner.tone ?? ("lock" as const),
       failure: banner.failure,
       fetching: fetching !== null,
       onCancelFetch: cancelFetch,

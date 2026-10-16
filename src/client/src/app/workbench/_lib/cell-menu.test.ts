@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { cellAccess, columnHintsOf, deleteRowAccess, newRowAccess, resultReadOnly, type CellContext } from "./cell-editing";
 import { autoRefreshMenuItem } from "./auto-refresh-menu";
 import { cellMenu, type CellMenuState } from "./cell-menu";
+import { editShortcuts } from "./grid-editing";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
 
@@ -132,13 +133,13 @@ describe("o que uma célula permite editar (RN-EDIT-002)", () => {
 
 const menu = copy.menu;
 
-const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "aberta", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, deleteRow: { editable: true }, ...over });
+const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "aberta", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, duplicateRow: { editable: true }, deleteRow: { editable: true }, ...over });
 
 /** Os itens como a tela os mostra: o rótulo, se está desabilitado e o motivo. */
 const shown = (groups: ReturnType<typeof cellMenu>) => groups.map((group) => group.map((item) => [item.label, item.disabled === true, item.hint ?? null]));
 
 describe("o menu de contexto da célula", () => {
-  it("numa célula que se edita: copiar, colar, editar e NULL habilitados; desfazer só com pendência; separador, linha nova e excluir", () => {
+  it("numa célula que se edita: copiar, colar, editar e NULL habilitados; desfazer só com pendência; separador, adicionar, duplicar e excluir linha", () => {
     expect(shown(cellMenu(state()))).toEqual([
       [
         [menu.copyValue, false, null],
@@ -149,6 +150,7 @@ describe("o menu de contexto da célula", () => {
       ],
       [
         [menu.newRow, false, null],
+        [menu.duplicateRow, false, null],
         [menu.deleteRow, false, null],
       ],
     ]);
@@ -199,11 +201,31 @@ describe("o menu de contexto da célula", () => {
     expect(cellMenu(state()).flat().some((item) => item.id === "autoRefresh")).toBe(false);
   });
 
-  it("os atalhos que a grade já trata vão à direita: F2 edita, Alt+Insert cria a linha", () => {
+  it("os atalhos que a grade trata vão à direita: F2 edita, Alt+Insert adiciona a linha, Alt+Delete a exclui (RN-EDIT-015)", () => {
     const items = cellMenu(state()).flat();
 
     expect(items.find((item) => item.id === "edit")?.shortcut).toBe("F2");
     expect(items.find((item) => item.id === "newRow")?.shortcut).toBe("Alt+Insert");
+    expect(items.find((item) => item.id === "deleteRow")?.shortcut).toBe("Alt+Delete");
+  });
+
+  it("no macOS o menu escreve os atalhos com o Option, como as dicas da barra de edição", () => {
+    const items = cellMenu(state({ shortcuts: editShortcuts("MacIntel") })).flat();
+
+    expect(items.find((item) => item.id === "newRow")?.shortcut).toBe("Option+Insert");
+    expect(items.find((item) => item.id === "deleteRow")?.shortcut).toBe("Option+Delete");
+  });
+
+  it("\"Excluir linha\" na linha já marcada para exclusão fica desabilitado, com o motivo (RN-EDIT-014), também antes de o catálogo responder", () => {
+    const deleted = { kind: "read" as const, truncated: undefined, deleted: true };
+    const reason = copy.readOnly(copy.reasons.alreadyDeleted);
+
+    expect(deleteRowAccess(deleted, null, target, false)).toEqual({ editable: false, reason });
+    expect(deleteRowAccess(deleted, null, null, false)).toEqual({ editable: false, reason });
+    expect(reason).toBe("Somente leitura: a linha já está marcada para exclusão; Desfazer alteração a devolve.");
+    // O que vem antes na ordem dos motivos fica na frente: o resultado só leitura, a aba ocupada, a junção.
+    expect(deleteRowAccess(deleted, "DISTINCT", target, false)).toEqual({ editable: false, reason: copy.readOnly("DISTINCT") });
+    expect(deleteRowAccess(deleted, null, target, true)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.busy) });
   });
 });
 
@@ -222,7 +244,7 @@ describe("a linha nova depois do Salvar, com o que o banco preencheu (RN-EDIT-00
 });
 
 describe("os rótulos do menu da célula são os da especificação (RN-EDIT-001)", () => {
-  it("Editar célula, Definir como nulo, Linha nova, Excluir linha e Desfazer alteração", () => {
-    expect([menu.edit, menu.setNull, menu.newRow, menu.deleteRow, menu.undo]).toEqual(["Editar célula", "Definir como nulo", "Linha nova", "Excluir linha", "Desfazer alteração"]);
+  it("Editar célula, Definir como nulo, Adicionar linha (seção 33: era \"Linha nova\"), Excluir linha e Desfazer alteração", () => {
+    expect([menu.edit, menu.setNull, menu.newRow, menu.deleteRow, menu.undo]).toEqual(["Editar célula", "Definir como nulo", "Adicionar linha", "Excluir linha", "Desfazer alteração"]);
   });
 });

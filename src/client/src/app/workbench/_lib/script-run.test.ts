@@ -7,6 +7,7 @@ import {
   entriesOf,
   entryAt,
   finishRun,
+  keptResultIds,
   scriptEndToast,
   scriptProgress,
   scriptShortcut,
@@ -20,6 +21,7 @@ import {
   statisticsSummary,
   statisticsWindow,
   withEntry,
+  withSavedResult,
   type ScriptEntry,
   type ScriptRun,
 } from "./script-run";
@@ -224,6 +226,38 @@ describe("a aba à frente (RN-SQL-020)", () => {
     expect(shownScriptTab(run({ results, phase: "done", live: 2 }), 0)).toBe(0);
     expect(shownScriptTab(run({ results, phase: "done", live: 2 }), "statistics")).toBe("statistics");
     expect(shownScriptTab(run({ results, phase: "done", live: 2 }), 1)).toBe(2);
+  });
+});
+
+describe("as abas que continuam se editando (seção 33, RN-SQL-023 e 024)", () => {
+  const of = (resultId: string | null) => ({ status: "rows", resultId, rows: [["1"]] }) as RowsState;
+  const results = [
+    { entry: 0, rows: of("r0") },
+    { entry: 1, rows: of(null) },
+    { entry: 2, rows: of("r2") },
+  ];
+
+  it("o keep são os resultados das abas, menos a do último comando, que o comando seguinte substitui; sem script, nenhum", () => {
+    expect(keptResultIds(null)).toEqual([]);
+    // Enquanto roda não há aba do último: vão todas, a do comando anterior também. O resultado sem `resultID` (uma API antiga) não vai.
+    expect(keptResultIds(run({ results }))).toEqual(["r0", "r2"]);
+    expect(keptResultIds(run({ results, phase: "done", live: 2 }))).toEqual(["r0"]);
+    expect(keptResultIds(run({ results: [], phase: "done", live: null }))).toEqual([]);
+  });
+
+  it("o Salvar de uma aba guardada troca as linhas dela, e só dela; o comando, as Estatísticas e a aba do último ficam", () => {
+    const before = run({ results, phase: "done", live: 2 });
+
+    const after = withSavedResult(before, "r0", { rows: [["9"]], cursorClosed: true });
+
+    expect(after.results[0].rows).toEqual({ status: "rows", resultId: "r0", rows: [["9"]], cursorClosed: true });
+    expect(after.results[0].entry).toBe(0);
+    expect(after.results.slice(1)).toEqual(before.results.slice(1));
+    expect(after.pages).toBe(before.pages);
+    expect(after.totals).toBe(before.totals);
+    // A aba do último desenha o executor, e não a cópia: um resultado que não é de aba guardada deixa o mesmo script.
+    expect(withSavedResult(before, "r2", { rows: [] })).toBe(before);
+    expect(withSavedResult(before, "outro", { rows: [] })).toBe(before);
   });
 });
 

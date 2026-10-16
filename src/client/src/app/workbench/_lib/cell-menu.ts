@@ -1,11 +1,12 @@
 import type { AutoRefreshAction } from "./auto-refresh-menu";
 import type { EditAccess } from "./cell-editing";
 import type { FilterAction } from "./filter-menu";
+import { editShortcuts, type EditShortcut, type RowShortcut } from "./grid-editing";
 import { recordsCopy } from "./records.copy";
 
 const copy = recordsCopy.edit.menu;
 
-export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction;
+export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "duplicateRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction;
 
 /**
  * Um item do menu da célula. O modelo só descreve; quem executa é a vista Registros, que tem as pendências e a área de transferência. `checked`: o item é
@@ -28,6 +29,8 @@ export type CellMenuState = {
   /** A coluna aceita NULL (o catálogo diz; sem o alvo, aceita). */
   nullable: boolean;
   newRow: EditAccess;
+  /** RN-EDIT-016: "Duplicar linha" vale onde "Adicionar linha" vale (`newRowAccess`). */
+  duplicateRow: EditAccess;
   deleteRow: EditAccess;
   /** O "Filtrar" (F11) com o submenu dele (`filterMenuItem`), quando a grade tem campo de filtro. */
   filter?: CellMenuItem;
@@ -35,7 +38,11 @@ export type CellMenuState = {
   refresh?: EditAccess;
   /** RN-GRADE-014: "Atualizar automaticamente", com o submenu dos intervalos (`autoRefreshMenuItem`), logo depois do "Atualizar". */
   autoRefresh?: CellMenuItem;
+  /** RN-EDIT-015: os atalhos como a plataforma os escreve (`editShortcuts`), os mesmos das dicas da barra de edição; sem eles, os do Windows e do Linux. */
+  shortcuts?: Record<"edit" | RowShortcut, EditShortcut>;
 };
+
+const defaultShortcuts = editShortcuts("");
 
 const hintOf = (access: EditAccess) => (access.editable ? {} : { disabled: true, hint: access.reason });
 
@@ -43,10 +50,12 @@ const hintOf = (access: EditAccess) => (access.editable ? {} : { disabled: true,
  * O menu de contexto de uma célula dos Registros (pedido do dono, ao lado da RN-EDIT-001): copiar o valor, colar como alteração
  * pendente, editar, definir como NULL e desfazer a alteração; depois, o "Filtrar" (F11, com o submenu), o "Atualizar" (F5) e o "Atualizar automaticamente"
  * (com o submenu dos intervalos), quando a grade os tem;
- * depois do separador, linha nova e excluir linha. O que não se aplica vem desabilitado, sem sumir, com o motivo quando é de só leitura (o de
- * `cellAccess`). Copiar vale sempre, também na célula só leitura; o nulo copia vazio. Os atalhos são os que a grade já trata.
+ * depois do separador, "Adicionar linha", "Duplicar linha" e "Excluir linha" (RN-GRADE-004). O que não se aplica vem desabilitado, sem sumir, com o motivo quando é de só
+ * leitura (o de `cellAccess`). Copiar vale sempre, também na célula só leitura; o nulo copia vazio. Os atalhos são os que a grade trata (RN-EDIT-015), como a
+ * plataforma os escreve.
  */
 export function cellMenu(state: CellMenuState): CellMenuItem[][] {
+  const shortcuts = state.shortcuts ?? defaultShortcuts;
   const notNullable = !state.access.editable ? hintOf(state.access) : state.nullable ? {} : { disabled: true, hint: copy.notNullable };
   const view: CellMenuItem[] = [
     ...(state.filter === undefined ? [] : [state.filter]),
@@ -58,14 +67,15 @@ export function cellMenu(state: CellMenuState): CellMenuItem[][] {
     [
       { id: "copy", label: copy.copyValue, disabled: false, text: state.value ?? "" },
       { id: "paste", label: copy.paste, ...hintOf(state.access) },
-      { id: "edit", label: copy.edit, shortcut: "F2", ...hintOf(state.access) },
+      { id: "edit", label: copy.edit, shortcut: shortcuts.edit.label, ...hintOf(state.access) },
       { id: "setNull", label: copy.setNull, ...notNullable },
       { id: "undo", label: copy.undo, disabled: !state.pending && !state.deletedRow },
     ],
     ...(view.length === 0 ? [] : [view]),
     [
-      { id: "newRow", label: copy.newRow, shortcut: "Alt+Insert", ...hintOf(state.newRow) },
-      { id: "deleteRow", label: copy.deleteRow, ...hintOf(state.deleteRow) },
+      { id: "newRow", label: copy.newRow, shortcut: shortcuts.newRow.label, ...hintOf(state.newRow) },
+      { id: "duplicateRow", label: copy.duplicateRow, shortcut: shortcuts.duplicateRow.label, ...hintOf(state.duplicateRow) },
+      { id: "deleteRow", label: copy.deleteRow, shortcut: shortcuts.deleteRow.label, ...hintOf(state.deleteRow) },
     ],
   ];
 }

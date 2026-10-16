@@ -147,6 +147,22 @@ internal static class EditableSql
     }
 
     /// <summary>
+    /// RN-SQL-024: o comando pode ter trocado a tabela que um nome escrito sem esquema leva, no Db2 e no Informix: começa, depois dos
+    /// comentários, dos `;` soltos e dos parênteses de abertura (o leitor da RN-PROT-005), por `SET` (`SET SCHEMA`, `SET CURRENT SCHEMA`,
+    /// `SET CURRENT SQLID`, `SET SESSION AUTHORIZATION`...), `CALL` ou `EXECUTE` (a rotina pode trocá-lo por dentro) e, no Informix,
+    /// `DATABASE`. No Db2 vale a leitura do comentário de bloco do banco e a do driver: basta uma delas. Na dúvida, sim: todo `SET` conta.
+    /// </summary>
+    internal static bool MayChangeTheCurrentSchema(string sql, ESqlDialect dialect)
+        => StartsBySchemaChange(Lex(sql, dialect), dialect) || (dialect == ESqlDialect.Db2 && StartsBySchemaChange(Lex(sql, dialect, asTheDriver: true), dialect));
+
+    private static bool StartsBySchemaChange(IEnumerable<Token> tokens, ESqlDialect dialect)
+    {
+        var first = tokens.FirstOrDefault(token => !token.Is("(") && !token.Is(";"));
+
+        return first.Kind == ETokenKind.Word && (first.Upper is "SET" or "CALL" or "EXECUTE" || (dialect == ESqlDialect.Informix && first.Upper == "DATABASE"));
+    }
+
+    /// <summary>
     /// As tabelas do `FROM`, na ordem em que aparecem, ou o motivo de o resultado inteiro ficar só leitura. `Merged` diz se há `USING` ou
     /// `NATURAL`, que juntam as colunas da junção numa só.
     /// </summary>

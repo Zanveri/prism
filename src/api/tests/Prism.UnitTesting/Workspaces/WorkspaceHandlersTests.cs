@@ -31,7 +31,7 @@ public sealed class WorkspaceHandlersTests
         => new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(_sink).CreateLogger();
 
     private void SetWorkspace(VaultWorkspaceRecord workspace)
-        => _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], workspace)));
+        => _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], workspace, [])));
 
     [Trait("GetWorkspaceHandler", "GetWorkspaceCommand")]
     [Fact(DisplayName = "OK as abas gravadas voltam na ordem, com a ativa, e cada uma com os campos dela")]

@@ -826,13 +826,36 @@ public sealed partial class DatabaseSessionServiceTests
             return Task.FromResult(Result.Success<IReadOnlyList<DatabaseInfo>, DatabaseFailure>([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)]));
         }
 
+        /// <summary>RN-EDIT-010: o que o catálogo da edição responde; sem ele, a edição não é esperada no teste.</summary>
+        public IReadOnlyList<EditCatalogTable?>? Catalog { get; set; }
+
+        /// <summary>Quantas vezes o catálogo da edição foi consultado nesta conexão.</summary>
+        public int DescribeCalls { get; private set; }
+
+        /// <summary>RN-EDIT-005: os comandos de cada "Salvar" que chegou à conexão, na ordem.</summary>
+        public List<IReadOnlyList<EditCommand>> Saved { get; } = [];
+
         public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        {
+            DescribeCalls++;
+
+            return Task.FromResult(Catalog is { } catalog ? Result.Success<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>(catalog) : throw new NotSupportedException());
+        }
 
         public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
 
+        /// <summary>Como a base: o "Salvar" é um comando na conexão e fecha o cursor aberto; o plano roda com o catálogo de dentro da transação.</summary>
         public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        {
+            HasOpenCursor = false;
+            var planned = plan(Catalog ?? throw new NotSupportedException());
+            if (planned.IsFailure)
+                return Task.FromResult(Result.Failure<int, DatabaseFailure>(planned.Error));
+
+            Saved.Add(planned.Value);
+
+            return Task.FromResult(Result.Success<int, DatabaseFailure>(planned.Value.Count));
+        }
     }
 }

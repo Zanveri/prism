@@ -24,7 +24,7 @@ public sealed class ScriptRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(params VaultScriptRecord[] scripts)
-        => new("marina.costa", [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection()], scripts, VaultWorkspaceRecord.Empty);
+        => new("marina.costa", [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection()], scripts, VaultWorkspaceRecord.Empty, []);
 
     private static VaultScriptRecord ToRecord(Script script)
         => new(script.ID, script.Name, script.Sql, script.ConnectionID, script.Database, script.CreatedAt, script.UpdatedAt);
@@ -258,5 +258,97 @@ public sealed class ScriptRepositoryTests
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
         Assert.Equal("SCRIPT_NOT_FOUND", result.Error.Type);
         Assert.Same(_current, _saved);
+    }
+
+    /// <summary>RN-SCRIPT-010: o script nasce na pasta do campo "Pasta", que existe no documento mais recente.</summary>
+    [Trait("ScriptRepository", "Insert")]
+    [Fact(DisplayName = "OK o script nasce dentro da pasta escolhida")]
+    public async Task Insert_InAFolder_ShouldBeOK()
+    {
+        //Arrange
+        var folder = VaultFakers.CreateScriptFolder(name: "Fechamento");
+        var repository = CreateRepository(Document() with { ScriptFolders = [folder] });
+        var script = ScriptFakers.Create(name: "Mensal", folderID: folder.ID);
+
+        //Act
+        var result = await repository.Insert(script, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(folder.ID, Assert.Single(_saved!.Scripts).FolderID);
+    }
+
+    /// <summary>A pasta escolhida que outra janela excluiu antes de gravar: a recusa vai ao campo, na tela, e o script não é gravado.</summary>
+    [Trait("ScriptRepository", "Insert")]
+    [Fact(DisplayName = "Erro a pasta escolhida que não existe mais responde 404, e não grava")]
+    public async Task Insert_InAMissingFolder_Returns404()
+    {
+        //Arrange
+        var current = Document();
+        var repository = CreateRepository(current);
+
+        //Act
+        var result = await repository.Insert(ScriptFakers.Create(folderID: Guid.CreateVersion7()), CancellationToken.None);
+
+        //Assert
+        Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
+        Assert.Equal("SCRIPT_FOLDER_NOT_FOUND", result.Error.Type);
+        Assert.Equal("A pasta escolhida não existe mais.", result.Error.Detail);
+        Assert.Same(current, _saved);
+    }
+
+    /// <summary>RN-SCRIPT-009: mover para uma pasta que existe e de volta para a raiz grava só a pasta; mover não confere o nome.</summary>
+    [Trait("ScriptRepository", "Update")]
+    [Fact(DisplayName = "OK mover para a pasta e para a raiz grava só a pasta")]
+    public async Task Update_Move_ShouldBeOK()
+    {
+        //Arrange
+        var folder = VaultFakers.CreateScriptFolder(name: "Fechamento");
+        var target = VaultFakers.CreateScript(name: "Mensal");
+        var repository = CreateRepository(Document(target) with { ScriptFolders = [folder] });
+
+        //Act
+        var moved = await repository.Update(target.ID, script => script.MoveTo(folder.ID, false, Now), CancellationToken.None);
+        var savedInFolder = _saved!.Scripts.Single();
+
+        //Assert
+        Assert.True(moved.IsSuccess);
+        Assert.Equal(target with { FolderID = folder.ID, UpdatedAt = Now }, savedInFolder);
+    }
+
+    [Trait("ScriptRepository", "Update")]
+    [Fact(DisplayName = "Erro mover para a pasta de destino que não existe mais responde 404, e não grava")]
+    public async Task Update_MoveToAMissingFolder_Returns404()
+    {
+        //Arrange
+        var target = VaultFakers.CreateScript(name: "Mensal");
+        var current = Document(target);
+        var repository = CreateRepository(current);
+
+        //Act
+        var result = await repository.Update(target.ID, script => script.MoveTo(Guid.CreateVersion7(), false, Now), CancellationToken.None);
+
+        //Assert
+        Assert.Equal("SCRIPT_FOLDER_NOT_FOUND", result.Error.Type);
+        Assert.Equal("A pasta de destino não existe mais.", result.Error.Detail);
+        Assert.Same(current, _saved);
+    }
+
+    /// <summary>O script que já está numa pasta continua lá quando só o nome ou o SQL mudam: a pasta dele não é conferida de novo.</summary>
+    [Trait("ScriptRepository", "Update")]
+    [Fact(DisplayName = "OK gravar por cima o script de uma pasta mantém a pasta")]
+    public async Task Update_OverwriteInAFolder_KeepsTheFolder()
+    {
+        //Arrange
+        var folder = VaultFakers.CreateScriptFolder(name: "Fechamento");
+        var target = VaultFakers.CreateScript(name: "Mensal", sql: "SELECT 1") with { FolderID = folder.ID };
+        var repository = CreateRepository(Document(target) with { ScriptFolders = [folder] });
+
+        //Act
+        var result = await repository.Update(target.ID, script => script.Change(null, "SELECT 2", null, null, false, null, null, Now), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(folder.ID, Assert.Single(_saved!.Scripts).FolderID);
     }
 }

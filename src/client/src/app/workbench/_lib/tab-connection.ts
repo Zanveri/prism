@@ -1,4 +1,5 @@
 import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
+import { isMacPlatform } from "@/lib/utils/platform";
 
 import { withEditedSql } from "./saved-scripts";
 import type { QueryTab } from "./workbench-model";
@@ -59,7 +60,7 @@ export function connectionShortcut(event: { key: string; code?: string; ctrlKey:
 
 /** O atalho como a plataforma o escreve, na dica do botão e para o leitor de tela: Cmd+9 no macOS, Ctrl+9 nas outras (`navigator.platform`). */
 export function connectionShortcutLabel(platform: string): { label: string; aria: string } {
-  return /mac|iphone|ipad/i.test(platform) ? { label: workbenchCopy.editor.connection.shortcutMac, aria: "Meta+9" } : { label: workbenchCopy.editor.connection.shortcut, aria: "Control+9" };
+  return isMacPlatform(platform) ? { label: workbenchCopy.editor.connection.shortcutMac, aria: "Meta+9" } : { label: workbenchCopy.editor.connection.shortcut, aria: "Control+9" };
 }
 
 /** As setas da lista, sem dar a volta (como no `Select`); sem nada marcado, a seta para baixo marca a primeira e a para cima, a última. `null`: não é seta. */

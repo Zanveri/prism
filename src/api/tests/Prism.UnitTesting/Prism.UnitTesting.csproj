@@ -23,6 +23,8 @@
     <EmbeddedResource Include="Vault/Samples/vault-format-1.json" LogicalName="vault-format-1.json" />
     <!-- RN-VERSAO-005 e RN-ABAS-006: um cofre do formato 2 gravado antes do formato 3, aberto em VaultFormatTwoSampleTests. -->
     <EmbeddedResource Include="Vault/Samples/vault-format-2.json" LogicalName="vault-format-2.json" />
+    <!-- RN-VERSAO-005 e RN-SCRIPT-011: um cofre do formato 3 gravado antes do formato 4, aberto em VaultFormatThreeSampleTests. -->
+    <EmbeddedResource Include="Vault/Samples/vault-format-3.json" LogicalName="vault-format-3.json" />
   </ItemGroup>
 
   <ItemGroup>

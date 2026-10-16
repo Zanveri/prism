@@ -12,7 +12,8 @@ namespace Prism.UnitTesting.Vault;
 
 /// <summary>
 /// O formato 2 do cofre (o dos scripts, RN-SCRIPT-002) como um arquivo gravado ANTES do formato 3 e versionado em `Vault/Samples/`. O formato 3 acrescentou a
-/// área de trabalho ao documento (RN-ABAS-006: as abas que voltam na próxima entrada): o exemplo abre, é migrado ao abrir (a área de trabalho vazia, os scripts
+/// área de trabalho ao documento (RN-ABAS-006: as abas que voltam na próxima entrada), e o 4, as pastas de scripts (RN-SCRIPT-011): o exemplo abre, é migrado ao
+/// abrir pelos dois passos (a área de trabalho vazia, as pastas de scripts vazias, os scripts
 /// como estavam, e o arquivo passa a declarar o formato atual) e o arquivo de antes fica no `.bak` (RN-VERSAO-005). O do formato 1 continua em
 /// `VaultFormatOneSampleTests`, que passa pelas duas migrações.
 ///
@@ -28,7 +29,10 @@ public sealed class VaultFormatTwoSampleTests : IDisposable
 
     private readonly string _directory = Directory.CreateTempSubdirectory("prism-vault-sample-").FullName;
 
-    /// <summary>O que o cofre de exemplo guarda: uma pasta, uma conexão e um script, tudo inventado. A área de trabalho é do formato 3: aberto, o exemplo a ganha vazia.</summary>
+    /// <summary>
+    /// O que o cofre de exemplo guarda: uma pasta, uma conexão e um script, tudo inventado. A área de trabalho é do formato 3 e as pastas de scripts do 4: aberto,
+    /// o exemplo ganha as duas vazias, e o script fica na raiz.
+    /// </summary>
     private static VaultDocument SampleDocument { get; } = CreateSampleDocument();
 
     private static VaultDocument CreateSampleDocument()
@@ -38,7 +42,7 @@ public sealed class VaultFormatTwoSampleTests : IDisposable
         var connection = new VaultConnectionRecord(Guid.Parse("0199dd00-0000-7000-8000-000000000002"), folder.ID, "Banco de exemplo 2", EDatabaseEngine.PostgreSql, "db2.exemplo.invalid", 5433, "exemplo", "usuario_exemplo", "senha-ficticia-do-banco-de-exemplo", "Homologação", "#3366cc", createdAt, createdAt);
         var script = new VaultScriptRecord(Guid.Parse("0199dd00-0000-7000-8000-000000000003"), "Relatório de exemplo", "SELECT id, nome FROM exemplo.clientes ORDER BY nome", connection.ID, "exemplo", createdAt, createdAt);
 
-        return new VaultDocument(SampleUserName, [folder], [connection], [script], VaultWorkspaceRecord.Empty);
+        return new VaultDocument(SampleUserName, [folder], [connection], [script], VaultWorkspaceRecord.Empty, []);
     }
 
     public void Dispose()
@@ -81,12 +85,13 @@ public sealed class VaultFormatTwoSampleTests : IDisposable
 
         //Assert
         Assert.Equal(2, format);
-        Assert.Equal(3, VaultCrypto.Version);
+        Assert.Equal(4, VaultCrypto.Version);
     }
 
     /// <summary>
-    /// RN-VERSAO-005 e RN-ABAS-006: o cofre do formato 2 abre com a senha e é migrado ao abrir. O principal passa a declarar o formato atual, com o mesmo algoritmo,
-    /// os mesmos parâmetros e o mesmo sal; o documento ganha a área de trabalho vazia, e os scripts ficam como estavam; o arquivo de antes fica no `.bak`, byte a byte.
+    /// RN-VERSAO-005, RN-ABAS-006 e RN-SCRIPT-011: o cofre do formato 2 abre com a senha e é migrado ao abrir. O principal passa a declarar o formato atual, com o
+    /// mesmo algoritmo, os mesmos parâmetros e o mesmo sal; o documento ganha a área de trabalho vazia e as pastas de scripts vazias, e os scripts ficam como
+    /// estavam, na raiz; o arquivo de antes fica no `.bak`, byte a byte.
     /// </summary>
     [Trait("VaultFormatTwoSample", "UnlockAsync")]
     [Fact(DisplayName = "OK o cofre do formato 2 abre, é migrado ao formato atual com a área de trabalho vazia e os scripts, e o arquivo de antes fica no .bak")]
@@ -109,6 +114,8 @@ public sealed class VaultFormatTwoSampleTests : IDisposable
         Assert.True(result.IsSuccess);
         Assert.True(opened.JsonEquals(SampleDocument));
         Assert.Equal("SELECT id, nome FROM exemplo.clientes ORDER BY nome", Assert.Single(opened.Scripts).Sql);
+        Assert.Null(Assert.Single(opened.Scripts).FolderID);
+        Assert.Empty(opened.ScriptFolders);
         Assert.Empty(opened.Workspace.Tabs);
         Assert.Null(opened.Workspace.ActiveIndex);
         Assert.Equal(VaultCrypto.Version, after.RootElement.GetProperty("version").GetInt32());
