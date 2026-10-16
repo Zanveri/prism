@@ -1,11 +1,13 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import type { ToastAction } from "@/components/ui";
 import { chooseExportDestination, copyExport, currentWindowId, deliverExport, releaseExportDestination, revealExport } from "@/lib/api/bridge";
+import { vaultLock } from "@/lib/api/vault-lock";
 
 import type { ExportSource } from "./export-source";
+import { createExportExits } from "./export-exits";
 import { createTransferTracker, type TrackedExport, type TrackerNotify } from "./transfer-tracker";
-import { forgetTransfer, getTransfer, listTransfers } from "./transfers.service";
+import { cancelExports, exportsInProgress, forgetTransfer, getTransfer, listTransfers } from "./transfers.service";
 
 /**
  * As exportações de dados desta janela (seção 35), de módulo como o `vaultLock` e a verificação das conexões: o assistente aberto (um por janela, RN-EXPORT-003)
@@ -34,6 +36,46 @@ export const exportTracker = createTransferTracker({
     return () => clearTimeout(timer);
   },
 });
+
+/** A área de trabalho está montada nesta janela: o cofre está aberto (`connectExports`). */
+let vaultOpen = false;
+
+/**
+ * As saídas que perguntam pelas exportações em andamento (RN-EXPORT-023), pela lista da API: `ahead` conta, e `cancelForExit` cancela tudo depois da última
+ * resposta. Fora da área de trabalho (a tela de entrada, o cofre bloqueado), nenhuma, sem pedir: o pedido com o cofre bloqueado esperaria o desbloqueio.
+ */
+export const exportExits = createExportExits({
+  open: () => vaultOpen && !vaultLock.isLocked(),
+  list: exportsInProgress,
+  forget: cancelExports,
+  tracker: exportTracker,
+});
+
+/** De quanto em quanto a conta de uma pergunta aberta é lida de novo: a exportação que termina, ou que começa noutra janela, muda a frase. */
+const aheadEveryMs = 3_000;
+
+/**
+ * Quantas exportações estão em andamento (de uma conexão, quando dada), para a frase de um aviso que está na tela (o reinício do serviço, a atualização, o
+ * diálogo de excluir a conexão). Lida ao abrir e a cada 3 segundos enquanto `enabled`; 0 antes da primeira resposta e sem o cofre aberto.
+ */
+export function useExportsAhead(enabled: boolean, connectionId?: string): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    const read = () =>
+      void exportExits.ahead(connectionId).then((list) => {
+        if (active) setCount(list.length);
+      });
+    read();
+    const timer = setInterval(read, aheadEveryMs);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [enabled, connectionId]);
+  return enabled ? count : 0;
+}
 
 /** O assistente aberto nesta janela: a origem e um número que muda a cada abertura (o diálogo nasce de novo). */
 export type ExportWizardRequest = { key: number; source: ExportSource };
@@ -79,6 +121,7 @@ export function useTrackedExports(): readonly TrackedExport[] {
  */
 export function connectExports(toast: TrackerNotify): () => void {
   notices = toast;
+  vaultOpen = true;
   const windowId = currentWindowId();
   if (windowId !== null) {
     void listTransfers().then((result) => {
@@ -88,6 +131,7 @@ export function connectExports(toast: TrackerNotify): () => void {
   }
   return () => {
     notices = silent;
+    vaultOpen = false;
     closeExportWizard();
     exportTracker.reset();
   };

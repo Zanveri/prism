@@ -1,4 +1,4 @@
-import { apiRequest, type ApiResult } from "@/lib/api/prism-api";
+import { apiRequest, userActionDeadlineMs, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
 import type { ExportRequest } from "./export-request";
@@ -55,10 +55,10 @@ export const isGone = (result: ApiResult<unknown>): boolean => !result.ok && res
 /**
  * As exportações em andamento no cofre aberto, de todas as janelas (RN-EXPORT-023): as que rodam e as prontas que ainda não foram entregues. É a conta das
  * saídas que perguntam ("Sair", o reinício do serviço, a instalação de uma atualização) e do diálogo de excluir a conexão (RN-CONN-014, pela conexão).
- * Sem resposta da API, nenhuma: a saída segue como antes.
+ * Sem resposta da API (com o prazo das ações da pessoa: quem espera é o "Sair"), nenhuma: a saída segue como antes.
  */
 export async function exportsInProgress(connectionId?: string): Promise<Transfer[]> {
-  const result = await listTransfers();
+  const result = await listTransfers(AbortSignal.timeout(userActionDeadlineMs));
   if (!result.ok) return [];
   return result.data.filter((transfer) => (transfer.kind ?? "export") === "export" && inProgress(transfer) && (connectionId === undefined || transfer.connectionID === connectionId));
 }

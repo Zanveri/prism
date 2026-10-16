@@ -335,6 +335,7 @@ export const dataExportCopy = {
     signOutTitle: "Sair com exportações em andamento?",
     signOutConfirm: (count: number) => (count === 1 ? "Sair e cancelar a exportação" : "Sair e cancelar as exportações"),
     keepExporting: "Continuar exportando",
+    cancelling: "Cancelando as exportações…",
     windowTitle: "Fechar com exportações em andamento?",
     window: (count: number) =>
       count === 1
