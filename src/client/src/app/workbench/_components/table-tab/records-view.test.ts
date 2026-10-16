@@ -60,7 +60,7 @@ import { canClear } from "../../_lib/table-view";
 import { isPersonBusy } from "../../_lib/use-query-runner";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { ResultPanel } from "../result-panel";
-import { editCell, noEdits } from "../../_lib/record-edits";
+import { deleteRow, editCell, noEdits } from "../../_lib/record-edits";
 import { recordsCopy } from "../../_lib/records.copy";
 import { remember } from "../../_lib/tab-memory";
 import { EditsBanner } from "../edits-banner";
@@ -1373,5 +1373,85 @@ describe("RecordsView: a edição e o menu da célula diante da atualização au
 
     rt.unmount();
     expect(pauses(after).at(-1)).toBe("editing:false");
+  });
+});
+
+describe("RecordsView: adicionar e excluir linha pelo teclado (RN-EDIT-014 e 015)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const pendingOf = (view: ReturnType<typeof mount>) => (view.show().panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.pending;
+  /** `loja.pedidos` de uma tabela só, com `id` como chave: aceita linha nova e exclusão. */
+  const target = {
+    tables: [{ schema: "loja", name: "pedidos", key: [0], editable: true, reason: null }],
+    columns: [
+      { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+      { table: 0, baseColumn: "cliente_id", editable: true, reason: null, nullable: true, generated: null },
+    ],
+    rowOperations: true,
+    oneAtATime: false,
+  };
+
+  beforeEach(() => {
+    rt.service.editTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: target }) as never);
+  });
+  afterEach(() => rt.service.editTargetOrRefuse.mockReset());
+
+  it("Alt+Delete marca para exclusão a linha da célula ativa, que fica riscada, e a célula ativa fica nela", async () => {
+    const view = mount(fakeRunner(rowsState({ resultId: "r1", rows: [["10", "4"], ["20", "5"]] })));
+    view.show().panel.editing!.onActivate({ row: 1, column: 1 });
+
+    view.show().panel.editing!.onDeleteRow();
+    await settle();
+    const editing = view.show().panel.editing!;
+
+    expect(editing.marks.get(1)?.deleted).toBe(true);
+    expect(editing.marks.get(0)).toBeUndefined();
+    expect(editing.active).toEqual({ row: 1, column: 1 });
+    expect(pendingOf(view)).toBe(1);
+  });
+
+  it("na linha já marcada, o menu tem \"Excluir linha\" desabilitado com o motivo, e Alt+Delete não muda nada: a faixa diz por quê", async () => {
+    remember("t1", "edits", { resultId: "r1", edits: deleteRow(noEdits, 0) });
+    const view = mount(fakeRunner(rowsState({ resultId: "r1", rows: [["10", "4"], ["20", "5"]] })));
+    const reason = recordsCopy.edit.readOnly(recordsCopy.edit.reasons.alreadyDeleted);
+
+    // Como o clique direito na grade: a célula fica ativa, e o menu abre nela.
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 2 }, false);
+    await settle();
+    expect(view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "deleteRow")).toMatchObject({ label: "Excluir linha", disabled: true, hint: reason, shortcut: "Alt+Delete" });
+    view.show().menu!.onClose();
+
+    view.show().panel.editing!.onDeleteRow();
+    await settle();
+    expect(pendingOf(view)).toBe(1);
+    expect((view.show().panel.banner as { props: ComponentProps<typeof EditsBanner> }).props.notice).toBe(reason);
+  });
+
+  it("tirada uma linha nova, a célula ativa passa à que ficou no lugar dela, ou à de cima quando ela era a última; sem linha nenhuma, não há célula ativa", async () => {
+    const view = mount(fakeRunner(rowsState({ resultId: "r1", rows: [] })));
+    for (let times = 0; times < 3; times += 1) {
+      view.show().panel.editing!.onNewRow();
+      await settle();
+    }
+    expect(view.show().panel.editing!.active).toEqual({ row: 2, column: 0 });
+
+    // A primeira das três: a segunda fica no lugar dela.
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    view.show().panel.editing!.onDeleteRow();
+    await settle();
+    expect(view.show().panel.editing!.rows).toHaveLength(2);
+    expect(view.show().panel.editing!.active).toEqual({ row: 0, column: 1 });
+
+    // A última: a célula ativa sobe.
+    view.show().panel.editing!.onActivate({ row: 1, column: 1 });
+    view.show().panel.editing!.onDeleteRow();
+    await settle();
+    expect(view.show().panel.editing!.active).toEqual({ row: 0, column: 1 });
+
+    view.show().panel.editing!.onDeleteRow();
+    await settle();
+    expect(view.show().panel.editing!.rows).toHaveLength(0);
+    expect(view.show().panel.editing!.active).toBeNull();
+    expect(pendingOf(view)).toBe(0);
   });
 });
