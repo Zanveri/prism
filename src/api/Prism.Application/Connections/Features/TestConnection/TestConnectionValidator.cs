@@ -10,7 +10,7 @@ public sealed class TestConnectionValidator : AbstractValidator<TestConnectionCo
     public TestConnectionValidator()
     {
         // RN-CONN-010: os mesmos campos e limites do `CreateConnectionValidator` (as regras do `ConnectionRules`, com os tetos e sem caractere de controle nem
-        // de direção do texto), menos o que só serve para gravar (nome, pasta, ambiente).
+        // de direção do texto), menos o que só serve para gravar (nome, pasta, ambiente). O usuário em branco continua sendo recusado aqui (RN-TRANSF-016).
         RuleFor(request => request.Engine).IsInEnum().WithMessage("Escolha o banco de dados.").WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.Host).MustPass(ConnectionRules.HostRefusal).WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.Port).MustPass(ConnectionRules.PortRefusal).WithErrorCode("CONNECTION_INVALID");
@@ -18,6 +18,7 @@ public sealed class TestConnectionValidator : AbstractValidator<TestConnectionCo
         RuleFor(request => request.UserName).MustPass(userName => ConnectionRules.UserNameRefusal(userName, required: true)).WithErrorCode("CONNECTION_INVALID");
 
         // RN-CONN-013: sem `id` não há senha guardada, e ela é obrigatória. Com `id`, ausente usa a do cofre; enviada é a que a pessoa digitou e tem de ter conteúdo (a regra da alteração, RN-CONN-004).
+        // A conexão gravada sem senha (RN-TRANSF-015), com `id` e sem senha no pedido, é recusada pelo handler, que sabe o que está gravado (RN-TRANSF-016).
         RuleFor(request => request.Password).Must((request, password) => request.ID is null ? !string.IsNullOrEmpty(password) : password is null || password.Length > 0).WithMessage("Informe a senha do banco.").WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.Password).MustPass(ConnectionRules.PasswordRefusal).WithErrorCode("CONNECTION_INVALID");
 

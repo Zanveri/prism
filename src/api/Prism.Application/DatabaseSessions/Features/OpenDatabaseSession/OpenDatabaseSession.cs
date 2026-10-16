@@ -37,6 +37,12 @@ internal sealed class OpenDatabaseSessionHandler(IConnectionQueries connectionQu
         if (read.Value is not { } record)
             return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.NotFound(request.ConnectionID));
 
+        // RN-TRANSF-016 e RN-SESSAO-003: a conexão que a importação trouxe sem usuário, ou com o usuário e sem a senha (RN-TRANSF-015), nem chega ao driver,
+        // que tentaria o usuário vazio (o do PostgreSQL usaria o do sistema operacional) e responderia uma mensagem que não diz o que fazer. A recusa vem antes
+        // da do driver não instalado, e vale para outro banco do servidor (RN-ARVORE-006), que usa as mesmas credenciais.
+        if (string.IsNullOrWhiteSpace(record.UserName) || string.IsNullOrEmpty(record.Password))
+            return Result.Failure<DatabaseSessionDto, ApiErrorDto>(ConnectionErrors.CredentialsMissingToConnect(userNameMissing: string.IsNullOrWhiteSpace(record.UserName)));
+
         // RN-ARVORE-006: o nome pedido entra só no lugar do banco; host, porta, usuário e senha são os da conexão gravada.
         var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, request.Database ?? record.Database, record.UserName, record.Password);
 

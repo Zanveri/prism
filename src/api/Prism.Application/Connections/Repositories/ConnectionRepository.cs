@@ -64,6 +64,11 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
             if (existing is null)
                 return ConnectionErrors.NotFound(connection.ID);
 
+            // RN-TRANSF-015: o usuário vazio só passa na conexão gravada já sem usuário (a que a importação trouxe sem ele: o "Renomear" e o "Mover" mandam o
+            // que ela tem). Tirar o usuário de uma conexão que tem um continua sendo a recusa do formulário. Decidido aqui, contra o documento mais recente.
+            if (string.IsNullOrWhiteSpace(connection.UserName) && !string.IsNullOrWhiteSpace(existing.UserName))
+                return ConnectionErrors.UserNameRequired();
+
             if (connection.FolderID is { } folderID && !VaultFolders.ExistsByID(document, folderID))
                 return FolderErrors.NotFound(folderID);
 

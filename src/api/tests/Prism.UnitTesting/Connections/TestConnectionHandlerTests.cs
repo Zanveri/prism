@@ -244,4 +244,50 @@ public sealed class TestConnectionHandlerTests
         _databaseSessionService.Verify(s => s.TestAsync(settings, sent, cancellationToken), Times.Once);
         _databaseSessionService.VerifyNoOtherCalls();
     }
+
+    /// <summary>
+    /// RN-TRANSF-016 e RN-CONN-013: com o `id`, sem a senha no pedido e sem senha gravada (a conexão que a importação trouxe sem ela, RN-TRANSF-015), a
+    /// resposta é 422 `CONNECTION_CREDENTIALS_MISSING` no campo da senha, sem conectar, em vez de testar com a senha vazia. Vem antes da conferência do
+    /// servidor: sem senha gravada não há o que a RN-CONN-004 proteger.
+    /// </summary>
+    [Trait("TestConnectionHandler", "TestConnectionCommand")]
+    [Fact(DisplayName = "Erro conexão gravada sem senha, sem a senha no pedido, é recusada no campo da senha sem conectar")]
+    public async Task Handle_ShouldBeError_StoredWithoutPassword()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var record = VaultFakers.CreateConnection(host: "outro.exemplo.invalid", userName: "datafix") with { Password = string.Empty };
+        _vaultService.SetupGet(v => v.Generation).Returns(Generation);
+        _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
+
+        //Act
+        var result = await CreateHandler().Handle(CreateCommand(id: record.ID, password: null), cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("CONNECTION_CREDENTIALS_MISSING", result.Error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
+        Assert.Equal(["Esta conexão não tem senha gravada. Informe a senha do banco para testar."], ((Dictionary<string, string[]>)result.Error.Extensions["errors"]!)["Password"]);
+        Assert.Equal(["CONNECTION_CREDENTIALS_MISSING"], ((Dictionary<string, string[]>)result.Error.Extensions["errorCodes"]!)["Password"]);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-TRANSF-016: a conexão gravada sem senha testa normalmente com a senha digitada no formulário.</summary>
+    [Trait("TestConnectionHandler", "TestConnectionCommand")]
+    [Fact(DisplayName = "OK conexão gravada sem senha testa com a senha digitada")]
+    public async Task Handle_ShouldBeOK_StoredWithoutPasswordAndTypedPassword()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var settings = new ConnectionSettings(EDatabaseEngine.PostgreSql, "pg.local", 5432, "producao", "operador", "senha-digitada");
+        _vaultService.SetupGet(v => v.Generation).Returns(Generation);
+        _databaseSessionService.Setup(s => s.TestAsync(settings, null, cancellationToken)).ReturnsAsync(UnitResult.Success<DatabaseFailure>());
+
+        //Act
+        var result = await CreateHandler().Handle(CreateCommand(id: Guid.CreateVersion7(), password: "senha-digitada"), cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        _connectionQueries.VerifyNoOtherCalls();
+    }
 }

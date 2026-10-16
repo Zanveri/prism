@@ -237,10 +237,22 @@ public sealed class ConnectionValidatorsTests
     public void UpdateConnection_ShouldBeError_DatabaseEmpty()
         => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { Database = string.Empty }, "Database");
 
+    /// <summary>
+    /// RN-TRANSF-015: o usuário vazio passa pelo validator do `PATCH` para chegar à gravação, que o aceita só na conexão gravada já sem usuário e o recusa,
+    /// com a mesma frase no campo, na que tem um (`ConnectionRepositoryTests`). O preenchido segue as regras de sempre.
+    /// </summary>
     [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
-    [Fact(DisplayName = "Erro usuário vazio")]
-    public void UpdateConnection_ShouldBeError_UserNameEmpty()
-        => AssertUpdateInvalid(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { UserName = string.Empty }, "UserName");
+    [Fact(DisplayName = "OK usuário vazio passa pelo validator, e a gravação decide")]
+    public void UpdateConnection_ShouldBeOK_UserNameEmpty()
+    {
+        //Act
+        var empty = UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { UserName = string.Empty });
+        var blank = UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { UserName = "   " });
+
+        //Assert
+        empty.ShouldNotHaveAnyValidationErrors();
+        blank.ShouldNotHaveAnyValidationErrors();
+    }
 
     /// <summary>`null` mantém a senha gravada (RN-CONN-004); o texto vazio não é "omitida", e deixaria a conexão sem senha.</summary>
     [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]

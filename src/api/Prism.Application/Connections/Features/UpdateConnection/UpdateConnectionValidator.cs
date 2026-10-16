@@ -19,7 +19,10 @@ public sealed class UpdateConnectionValidator : AbstractValidator<UpdateConnecti
         RuleFor(request => request.Host).MustPass(ConnectionRules.HostRefusal).WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.Port).MustPass(ConnectionRules.PortRefusal).WithErrorCode("CONNECTION_INVALID");
         RuleFor(request => request.Database).MustPass(ConnectionRules.DatabaseRefusal).WithErrorCode("CONNECTION_INVALID");
-        RuleFor(request => request.UserName).MustPass(userName => ConnectionRules.UserNameRefusal(userName, required: true)).WithErrorCode("CONNECTION_INVALID");
+
+        // RN-TRANSF-015: o usuário vazio passa aqui só para chegar à gravação, que o aceita na conexão gravada já sem usuário (o "Renomear" e o "Mover" de
+        // uma conexão importada sem ele mandam o que ela tem) e o recusa, com a mesma frase no campo, na que tem um. O que vem preenchido segue as regras de sempre.
+        RuleFor(request => request.UserName).MustPass(userName => ConnectionRules.UserNameRefusal(userName, required: false)).WithErrorCode("CONNECTION_INVALID");
 
         // RN-CONN-004: nula mantém a senha gravada. Enviada, é uma senha nova e tem de ter conteúdo: o texto vazio não é "omitida", e deixaria a conexão sem senha.
         RuleFor(request => request.Password).MustPass(password => password is { Length: 0 } ? "Informe a nova senha do banco, ou deixe em branco para manter a atual." : ConnectionRules.PasswordRefusal(password)).WithErrorCode("CONNECTION_INVALID");
