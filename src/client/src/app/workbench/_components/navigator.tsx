@@ -19,6 +19,7 @@ import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
 import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
+import { credentialsMissingField } from "../_lib/credentials-missing";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
@@ -64,7 +65,16 @@ function levelOf<T>(result: UseQueryResult<T>, children: (data: T) => NavNode[])
 function statusOf(treeSession: UseQueryResult, connected: boolean): ConnectionStatus {
   if (treeSession.isFetching && treeSession.data === undefined) return "connecting";
   if (connected) return "connected";
-  return treeSession.isError ? "failed" : "disconnected";
+  // RN-TRANSF-016: a conexão sem usuário ou sem senha nem chegou ao driver; ela continua desconectada, e o "Editar conexão" abre.
+  return treeSession.isError && !lacksCredentials(treeSession) ? "failed" : "disconnected";
+}
+
+/**
+ * A sessão da árvore recusada por faltar o usuário ou a senha (RN-TRANSF-016): o nó fica como estava, fechado e sem a linha de erro (RN-ARVORE-005), e quem
+ * abre o "Editar conexão" é a página, pelo cache (`watchCredentialsMissing`).
+ */
+function lacksCredentials(treeSession: UseQueryResult): boolean {
+  return treeSession.isError && !treeSession.isFetching && credentialsMissingField(treeSession.error) !== null;
 }
 
 const isFetched = (path: NavPath): path is FetchedPath => path.type === "connection" || path.type === "database" || path.type === "objects" || path.type === "tableLevel";
@@ -215,7 +225,14 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const shown = useMemo(() => filterConnected(inEnvironment.folders, inEnvironment.connections, connectedKey === null ? null : new Set(connectedKey.split(" "))), [inEnvironment, connectedKey]);
   const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
 
-  const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
+  // RN-TRANSF-016: a conexão que a API recusou por faltar o usuário ou a senha fica fechada, como estava antes do clique; um efeito a fecha de vez.
+  const lackingCredentials = connectionList.filter((connection) => {
+    const session = sessionById.get(connection.id);
+    return session !== undefined && lacksCredentials(session);
+  });
+  const lackingKey = lackingCredentials.map((connection) => connection.id).join(" ");
+  const lackingKeys = new Set(lackingCredentials.map((connection) => navKey({ type: "connection", connectionId: connection.id })));
+  const open = new Set([...[...expanded].filter((key) => !lackingKeys.has(key)), ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
   const paths = [...expanded].map(parseNavKey);
   const fetchedPaths = paths.filter(isFetched);
@@ -265,6 +282,13 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       setOnlyConnected(false);
     }
   }
+
+  useEffect(() => {
+    for (const connectionId of lackingKey.split(" ").filter((id) => id !== "")) {
+      setNodeOpen(navKey({ type: "connection", connectionId }), false);
+      setNodeOpen(navKey({ type: "database", connectionId }), false);
+    }
+  }, [lackingKey, setNodeOpen]);
 
   const announcedReveal = useRef(0);
   useEffect(() => {

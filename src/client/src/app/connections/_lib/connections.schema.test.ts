@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema, withoutControl } from "./connections.schema";
+import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, editWithoutPasswordSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema, withoutControl } from "./connections.schema";
 
 const form = {
   engine: "1",
@@ -229,10 +229,23 @@ describe("os tetos e os caracteres de controle e de direção do texto (RN-CONN-
   });
 
   it("a senha tem até 1.024 caracteres, contados como veio (ela não é aparada), na criação e na edição", () => {
-    for (const schema of [createConnectionSchema, editConnectionSchema]) {
+    for (const schema of [createConnectionSchema, editConnectionSchema, editWithoutPasswordSchema]) {
       expect(schema.safeParse({ ...form, password: " ".repeat(1024) }).success).toBe(true);
       expect(fieldErrors(schema, { ...form, password: `${"s".repeat(1024)} ` })).toEqual({ password: ["A senha do banco pode ter até 1.024 caracteres."] });
     }
+  });
+});
+
+describe("editWithoutPasswordSchema: a edição da conexão sem senha gravada (RN-TRANSF-015)", () => {
+  it("exige a senha: não há o que manter, e vazio é “Informe a senha do banco.”", () => {
+    expect(fieldErrors(editWithoutPasswordSchema, { ...form, password: "" })).toEqual({ password: ["Informe a senha do banco."] });
+    const ok = editWithoutPasswordSchema.safeParse({ ...form, password: "nova" });
+    expect(ok.success && ok.data.password).toBe("nova");
+  });
+
+  it("o usuário continua obrigatório no formulário: tirá-lo é recusado no campo", () => {
+    expect(fieldErrors(editWithoutPasswordSchema, { ...form, userName: "" })).toEqual({ userName: ["Informe o usuário do banco."] });
+    expect(fieldErrors(editConnectionSchema, { ...form, userName: " " })).toEqual({ userName: ["Informe o usuário do banco."] });
   });
 });
 

@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ConnectionDialog } from "@/app/connections/_components/connection-dialog";
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
@@ -13,6 +13,7 @@ import { NavigatorToggle } from "./_components/navigator-toggle";
 import { ScriptsSection } from "./_components/scripts-section";
 import { connectionReveal } from "./_lib/connection-intent";
 import { keepsDialog, type ConnectionDialogOpen } from "./_lib/connection-dialog-state";
+import { credentialsRequests, watchCredentialsMissing } from "./_lib/credentials-missing";
 import { hideFocusTarget, navigatorShortcut, navigatorShortcutLabels } from "./_lib/navigator-layout";
 import { useNavigatorHidden } from "./_lib/use-navigator-layout";
 import { useWorkbenchOnScreen } from "./_lib/use-workbench-on-screen";
@@ -78,7 +79,8 @@ function ResizeHandle({ width, onResize }: { width: number; onResize: (width: nu
  * O formulário de conexão é um diálogo sobre ela (RN-NAV-004), aberto daqui: pelo navegador ("Nova conexão" da barra de ações, do menu de
  * uma pasta e do espaço vazio; "Editar conexão" do menu da conexão) e pelo primeiro uso. Salvar fecha o diálogo e pede à árvore que mostre a
  * conexão (`connectionReveal`). O diálogo some, com o que tinha, no bloqueio por inatividade e quando a área de trabalho sai da tela
- * (`keepsDialog`).
+ * (`keepsDialog`). Abre sozinho, na edição, quando conectar (pela árvore, por uma aba, pela barra do editor) é recusado por faltar o usuário ou a senha
+ * da conexão (RN-TRANSF-016, `credentialsRequests`); com um diálogo de conexão já aberto, não abre outro.
  *
  * O navegador é retrátil (RN-NAV-008): o botão da barra de ações e o da barra superior (sempre à vista) o escondem e mostram, Ctrl+B também, e
  * Ctrl+Shift+E o mostra e leva o foco à busca. Escondido, ele fica MONTADO (`hidden` e `inert`: fora da tela, do teclado e do leitor de tela) e a
@@ -99,6 +101,22 @@ export function WorkbenchPage() {
   const [dialog, setDialog] = useState<ConnectionDialogOpen | null>(null);
   // Ajuste durante a renderização (como no provedor): o diálogo que não deve continuar some antes de qualquer filho vê-lo.
   if (dialog !== null && !keepsDialog(dialog, { onScreen, lockEpoch, connectionIds })) setDialog(null);
+
+  // RN-TRANSF-016: quem abre uma sessão e é recusado por faltar o usuário ou a senha pede o "Editar conexão" daquela conexão. As sessões da árvore são
+  // observadas no cache; o executor de cada aba pede direto. Atende-se uma vez por pedido, com a área de trabalho na tela e a conexão na lista; com um
+  // diálogo de conexão já aberto (o dela, ou outro com algo digitado), nada abre por cima.
+  const queryClient = useQueryClient();
+  useEffect(() => watchCredentialsMissing(queryClient), [queryClient]);
+  useEffect(() => () => credentialsRequests.clear(), []);
+  const credentialsRequest = useSyncExternalStore(credentialsRequests.subscribe, credentialsRequests.pending, credentialsRequests.pending);
+  const [answeredCredentials, setAnsweredCredentials] = useState(0);
+  if (credentialsRequest !== null && credentialsRequest.seq !== answeredCredentials && onScreen && connectionIds !== null) {
+    setAnsweredCredentials(credentialsRequest.seq);
+    if (dialog === null && connectionIds.has(credentialsRequest.connectionId)) setDialog({ request: { mode: "edit", connectionId: credentialsRequest.connectionId }, epoch: lockEpoch });
+  }
+  useEffect(() => {
+    if (answeredCredentials !== 0) credentialsRequests.take(answeredCredentials);
+  }, [answeredCredentials]);
 
   const openNew = (folderID: string | null) => setDialog({ request: { mode: "new", folderID }, epoch: lockEpoch });
   const openEdit = (connectionId: string) => setDialog({ request: { mode: "edit", connectionId }, epoch: lockEpoch });

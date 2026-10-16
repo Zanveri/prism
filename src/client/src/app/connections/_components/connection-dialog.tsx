@@ -4,17 +4,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDriverActions } from "@/app/drivers/_components/driver-actions";
 import { driverIdOf } from "@/app/drivers/_lib/drivers.model";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
+import { credentialsMissingCode, missingCredentials } from "@/app/workbench/_lib/credentials-missing";
 import { Button, ConfirmDialog, Dialog, FieldError, FormMessage, useToast, type Engine } from "@/components/ui";
 import { allowRefusal, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type FieldErrors } from "@/lib/utils/form";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import { createConnectionSchema, editConnectionSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
+import { createConnectionSchema, editConnectionSchema, editWithoutPasswordSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
 import { connectionsQuery, createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
 import { choiceOf, engineChoices } from "../_lib/engine-choices";
 import { environmentLookup } from "../_lib/environment";
 import { hasChanges, snapshotOf, type FormSnapshot } from "../_lib/form-leave";
 import { confirmationChoiceOf, type ConfirmationChoice } from "../_lib/protections";
+import { transferCopy } from "../_lib/transfer.copy";
 import { userEnvironments } from "../_lib/user-environments";
 import { passwordAsked, readOnlyChange } from "../_lib/user-password";
 import { ConnectionFields } from "./connection-fields";
@@ -103,12 +105,16 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
   const selected = engine === null ? undefined : choiceOf(choices, engine);
   const canAdvance = selected !== undefined && !selected.disabled;
 
-  // As configurações apareceram: a foto da abertura (uma vez) e o foco no nome, o primeiro campo.
+  // RN-TRANSF-016: a conexão gravada sem usuário, ou com o usuário e sem a senha (a que a importação trouxe sem eles), diz no topo o que falta e leva o foco a
+  // esse campo, enquanto estiver assim: aberta sozinha, ao conectar, ou pelo menu.
+  const missing = connection === null ? null : missingCredentials(connection);
+
+  // As configurações apareceram: a foto da abertura (uma vez) e o foco no nome, o primeiro campo, ou no que falta para conectar.
   useEffect(() => {
     if (step !== "settings" || formRef.current === null) return;
     opened.current ??= snapshotOf(new FormData(formRef.current));
-    formRef.current.querySelector<HTMLElement>('[name="name"]')?.focus();
-  }, [step]);
+    formRef.current.querySelector<HTMLElement>(`[name="${missing ?? "name"}"]`)?.focus();
+  }, [step, missing]);
 
   /** O 422 de campos: cada mensagem no campo que a API nomeia; o que nenhum campo mostra vira aviso (RN-AVISO-004). */
   function showInvalid(error: ApiError) {
@@ -157,7 +163,8 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
         return;
       }
 
-      if (result.error.code === "CONNECTION_INVALID") {
+      // RN-TRANSF-016: a conexão sem senha gravada, testada com a senha em branco, diz no campo da senha que ela falta.
+      if (result.error.code === "CONNECTION_INVALID" || result.error.code === credentialsMissingCode) {
         showInvalid(result.error);
         return;
       }
@@ -205,13 +212,14 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
 
   /**
    * Lê e valida o formulário (o mesmo para gravar e para testar); nulo, com os erros nos campos, se algo foi recusado. A sessão da conexão (RN-VERIF-001) vai
-   * junto: o `PATCH` grava a conexão por inteiro, e "Testar conexão" usa a consulta de verificação do formulário (RN-CONN-013).
+   * junto: o `PATCH` grava a conexão por inteiro, e "Testar conexão" usa a consulta de verificação do formulário (RN-CONN-013). Gravar a edição de uma
+   * conexão sem senha gravada exige a senha (RN-TRANSF-015: não há o que manter); testar não, e a API diz que ela falta (RN-TRANSF-016).
    */
-  function readForm(form: HTMLFormElement): ConnectionInput | null {
+  function readForm(form: HTMLFormElement, purpose: "save" | "test"): ConnectionInput | null {
     setRefusal(null);
     setTestFailure(null);
 
-    const parsed = connection ? parseForm(form, editConnectionSchema) : parseForm(form, createConnectionSchema);
+    const parsed = connection ? parseForm(form, purpose === "save" && !connection.hasPassword ? editWithoutPasswordSchema : editConnectionSchema) : parseForm(form, createConnectionSchema);
     setErrors(parsed.ok ? {} : parsed.errors);
     return parsed.ok ? parsed.data : null;
   }
@@ -220,7 +228,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
     event.preventDefault();
     if (save.isPending || test.isPending || asking !== null) return;
 
-    const input = readForm(event.currentTarget);
+    const input = readForm(event.currentTarget, "save");
     if (input === null) return;
     // RN-PROT-003: marcar ou desmarcar "Somente leitura" numa conexão que já existe pede a senha do usuário antes de gravar.
     const change = connection ? readOnlyChange(connection.name, connection.readOnly, input.readOnly) : null;
@@ -231,7 +239,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
   function handleTest() {
     if (save.isPending || test.isPending || formRef.current === null) return;
 
-    const input = readForm(formRef.current);
+    const input = readForm(formRef.current, "test");
     if (input) test.mutate(input);
   }
 
@@ -297,6 +305,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved,
             {connection ? <ShownEnvironmentPill environment={environmentLookup(folders).connection(connection)} className="h-[22px] px-[9px] text-xs leading-[22px]" /> : null}
           </div>
           {selected === undefined ? null : <DriverNotice choice={selected} actions={driverActions} />}
+          {missing === null ? null : <FormMessage tone="warning">{missing === "userName" ? transferCopy.credentials.noticeNoUser : transferCopy.credentials.noticeNoPassword}</FormMessage>}
 
           <form id={formID} ref={formRef} onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
             <input type="hidden" name="engine" value={engine ?? ""} />

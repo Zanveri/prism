@@ -83,6 +83,18 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     expect(footerButtons(markup)).toEqual(["Voltar", "Excluir", "Testar conexão", "Cancelar", "Salvar"]);
   });
 
+  it("a conexão que chegou sem usuário e senha (RN-TRANSF-016): a frase no topo, e o campo da senha não diz “Deixe vazio para manter”", () => {
+    const markup = render({ mode: "edit", connection: { ...mes, userName: "", hasPassword: false } });
+
+    expect(markup).toContain("Esta conexão chegou sem usuário e senha. Preencha para conectar.");
+    expect(markup).not.toContain("Deixe vazio para manter");
+  });
+
+  it("com o usuário e sem a senha, a frase diz que falta a senha; com os dois, nada", () => {
+    expect(render({ mode: "edit", connection: { ...mes, hasPassword: false } })).toContain("Esta conexão chegou sem a senha. Preencha para conectar.");
+    expect(render({ mode: "edit", connection: mes })).not.toContain("Preencha para conectar.");
+  });
+
   it("o driver do banco escolhido falta: o passo das configurações diz ali mesmo, com 'Instalar driver' (RN-NAV-005)", () => {
     const markup = render({ mode: "edit", connection: mes });
 

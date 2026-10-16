@@ -9,6 +9,7 @@ import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 
 import { createAutoRefresh, type AutoRefreshControl } from "./auto-refresh";
+import { credentialsMissingField, credentialsRequests } from "./credentials-missing";
 import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
 import { createScriptRun, finishRun, keptResultIds, platformScriptShortcut, scriptEndToast, scriptResultCap, startEntry, withEntry, withSavedResult, type ScriptChoice, type ScriptError, type ScriptRun } from "./script-run";
@@ -511,6 +512,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         if (!opened.ok) {
           // A sessão que caiu não reabriu: a aba segue sem ela.
           if (reopened) autoRefresh.lost();
+          // RN-TRANSF-016: a conexão sem usuário ou sem senha não chega ao driver. A aba fica com o resultado de antes e o comando sem executar (o erro de
+          // campo não vira aviso), e o "Editar conexão" dela abre, com o que falta.
+          if (credentialsMissingField(opened.error) !== null) credentialsRequests.request(connection);
           return opened;
         }
 

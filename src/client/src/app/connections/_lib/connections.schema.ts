@@ -219,6 +219,12 @@ export const createConnectionSchema = connectionFields.extend({ password: z.stri
 /** Na edição a senha vazia vira `null`, e a API mantém a gravada (RN-CONN-004). */
 export const editConnectionSchema = connectionFields.extend({ password: z.string().max(1024, passwordMessage).transform(emptyToNull) });
 
+/**
+ * RN-TRANSF-015: salvar a edição de uma conexão sem senha gravada (a que a importação trouxe sem ela) exige a senha: não há o que manter, e vazio é "Informe a
+ * senha do banco.". O "Testar conexão" usa o `editConnectionSchema`: a senha em branco vai à API, que responde que a conexão não tem senha gravada.
+ */
+export const editWithoutPasswordSchema = connectionFields.extend({ password: z.string().min(1, "Informe a senha do banco.").max(1024, passwordMessage) });
+
 /** RN-NAV-009: o diálogo de renomear conexão, só com o nome, na regra do formulário. */
 export const renameConnectionSchema = connectionFields.pick({ name: true });
 
