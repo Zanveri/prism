@@ -1455,3 +1455,196 @@ describe("RecordsView: adicionar e excluir linha pelo teclado (RN-EDIT-014 e 015
     expect(pendingOf(view)).toBe(0);
   });
 });
+
+describe("RecordsView: Duplicar linha (RN-EDIT-016)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const bannerOf = (view: ReturnType<typeof mount>) => (view.show().panel.banner as { props: ComponentProps<typeof EditsBanner> }).props;
+  /** `loja.pedidos` com `code`, de texto: `id` é `serial` (gerado "por padrão", a chave), `cliente_id` e `code` se copiam. */
+  const withCode: RowsState["columns"] = [...columns, { name: "code", type: "varchar", kind: "text" }];
+  const target = {
+    tables: [{ schema: "loja", name: "pedidos", key: [0], editable: true, reason: null }],
+    columns: [
+      { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: "byDefault" },
+      { table: 0, baseColumn: "cliente_id", editable: true, reason: null, nullable: true, generated: null },
+      { table: 0, baseColumn: "code", editable: true, reason: null, nullable: true, generated: null },
+    ],
+    rowOperations: true,
+    oneAtATime: false,
+  };
+  /** A mesma tabela com a chave natural em `code`, que se copia. */
+  const naturalKey = { ...target, tables: [{ ...target.tables[0], key: [2] }] };
+  const loaded = (over: Partial<RowsState> = {}) => rowsState({ columns: withCode, rows: [["10", "4", "A-1"], ["20", "5", "B-2"]], resultId: "r1", ...over });
+  const answer = (data: unknown) => rt.service.editTargetOrRefuse.mockImplementation(async () => ({ ok: true, data }) as never);
+  const notCopiedId = recordsCopy.edit.duplicate.notCopied(["id"]);
+
+  /** Duplica a linha da célula ativa pelo teclado (Ctrl+Alt+Insert), como a pessoa faz. */
+  async function duplicate(view: ReturnType<typeof mount>, row: number, column = 1) {
+    view.show().panel.editing!.onActivate({ row, column });
+    view.show().panel.editing!.onDuplicateRow();
+    await settle();
+    await settle();
+  }
+
+  beforeEach(() => answer(target));
+  afterEach(() => {
+    rt.service.editTargetOrRefuse.mockReset();
+    rt.cells.resultCells.mockReset();
+  });
+
+  it("o menu da célula tem \"Duplicar linha\" (Ctrl+Alt+Insert) entre \"Adicionar linha\" e \"Excluir linha\"", async () => {
+    const view = mount(fakeRunner(loaded()));
+
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 2 }, false);
+    await settle();
+    const group = view.show().menu!.groups.at(-1) as ContextMenuItem[];
+
+    expect(group.map((item) => [item.label, item.shortcut, item.disabled === true])).toEqual([
+      ["Adicionar linha", "Alt+Insert", false],
+      ["Duplicar linha", "Ctrl+Alt+Insert", false],
+      ["Excluir linha", "Alt+Delete", false],
+    ]);
+  });
+
+  it("a cópia vai para o fim da grade com o que a tela mostra (a alteração pendente também), sem o id serial, e a célula ativa vai à primeira coluna editável", async () => {
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 2, "A-9", "A-1") });
+    const view = mount(fakeRunner(loaded()));
+
+    await duplicate(view, 0);
+    const editing = view.show().panel.editing!;
+
+    expect(editing.rows).toEqual([["10", "4", "A-1"], ["20", "5", "B-2"], [null, "4", "A-9"]]);
+    expect(editing.marks.get(2)).toMatchObject({ kind: "new", pending: new Map([[1, "4"], [2, "A-9"]]) });
+    expect(editing.active).toEqual({ row: 2, column: 0 });
+    expect(bannerOf(view)).toMatchObject({ pending: 2, notice: notCopiedId, noticeTone: "warning" });
+  });
+
+  it("com a chave copiada inteira, a faixa avisa (com as colunas que ficaram de fora) e a célula ativa vai para a coluna da chave", async () => {
+    answer(naturalKey);
+    const view = mount(fakeRunner(loaded()));
+
+    await duplicate(view, 1);
+
+    expect(view.show().panel.editing!.active).toEqual({ row: 2, column: 2 });
+    expect(bannerOf(view).notice).toBe(`${recordsCopy.edit.duplicate.keyCopied("pedidos", ["code"])} ${notCopiedId}`);
+    expect(bannerOf(view).notice).toBe("A linha duplicada copiou a chave de pedidos (code): troque-a antes de salvar, ou o banco vai recusar a linha repetida. Não copiada (fica com o padrão da tabela): id.");
+  });
+
+  it("o aviso fica até a próxima ação de edição: \"Desfazer alteração\" numa célula da duplicada a tira de lá, e o aviso sai", async () => {
+    const view = mount(fakeRunner(loaded()));
+    await duplicate(view, 0);
+
+    view.show().panel.editing!.onMenu({ row: 2, column: 1 }, { x: 1, y: 2 }, false);
+    await settle();
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "undo")!.onSelect!();
+    await settle();
+
+    expect(view.show().panel.editing!.rows[2]).toEqual([null, null, "A-1"]);
+    expect(bannerOf(view)).toMatchObject({ pending: 1, notice: null });
+  });
+
+  it("a linha marcada para exclusão copia os valores lidos; a linha nova copia só o que foi preenchido nela, e a coluna em branco não entra no aviso", async () => {
+    remember("t1", "edits", { resultId: "r1", edits: deleteRow(noEdits, 1) });
+    const view = mount(fakeRunner(loaded()));
+
+    await duplicate(view, 1);
+    expect(view.show().panel.editing!.rows[2]).toEqual([null, "5", "B-2"]);
+
+    await duplicate(view, 2);
+    expect(view.show().panel.editing!.rows[3]).toEqual([null, "5", "B-2"]);
+    expect(bannerOf(view).notice).toBeNull();
+    expect(bannerOf(view).pending).toBe(3);
+  });
+
+  it("a célula cortada vai com o valor completo, que a tela busca antes na API", async () => {
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: ["A-1 inteiro"] });
+    const view = mount(fakeRunner(loaded({ truncated: new Map([[0, new Set([2])]]) })));
+
+    await duplicate(view, 0);
+
+    expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 2 }], expect.any(AbortSignal));
+    expect(view.show().panel.editing!.rows[2]).toEqual([null, "4", "A-1 inteiro"]);
+  });
+
+  it("o valor completo que não vem não duplica nada, e a faixa diz por quê: nos Registros, atualize", async () => {
+    rt.cells.resultCells.mockResolvedValue({ ok: false, error: { status: 404, code: "RESULT_NOT_FOUND", title: "x", detail: null, errors: null, extensions: {} } });
+    const view = mount(fakeRunner(loaded({ truncated: new Map([[0, new Set([2])]]) })));
+
+    await duplicate(view, 0);
+
+    expect(view.show().panel.editing!.rows).toHaveLength(2);
+    expect(bannerOf(view)).toMatchObject({ pending: 0, noticeTone: "warning", notice: "A linha não foi duplicada: o valor completo de code não pôde vir. Atualize os registros para duplicá-la." });
+  });
+
+  it("enquanto busca, a faixa diz e deixa cancelar; cancelada, nada é duplicado", async () => {
+    rt.cells.resultCells.mockImplementation((_session: string, _result: string, _cells: unknown, signal: AbortSignal) => new Promise((resolve) => signal.addEventListener("abort", () => resolve({ ok: false, error: { status: 0, code: "NETWORK_ERROR", title: "x", detail: null, errors: null, extensions: {} } }))));
+    const view = mount(fakeRunner(loaded({ truncated: new Map([[0, new Set([2])]]) })));
+
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    view.show().panel.editing!.onDuplicateRow();
+    await settle();
+    expect(bannerOf(view).fetching).toBe(true);
+
+    bannerOf(view).onCancelFetch();
+    await settle();
+
+    expect(view.show().panel.editing!.rows).toHaveLength(2);
+    expect(bannerOf(view)).toMatchObject({ fetching: false, notice: recordsCopy.edit.duplicate.fetchCancelled });
+  });
+
+  it("duas vezes seguidas com a busca dos valores completos correndo (o duplo clique no botão): a segunda cancela a busca da primeira, que sai calada, e a linha é duplicada uma vez", async () => {
+    const answers: ((answer: unknown) => void)[] = [];
+    rt.cells.resultCells.mockImplementation(
+      (_session: string, _result: string, _cells: unknown, signal: AbortSignal) =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+          signal.addEventListener("abort", () => resolve({ ok: false, error: { status: 0, code: "NETWORK_ERROR", title: "x", detail: null, errors: null, extensions: {} } }));
+        }),
+    );
+    const view = mount(fakeRunner(loaded({ truncated: new Map([[0, new Set([2])]]) })));
+
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    view.show().panel.editing!.onDuplicateRow();
+    view.show().panel.editing!.onDuplicateRow();
+    await settle();
+    expect(rt.cells.resultCells).toHaveBeenCalledTimes(2);
+    expect(bannerOf(view)).toMatchObject({ fetching: true, notice: null });
+
+    answers[1]({ ok: true, data: ["A-1 inteiro"] });
+    await settle();
+    await settle();
+
+    expect(view.show().panel.editing!.rows).toEqual([["10", "4", "A-1"], ["20", "5", "B-2"], [null, "4", "A-1 inteiro"]]);
+    expect(bannerOf(view)).toMatchObject({ pending: 1, fetching: false, notice: notCopiedId });
+  });
+
+  it("onde \"Adicionar linha\" não vale (a tabela sem chave), duplicar diz o motivo e não muda nada", async () => {
+    const reason = "pedidos não tem chave primária nem chave única de colunas não nulas";
+    answer({ ...target, tables: [{ ...target.tables[0], key: [], editable: false, reason }], columns: target.columns.map((column) => ({ ...column, editable: false, reason })), rowOperations: false });
+    const view = mount(fakeRunner(loaded()));
+
+    await duplicate(view, 0);
+
+    expect(view.show().panel.editing!.rows).toHaveLength(2);
+    expect(bannerOf(view)).toMatchObject({ pending: 0, notice: recordsCopy.edit.readOnly(reason) });
+  });
+
+  it("a atualização automática fica em pausa desde o começo; com as linhas trocadas enquanto o alvo era perguntado, nada é duplicado", async () => {
+    let respond!: () => void;
+    rt.service.editTargetOrRefuse.mockImplementationOnce(() => new Promise((resolve) => (respond = () => resolve({ ok: true, data: target }))) as never);
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    runner.autoRefresh.pause.mockClear();
+
+    view.show().panel.editing!.onDuplicateRow();
+    expect(runner.autoRefresh.pause.mock.calls).toEqual([["editing", true]]);
+
+    runner.state = loaded({ resultId: "r2", rows: [["5", "9", "C-3"], ["10", "4", "A-1"]] });
+    view.show();
+    respond();
+    await settle();
+
+    expect(view.show().panel.editing!.rows).toHaveLength(2);
+    expect(runner.autoRefresh.pause.mock.calls.at(-1)).toEqual(["editing", false]);
+  });
+});

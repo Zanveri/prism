@@ -557,8 +557,46 @@ describe("QueryTabPanel: num resultado de junção cada coluna se edita na tabel
     const items = view.show().menu!.groups.flatMap(groupItems);
 
     expect(items.find((item) => item.label === copy.menu.newRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
+    // RN-EDIT-016: duplicar vale onde adicionar vale.
+    expect(items.find((item) => item.label === copy.menu.duplicateRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
     expect(items.find((item) => item.label === copy.menu.deleteRow)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.joinRowOperations) });
     expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("coluna da chave numa junção") });
+  });
+});
+
+describe("QueryTabPanel: Duplicar linha no resultado de um comando (RN-EDIT-016)", () => {
+  it("a cópia vai para o fim da grade, como nos Registros; o valor completo que não vem diz para executar o comando de novo", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.cells.resultCells.mockResolvedValue({ ok: true, data: [null] });
+    const view = mount(fakeRunner(rowsState({ rows: [["10", "aberta"], ["11", "longa"]], truncated: new Map([[1, new Set([1])]]) })));
+
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onDuplicateRow();
+    await settle();
+    expect(view.show().area.editing!.rows[2]).toEqual(["10", "aberta"]);
+    expect(view.show().banner!.props.notice).toBe(copy.duplicate.keyCopied("pedido", ["id"]));
+
+    view.show().area.editing!.onActivate({ row: 1, column: 0 });
+    view.show().area.editing!.onDuplicateRow();
+    await settle();
+    await settle();
+    expect(view.show().area.editing!.rows).toHaveLength(3);
+    expect(view.show().banner!.props.notice).toBe("A linha não foi duplicada: o valor completo de status não pôde vir. Execute o comando de novo para duplicá-la.");
+  });
+
+  it("da linha nova já salva (RN-EDIT-009), a coluna que o banco preencheu não se copia, fica com o padrão da tabela e entra no aviso", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    // A segunda linha é a nova que o Salvar gravou: o `id` foi o banco que preencheu, e a tela não sabe o valor.
+    const view = mount(fakeRunner(rowsState({ rows: [["10", "aberta"], [null, "nova"]], generated: new Map([[1, new Set([0])]]) })));
+
+    view.show().area.editing!.onActivate({ row: 1, column: 1 });
+    view.show().area.editing!.onDuplicateRow();
+    await settle();
+
+    expect(view.show().area.editing!.rows[2]).toEqual([null, "nova"]);
+    expect(view.show().area.editing!.marks.get(2)).toMatchObject({ kind: "new", pending: new Map([[1, "nova"]]) });
+    expect(view.show().area.editing!.active).toEqual({ row: 2, column: 0 });
+    expect(view.show().banner!.props.notice).toBe(copy.duplicate.notCopied(["id"]));
   });
 });
 
