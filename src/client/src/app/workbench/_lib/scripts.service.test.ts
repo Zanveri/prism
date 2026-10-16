@@ -47,11 +47,17 @@ describe("as rotas dos scripts (seção 23)", () => {
     expect(request(fake).url).toBe(`${base}/api/user/scripts/${id}`);
   });
 
-  it("salvar a primeira vez manda o nome, o SQL e o lugar da aba", async () => {
-    const fake = fetchAnswers(json(summary, 201));
+  it("salvar a primeira vez manda o nome, o SQL, o lugar da aba e a pasta do campo Pasta (RN-SCRIPT-010)", async () => {
+    const fake = fetchAnswers(json({ ...summary, folderID: id }, 201));
 
-    expect(await createScriptOrRefuse({ name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas", folderID: null })).toEqual({ ok: true, data: summary });
-    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "POST", body: { name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas", folderID: null } });
+    expect(await createScriptOrRefuse({ name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas", folderID: id })).toEqual({ ok: true, data: { ...summary, folderID: id } });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "POST", body: { name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas", folderID: id } });
+  });
+
+  it("a pasta escolhida que outra janela excluiu volta como valor, para o campo Pasta (RN-SCRIPT-010)", async () => {
+    fetchAnswers(refusal(404, "SCRIPT_FOLDER_NOT_FOUND"));
+
+    expect(await createScriptOrRefuse({ name: "a", sql: "", connectionID: null, database: null, folderID: id })).toMatchObject({ ok: false, error: { code: "SCRIPT_FOLDER_NOT_FOUND" } });
   });
 
   it("o Mover para… do script manda só a pasta, ou root na raiz; a recusa vai ao aviso central (RN-SCRIPT-009)", async () => {

@@ -228,6 +228,21 @@ describe("WorkbenchProvider: a conexão da aba de um script é mudança não sal
     expect(value.tabs[0].script).toEqual({ id: "s1", name: "Fechamento", savedSql: "select 1", generic: true, dirty: false });
   });
 
+  it("a aba lembra a pasta do script de quando o abriu e de quando o gravou, sem a gravar no cofre (RN-SCRIPT-010)", () => {
+    render().openScriptTab(script({ folderID: "f1" }), { connectionId: "c1", saved: { savedConnectionId: "c1" } });
+    let value = render();
+    const tab = value.tabs[0];
+    expect(value.tabs[0].script?.folderId).toBe("f1");
+
+    value.setTabScript(tab.id, { id: "s1", name: "Fechamento", folderId: "f2" }, "select 1", { savedConnectionId: "c1" });
+    value = render();
+    expect(value.tabs[0].script?.folderId).toBe("f2");
+
+    value.setTabScript(tab.id, { id: "s1", name: "Fechamento" }, "select 1", { savedConnectionId: "c1" });
+    value = render();
+    expect(value.tabs[0].script).not.toHaveProperty("folderId");
+  });
+
   it("o texto do editor que mudou enquanto a gravação ia continua marcado", () => {
     render().openQueryTab("c1", "select 1");
     let value = render();

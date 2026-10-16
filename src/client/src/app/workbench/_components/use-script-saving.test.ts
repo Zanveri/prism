@@ -154,3 +154,89 @@ describe("useScriptSaving: o diálogo do nome e a caixa do script genérico (RN-
     expect(rt.workbench.setTabScript).toHaveBeenCalledWith("q1", { id: "s2", name: "Relatório" }, "select 2", { generic: true });
   });
 });
+
+describe("useScriptSaving: o campo \"Pasta\" (RN-SCRIPT-010)", () => {
+  it("na primeira vez vem \"Sem pasta\", com as pastas e o caminho de cada uma; no \"Salvar como\", a pasta em que o script está na lista", () => {
+    rt.scripts = [summary({ folderID: "f2" })];
+    rt.tabs = [queryTab(), queryTab({ id: "q2", script: { id: "s1", name: "Fechamento", savedSql: "select 1", savedConnectionId: "c1", folderId: "f1", dirty: false } })];
+
+    void show().save("q1", "save");
+    expect(show().dialog?.folder).toMatchObject({ value: "", error: null });
+    expect(show().dialog?.folder?.options.map((option) => option.label)).toEqual(["Fechamento", "Fechamento / Mensal"]);
+    show().dialog!.onCancel();
+
+    void show().save("q2", "saveAs");
+    expect(show().dialog?.folder?.value).toBe("f2");
+  });
+
+  it("o Ctrl+S do script que outra janela excluiu pede o nome com a pasta que a aba lembra", async () => {
+    rt.scripts = [];
+    rt.service.overwriteScriptOrRefuse.mockResolvedValueOnce({ ok: false, error: { code: "SCRIPT_NOT_FOUND", title: "Script não localizado.", status: 404, detail: null, errors: null, extensions: {} } });
+    rt.tabs = [queryTab({ script: { id: "s1", name: "Fechamento", savedSql: "select 1", savedConnectionId: "c1", folderId: "f2", dirty: true } })];
+
+    void show().save("q1", "save");
+    await settle();
+
+    expect(rt.workbench.forgetScript).toHaveBeenCalledWith("s1");
+    expect(show().dialog?.folder?.value).toBe("f2");
+  });
+
+  it("a pasta escolhida vai à API, a aba a lembra, e o aviso diz onde o script ficou; na raiz, o aviso de sempre", async () => {
+    rt.service.createScriptOrRefuse.mockImplementationOnce((input: { name: string; folderID: string | null }) => Promise.resolve({ ok: true, data: summary({ id: "s2", name: input.name, folderID: input.folderID }) }));
+    rt.tabs = [queryTab()];
+
+    void show().save("q1", "save");
+    show().dialog!.folder!.onChange("f2");
+    show().dialog!.onSubmit("Relatório", false);
+    await settle();
+
+    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: "c1", database: null, folderID: "f2" });
+    expect(rt.workbench.setTabScript).toHaveBeenCalledWith("q1", { id: "s2", name: "Relatório", folderId: "f2" }, "select 2", { savedConnectionId: "c1" });
+    expect(rt.toast.success).toHaveBeenCalledWith(scriptsCopy.toasts.savedIn("Relatório", "Fechamento / Mensal"));
+  });
+
+  it("a pasta que outra janela excluiu antes de gravar é recusada no campo, a lista é lida de novo, e nada se grava", async () => {
+    rt.service.createScriptOrRefuse.mockResolvedValueOnce({ ok: false, error: { code: "SCRIPT_FOLDER_NOT_FOUND", title: "Pasta não localizada.", status: 404, detail: "A pasta escolhida não existe mais.", errors: null, extensions: {} } });
+    rt.tabs = [queryTab()];
+
+    void show().save("q1", "save");
+    show().dialog!.folder!.onChange("f1");
+    show().dialog!.onSubmit("Relatório", false);
+    await settle();
+
+    expect(show().dialog).toMatchObject({ error: null, folder: { value: "f1", error: scriptsCopy.save.folderGone } });
+    expect(rt.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["script-folders"] });
+    expect(rt.workbench.setTabScript).not.toHaveBeenCalled();
+    expect(rt.toast.success).not.toHaveBeenCalled();
+  });
+
+  it("a pasta escolhida que saiu da lista (a recusa anterior, ou a lista lida de novo) é recusada no campo sem ir à API; escolher de novo tira o erro e grava", async () => {
+    rt.tabs = [queryTab()];
+    void show().save("q1", "save");
+    show().dialog!.folder!.onChange("f2");
+
+    // Outra janela excluiu "Mensal", e a lista lida de novo já não a tem: o campo a mostra como "Sem pasta".
+    rt.folders = [folder("f1", "Fechamento")];
+    show().dialog!.onSubmit("Relatório", false);
+    await settle();
+    expect(show().dialog).toMatchObject({ folder: { value: "f2", error: scriptsCopy.save.folderGone } });
+    expect(rt.service.createScriptOrRefuse).not.toHaveBeenCalled();
+    expect(rt.queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["script-folders"] });
+
+    show().dialog!.folder!.onChange("");
+    expect(show().dialog!.folder).toMatchObject({ value: "", error: null });
+    show().dialog!.onSubmit("Relatório", false);
+    await settle();
+    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith(expect.objectContaining({ name: "Relatório", folderID: null }));
+  });
+
+  it("o Ctrl+S que grava por cima o script de uma pasta diz só \"salvo\", e a aba continua lembrando a pasta", async () => {
+    rt.service.overwriteScriptOrRefuse.mockResolvedValueOnce({ ok: true, data: summary({ folderID: "f2" }) });
+    rt.tabs = [queryTab({ script: { id: "s1", name: "Fechamento", savedSql: "select 1", savedConnectionId: "c1", folderId: "f2", dirty: true } })];
+
+    await show().save("q1", "save");
+
+    expect(rt.workbench.setTabScript).toHaveBeenCalledWith("q1", { id: "s1", name: "Fechamento", folderId: "f2" }, "select 2", { savedConnectionId: "c1" });
+    expect(rt.toast.success).toHaveBeenCalledWith(scriptsCopy.toasts.saved("Fechamento"));
+  });
+});
