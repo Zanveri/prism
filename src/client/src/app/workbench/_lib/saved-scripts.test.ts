@@ -14,11 +14,10 @@ import {
   placeChanged,
   savedPlaceOfTab,
   saveShortcut,
-  scriptKeyTarget,
   scriptIconOf,
   scriptIcons,
   scriptMenu,
-  scriptRowKey,
+  scriptFolderMenu,
   scriptNameProblem,
   scriptPlace,
   scriptsToAsk,
@@ -189,18 +188,6 @@ describe("onde o script genérico abre (RN-SCRIPT-005)", () => {
   });
 });
 
-describe("o teclado da lista de scripts", () => {
-  it("as setas andam sem dar a volta, Home e End vão às pontas, e o resto não é da lista", () => {
-    expect(scriptKeyTarget("ArrowDown", 0, 3)).toBe(1);
-    expect(scriptKeyTarget("ArrowDown", 2, 3)).toBe(2);
-    expect(scriptKeyTarget("ArrowUp", 0, 3)).toBe(0);
-    expect(scriptKeyTarget("Home", 2, 3)).toBe(0);
-    expect(scriptKeyTarget("End", 0, 3)).toBe(2);
-    expect(scriptKeyTarget("a", 1, 3)).toBeNull();
-    expect(scriptKeyTarget("ArrowDown", 0, 0)).toBeNull();
-  });
-});
-
 describe("Ctrl+S e Ctrl+Shift+S (RN-SCRIPT-001)", () => {
   const key = (over: Partial<{ key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "s", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...over });
 
@@ -227,29 +214,22 @@ describe("a recusa da API, no campo do nome", () => {
   });
 });
 
-describe("o menu de um script e as teclas da linha (RN-SCRIPT-003)", () => {
-  it("abrir primeiro; renomear, editar (RN-SCRIPT-006), copiar o SQL e o lugar; excluir à parte, por último", () => {
-    expect(scriptMenu({ generic: false, bindable: false }).map((group) => group.map((item) => item.action))).toEqual([["open"], ["rename", "edit", "copySql", "makeGeneric"], ["delete"]]);
+describe("o menu de um script e o de uma pasta de scripts (RN-SCRIPT-003 e 009)", () => {
+  it("abrir primeiro; renomear, editar (RN-SCRIPT-006), mover para… (RN-SCRIPT-009), copiar o SQL e o lugar; excluir à parte, por último", () => {
+    expect(scriptMenu({ generic: false, bindable: false }).map((group) => group.map((item) => item.action))).toEqual([["open"], ["rename", "edit", "move", "copySql", "makeGeneric"], ["delete"]]);
   });
 
   it("o script com conexão oferece \"Tornar genérico\"; o genérico, \"Vincular à conexão da aba\", apagado sem aba aberta com conexão (RN-SCRIPT-005)", () => {
-    const placeItem = (script: { generic: boolean; bindable: boolean }) => scriptMenu(script)[1][3];
+    const placeItem = (script: { generic: boolean; bindable: boolean }) => scriptMenu(script)[1][4];
 
     expect(placeItem({ generic: false, bindable: true })).toEqual({ action: "makeGeneric" });
     expect(placeItem({ generic: true, bindable: true })).toEqual({ action: "bind" });
     expect(placeItem({ generic: true, bindable: false })).toEqual({ action: "bind", disabled: true });
   });
 
-  it("Enter abre, F2 renomeia, Delete exclui, Shift+F10 e a tecla de menu abrem o menu; o resto não é da linha", () => {
-    const key = (over: Partial<{ key: string; shiftKey: boolean }>) => ({ key: "", shiftKey: false, ...over });
-
-    expect(scriptRowKey(key({ key: "Enter" }))).toBe("open");
-    expect(scriptRowKey(key({ key: "F2" }))).toBe("rename");
-    expect(scriptRowKey(key({ key: "Delete" }))).toBe("delete");
-    expect(scriptRowKey(key({ key: "F10", shiftKey: true }))).toBe("menu");
-    expect(scriptRowKey(key({ key: "ContextMenu" }))).toBe("menu");
-    expect(scriptRowKey(key({ key: "F10" }))).toBeNull();
-    expect(scriptRowKey(key({ key: "a" }))).toBeNull();
+  it("a pasta: nova subpasta; renomear e mover para…; excluir à parte, desabilitado na pasta que tem alguma coisa dentro (RN-SCRIPT-007)", () => {
+    expect(scriptFolderMenu({ empty: true })).toEqual([[{ action: "newSubfolder" }], [{ action: "rename" }, { action: "move" }], [{ action: "delete" }]]);
+    expect(scriptFolderMenu({ empty: false })[2]).toEqual([{ action: "delete", disabled: true }]);
   });
 });
 
@@ -303,9 +283,5 @@ describe("o ícone e a cor do script (RN-SCRIPT-006)", () => {
     expect(appearanceChanged(plain, { name: "Fechamento", icon: "bug", color: null })).toBe(true);
     expect(appearanceChanged(plain, { name: "Fechamento", icon: "document", color: "#FF8A7A" })).toBe(true);
     expect(appearanceChanged(colored, { name: "Fechamento", icon: "star", color: null })).toBe(true);
-  });
-
-  it("o F2 da linha continua só renomeando: o Editar script… é do menu", () => {
-    expect(scriptRowKey({ key: "F2", shiftKey: false })).toBe("rename");
   });
 });

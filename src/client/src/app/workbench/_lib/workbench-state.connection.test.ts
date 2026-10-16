@@ -74,7 +74,7 @@ const fake = (runner: QueryRunner) => runner as unknown as Fake;
 /** Deixa as promessas em andamento chegarem ao fim. */
 const settle = () => new Promise((done) => setTimeout(done, 0));
 
-const script = (over: Partial<Script> = {}): Script => ({ id: "s1", name: "Fechamento", connectionID: "c1", database: null, icon: null, color: null, sql: "select 1", updatedAt: "2026-10-15T00:00:00Z", ...over });
+const script = (over: Partial<Script> = {}): Script => ({ id: "s1", name: "Fechamento", connectionID: "c1", database: null, folderID: null, icon: null, color: null, sql: "select 1", updatedAt: "2026-10-15T00:00:00Z", ...over });
 
 beforeEach(() => {
   rt.created.length = 0;

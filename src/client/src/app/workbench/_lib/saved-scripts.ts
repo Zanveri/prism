@@ -1,7 +1,8 @@
 /**
  * O que a tela decide sobre os scripts salvos (seção 23 da especificação, RN-SCRIPT-001 a 005), sem tocar a página nem a API: as regras do nome (as
  * mesmas da API, para o diálogo dizer o problema antes de enviar; quem decide é a API), a sugestão de nome, o tamanho do SQL, a mudança não salva, onde
- * o script abre (e o genérico, seção 27), o ícone e a cor (seção 28) e o teclado da lista do navegador.
+ * o script abre (e o genérico, seção 27), o ícone e a cor (seção 28) e os menus do script e da pasta de scripts (seção 33). A árvore da seção e o teclado
+ * dela estão em `script-tree.ts`.
  */
 
 export const maxScriptNameLength = 200;
@@ -18,7 +19,15 @@ export const maxScriptBytes = 1024 * 1024;
  * script foi salvo numa conexão que não existe mais: a aba abriu sem conexão, e é contra "sem conexão" que a mudança se mede (dar uma conexão à aba é mudar
  * o lugar, e o Ctrl+S o grava).
  */
-export type ScriptRef = { id: string; name: string; savedSql: string; generic?: true; savedConnectionId?: string; savedDatabase?: string; dirty: boolean };
+export type ScriptRef = {
+  id: string;
+  name: string;
+  savedSql: string;
+  generic?: true;
+  savedConnectionId?: string;
+  savedDatabase?: string;
+  dirty: boolean;
+};
 
 /** O lugar salvo de um script, como a aba o guarda (`ScriptRef`): o genérico, ou a conexão e o banco. */
 export type SavedPlace = Pick<ScriptRef, "generic" | "savedConnectionId" | "savedDatabase">;
@@ -37,8 +46,11 @@ export function normalizeScriptName(name: string): string {
   return name.split(/\s+/u).filter(Boolean).join(" ").normalize("NFC");
 }
 
-/** Os caracteres de controle do C# (`char.IsControl`): U+0000 a U+001F e U+007F a U+009F, a tabulação e a quebra de linha entre eles. */
-function hasControlCharacter(text: string): boolean {
+/**
+ * Os caracteres de controle do C# (`char.IsControl`): U+0000 a U+001F e U+007F a U+009F, a tabulação e a quebra de linha entre eles. O nome do script e o da
+ * pasta de scripts (RN-SCRIPT-007) os recusam.
+ */
+export function hasControlCharacter(text: string): boolean {
   for (let index = 0; index < text.length; index++) {
     const code = text.charCodeAt(index);
     if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true;
@@ -150,16 +162,6 @@ export function scriptPlace(script: { connectionID: string | null; database: str
   return { connectionId: script.connectionID, database, missing: false, saved: { savedConnectionId: script.connectionID, ...(database === undefined ? {} : { savedDatabase: database }) } };
 }
 
-/** As setas da lista de scripts do navegador, sem dar a volta, e Home e End. `null`: a tecla não é da lista. */
-export function scriptKeyTarget(key: string, index: number, count: number): number | null {
-  if (count === 0) return null;
-  if (key === "ArrowDown") return Math.min(index + 1, count - 1);
-  if (key === "ArrowUp") return Math.max(index - 1, 0);
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return null;
-}
-
 /** RN-SCRIPT-001: Ctrl+S salva e Ctrl+Shift+S é o "Salvar como" (o Cmd do macOS vale o Ctrl, como no Ctrl+W). `null`: não é o atalho. */
 export function saveShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }): "save" | "saveAs" | null {
   if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "s") return null;
@@ -177,16 +179,27 @@ export function refusalProblem(code: string, name: string): ScriptNameProblem | 
   return null;
 }
 
-export type ScriptAction = "open" | "rename" | "edit" | "copySql" | "makeGeneric" | "bind" | "delete";
+export type ScriptAction = "open" | "rename" | "edit" | "move" | "copySql" | "makeGeneric" | "bind" | "delete";
 
 /**
  * RN-SCRIPT-003: o menu de um script na seção "Scripts", em grupos (entre dois grupos, um separador). Quem dá o rótulo e executa é a seção. RN-SCRIPT-005: o
  * script com conexão oferece "Tornar genérico"; o genérico, "Vincular à conexão da aba", que só vale com o script aberto numa aba que tenha conexão (`bindable`):
- * sem ela, o item fica apagado e diz por quê. RN-SCRIPT-006: "Editar script…", logo depois do "Renomear", muda o nome, o ícone e a cor.
+ * sem ela, o item fica apagado e diz por quê. RN-SCRIPT-006: "Editar script…", logo depois do "Renomear", muda o nome, o ícone e a cor. RN-SCRIPT-009: "Mover
+ * para…", logo depois do "Editar script…", leva o script a outra pasta.
  */
 export function scriptMenu(script: { generic: boolean; bindable: boolean }): { action: ScriptAction; disabled?: true }[][] {
   const place = script.generic ? { action: "bind" as const, ...(script.bindable ? {} : { disabled: true as const }) } : { action: "makeGeneric" as const };
-  return [[{ action: "open" }], [{ action: "rename" }, { action: "edit" }, { action: "copySql" }, place], [{ action: "delete" }]];
+  return [[{ action: "open" }], [{ action: "rename" }, { action: "edit" }, { action: "move" }, { action: "copySql" }, place], [{ action: "delete" }]];
+}
+
+export type ScriptFolderAction = "newSubfolder" | "rename" | "move" | "delete";
+
+/**
+ * RN-SCRIPT-009: o menu de uma pasta de scripts: "Nova subpasta"; "Renomear" (F2) e "Mover para…"; e "Excluir" (Delete), desabilitado na pasta que tem alguma
+ * coisa dentro (só a vazia se exclui, RN-SCRIPT-007), com o motivo, que quem desenha escreve.
+ */
+export function scriptFolderMenu(folder: { empty: boolean }): { action: ScriptFolderAction; disabled?: true }[][] {
+  return [[{ action: "newSubfolder" }], [{ action: "rename" }, { action: "move" }], [{ action: "delete", ...(folder.empty ? {} : { disabled: true as const }) }]];
 }
 
 /**
@@ -223,11 +236,3 @@ export function appearanceChanged(script: { name: string; icon: string | null; c
   return normalizeScriptName(edited.name) !== script.name || edited.icon !== scriptIconOf(script) || (edited.color?.toUpperCase() ?? null) !== (script.color?.toUpperCase() ?? null);
 }
 
-/** As teclas da linha de um script: Enter abre, F2 renomeia, Delete exclui (com a confirmação), Shift+F10 e a tecla de menu abrem o menu. */
-export function scriptRowKey(event: { key: string; shiftKey: boolean }): ScriptAction | "menu" | null {
-  if (event.key === "Enter") return "open";
-  if (event.key === "F2") return "rename";
-  if (event.key === "Delete") return "delete";
-  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) return "menu";
-  return null;
-}

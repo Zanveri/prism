@@ -34,7 +34,7 @@ import { useScriptSaving } from "./use-script-saving";
 
 type Dialog = ComponentProps<typeof ScriptNameDialog>;
 
-const summary = (over: Partial<ScriptSummary> = {}): ScriptSummary => ({ id: "s1", name: "Fechamento", connectionID: "c1", database: null, icon: null, color: null, updatedAt: "2026-10-15T00:00:00Z", ...over });
+const summary = (over: Partial<ScriptSummary> = {}): ScriptSummary => ({ id: "s1", name: "Fechamento", connectionID: "c1", database: null, folderID: null, icon: null, color: null, updatedAt: "2026-10-15T00:00:00Z", ...over });
 const queryTab = (over: Partial<QueryTab> = {}): QueryTab => ({ id: "q1", title: "consulta-1.sql", connectionId: "c1", sessionId: null, sql: "select 2", ...over });
 
 /** O que o gancho entrega agora: `save` e o diálogo do nome, se está aberto. Duas voltas: o efeito da primeira guarda a lista de abas mais recente. */

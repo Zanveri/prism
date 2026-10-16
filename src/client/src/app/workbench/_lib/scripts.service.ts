@@ -49,6 +49,14 @@ export function changeScriptPlace(id: string, place: ScriptPlaceInput, signal: A
   return apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: { id, ...place }, schema: scriptSummarySchema, signal });
 }
 
+/**
+ * RN-SCRIPT-009: o "Mover para…" do script manda só a pasta: `folderID`, ou `root: true` para a raiz da seção, porque o nulo do `PATCH` é "fica". O nome, o SQL,
+ * o lugar, o ícone e a cor ficam. Toda recusa (a pasta de destino que outra janela excluiu, o script que sumiu) vai ao aviso central, com o detalhe da API.
+ */
+export function moveScript(id: string, folderID: string | null, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
+  return apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: folderID === null ? { id, root: true } : { id, folderID }, schema: scriptSummarySchema, signal });
+}
+
 /** RN-SCRIPT-003: renomear manda só o nome; o SQL e o lugar ficam. */
 export async function renameScriptOrRefuse(id: string, name: string, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
   return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "PATCH", body: { id, name }, schema: scriptSummarySchema, signal }), ...nameRefusals);

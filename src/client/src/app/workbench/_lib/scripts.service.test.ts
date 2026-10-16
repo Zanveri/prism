@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { changeScriptPlace, createScriptOrRefuse, deleteScript, editScriptOrRefuse, getScript, listScripts, renameScriptOrRefuse, overwriteScriptOrRefuse } from "./scripts.service";
+import { changeScriptPlace, createScriptOrRefuse, deleteScript, editScriptOrRefuse, getScript, listScripts, moveScript, renameScriptOrRefuse, overwriteScriptOrRefuse } from "./scripts.service";
 
 const base = "http://127.0.0.1:51234";
 const bridge = { getApiConfig: async () => ({ baseUrl: base, token: "token-de-teste" }), onApiExit: () => () => {}, restartApi: async () => {} };
 
 const id = "0199c3a0-0000-7000-8000-000000000001";
 const connectionID = "0199c3a0-0000-7000-8000-000000000002";
-const summary = { id, name: "Fechamento", connectionID, database: "vendas", icon: null, color: null, updatedAt: "2026-10-13T12:00:00Z" };
+const summary = { id, name: "Fechamento", connectionID, database: "vendas", folderID: null, icon: null, color: null, updatedAt: "2026-10-13T12:00:00Z" };
 
 function fetchAnswers(response: Response) {
   const fake = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => response);
@@ -52,6 +52,26 @@ describe("as rotas dos scripts (seção 23)", () => {
 
     expect(await createScriptOrRefuse({ name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas" })).toEqual({ ok: true, data: summary });
     expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "POST", body: { name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas" } });
+  });
+
+  it("o Mover para… do script manda só a pasta, ou root na raiz; a recusa vai ao aviso central (RN-SCRIPT-009)", async () => {
+    let fake = fetchAnswers(json({ ...summary, folderID: id }));
+    expect(await moveScript(id, id)).toMatchObject({ ok: true, data: { folderID: id } });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, folderID: id } });
+
+    fake = fetchAnswers(json(summary));
+    await moveScript(id, null);
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "PATCH", body: { id, root: true } });
+
+    fetchAnswers(refusal(404, "SCRIPT_FOLDER_NOT_FOUND"));
+    expect(await moveScript(id, id)).toMatchObject({ ok: false, error: { code: "SCRIPT_FOLDER_NOT_FOUND" } });
+  });
+
+  it("a lista sem a pasta de cada script é recusada: a árvore precisa dela", async () => {
+    // O JSON não leva o campo indefinido: é a lista de uma API anterior às pastas de scripts.
+    fetchAnswers(json([{ ...summary, folderID: undefined }]));
+
+    expect(await listScripts()).toMatchObject({ ok: false, error: { code: "RESPONSE_INVALID" } });
   });
 
   it("gravar por cima manda o SQL e o lugar; renomear manda só o nome", async () => {

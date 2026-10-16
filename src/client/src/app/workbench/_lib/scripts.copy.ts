@@ -1,8 +1,15 @@
 import { maxScriptNameLength, type ScriptIcon } from "./saved-scripts";
+import { maxScriptFolderNameLength } from "./script-tree";
+
+/** "2 subpastas e 3 scripts", "1 subpasta", "1 script": no singular e no plural, e só com a parte que existe. */
+function folderContents(folders: number, scripts: number): string {
+  const parts = [folders === 0 ? null : folders === 1 ? "1 subpasta" : `${folders.toLocaleString("pt-BR")} subpastas`, scripts === 0 ? null : scripts === 1 ? "1 script" : `${scripts.toLocaleString("pt-BR")} scripts`];
+  return parts.filter((part) => part !== null).join(" e ");
+}
 
 /**
- * Os textos dos scripts salvos (seção 23 da especificação, RN-SCRIPT-001 a 004, o genérico da seção 27, RN-SCRIPT-005, e o ícone e a cor da seção 28,
- * RN-SCRIPT-006): o salvar, o editar, a aba, a pergunta de fechar e a seção "Scripts" do navegador.
+ * Os textos dos scripts salvos (seção 23 da especificação, RN-SCRIPT-001 a 004, o genérico da seção 27, RN-SCRIPT-005, o ícone e a cor da seção 28,
+ * RN-SCRIPT-006, e as pastas de scripts da seção 33, RN-SCRIPT-007 a 010): o salvar, o editar, a aba, a pergunta de fechar e a seção "Scripts" do navegador.
  */
 export const scriptsCopy = {
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S.
@@ -57,6 +64,8 @@ export const scriptsCopy = {
   },
   toasts: {
     saved: (name: string) => `Script ${name} salvo.`,
+    // RN-SCRIPT-009.
+    moved: "Script movido.",
     renamed: (name: string) => `Script renomeado para ${name}.`,
     // RN-SCRIPT-006.
     edited: (name: string) => `Script ${name} alterado.`,
@@ -115,6 +124,10 @@ export const scriptsCopy = {
     retry: "Tentar de novo",
     rowHint: (name: string) => `${name}. Duplo clique ou Enter abre o script numa aba de consulta.`,
     rowHintGeneric: (name: string) => `${name}, script genérico. Duplo clique ou Enter abre o script na conexão conectada, ou pergunta qual.`,
+    // RN-SCRIPT-008: a linha da pasta.
+    folderHint: (name: string) => `${name}. Duplo clique ou Enter abre e fecha a pasta.`,
+    // RN-SCRIPT-009: o menu do título e do espaço vazio da seção.
+    sectionMenuLabel: "Ações da seção Scripts",
     // RN-SCRIPT-005: a marca discreta do script genérico na lista.
     generic: "genérico",
     menuLabel: (name: string) => `Ações do script ${name}`,
@@ -129,7 +142,65 @@ export const scriptsCopy = {
     makeGeneric: "Tornar genérico",
     bind: "Vincular à conexão da aba",
     bindUnavailable: "Abra o script numa aba e escolha a conexão dela.",
+    // RN-SCRIPT-009: logo depois do "Editar script…".
+    move: "Mover para…",
     delete: "Excluir",
+  },
+  // RN-SCRIPT-007 a 009: as pastas da seção Scripts, os menus e os diálogos delas.
+  folders: {
+    menuLabel: (name: string) => `Ações da pasta ${name}`,
+    menu: {
+      newFolder: "Nova pasta",
+      newSubfolder: "Nova subpasta",
+      rename: "Renomear",
+      move: "Mover para…",
+      delete: "Excluir",
+    },
+    /** A pasta que tem alguma coisa dentro não se exclui: o motivo do "Excluir" desabilitado e o aviso do Delete nela. */
+    notEmpty: (folders: number, scripts: number) => `A pasta tem ${folderContents(folders, scripts)}: mova ou exclua antes o que está dentro dela.`,
+    create: {
+      title: "Nova pasta",
+      titleSub: "Nova subpasta",
+      atRoot: "Na raiz da seção Scripts.",
+      inside: (path: string) => `Dentro de ${path}.`,
+      submit: "Criar pasta",
+      submitting: "Criando…",
+    },
+    rename: {
+      title: "Renomear pasta",
+      submit: "Renomear",
+      submitting: "Renomeando…",
+    },
+    name: "Nome da pasta",
+    cancel: "Cancelar",
+    // As recusas do nome, no campo (RN-AVISO-004).
+    errors: {
+      empty: "Dê um nome à pasta.",
+      tooLong: `O nome pode ter até ${maxScriptFolderNameLength} caracteres.`,
+      control: "O nome não pode ter tabulação, quebra de linha nem outro caractere de controle.",
+      taken: "Já existe uma pasta com este nome aqui.",
+    },
+    move: {
+      titleFolder: "Mover pasta",
+      titleScript: "Mover script",
+      description: (name: string) => `Escolha a pasta de destino de ${name}.`,
+      folder: "Pasta",
+      noFolder: "Sem pasta",
+      submit: "Mover",
+      submitting: "Movendo…",
+    },
+    remove: {
+      title: (name: string) => `Excluir a pasta ${name}?`,
+      description: "A pasta está vazia e sai da seção Scripts.",
+      submit: "Excluir pasta",
+      submitting: "Excluindo…",
+    },
+    toasts: {
+      created: "Pasta criada.",
+      renamed: "Pasta renomeada.",
+      moved: "Pasta movida.",
+      deleted: "Pasta excluída.",
+    },
   },
   delete: {
     title: (name: string) => `Excluir o script ${name}?`,

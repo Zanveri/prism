@@ -18,7 +18,7 @@ const rt = await vi.hoisted(async () => {
   const bridge = { claim: vi.fn(async () => true), report: vi.fn(), withdraw: vi.fn() };
   const api = { workspace: vi.fn(), script: vi.fn() };
   const connections = [{ id: "0199dd00-0000-7000-8000-000000000001" }];
-  const scripts = [{ id: "0199dd00-0000-7000-8000-0000000000a1", name: "Relatório", connectionID: null, database: null, icon: null, color: null, updatedAt: "" }];
+  const scripts = [{ id: "0199dd00-0000-7000-8000-0000000000a1", name: "Relatório", connectionID: null, database: null, folderID: null, icon: null, color: null, updatedAt: "" }];
   const queryClient = { removeQueries: vi.fn(), getQueryData: vi.fn(), fetchQuery: vi.fn(async ({ queryKey }: { queryKey: unknown[] }) => (queryKey[0] === "scripts" ? scripts : connections)) };
   const toast = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
 
@@ -83,7 +83,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   rt.bridge.claim.mockResolvedValue(true);
   rt.api.workspace.mockResolvedValue({ ok: true, data: saved });
-  rt.api.script.mockResolvedValue({ ok: true, data: { id: s1, name: "Relatório", connectionID: null, database: null, icon: null, color: null, sql: "SELECT 'salvo'", updatedAt: "" } });
+  rt.api.script.mockResolvedValue({ ok: true, data: { id: s1, name: "Relatório", connectionID: null, database: null, folderID: null, icon: null, color: null, sql: "SELECT 'salvo'", updatedAt: "" } });
 });
 
 afterEach(() => {
