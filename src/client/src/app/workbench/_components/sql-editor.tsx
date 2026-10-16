@@ -11,6 +11,7 @@ import { editorFont, type EditorPreferences } from "@/app/settings/_lib/editor-s
 import { resolveScheme, subscribeSystemScheme, systemPrefersLight } from "@/app/settings/_lib/theme";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
+import { isMacPlatform } from "@/lib/utils/platform";
 
 import type { CachedLevel } from "../_lib/navigator-search";
 import { completionTheme, highlight } from "../_lib/completion-theme";
@@ -249,7 +250,7 @@ type SqlEditorProps = {
 };
 
 /** O macOS usa o ⌘ onde os outros usam o Ctrl (RN-LINK-001). */
-const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
 
 /** Os níveis da árvore são os mesmos objetos enquanto nenhuma consulta deles mudou: o catálogo dos links só é refeito quando algum muda. */
 const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.length === b.length && a.every((level, index) => level.key === b[index].key && level.nodes === b[index].nodes);

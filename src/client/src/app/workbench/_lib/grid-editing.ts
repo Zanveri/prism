@@ -1,3 +1,5 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
 import type { EditBarAction, EditBarButton } from "./edit-bar";
 import type { GridCell } from "./grid-cursor";
 import type { QueryRow } from "./query.schema";
@@ -98,8 +100,6 @@ export function filterKey(event: { key: string; ctrlKey: boolean; metaKey: boole
 export function refreshKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return event.key === "F5" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
-
-const isMacPlatform = (platform: string) => /mac|iphone|ipad/i.test(platform);
 
 /** As ações da linha que têm atalho com o foco na grade (RN-EDIT-015): adicionar, duplicar e excluir. */
 export type RowShortcut = "newRow" | "duplicateRow" | "deleteRow";

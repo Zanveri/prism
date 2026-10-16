@@ -1,3 +1,5 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
 import { scriptsCopy } from "./scripts.copy";
 import { workbenchCopy } from "./workbench.copy";
 
@@ -72,7 +74,7 @@ export function stripKeyTarget(key: string, current: number, count: number): num
 
 /** O atalho de fechar a aba como a plataforma o escreve: Cmd+W no macOS, Ctrl+W nas outras (`navigator.platform`). */
 export function closeShortcutLabel(platform: string): string {
-  return /mac|iphone|ipad/i.test(platform) ? copy.closeShortcutMac : copy.closeShortcut;
+  return isMacPlatform(platform) ? copy.closeShortcutMac : copy.closeShortcut;
 }
 
 /** Ctrl+W (ou Cmd+W) fecha a aba ativa. Com Shift ou Alt junto é outro atalho. */

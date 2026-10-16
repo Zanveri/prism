@@ -1479,9 +1479,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
       ou o "Carregar mais" no meio mudam a linha daquela posição, e a segunda exclusão não tira a linha nova que passou ao lugar da primeira.
     - **Os atalhos** (`rowShortcut`, conferido no `handleKeyDown` da grade antes das setas): Alt+Insert adiciona, Ctrl+Alt+Insert duplica (a mesma tecla, o
       Ctrl decide: antes o ramo do Alt+Insert casava também o Ctrl+Alt+Insert e o Shift+Alt+Insert) e Alt+Delete exclui a linha da célula ativa, com os
-      modificadores exatos; com Shift, nada. O AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica e o Delete não faz nada. No macOS (`navigator.platform`)
-      o Option faz o papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o
-      Backspace (a tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
+      modificadores exatos; com Shift, nada. O AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica e o Delete não faz nada. No macOS
+      (`navigator.platform`, pelo `isMacPlatform` de `src/lib/utils/platform.ts`, a conferência que todos os atalhos e dicas da tela usam) o Option faz o
+      papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
+      tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
       `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
       (`rowAction`). O Delete sozinho continua sem excluir: espera a seleção de linhas (RN-GRADE-001).
     - **Duplicar linha** (`duplicateRow`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), uma linha nova no fim da grade

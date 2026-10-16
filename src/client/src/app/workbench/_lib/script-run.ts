@@ -1,3 +1,5 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
 import { scriptRunCopy } from "./script-run.copy";
 import { commandStart } from "./sql-statements";
 import type { RowsState, RunTarget } from "./use-query-runner";
@@ -11,8 +13,6 @@ const copy = scriptRunCopy;
 
 /** Quantas abas de resultado o script guarda (RN-SQL-020): as dos 20 primeiros comandos que devolvem linhas, e a do último, que tem o cursor aberto. */
 export const scriptResultCap = 20;
-
-const isMacPlatform = (platform: string) => /mac|iphone|ipad/i.test(platform);
 
 /**
  * Alt+X, como no DBeaver (RN-SQL-019); no macOS, Cmd+Option+X, porque lá o Option+X escreve um caractere (`≈` no teclado americano) e o atalho o
