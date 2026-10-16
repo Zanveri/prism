@@ -340,7 +340,7 @@ public sealed partial class VaultServiceTests : IDisposable
     public async Task Unlock_WithRightPassword_ReturnsDocument()
     {
         //Arrange
-        var expected = new VaultDocument(_userName, [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection(), VaultFakers.CreateConnection()], [VaultFakers.CreateScript()], VaultFakers.CreateWorkspace(1, VaultFakers.CreateQueryTab(), VaultFakers.CreateTableTab()));
+        var expected = new VaultDocument(_userName, [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection(), VaultFakers.CreateConnection()], [VaultFakers.CreateScript()], VaultFakers.CreateWorkspace(1, VaultFakers.CreateQueryTab(), VaultFakers.CreateTableTab()), []);
 
         using (var writer = CreateService())
         {
@@ -860,7 +860,7 @@ public sealed partial class VaultServiceTests : IDisposable
         var unlocked = await service.UnlockAsync(_userName, _password, CancellationToken.None);
 
         //Assert
-        var expected = new VaultDocument(_userName, [folder], [connection], [], VaultWorkspaceRecord.Empty);
+        var expected = new VaultDocument(_userName, [folder], [connection], [], VaultWorkspaceRecord.Empty, []);
         Assert.True(saved.IsSuccess);
         Assert.True(afterSave.Value.JsonEquals(expected));
         Assert.True(unlocked.IsSuccess);

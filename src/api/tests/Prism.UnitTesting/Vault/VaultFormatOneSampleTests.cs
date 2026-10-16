@@ -17,9 +17,10 @@ namespace Prism.UnitTesting.Vault;
 /// O formato 1 do cofre (RN-COFRE-003 e 004) como um arquivo gravado ANTES da RN-VERSAO-005 e versionado em `Vault/Samples/`. Este
 /// teste é o que acusa uma mudança de formato sem migração: o cabeçalho é dado autenticado das duas cifras (a versão, o algoritmo, os
 /// parâmetros e o sal entram na conta), então mexer em qualquer coisa do formato, ou no jeito de montar esse dado, faz o exemplo deixar
-/// de abrir, e a pessoa com um cofre real perderia o acesso a ele. O formato 2 (RN-SCRIPT-002) acrescentou os scripts ao documento, e o
-/// formato 3 (RN-ABAS-006), a área de trabalho: o exemplo abre, é migrado ao abrir pelos dois passos (ganha a lista de scripts vazia e a área
-/// de trabalho vazia, e passa a declarar o formato atual) e o arquivo de antes fica no `.bak`. O do formato 2 está em `VaultFormatTwoSampleTests`.
+/// de abrir, e a pessoa com um cofre real perderia o acesso a ele. O formato 2 (RN-SCRIPT-002) acrescentou os scripts ao documento, o
+/// formato 3 (RN-ABAS-006), a área de trabalho, e o formato 4 (RN-SCRIPT-011), as pastas de scripts: o exemplo abre, é migrado ao abrir pelos
+/// três passos (ganha a lista de scripts vazia, a área de trabalho vazia e a lista de pastas de scripts vazia, e passa a declarar o formato
+/// atual) e o arquivo de antes fica no `.bak`. O do formato 2 está em `VaultFormatTwoSampleTests`, e o do 3, em `VaultFormatThreeSampleTests`.
 ///
 /// A SENHA ABAIXO É UMA CONSTANTE FICTÍCIA, de um cofre de exemplo com dados inventados (usuário, host e senha de banco que não existem):
 /// sem ela o arquivo não serve de prova. Não protege nada de ninguém, e não deve ser trocada por uma senha de verdade. O arquivo foi
@@ -38,8 +39,8 @@ public sealed class VaultFormatOneSampleTests : IDisposable
     private readonly string _directory = Directory.CreateTempSubdirectory("prism-vault-sample-").FullName;
 
     /// <summary>
-    /// O que o cofre de exemplo guarda: uma pasta com uma conexão dentro, tudo inventado. Os scripts são do formato 2 e a área de trabalho do formato 3: aberto,
-    /// o exemplo ganha as duas vazias.
+    /// O que o cofre de exemplo guarda: uma pasta com uma conexão dentro, tudo inventado. Os scripts são do formato 2, a área de trabalho do formato 3 e as
+    /// pastas de scripts do formato 4: aberto, o exemplo ganha as três vazias.
     /// </summary>
     internal static VaultDocument SampleDocument { get; } = CreateSampleDocument();
 
@@ -49,7 +50,7 @@ public sealed class VaultFormatOneSampleTests : IDisposable
         var folder = new VaultFolderRecord(Guid.Parse("0199c3a0-0000-7000-8000-000000000001"), null, "Produção", createdAt, createdAt);
         var connection = new VaultConnectionRecord(Guid.Parse("0199c3a0-0000-7000-8000-000000000002"), folder.ID, "Banco de exemplo", EDatabaseEngine.PostgreSql, "db.exemplo.invalid", 5432, "exemplo", "usuario_exemplo", "senha-ficticia-do-banco-de-exemplo", "Produção", "#cc3300", createdAt, createdAt);
 
-        return new VaultDocument(SampleUserName, [folder], [connection], [], VaultWorkspaceRecord.Empty);
+        return new VaultDocument(SampleUserName, [folder], [connection], [], VaultWorkspaceRecord.Empty, []);
     }
 
     public void Dispose()
@@ -97,16 +98,17 @@ public sealed class VaultFormatOneSampleTests : IDisposable
 
         //Assert
         Assert.Equal(1, format);
-        Assert.Equal(3, VaultCrypto.Version);
+        Assert.Equal(4, VaultCrypto.Version);
     }
 
     /// <summary>
-    /// RN-VERSAO-005, RN-SCRIPT-002 e RN-ABAS-006: o cofre do formato 1 abre com a senha e é migrado ao abrir. O principal passa a declarar o formato atual, com
-    /// o mesmo algoritmo, os mesmos parâmetros e o mesmo sal (a senha é a mesma), e o documento ganha a lista de scripts vazia e a área de trabalho vazia; o
+    /// RN-VERSAO-005, RN-SCRIPT-002, RN-ABAS-006 e RN-SCRIPT-011: o cofre do formato 1 abre com a senha e é migrado ao abrir. O principal passa a declarar o
+    /// formato atual, com o mesmo algoritmo, os mesmos parâmetros e o mesmo sal (a senha é a mesma), e o documento ganha a lista de scripts vazia, a área de
+    /// trabalho vazia e a lista de pastas de scripts vazia; o
     /// arquivo de antes fica no `.bak`, byte a byte. O principal migrado abre de novo com a mesma senha, e só ela o abre.
     /// </summary>
     [Trait("VaultFormatOneSample", "UnlockAsync")]
-    [Fact(DisplayName = "OK o cofre do formato 1 abre, é migrado ao formato atual com os scripts e a área de trabalho vazios, e o arquivo de antes fica no .bak")]
+    [Fact(DisplayName = "OK o cofre do formato 1 abre, é migrado ao formato atual com os scripts, a área de trabalho e as pastas de scripts vazios, e o arquivo de antes fica no .bak")]
     public async Task Unlock_VaultOfFormatOneWrittenBefore_OpensAndMigrates()
     {
         //Arrange
@@ -128,6 +130,7 @@ public sealed class VaultFormatOneSampleTests : IDisposable
         Assert.Equal(SampleUserName, opened.UserName);
         Assert.True(opened.JsonEquals(SampleDocument));
         Assert.Empty(opened.Scripts);
+        Assert.Empty(opened.ScriptFolders);
         Assert.Empty(opened.Workspace.Tabs);
         Assert.Null(opened.Workspace.ActiveIndex);
         Assert.Equal(VaultCrypto.Version, after.RootElement.GetProperty("version").GetInt32());

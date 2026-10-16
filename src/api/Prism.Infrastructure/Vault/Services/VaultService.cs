@@ -145,7 +145,7 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
         var wrappedKey = VaultCrypto.Seal(passwordKey, key, associatedData);
         CryptographicOperations.ZeroMemory(passwordKey);
 
-        var document = new VaultDocument(userName, [], [], [], VaultWorkspaceRecord.Empty);
+        var document = new VaultDocument(userName, [], [], [], VaultWorkspaceRecord.Empty, []);
         var file = new VaultFile(VaultCrypto.Version, kdf, wrappedKey, Seal(key, document, associatedData));
 
         if (client.Write(userName, file, cancellationToken).IsFailure)
@@ -232,8 +232,9 @@ internal sealed class VaultService(IVaultFileClient client, IOptions<VaultOption
     }
 
     /// <summary>
-    /// RN-VERSAO-005, RN-SCRIPT-002 e RN-ABAS-006: a migração de um cofre de formato mais antigo, ao abrir, com o semáforo tomado e a senha já conferida. O
-    /// documento passa pelo <see cref="VaultMigration.Upgrade"/> (do 1 para o 2, a lista de scripts vazia; do 2 para o 3, a área de trabalho vazia), e o arquivo
+    /// RN-VERSAO-005, RN-SCRIPT-002, RN-ABAS-006 e RN-SCRIPT-011: a migração de um cofre de formato mais antigo, ao abrir, com o semáforo tomado e a senha já
+    /// conferida. O documento passa pelo <see cref="VaultMigration.Upgrade"/> (do 1 para o 2, a lista de scripts vazia; do 2 para o 3, a área de trabalho vazia;
+    /// do 3 para o 4, a lista de pastas de scripts vazia), e o arquivo
     /// é regravado no formato atual: a mesma senha, o mesmo sal e os mesmos parâmetros, e a mesma chave do cofre, embrulhada de novo e com o conteúdo cifrado de novo, porque o número do formato faz parte do dado autenticado
     /// das duas cifras (RN-COFRE-003 e 004). A gravação é a de sempre (RN-COFRE-005): atômica, e o arquivo de antes vai para o `.bak`.
     ///

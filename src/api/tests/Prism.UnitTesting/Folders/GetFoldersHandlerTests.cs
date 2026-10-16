@@ -21,7 +21,7 @@ public sealed class GetFoldersHandlerTests
         var beta = VaultFakers.CreateFolder(name: "beta");
         var alfa = VaultFakers.CreateFolder(name: "Alfa");
         var delta = VaultFakers.CreateFolder(parentID: beta.ID, name: "Delta");
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [beta, delta, alfa], [], [], VaultWorkspaceRecord.Empty)));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [beta, delta, alfa], [], [], VaultWorkspaceRecord.Empty, [])));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act
@@ -43,7 +43,7 @@ public sealed class GetFoldersHandlerTests
     public async Task Handle_ShouldBeOK_Empty()
     {
         //Arrange
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], VaultWorkspaceRecord.Empty)));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], VaultWorkspaceRecord.Empty, [])));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act
@@ -88,7 +88,7 @@ public sealed class GetFoldersHandlerTests
         //Arrange
         var factory = VaultFakers.CreateFolder(name: "Fábrica") with { ReadOnly = true, ConfirmCommands = "irreversible" };
         var line = VaultFakers.CreateFolder(parentID: factory.ID, name: "Linha 1") with { ConfirmCommands = "all" };
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [factory, line], [], [], VaultWorkspaceRecord.Empty)));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [factory, line], [], [], VaultWorkspaceRecord.Empty, [])));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act

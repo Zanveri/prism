@@ -201,7 +201,8 @@ public sealed class WorkspaceTests
 
     /// <summary>
     /// RN-VERSAO-005: o cofre do formato 2, gravado antes da área de trabalho, abre pela rota de entrada e é migrado. A área de trabalho vem vazia, o script e a
-    /// conexão continuam lá, o arquivo passa a declarar o formato 3, e o de antes fica no `.bak`, byte a byte. A primeira área de trabalho já se grava.
+    /// conexão continuam lá, o arquivo passa a declarar o formato atual (o 4, com as pastas de scripts vazias, RN-SCRIPT-011), e o de antes fica no `.bak`, byte
+    /// a byte. A primeira área de trabalho já se grava.
     /// </summary>
     [Test]
     public async Task SignIn_VaultOfFormatTwo_IsMigrated()
@@ -220,7 +221,7 @@ public sealed class WorkspaceTests
         Assert.That((await GetAsync(host)).GetProperty("tabs").GetArrayLength(), Is.Zero);
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/scripts"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/connections"))).GetArrayLength(), Is.EqualTo(1));
-        Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(3));
+        Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(4));
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.EqualTo(before));
         Assert.That((await PutAsync(host, [QueryTab("SELECT 1")], 0)).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.Not.EqualTo(before), "A gravação seguinte põe a versão migrada no .bak, como sempre.");

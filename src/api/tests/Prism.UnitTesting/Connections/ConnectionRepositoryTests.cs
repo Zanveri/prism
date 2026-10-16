@@ -26,7 +26,7 @@ public sealed class ConnectionRepositoryTests
     private bool _passwordAsked;
 
     private static VaultDocument Document(IReadOnlyList<VaultFolderRecord>? folders = null, IReadOnlyList<VaultConnectionRecord>? connections = null)
-        => new("marina.costa", folders ?? [], connections ?? [], [], VaultWorkspaceRecord.Empty);
+        => new("marina.costa", folders ?? [], connections ?? [], [], VaultWorkspaceRecord.Empty, []);
 
     private static VaultConnectionRecord ToRecord(Connection connection)
         => ConnectionRecords.ToRecord(connection);

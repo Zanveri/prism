@@ -393,8 +393,8 @@ public sealed class ScriptsTests
 
     /// <summary>
     /// RN-VERSAO-005: o cofre do formato 1, gravado antes dos scripts, abre pela rota de entrada e é migrado. A lista de scripts vem vazia, as pastas e as
-    /// conexões continuam lá, o arquivo passa a declarar o formato atual (o 3, que trouxe a área de trabalho, RN-ABAS-006: ela também vem vazia), e o de antes
-    /// fica no `.bak`, byte a byte. O primeiro script já se grava.
+    /// conexões continuam lá, o arquivo passa a declarar o formato atual (o 4, que trouxe as pastas de scripts, RN-SCRIPT-011, depois do 3, que trouxe a área de
+    /// trabalho, RN-ABAS-006: as duas também vêm vazias), e o de antes fica no `.bak`, byte a byte. O primeiro script já se grava.
     /// </summary>
     [Test]
     public async Task SignIn_VaultOfFormatOne_IsMigrated()
@@ -414,7 +414,7 @@ public sealed class ScriptsTests
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/folders"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/connections"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/workspace"))).GetProperty("tabs").GetArrayLength(), Is.Zero);
-        Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(3));
+        Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(4));
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.EqualTo(before));
         await CreateAsync(host, "Primeiro script");
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.Not.EqualTo(before), "A gravação seguinte põe a versão migrada no .bak, como sempre.");

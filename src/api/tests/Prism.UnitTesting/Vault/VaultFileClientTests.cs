@@ -579,7 +579,7 @@ public sealed partial class VaultFileClientTests : IDisposable
         Assert.Null(logEvent.Exception);
         Assert.DoesNotContain(_userName, logEvent.RenderMessage());
         Assert.DoesNotContain(_directory, logEvent.RenderMessage());
-        Assert.Contains("3", logEvent.RenderMessage());
+        Assert.Contains($"({VaultCrypto.Version + 1}) que o conhecido ({VaultCrypto.Version})", logEvent.RenderMessage());
     }
 
     /// <summary>

@@ -24,7 +24,7 @@ public sealed class ScriptRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(params VaultScriptRecord[] scripts)
-        => new("marina.costa", [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection()], scripts, VaultWorkspaceRecord.Empty);
+        => new("marina.costa", [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection()], scripts, VaultWorkspaceRecord.Empty, []);
 
     private static VaultScriptRecord ToRecord(Script script)
         => new(script.ID, script.Name, script.Sql, script.ConnectionID, script.Database, script.CreatedAt, script.UpdatedAt);

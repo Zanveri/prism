@@ -204,7 +204,7 @@ public sealed class UsersAndSessionsTests
     {
         await using var host = await ApiHost.StartAsync();
         var password = await CreateVaultWithBackupAsync(host, "marina.costa");
-        SetFormat(VaultPath(host, "marina.costa"), "4");
+        SetFormat(VaultPath(host, "marina.costa"), "5");
         var mainBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa"));
         var backupBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa") + ".bak");
 
@@ -230,7 +230,7 @@ public sealed class UsersAndSessionsTests
         await using var host = await ApiHost.StartAsync();
         var password = await CreateVaultWithBackupAsync(host, "marina.costa");
         File.Delete(VaultPath(host, "marina.costa"));
-        SetFormat(VaultPath(host, "marina.costa") + ".bak", "4");
+        SetFormat(VaultPath(host, "marina.costa") + ".bak", "5");
         var backupBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa") + ".bak");
 
         var response = await SignInAsync(host, "marina.costa", password);
@@ -246,7 +246,7 @@ public sealed class UsersAndSessionsTests
     {
         await using var host = await ApiHost.StartAsync();
         var password = await CreateVaultWithBackupAsync(host, "marina.costa");
-        SetFormat(VaultPath(host, "marina.costa"), "4");
+        SetFormat(VaultPath(host, "marina.costa"), "5");
         var mainBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa"));
         var backupBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa") + ".bak");
 
@@ -287,7 +287,7 @@ public sealed class UsersAndSessionsTests
     {
         await using var host = await ApiHost.StartAsync();
         await CreateVaultWithBackupAsync(host, "marina.costa");
-        SetFormat(VaultPath(host, "marina.costa"), "4");
+        SetFormat(VaultPath(host, "marina.costa"), "5");
         var mainBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa"));
         var backupBytes = await File.ReadAllBytesAsync(VaultPath(host, "marina.costa") + ".bak");
 

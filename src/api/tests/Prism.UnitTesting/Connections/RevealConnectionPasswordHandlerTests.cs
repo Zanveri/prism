@@ -21,7 +21,7 @@ public sealed class RevealConnectionPasswordHandlerTests
     private readonly Mock<IVaultService> _vault = new();
 
     private static VaultDocument Document(params VaultConnectionRecord[] connections)
-        => new("marina.costa", [], connections, [], VaultWorkspaceRecord.Empty);
+        => new("marina.costa", [], connections, [], VaultWorkspaceRecord.Empty, []);
 
     [Trait("RevealConnectionPasswordHandler", "RevealConnectionPasswordCommand")]
     [Fact(DisplayName = "OK senha do usuário certa revela a senha da conexão")]
