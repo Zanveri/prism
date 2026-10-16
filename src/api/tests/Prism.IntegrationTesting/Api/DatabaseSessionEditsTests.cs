@@ -130,6 +130,97 @@ public sealed class DatabaseSessionEditsTests
         await ProblemAsync(await host.Client.PostAsJsonAsync(Url(Guid.NewGuid(), "/queries/edit-target"), new { resultID }), HttpStatusCode.NotFound, "DATABASE_SESSION_NOT_FOUND");
     }
 
+    /// <summary>
+    /// RN-SQL-024 (seção 33): o resultado que o comando seguinte leva em `keep` continua se editando pelo `resultID` dele, como as abas do
+    /// script; o "Salvar" dele fecha o cursor do atual, que continua o atual. O comando sem `keep` o esquece, e as rotas da edição respondem
+    /// 409 `RESULT_CHANGED` com o texto novo. O `keep` com uma entrada que não é um identificador, ou com mais de 20, é 422 `QUERY_INVALID`
+    /// no campo, e nada vai ao banco.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfAKeptResult_FollowTheRoutesOfSection33()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var guardado = $"\"{_schema}\".\"guardado\"";
+        await host.Client.ExecuteAsync(session, $"CREATE TABLE {guardado} (id integer PRIMARY KEY, status text)");
+        await host.Client.ExecuteAsync(session, $"INSERT INTO {guardado} VALUES (1, 'aberta'), (2, 'aberta')");
+
+        var first = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {guardado}\nORDER BY 1")).GetProperty("resultID").GetGuid();
+        var current = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = "SELECT * FROM generate_series(1, 500) AS n", pageSize = 50, keep = new[] { first } }), HttpStatusCode.OK);
+        Assert.That(current.GetProperty("hasMore").GetBoolean(), Is.True);
+
+        var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.OK);
+        Assert.That(target.GetProperty("rowOperations").GetBoolean(), Is.True);
+
+        var changes = new object[] { new { kind = "update", table = 0, key = new[] { "2" }, set = new[] { new { column = 1, value = (string?)"guardada" } } } };
+        var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID = first, changes }), HttpStatusCode.OK);
+        Assert.That(preview.GetProperty("statements")[0].GetProperty("sql").GetString(), Is.EqualTo($"UPDATE {guardado} SET \"status\" = 'guardada' WHERE \"id\" = 2"));
+
+        var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID = first, changes }), HttpStatusCode.OK);
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1}"""));
+
+        // O "Salvar" fechou o cursor do atual (RN-EDIT-009), que continua o atual: o "carregar mais" não tem mais o que ler.
+        await ProblemAsync(await host.Client.PostAsync(Url(session, "/queries/next"), null), HttpStatusCode.Conflict, "NO_OPEN_CURSOR");
+
+        var invalid = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = "SELECT 1", keep = new object?[] { first, "texto" } }), HttpStatusCode.UnprocessableEntity, "QUERY_INVALID");
+        Assert.That(invalid.GetProperty("errorCodes").GetProperty("Keep").ToString(), Does.Contain("QUERY_INVALID"));
+        await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = "SELECT 1", keep = Enumerable.Range(0, 21).Select(_ => Guid.NewGuid()) }), HttpStatusCode.UnprocessableEntity, "QUERY_INVALID");
+        await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.OK);
+
+        await host.Client.ExecuteAsync(session, "SELECT 1");
+        var forgotten = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.Conflict, "RESULT_CHANGED");
+        Assert.That(forgotten.GetProperty("detail").GetString(), Is.EqualTo("O resultado não está mais guardado na sessão: outro comando foi executado nela depois dele. Execute o comando de novo para editar."));
+
+        var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {guardado} WHERE id = 2")).GetProperty("rows").ToString();
+        Assert.That(rows, Is.EqualTo("""[["2","guardada"]]"""));
+    }
+
+    /// <summary>
+    /// RN-SQL-024 (seção 33): no PostgreSQL o guardado edita a tabela que leu, pelo identificador dela. Quando o nome escrito sem esquema leva
+    /// agora a outra tabela (um `SET search_path` depois dele), o "Salvar", que confere o nome na própria sessão, dentro da transação, responde
+    /// 409 `RESULT_CHANGED` com a tabela que mudou, e nada vai para nenhuma das duas. O alvo perguntado antes da mudança vinha editável: o
+    /// catálogo do `edit-target` não vai à sessão do resultado (RN-EDIT-010), e o caminho de busca dele é outro.
+    /// </summary>
+    [Test]
+    public async Task Save_OfAKeptResult_IsRefused_WhenTheUnqualifiedNameNowLeadsToAnotherTable()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var other = $"{_schema}_b";
+        try
+        {
+            await host.Client.ExecuteAsync(session, $"CREATE SCHEMA \"{other}\"");
+            foreach (var schema in new[] { _schema, other })
+            {
+                await host.Client.ExecuteAsync(session, $"CREATE TABLE \"{schema}\".\"caminho\" (id integer PRIMARY KEY, status text)");
+                await host.Client.ExecuteAsync(session, $"INSERT INTO \"{schema}\".\"caminho\" VALUES (1, 'aberta')");
+            }
+
+            await host.Client.ExecuteAsync(session, $"SET search_path TO \"{_schema}\"");
+            var first = (await host.Client.ExecuteAsync(session, "SELECT * FROM caminho")).GetProperty("resultID").GetGuid();
+            var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.OK);
+            Assert.That(target.GetProperty("tables")[0].GetProperty("schema").GetString(), Is.EqualTo(_schema));
+            Assert.That(target.GetProperty("rowOperations").GetBoolean(), Is.True);
+
+            await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = $"SET search_path TO \"{other}\"", keep = new[] { first } }), HttpStatusCode.OK);
+
+            var changes = new object[] { new { kind = "update", table = 0, key = new[] { "1" }, set = new[] { new { column = 1, value = (string?)"mudou" } } } };
+            var refused = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID = first, changes }), HttpStatusCode.Conflict, "RESULT_CHANGED");
+            Assert.That(refused.GetProperty("detail").GetString(), Is.EqualTo("A tabela caminho mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo."));
+
+            foreach (var schema in new[] { _schema, other })
+            {
+                var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM \"{schema}\".\"caminho\"")).GetProperty("rows").ToString();
+                Assert.That(rows, Is.EqualTo("""[["1","aberta"]]"""), schema);
+            }
+        }
+        finally
+        {
+            await host.Client.ExecuteAsync(session, $"DROP SCHEMA IF EXISTS \"{other}\" CASCADE");
+            await host.Client.ExecuteAsync(session, $"DROP TABLE IF EXISTS \"{_schema}\".\"caminho\"");
+        }
+    }
+
     private async Task<Guid> StartSessionAsync(ApiHost host)
     {
         await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());

@@ -242,6 +242,24 @@ public abstract class DatabaseEditContractTests
     }
 
     /// <summary>
+    /// RN-SQL-024 (seção 33): o resultado que o comando seguinte leva em `keep`, como as abas do script, continua se editando em cada banco: o
+    /// "Salvar" dele grava pela chave, numa sessão em que outro comando já rodou, e o resultado atual continua o atual.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfAKeptResult_AreSavedAfterAnotherCommand()
+    {
+        var session = await OpenSessionAsync();
+        var page = await EditableRecordsAsync(session, "pedido");
+        var current = Value(await _service.ExecuteAsync(session, $"SELECT * FROM {Quoted("pedido")}\nORDER BY 1", null, QueryPaging.DefaultPageSize, false, [page.ResultID!.Value], CancellationToken.None)).Page!;
+
+        var applied = await _service.ApplyEditsAsync(session, page.ResultID!.Value, [new EditChange(EEditKind.Update, 0, ["1"], [new EditValue(Column(page, "status"), "guardada")])], CancellationToken.None);
+
+        Assert.That(Value(applied), Is.EqualTo(1));
+        Assert.That(await RowsAsync("pedido", "status"), Is.EqualTo(new[] { ("1", (string?)"guardada"), ("2", "aberta"), ("3", "fechada") }));
+        Assert.That(Value(await _service.GetEditTargetAsync(session, current.ResultID!.Value, null, CancellationToken.None)).RowOperations, Is.True);
+    }
+
+    /// <summary>
     /// O pedido do dono (2026-10-14): o SELECT com junção de três tabelas que lê as colunas de uma só, sem apelido. Edita-se a tabela que
     /// tem a chave inteira no resultado (menos a coluna da chave); as outras duas ficam só leitura, com o motivo. Não há linha nova nem
     /// exclusão. O "Salvar" grava pela chave da tabela da coluna.
