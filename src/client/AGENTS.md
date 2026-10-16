@@ -858,7 +858,8 @@ suas abas ao processo principal, que junta as de todas e grava.
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
   só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), na conexão em que estava e lembrando o lugar com que o
   script está gravado (o da lista de scripts, por `scriptPlace(...).saved`: a conexão e o banco, o genérico, ou nada se a conexão dele não existe mais; a aba
-  que trocou de conexão volta nela, marcada, e o Ctrl+S grava a conexão nova), a de um script excluído como consulta comum, a de consulta
+  que trocou de conexão volta nela, marcada, e o Ctrl+S grava a conexão nova; a pasta do script que a aba lembrava, `folderId`, não volta, RN-SCRIPT-010),
+  a de um script excluído como consulta comum, a de consulta
   cuja conexão foi excluída sem conexão (`NoConnectionBarView` com `reason` `restored`: "A conexão desta aba não existe mais"; aviso `restoredWithoutConnection`),
   e a de tabela cuja conexão foi excluída **não volta**, e a entrada avisa (a regra, RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; aviso
   `restoredTablesDropped`). A ativa que não voltou
@@ -906,9 +907,9 @@ suas abas ao processo principal, que junta as de todas e grava.
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
   voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
 
-## Scripts salvos (RN-SCRIPT-001 a 006)
+## Scripts salvos (RN-SCRIPT-001 a 010)
 
-Seções 23, 27 e 28 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
+Seções 23, 27, 28 e 33 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
 (`scriptsQuery`, sem o SQL: o schema recusa a lista que o traga) e lê o SQL só para abrir e para copiar, pela rota do item, pelo cache de mutações (não fica
 guardado). As regras que a tela confere antes de enviar (`saved-scripts.ts`, puro e testado) são as da API: o nome normalizado como a API o grava, de 1 a 200
 caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL de até 1 MB em bytes de UTF-8. Os textos estão em `scripts.copy.ts`.
@@ -922,6 +923,20 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   janela excluiu (404) pede o nome, como na primeira vez. O "Salvar como" faz da aba o script novo. As recusas do nome e do tamanho ficam no campo
   (`refusalProblem`); o resto vai ao aviso central. As chamadas têm o prazo das ações da pessoa. A ligação (o que vai à API, como a caixa nasce e o lugar que a
   aba guarda) é testada com os ganchos simulados (`use-script-saving.test.ts`).
+- **O campo "Pasta" ao salvar** (RN-SCRIPT-010, seção 33). O diálogo do nome do primeiro Ctrl+S e do "Salvar como" tem o campo "Pasta" depois do nome e antes
+  da caixa do genérico (a propriedade `folder` do `ScriptNameDialog`, controlada por quem chama; renomear não o tem): o `Select` com "Sem pasta" (o
+  placeholder, de valor vazio: a raiz) e as pastas com o caminho, na ordem da árvore (`scriptFolderOptions`), lidas pelo `useQuery(scriptFoldersQuery)` do
+  `useScriptSaving`. A pasta que ele traz é a do `initialSaveFolder` (`_lib/script-tree.ts`): no "Salvar como", a do script de onde a aba veio, como está na
+  lista; no Ctrl+S do script que outra janela excluiu (o 404 que pede o nome de novo), a que a aba lembra (`ScriptRef.folderId`, posto pelo `openScriptTab`
+  com a pasta do script aberto e pelo `setTabScript` com a da resposta da gravação; não vai ao cofre, a aba que voltou numa entrada nova não a sabe, e a
+  que passa para outra janela a leva, no `folderId` opcional do `tabTransferSchema`); "Sem pasta" no resto e quando a pasta não está mais na lista. O `POST`
+  leva `folderID` (nulo na raiz). A pasta que outra janela excluiu antes de gravar (404 `SCRIPT_FOLDER_NOT_FOUND`, que o `createScriptOrRefuse` devolve como
+  valor) fica no campo dela ("A pasta escolhida não existe mais.", num `FieldError` com `role="alert"`: o foco está no nome, e o alerta a anuncia), a lista
+  das pastas é lida de novo, e nada se grava. Depois disso o `Select` mostra "Sem pasta" (não acha a escolhida entre as opções), mas o valor continua o da
+  pasta excluída: o "Salvar" seguinte, e o de uma escolha que saiu da lista lida de novo sozinha, recusa no campo do mesmo jeito sem ir à API, até a pessoa
+  escolher de novo (a escolha tira o erro). O aviso do script novo numa pasta diz
+  onde ele ficou (`savedIn`: "Script X salvo em Fechamento / Mensal."); na raiz, e no Ctrl+S que grava por cima, o "Script X salvo." de sempre. Gravar por cima
+  não muda a pasta, e a árvore não abre a pasta nem tira o foco do editor.
 - **A aba de um script** tem o nome dele como título e, com mudança não salva, um ponto na faixa (desenho; o leitor de tela ouve "alterações não salvas", e o
   `title` diz o mesmo: `tabTitleOf`). Só a aba de um script tem o ponto e a pergunta: a consulta que nunca foi salva fecha como antes. O ponto acende na
   primeira tecla (`markScriptEdited`, pelo `onEdited` do editor, sem atraso; as teclas seguintes devolvem a mesma lista de abas e não redesenham nada) e é
@@ -935,13 +950,15 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
   script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
   aberta. Mover a aba para outra janela não pergunta: o texto vai com ela.
-- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a lista é `ScriptsListView`, sem estado, testada sem DOM), abaixo da árvore e recolhível
+- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a árvore é `ScriptsTreeView`, sem estado, testada sem DOM; ver também "Pastas de scripts",
+  abaixo), abaixo da árvore das conexões e recolhível
   (**lembra se ficou recolhida**, RN-NAV-012: `useScriptsCollapsed`, na chave `prism:navigator:<usuário>` ao lado do navegador escondido, `NavigatorLayout`
   com `hidden` e `scriptsCollapsed`; a loja muda só o campo pedido, e o gravado antes, só com `hidden`, vale com a seção aberta. Cada janela tem o seu
   armazém, que não ouve as outras (a janela aberta fica como está, a que abre depois começa como a última escolha): por isso o `set` grava o pedido sobre o
-  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): em ordem de
-  nome, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem, F2 renomeia, Delete exclui (com a confirmação), Shift+F10 e a tecla de menu abrem o
-  menu (Abrir; Renomear, Editar script…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do script; excluir deixa as abas com o texto, como consultas sem script.
+  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): uma árvore, com as
+  pastas de scripts e os scripts, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem o script, F2 renomeia, Delete exclui (com a confirmação),
+  Shift+F10 e a tecla de menu abrem o menu (Abrir; Renomear, Editar script…, Mover para…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do
+  script; excluir deixa as abas com o texto, como consultas sem script.
   O lugar (RN-SCRIPT-005, `scriptMenu`): o script com conexão oferece "Tornar genérico" (`PATCH` com `generic`); o genérico, "Vincular à conexão da aba" (a
   conexão e o banco da aba aberta com ele nesta janela; sem ela, ou com ela sem conexão, o item fica apagado com o motivo). Os dois passam por
   `changeScriptPlace` (`scripts.service.ts`), e as abas do script guardam o lugar novo (`setScriptPlace`, sobre `withSavedPlace`). O genérico (`connectionID`
@@ -975,6 +992,58 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
   mantém o lugar antigo (o `PATCH` sem `connectionID`). **O editor segue o banco da aba com ele montado** (a gramática, o separador de comandos, as maiúsculas e o
   completar, por compartimentos): a aba que recebe uma conexão de outro banco não recria o editor, e o texto e o desfazer ficam.
+
+## Pastas de scripts (RN-SCRIPT-007 a 010)
+
+Seção 33 da especificação. As pastas da seção Scripts são as da API `api/user/script-folders` (ver o guia da API), à parte das pastas de conexões: não têm
+cor, ambiente nem proteções. A tela tem a lista em cache (`scriptFoldersQuery`, chave `["script-folders"]`, em `_lib/script-folders.service.ts`), e cada script
+da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de uma API anterior é recusada). O que a tela decide é puro e testado, em
+`_lib/script-tree.ts`; os textos estão em `scripts.copy.ts` (`folders`).
+
+- **A árvore** (`buildScriptTree`): em cada nível as subpastas e depois os scripts, por nome, com o `byName` da árvore das conexões (o português, sem caixa
+  nem acento); a pasta ou o script cuja pasta não está na lista vai à raiz até a leitura seguinte, e as pastas em ciclo não aparecem. As chaves levam o tipo
+  (`folder:<id>`, `script:<id>`), porque uma pasta e um script podem ter o mesmo nome no mesmo lugar, e cada pasta sabe o que tem direto dentro
+  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista: as pastas começam abertas, e as fechadas são estado da `ScriptsSection`
+  (`closedFolders`), desta janela, sem gravar; a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
+  salvos") com `treeitem`s planos, cada um com o `aria-level`, a altura e o recuo da densidade (RN-NAV-011), o ícone de pasta neutro ou o do script
+  (RN-SCRIPT-006) e a marca do genérico.
+- **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
+  aberta, vai à primeira linha de dentro; a esquerda fecha a aberta e, na fechada ou no script, vai à pasta pai. Enter e o duplo clique abrem e fecham a pasta
+  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha.
+- **Os menus** (`scriptFolderMenu` e `scriptMenu`, em `saved-scripts.ts`): o botão direito no título da seção ou no espaço vazio dela (a seção tem a altura
+  do que mostra, até 40% do navegador: o espaço vazio é a faixa sob a lista e as margens das linhas, e o texto da seção vazia), e Shift+F10 ou a tecla
+  de menu no título, dão "Nova pasta" (na raiz); a pasta, "Nova subpasta", "Renomear" (F2), "Mover para…" e "Excluir" (Delete), este desabilitado na pasta que
+  tem alguma coisa dentro, com o motivo ("A pasta tem 2 subpastas e 3 scripts: mova ou exclua antes o que está dentro dela.", `folders.notEmpty`, no singular
+  e só com a parte que existe; a especificação o escreve entre parênteses, em minúscula e sem ponto, e aqui ele vale sozinho, na dica e no aviso, e vai como
+  frase, como as outras dicas e avisos), e o Delete nela dá esse mesmo aviso de erro sem perguntar; o script ganha "Mover para…" logo depois do "Editar script…".
+- **Os diálogos e as chamadas** (`useScriptFolderActions`, `_components/use-script-folder-actions.tsx`, que a `ScriptsSection` monta; as vistas sem estado
+  em `script-folder-dialogs.tsx`). "Nova pasta" e "Nova subpasta" (`ScriptFolderNameDialog`, com o lugar na descrição: "Na raiz da seção Scripts." ou
+  "Dentro de Fechamento / Mensal.") e o "Renomear" da pasta (o mesmo nome, com as mesmas maiúsculas, fecha sem gravar; mudar só as maiúsculas grava, com a
+  pasta pai que ela tem: o `PATCH` é a pasta inteira) conferem o nome antes (`scriptFolderNameProblem`: as regras da API, e o repetido entre as irmãs na
+  lista) e mostram as recusas do nome no campo (`scriptFolderRefusal`, para o `SCRIPT_FOLDER_NAME_INVALID` e o `SCRIPT_FOLDER_ALREADY_EXISTS` da API, que voltam
+  por `allowRefusal`). "Mover para…" (`MoveToFolderDialog`: "Sem pasta" e as pastas, com a de agora escolhida; a da pasta sem ela nem as subpastas dela) não
+  chama a API para o mesmo destino, e o do script manda `folderID` ou `root: true` (`moveScript`). As recusas de regra (a pasta pai ou a de destino que outra
+  janela excluiu, o nome repetido no destino, o ciclo) lançam e vão ao aviso central com o detalhe da API, o diálogo fica aberto e as duas listas são lidas
+  de novo (`afterRefusal`): o destino que saiu da lista volta a "Sem pasta" (o que o campo já mostrava; o "Mover" seguinte faz o que ele diz, em vez de
+  mandar de novo a pasta excluída), e o diálogo do item que outra janela excluiu (renomear ou mover a pasta, mover o script) fecha, porque a regra só o deixa
+  aberto pela pasta pai e pela de destino. O `PATCH` da pasta (a pasta inteira) leva o nome e a pasta pai da lista mais recente (`currentOf`), e não os de
+  quando o diálogo abriu: a janela cuja lista já foi lida de novo não desfaz o "Mover" da outra (a que ainda não leu continua na consequência aceita da
+  especificação). "Excluir" na pasta vazia pergunta (`ConfirmDialog`, no tom de perigo, "Excluir pasta"); a recusa `SCRIPT_FOLDER_NOT_EMPTY` (outra janela pôs algo
+  nela) fecha a pergunta, vai ao aviso central e as listas são lidas de novo. Os avisos de sucesso: "Pasta criada.", "Pasta renomeada.", "Pasta movida.",
+  "Script movido." e "Pasta excluída.".
+- **A linha à vista** (RN-SCRIPT-008): depois de criar, renomear ou mover uma pasta ou um script (o renomear do script também), a `ScriptsSection` lê as
+  listas de novo, abre as pastas acima dele (`ancestorKeys`, sobre a lista que acabou de chegar), abre a seção recolhida e escolhe a linha. A linha que já
+  está na página (nada acima dela a abrir, a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
+  pedido armado esperaria uma renderização qualquer depois (a primeira tecla no editor) para tirar o foco de lá. A que ainda vai aparecer fica numa
+  referência; um efeito sem dependências, depois de cada renderização, dá o foco a ela quando ela está na página e esquece a chave. Uma referência, e não um
+  estado, porque o `setState` num efeito é recusado pelo lint (renderizações em cascata).
+- **A barra de ações do navegador é da árvore das conexões** (RN-NAV-002): o nome dela diz isso ("Ações da árvore de conexões"), e nada nela age sobre a
+  seção Scripts, que tem os menus dela.
+- **Testes**: `script-tree.test.ts` (a árvore, as linhas, o teclado, o nome, o caminho, as escolhas e a pasta do diálogo do nome), `script-folders.service.test.ts`
+  (as rotas e as recusas), `scripts-section.test.ts` (a vista), `scripts-section.folders.test.ts` (a ligação, com os ganchos simulados: os menus, os
+  diálogos, o que vai à API, as recusas e a linha escolhida depois), `script-folder-dialogs.test.ts`, e, no salvar, `use-script-saving.test.ts`,
+  `script-dialogs.test.ts`, `tab-transfer.test.ts` e `workbench-state.connection.test.ts`. O que não tem teste: o foco de verdade na linha depois de criar
+  (o vitest não tem DOM; o efeito sai cedo sem `document`), e o app não foi aberto nesta mudança.
 
 ## A conexão da aba de consulta (RN-ARVORE-008)
 
@@ -1126,11 +1195,12 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
   "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
 - **Densidade** (RN-NAV-011; `_lib/navigator-density.ts`, com teste). `navigatorMetrics` tem as medidas de cada uma, com as classes escritas por inteiro
-  para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px, a linha da lista de
-  scripts de 28 px); a compacta tem linha de 22 px, recuo de 6 px e 12 por nível, botões de 20 px e a linha de script de 22 px. O texto é o 13/20 nas
+  para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px); a compacta tem linha de
+  22 px, recuo de 6 px e 12 por nível e botões de 20 px. A árvore da seção Scripts (RN-SCRIPT-008) usa a mesma linha (`rowClass`) e o mesmo recuo
+  (`rowIndent`): até a seção 33 a lista de scripts tinha a linha de 28 px na confortável (`scriptRowClass`, que saiu). O texto é o 13/20 nas
   duas, e as etiquetas (18 px) e o ponto de estado cabem (conferido sob Xvfb: as 16 linhas de uma árvore de teste e os 8 scripts à vista numa janela de
   900 px, com os três botões de ação dentro da linha). O `Navigator` lê a preferência e a passa à `NavigatorList` e a cada `NavigatorRow` (`density`;
-  sem ela, a confortável), e a `ScriptsSection` à `ScriptsListView`. A lista virtual estima a linha pela densidade e, quando ela muda (em
+  sem ela, a confortável), e a `ScriptsSection` à `ScriptsTreeView`. A lista virtual estima a linha pela densidade e, quando ela muda (em
   Configurações, com a árvore escondida por baixo, ou noutra janela, com ela à mostra: as preferências chegam pelo evento `storage`), **esquece as
   alturas medidas na outra e mede de novo as desenhadas** (`remeasureRendered`, em `_lib/row-measure.ts`, num `useLayoutEffect` que só roda na troca):
   as linhas que rolaram para fora não se medem de novo, e ficariam com a altura antiga. Só `virtualizer.measure()` não basta: a linha de erro não muda
