@@ -127,19 +127,21 @@ describe("menuFor: tabela e visão (RN-MENU-001 e RN-TABELA-001)", () => {
   it.each([
     ["tabela", table, "pedido"],
     ["visão", view, "v_pedido"],
-  ])("%s: as três vistas, Gerar SELECT e as duas cópias", (_name, node, name) => {
+  ])("%s: as três vistas, Gerar SELECT, Exportar dados… (RN-EXPORT-001, num grupo próprio) e as duas cópias", (_name, node, name) => {
     const groups = menuFor(node, idle);
 
-    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["copyName", "copyQualifiedName"]]);
+    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["exportData"], ["copyName", "copyQualifiedName"]]);
     expect(flat(groups).map((item) => item.action)).toEqual([
       { type: "openTable", view: "data" },
       { type: "openTable", view: "structure" },
       { type: "openTable", view: "diagram" },
       { type: "generateSelect" },
+      { type: "exportData" },
       { type: "copy", text: name },
       { type: "copy", text: `"vendas"."${name}"` },
     ]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
+    expect(byId(groups, "exportData")?.label).toBe("Exportar dados…");
   });
 
   it("só mostram atalho as teclas que a árvore já trata (nenhum atalho de mentira): o Enter de Abrir registros e o F2 de Renomear", () => {
@@ -186,7 +188,7 @@ describe("menuFor: tabela e visão (RN-MENU-001 e RN-TABELA-001)", () => {
 
 describe("menuFor: tabela ou visão que o menu não sabe localizar", () => {
   const wrongKey = navKey({ type: "connection", connectionId: "c1" });
-  const ids6 = ["openRecords", "openStructure", "openDiagram", "generateSelect", "copyQualifiedName"];
+  const ids6 = ["openRecords", "openStructure", "openDiagram", "generateSelect", "exportData", "copyQualifiedName"];
 
   it.each([
     ["tabela", { ...table, key: wrongKey }],
@@ -194,7 +196,7 @@ describe("menuFor: tabela ou visão que o menu não sabe localizar", () => {
   ])("%s: as ações aparecem desabilitadas, em vez de sumirem, e só o nome cru continua habilitado", (_kind, node) => {
     const groups = menuFor(node, idle);
 
-    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["copyName", "copyQualifiedName"]]);
+    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["exportData"], ["copyName", "copyQualifiedName"]]);
     expect(flat(groups).filter((item) => item.disabled).map((item) => item.id)).toEqual(ids6);
     expect(byId(groups, "copyName")?.disabled).toBeFalsy();
     expect(byId(groups, "copyName")?.action).toEqual({ type: "copy", text: node.label });

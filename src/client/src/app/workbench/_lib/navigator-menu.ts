@@ -1,5 +1,6 @@
 import { transferCopy } from "@/app/connections/_lib/transfer.copy";
 
+import { dataExportCopy } from "./data-export/data-export.copy";
 import { tableTargetOf, type NavNode } from "./navigator-model";
 import { quoteIdentifier } from "./table-sql";
 import { navigatorCopy } from "./navigator.copy";
@@ -29,6 +30,8 @@ export type MenuAction =
   | { type: "newConnection" }
   | { type: "openTable"; view: TableView }
   | { type: "generateSelect" }
+  /** RN-EXPORT-001: o assistente "Exportar dados", com a tabela (ou a visão) inteira como origem. */
+  | { type: "exportData" }
   | { type: "copy"; text: string }
   | { type: "newFolder" }
   | { type: "renameFolder" }
@@ -164,6 +167,8 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
           item("openDiagram", copy.openDiagram, { type: "openTable", view: "diagram" }, { disabled }),
         ],
         [item("generateSelect", copy.generateSelect, { type: "generateSelect" }, { disabled })],
+        // RN-EXPORT-001: num grupo próprio, depois de "Gerar SELECT" e antes de "Copiar nome".
+        [item("exportData", dataExportCopy.entry.menu, { type: "exportData" }, { disabled })],
         [copyName, item("copyQualifiedName", copy.copyQualifiedName, { type: "copy", text: qualified }, { disabled })],
       ];
     }
