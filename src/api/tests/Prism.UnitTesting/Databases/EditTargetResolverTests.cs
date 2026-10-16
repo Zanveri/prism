@@ -117,11 +117,12 @@ public sealed class EditTargetResolverTests
     }
 
     [Trait("EditTargetResolver", "Resolve")]
-    [Theory(DisplayName = "OK a visão, a tabela estrangeira e o que não é tabela ficam só leitura, com o motivo em cada coluna")]
+    [Theory(DisplayName = "OK a visão, a tabela estrangeira, o que não é tabela e a tabela a que o nome sem esquema não leva mais ficam só leitura, com o motivo em cada coluna")]
     [InlineData("view", "pedido é uma visão")]
     [InlineData("materializedView", "pedido é uma visão materializada")]
     [InlineData("foreign", "pedido é uma tabela estrangeira")]
     [InlineData("other", "pedido não é uma tabela")]
+    [InlineData(EditCatalogTable.Elsewhere, "pedido, escrita sem esquema, leva agora a outra tabela na sessão")]
     public void Resolve_ShouldKeepWhatIsNotATableReadOnly(string kind, string reason)
     {
         //Act

@@ -177,6 +177,35 @@ public sealed class ExecuteQueryHandlerTests
         _databaseSessionService.VerifyNoOtherCalls();
     }
 
+    /// <summary>
+    /// RN-SQL-024: os `resultID` de `keep` vão ao registro de sessões, o repetido uma vez só; `keep` nulo, ausente ou vazio é a lista vazia, que
+    /// esquece os guardados.
+    /// </summary>
+    [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
+    [Fact(DisplayName = "OK envia os resultados de keep, sem repetir, e nenhum com keep nulo ou vazio")]
+    public async Task Handle_ShouldSendTheKeptResults()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var sessionID = Guid.CreateVersion7();
+        var (first, second) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        IReadOnlyCollection<Guid>? sent = null;
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, It.Is<IReadOnlyCollection<Guid>>(keep => keep.Count > 0), cancellationToken))
+            .Callback((Guid _, string _, string? _, int _, bool _, IReadOnlyCollection<Guid> keep, CancellationToken _) => sent = keep)
+            .ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        _databaseSessionService.Setup(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken)).ReturnsAsync(Result.Success<QueryOutcome, DatabaseFailure>(new QueryOutcome(null, 0, 1)));
+        var handler = new ExecuteQueryHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Keep = JsonSerializer.SerializeToElement(new[] { first, second, first }) }, cancellationToken);
+        await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Keep = JsonSerializer.SerializeToElement<object?>(null) }, cancellationToken);
+        await handler.Handle(new ExecuteQueryCommand { SessionID = sessionID, Sql = Sql, Keep = JsonSerializer.SerializeToElement(Array.Empty<Guid>()) }, cancellationToken);
+
+        //Assert
+        Assert.Equal([first, second], sent);
+        _databaseSessionService.Verify(s => s.ExecuteAsync(sessionID, Sql, null, QueryPaging.DefaultPageSize, false, NoKeep, cancellationToken), Times.Exactly(2));
+    }
+
     /// <summary>RN-GRADE-011: com filtro, o registro de sessões recebe o comando e o filtro como vieram, e a página diz como ele entrou.</summary>
     [Trait("ExecuteQueryHandler", "ExecuteQueryCommand")]
     [Fact(DisplayName = "OK com filtro envia o comando e o filtro, e a página diz como o filtro entrou")]
