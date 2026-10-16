@@ -379,9 +379,10 @@ internal static class EditableSql
     /// O texto fora de comentário, pedaço por pedaço: a palavra (com `$` no meio, como os três bancos aceitam num nome), o identificador
     /// entre aspas (com o conteúdo, a aspa dobrada desfeita), o texto (em qualquer forma: `'...'`, `E'...'`, `X'...'`, `U&amp;'...'` e o
     /// `$marca$` do PostgreSQL) e cada outro caractere que não é espaço, com a posição de cada um no texto. É também o leitor do filtro
-    /// do resultado (<see cref="SqlFilter"/>), que junta o filtro ao comando pelas posições.
+    /// do resultado (<see cref="SqlFilter"/>), que junta o filtro ao comando pelas posições, e o da leitura do somente leitura (<see cref="ReadOnlySql"/>).
     /// </summary>
-    internal static IEnumerable<Token> Lex(string sql, ESqlDialect dialect)
+    /// <param name="asTheDriver">O comentário de bloco como o driver da IBM o lê, e não como o banco (<see cref="SqlText.SkipComment"/>): no Db2 as duas leituras divergem.</param>
+    internal static IEnumerable<Token> Lex(string sql, ESqlDialect dialect, bool asTheDriver = false)
     {
         var position = 0;
 
@@ -394,7 +395,7 @@ internal static class EditableSql
                 continue;
             }
 
-            if (SqlText.SkipComment(sql, position, dialect) is var afterComment && afterComment > position)
+            if (SqlText.SkipComment(sql, position, dialect, asTheDriver) is var afterComment && afterComment > position)
             {
                 position = afterComment;
                 continue;

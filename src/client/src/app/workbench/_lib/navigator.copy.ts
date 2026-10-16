@@ -1,3 +1,5 @@
+import { formatCount } from "@/lib/utils/format";
+
 /**
  * Os textos que o navegador ganhou quando as telas de Conexões e de Drivers passaram para a área de trabalho (seção 20 da especificação,
  * RN-NAV-001 a 008). Os que ele já tinha continuam em `workbench.copy.ts`.
@@ -52,6 +54,20 @@ export const navigatorCopy = {
     clear: "Limpar o filtro de ambiente",
     nothingIn: (environment: string) => `Nenhuma conexão em ${environment}.`,
     nothingWithout: "Nenhuma conexão sem ambiente.",
+  },
+
+  // RN-NAV-013: "Só as conectadas", o botão de alternar ao lado do seletor de ambiente, que diz quantas conexões estão conectadas, ligado ou não. O nome
+  // acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas"); o estado é o `aria-pressed`, e a dica diz o que o clique faz agora.
+  connectedFilter: {
+    label: "Só as conectadas",
+    count: (count: number) => (count === 0 ? "Nenhuma conectada" : formatCount(count, "conectada", "conectadas")),
+    showOnly: "Mostrar só as conexões conectadas, com as pastas no caminho até elas",
+    showAll: "Mostrar todas as conexões",
+    nothing: "Nenhuma conexão conectada.",
+    nothingIn: (environment: string) => `Nenhuma conexão conectada em ${environment}.`,
+    nothingWithout: "Nenhuma conexão conectada sem ambiente.",
+    // O que desliga o filtro na árvore vazia.
+    clear: "Mostrar todas",
   },
 
   // RN-NAV-003: os itens do menu de contexto que vieram da tela de Conexões.

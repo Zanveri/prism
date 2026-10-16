@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { canClose, closesFromBackdrop } from "./dialog";
+import { canClose, closesFromBackdrop, describedByOf } from "./dialog";
 
 describe("canClose: o que fecha um diálogo por fora (Esc, clique fora e o X)", () => {
   it("fecha, por padrão", () => {
@@ -14,6 +14,17 @@ describe("canClose: o que fecha um diálogo por fora (Esc, clique fora e o X)", 
   it("o diálogo que só se resolve por um botão dele (o de reinício dos drivers) não fecha por fora", () => {
     expect(canClose({ pending: false, dismissible: false })).toBe(false);
     expect(canClose({ pending: true, dismissible: false })).toBe(false);
+  });
+
+  it("o que se fecha só pelo Esc (a pergunta de erro do script, em que o Esc é “Parar”): o Esc fecha, e o clique fora e o X, não", () => {
+    expect(canClose({ pending: false, dismissible: "escape" }, "escape")).toBe(true);
+    expect(canClose({ pending: false, dismissible: "escape" }, "backdrop")).toBe(false);
+    expect(canClose({ pending: false, dismissible: "escape" }, "button")).toBe(false);
+    expect(canClose({ pending: true, dismissible: "escape" }, "escape")).toBe(false);
+  });
+
+  it("o padrão fecha pelos três", () => {
+    for (const via of ["escape", "backdrop", "button"] as const) expect(canClose({ pending: false, dismissible: true }, via)).toBe(true);
   });
 });
 
@@ -39,5 +50,22 @@ describe("closesFromBackdrop: o clique no fundo escurecido", () => {
   it("e continua valendo o que `canClose` diz: a ação rodando e o diálogo que só se resolve por um botão não fecham por fora", () => {
     expect(closesFromBackdrop(click(0), { pending: true, dismissible: true })).toBe(false);
     expect(closesFromBackdrop(click(0), { pending: false, dismissible: false })).toBe(false);
+  });
+
+  it("o que se fecha só pelo Esc não fecha pelo fundo: um clique fora sem querer não para o script calado (RN-SQL-021)", () => {
+    expect(closesFromBackdrop(click(0), { pending: false, dismissible: "escape" })).toBe(false);
+  });
+});
+
+describe("describedByOf: o que o leitor de tela ouve com o título (o aria-describedby do painel)", () => {
+  it("a descrição do cabeçalho, quando há, e o que o corpo aponta (o aviso de confirmação, RN-PROT-001), nessa ordem", () => {
+    expect(describedByOf(":r2:", undefined)).toBe(":r2:");
+    expect(describedByOf(null, ":r1:-faz :r1:-comando")).toBe(":r1:-faz :r1:-comando");
+    expect(describedByOf(":r2:", ":r1:-resumo")).toBe(":r2: :r1:-resumo");
+  });
+
+  it("sem nenhum dos dois, não há aria-describedby", () => {
+    expect(describedByOf(null, undefined)).toBeUndefined();
+    expect(describedByOf(null, "")).toBeUndefined();
   });
 });

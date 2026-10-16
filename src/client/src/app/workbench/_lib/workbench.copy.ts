@@ -1,5 +1,8 @@
 import { formatCount, formatElapsed } from "@/lib/utils/format";
 
+/** A frase com a primeira letra em minúscula, para entrar no meio de outra ("Somente leitura" vira "somente leitura"). */
+const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+
 /** Os textos da área de trabalho, num lugar só (RN-AVISO-002 a 005, RN-SESSAO-005, RN-ARVORE-003, RN-SQL-004 a 009). */
 export const workbenchCopy = {
   navigator: {
@@ -124,7 +127,10 @@ export const workbenchCopy = {
     connection: {
       // O nome acessível começa pelo que o botão mostra (a sigla, o nome e o ambiente, na ordem da tela), e diz depois o que ele é: quem usa comando de voz
       // diz o que vê, e o leitor de tela ouve o ambiente, que é o aviso da conexão.
-      label: (engine: string, name: string, environment: string | null) => `${engine} ${name}${environment === null ? "" : ` ${environment}`}, conexão desta aba`,
+      // RN-PROT-002: a dica do cadeado vai no nome acessível, depois do ambiente ("Somente leitura, herdado da pasta Fábrica"). RN-VERIF-003: o indicador
+      // da verificação vai depois dele, como na tela, em que o ponto fica na ponta, como na árvore ("…, respondeu na última verificação").
+      label: (engine: string, name: string, environment: string | null, readOnly: string | null = null, check: string | null = null) =>
+        `${engine} ${name}${environment === null ? "" : ` ${environment}`}${readOnly === null ? "" : `, ${lowerFirst(readOnly)}`}${check === null ? "" : `, ${lowerFirst(check)}`}, conexão desta aba`,
       none: "Sem conexão",
       noneLabel: "Sem conexão, escolher a conexão desta aba",
       // A lista de conexões ainda não chegou.
@@ -154,7 +160,8 @@ export const workbenchCopy = {
     label: "Resultado da consulta",
     title: "Resultado",
     empty: "Nenhum comando executado nesta aba.",
-    emptyHint: "Ctrl+Enter executa o texto selecionado ou, sem seleção, o comando onde está o cursor.",
+    // RN-SQL-001 e 019: os dois jeitos de executar; `script` é o atalho do script na plataforma (Alt+X, ou Cmd+Option+X no macOS).
+    emptyHint: (script: string) => `Ctrl+Enter executa o texto selecionado ou, sem seleção, o comando onde está o cursor. ${script} executa os comandos da seleção ou do texto inteiro, um depois do outro.`,
     running: "Executando…",
     grid: "Linhas do resultado",
     rowNumber: "#",
@@ -165,8 +172,9 @@ export const workbenchCopy = {
     // RN-SQL-013: o comando gravou, foi até o fim e devolveu `total` linhas; a tela recebeu as primeiras.
     returnedRows: (received: number, total: number, elapsedMs: number) =>
       `${received < total ? `${received.toLocaleString("pt-BR")} de ` : ""}${formatCount(total, "linha devolvida", "linhas devolvidas")} · comando concluído · ${formatElapsed(elapsedMs)}`,
-    // RN-SQL-001: uma execução leva um comando só.
-    tooManyStatements: (count: number) => `A seleção tem ${count.toLocaleString("pt-BR")} comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele.`,
+    // RN-SQL-001: uma execução leva um comando só; quem executa vários é o script (RN-SQL-019).
+    tooManyStatements: (count: number, script: string) =>
+      `A seleção tem ${count.toLocaleString("pt-BR")} comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${script}).`,
     // RN-SQL-008. Há comando (DDL) para o qual o banco não conta linhas, e o driver responde um número negativo.
     affected: (count: number, elapsedMs: number) => `${count < 0 ? "Comando executado" : formatCount(count, "linha afetada", "linhas afetadas")} · ${formatElapsed(elapsedMs)}`,
     loadedHint: (count: number) => `Linhas 1 a ${count.toLocaleString("pt-BR")} carregadas. As próximas linhas e o total só são buscados quando você pedir.`,
@@ -308,6 +316,8 @@ export const workbenchCopy = {
     // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
     place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
+    // RN-PROT-002: a conexão da aba é somente leitura (a dica diz de onde vem).
+    readOnly: "Somente leitura",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,
   },
 
@@ -320,8 +330,8 @@ export const workbenchCopy = {
     commandExecuted: (rowsAffected: number) => (rowsAffected < 0 ? "Comando executado." : `Comando executado. ${formatCount(rowsAffected, "linha afetada", "linhas afetadas")}.`),
     // RN-AVISO-002 e RN-SQL-013: comando que grava e devolve linhas, já confirmado no banco.
     commandCompleted: (totalRows: number) => `Comando executado. ${formatCount(totalRows, "linha devolvida", "linhas devolvidas")}.`,
-    // RN-AVISO-003 e RN-SQL-001: a seleção tem mais de um comando, e nada foi enviado.
-    tooManyStatements: "A seleção tem mais de um comando. Nada foi executado.",
+    // RN-AVISO-003 e RN-SQL-001: a seleção tem mais de um comando, e nada foi enviado; o script executa todos (RN-SQL-019).
+    tooManyStatements: (script: string) => `A seleção tem mais de um comando. Nada foi executado: para executar todos, use Executar script (${script}).`,
     // Ctrl+Enter sem comando no cursor nem na seleção (só espaços, `;` e comentários).
     nothingToSend: "Não há comando para executar.",
     // O mesmo texto do aviso central para o que não é recusa da API: o que a rede de segurança da aba pegou.

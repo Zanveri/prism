@@ -6,6 +6,7 @@ import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connectio
 import { TopBar } from "@/components/layout/top-bar";
 import { vaultLock } from "@/lib/api/vault-lock";
 
+import { ConnectionCheckLabel } from "./_components/connection-check";
 import { FirstUse } from "./_components/first-use";
 import { Navigator } from "./_components/navigator";
 import { NavigatorToggle } from "./_components/navigator-toggle";
@@ -203,6 +204,7 @@ export function WorkbenchPage() {
             setDialog(null);
             connectionReveal.request(saved.id);
           }}
+          checkIndicator={dialogRequest.mode === "edit" ? <ConnectionCheckLabel connectionId={dialogRequest.connection.id} /> : undefined}
         />
       )}
     </div>

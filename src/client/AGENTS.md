@@ -106,10 +106,11 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
-  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `workspace` (ver "Abas que voltam na
+  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
+  periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
   próxima entrada") e `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
+  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
@@ -288,7 +289,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `SQL_EXECUTION_FAILED` de uma execução vira o aviso curto "O comando falhou. Veja o erro no resultado." e a mensagem do
   banco, com o SQLSTATE, fica na área de resultado (RN-AVISO-005); o `TRANSACTION_CONTROL_NOT_SUPPORTED` (`BEGIN`,
   `COMMIT` e afins, RN-SQL-003) tem o mesmo aviso, com a frase da API (`title` e `detail`) na área de resultado, ou,
-  havendo linhas na tela (que ficam), a frase da API vai no próprio aviso. Depois de "Cancelar", o comando que terminou por
+  havendo linhas na tela (que ficam), a frase da API vai no próprio aviso; a recusa do somente leitura (`CONNECTION_READ_ONLY`, RN-PROT-002)
+  é tratada do mesmo jeito (ver "Proteções da conexão e da pasta"). Depois de "Cancelar", o comando que terminou por
   causa disso é "Comando cancelado." (ver "Uma coisa por vez"), e **não** gera o aviso de falha.
 - **Avisos dos scripts** (`scripts.copy.ts`): gravar por cima um script com o SQL grande demais vira o aviso de erro com a frase da tela, porque não há
   diálogo aberto para mostrá-lo (a tela confere o tamanho antes de enviar, e o `SCRIPT_TOO_LARGE` da API só chega se as duas contas divergirem); salvar, renomear
@@ -390,9 +392,51 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `icon-color.test.ts` confere que são as fichas do `globals.css`), e senão a mistura com o preto (claros) ou o branco (escuros) com a menor
   parte, de 1 em 1%, que passa. As seis do canvas são claras: nos escuros ficam como são, e nos claros escurecem (o Âmbar dá 1,7:1 sobre o
   fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa.
-- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente e a cor inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
-  diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela). As recusas do ambiente e da cor da
-  pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`, `environmentColor`, `color`), que o diálogo já mostra no lugar.
+- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente, a cor e as proteções inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
+  diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela, voltariam a confirmação a "Não" e tirariam
+  o somente leitura, com a API pedindo a senha). As recusas do ambiente e da cor da pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`,
+  `environmentColor`, `color`), que o diálogo já mostra no lugar.
+- **O `PATCH` da conexão também grava a conexão por inteiro** (seção 32): as proteções próprias (`confirmCommands`, `readOnly`) e a verificação
+  (`verificationEnabled`, `verificationInterval`, `verificationQuery`) vão sempre. Renomear e mover mandam as da conexão (`movedConnectionInput`, que
+  o `renamedConnectionInput` usa, com o `verificationOf`); o formulário manda as proteções pelos campos escondidos da seção Proteções e a verificação
+  pelo painel "Sessão da conexão" (abaixo), que nasce com a gravada (na nova, o `newVerification`). As herdadas (`protections`) nunca vão: elas
+  mudam com a pasta. O `connectionSchema` e o `folderSchema` exigem os campos: a resposta sem eles, ou com uma confirmação que a tela não conhece, é
+  recusada, em vez de o PATCH seguinte gravar a proteção mais fraca sem ninguém pedir (o `none` da API vale nulo, "Não"). Os testes dos corpos
+  (`folder-input`, `move-connection`, `rename-connection`, `rename-folder`) conferem que renomear e mover levam as proteções e a verificação, e os dos
+  diálogos, com os ganchos simulados (`connection-dialog.save`, `folder-dialog.save`, `move-connection-dialog`, `rename-connection-dialog`,
+  `rename-folder-dialog.save`), o `PATCH` que cada um manda de fato, por inteiro, e quando a senha é pedida. **Quem passar a gravar uma conexão ou uma
+  pasta por outro caminho** (o arrastar na árvore, que a especificação cita e a árvore ainda não tem, ou um atalho que troque só a cor) monta o corpo
+  pelo `movedConnectionInput` ou pelo `folderInputOf` e trata o `USER_PASSWORD_REQUIRED` pelo `passwordAsked`, como o "Mover".
+- **O painel "Sessão da conexão"** (`session-section.tsx`, RN-VERIF-001), só no formulário da conexão, logo depois dos campos e antes do Ambiente: a
+  ordem de leitura do canvas (`Conexoes.dc.html`), que põe a sessão embaixo dos campos, na coluna da esquerda, e o Ambiente e as Proteções na da direita.
+  "Verificar a cada [N] segundos" é estado do diálogo (`verifying`) e vai pelo campo escondido `verificationEnabled`, como o somente leitura; o intervalo
+  (`verificationInterval`, de 5 a 3.600, com a frase da API) e a "Consulta de verificação" (`verificationQuery`, um `<textarea>`, aparada, até 1.000
+  caracteres e nula em branco) são campos não controlados do `FormData`, no `connectionFields`. O intervalo não se desabilita com a caixa desmarcada:
+  desabilitado, ele sairia do `FormData`. A dica da consulta é a do banco escolhido (`engineOptions[].verificationQuery`, as `PingSql` da API), e que ela
+  seja uma leitura só quem diz é a API: a recusa (`CONNECTION_INVALID` no `verificationQuery`, com o motivo) vai ao campo, com o foco, como as outras; o
+  `readForm` serve a gravar e a testar, então o "Testar conexão" leva a consulta digitada (RN-CONN-013), e não a gravada. À direita da linha da caixa vai o
+  indicador da última verificação da conexão aberta, como no canvas (`checkIndicator`, que a página da área de trabalho passa: o `ConnectionCheckLabel`,
+  ver "Verificação periódica e Só as conectadas"). O "Encerrar a conexão após N minutos sem uso" do canvas não é desenhado: o encerramento por ociosidade
+  continua fora (seção 13), e o teste confere que ele não aparece.
+- **A seção Proteções** (`protections-section.tsx`, RN-PROT-001 a 004), a mesma no formulário da conexão e nos diálogos de nova pasta e de "Editar
+  pasta…", depois da seção Ambiente (o "Mover" não a mostra), como no canvas, com a escolha de três no lugar da caixa: "Confirmar antes de executar"
+  ("Não", "Só comandos irreversíveis", "Todos os comandos", rádios) e "Somente leitura" (caixa, com o cadeado). As escolhas PRÓPRIAS são estado do
+  diálogo e vão por dois campos escondidos (`confirmCommands`: `none`, `irreversible` ou `all`; `readOnly`: `true` ou `false`), e os controles
+  mostram o que vale. **A herdada não se afrouxa**: `inheritedProtections(folders, pasta)` (`_lib/protections.ts`, pura e testada) diz o que a pasta
+  impõe a quem está dentro dela, pelo `protections` que a API devolve de cada pasta (as dela e as de cima, com a origem); na conexão é a pasta
+  escolhida no campo (antes de gravar, como o ambiente herdado), na pasta é a pasta pai. O somente leitura herdado fica marcado e desabilitado, as
+  escolhas abaixo da confirmação herdada ficam desabilitadas, e as duas dizem "Herdado da pasta X" e por que não se afrouxa ali. A herdada não vira
+  própria: o campo escondido continua com a própria, e sair da pasta tira a proteção junto.
+- **A senha do somente leitura** (RN-PROT-003, `user-password-dialog.tsx`, no molde do de revelar a senha): marcar ou desmarcar "Somente leitura"
+  numa conexão ou numa pasta que já existe abre "Confirme a sua senha" ao salvar (`readOnlyChange`), com o que muda ("Desmarcar “Somente leitura” de
+  MES Produção") e o aviso de que cinco senhas erradas seguidas fecham o cofre, e o mesmo `PATCH` vai com `userPassword` (`updateConnection` e
+  `updateFolder` só põem a chave quando ela veio). O 422 `USER_PASSWORD_REQUIRED` que a tela não previu (mover a conexão, ou a pasta acima dela,
+  para fora de uma pasta somente leitura: pelo formulário, pelo "Mover" da conexão ou pelo "Mover" da pasta; a árvore não se arrasta) abre o mesmo diálogo (`passwordAsked`)
+  e grava de novo; o Renomear não pede, e a recusa que chegasse nele iria ao aviso central. No diálogo, a senha errada (`INVALID_PASSWORD`) e a que
+  faltou ficam no campo, que volta vazio; o 401 `VAULT_LOCKED` do quinto erro dá o aviso de atenção na `onSuccess` da própria mutação, e o
+  `VaultGuard` leva ao login; o resto volta a quem abriu (`onDone`: o 422 dos campos vai a eles; `null` quando a falha já foi ao aviso central). A
+  senha não fica guardada (`gcTime: 0` e `reset`). Não há transação aberta a avisar: a tela ainda não tem o Commit manual (RN-TX-001). O diálogo
+  fica fora do `<form>` de quem o abre, como o de revelar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
 - **`?connection=<id>`** (o "Editar conexão" do navegador de bancos): a página abre aquela conexão no formulário ao chegar,
@@ -444,7 +488,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   sessão: sem isso, o comando que rodava receberia `DATABASE_SESSION_NOT_FOUND` e abriria outra sessão, que ficaria órfã.
 - **As chamadas da aba passam pelo cache de mutações** (`throughMutationCache`, sem hook): a recusa que a aba não trata no
   lugar lança e chega ao aviso central, como em qualquer `mutationFn`. As que ela trata (`SQL_EXECUTION_FAILED`,
-  `TRANSACTION_CONTROL_NOT_SUPPORTED`, `NO_OPEN_CURSOR`, `DATABASE_SESSION_NOT_FOUND`) voltam como valor por `allowRefusal`.
+  `TRANSACTION_CONTROL_NOT_SUPPORTED`, `CONNECTION_READ_ONLY`, `NO_OPEN_CURSOR`, `DATABASE_SESSION_NOT_FOUND`) voltam como valor por `allowRefusal`.
   **Um `MutationObserver` usado fora de hook tem de ser solto** (`observer.reset()` num `finally`): `mutate()` prende o
   observador à mutação, e presa ela nunca sai do cache, nem com `gcTime: 0`. Cada execução ficaria guardada com as linhas
   da resposta e o SQL até o cofre fechar. Há teste do cache vazio depois de cada tipo de chamada.
@@ -497,7 +541,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   leva um comando só (RN-SQL-001): quem confere é o `run`, com `statementCount`, e a seleção com mais de um não é enviada
   (aviso de atenção; e o estado `notice`, quando não há linhas na tela). Trecho só com comentários não é comando. O botão
   pergunta "há o que enviar?" a cada tecla com `hasStatement`, que para no primeiro caractere de comando: não separe os
-  comandos a cada tecla. Ctrl+Enter é registrado com `Prec.highest`, porque o mapa padrão do CodeMirror usa a mesma tecla
+  comandos a cada tecla. O "Executar script" (Alt+X), que manda vários, é outro caminho: ver "Executar script", mais abaixo. Ctrl+Enter é registrado com `Prec.highest`, porque o mapa padrão do CodeMirror usa a mesma tecla
   para abrir uma linha.
 - **O separador conhece o banco da aba** (RN-SQL-002): o editor manda o banco junto do texto (`RunTarget.engine`). No
   PostgreSQL o comentário de bloco aceita outro dentro dele e existe o bloco `$tag$`; no Db2 e no Informix o primeiro `*/`
@@ -505,8 +549,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   PostgreSQL.
 - **A linha em branco separa o comando do cursor** (RN-SQL-018, issue #7; `blankLineCuts` em `sql-statements.ts`, testes em
   `sql-statements.blank-line.test.ts`). Com a preferência ligada (o padrão), sem seleção, a linha em branco (só espaços) também termina o
-  comando, como o "Smart" do DBeaver. A regra é **"na dúvida, não separa"**: o Prism ainda não confirma comando irreversível, e separar onde
-  não devia executa a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`), enquanto não separar só faz o banco
+  comando, como o "Smart" do DBeaver. A regra é **"na dúvida, não separa"**: só a conexão que pede confirma o comando irreversível (RN-PROT-001), e
+  separar onde não devia executa a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`), enquanto não separar só faz o banco
   recusar o texto inteiro. Separa só quando as duas condições valem: o pedaço logo depois da linha em branco começa um comando
   (`startsCommand`: `commandWords`, mais os casos que olham a palavra seguinte, `WITH` com `nome [ ( … ) ] AS (` em `opensQueries`, `ALTER`
   e `DROP` com o tipo do objeto em `objectKinds`, `COMMENT ON`, `LOCK TABLE`, `REFRESH MATERIALIZED|TABLE` e `DO` com o corpo) e o comando
@@ -574,7 +618,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   (`1,3 s`), em minutos e segundos até uma hora (`1 min 10 s`) e em horas e minutos daí em diante (`2 h 5 min`); a unidade é a do valor já
   arredondado, e o que não é um tempo (não finito, ou negativo) sai como um traço.
 - **"Conectada" tem uma definição só**, `isConnected` (`workbench-model.ts`): a árvore abriu a sessão da conexão, ou
-  alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status.
+  alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status. As listas das conectadas
+  (`connectedConnectionIds`: a conta e o "Só as conectadas" do navegador, a lista do botão da conexão da aba e o script genérico) tiram dela a que a
+  verificação periódica achou sem sessão na API (`notConnectedIds`, o "Sem sessão aberta"; ver "Verificação periódica e Só as conectadas").
 - **Aba à vista (RN-SEG-001): só ela fala com o banco.** `visible` é "a aba é a ativa E a área de trabalho é a tela mostrada"
   (`selected && useWorkbenchOnScreen()`, em `workbench-tabs.tsx`; o `useWorkbenchOnScreen` usa a regra do `WorkbenchSlot`: a rota é
   `/workbench`). Chega ao `TableTabPanel` e dali à vista Registros (`needsFirstRun(estado, { engine, visible, disconnected })`: a primeira
@@ -687,7 +733,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   coluna caberem inteiros).
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
   na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
-  seção 9 da especificação, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
+  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -778,6 +824,8 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 - **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele (na última janela, só a da grade, RN-ABAS-007); cancelar uma
   pergunta deixa a janela aberta; quando a última aba fechou, `releaseWindow` espera os fechamentos de sessão a caminho e fecha as sessões da
   árvore DESTA janela, e só então a janela fecha. Com o cofre bloqueado fecha direto (a API já fechou as sessões).
+- **A vez da verificação periódica** (RN-VERIF-002): o centro das janelas também diz qual janela verifica cada conexão conectada em mais de uma, e repassa
+  a resposta às outras (`claimVerification`, `finishVerification`); ver "Verificação periódica e Só as conectadas".
 - **O cofre é um só** (RN-ABAS-004). O que uma janela conta às outras (`prism:session-share`, `peerEventSchema`: `activity`, `lock`, `unlock`,
   `signOut`, `signIn`, só o tipo) o centro repassa a todas as outras, também às que estão no login, e cada uma decide com `peerAction`
   (`app/_lib/peer-session.ts`, puro e testado). A atividade vai no máximo uma vez por segundo (`shouldShareActivity`), e a cada conferência
@@ -921,7 +969,7 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   salvo que a aba guarda). Se a conexão não existe mais, a aba abre **sem conexão** (`connectionId` nulo), com aviso: o texto já está no editor, a faixa acima
   dele (`NoConnectionBarView`) pede uma conexão, e "Usar esta conexão" passa pelo mesmo `switchConnection` do botão da conexão (ver "A conexão da aba de
   consulta"): a aba ganha um executor novo, na conexão escolhida e no banco dela. **O script genérico** (RN-SCRIPT-005) abre na única conexão conectada
-  (`scriptPlace` recebe as conectadas deste instante: `connectedConnectionIds` sobre o cache das sessões da árvore e as abas); com mais de uma, ou nenhuma, abre
+  (`scriptPlace` recebe as conectadas deste instante: `connectedConnectionIds` sobre o cache das sessões da árvore, as abas e a foto da verificação); com mais de uma, ou nenhuma, abre
   sem conexão, sem aviso, e a faixa pergunta com a frase dele. A frase da faixa vem do `reason` (`scriptMissing`, `generic`, `restored`), e as opções dela
   vêm na ordem da lista do botão da conexão (`connectionChoices`: as conectadas primeiro, com o caminho de pastas e a marca "conectada"); nada vem escolhido. Sem conexão o executor não abre sessão nem chama a
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
@@ -955,8 +1003,9 @@ aparece, seção 9), e deixa trocá-la.
 - **O que a lista mostra** (`connectionChoices`, `_lib/tab-connection.ts`, puro e testado): as conectadas primeiro, num grupo com título ("Conectadas" e
   "Desconectadas", só quando há alguma conectada), e em cada grupo por nome (`Intl.Collator` do pt-BR, sem caixa nem acento, com os números pela grandeza); cada
   conexão com a sigla, o nome, o ambiente e o caminho de pastas (`folderPathOf`, "Sem pasta" na raiz), e a da aba marcada (`aria-selected` e o visto). A busca
-  acha o pedaço no nome, no caminho e no `host`. "Conectada" é a de sempre (`isConnected`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
-  sessões da árvore com `enabled: false`, que nunca abrem sessão, e as abas): só a lista aberta o usa. No fim, "Mostrar no navegador" pede ao navegador a
+  acha o pedaço no nome, no caminho e no `host`. "Conectada" é a das listas (`connectedConnectionIds`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
+  sessões da árvore com `enabled: false`, que nunca abrem sessão, as abas e as que a verificação achou sem sessão, `useNotConnectedIds`, numa chave de texto
+  que só muda com elas): só a lista aberta e a faixa da aba sem conexão o usam. No fim, "Mostrar no navegador" pede ao navegador a
   conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela, a escolhe, lhe dá o foco e aparece se estava escondido.
 - **A troca** (`switchConnection` no provedor, sobre `withConnection`, puro e testado; substitui o antigo `assignConnection`): passa pela pergunta das alterações
   não salvas da grade (o `guard` da edição, como a troca do banco), e então a aba ganha um executor novo na conexão escolhida, no banco padrão dela; o de antes
@@ -1548,6 +1597,255 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   pasta do `postgres` (`/var/lib/postgresql/<nome>`), com porta e soquete próprios, e sai no fim. Encerre só os PID que você iniciou: um `pkill -f` com o
   caminho da árvore mata também o shell que o roda, e outra frente pode ter um Xvfb e um `pnpm dev` de pé ao lado.
 
+## Executar script (RN-SQL-019 a 022)
+
+Seção 31 da especificação, pedido do dono em 2026-10-15 ("igual a do dbeaver do alt + x"): os comandos do editor um depois do outro, uma aba por
+resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando é um `POST …/queries`, como no Ctrl+Enter.
+
+- **Onde mora cada parte.** `_lib/script-run.ts` (puro, com teste): o atalho (`scriptShortcut`, `scriptShortcutLabel`, e `platformScriptShortcut`
+  para os textos que o ensinam), o estado do script (`ScriptRun`, `ScriptEntry`, as funções que o mudam, `entryAt` e `entriesOf`), os totais, as
+  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas e o aviso do fim; os textos em
+  `script-run.copy.ts` (não confundir com `scripts.copy.ts`, que é o dos scripts salvos). A divisão é `scriptStatements` em `sql-statements.ts`; o
+  executor é o `runScript` de `use-query-runner.ts`; a tela é `script-tabs.tsx` (as abas, a nota da aba guardada e a marca da faixa de abas,
+  `ScriptWaitingMark`), `script-statistics.tsx` (com `useCoalescedRun`), `script-error-dialog.tsx`, a marca do editor (`_lib/script-mark.ts`) e as
+  propriedades `tabs`, `progress`, `statistics` e `kept` do `ResultPanel` (o `kept` é `{ busy, onRunAlone }`: quem desenha a nota é a área, que tem o
+  resgate do foco).
+- **O atalho é Alt+X, e no macOS Cmd+Option+X.** Lá o Option+X escreve um caractere (`≈` no teclado americano, outros em outros), e o atalho o tiraria
+  do editor. A tecla vale pelo caractere ou pela posição (`code === "KeyX"`: no macOS o Option muda o caractere), e nunca com Ctrl (o AltGr do Windows
+  chega como Ctrl+Alt) nem com Shift. Quem trata é o `onKeyDown` do `QueryTabPanel`, e não um mapa do CodeMirror: assim vale no editor e em qualquer
+  ponto da aba (a barra, a grade, o campo de filtro); o campo de edição da célula para a propagação e fica com as teclas dele. Nada mais usa a tecla: o
+  mapa padrão do CodeMirror tem `Alt-l`, `Alt-u` e `Alt-A` (Shift), mas não `Alt-x`; o `before-input-event` do Electron só pega Ctrl (zoom, F5, Ctrl+R);
+  o menu de desenvolvimento não tem mnemônico X, e o app empacotado do Windows e do Linux não tem menu. O botão escreve o atalho da plataforma
+  (`aria-keyshortcuts`). Segurar as teclas repete o evento (`event.repeat`): a repetição só é consumida, e o script começa uma vez, no primeiro (com a
+  pergunta de erro à espera o executor não está ocupado, e a repetição a responderia e começaria outro).
+- **A divisão é o leitor do Ctrl+Enter** (`scan`), com uma peça a mais: os `;` que estão no corpo de um bloco não separam (`innerSemicolons`, com o
+  mesmo `dialect.body()` do `statementCount`, recomeçado no `;` que fecha e em cada corte da linha em branco; o corpo que chega aberto ao fim prende os
+  `;`, menos com o `extra` do Informix, a rotina sem `END PROCEDURE`, em que todo `;` separa). O `splitStatements` e o `statementAt` seguem separando
+  em todo `;`, como antes. A garantia que o teste confere em textos dos três bancos: cada pedaço conta 1 no `statementCount` (a conta da API, que
+  repete a conferência e recusaria o pedaço com `MULTIPLE_STATEMENTS_NOT_SUPPORTED`), e o número de pedaços é a conta do texto inteiro. No script a
+  linha em branco divide também a seleção (no Ctrl+Enter a seleção vai inteira). No Db2 o bloco vai até o fim do texto, como na conta.
+- **O executor** (`runScript`). O estado do script é um observável à parte (`runner.script`, com `useScriptRun`), e não um estado novo do `RunnerState`:
+  o resto da tela (a barra, o bloqueio, a ida para outra janela, a troca do banco e da conexão) continua lendo só o estado do executor. Ele fica
+  `running` do primeiro ao último comando (ocupado para a pessoa e para o bloqueio por inatividade), com o `previous` sendo o que o comando anterior
+  deixou, e termina com o do último. **A pergunta de erro não ocupa**: o estado é o do comando que falhou (o editor marca a posição do erro, pelo
+  `offset` do comando no texto inteiro, como no Ctrl+Enter), e o bloqueio pode vir; ele aposenta o executor (`retire`), que responde "Parar" à
+  pergunta (`deciding`) e tira o script. `release` (Desconectar) para o script: o comando em andamento fica "cancelado". **Uma execução nova na aba com
+  a pergunta à espera** (`run`, `runScript`, `runCommand` e `rerun`: o caminho não passa pela tela, em que o diálogo cobre a aba, mas o executor o aceita)
+  é a resposta "Parar" (`afterPausedScript`), como a RN-SQL-020 manda trocar os resultados do script por uma execução nova: o script para com o que já
+  rodou e o aviso do fim, e o comando novo só sai depois de o laço dele terminar (`scriptLoop`); antes, a promessa do script ficava esperando para sempre, e
+  uma resposta atrasada o retomava por cima do comando novo. O que o executor recusaria antes de enviar (`sends`: mais de um comando, nada a enviar, a aba
+  sem conexão; o F5 sem resultado de linhas na tela) não mexe na pergunta, e sem pergunta à espera nada muda (quem chama vê a aba ocupada na mesma chamada). Cada comando passa por
+  `execute`, com as recusas do comando a mais (`scriptCommandRefusals`: o controle de transação, o comando que não roda em transação, mais de um
+  comando e, na conexão somente leitura, o que não é leitura, `CONNECTION_READ_ONLY`), que perguntam como o erro do banco, sem o aviso central; o resto (a sessão ocupada, a API fora do ar, a sessão que caiu) para o script
+  sem perguntar. A sessão que cai só é reaberta antes da primeira resposta (`!answered`): depois, o que os comandos de antes deixaram nela se perdeu.
+  **Sem resposta sobre comando nenhum** (a conexão que não abre, o cancelamento antes do primeiro), a tela fica como estava: o script de antes volta
+  (`untouched`), e o executor faz o que o Ctrl+Enter faria. O `failed` ganhou `notify`: no script os avisos de cada comando calam, e sai um no fim
+  (`scriptEndToast`), com o nome da aba (o `title` de `createQueryRunner`, lido no fim: a aba pode ter sido renomeada ou salva como script enquanto ele
+  rodava; o `WorkbenchProvider` o tira de um mapa guardado por `useState`, e não de uma ref, porque o `createRunner` vai ao `createLockHandles` durante
+  a renderização e o lint do React não deixa a ref ir junto); o de valores cortados, um por script. Os avisos da seleção com mais de um comando
+  (`tooManyStatements`, o da área e o do canto) e a área vazia (`emptyHint`) ensinam o atalho.
+- **Um script de milhares de comandos** (uma carga de `INSERT`, o caso que leva ao Alt+X em vez do Ctrl+Enter) custa o mesmo por comando do começo ao
+  fim. O script muda duas vezes por comando, e três coisas cresciam com o tamanho dele: (1) a lista dos comandos era copiada inteira a cada mudança
+  (`withEntry` e `startEntry`); agora ela vai em páginas de 256 (`ScriptRun.pages`, lida por `entryAt` e `entriesOf`), e mudar um comando copia a
+  página dele e a lista das páginas; (2) os totais percorriam o script a cada desenho; agora vão no próprio script (`totals`), acertados a cada
+  mudança (o teste confere que dão o mesmo que contar tudo de novo); (3) as Estatísticas, à frente enquanto ele roda, refaziam, mediam e pintavam a
+  tabela inteira a cada comando; agora, enquanto ele roda, só os 50 comandos em volta do que está em execução (`statisticsRange`, com ele perto do
+  alto e duas linhas dizendo quantos ficaram antes e quantos estão na fila), a tabela inteira uma vez no fim, e o redesenho no máximo a cada 250 ms
+  (`useCoalescedRun`: o relógio conta da última troca, e não do último comando; a pergunta, o fim e um script novo vêm na hora). As publicações do
+  executor e o `set` dele no mesmo trecho síncrono (o fim de um comando e o começo do seguinte) já saem num desenho só: o React junta as atualizações
+  de `useSyncExternalStore` numa microtarefa. Medido na tela (abaixo): antes, 3.000 comandos levavam 115 s no app de produção com as Estatísticas à
+  frente (contra 23 s com uma aba de resultado à frente), com a janela parada por até 27 s.
+- **O começo do comando** nas abas e nas Estatísticas (`commandHead(target)`) pula os espaços e os comentários de cima pelo leitor do projeto, no banco do
+  comando (`commandStart` de `sql-statements.ts`: o comentário de bloco aninhado do PostgreSQL e do Db2, o primeiro fecho no Informix, o `{ … }` só no
+  Informix, o `--` que no PostgreSQL acaba também no retorno de carro), e não por uma expressão regular, que lia o aninhado errado e tomava `{` por
+  comentário em todo banco. **"Linhas alteradas"** soma só as linhas afetadas dos comandos que não devolvem linhas: o que grava e devolve linhas (RN-SQL-013)
+  traz da API o total devolvido (`totalRows`), e não o de alteradas, e fica de fora, contado em `ScriptTotals.returning`, que o total diz ("Linhas
+  alteradas: 12 (sem contar 1 comando que gravou e devolveu linhas)"); a especificação diz por quê.
+- **As abas e o cursor.** Cada comando que devolve linhas guarda a página dele (`results`, até `scriptResultCap`, 20); no fim, o do último comando
+  executado, quando devolveu linhas, fica sempre (`live`), também depois do limite: é o do cursor aberto (RN-SQL-007: um por sessão, e cada comando
+  novo fecha o anterior), e a aba dele desenha o **estado do executor**, e não a cópia guardada, com tudo o que vale num resultado. As outras desenham a
+  cópia (`kept`): grade sem `editing` (uma tabela só para leitura, sem o menu da grade), sem contar, sem "Carregar mais", sem filtro nem atualização
+  automática, e a nota com "Executar este comando" (`runCommand`: o "executar de novo" do comando, com o lugar no texto de quando o script rodou, que
+  troca os resultados do script). Com um comando em andamento na aba o botão fica `aria-disabled`, com o porquê na dica (o executor recusaria calado),
+  e o `handleRunAlone` só pergunta das alterações, limpa o filtro e abre a área quando o comando vai rodar (`commandWillRun`, como os outros caminhos);
+  quando o comando troca os resultados do script, o botão sai da página com o foco, e a área o leva à grade nova (`onFocusLost` e `rescueFocus`, o
+  mesmo do botão de contar, RN-SQL-006). A aba à frente: as Estatísticas enquanto roda, a do último no fim, e a que a pessoa escolheu enquanto ela existe
+  (pelo `id` do script; o seguinte volta às Estatísticas). Cada executor numera os scripts dele desde o 1, e o painel continua montado quando a aba
+  ganha outro (o banco, a conexão, o bloqueio): a escolha sai junto com o filtro, no ajuste do `filterRunner`. O F5 só executa de novo com a aba do
+  último à frente, e a atualização automática espera (`hidden`) com outra aba do script à frente.
+- **A pergunta de erro se fecha só pelo Esc**, que é o "Parar" da especificação (`dismissible="escape"` do `Dialog`: sem o X e sem o clique fora, que
+  paravam o script calados; `canClose` diz por qual caminho, o Esc, o fundo ou o X).
+- **A pergunta de erro só na aba à vista** (`active && onScreen`, como a atualização automática). O `Dialog` vai por portal ao `body`, fora do `hidden`
+  da aba e do `inert` da área de trabalho escondida: sem isso, o script de uma aba de trás abria a pergunta por cima da aba da frente, ou de
+  Configurações, tirava o foco de quem digitava (um Espaço ou Enter caía no "Parar") e dois scripts empilhavam dois diálogos iguais. O de outra aba
+  espera; a faixa de abas mostra a marca dele (`markOf` do `TabStrip`, que o `WorkbenchTabs` preenche com `ScriptWaitingMark`, um ponto vermelho com
+  o texto para o leitor de tela), e a pergunta aparece quando a pessoa vai até ela.
+- **Quem troca os resultados do script**: o comando aceito do `run` (o Ctrl+Enter), o `runCommand` e outro `runScript`. O filtro do resultado manda
+  `run(…, { keepScript: true })`, e o F5 e a execução automática não trocam: mudam só o resultado do último. A recusa antes de executar (a sessão
+  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`).
+- **A barra e o leitor de tela.** "Executando 3 de 12…" é o `progress` da barra (um `role="status"` só, em qualquer aba e com a área recolhida); as
+  Estatísticas marcam a linha do comando com `aria-current="step"` e não repetem o progresso. As abas são uma lista de abas (`role="tablist"`, só a
+  escolhida no Tab, setas com a volta, Home e End, o foco vai à escolhida); o corpo da área é o `tabpanel` dela, e entra no Tab nas Estatísticas, que
+  não têm o que focar. As abas dos resultados rolam numa caixa só delas, e a escolhida vem à vista a cada troca (`revealOffset`, o mesmo da faixa de
+  abas, e um `ResizeObserver` para a faixa que estava sem largura); "Estatísticas" fica fora da rolagem, na ponta direita. Sem isso, com umas oito
+  abas, a do último comando, que vem à frente sozinha no fim, e as Estatísticas ficavam fora da faixa. Cada linha das Estatísticas é memorizada: o
+  script publica um estado novo a cada comando, e só a linha que mudou é outro objeto.
+- **O que não foi feito**: as abas guardadas não têm o menu da grade nem o copiar da célula (a seleção do texto com o mouse continua); levar a aba
+  para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); o script que é uma transação só e continuar o
+  script a partir de um comando escolhido ficam para depois (seção 31). Não há atalho para "Cancelar": o botão da barra.
+- **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55481, o usuário e a conexão criados
+  por `fetch` à API com `window.prism.getApiConfig()`, o login pelo formulário): com um script de cinco comandos separados por `;` e por linha em
+  branco, o Alt+X de verdade (`xdotool key alt+x`, no `pnpm dev` com o menu padrão do Electron) rodou os três primeiros e parou no `SELECT * FORM
+  pedido` com a pergunta (o erro do PostgreSQL como veio, o SQLSTATE 42601, "Parar" com o foco) e o `FORM` marcado no texto inteiro; "Pular" seguiu,
+  o último ficou à frente com o filtro, o relógio da atualização automática e o zoom, a aba do primeiro mostrou as 200 linhas com a nota, as
+  Estatísticas mostraram o pulado com o erro na linha de baixo e os totais, e o aviso disse "Script executado com 1 erro: 4 de 5 comandos
+  executados.". Com `pg_sleep`, a barra disse "Executando 2 de 3…", o editor marcou o segundo comando, a barra do editor mostrou "Cancelar", e o
+  "Cancelar" deixou o segundo cancelado e o terceiro não executado, com "Script cancelado: 1 de 3 comandos executados."; as setas andaram nas abas, e
+  o Ctrl+Enter seguinte trocou as abas pelo resultado dele. No macOS e no Windows o atalho não foi aberto: só os testes.
+- **Conferido na tela depois da revisão** (Xvfb a 1440×900, PostgreSQL 16 local num cluster próprio na porta 55491 com `cliente` de 3.000 linhas, o
+  usuário e a conexão por `fetch`, o login pelo formulário, o texto posto no editor pela `EditorView` que o CodeMirror pendura no `.cm-content`
+  (`cmTile.view`), o tempo do clique em "Executar script" até o aviso do fim, medido na página, com a maior pausa entre dois `requestAnimationFrame`):
+  `update cliente set nome = nome where id = N;` repetido. No `pnpm dev`, com as Estatísticas à frente (antes do redesenho a cada 250 ms): 300
+  comandos em 4,2 s, 1.000 em 16,2 s, 2.000 em 28,7 s e 3.000 em 37,9 s (a revisão tinha medido 27,8 s e 98,4 s para 1.000 e 2.000). No app de
+  produção (`pnpm build` e o Electron na pasta, com `--remote-debugging-port`), 3.000 comandos: com as Estatísticas à frente, 29,5 s antes do redesenho
+  a cada 250 ms e 26,1 s e 22,7 s depois; com uma aba de resultado à frente (o mesmo script com `select 1 as a;` antes, e a aba 1 clicada), 20,9 s e
+  22,9 s. A maior pausa da janela foi de 330 a 370 ms, a tabela inteira desenhada uma vez no fim (era de 27 s). No meio dos 3.000, as Estatísticas
+  tinham 52 linhas ("510 comandos antes destes, que aparecem quando o script terminar.", "Mais 2.440 comandos na fila."), a barra dizia "Executando
+  525 de 3.000…", e "Cancelar" parou o script em 0,3 s ("Script cancelado na aba consulta-1.sql: 525 de 3.000 comandos executados."). Com 12
+  `select n`, a faixa de 706 px rolou até a aba "12 · select 12 as n12", e as Estatísticas ficaram à vista; "Executar este comando" na aba 1, com o
+  foco nele, levou o foco à grade do resultado novo ("Linhas do resultado"). Um script parado no erro com a área de trabalho por baixo de
+  Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
+  consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
+
+## Proteções da conexão e da pasta (RN-PROT-001 a 006)
+
+Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
+pasta que o usuário desejar", e a conexão "apenas readonly, ou seja, permite apenas select"). Quem impõe o somente leitura é a API, que recusa o que não é
+leitura antes de ir ao banco; a confirmação é da tela, que pergunta antes de enviar. A seção Proteções do formulário, a senha do somente leitura e o PATCH
+que leva tudo estão em "Conexões", acima. O painel "Sessão da conexão" está lá também, e a verificação periódica e o "Só as conectadas" do navegador, na
+seção seguinte.
+
+- **O que é irreversível** (`_lib/irreversible.ts`, `irreversibleOf`, com teste nos três bancos). Lido pelo leitor único do projeto (`sqlTokens`): texto,
+  nomes entre aspas, comentários de cada banco (o `{ … }` do Informix, o aninhado do PostgreSQL e do Db2) e `$tag$` não contam. É irreversível o `DROP`
+  de qualquer objeto, o `ALTER` com um `DROP` dentro (`ALTER TABLE … DROP COLUMN`, também `DROP DEFAULT`: na dúvida, pergunta), o `TRUNCATE`, e o
+  `DELETE` e o `UPDATE` sem `WHERE` no nível de fora: o `WHERE` de uma subconsulta não conta (o `UPDATE t SET a = (SELECT … WHERE …)` altera todas as
+  linhas), e quem diz o nível é a profundidade de parênteses do comando. Contam as palavras que podem começar um comando: a primeira, a de depois de um
+  `;`, de um `BEGIN` ou de um `ATOMIC` (o bloco do Db2), e, para `DELETE` e `UPDATE`, a de depois de `(` e de `)`: o comando principal depois do `WITH`,
+  o `DELETE` de dentro das consultas dele (o `WITH` que grava, do PostgreSQL) e o `FINAL TABLE (UPDATE …)` do Db2. Na dúvida, pergunta: a coluna
+  `update` sem aspas logo depois de um parêntese conta. Não contam: o `CREATE` (criar uma rotina ou um gatilho não executa o corpo dele), o `EXPLAIN`
+  sem `ANALYZE` (só planeja; com `ANALYZE` vale o comando explicado), o `UPDATE STATISTICS` do Informix, o `ON CONFLICT DO UPDATE`, o `FOR UPDATE`, o
+  `GRANT … UPDATE` e o `THEN UPDATE` do `MERGE`, que não começam um comando. O motivo volta com o objeto como foi escrito (`producao.apontamento`, com as
+  aspas), que o aviso usa na frase ("Este DELETE não tem WHERE: ele apaga todas as linhas de producao.apontamento.").
+- **Quando pergunta** (`_lib/command-confirmation.ts`, puro e testado): `commandQuestion` (o comando: em "Todos os comandos", sempre, com o motivo quando é
+  irreversível; em "Só comandos irreversíveis", só o irreversível, e nunca na conexão somente leitura, em que a API o recusa antes do banco),
+  `scriptQuestion` (uma vez, com os comandos que pedem e o número de cada um no script, e o total), `saveQuestion` (só em "Todos os comandos": cada
+  comando do Salvar é pela chave da linha, com `WHERE`) e `autoRefreshQuestion` (só em "Todos os comandos": ela só repete uma leitura). As proteções
+  vêm de `shownProtections` (`connections/_lib/protections.ts`): o `protections` da API, com a pasta de onde vem cada uma.
+- **Quem pergunta** (`_lib/use-command-confirmation.ts`): a aba, pela conexão e pelo banco dela, com as proteções da lista de conexões do cache
+  (`connectionsQuery`): mudar a proteção vale para o comando seguinte, depois do `invalidateLists` (outra janela tem o cache dela, e relê a lista quando
+  ganha o foco). `confirm(monta, segue, cancelou)` monta a pergunta na hora do pedido; **sem pergunta, `segue` roda na mesma chamada**, e tudo fica como
+  era sem a proteção (o destaque do comando, os testes que esperam o envio na hora). Com ela, o aviso abre (`open`), e só "Executar mesmo assim" chama
+  `segue`. Um aviso por vez: o pedido novo cancela o de antes; desmontar a vista cancela o que esperava. `confirmed` é o mesmo como valor (verdadeiro na
+  hora, ou a promessa da resposta), para o Salvar, que espera. Sem a conexão na lista, nada pergunta.
+- **Onde** (`query-tab.tsx`): depois da pergunta das alterações não salvas (RN-EDIT-007) e logo antes de o comando sair, só quando o executor vai mesmo
+  enviar (`commandWillRun`, `scriptWillRun`: com mais de um comando, ou a aba ocupada, ele só avisa, e nada pergunta). No "Executar" e no Ctrl+Enter
+  (o destaque do comando acende só quando ele sai), no "Executar este comando", no "Executar script" (confirmado, roda inteiro, também o "Tentar de
+  novo" da pergunta de erro), no F5, no "Executar de novo" e no "Atualizar" do menu da grade (pelo comando das linhas na tela, `rowsTargetOf`), no
+  filtro e na ordem do resultado (pelo comando com o filtro junto; cancelado, o campo e o filtro em vigor ficam), no Salvar da grade (`confirmSave` de
+  `useRecordEdits`, que espera a resposta e segue só se o resultado ainda é o mesmo; também nos Registros, que montam o aviso deles) e ao ligar a
+  atualização automática (`confirmStart` de `useAutoRefresh`, só com ela desligada e livre para ligar: trocar o intervalo não pergunta). Os Registros
+  (com o filtro e a ordem deles), a Estrutura, os diagramas, "Carregar mais" e "Contar total" não perguntam: é o que o Prism monta para mostrar o que a
+  pessoa abriu.
+- **O aviso** (`confirm-command-dialog.tsx`, o `ConfirmarComando` do canvas): um `alertdialog`, com a faixa do ambiente (o próprio ou o herdado) na cor
+  dele e o texto em contraste (`environmentTextColor`), com a conexão e o banco da aba; sem ambiente, a faixa neutra. O título é "Executar comando
+  irreversível?" quando ele é (também em "Todos os comandos": dizer que é irreversível é mais do que dizer que vai executar), senão "Executar
+  comando?"; no script, "Executar script com comandos irreversíveis?" ou "Executar script?"; no Salvar, "Salvar as alterações?", com quantas vão e o "Ver
+  SQL", que abre os comandos (`EditSqlDialog`) por cima do aviso; ao ligar, "Ligar a atualização automática?". O comando vai em código, que rola, com o
+  filtro do resultado embaixo quando há; no script, a lista. Embaixo, por que o aviso aparece: a proteção da conexão, ou a herdada da pasta, com o nome
+  dela. Os botões são os do canvas: "Executar mesmo assim" ("Executar script", "Salvar mesmo assim", "Ligar mesmo assim") só com o contorno do erro, e
+  "Cancelar" cheio, com o foco. Esc, o X e o clique fora cancelam. O leitor de tela ouve, com o título, o que o comando faz e o comando (o
+  `aria-describedby` do canvas, pelo `describedBy` do `Dialog` e os ids de `describedIds`), e não só o título e o "Cancelar"; no script e no Salvar, o
+  resumo ("2 comandos de 12 são irreversíveis…"), sem a lista, que ele percorre no corpo. O script de um comando só em "Todos os comandos" diz "O comando do
+  script pede confirmação", e não "Todos os 1 comando".
+- **O somente leitura na tela** (RN-PROT-002). O cadeado do canvas (`ReadOnlyMark`) fica ao lado do nome da conexão na árvore (`NavigatorRow.readOnly`,
+  do mapa que o `Navigator` monta), no botão da conexão da aba e na lista dele (`ConnectionButtonView.readOnly`, `ConnectionListView.readOnlyOf`), e a
+  barra de status diz "Somente leitura". A dica é `readOnlyHintOf` ("Somente leitura" ou "Somente leitura, herdado da pasta Fábrica"), que é também o
+  nome acessível do cadeado e entra no do botão da conexão. A grade não se edita: a página já vem com `editable: { known: true, reason: "a conexão é
+  somente leitura" }`, e os itens ficam desabilitados com "Somente leitura: a conexão é somente leitura."; a conexão que passou a ser somente leitura
+  depois do resultado responde o `edit-target` com `CONNECTION_READ_ONLY`, tratado como o resultado só leitura, com o mesmo motivo
+  (`recordsCopy.edit.reasons.connectionReadOnly`), e o Salvar recusado assim mostra a frase na faixa.
+- **A recusa do comando** (`CONNECTION_READ_ONLY`, 422): o executor a trata no lugar, como o controle de transação recusado antes de executar (`failed`):
+  nada foi ao banco, então com linhas na tela elas e o cursor ficam ("Carregar mais" continua), e a frase da API vai no aviso de erro; sem resultado, ela
+  vai à área de resultado, com o aviso curto. No script, ela é o erro do comando (`scriptCommandRefusals`), e o script pergunta o que fazer.
+- **O que não foi feito**: o cadeado na faixa de abas; e a conferência na tela (só os testes).
+
+## Verificação periódica e Só as conectadas (RN-VERIF-001 a 003, RN-NAV-013)
+
+Seção 32 da especificação, pedidos do dono e de um colega em 2026-10-15 ("validar a conexão fazendo o select 1 ou o usuário se informar qual select ele
+quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota (`POST api/user/connections/{id}/verification`, que responde `ok`, `failed`,
+`busy` ou `notConnected`, a falha do banco como resposta 200); o painel do formulário está em "Conexões".
+
+- **Onde mora cada parte.** `_lib/connection-checks.ts` (puro, com teste): `createConnectionChecks`, a verificação de uma janela, com as dependências de
+  fora (o pedido, a vez entre as janelas, o fim, o relógio e o bloqueio), e `checkView`, o que o indicador diz; os textos em `connection-checks.copy.ts`.
+  `_lib/use-connection-checks.tsx`: a instância da janela (`connectionChecks`, de módulo, como o `vaultLock`), as conexões a verificar (`checkTargets`,
+  puro), o `ConnectionChecks` que as entrega e avisa das passagens, e os ganchos dos indicadores (`useConnectionCheck`, `useConnectionChecksSnapshot`).
+  `_components/connection-check.tsx`: o ponto (`CheckDot`), o ponto com o texto (`CheckLabel`, `ConnectionCheckLabel`) e a janela da falha
+  (`CheckFailureDialog`). A rota é o `verifyConnection` de `connections.service.ts`, com o `connectionVerificationSchema`.
+- **Um relógio por conexão conectada, numa instância por janela, e não um por componente.** Quem alimenta é o `ConnectionChecks`, montado UMA vez em
+  `routes.tsx`, dentro do `WorkbenchProvider` (ele lê as abas; montado no provedor, o arquivo do provedor e o da verificação se importariam um ao outro).
+  Ele monta os alvos a cada desenho (`checkTargets`: as conexões com a verificação ligada e conectadas nesta janela, na conta de `isConnected`, a sessão da
+  árvore em cache, lida com `enabled: false`, ou uma aba com sessão; o intervalo; e as sessões numa chave) e os entrega por um efeito com a chave em texto.
+  Os indicadores só leem: o navegador lê a foto inteira uma vez (as linhas não cabem num gancho por linha), e o botão da conexão da aba, a barra de status e
+  o formulário leem a da conexão deles (o mesmo objeto enquanto nada muda: o botão fechado de cada aba não redesenha a cada verificação).
+- **Um pedido por vez, e o intervalo conta do fim.** A conexão que entra espera um intervalo antes da primeira verificação (a sessão acabou de abrir, e a
+  abertura já respondeu; até lá o indicador diz "Conectada, ainda não verificada"); a resposta agenda a seguinte, e com o pedido a caminho não há relógio.
+  A conexão que desconecta (ou some da lista, ou desliga a verificação) sai na hora: o pedido a caminho é abandonado pelo `AbortSignal`, e a resposta dele
+  não volta ao indicador. `notConnected` para a verificação da conexão até a chave das sessões mudar (uma sessão nova abriu, pela próxima ação na árvore ou
+  na aba); a chamada que falhou (a API fora do ar) deixa o indicador como estava e tenta no intervalo seguinte. A falha nunca reconecta nada.
+- **Entre as janelas, uma verificação por intervalo** (decisão desta entrega: a especificação diz "a tela", e cada janela tem a árvore e as abas dela). A
+  conexão conectada em duas janelas seria verificada duas vezes por intervalo. Nenhuma janela fala com outra: antes de chamar a API a janela pede a vez ao
+  processo principal (`claimVerification`, `prism:verification-claim`), que a dá (`window-hub.ts`, `claimVerification`) se nenhuma outra está verificando
+  a mesma conexão e se a última verificação dela, feita por outra janela, não acabou há menos que o intervalo menos um segundo (`verificationSlackMs`). O
+  fim (`finishVerification`, `prism:verification-finish`) solta a vez e manda a resposta às outras janelas com a área de trabalho montada
+  (`prism:verification-peer`, `verificationPeerSchema`, conferido nos dois lados), que a mostram e recomeçam o relógio dela (`peer`): quem verificou por
+  último é quem verifica de novo, e as outras só a ouvem. Sem a vez, a janela não chama a API e volta a contar. A resposta de outra janela com a verificação
+  daqui a caminho, ou para uma conexão sem sessão aqui, fica de fora, e o `busy` e o `notConnected` de lá (que dizem das sessões de lá) só recomeçam o
+  relógio. A janela que fecha no meio solta a vez (`remove`), e a que travou a solta em dois minutos (`verificationClaimTtlMs`). Fora do Electron a vez é
+  sempre da janela. Só ids, o intervalo e a resposta da API passam: nada de nome, endereço ou SQL; o processo principal não chama a API.
+- **Não é atividade nem comando em andamento** (RN-SEG-001). O pedido sai pelo `apiRequest`, e não pelo cache de mutações (a falha da chamada não vira
+  aviso central) nem por um executor de aba (o bloqueio só olha a tecla, o ponteiro e os executores), então a verificação não segura o bloqueio nem o
+  adia. Bloqueado, nada sai: os alvos ficam vazios (o `ConnectionChecks` lê o `vaultLock`), o relógio que disparar antes do desenho não pede a vez
+  (`paused`), e o pedido a caminho é abandonado (a barreira dos pedidos o soltaria só no desbloqueio). Sair do cofre desmonta o `ConnectionChecks`, que
+  esvazia a verificação.
+- **O indicador** (`checkView`, RN-VERIF-003): "Respondeu na última verificação", o ponto do canvas, com "Respondeu às 14:32:05, em 3 ms" na dica (a hora
+  do relógio da máquina, `clockOf`); "Não respondeu", no tom de erro, com a hora, o SQLSTATE e a mensagem do banco na dica; `busy` deixa como estava, com
+  "Ocupada: verificada na próxima" na dica; "Sem sessão aberta" (o anel no tom do acento); antes da primeira resposta, o anel verde. Com a verificação
+  desligada não há indicador: fica o ponto de conectada de sempre. Na árvore ele fica no lugar do ponto de conectada, e a dica dele vai também na dica da
+  linha: com o mouse em cima, as ações da linha cobrem o ponto. No botão da conexão da aba (o pedido desta entrega, além da barra de status que a
+  especificação cita) ele vai na ponta, depois do cadeado, e entra no nome acessível depois dele. Na barra de status ele troca o "Conectada", com o
+  texto; no formulário, à direita da linha da caixa.
+- **A falha num clique**, como o erro de um nó da árvore (RN-ARVORE-005): na árvore, um botão das ações da linha ("Ver por que MES Produção não
+  respondeu", o `AlertIcon`), só com a conexão sem responder; na barra de status, o próprio texto "Não respondeu". Os dois abrem a `CheckFailureDialog`
+  (a hora, o tempo, a mensagem como veio, o SQLSTATE, e que o Prism não reconecta sozinho), que acompanha as respostas seguintes e fecha de vez quando a
+  conexão volta a responder (ajuste durante a renderização: a falha seguinte não a reabre sozinha).
+- **Os avisos de passagem**: de responder (ou de ainda não verificada) a não responder, um aviso de atenção ("MES Produção não respondeu à verificação"),
+  uma vez, e não de novo enquanto ela continuar sem responder; de volta, um de sucesso ("MES Produção voltou a responder à verificação"). Cada janela que
+  verifica a conexão avisa na dela, também com a resposta que veio de outra (a pessoa pode estar olhando qualquer uma). O nome é o de agora.
+- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) depois do
+  seletor de ambiente, na mesma linha do campo de busca (desce com eles no navegador estreito), com a conta das conectadas ("3 conectadas", "1
+  conectada", "Nenhuma conectada"), ligado ou não. O nome acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas", o rótulo num `sr-only`), e a
+  dica diz o que o clique faz agora. Conectada é a definição única (`connectedConnectionIds`), então a que desconecta sai na hora e a que conecta por uma
+  aba ou por um script entra. A que a verificação achou sem sessão na API (`notConnected`) também sai, e a conta não diz "conectada" ao lado do indicador
+  que diz "Sem sessão aberta": a sessão da árvore em cache e o `sessionId` das abas continuam lá, mortos, e ninguém os apaga (a próxima ação na árvore ou na
+  aba abre uma nova, a chave das sessões muda e ela volta a contar). O ponto, o "Desconectar" e a barra de status seguem com o `isConnected`: com a
+  verificação ligada o indicador já diz o estado, e "Desconectar" encerra o que ainda houver. O filtro (`filterConnected`, puro) roda sobre o que o seletor de ambiente deixou, pelo mesmo `withFolderPath` (as pastas no
+  caminho até as conexões), e a busca filtra depois; os memos do `Navigator` dependem de uma chave em texto com as conectadas, só com o filtro ligado, e a
+  árvore não se refaz com ele desligado. Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
+  todas", que o desliga. É estado do navegador, como o ambiente: vale enquanto a janela está aberta. A conexão que o formulário acabou de salvar, ou a
+  duplicada, desliga os dois filtros quando eles a escondem.
+- **O que não foi feito**: a verificação de cada banco aberto da conexão (RN-ARVORE-006; uma sessão qualquer da conexão responde por ela, como a
+  especificação deixa para depois) e a conferência na tela (só os testes; o arrasto entre janelas sob o Xvfb não foi refeito para a vez da verificação).
+
 ## Configurações (`src/app/settings`)
 
 RN-CONFIG-001. A rota é `/settings` (`pathsConfig.settings`), sob o `WorkbenchProvider` como as outras telas de dentro: abrir e
@@ -1711,6 +2009,8 @@ inicial; "Sair" encerra de verdade.
   cache e das abas). **A ordem dos passos e as falhas ficam em `lock-vault.ts` e no teste dele; este guia não as repete.**
 - **Com mais de uma janela** a contagem é de todas e o bloqueio também (RN-ABAS-004): `peers` do `useIdleLock`, `peerAction` e
   `closedByAnotherWindow`, descritos em "Abas que se movem e outras janelas".
+- **A verificação periódica das conexões** (RN-VERIF-002) não é atividade nem comando em andamento: ela não passa pelos executores das abas nem pelos
+  eventos da janela, e bloqueado nada dela sai (ver "Verificação periódica e Só as conectadas").
 - **A barreira.** Bloqueado, `apiRequest` espera o desbloqueio (não falha e não avisa); só passa o pedido com `whileLocked` (`signIn` e
   `signOut`). Um 401 `VAULT_LOCKED` que chega com o app bloqueado não leva ao login (um pedido que já estava a caminho apagaria as abas), e a
   falha de consulta não vira aviso. `vaultLock.reset()` no desmonte do `VaultGuard` solta o que ficou preso: sem isso o login seguinte
@@ -2142,7 +2442,9 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
   que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
   a desenha no lugar do rótulo, na lista e no controle fechado: a etiqueta de ambiente do navegador; o rótulo segue sendo o da busca pela inicial), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
-  ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
+  ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título e uma faixa no topo do painel (`banner`, a do
+  ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
+  corpo, o leitor de tela lê com o título (`describedByOf`: a `description` do cabeçalho vem antes, quando há). O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que

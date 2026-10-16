@@ -27,6 +27,7 @@ import { isTableTab, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
 import { UnsavedScriptsDialog } from "./script-dialogs";
+import { ScriptWaitingMark } from "./script-tabs";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 import { TableTabPanel } from "./table-tab/table-tab";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
@@ -331,7 +332,21 @@ export function WorkbenchTabs() {
     <>
       <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tabs.length === 0 ? null : (
-          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} environmentOf={environmentOf} scriptOf={scriptOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
+          <TabStrip
+            tabs={tabs}
+            activeTabId={activeTabId}
+            connectionOf={connectionOf}
+            environmentOf={environmentOf}
+            scriptOf={scriptOf}
+            onSelect={setActiveTab}
+            onClose={handleClose}
+            windowId={windowId}
+            onReorder={reorderTab}
+            onMove={handleMove}
+            onReceive={receive}
+            // RN-SQL-021: a aba cujo script espera a resposta da pergunta de erro, que só aparece na aba à vista.
+            markOf={(tabId) => <ScriptWaitingMark runner={runnerOf(tabId)} />}
+          />
         )}
 
         {tabs.length === 0 ? (

@@ -10,6 +10,7 @@ import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { unwrap } from "@/lib/api/prism-api";
 import { cn } from "@/lib/utils/cn";
 
+import { notConnectedIds } from "../_lib/connection-checks";
 import { databaseSessionQuery } from "../_lib/database-sessions.service";
 import { editScriptErrors, type EditScriptErrors } from "../_lib/edit-script-errors";
 import { navigatorMetrics } from "../_lib/navigator-density";
@@ -18,6 +19,7 @@ import { appearanceChanged, normalizeScriptName, refusalProblem, savedPlaceOfTab
 import { scriptsCopy } from "../_lib/scripts.copy";
 import type { Script, ScriptSummary } from "../_lib/scripts.schema";
 import { changeScriptPlace, deleteScript, editScriptOrRefuse, getScript, renameScriptOrRefuse, scriptsQuery } from "../_lib/scripts.service";
+import { connectionChecks } from "../_lib/use-connection-checks";
 import { useScriptsCollapsed } from "../_lib/use-navigator-layout";
 import { connectedConnectionIds } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
@@ -143,11 +145,13 @@ export function ScriptsSection() {
     if (script === null) return void refresh();
 
     const known = queryClient.getQueryData<Connection[]>(connectionsQuery.queryKey);
-    // RN-SCRIPT-005: as conectadas deste instante (a sessão da árvore em cache, ou a de uma aba), para o genérico abrir na única que houver.
+    // RN-SCRIPT-005: as conectadas deste instante (a sessão da árvore em cache, ou a de uma aba, menos as que a verificação achou sem sessão na API), para
+    // o genérico abrir na única que houver.
     const connected = connectedConnectionIds(
       (known ?? []).map((connection) => connection.id),
       tabs,
       (connectionId) => queryClient.getQueryData(databaseSessionQuery(connectionId).queryKey) !== undefined,
+      new Set(notConnectedIds(connectionChecks.snapshot())),
     );
     const place = scriptPlace(script, known === undefined ? null : new Set(known.map((connection) => connection.id)), connected);
     openScriptTab(script, { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), saved: place.saved });

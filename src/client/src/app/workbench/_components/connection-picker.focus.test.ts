@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 
 // O botão da conexão e a lista aberta com os ganchos do React simulados (`createHookRuntime`, em `lib/testing/react-hooks.ts`: o vitest deste projeto não
 // tem DOM). O que se confere AQUI é o foco ao fechar a lista e ao escolher outra conexão: na hora, e antes da troca, porque a troca com alterações não
@@ -28,7 +28,7 @@ import { connectionChoices } from "../_lib/tab-connection";
 import { ConnectionButtonView, ConnectionListPanel, ConnectionPicker, focusBack } from "./connection-picker";
 
 function connection(id: string, name: string): Connection {
-  return { id, folderID: null, name, engine: 3, host: "ifx.zanveri.local", port: 9089, database: "erp", userName: "informix", hasPassword: true, environmentName: null, environmentColor: null, createdAt: "", updatedAt: "" };
+  return { id, folderID: null, name, engine: 3, host: "ifx.zanveri.local", port: 9089, database: "erp", userName: "informix", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: "", updatedAt: "" };
 }
 
 const erp = connection("c1", "ERP");

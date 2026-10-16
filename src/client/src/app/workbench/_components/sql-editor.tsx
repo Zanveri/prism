@@ -19,8 +19,9 @@ import { tableLinks } from "../_lib/table-link-extension";
 import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type TableLink } from "../_lib/table-links";
 import { liveEditors } from "../_lib/live-editors";
 import { flashRun, runFlash } from "../_lib/run-flash";
+import { scriptMark, scriptMarkEffects } from "../_lib/script-mark";
 import { keywordCase } from "../_lib/sql-keyword-case";
-import { hasStatement, statementAt } from "../_lib/sql-statements";
+import { hasStatement, scriptStatements, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -130,6 +131,17 @@ export function runTarget(state: EditorState, engine: Engine | undefined, blankL
 }
 
 /**
+ * O que "Executar script" envia (RN-SQL-019): os comandos da seleção, quando há, ou do texto inteiro, um por um, divididos pelas regras do Ctrl+Enter (o
+ * `;` e, com `blankLines`, a linha em branco, que no script divide também a seleção), com o bloco de `;` no corpo como um comando só (`scriptStatements`).
+ * Cada um leva onde começa no texto do editor: é por aí que o erro e a marca do comando em execução acham o lugar.
+ */
+export function scriptTargets(state: EditorState, engine: Engine | undefined, blankLines: boolean): RunTarget[] {
+  const { from, to } = state.selection.main;
+  const [text, start] = from === to ? [state.doc.toString(), 0] : [state.sliceDoc(from, to), from];
+  return scriptStatements(text, engine, { blankLines }).map((statement) => ({ sql: statement.text, offset: start + statement.start, engine }));
+}
+
+/**
  * O trecho que pisca quando "Executar" envia `target` (RN-SQL-018): sem seleção, o comando do cursor, exatamente o que foi enviado; com a linha em
  * branco separando, é assim que a pessoa vê qual comando o cursor pegou. A seleção já está à vista e não pisca; sem comando, nada pisca.
  */
@@ -187,6 +199,8 @@ function isRunnable(state: EditorState, engine: Engine | undefined): boolean {
 export type SqlEditorHandle = {
   /** Executa o que o editor mandaria com Ctrl+Enter e devolve o foco a ele. */
   run: () => void;
+  /** RN-SQL-019: "Executar script" (o botão e o Alt+X): os comandos da seleção ou do texto inteiro (`scriptTargets`), e o foco volta ao editor. */
+  runScript: () => void;
   focus: () => void;
 };
 
@@ -215,6 +229,13 @@ type SqlEditorProps = {
    * chama `flash` quando o comando vai mesmo ao banco, e depois da pergunta das alterações não salvas, quando ela vier.
    */
   onRun: (target: RunTarget, flash: () => void) => void;
+  /** RN-SQL-019: "Executar script": os comandos, na ordem. Quem executa pergunta das alterações não salvas antes, e recusa com a aba ocupada. */
+  onRunScript?: (targets: RunTarget[]) => void;
+  /**
+   * RN-SQL-019: o comando do script em execução (o texto e onde ele estava quando o script começou), que o editor marca até o seguinte começar; nulo sem
+   * script rodando. Com o texto editado depois disso, o lugar já não é o mesmo, e nada é marcado.
+   */
+  runningAt?: { offset: number; sql: string } | null;
   /** O texto, com atraso: depois de uma pausa na digitação, ao perder o foco e ao desmontar. */
   onChange: (sql: string) => void;
   onRunnableChange: (runnable: boolean) => void;
@@ -238,7 +259,7 @@ const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.l
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited, onOpenTable }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
@@ -317,6 +338,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine) : []),
           errorMark,
           runFlash,
+          scriptMark,
           tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
           // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco.
           Prec.highest(keymap.of([{ key: "Mod-Enter", run }])),
@@ -395,6 +417,17 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     editor.dispatch({ effects: errorAt === null ? setErrorMark.of(null) : [setErrorMark.of(errorAt), EditorView.scrollIntoView(Math.min(errorAt, editor.state.doc.length))] });
   }, [errorAt]);
 
+  // RN-SQL-019: a marca do comando do script em execução segue o executor; o texto e o lugar dizem qual é, e um script novo no mesmo lugar é outra marca.
+  const runningOffset = runningAt?.offset ?? null;
+  const runningSql = runningAt?.sql ?? null;
+  useEffect(() => {
+    const editor = view.current;
+    if (editor === null) return;
+
+    const effects = scriptMarkEffects(editor.state, runningOffset === null || runningSql === null ? null : { offset: runningOffset, sql: runningSql });
+    if (effects.length > 0) editor.dispatch({ effects });
+  }, [runningOffset, runningSql]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -406,9 +439,16 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
         onRun(target, flash);
         editor.focus();
       },
+      runScript: () => {
+        const editor = view.current;
+        if (editor === null) return;
+
+        onRunScript?.(scriptTargets(editor.state, engineNow.current, blankLinesNow.current));
+        editor.focus();
+      },
       focus: () => view.current?.focus(),
     }),
-    [onRun],
+    [onRun, onRunScript],
   );
 
   return <div ref={host} className="h-full" />;

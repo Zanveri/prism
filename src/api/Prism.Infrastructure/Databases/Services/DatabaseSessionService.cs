@@ -20,6 +20,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// </summary>
     private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>RN-SQL-010: o comando que esperava o fim de uma verificação (RN-VERIF-002) e foi cancelado antes de ir ao banco.</summary>
+    private const string CanceledBeforeItRanMessage = "O comando foi cancelado antes de ir ao banco: nada foi executado.";
+
     private readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
     /// <summary>
@@ -70,17 +73,81 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return session.Info;
     }
 
-    public async Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, CancellationToken cancellationToken)
+    public Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, CancellationToken cancellationToken)
+        => TestAsync(settings, null, cancellationToken);
+
+    public async Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, string? verificationQuery, CancellationToken cancellationToken)
     {
         var opened = await ConnectAsync(settings, cancellationToken);
         if (opened.IsFailure)
             return opened.Error;
 
-        // RN-CONN-013: abre, roda a consulta de verificação e fecha, sem registrar sessão.
+        // RN-CONN-013: abre, roda a consulta de verificação (a do formulário, RN-VERIF-001, ou a do banco) e fecha, sem registrar sessão.
         await using var connection = opened.Value;
 
-        return await connection.PingAsync(cancellationToken);
+        return await connection.VerifyAsync(verificationQuery, cancellationToken);
     }
+
+    /// <summary>
+    /// RN-VERIF-002. A vez é tomada sem esperar (`Wait(0)`), sessão por sessão, e o cursor é conferido na conexão depois de tomá-la: a marca do registro
+    /// (`CursorOpen`) é a do temporizador do cursor, e a conexão é quem sabe se ele está aberto. Nada do que a sessão guarda muda (resultado, última
+    /// leitura, temporizador): a verificação não é atividade. O log leva a conexão, a sessão, o tempo e a classe da falha, nunca a mensagem nem a
+    /// consulta (RN-LOG-001); a que deu certo só em depuração, porque seria uma linha a cada intervalo de cada conexão.
+    /// </summary>
+    public async Task<ConnectionVerification> VerifyAsync(Guid connectionID, string? verificationQuery, long vaultGeneration, CancellationToken cancellationToken)
+    {
+        // A sessão sem resultado primeiro: é a da árvore, que só faz catálogo, e a de uma aba sem cursor vem depois. Entre as iguais, a mais antiga.
+        var sessions = _sessions.Values
+            .Where(session => session.Info.ConnectionID == connectionID && session.VaultGeneration == vaultGeneration)
+            .OrderBy(session => session.CurrentResult is null ? 0 : 1)
+            .ThenBy(session => session.Info.ID)
+            .ToList();
+
+        if (sessions.Count == 0)
+        {
+            _logger.Debug("Conexão {ConnectionID}: verificação sem sessão aberta.", connectionID);
+
+            return new ConnectionVerification(EVerificationStatus.NotConnected);
+        }
+
+        foreach (var session in sessions)
+        {
+            if (!session.Turn.Wait(0))
+                continue;
+
+            using var turnEnd = new TurnEnd(session.Turn);
+
+            // A sessão fechou depois da lista, ou tem um cursor que a consulta fecharia (RN-SQL-007).
+            if (session.Closed || session.Connection.HasOpenCursor)
+                continue;
+
+            // O comando da pessoa que chega agora espera o fim da verificação, em vez de responder que a sessão está ocupada (`RunAsync`).
+            session.Verifying = true;
+            var started = _timeProvider.GetTimestamp();
+            var verified = await session.Connection.VerifyAsync(verificationQuery, cancellationToken);
+            var elapsedMs = (long)_timeProvider.GetElapsedTime(started).TotalMilliseconds;
+            session.Verifying = false;
+
+            if (verified.IsSuccess)
+                _logger.Debug("Conexão {ConnectionID}: verificação na sessão {SessionID} em {ElapsedMs} ms.", connectionID, session.Info.ID, elapsedMs);
+            else
+                _logger.Information("Conexão {ConnectionID}: a verificação falhou na sessão {SessionID} em {ElapsedMs} ms ({Failure}, SQLSTATE {SqlState}).", connectionID, session.Info.ID, elapsedMs, verified.Error.Kind, verified.Error.SqlState);
+
+            // A sessão cuja conexão caiu sai do registro, como depois de qualquer falha; a verificação seguinte procura outra.
+            await RemoveIfClosedAsync(session);
+
+            return verified.IsSuccess
+                ? new ConnectionVerification(EVerificationStatus.Ok, elapsedMs)
+                : new ConnectionVerification(EVerificationStatus.Failed, elapsedMs, verified.Error.Message, verified.Error.SqlState);
+        }
+
+        _logger.Debug("Conexão {ConnectionID}: verificação adiada, com as {Sessions} sessões ocupadas.", connectionID, sessions.Count);
+
+        return new ConnectionVerification(EVerificationStatus.Busy);
+    }
+
+    public Guid? ConnectionOf(Guid sessionID)
+        => _sessions.TryGetValue(sessionID, out var session) ? session.Info.ConnectionID : null;
 
     public async Task<UnitResult<DatabaseFailure>> CloseAsync(Guid sessionID)
     {
@@ -138,6 +205,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         => ExecuteAsync(sessionID, sql, null, pageSize, cancellationToken);
 
     public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, CancellationToken cancellationToken)
+        => ExecuteAsync(sessionID, sql, filter, pageSize, readOnly: false, cancellationToken);
+
+    public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ExecuteAsync), waitsForTurn: false, async session =>
         {
             var dialect = DialectOf(session);
@@ -154,7 +224,12 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             }
 
             var sent = filtered?.Sql ?? sql;
-            var outcome = await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
+
+            // RN-PROT-002: na conexão somente leitura, o comando montado que não é uma leitura nem vai ao banco, e o resultado anterior fica.
+            if (readOnly && ReadOnlySql.Refusal(sent, session.Info.Engine) is { } reason)
+                return new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, ReadOnlySql.Message(reason));
+
+            var outcome = readOnly ? await session.Connection.ExecuteReadOnlyAsync(sent, pageSize, cancellationToken) : await session.Connection.ExecuteAsync(sent, pageSize, cancellationToken);
 
             // RN-SQL-009: a posição do erro seria a do comando montado, que a tela não mostra (como na contagem, RN-SQL-006).
             if (outcome.IsFailure && filtered is not null)
@@ -168,7 +243,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
                 // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
                 // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
-                var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
+                // RN-PROT-002: na conexão somente leitura o resultado inteiro é só leitura, com o motivo que a grade mostra.
+                var source = readOnly ? ResultSource.ReadOnly(ReadOnlySql.ResultReason)
+                    : page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
                     : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
                     : EditableSql.Read(sent, dialect);
                 var result = new ResultState(source, page.Columns, filtered?.Applied);
@@ -264,8 +341,12 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         // RN-SQL-010: a contagem em andamento é interrompida; a seguinte usa uma fonte nova, e não nasce cancelada.
         _ = Interlocked.Exchange(ref session.CountCancellation, new CancellationTokenSource()).CancelAsync();
 
+        // RN-VERIF-002: o comando que espera o fim de uma verificação desiste na hora, pela fonte acima, e o contador pega o "cancelar" que chega
+        // junto com a vez dele. A verificação em si não é interrompida: não é dela que a pessoa desistiu.
+        Interlocked.Increment(ref session.CancelRequests);
+
         // Só com comando em andamento: sem ele não há o que interromper, e um cursor aberto e parado fica como está.
-        if (session.Turn.CurrentCount == 0)
+        if (session.Turn.CurrentCount == 0 && !session.Verifying)
             session.Connection.Cancel();
 
         return UnitResult.Success<DatabaseFailure>();
@@ -442,8 +523,8 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         return limited.IsFailure ? limited.Error : await connection.DescribeEditTablesAsync(tables, describing.Token);
     }
 
-    /// <summary>RN-SQL-007: só há cursor aberto quando a página diz que há mais linhas; qualquer outro desfecho de um comando o fechou.</summary>
-    private static bool HasOpenCursor(object? value)
+    /// <summary>RN-SQL-007: a operação leu uma página e deixou o cursor aberto, porque há mais linhas. É a única leitura que o temporizador conta.</summary>
+    private static bool LeftTheCursorOpen(object? value)
         => value switch
         {
             QueryPage page => page.HasMore,
@@ -574,17 +655,26 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     {
         using var turnEnd = new TurnEnd(session.Turn);
 
-        // O aviso pode chegar atrasado, depois de uma leitura que acabou de rearmar o temporizador, ou adiantado uns milissegundos em
-        // relação ao relógio da última leitura: quem decide é a hora da última leitura. Antes da hora, com o cursor ainda aberto, o
-        // temporizador volta a contar o que falta; sem isso, o aviso adiantado deixava o cursor aberto até a sessão fechar.
-        if (session.Closed)
+        // O aviso pode chegar atrasado: depois de uma operação que fechou o cursor (sem cursor vigiado, não há o que fechar) ou de uma
+        // página que acabou de rearmar o temporizador (quem decide é a hora dessa leitura).
+        if (session.Closed || !session.CursorOpen)
             return;
 
+        await CloseCursorIfIdleAsync(session);
+        await RemoveIfClosedAsync(session);
+    }
+
+    /// <summary>
+    /// RN-SQL-007, com a vez da sessão tomada e o cursor vigiado aberto: quem decide é a hora da última leitura, e não a do aviso nem a
+    /// da operação que acabou. O aviso pode chegar adiantado uns milissegundos em relação a esse relógio: antes da hora, o temporizador
+    /// volta a contar o que falta (sem isso, o aviso adiantado deixava o cursor aberto até a sessão fechar). Passada a hora, o cursor fecha.
+    /// </summary>
+    private async Task CloseCursorIfIdleAsync(Session session)
+    {
         var idle = _timeProvider.GetElapsedTime(session.LastReadAt);
         if (idle < QueryPaging.CursorIdleTimeout)
         {
-            if (session.CursorOpen)
-                session.IdleTimer.Change(QueryPaging.CursorIdleTimeout - idle, Timeout.InfiniteTimeSpan);
+            session.IdleTimer.Change(QueryPaging.CursorIdleTimeout - idle, Timeout.InfiniteTimeSpan);
 
             return;
         }
@@ -592,7 +682,37 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         session.CursorOpen = false;
         await session.Connection.CloseCursorAsync();
         _logger.Information("Sessão {SessionID}: cursor fechado por tempo sem leitura.", session.Info.ID);
-        await RemoveIfClosedAsync(session);
+    }
+
+    /// <summary>
+    /// RN-SQL-007, com a vez da sessão tomada, no fim de cada operação. Só a página que deixa o cursor aberto é leitura: o temporizador
+    /// recomeça a contar dela. Se a operação não leu e o cursor vigiado continua aberto na conexão, ela não chegou a ele (a recusa
+    /// antes de ir ao banco: a da conexão somente leitura, RN-PROT-002, o filtro, o controle de transação, mais de um comando; e
+    /// qualquer outra que venha a existir), e o prazo continua o da última leitura. Ele é conferido aqui, e não só deixado como estava:
+    /// o aviso que chegou enquanto esta operação tinha a vez desistiu, contando com ela (<see cref="OnCursorIdle"/>), e, se o prazo já
+    /// passou, o cursor fecha agora. O resto fechou o cursor (todo comando que vai ao banco fecha o anterior antes de ser enviado, e a
+    /// falha, o cancelamento e a queda da conexão também), e o temporizador para.
+    /// </summary>
+    private async Task WatchCursorAsync<T>(Session session, Result<T, DatabaseFailure> result)
+    {
+        if (result.IsSuccess && LeftTheCursorOpen(result.Value))
+        {
+            session.LastReadAt = _timeProvider.GetTimestamp();
+            session.CursorOpen = true;
+            session.IdleTimer.Change(QueryPaging.CursorIdleTimeout, Timeout.InfiniteTimeSpan);
+
+            return;
+        }
+
+        if (session.CursorOpen && session.Connection.HasOpenCursor)
+        {
+            await CloseCursorIfIdleAsync(session);
+
+            return;
+        }
+
+        session.CursorOpen = false;
+        session.IdleTimer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>
@@ -628,7 +748,35 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "A operação foi cancelada antes de chegar a vez dela na sessão.");
         }
         else if (!session.Turn.Wait(0))
-            return new DatabaseFailure(EDatabaseFailure.SessionBusy, "A sessão está ocupada com outro comando.");
+        {
+            if (!session.Verifying)
+                return new DatabaseFailure(EDatabaseFailure.SessionBusy, "A sessão está ocupada com outro comando.");
+
+            // RN-VERIF-002: a verificação periódica não é comando da pessoa, e não a deixa com a sessão ocupada: o comando espera o fim dela, que tem o
+            // prazo do driver. O "cancelar" pedido durante a espera vale para ele, que desiste na hora, sem ir ao banco: a fonte que o "cancelar" e o
+            // fechamento da sessão cancelam interrompe a espera. O contador pega o "cancelar" que chega junto com a vez, depois da espera.
+            var canceled = Volatile.Read(ref session.CancelRequests);
+            using var waiting = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, session.CountCancellation.Token);
+            var afterTheVerification = session.Turn.WaitAsync(waiting.Token);
+            await afterTheVerification.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+            if (!afterTheVerification.IsCompletedSuccessfully)
+            {
+                if (session.Closed)
+                    return SessionNotFound();
+
+                return cancellationToken.IsCancellationRequested
+                    ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "A operação foi cancelada antes de chegar a vez dela na sessão.")
+                    : new DatabaseFailure(EDatabaseFailure.ExecutionFailed, CanceledBeforeItRanMessage, Outcome: ECancelOutcome.Canceled);
+            }
+
+            if (Volatile.Read(ref session.CancelRequests) != canceled)
+            {
+                session.Turn.Release();
+
+                return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, CanceledBeforeItRanMessage, Outcome: ECancelOutcome.Canceled);
+            }
+        }
 
         using var turnEnd = new TurnEnd(session.Turn);
 
@@ -639,12 +787,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         var started = _timeProvider.GetTimestamp();
         var result = await work(session);
         Log(session, operation, started, result);
-
-        // RN-SQL-007: o temporizador recomeça a cada página que deixa o cursor aberto.
-        var cursorOpen = result.IsSuccess && HasOpenCursor(result.Value);
-        session.LastReadAt = _timeProvider.GetTimestamp();
-        session.CursorOpen = cursorOpen;
-        session.IdleTimer.Change(cursorOpen ? QueryPaging.CursorIdleTimeout : Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        await WatchCursorAsync(session, result);
 
         // A tela recebe a resposta desta chamada (o erro do banco, quando a conexão caiu no meio dela); a seguinte já não encontra a sessão.
         await RemoveIfClosedAsync(session);
@@ -676,12 +819,22 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         public volatile RowQuery? LastRowQuery;
 
         /// <summary>
-        /// O que interrompe as contagens em andamento da sessão, que rodam em outras conexões (RN-SQL-010). "Cancelar" troca a fonte por
-        /// uma nova depois de cancelar a atual; o fechamento da sessão a cancela de vez.
+        /// O que interrompe as contagens em andamento da sessão, que rodam em outras conexões (RN-SQL-010), e a espera do comando pelo fim
+        /// de uma verificação (RN-VERIF-002). "Cancelar" troca a fonte por uma nova depois de cancelar a atual; o fechamento da sessão a
+        /// cancela de vez.
         /// </summary>
         public CancellationTokenSource CountCancellation = new();
 
         public volatile bool Closed;
+
+        /// <summary>RN-VERIF-002: a vez está com a verificação periódica, e não com um comando da pessoa: quem chega espera, em vez de ouvir "ocupada".</summary>
+        public volatile bool Verifying;
+
+        /// <summary>
+        /// RN-SQL-010: quantos "cancelar" a sessão recebeu. O comando que esperava a verificação compara antes e depois da espera: pega o
+        /// "cancelar" que chegou junto com a vez, que a fonte (<see cref="CountCancellation"/>) já não interrompe.
+        /// </summary>
+        public int CancelRequests;
 
         public DatabaseSessionInfo Info => info;
 
@@ -697,10 +850,13 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         public ITimer IdleTimer { get; set; } = null!;
 
-        /// <summary>O instante da última página lida com a vez tomada, pelo relógio do registro (RN-SQL-007).</summary>
+        /// <summary>
+        /// O instante da última página que deixou o cursor aberto, pelo relógio do registro (RN-SQL-007). Os cinco minutos contam dele: a
+        /// operação que não leu (uma recusa antes de ir ao banco) não o muda.
+        /// </summary>
         public long LastReadAt { get; set; }
 
-        /// <summary>A última operação deixou um cursor aberto, que o temporizador da RN-SQL-007 vigia.</summary>
+        /// <summary>Há um cursor aberto, que o temporizador da RN-SQL-007 vigia: uma página o abriu, e nenhuma operação depois dela o fechou.</summary>
         public bool CursorOpen { get; set; }
 
         /// <summary>

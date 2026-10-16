@@ -48,7 +48,7 @@ Cada entrega tem a sua especificação e o seu plano. Esta especificação cobre
 | --- | --- |
 | **1 (esta)** | Casca Electron + API C#, login e cofre por usuário, pastas e conexões, os três bancos conectando, árvore de objetos, editor SQL com 200 linhas, "Carregar mais" e "Contar total" |
 | 2 | Aba de tabela: Registros (200 + rolagem), Estrutura (colunas, FKs, índices, DDL), salto por FK, abrir e salvar `.sql` |
-| 3 | Proteções e sessão: somente leitura (com senha para mudar), confirmação antes de comando irreversível, verificação periódica da conexão, encerramento por ociosidade, ambiente e proteções herdados da pasta |
+| 3 | Proteções e sessão: somente leitura (com senha para mudar), confirmação antes de comando irreversível, verificação periódica da conexão, encerramento por ociosidade, ambiente e proteções herdados da pasta. Em 2026-10-15 (pedido do dono, seção 32) entraram nesta fatia o somente leitura, a confirmação antes de executar, a verificação periódica e as proteções herdadas da pasta; o ambiente herdado já tinha entrado pela RN-PASTA-005. Fica o encerramento por ociosidade |
 | 4 | Diagrama ER, configurações do usuário, temas, troca de senha, bloqueio por inatividade, instalador |
 
 ## 3. Arquitetura
@@ -235,14 +235,23 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 
 - **RN-CONN-010.** Campos: nome (1 a 80), pasta (opcional), banco (`PostgreSql` = 1, `Db2` = 2,
   `Informix` = 3), host, porta, nome do banco de dados, usuário, senha, nome do ambiente
-  (opcional, até 30) e cor do ambiente (opcional, `#RRGGBB`).
+  (opcional, até 30) e cor do ambiente (opcional, `#RRGGBB`); as proteções, "Confirmar antes de
+  executar" ("Não", o padrão, "Só comandos irreversíveis" ou "Todos os comandos", RN-PROT-001) e
+  "Somente leitura" (desmarcada por padrão, RN-PROT-002); e a sessão da conexão, "Verificar a cada N
+  segundos" (ligada, 30 segundos, de 5 a 3.600) e a consulta de verificação (opcional, até 1.000
+  caracteres, RN-VERIF-001). *Alterada a pedido do dono em 2026-10-15 (seção 32): entraram as
+  proteções e a sessão da conexão.*
 - **RN-CONN-011.** Nome único dentro da mesma pasta: 409 `CONNECTION_ALREADY_EXISTS`.
 - **RN-CONN-012.** Portas sugeridas no formulário: PostgreSQL 5432, Db2 50000, Informix 9089.
 - **RN-CONN-013.** "Testar conexão" abre, executa a consulta de verificação do banco e fecha,
   sem gravar nada. Ao testar uma conexão já gravada sem redigitar a senha, o pedido leva o `id`
   e a API usa a senha do cofre, com a mesma condição da RN-CONN-004: se o host ou a porta do
   pedido diferem dos gravados, 422 `CONNECTION_INVALID`. Consultas: PostgreSQL `SELECT 1`; Db2 `SELECT 1 FROM SYSIBM.SYSDUMMY1`;
-  Informix `SELECT 1 FROM systables WHERE tabid = 1`.
+  Informix `SELECT 1 FROM systables WHERE tabid = 1`. Quando o formulário tem uma consulta de
+  verificação própria (RN-VERIF-001), o teste executa a dela no lugar da do banco, com as mesmas
+  regras da verificação periódica, e a recusa da consulta é 422 `CONNECTION_INVALID` no campo dela,
+  antes de conectar. *Alterada a pedido do dono em 2026-10-15 (seção 32): antes valia só a consulta
+  do banco.*
 - **RN-CONN-014.** Excluir uma conexão encerra as sessões abertas dela. Antes de encerrar
   sessões com transação aberta, vale a RN-TX-006.
 - **RN-CONN-015.** O ambiente aparece como etiqueta colorida ao lado do nome da conexão, na
@@ -305,7 +314,9 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-SQL-001.** Executar (botão ou Ctrl+Enter) envia o texto selecionado; sem seleção, envia o
   comando onde está o cursor, que acaba no `;` e também na linha em branco, nas condições da
   RN-SQL-018 (pedido do dono em 2026-10-15, issue #7). Uma execução leva um comando só: se a seleção tiver mais de um
-  (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência entra na entrega 2.
+  (pela RN-SQL-002), a tela avisa e não envia. Executar vários em sequência é o "Executar script" (Alt+X, RN-SQL-019 a
+  022), que entrou pela seção 31 (pedido do dono em 2026-10-15; antes ficava para a entrega 2), e o aviso da seleção com
+  mais de um comando o aponta, com o atalho.
   Um bloco com `;` no corpo (procedimento, função, gatilho, bloco composto) conta como um
   comando só. No Db2 e no Informix a API repete a conferência e responde 422
   `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, porque o driver da IBM executaria os comandos um a um
@@ -457,17 +468,18 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET api/public/sessions` | 200 `{ unlocked, userName }` | |
 | `POST api/public/sessions` | 200 `{ unlocked, userName }` | 401 `INVALID_CREDENTIALS`; 409 `VAULT_FORMAT_UNSUPPORTED` (RN-VERSAO-005) |
 | `DELETE api/public/sessions` | 204 | |
-| `GET api/user/folders` | 200 lista | |
+| `GET api/user/folders` | 200 lista (cada pasta com as proteções próprias e as que valem, `protections`: seção 32) | |
 | `POST api/user/folders` | 201 | 404 `FOLDER_NOT_FOUND` (pai); 409 `FOLDER_ALREADY_EXISTS`; 422 `FOLDER_NAME_INVALID` |
-| `PATCH api/user/folders` | 200 | 404 `FOLDER_NOT_FOUND`; 409 `FOLDER_ALREADY_EXISTS`, `FOLDER_CYCLE`; 422 `FOLDER_NAME_INVALID` |
+| `PATCH api/user/folders` | 200 | 404 `FOLDER_NOT_FOUND`; 409 `FOLDER_ALREADY_EXISTS`, `FOLDER_CYCLE`; 422 `FOLDER_NAME_INVALID`, `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (a senha do somente leitura, RN-PROT-003); 401 `VAULT_LOCKED` no quinto erro |
 | `DELETE api/user/folders/{id}` | 204 | 404 `FOLDER_NOT_FOUND`; 409 `FOLDER_NOT_EMPTY` |
-| `GET api/user/connections` | 200 lista | |
+| `GET api/user/connections` | 200 lista (cada conexão com as proteções próprias e as que valem, `protections`, e a verificação: seção 32) | |
 | `GET api/user/connections/{id}` | 200 | 404 `CONNECTION_NOT_FOUND` |
 | `POST api/user/connections` | 201 | 404 `FOLDER_NOT_FOUND`; 409 `CONNECTION_ALREADY_EXISTS`; 422 `CONNECTION_INVALID` |
-| `PATCH api/user/connections` | 200 | as mesmas, mais 404 `CONNECTION_NOT_FOUND` |
+| `PATCH api/user/connections` | 200 | as mesmas, mais 404 `CONNECTION_NOT_FOUND`, 422 `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (a senha do somente leitura, RN-PROT-003) e 401 `VAULT_LOCKED` no quinto erro |
 | `DELETE api/user/connections/{id}` | 204 | 404 `CONNECTION_NOT_FOUND` |
 | `POST api/user/connections/test` | 204 | 404 `CONNECTION_NOT_FOUND` (com `id` e sem senha, quando a conexão não existe); 422 `CONNECTION_INVALID`, `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED` |
 | `POST api/user/connections/{id}/password/reveal` | 200 `{ password }` | 404 `CONNECTION_NOT_FOUND`; 422 `INVALID_PASSWORD`; 401 `VAULT_LOCKED` no quinto erro |
+| `POST api/user/connections/{id}/verification` | 200 `{ status, checkedAt, elapsedMs, message, sqlState }` (a verificação periódica, RN-VERIF-002; a falha do banco é `status: failed`, e não um erro) | 404 `CONNECTION_NOT_FOUND` |
 | `PUT api/user/password` `{ currentPassword, newPassword }` | 204 (troca a senha e recifra o cofre, RN-COFRE-013) | 422 `INVALID_PASSWORD` (a atual não confere), `PASSWORD_INVALID` (a nova), `PASSWORD_UNCHANGED`; 401 `VAULT_LOCKED` no quinto erro |
 | `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013) |
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
@@ -483,15 +495,15 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET .../schemas/{schema}/views/{view}/definition` | 200 `{ definition }` (RN-CAT-006) | as mesmas |
 | `GET .../schemas/{schema}/diagram` | 200 `{ tables, foreignKeys }` (RN-CAT-008) | as mesmas |
 | `GET api/user/database-sessions/{id}/properties` | 200 lista de `{ name, value }` (RN-CAT-010) | as mesmas |
-| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem) |
+| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem), `CONNECTION_READ_ONLY` (RN-PROT-002: o comando não é uma leitura) |
 | `POST .../queries/next` | 200 página | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_CURSOR`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/count` | 200 `{ total }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_QUERY_TO_COUNT`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `POST api/user/database-sessions/{id}/transaction/commit` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone` quando o banco desfez) |
 | `POST api/user/database-sessions/{id}/transaction/rollback` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone`: a conexão caiu, e a transação já estava perdida) |
-| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED` |
-| `POST .../queries/edits` `{ resultID, changes }` | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`) |
-| `POST .../queries/edits/preview` `{ resultID, changes }` | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` |
+| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST .../queries/edits` `{ resultID, changes }` | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`), `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST .../queries/edits/preview` `{ resultID, changes }` | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
 
 Página de resultado: `{ columns: [{ name, type, kind }], rows: string|null [][], hasMore,
 elapsedMs, truncatedCells: [linha, coluna][], totalRows }`, com `kind` em `text`, `number`,
@@ -511,7 +523,9 @@ leva `executed: true` quando o comando rodou e o Prism desfez a transação que 
 da transação depois do comando, ao lado de `outcome` e `executed`; `SQL_EXECUTION_FAILED` do
 Commit e do Rollback leva `transactionUndone` quando a transação foi desfeita (RN-TX-014 e
 RN-TX-008); e, no Informix sem log, as recusas de `queries/edits` levam `applied`, as alterações
-já gravadas antes da que falhou (RN-EDIT-012).
+já gravadas antes da que falhou (RN-EDIT-012). Com a seção 32: `CONNECTION_READ_ONLY` é a recusa,
+antes de ir ao banco, do que não é leitura numa conexão somente leitura, e não leva `executed` (o
+resultado anterior continua); os campos novos das pastas e das conexões estão nas notas dela.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -553,8 +567,17 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
 
 ## 9. Diferenças em relação ao canvas
 
-- O formulário de conexão desta fatia não tem os painéis "Sessão da conexão" e "Proteções";
-  eles entram na entrega 3, junto com o que fazem.
+- O formulário de conexão tem os painéis "Proteções" e "Sessão da conexão" do canvas desde
+  2026-10-15 (pedido do dono, seção 32; antes ficavam para a entrega 3), com três diferenças: a
+  caixa "Confirmar antes de comandos irreversíveis" vira a escolha "Confirmar antes de executar",
+  com "Não", "Só comandos irreversíveis" e "Todos os comandos" (RN-PROT-001); a consulta de
+  verificação, que o canvas mostra fixa, vira um campo que a pessoa pode preencher, com a do banco
+  como dica (RN-VERIF-001); e "Encerrar a conexão após N minutos sem uso" não aparece, porque o
+  encerramento por ociosidade continua fora (seção 13). O diálogo da pasta (`PastaAmbiente`) tem as
+  mesmas duas proteções, com a mesma escolha de três no lugar da caixa, e o aviso de confirmação
+  (`ConfirmarComando`) ganha "Executar comando?" para "Todos os comandos" e a lista dos comandos no
+  script (RN-PROT-001). A barra do navegador ganha "Só as conectadas" (RN-NAV-013), que o canvas
+  não tem.
 - O campo "Servidor Informix" sai, porque o driver escolhido não usa `INFORMIXSERVER`. Volta se
   a sonda da seção 10 mostrar que é necessário.
 - A porta sugerida do Informix é 9089, não 9088.
@@ -587,6 +610,10 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   tem; na densidade "Compacta" a árvore tem linhas de 22 px, e não as de 30 px do canvas, que
   continuam sendo o padrão (RN-ZOOM-001 e RN-NAV-011, seção 30). Fora de 100% o splash tem o
   tamanho do zoom, e não os 640×400 do canvas (RN-MARCA-002).
+- A barra do editor ganha "Executar script (Alt+X)" ao lado de "Executar", e a área de resultado,
+  depois de um script, ganha uma aba por resultado e as Estatísticas no lugar do título
+  "Resultado", no mesmo desenho das abas "Resultado", "Mensagens" e "Plano de execução" do canvas
+  (RN-SQL-019 e 020, seção 31). O canvas não desenha o script.
 
 ## 10. Riscos e sondas
 
@@ -650,10 +677,17 @@ e a tela de configurações, nos limites ditos lá.)
 RN-GRADE-014. A "atualização automática" da lista abaixo, ao lado da assinatura de código, é a do
 próprio app, que entrou pela seção 17.)
 
+(Em 2026-10-15 entrou pela seção 31, pedido do dono, executar vários comandos em sequência: o
+"Executar script" (Alt+X), RN-SQL-019 a 022.)
+
+(Em 2026-10-15 entraram pela seção 32, pedido do dono: o somente leitura, a confirmação antes de
+executar (que vale para o comando irreversível e, se a pessoa quiser, para todos), a verificação
+periódica e as proteções herdadas da pasta. O ambiente por pasta já tinha entrado pela RN-PASTA-005.
+Da lista abaixo, continua fora o encerramento por ociosidade.)
+
 Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama ER, somente
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
-troca de senha, explicar plano, formatar SQL, exportar CSV, executar vários comandos em
-sequência (script), salvar e abrir arquivos `.sql`
+troca de senha, explicar plano, formatar SQL, exportar CSV, salvar e abrir arquivos `.sql`
 (o texto das abas se perde ao fechar o app), trocar de banco dentro da mesma conexão,
 atualização automática, assinatura de código, roteiro de aceite completo em macOS e Linux
 (a seção 14 cobre só a geração dos pacotes), mais de uma janela.
@@ -1080,8 +1114,10 @@ Só da tela:
   ser desligado). Sem tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em
   nenhuma aba (o tempo conta a partir do fim do último; a execução da atualização automática,
   RN-GRADE-014, não conta como comando em andamento nem como atividade, pedido do dono em
-  2026-10-15, issue #11), o Prism avisa 60 segundos antes (30, quando o
-  tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
+  2026-10-15, issue #11; o script conta enquanto roda, e não enquanto espera a resposta da
+  pergunta de erro, RN-SQL-021; a verificação periódica das conexões, RN-VERIF-002, não conta como
+  comando em andamento nem como atividade, e não roda com o cofre bloqueado), o Prism avisa 60
+  segundos antes (30, quando o tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
   mostra o bloqueio, que pede a senha do MESMO usuário. Desbloquear devolve a área de trabalho
   com as abas e o texto de SQL como estavam; os resultados que estavam na tela são descartados
   no bloqueio. O aviso antes do bloqueio diz quantas transações serão desfeitas e quantas
@@ -1096,6 +1132,7 @@ Só da tela:
   mesmo jeito e tenta de novo com espera crescente (cada tentativa com prazo); enquanto tenta,
   "Desbloquear" espera, e a tela diz o que está acontecendo. Se desistir, avisa que o cofre pode
   continuar aberto no serviço, e o desbloqueio continua conferindo a senha lá.
+  *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a verificação periódica.*
 - **RN-TABELA-005.** Registros: um campo de filtro recebe a condição (`WHERE`) que o usuário
   escreve, e clicar no cabeçalho de uma coluna ordena por ela (crescente, decrescente, sem
   ordem). A tela monta o `SELECT` com a condição e a ordem e mostra o comando que executou. A
@@ -1664,7 +1701,8 @@ até lá, o que depende delas está a provar.
 
   O **resultado inteiro** é só leitura quando o comando não é um `SELECT` só, ou tem `UNION`, `INTERSECT`, `EXCEPT` ou `MINUS`,
   `DISTINCT`, `GROUP BY`, `HAVING`, `FOR UPDATE`, `WITH`, ou subconsulta no `FROM`; quando ele gravou e devolveu linhas
-  (RN-SQL-013); ou quando o Prism não consegue saber de onde vêm as colunas (RN-EDIT-003). `WHERE` (com subconsultas dentro),
+  (RN-SQL-013); quando o Prism não consegue saber de onde vêm as colunas (RN-EDIT-003); ou quando a conexão é somente leitura
+  (RN-PROT-002, pedido do dono em 2026-10-15). `WHERE` (com subconsultas dentro),
   `ORDER BY`, os limites de linhas de cada banco e as junções (`JOIN`, `LEFT`, `RIGHT` e `FULL JOIN`, `CROSS JOIN`, vírgula no
   `FROM`; no Informix também a forma `, OUTER tabela`) são permitidos.
 
@@ -1685,7 +1723,7 @@ até lá, o que depende delas está a provar.
 
   Os motivos ficam à vista: os do resultado inteiro na barra do resultado ("Somente leitura: união de consultas", "DISTINCT",
   "agrupamento", "SELECT ... FOR UPDATE", "subconsulta ou WITH no FROM", "o comando gravou e devolveu linhas", "o Prism não
-  conseguiu saber de onde vêm as colunas"), sabidos sem consultar o banco; os de tabela e de coluna na faixa da grade quando a
+  conseguiu saber de onde vêm as colunas", "a conexão é somente leitura"), sabidos sem consultar o banco; os de tabela e de coluna na faixa da grade quando a
   pessoa tenta editar e na dica do cabeçalho da coluna ("<tabela> é uma visão", "<tabela> aparece mais de uma vez no
   comando", "a chave de <tabela> não está inteira no resultado: faltam <colunas>", "<tabela> não tem chave primária nem chave
   única de colunas não nulas", "coluna calculada", "gerada pelo banco", "coluna da chave numa junção", "o Prism ainda não
@@ -1898,8 +1936,11 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - **Manter o "carregar mais" depois de salvar.** Salvar é um comando na sessão e fecha o cursor (RN-EDIT-009).
 - **Conferir o valor lido ao salvar** e **Commit manual na aba de uma tabela**, se o dono quiser depois.
 - **Pontos de salvamento com botão**, "commit inteligente" (passar sozinho ao manual quando um comando grava), confirmação em
-  duas fases e transação que atravessa um script de vários comandos (a execução de script ainda é da entrega 2).
-- **Proteções** da entrega 3 (somente leitura com senha, confirmar comando irreversível), que vão restringir a edição.
+  duas fases e transação que atravessa um script de vários comandos. A execução de script entrou pela seção 31 (pedido do dono
+  em 2026-10-15) e segue o modo da aba comando a comando, como se cada um fosse executado sozinho (RN-SQL-019); o script que é uma
+  transação só, confirmada ou desfeita no fim, continua para depois.
+- **Proteções** da entrega 3: entraram pela seção 32 (pedido do dono em 2026-10-15). A restrição da edição é a da RN-PROT-002
+  (nenhuma edição na conexão somente leitura) e a da RN-PROT-001 (o "Salvar" pergunta em "Todos os comandos").
 
 ## 23. Complemento de 2026-10-13: abas que se movem, janelas e scripts salvos
 
@@ -2128,8 +2169,8 @@ O log dessa rota registra só a contagem de células, nunca o valor.
 Pedidos do dono em 2026-10-13: "as pastas terem seus ambientes também, por exemplo uma pasta só de
 production, outra só de QAS, outra de develop"; e o seletor de "Outra cor" abria ao clicar em
 qualquer ponto da linha dele, e deve virar uma bolinha ao lado das outras, com o ícone de
-conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções herdadas continuam
-lá.
+conta-gotas. Antecipa da entrega 3 o "ambiente herdado da pasta"; as proteções herdadas continuavam
+lá, e entraram pela seção 32 (pedido do dono em 2026-10-15).
 
 - **RN-PASTA-005.** A pasta pode ter um ambiente, com nome e cor, nas mesmas regras do ambiente da
   conexão (RN-CONN-010: nome opcional de até 30 caracteres, cor `#RRGGBB`). Só o nome faz um
@@ -2147,6 +2188,11 @@ lá.
   - As rotas de pastas (`GET`, `POST` e `PATCH api/user/folders`) recebem e devolvem
     `environmentName` e `environmentColor`, opcionais, com as recusas do ambiente da conexão em
     `FOLDER_NAME_INVALID` ou num código próprio, como a conexão já faz.
+  - A pasta tem também as proteções da conexão, "Confirmar antes de executar" e "Somente leitura"
+    (RN-PROT-001 e 002), no diálogo de nova pasta e no "Editar pasta…", depois da seção Ambiente.
+    Ao contrário do ambiente, elas valem para tudo o que está dentro da pasta, a qualquer
+    profundidade, e a conexão não as afrouxa (RN-PROT-004). *Alterada a pedido do dono em
+    2026-10-15 (seção 32): entraram as proteções da pasta.*
 - **RN-CONN-017.** O seletor de cor do ambiente (da conexão e da pasta) é uma fileira de bolinhas.
   - A última bolinha é "Outra cor", com o ícone de conta-gotas. Só ela abre o seletor de cor do
     sistema; clicar em outro ponto da fileira ou da seção não abre nada.
@@ -2452,6 +2498,9 @@ nos dados que estão sendo acompanhados".
     Quem diz se o comando grava é a regra da RN-SQL-013, e a tela não lê o texto de novo. Também
     não liga com a aba ocupada nem desconectada. O que não se aplica aparece desabilitado, com o
     motivo.
+  - Na conexão com "Confirmar antes de executar" em "Todos os comandos" (RN-PROT-001), ligar pergunta
+    uma vez, e nunca a cada intervalo: confirmada, ela roda até ser desligada, e trocar só o
+    intervalo não pergunta de novo. *Alterada a pedido do dono em 2026-10-15 (seção 32).*
   - Fica em pausa (não executa) enquanto há alteração não salva na grade (RN-EDIT-007), uma célula
     em edição ou um menu ou diálogo da grade aberto, e enquanto a aba não está à vista (outra aba à
     frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
@@ -2525,3 +2574,494 @@ primeiras: a área de trabalho passa de 14 px a 13 px, e quem quer menos ainda u
 - **RN-NAV-012.** A seção Scripts do navegador lembra se ficou recolhida ou aberta: volta assim ao
   entrar de novo e ao abrir o app, por usuário, como o navegador escondido (RN-NAV-008). Aberta é o
   padrão. A janela que abre depois começa como a última escolha.
+
+## 31. Complemento de 2026-10-15, versão 0.4.0: executar script (Alt+X), como no DBeaver
+
+Pedido do dono em 2026-10-15: "Crie uma nova funcionalidade igual a do dbeaver do alt + x que
+executava scripts, sabe?". No DBeaver, "Executar script" (Alt+X) executa os comandos do editor um
+depois do outro, abre uma aba para cada resultado e uma de estatísticas, e pergunta o que fazer
+quando um comando falha. No Prism uma execução levava um comando só (RN-SQL-001), e o script ficava
+para a entrega 2 (seção 13). Entra agora, com as regras do Prism para cada comando. Muda a
+RN-SQL-001, a seção 13 e o "fica para depois" da seção 22, que citam o script, e a RN-SEG-001 (o
+script parado na pergunta de erro não segura o bloqueio); a seção 9 diz o que o canvas não desenha.
+A API não muda: continua recebendo um comando por execução.
+
+- **RN-SQL-019.** Executar script.
+  - Onde: Alt+X no editor e com o foco em qualquer ponto da aba de consulta (a barra, o resultado, o
+    campo de filtro), menos no campo de edição de uma célula, que fica com as teclas dele; e o botão
+    "Executar script" na barra do editor, logo depois de "Executar", com o atalho escrito nele. No
+    macOS a tecla é Cmd+Option+X: lá o Option+X escreve um caractere (`≈` no teclado americano, outros
+    em outros teclados), e o atalho o tiraria do editor. Nenhum outro atalho do Prism, do menu do
+    Electron ou do editor usa essas teclas; no Windows e no Linux o AltGr+X continua escrevendo o que
+    escreve. A área de resultado vazia ensina o atalho ao lado do Ctrl+Enter, e o aviso da seleção com
+    mais de um comando (RN-SQL-001) também.
+  - O que vai: a seleção, quando há; sem seleção, o texto inteiro do editor. O texto é dividido em
+    comandos pelas regras do Ctrl+Enter, com o mesmo leitor: o `;` fora de texto, de nome entre aspas,
+    de comentário e de `$tag$` (RN-SQL-002) e, com "A linha em branco separa os comandos" ligada, a
+    linha em branco, nas condições da RN-SQL-018. No script a linha em branco divide também a seleção,
+    porque dividir é o que o script faz com o texto; no Ctrl+Enter a seleção continua indo inteira,
+    como um comando só. O bloco com `;` no corpo (procedimento, função, gatilho, bloco composto: os da
+    RN-SQL-001) e o `CREATE SCHEMA` com os objetos dele são um comando só. No Db2 o bloco vai até o fim
+    do texto, como na RN-SQL-001: o que vem depois dele vai junto, e para executar um bloco e depois
+    outros comandos a pessoa seleciona as partes. Trecho só com espaços, `;` ou comentários não é
+    comando e não aparece. Um comando só também é script: roda, e aparece como um script de um comando.
+  - Como roda: um comando por vez, na ordem, na sessão da aba, pelo caminho de "Executar" (cada um é
+    um `POST …/queries`, com o texto como está, RN-SQL-003). Valem as regras de uma execução: com
+    alterações não salvas na grade, a pergunta da RN-EDIT-007 vem antes; a atualização automática
+    desliga (RN-GRADE-014); o filtro do resultado sai (RN-GRADE-011); a área de resultado recolhida
+    volta (RN-PAINEL-001). Com um comando em andamento na aba, ou com a aba sem conexão
+    (RN-SCRIPT-003), nada roda, como no Ctrl+Enter. Na conexão que confirma antes de executar
+    (RN-PROT-001), a pergunta vem uma vez, antes do primeiro comando, com a lista dos comandos que a
+    pedem, e cancelada nada roda; na conexão somente leitura (RN-PROT-002), o comando que não é uma
+    leitura é recusado pela API, e a recusa é o erro dele (RN-SQL-021). *Alterada a pedido do dono em
+    2026-10-15 (seção 32).*
+  - Enquanto roda: o editor marca o comando em execução, com o acento do tema, até o seguinte começar,
+    e traz o comando à vista quando ele está fora dela; a marca some no fim. Se o texto foi editado
+    depois de o script começar, a marca não aparece, porque o lugar já não é o mesmo. A barra da área
+    de resultado diz "Executando 3 de 12…", em qualquer aba dela e também com ela recolhida.
+    "Executar" vira "Cancelar", como num comando, e a aba fica ocupada para tudo o que espera um
+    comando acabar: trocar o banco ou a conexão (RN-ARVORE-007 e 008), levar a aba para outra janela
+    (RN-ABAS-002), o bloqueio por inatividade (RN-SEG-001).
+  - Transação: cada comando segue o modo da aba como se fosse executado sozinho. Hoje a aba de
+    consulta só tem o Auto-commit na tela: cada comando é confirmado quando termina, e um comando de
+    controle de transação no script (`BEGIN`, `COMMIT`, `ROLLBACK`…) é recusado como no Ctrl+Enter
+    (RN-SQL-003 e RN-TX-004), com o erro dele (RN-SQL-021). Quando o Commit manual (RN-TX-001)
+    chegar à aba de consulta, o script roda dentro da transação da aba, comando a comando, sem
+    confirmar nada sozinho, e o controle de transação digitado vale como na RN-TX-004.
+  - Não é gravado com as abas (RN-ABAS-006): elas voltam com o texto, sem os resultados do script.
+- **RN-SQL-020.** Os resultados do script, como as abas de resultado e as estatísticas do DBeaver.
+  - A área de resultado ganha abas no lugar do título "Resultado": uma para cada comando que devolveu
+    linhas, com o número dele no script e o começo do texto ("3 · SELECT * FROM pedido…", com o texto
+    inteiro na dica), e, por último, "Estatísticas". O comando que não devolve linhas (linhas
+    afetadas, DDL) aparece só nas Estatísticas. As abas andam com as setas, Home e End, como uma lista
+    de abas, e só a escolhida entra no Tab. As dos resultados rolam na horizontal quando não cabem, e a
+    escolhida (também a que vem à frente sozinha) é sempre trazida à vista; "Estatísticas" fica fixa na
+    ponta direita, fora da rolagem.
+  - Enquanto o script roda, as Estatísticas ficam à frente e se preenchem. No fim, se o último comando
+    executado devolveu linhas, a aba dele vem à frente; senão, ficam as Estatísticas. A aba que a
+    pessoa escolheu durante o script continua escolhida; o script seguinte volta às Estatísticas, também
+    depois de a aba trocar de banco ou de conexão ou passar pelo bloqueio por inatividade.
+  - Só o resultado do último comando executado tem o cursor aberto: a sessão tem um cursor só, e cada
+    comando novo fecha o anterior (RN-SQL-007). Nele vale tudo o que vale no resultado de um comando:
+    "Carregar mais", "Contar total", o filtro do resultado (RN-GRADE-011), a edição das células (seção
+    22), a atualização automática (RN-GRADE-014) e o F5, com a aba dele à frente; com outra aba do
+    script à frente, a atualização automática espera, como com outra aba do Prism à frente. As abas dos
+    outros comandos guardam as linhas que já tinham sido lidas (as primeiras 200, RN-SQL-004), só para
+    leitura, sem o menu da grade, e dizem por que o resto não vale ali: o cursor delas fechou quando o
+    comando seguinte rodou, e "Carregar mais", "Contar total", o filtro, o menu da grade, a edição e a
+    atualização automática ficam no resultado do último comando. Elas oferecem "Executar este
+    comando", que executa só aquele comando, como o Ctrl+Enter nele (com a pergunta da RN-EDIT-007
+    antes, quando há alterações não salvas). Com um comando em andamento na aba, o botão fica à vista,
+    não executa e diz por quê, sem perguntar nem mexer na área; quando o comando executado troca os
+    resultados do script, o foco vai à grade do resultado novo, e não se perde (como na RN-SQL-006).
+  - O script guarda as abas dos 20 primeiros comandos que devolvem linhas, para um script longo não
+    encher a memória de grades; a do último comando executado fica sempre, quando ele devolve linhas,
+    porque é a do cursor aberto. Os outros aparecem só nas Estatísticas, com as linhas que devolveram,
+    e elas dizem quantos resultados não foram guardados.
+  - As Estatísticas são uma tabela com cabeçalho: o número do comando, o começo do texto (inteiro na
+    dica), a situação ("na fila", "executando", "ok", "erro", "pulado", "cancelado" ou "não
+    executado"), as linhas (lidas ou devolvidas, ou afetadas) e o tempo. O erro de um comando vem na
+    linha logo abaixo dele, como o banco o deu (RN-SQL-009), com o SQLSTATE. Abaixo da tabela, os
+    totais: comandos executados (os que deram certo, de quantos o script tem), linhas alteradas (a
+    soma das linhas afetadas; o comando para o qual o banco não conta linhas não soma, nem o que grava
+    e devolve linhas, como o `INSERT ... RETURNING` (RN-SQL-013): dele a API diz quantas linhas
+    devolveu, e não quantas alterou, e as duas contas só coincidem no `INSERT`, no `UPDATE` e no
+    `DELETE` com `RETURNING` sozinhos; o total diz quantos ficaram de fora, "Linhas alteradas: 12 (sem
+    contar 1 comando que gravou e devolveu linhas)") e o tempo total (a soma dos tempos dos comandos,
+    sem o tempo das perguntas). Enquanto o script roda, a tabela
+    mostra os 50 comandos em volta do que está em execução, com ele perto do alto, e duas linhas dizem
+    quantos ficaram antes ("1.995 comandos antes destes, que aparecem quando o script terminar.") e
+    quantos estão na fila ("Mais 955 comandos na fila."); os totais são do script inteiro. Enquanto ele
+    roda, ela se atualiza no máximo quatro vezes por segundo (quem diz o comando em execução a cada um é
+    a barra da área); a pergunta de erro e o fim aparecem na hora. No fim, ela mostra todos. Assim um
+    script de milhares de comandos (uma carga de `INSERT`) leva o mesmo com as Estatísticas à frente e
+    com outra aba à frente, e não fica mais lento a cada comando: refazer a tabela inteira a cada um
+    fazia o tempo crescer com o quadrado do tamanho.
+  - Uma execução nova na aba substitui os resultados do script, como substitui o resultado de um
+    comando: o Ctrl+Enter, "Executar este comando" e outro script. O F5, "Executar de novo", o filtro
+    e a atualização automática do resultado do último comando mudam só ele, e as outras abas ficam.
+    Como antes, o que está na tela só sai quando a API aceita um comando novo: se o script não chega a
+    executar comando nenhum (a conexão não abre, a sessão está ocupada, o cancelamento antes do
+    primeiro), a área fica como estava. Trocar o banco ou a conexão da aba e o bloqueio por
+    inatividade tiram os resultados do script, como tiram o resultado. Levar a aba para outra janela
+    leva o resultado do último comando, como hoje; as outras abas e as Estatísticas não vão.
+  - Avisos: um no fim, e não um por comando, com o nome da aba, porque o script de uma aba que não
+    está à vista também termina. "Script executado na aba consulta-1.sql: 12 comandos." (sucesso);
+    "Script executado na aba consulta-1.sql com 2 erros: 10 de 12 comandos executados." (atenção);
+    "Script parado na aba consulta-1.sql: 4 de 12 comandos executados." e "Script cancelado na aba
+    consulta-1.sql: 4 de 12 comandos executados." (atenção). O nome é o da aba no fim do script (ela
+    pode ter sido renomeada, ou salva como script, enquanto ele rodava). O aviso de valores cortados
+    (RN-AVISO-003) sai uma vez por script, e o de sessão reaberta, como sempre.
+- **RN-SQL-021.** Erro num comando do script, como o diálogo de erro do DBeaver.
+  - O script para, e um diálogo mostra o comando (o número e o texto) e o erro como veio (RN-SQL-009),
+    com o SQLSTATE, e pergunta: "Parar" (o padrão, com o foco, e também o Esc), "Tentar de novo"
+    (executa o mesmo comando outra vez), "Pular" (segue com o próximo) e "Pular todos os erros" (segue,
+    e o resto do script pula os comandos que falharem sem perguntar). O foco volta, quando o diálogo
+    fecha, para onde estava: o editor, de onde o script saiu.
+  - O diálogo só aparece na aba à vista: a ativa, com a área de trabalho na tela (como a atualização
+    automática, RN-GRADE-014). O script de outra aba, ou o da área de trabalho escondida por baixo de
+    Configurações, Conexões ou Drivers, espera a resposta sem cobrir a tela nem tirar o foco de quem
+    está digitando em outro lugar; a aba dele leva, na faixa de abas, um ponto vermelho ("O script
+    parou num erro e espera a resposta", também para o leitor de tela), e o diálogo aparece quando a
+    pessoa vai até ela. Assim dois scripts parados em abas diferentes nunca abrem dois diálogos.
+  - É erro do comando o que o banco respondeu (`SQL_EXECUTION_FAILED`) e a recusa da API para aquele
+    comando (`TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`,
+    `MULTIPLE_STATEMENTS_NOT_SUPPORTED` e, na conexão somente leitura, `CONNECTION_READ_ONLY`,
+    RN-PROT-002). O que não é do comando (a conexão que não abre, a sessão
+    ocupada, a API fora do ar ou com erro interno, a sessão que caiu) para o script sem perguntar: o
+    aviso central diz o que houve (RN-AVISO-004), o comando fica como "erro" e os seguintes, como "não
+    executado". A sessão que cai no primeiro comando é reaberta uma vez, como no Ctrl+Enter (seção 7);
+    a que cai depois dele não é, porque o que os comandos de antes deixaram nela (uma tabela
+    temporária, um `SET`) se perdeu: as Estatísticas dizem isso, e a pessoa executa o script de novo.
+    *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a recusa do somente leitura.*
+  - O editor marca a posição do erro, quando o banco a dá, no texto inteiro: no lugar do comando
+    dentro do texto do editor, como faz com o comando do Ctrl+Enter (RN-SQL-009). Se o texto foi
+    editado depois de o script começar, a marca não aparece.
+  - "Parar" deixa nos resultados e nas Estatísticas o que já rodou; o comando que falhou fica como
+    "erro", e os seguintes, como "não executado". Pulado, o comando fica como "pulado", com o erro.
+  - Enquanto o diálogo espera a resposta, o script não é comando em andamento para o bloqueio por
+    inatividade (RN-SEG-001): passado o prazo, o Prism bloqueia, e o bloqueio para o script e tira os
+    resultados dele, como tira o resultado de um comando.
+- **RN-SQL-022.** Cancelar o script: "Cancelar", na barra do editor, interrompe o comando em andamento
+  (RN-SQL-010) e para o script. O comando cancelado fica como "cancelado"; o que terminou antes de o
+  cancelamento chegar fica como "ok", e o script para mesmo assim; com o desfecho incerto ou parcial
+  da RN-SQL-010, fica como "erro", com a frase da API. Os seguintes ficam como "não executado", e o
+  que já rodou fica nos resultados e nas Estatísticas. "Desconectar" também para o script: a sessão
+  fecha com o comando em andamento, que fica como "cancelado".
+- **Fica para depois:** um script que é uma transação só (seção 22); continuar o script a partir de um
+  comando escolhido; e levar para outra janela as abas dos outros resultados e as Estatísticas.
+
+## 32. Complemento de 2026-10-15, versão 0.4.0: proteções da conexão e da pasta, verificação periódica e o filtro das conectadas
+
+Pedidos do dono em 2026-10-15: "Falta adicionar aquelas coisas que te pedi no começo de ter uma
+configuração pra abrir um modal pedindo confirmação do usuário antes de executar qualquer comando em
+uma conexão ou pasta que o usuário desejar, inclusive, ter outra configuração que permite que uma
+conexão seja apenas readonly, ou seja, permite apenas select"; e "aquele negócio de validar a conexão
+fazendo o select 1 ou o usuário se informar qual select ele quer fazer pra confirmar o healthcheck da
+conexão". E o de um colega, que o dono repassou: "podia ter um filtro de conexões abertas né / não dá
+pra saber se tenho conexões em aberto". É a entrega 3 da seção 2, menos o encerramento por
+ociosidade, que o dono não pediu e continua na seção 13 (o ambiente herdado da pasta já tinha
+entrado pela RN-PASTA-005). O canvas desenha os painéis "Proteções" e "Sessão da conexão" do
+formulário da conexão (`Conexoes.dc.html`), as proteções do diálogo da pasta (`PastaAmbiente.dc.html`)
+e o aviso de confirmação (`ConfirmarComando.dc.html`); a seção 9 diz onde esta seção se afasta deles.
+Muda a RN-CONN-010, a RN-CONN-013, a RN-PASTA-005, a RN-EDIT-002, a RN-GRADE-014, a RN-SQL-019, a
+RN-SQL-021 e a RN-SEG-001, e as seções 2, 6, 9, 13 e 22.
+
+Quem impõe o somente leitura é a API: ela recusa, antes de qualquer coisa ir ao banco, o comando que
+não é uma leitura. A confirmação é da tela, que pergunta antes de enviar; a API guarda a escolha e
+diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas vêm.
+
+### Proteções
+
+- **RN-PROT-001.** Confirmar antes de executar. A conexão e a pasta têm a escolha "Confirmar antes
+  de executar", com três valores: "Não" (o padrão), "Só comandos irreversíveis" e "Todos os
+  comandos". Vale a mais forte entre a da conexão e as das pastas acima dela (RN-PROT-004).
+  - Irreversível é o comando que apaga o que não volta: `DROP` (de qualquer objeto, também o de
+    dentro de um `ALTER`, como `ALTER TABLE ... DROP COLUMN`), `TRUNCATE`, e `DELETE` e `UPDATE` sem
+    `WHERE` no nível de fora (também quando vêm depois de um `WITH`). A tela lê o comando com o
+    leitor da RN-SQL-002 (texto, nomes entre aspas, comentários e `$tag$` não contam) e, na dúvida,
+    pergunta.
+  - A pergunta é um aviso que ocupa a janela (o `ConfirmarComando` do canvas), antes de o comando
+    sair da tela. No topo, o ambiente da conexão (próprio ou herdado, RN-PASTA-005), com a cor
+    dele, e a conexão e o banco da aba. Depois o título ("Executar comando irreversível?" ou, em
+    "Todos os comandos", "Executar comando?"); o que o comando faz, quando a tela sabe dizer ("Este
+    DELETE não tem WHERE: ele apaga todas as linhas de producao.apontamento."); o comando, em
+    código; e por que o aviso aparece ("Você vê este aviso porque a conexão MES Produção herda da
+    pasta Fábrica a proteção "Só comandos irreversíveis"", ou "porque a conexão MES Produção tem a
+    proteção ..."). Os botões são "Executar mesmo assim" e "Cancelar". O foco começa em
+    "Cancelar", Esc cancela, e nada é executado sem "Executar mesmo assim". Cancelar deixa a aba
+    como estava, com o resultado de antes.
+  - Onde vale:
+    - "Executar" (o botão e o Ctrl+Enter), e o "Executar este comando" das abas do script
+      (RN-SQL-020), que é o Ctrl+Enter naquele comando;
+    - o "Executar script" (Alt+X, RN-SQL-019): a pergunta vem uma vez, antes do primeiro comando,
+      com a lista dos comandos que pedem confirmação (cada um com o número dele no script; em "Todos
+      os comandos", todos) e "Executar script" no lugar de "Executar mesmo assim". Confirmado, o
+      script roda sem perguntar de novo; cancelado, nada roda;
+    - o "Salvar" das edições (RN-EDIT-005): em "Todos os comandos" pergunta uma vez por "Salvar",
+      com quantas alterações vão e o "Ver SQL" (RN-EDIT-008) no próprio aviso; em "Só comandos
+      irreversíveis" não pergunta, porque cada comando dele é pela chave da linha, com `WHERE`;
+    - na aba de consulta, o que executa de novo o comando do resultado: o F5 e o "Executar de novo"
+      (RN-GRADE-012), aplicar o filtro e ordenar pela coluna (RN-GRADE-011), que perguntam pelo
+      comando que vai ao banco, como qualquer execução;
+    - a atualização automática (RN-GRADE-014), que só pergunta ao ser ligada, uma vez, e nunca a
+      cada intervalo.
+  - Não perguntam: o que o Prism monta sozinho para mostrar o que a pessoa abriu (a árvore e o
+    catálogo, os Registros de uma tabela, com o filtro e a ordem do campo deles, a Estrutura, os
+    diagramas, a aba do banco), "Carregar mais", "Contar total" e a verificação periódica
+    (RN-VERIF-002).
+  - Numa conexão somente leitura (RN-PROT-002), "Só comandos irreversíveis" não pergunta nada: todo
+    comando irreversível é recusado pela API antes de chegar ao banco. "Todos os comandos" continua
+    perguntando.
+  - Mudar a escolha não pede senha: a senha é só do somente leitura (RN-PROT-003).
+- **RN-PROT-002.** Somente leitura. A conexão e a pasta têm a opção "Somente leitura". Na conexão
+  somente leitura (pela opção dela ou de uma pasta acima, RN-PROT-004) só as leituras são
+  executadas (RN-PROT-005), e todo o resto é recusado: `INSERT`, `UPDATE`, `DELETE`, `MERGE`,
+  `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `GRANT`, `REVOKE`, `COMMENT`, `CALL`, `EXECUTE`, `DO`, `SET`,
+  `RESET`, `LOCK`, os de transação (`BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`…) e o
+  `SELECT ... INTO`, entre outros.
+  - Quem recusa é a API, antes de qualquer coisa ir ao banco: 422 `CONNECTION_READ_ONLY`, com o
+    motivo no detalhe ("A conexão é somente leitura, e só leituras são executadas nela: um DELETE
+    não é leitura. Nada foi enviado ao banco."). A recusa não fecha o cursor nem tira o resultado
+    anterior da aba, como a recusa do controle de transação sem `executed` (RN-SESSAO-005), e não
+    conta como leitura: o cursor aberto fecha aos 5 minutos da última leitura, como fecharia sem ela
+    (RN-SQL-007).
+  - Vale em toda rota que executa um comando na conexão: `queries`, em que, com o filtro do
+    resultado, é o comando montado que se confere (RN-GRADE-011), e por ela cada comando do script
+    (RN-SQL-019), em que a recusa é o erro daquele comando (RN-SQL-021); e as da edição,
+    `queries/edit-target`, `queries/edits` e `queries/edits/preview`: a edição de registros não
+    existe numa conexão somente leitura, e a página do resultado já vem com `editable: { known:
+    true, reason: "a conexão é somente leitura" }`, o motivo que a grade mostra (RN-EDIT-002).
+    "Carregar mais", "Contar total", "Cancelar", o valor completo das células, o catálogo, abrir a
+    sessão e "Testar conexão" continuam valendo: leem o que a pessoa já executou ou o catálogo, e a
+    contagem só executa de novo uma leitura (RN-SQL-006).
+  - No PostgreSQL o banco também recusa. Toda leitura de uma conexão somente leitura roda na
+    transação só de leitura da RN-SQL-013, e o que o banco recusa ali por gravar (uma função que
+    grava chamada pelo `SELECT`, um `nextval`) é a resposta, como erro do banco (422
+    `SQL_EXECUTION_FAILED`, SQLSTATE 25006, com a mensagem dele): nada é gravado, e o comando nunca
+    é executado de novo fora da transação, como seria numa conexão comum. O mesmo vale para a
+    recusa que só aparece no "Carregar mais", que não sugere executar de novo. A sessão fica também
+    no modo só de leitura do banco (RN-PROT-006). O que a transação só de leitura do PostgreSQL
+    deixa passar continua passando: `set_config`, `pg_notify`, as travas consultivas, encerrar ou
+    cancelar outra sessão (`pg_terminate_backend`, `pg_cancel_backend`) e o que uma função faz fora
+    do banco (dblink, tabela estrangeira).
+  - No Db2 e no Informix quem impõe é só o texto (RN-PROT-005). O driver da IBM não tem conexão só
+    de leitura: o `Net.IBM.Data.Db2` 10.0.0.300 não tem esse dado na string de conexão nem na
+    conexão, e o modo de acesso da CLI da IBM é só uma dica, que o Db2 não impõe. O Db2 não tem
+    transação só de leitura, e a do Informix (`SET TRANSACTION READ ONLY`) só existe dentro de uma
+    transação, que a sessão em auto-commit não abre e o banco sem log nem tem. O que o texto não
+    mostra, o banco recusa: no Db2 a função escalar criada com `MODIFIES SQL DATA` não pode ser
+    chamada por um `SELECT` (SQL0740N), e no Informix a rotina que grava chamada de dentro de um
+    `SELECT` é recusada (-675, como na RN-SQL-013).
+  - A proteção que o banco garante para qualquer cliente continua sendo a do usuário do banco: para
+    produção, o mais seguro é uma conta só com `SELECT`. O somente leitura do Prism protege de um
+    engano no Prism, e não de quem tem a senha do banco.
+  - A tela mostra o cadeado do canvas ao lado do nome da conexão na árvore, na lista do botão da
+    conexão da aba (RN-ARVORE-008) e na barra de status, e a dica diz de onde ele vem ("Somente
+    leitura, herdado da pasta Fábrica"). A grade de uma conexão somente leitura não oferece a edição
+    de células: os itens ficam desabilitados, com o motivo (RN-EDIT-001).
+- **RN-PROT-003.** A senha do somente leitura. Marcar ou desmarcar "Somente leitura" numa conexão ou
+  numa pasta que já existe pede a senha do usuário (a do Prism), como revelar a senha de uma conexão
+  (RN-CONN-002). Também pede a senha a mudança que tira de uma conexão que já existe o somente
+  leitura herdado: mover a conexão, ou uma pasta acima dela, para fora de uma pasta somente leitura.
+  - A conferência e a contagem de erros são as de revelar a senha e de trocar a senha (RN-CONN-003 e
+    RN-COFRE-013). A senha errada responde 422 `INVALID_PASSWORD` no campo `userPassword`, e o quinto
+    erro seguido, somando os das três, fecha o cofre e responde 401 `VAULT_LOCKED`. Sem a senha,
+    quando ela é pedida, a resposta é 422 `USER_PASSWORD_REQUIRED` no mesmo campo, sem conferir nada
+    e sem contar erro. A senha que vem sem ser pedida não é conferida.
+  - Não pedem a senha: criar uma conexão ou uma pasta já marcada (nada do que existe muda), duplicar
+    uma conexão (a cópia nasce com as proteções dela, RN-CONN-016), mover para dentro de uma pasta
+    somente leitura (a proteção só aumenta), excluir, e mudar a confirmação (RN-PROT-001) ou a
+    verificação (RN-VERIF-001).
+  - A conferência da senha e a gravação são uma operação só do cofre: quem decide se a senha é
+    pedida é o documento mais recente, e não o que a tela leu antes.
+  - A tela pede a senha ao salvar (o formulário da conexão, o "Editar pasta…", o "Mover" e o
+    arrastar na árvore), num diálogo como o de revelar a senha: ele diz o que muda ("Desmarcar
+    "Somente leitura" de MES Produção"), avisa que cinco erros seguidos fecham o cofre (e, com
+    transação aberta, que desfazem as transações, RN-TX-008) e mostra o erro no campo. A senha não
+    fica guardada depois da resposta.
+- **RN-PROT-004.** Herdadas da pasta. As proteções da pasta valem para tudo o que está dentro dela,
+  a qualquer profundidade (as subpastas e as conexões delas), ao contrário do ambiente
+  (RN-PASTA-005), que a subpasta não mostra. Vale a mais forte: a conexão é somente leitura quando
+  ela ou alguma pasta acima dela é; e a confirmação é a mais alta entre a dela e as das pastas acima
+  ("Todos os comandos", depois "Só comandos irreversíveis", depois "Não"). A conexão não afrouxa o
+  que uma pasta acima impõe.
+  - A API devolve, em cada conexão e em cada pasta, além das escolhas próprias, as que valem
+    (`protections`) e de onde cada uma vem: a pasta mais próxima acima que impõe o valor que vale,
+    ou nulo quando ele é o próprio, ou quando não há proteção.
+  - O formulário mostra a proteção herdada marcada e desabilitada, com "Herdado da pasta Fábrica"
+    ao lado; na confirmação, as escolhas abaixo da herdada ficam desabilitadas, com o mesmo texto. O
+    diálogo da pasta faz o mesmo com as pastas acima dela.
+  - Mover uma conexão ou uma pasta muda o que ela herda; para tirar um somente leitura herdado, vale
+    a RN-PROT-003.
+- **RN-PROT-005.** O que é leitura. O comando é lido como a API já lê o texto de cada banco
+  (RN-SQL-002 e 003): texto entre aspas, nomes entre aspas, comentários (os de cada banco, também o
+  entre chaves do Informix e o aninhado do Db2, este nas duas leituras, a do banco e a do driver) e
+  o `$tag$` do PostgreSQL não contam. Cada comando separado por `;` tem de ser uma leitura (o envio
+  com mais de um continua recusado pela RN-SQL-001). O texto sem comando nenhum (só comentários)
+  não é recusado aqui: quem responde é o banco.
+  - É leitura o comando que começa, depois dos parênteses de abertura, por `SELECT`, `WITH` ou
+    `VALUES` e não tem, como palavra inteira: `INSERT`, `UPDATE`, `DELETE` ou `MERGE` (o `WITH` que
+    grava, no PostgreSQL, e o `FROM FINAL TABLE (UPDATE ...)` do Db2); `INTO` (o `SELECT ... INTO`
+    cria uma tabela no PostgreSQL, e o `INTO TEMP` e o `INTO EXTERNAL` do Informix gravam); a trava
+    de linha (`FOR UPDATE`, `FOR NO KEY UPDATE`, `FOR SHARE`, `FOR KEY SHARE`), que é para alterar;
+    nem o próximo valor de uma sequência (`NEXT VALUE FOR`, `NEXTVAL`), que não volta atrás.
+  - No PostgreSQL são leitura também `TABLE`, `SHOW` e `EXPLAIN` sem `ANALYZE` (sem `ANALYZE` o
+    `EXPLAIN` não executa o comando, nem o de um `DELETE`).
+  - No Db2 não é leitura o comando com função de tabela (`TABLE (...)`, com qualquer espaço ou
+    comentário entre as duas partes), porque a função criada com `MODIFIES SQL DATA` grava sem que o
+    texto mostre (a mesma regra da RN-SQL-013), nem o `EXPLAIN`, que grava nas tabelas de
+    explicação.
+  - Na dúvida, não é leitura: uma coluna chamada `update` sem aspas faz a leitura ser recusada (com
+    aspas, ela passa). E o `SET` é recusado também quando só muda o esquema ou o caminho de busca da
+    sessão: para ler outro esquema, escreva o nome dele no comando (`esquema.tabela`).
+- **RN-PROT-006.** As sessões abertas. Mudar as proteções (na conexão, numa pasta acima, ou movendo
+  uma das duas) não fecha nenhuma sessão: o comando seguinte de cada sessão já segue a regra nova,
+  porque a API lê as proteções do cofre a cada comando. O cursor aberto continua sendo lido
+  ("Carregar mais"): ele é de uma leitura que já rodou. O resultado que já está na grade fica com a
+  edição que tinha quando foi executado: a recusa da edição (RN-PROT-002) vem da proteção do momento
+  do pedido, e o resultado novo, executado depois da mudança, já sai com ela. A sessão de uma conexão
+  que acabou de ser excluída, e que ainda não fechou (RN-CONN-014), responde como a sessão que não
+  existe (404 `DATABASE_SESSION_NOT_FOUND`).
+  - No PostgreSQL, antes de cada comando da pessoa e de cada "Salvar", a sessão é posta no modo da
+    conexão daquele momento: `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` quando ela é
+    somente leitura, e `... READ WRITE` quando deixa de ser. O `SET` só vai ao banco quando o modo
+    muda: no primeiro comando de uma sessão somente leitura, e quando a proteção muda com a sessão
+    aberta. A sessão de uma conexão que nunca foi somente leitura não recebe nada, e vale o que o
+    banco e o usuário dele já usam.
+  - O que a própria sessão mudar no modo (um `set_config` num `SELECT`) não abre a porta: a leitura
+    roda na transação só de leitura que o Prism abre, e a recusa do banco é a resposta (RN-PROT-002).
+
+### Verificação periódica
+
+- **RN-VERIF-001.** "Sessão da conexão", no formulário da conexão, como no canvas: "Verificar a
+  cada [N] segundos", ligada por padrão, com 30 segundos (de 5 a 3.600, inteiros); e "Consulta de
+  verificação", opcional, com a consulta do banco como dica do campo (a da RN-CONN-013: PostgreSQL
+  `SELECT 1`; Db2 `SELECT 1 FROM SYSIBM.SYSDUMMY1`; Informix `SELECT 1 FROM systables WHERE tabid =
+  1`). Em branco, vale a do banco.
+  - A consulta própria tem até 1.000 caracteres e é uma leitura só, pela regra da RN-PROT-005 no
+    banco da conexão: um comando só (o `;` do fim não conta). A API recusa o resto com 422
+    `CONNECTION_INVALID` no campo `verificationQuery`, com o motivo ("A consulta de verificação tem
+    de ser uma leitura só: um UPDATE não é leitura."). Ela é lida até o fim a cada verificação: a
+    que devolve muitas linhas custa isso a cada intervalo, e o texto de ajuda do campo pede uma que
+    devolva uma linha. No PostgreSQL ela roda numa transação só de leitura: nem uma função chamada
+    por ela grava.
+  - "Testar conexão" (RN-CONN-013) usa a consulta do formulário, quando há uma.
+  - O intervalo e a consulta são da conexão; a pasta não os tem, e a cópia da conexão (RN-CONN-016)
+    os leva.
+- **RN-VERIF-002.** Enquanto a conexão está conectada (a sessão da árvore ou a de alguma aba, a
+  mesma conta da lista do botão da conexão da aba, RN-ARVORE-008), a tela pede a verificação a cada
+  intervalo, `POST api/user/connections/{id}/verification`, um pedido por vez: o intervalo conta do
+  fim do anterior. A API:
+  - roda a consulta numa sessão da conexão que já está aberta (de qualquer banco dela), nunca numa
+    nova: sem nenhuma sessão aberta no cofre aberto, responde `notConnected`, e não há o que
+    verificar;
+  - nunca numa sessão com cursor aberto, que a consulta fecharia (RN-SQL-007), nem numa com comando
+    em andamento: escolhe primeiro a sessão sem resultado (a da árvore, que só faz catálogo) e depois
+    a de uma aba sem cursor aberto, e, quando todas estão ocupadas, responde `busy` na hora, sem
+    esperar a vez ("ocupada, verificada na próxima");
+  - responde `ok`, com o tempo da consulta, ou `failed`, com a mensagem do banco como veio e o
+    SQLSTATE quando o driver o informa. A sessão cuja conexão caiu sai do registro, como depois de
+    qualquer falha, e a verificação seguinte responde `notConnected` se não sobrou outra;
+  - usa o prazo do driver para a consulta, como o catálogo;
+  - registra no log a verificação que falhou, e a que deu certo só em nível de depuração (seria uma
+    linha a cada intervalo de cada conexão).
+  - A verificação não conta como atividade da pessoa nem como comando em andamento para o bloqueio
+    por inatividade (RN-SEG-001), e não contará para o encerramento por ociosidade, quando ele vier
+    (seção 13). Ela não roda com a verificação desligada, nem com o cofre bloqueado.
+  - A verificação também não deixa a sessão ocupada para a pessoa: o comando ou o "Salvar" que
+    chega durante ela espera o fim dela (no máximo o prazo do driver), em vez de responder
+    `SESSION_BUSY` (RN-SESSAO-002), e o "Cancelar" pedido nessa espera faz o comando desistir na
+    hora, sem esperar o fim dela e sem ir ao banco, como cancelado (RN-SQL-010); a verificação em si
+    não é interrompida.
+- **RN-VERIF-003.** O indicador, ao lado do nome da conexão conectada na árvore (no lugar do ponto de
+  conectada) e na barra de status da aba dela:
+  - "Respondeu na última verificação", o ponto do canvas, com a hora e o tempo na dica ("Respondeu
+    às 14:32:05, em 3 ms");
+  - "Não respondeu", no tom de erro, com a mensagem do banco na dica e num clique, como o erro de um
+    nó da árvore (RN-ARVORE-005);
+  - a resposta `busy` deixa o indicador como estava, com "Ocupada: verificada na próxima" na dica;
+  - com `notConnected` a tela para de verificar a conexão, e o indicador diz "Sem sessão aberta"; a
+    próxima ação na árvore ou na aba abre a sessão de novo, como hoje (RN-AVISO-003). Até lá ela não
+    conta como conectada (RN-NAV-013).
+  - Quando a conexão passa de responder a não responder, um aviso de atenção diz isso uma vez ("MES
+    Produção não respondeu à verificação"), e não se repete enquanto ela continuar sem responder;
+    quando ela volta a responder, um aviso de sucesso diz isso.
+  - Com a verificação desligada não há indicador: fica o ponto de conectada de sempre.
+
+### Só as conectadas
+
+- **RN-NAV-013.** A barra do navegador ganha "Só as conectadas", um botão de alternar ao lado do
+  seletor de ambiente (RN-NAV-010), que mostra quantas conexões estão conectadas ("3 conectadas"),
+  ligado ou não: é o que o colega pediu, saber se há conexões abertas.
+  - Conectada é a conexão com a sessão da árvore aberta ou com uma aba conectada, a mesma conta da
+    lista do botão da conexão da aba (RN-ARVORE-008) e do script genérico (RN-SCRIPT-005).
+  - A conexão cuja verificação respondeu que a API não tem sessão aberta com ela (o "Sem sessão
+    aberta" da RN-VERIF-003) não conta como conectada, na conta, no filtro e na lista do botão da
+    conexão, até uma sessão nova abrir (a próxima ação na árvore ou na aba): o indicador e a conta
+    dizem o mesmo. O "Desconectar" do menu continua valendo para ela, e na árvore e na barra de
+    status quem diz o estado dela é o indicador.
+  - Ligado, a árvore mostra só as conexões conectadas e as pastas no caminho até elas. Combina com o
+    campo de filtro e com o seletor de ambiente, como os dois entre si.
+  - A conexão que desconecta sai da árvore filtrada na hora, e a que conecta (pela árvore, por uma
+    aba, por um script) entra.
+  - Sem nenhuma conectada, o botão diz "Nenhuma conectada", e, ligado, a árvore diz "Nenhuma conexão
+    conectada." com "Mostrar todas", que o desliga.
+  - A escolha vale enquanto a janela está aberta, como a do ambiente.
+  - A API não muda: a tela já sabe quais conexões estão conectadas, e a verificação diz quais
+    perderam a sessão.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `GET api/user/folders` | 200 lista; cada pasta ganha `confirmCommands`, `readOnly` e `protections` | |
+| `POST api/user/folders` `{ ..., confirmCommands?, readOnly? }` | 201 a pasta, com `protections` | as de antes, com `FOLDER_NAME_INVALID` também no campo `confirmCommands` |
+| `PATCH api/user/folders` `{ ..., confirmCommands?, readOnly?, userPassword? }` | 200 a pasta, com `protections` | as de antes; 422 `USER_PASSWORD_REQUIRED`, `INVALID_PASSWORD` (no campo `userPassword`, RN-PROT-003); 401 `VAULT_LOCKED` no quinto erro seguido |
+| `GET api/user/connections` e `GET api/user/connections/{id}` | 200; cada conexão ganha `confirmCommands`, `readOnly`, `verificationEnabled`, `verificationInterval`, `verificationQuery` e `protections` | as de antes |
+| `POST api/user/connections` `{ ..., confirmCommands?, readOnly?, verificationEnabled?, verificationInterval?, verificationQuery? }` | 201 a conexão, com `protections` | as de antes, com `CONNECTION_INVALID` também nos campos novos |
+| `PATCH api/user/connections` `{ ..., os mesmos, userPassword? }` | 200 a conexão, com `protections` | as de antes; 422 `USER_PASSWORD_REQUIRED`, `INVALID_PASSWORD` (no campo `userPassword`); 401 `VAULT_LOCKED` no quinto erro seguido |
+| `POST api/user/connections/{id}/duplicate` | 201 a cópia, com as proteções e a verificação da origem | as de antes |
+| `POST api/user/connections/test` `{ ..., verificationQuery? }` | 204 | as de antes, com `CONNECTION_INVALID` também no campo `verificationQuery` |
+| `POST api/user/connections/{id}/verification` (sem corpo) | 200 `{ status, checkedAt, elapsedMs, message, sqlState }` | 404 `CONNECTION_NOT_FOUND` |
+| `POST .../queries` | como antes; na conexão somente leitura a página leva `editable: { known: true, reason: "a conexão é somente leitura" }` | as de antes, mais 422 `CONNECTION_READ_ONLY` |
+| `POST .../queries/edit-target`, `.../queries/edits` e `.../queries/edits/preview` | como antes | as de antes, mais 422 `CONNECTION_READ_ONLY` |
+
+Notas:
+
+- `confirmCommands`: `none`, `irreversible` ou `all`. Ausente, nulo, vazio ou `none` é "Não", e a
+  resposta o devolve nulo, como o ícone padrão do script (RN-SCRIPT-006). Fora da lista: 422 no
+  campo ("Escolha não confirmar, só os comandos irreversíveis ou todos os comandos.").
+- `readOnly`: booleano; ausente é falso.
+- O `PATCH` grava a pasta e a conexão por inteiro, como já faz com o ambiente e a cor: sem
+  `confirmCommands`, a confirmação volta a "Não"; sem `readOnly`, a opção própria sai (e, se estava
+  marcada, a senha é pedida, RN-PROT-003); sem os campos da verificação, ela volta ao padrão. Quem
+  só renomeia ou move manda o que a conexão ou a pasta já têm.
+- `verificationEnabled`: ausente ou nulo, verdadeiro. `verificationInterval`: os segundos, de 5 a
+  3.600; ausente ou nulo, 30 (texto e número com casas são o 400 do MVC, como na porta).
+  `verificationQuery`: até 1.000 caracteres depois de aparada, uma leitura só (RN-VERIF-001); em
+  branco é nula, e vale a do banco. A resposta devolve os três como valem (`true`, `30` e nulo no
+  padrão).
+- `protections`: `{ readOnly, readOnlyFolderID, confirmCommands, confirmCommandsFolderID }`, as que
+  valem (RN-PROT-004). `readOnlyFolderID` e `confirmCommandsFolderID` são a pasta acima que impõe o
+  valor, e nulos quando ele é o próprio ou quando não há proteção; `confirmCommands` nulo é "Não".
+  Na pasta, o mesmo, com as pastas acima dela.
+- `userPassword`: a senha do usuário do Prism, só quando a RN-PROT-003 a pede; nunca vai a log nem
+  volta numa resposta.
+- `verification`: `status` é `ok`, `failed`, `busy` ou `notConnected`; `checkedAt` é o instante da
+  resposta (UTC); `elapsedMs`, o tempo da consulta (só em `ok` e `failed`); `message` e `sqlState`,
+  só em `failed`, com a mensagem do banco como veio e o SQLSTATE quando o driver o informa. A falha
+  do banco é resposta 200, e não erro: a tela a mostra no indicador, sem o aviso de erro de toda
+  chamada que falha (RN-AVISO-004). O cofre fechado é o 401 de sempre. A rota não olha
+  `verificationEnabled`: quem decide se pede é a tela, e a consulta é a gravada na conexão.
+- `CONNECTION_READ_ONLY` (422): o comando não é uma leitura numa conexão somente leitura, ou a rota é
+  da edição; nada foi ao banco, e o resultado anterior continua (a recusa não leva `executed`).
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita na própria regra; aqui fica só a lista.
+
+- **Seção 2**: a entrega 3 diz o que entrou por esta seção e o que fica.
+- **RN-CONN-010**: as proteções e a sessão da conexão.
+- **RN-CONN-013**: o teste usa a consulta de verificação do formulário, quando há uma.
+- **RN-PASTA-005**: a pasta tem também as proteções, que valem para tudo o que está dentro dela.
+- **RN-EDIT-002**: o resultado inteiro é só leitura na conexão somente leitura.
+- **RN-GRADE-014**: ligar a atualização automática pergunta uma vez em "Todos os comandos".
+- **RN-SQL-019**: a confirmação vem uma vez, antes do primeiro comando do script, e na conexão
+  somente leitura cada comando passa pela recusa da API.
+- **RN-SQL-021**: a recusa do somente leitura (`CONNECTION_READ_ONLY`) é erro do comando, e o script
+  pergunta o que fazer, como no erro do banco.
+- **Seções 6, 9 e 13**: as rotas e os códigos novos; o que o formulário, o diálogo da pasta, o aviso e
+  o navegador fazem diferente do canvas; o que entrou e o que continua fora.
+- O "fica para depois" da seção 22 citava as proteções "que vão restringir a edição": a restrição é a
+  da RN-PROT-002 (nenhuma edição na conexão somente leitura) e a da RN-PROT-001 (o "Salvar" pergunta
+  em "Todos os comandos").
+- **RN-SEG-001**: a verificação periódica não é atividade nem comando em andamento (RN-VERIF-002).
+
+### Fica para depois
+
+- O encerramento por ociosidade ("Encerrar a conexão após N minutos sem uso", do canvas), que o dono
+  não pediu agora (seção 13).
+- Proteções por esquema ou por tabela, e a lista de comandos irreversíveis escolhida pela pessoa.
+- A verificação de cada banco aberto da conexão (RN-ARVORE-006): hoje uma sessão qualquer da conexão
+  responde por ela.

@@ -64,4 +64,13 @@ describe("os canais entre a tela e o processo principal", () => {
     expect(workspaceChannels).toEqual(["prism:workspace-claim", "prism:workspace-flush", "prism:workspace-report", "prism:workspace-withdraw"]);
     expect(handlers.sort()).toEqual(workspaceChannels);
   });
+
+  it("a vez da verificação periódica (RN-VERIF-002): os dois pedidos conferem a origem e passam ao centro das janelas, que os confere com o schema", () => {
+    const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:verification-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?hub\.[a-zA-Z]+Verification\(windowIdOf\(event\.sender\), /g)].map((match) => match[1]);
+    const verificationChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:verification-"));
+
+    expect(verificationChannels).toEqual(["prism:verification-claim", "prism:verification-finish"]);
+    expect(handlers.sort()).toEqual(verificationChannels);
+    expect(channelsOf(hub, "window.send")).toContain("prism:verification-peer");
+  });
 });

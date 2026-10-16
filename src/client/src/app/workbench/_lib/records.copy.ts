@@ -110,6 +110,8 @@ export const recordsCopy = {
       // RN-EDIT-009: a linha nova salva na aba de consulta, que não executa de novo.
       generated: "o valor foi gerado pelo banco; execute de novo para vê-lo",
       keyGenerated: "a chave desta linha foi gerada pelo banco; execute de novo para editá-la",
+      // RN-PROT-002: o mesmo motivo que a página do resultado traz numa conexão somente leitura (`editable.reason`).
+      connectionReadOnly: "a conexão é somente leitura",
     },
     // RN-EDIT-009: a coluna da linha nova salva que a pessoa não preencheu, na aba de consulta.
     generated: "gerado pelo banco — execute de novo para ver",

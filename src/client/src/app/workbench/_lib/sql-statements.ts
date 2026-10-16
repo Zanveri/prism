@@ -128,8 +128,10 @@ function dollarTag(sql: string, at: number): string | null {
  *
  * `cuts` são as linhas em branco que também separam (RN-SQL-018, de `blankLineCuts`), em ordem: o começo de cada uma. O comando de cima
  * acaba no fim da linha anterior (o `\n` logo antes do corte), que é também até onde vai o cursor dele.
+ *
+ * `inner` são os `;` que não separam, por estarem no corpo de um bloco (RN-SQL-001, de `innerSemicolons`): só o script os passa (RN-SQL-019).
  */
-function scan(sql: string, dialect: Dialect, cuts: readonly number[] = []): Scanned[] {
+function scan(sql: string, dialect: Dialect, cuts: readonly number[] = [], inner: ReadonlySet<number> = noSemicolons): Scanned[] {
   const statements: Scanned[] = [];
   let segmentStart = 0;
   let hasCode = false;
@@ -157,7 +159,8 @@ function scan(sql: string, dialect: Dialect, cuts: readonly number[] = []): Scan
     const code = sql.charCodeAt(position);
 
     if (code === 59) {
-      close(position, position + 1);
+      if (inner.has(position)) hasCode = true;
+      else close(position, position + 1);
       position++;
       continue;
     }
@@ -190,6 +193,8 @@ const toStatement = ({ text, start, end }: Scanned): SqlStatement => ({ text, st
  * comando do cursor; sem ela, só o `;` separa, como antes.
  */
 export type StatementOptions = { blankLines?: boolean };
+
+const noSemicolons: ReadonlySet<number> = new Set();
 
 /** Os comandos do texto, separados por `;` (RN-SQL-002) e, com `blankLines`, pela linha em branco (RN-SQL-018), pelas regras do banco da aba. */
 export function splitStatements(sql: string, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement[] {
@@ -353,10 +358,10 @@ function standardBody(): Body {
  * Quantos comandos o texto tem. Uma execução leva um só (RN-SQL-001): com mais de um na seleção a
  * tela avisa e não envia; com nenhum, não há o que enviar. O que separa é o `;`, menos o que está num
  * bloco com `;` no corpo (procedimento, função, gatilho, bloco composto): ele é um comando só, pelas
- * regras do banco da aba, as mesmas que a API aplica (`SqlText.HasSeveralStatements`). Só aqui a regra
- * vale: `splitStatements` e `statementAt`, que acham o comando do cursor, seguem separando pelo `;`
- * (a linha em branco, RN-SQL-018, é que nunca separa dentro do bloco). A conta é sempre só pelo `;`:
- * a linha em branco não divide a seleção.
+ * regras do banco da aba, as mesmas que a API aplica (`SqlText.HasSeveralStatements`). A regra vale
+ * aqui e nos comandos do script (`scriptStatements`, RN-SQL-019, pelo mesmo corpo): `splitStatements` e
+ * `statementAt`, que acham o comando do cursor, seguem separando pelo `;` (a linha em branco, RN-SQL-018,
+ * é que nunca separa dentro do bloco). A conta é sempre só pelo `;`: a linha em branco não divide a seleção.
  */
 export function statementCount(sql: string, engine?: Engine): number {
   const dialect = dialectOf(engine);
@@ -378,8 +383,8 @@ export function statementCount(sql: string, engine?: Engine): number {
 }
 
 /*
- * A linha em branco que separa os comandos (RN-SQL-018), como o "Smart" do DBeaver, com mais cuidado: o Prism ainda não confirma comando
- * irreversível, e separar onde não devia executaria a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`). Na dúvida
+ * A linha em branco que separa os comandos (RN-SQL-018), como o "Smart" do DBeaver, com mais cuidado: só a conexão que pede confirma o comando
+ * irreversível (RN-PROT-001), e separar onde não devia executaria a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`). Na dúvida
  * não separa: o banco recusa o texto inteiro, sem executar nada. Separa só quando o de baixo começa um comando e o de cima está fechado.
  */
 
@@ -695,6 +700,52 @@ export function statementAt(sql: string, offset: number, engine?: Engine, { blan
 }
 
 /**
+ * Os `;` que ficam no corpo de um bloco e não separam (RN-SQL-001): o corpo é o mesmo de `statementCount` (`dialect.body()`), que recomeça no `;` que
+ * fecha e em cada corte da linha em branco (RN-SQL-018: `blankLineCuts` nunca corta com o corpo aberto, e o comando de baixo começa um corpo novo, como
+ * lá). Um corpo que chega aberto ao fim do texto prende os `;` dele, menos quando o banco diz que eles separam (`extra`: a rotina do Informix sem o
+ * `END PROCEDURE`, em que todo `;` separa, a mesma conta de `statementCount`).
+ */
+function innerSemicolons(sql: string, dialect: Dialect, cuts: readonly number[]): Set<number> {
+  const inner = new Set<number>();
+  let held: number[] = [];
+  let body = dialect.body();
+  let cut = 0;
+
+  for (const token of tokens(sql, dialect)) {
+    if (cut < cuts.length && token.start >= cuts[cut]) {
+      while (cut < cuts.length && token.start >= cuts[cut]) cut++;
+      for (const position of held) inner.add(position);
+      held = [];
+      body = dialect.body();
+    }
+
+    body.next(token);
+    if (token.text !== ";") continue;
+    if (body.open()) held.push(token.start);
+    else {
+      for (const position of held) inner.add(position);
+      held = [];
+      body = dialect.body();
+    }
+  }
+  if (body.extra() === 0) for (const position of held) inner.add(position);
+  return inner;
+}
+
+/**
+ * Os comandos do script (RN-SQL-019), na ordem: o texto inteiro do editor, ou a seleção, dividido pelas regras do Ctrl+Enter, com o mesmo leitor
+ * (`scan`): o `;` (RN-SQL-002) e, com `blankLines`, a linha em branco (RN-SQL-018), que no script divide também a seleção. Ao contrário de
+ * `splitStatements`, o bloco com `;` no corpo (rotina, gatilho, bloco composto; no Db2, até o fim do texto) é um comando só, pela conta de
+ * `statementCount`: cada comando daqui conta 1 lá, e a API, que repete a conferência, o aceita. O pedaço só com espaços, `;` e comentários não é
+ * comando. `start` e `end` são posições em `sql`.
+ */
+export function scriptStatements(sql: string, engine?: Engine, { blankLines = false }: StatementOptions = {}): SqlStatement[] {
+  const dialect = dialectOf(engine);
+  const cuts = blankLines ? blankLineCuts(sql, dialect) : [];
+  return scan(sql, dialect, cuts, innerSemicolons(sql, dialect, cuts)).map(toStatement);
+}
+
+/**
  * Se o texto tem algum comando: algo além de espaços, `;` e comentários. É a pergunta do botão
  * "Executar", feita a cada tecla, e por isso para no primeiro caractere de comando que achar.
  */
@@ -711,6 +762,25 @@ export function hasStatement(sql: string, engine?: Engine): boolean {
     else return true;
   }
   return false;
+}
+
+/**
+ * Onde o texto do comando começa, depois dos espaços e dos comentários de cima, pelas regras do banco (as de `splitStatements`: o comentário de bloco
+ * aninhado do PostgreSQL e do Db2, o primeiro fecho no Informix, o `{ … }` só no Informix, e o `--` que no PostgreSQL acaba também no retorno de carro). Quem
+ * pergunta é quem mostra o começo do comando (o título da aba do resultado do script e a coluna das Estatísticas, RN-SQL-020). Só espaço e comentário: o
+ * tamanho do texto.
+ */
+export function commandStart(sql: string, engine?: Engine): number {
+  const dialect = dialectOf(engine);
+
+  let position = 0;
+  while (position < sql.length) {
+    const comment = afterComment(sql, position, dialect);
+    if (comment !== null) position = comment;
+    else if (isWhitespace(sql.charCodeAt(position))) position++;
+    else return position;
+  }
+  return sql.length;
 }
 
 /**

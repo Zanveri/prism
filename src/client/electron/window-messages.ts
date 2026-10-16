@@ -173,3 +173,34 @@ export type WindowCloseRequest = z.infer<typeof windowCloseRequestSchema>;
 export const peerEventSchema = z.object({ kind: z.enum(["activity", "lock", "unlock", "signOut", "signIn"]) });
 
 export type PeerEvent = z.infer<typeof peerEventSchema>;
+
+/**
+ * RN-VERIF-002: a verificação periódica de uma conexão conectada em mais de uma janela sai de uma só por intervalo, e a resposta vai às outras. Antes de
+ * chamar a API, a janela pede a vez ao processo principal, com o intervalo da conexão: ele a dá se nenhuma outra está verificando a mesma conexão e se a
+ * última verificação dela, feita por outra janela, não acabou há menos que o intervalo. Só o id da conexão e o intervalo: nada de nome, endereço ou SQL.
+ */
+export const verificationClaimSchema = z.object({ connectionId: id, intervalMs: z.number().int().min(1_000).max(3_600_000) });
+
+export type VerificationClaim = z.infer<typeof verificationClaimSchema>;
+
+/**
+ * A resposta da verificação como a API a deu (`POST api/user/connections/{id}/verification`): `status`, o instante, o tempo da consulta e, quando o banco não
+ * respondeu, a mensagem dele como veio e o SQLSTATE. É o que as outras janelas com a conexão conectada mostram no indicador (RN-VERIF-003).
+ */
+export const verificationResultSchema = z.object({
+  status: z.enum(["ok", "failed", "busy", "notConnected"]),
+  checkedAt: z.string().min(1).max(100),
+  elapsedMs: z.number().min(0).nullable(),
+  message: z.string().max(1_000_000).nullable(),
+  sqlState: z.string().max(100).nullable(),
+});
+
+/** A janela terminou a verificação que pediu: com a resposta, que vai às outras, ou sem ela (`null`: a chamada falhou, ou a conexão desconectou no meio). */
+export const verificationDoneSchema = z.object({ connectionId: id, result: verificationResultSchema.nullable() });
+
+export type VerificationDone = z.infer<typeof verificationDoneSchema>;
+
+/** O que chega às outras janelas: a resposta da verificação de uma conexão, feita por outra janela. */
+export const verificationPeerSchema = z.object({ connectionId: id, result: verificationResultSchema });
+
+export type VerificationPeer = z.infer<typeof verificationPeerSchema>;

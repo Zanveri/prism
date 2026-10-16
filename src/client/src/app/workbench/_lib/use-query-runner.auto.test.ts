@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createQueryClient } from "@/lib/api/query-client";
 
+import { platformScriptShortcut } from "./script-run";
 import { anyRunnerBusy } from "./workbench-lock";
 import { createQueryRunner, isAutoRun, isBusyState, isPersonBusy, type QueryRunner, type RunnerState } from "./use-query-runner";
 import { workbenchCopy } from "./workbench.copy";
@@ -195,7 +196,7 @@ describe("a atualização automática pelo executor (RN-GRADE-014)", () => {
 
     await runner.run({ sql: "select 1; select 2", offset: 0 });
 
-    expect(toast.warning).toHaveBeenLastCalledWith(workbenchCopy.toasts.tooManyStatements);
+    expect(toast.warning).toHaveBeenLastCalledWith(workbenchCopy.toasts.tooManyStatements(platformScriptShortcut));
     expect(runner.autoRefresh.getState()).toMatchObject({ status: "on" });
   });
 
@@ -439,7 +440,7 @@ describe("o que a pessoa pede enquanto a execução automática roda (RN-GRADE-0
     const { api, toast, runner, autoAnswer } = await withAutoRunning();
 
     await runner.run({ sql: "select 1; select 2", offset: 0 });
-    expect(toast.warning).toHaveBeenLastCalledWith(workbenchCopy.toasts.tooManyStatements);
+    expect(toast.warning).toHaveBeenLastCalledWith(workbenchCopy.toasts.tooManyStatements(platformScriptShortcut));
     expect(runner.getState()).toMatchObject({ status: "running", auto: true });
 
     autoAnswer.resolve(page([["1", "novo"]]));

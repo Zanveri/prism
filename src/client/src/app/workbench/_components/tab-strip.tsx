@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
@@ -48,6 +48,8 @@ type TabStripProps = {
   onMove: (tabId: string, target: TabMoveTarget) => void;
   /** RN-ABAS-003: uma aba de outra janela foi solta nesta faixa. */
   onReceive: (fromWindowId: number, tabId: string, insertAt: number) => void;
+  /** RN-SQL-021: o que a aba mostra do estado dela, depois do nome: a marca do script que parou num erro e espera a resposta (`ScriptWaitingMark`). */
+  markOf?: (tabId: string) => ReactNode;
 };
 
 /** Os botões das pontas e o da lista: 28 px de largura e a altura da faixa. */
@@ -62,7 +64,7 @@ const stripButton = "flex h-10 w-7 flex-none cursor-pointer items-center justify
  * Os botões das pontas acendem por atributos (`data-left` e `data-right` da moldura) e não por estado: rolar não redesenha a faixa.
  * Os botões de rolar e o da lista são para o mouse; o teclado tem as setas, que trazem a aba à vista, e a tecla de menu.
  */
-export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scriptOf, onSelect, onClose, windowId, onReorder, onMove, onReceive }: TabStripProps) {
+export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scriptOf, onSelect, onClose, windowId, onReorder, onMove, onReceive, markOf }: TabStripProps) {
   const frame = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<StripMenu | null>(null);
@@ -315,6 +317,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
                     <span className="sr-only">{scriptsCopy.tab.unsaved}</span>
                   </>
                 ) : null}
+                {markOf?.(tab.id) ?? null}
                 <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} />
               </button>
               <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="mr-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-subtle transition-colors hover:bg-selected hover:text-ink">

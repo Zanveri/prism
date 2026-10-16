@@ -3,22 +3,28 @@ import { describe, expect, it } from "vitest";
 import type { ApiError } from "@/lib/api/prism-api";
 
 import { connectionsCopy } from "./connections.copy";
-import { editFolderSchema, renameFolderSchema, type Folder } from "./connections.schema";
+import { editFolderSchema, renameFolderSchema, unprotected, type Folder } from "./connections.schema";
 import { folderInputOf } from "./folder-input";
 import { renamedFolderInput, renameFolderRefusalFields } from "./rename-folder";
 
 const now = "2026-10-15T12:00:00Z";
-const fabrica: Folder = { id: "f1", parentID: "raiz", name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: "#7DB2FF", createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "f1", parentID: "raiz", name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: "#7DB2FF", confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 
 const refusal = (code: string, errors: Record<string, string[]> | null = null): ApiError => ({ status: code === "FOLDER_ALREADY_EXISTS" ? 409 : 422, code, title: `Título de ${code}`, detail: null, errors, extensions: {} });
 
 describe("renamedFolderInput: o Renomear da pasta (F2, RN-NAV-009)", () => {
   it("leva a pasta como está, na mesma pasta pai, com a cor e o ambiente dela, só com o nome novo", () => {
-    expect(renamedFolderInput(fabrica, "Fábrica Sul")).toEqual({ name: "Fábrica Sul", parentID: "raiz", color: "#7DB2FF", environmentName: "Produção", environmentColor: "#FF8A7A" });
+    expect(renamedFolderInput(fabrica, "Fábrica Sul")).toEqual({ name: "Fábrica Sul", parentID: "raiz", color: "#7DB2FF", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false });
+  });
+
+  it("renomear não tira as proteções da pasta (RN-PROT-003): sem elas a API voltaria a confirmação a “Não” e pediria a senha do somente leitura", () => {
+    const protegida: Folder = { ...fabrica, confirmCommands: "irreversible", readOnly: true, protections: { readOnly: true, readOnlyFolderID: null, confirmCommands: "irreversible", confirmCommandsFolderID: null } };
+
+    expect(renamedFolderInput(protegida, "Fábrica Sul")).toMatchObject({ name: "Fábrica Sul", confirmCommands: "irreversible", readOnly: true });
   });
 
   it("é o mesmo pedido que o Editar pasta… mandaria mudando só o nome (o mesmo PATCH, que grava a pasta por inteiro)", () => {
-    const fromEdit = editFolderSchema.parse({ name: "Fábrica Sul", color: "#7DB2FF", environmentName: "Produção", environmentColor: "#FF8A7A" });
+    const fromEdit = editFolderSchema.parse({ name: "Fábrica Sul", color: "#7DB2FF", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: "none", readOnly: "false" });
 
     expect(renamedFolderInput(fabrica, "Fábrica Sul")).toEqual(folderInputOf(fabrica, fromEdit));
   });

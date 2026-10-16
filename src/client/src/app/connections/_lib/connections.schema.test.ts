@@ -3,7 +3,23 @@ import { z } from "zod";
 
 import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema } from "./connections.schema";
 
-const form = { engine: "1", name: "ERP", folderID: "", host: "srv-pg.exemplo.local", port: "5432", database: "erp", userName: "prism_leitura", password: "demonstracao", environmentName: "", environmentColor: "" };
+const form = {
+  engine: "1",
+  name: "ERP",
+  folderID: "",
+  host: "srv-pg.exemplo.local",
+  port: "5432",
+  database: "erp",
+  userName: "prism_leitura",
+  password: "demonstracao",
+  environmentName: "",
+  environmentColor: "",
+  confirmCommands: "none",
+  readOnly: "false",
+  verificationEnabled: "true",
+  verificationInterval: "30",
+  verificationQuery: "",
+};
 
 /** As mensagens por campo da recusa, ou `{}` quando o schema aceitou. */
 function fieldErrors(schema: z.ZodType, input: unknown) {
@@ -23,16 +39,22 @@ const saved = {
   hasPassword: true,
   environmentName: "Produção",
   environmentColor: "#FF8A7A",
+  confirmCommands: null,
+  readOnly: false,
+  verificationEnabled: true,
+  verificationInterval: 30,
+  verificationQuery: null,
+  protections: { readOnly: false, readOnlyFolderID: null, confirmCommands: null, confirmCommandsFolderID: null },
   createdAt: "2026-10-09T12:00:00Z",
   updatedAt: "2026-10-09T12:00:00Z",
 };
 
 describe("engineOptions (RN-CONN-012)", () => {
-  it("traz o rótulo, a etiqueta e a porta sugerida de cada banco", () => {
-    expect(engineOptions.map(({ value, label, tag, defaultPort }) => [value, label, tag, defaultPort])).toEqual([
-      [1, "PostgreSQL", "PG", 5432],
-      [2, "Db2", "DB2", 50000],
-      [3, "Informix", "IFX", 9089],
+  it("traz o rótulo, a etiqueta, a porta sugerida e a consulta de verificação de cada banco, a da API (RN-CONN-013 e RN-VERIF-001)", () => {
+    expect(engineOptions.map(({ value, label, tag, defaultPort, verificationQuery }) => [value, label, tag, defaultPort, verificationQuery])).toEqual([
+      [1, "PostgreSQL", "PG", 5432, "SELECT 1"],
+      [2, "Db2", "DB2", 50000, "SELECT 1 FROM SYSIBM.SYSDUMMY1"],
+      [3, "Informix", "IFX", 9089, "SELECT 1 FROM systables WHERE tabid = 1"],
     ]);
   });
 });
@@ -41,7 +63,70 @@ describe("createConnectionSchema (RN-CONN-010)", () => {
   it("aceita um formulário válido e entrega a porta e o banco como número", () => {
     const result = createConnectionSchema.safeParse(form);
 
-    expect(result.success && result.data).toEqual({ engine: 1, name: "ERP", folderID: null, host: "srv-pg.exemplo.local", port: 5432, database: "erp", userName: "prism_leitura", password: "demonstracao", environmentName: null, environmentColor: null });
+    expect(result.success && result.data).toEqual({
+      engine: 1,
+      name: "ERP",
+      folderID: null,
+      host: "srv-pg.exemplo.local",
+      port: 5432,
+      database: "erp",
+      userName: "prism_leitura",
+      password: "demonstracao",
+      environmentName: null,
+      environmentColor: null,
+      confirmCommands: null,
+      readOnly: false,
+      verificationEnabled: true,
+      verificationInterval: 30,
+      verificationQuery: null,
+    });
+  });
+
+  it("a sessão da conexão (RN-VERIF-001): a caixa vem do campo escondido, o intervalo vira número e a consulta é aparada, nula em branco", () => {
+    const off = createConnectionSchema.safeParse({ ...form, verificationEnabled: "false", verificationInterval: " 120 ", verificationQuery: "  SELECT 1 FROM SYSIBM.SYSDUMMY1\n" });
+    const blank = createConnectionSchema.safeParse({ ...form, verificationQuery: " \n " });
+
+    expect(off.success && [off.data.verificationEnabled, off.data.verificationInterval, off.data.verificationQuery]).toEqual([false, 120, "SELECT 1 FROM SYSIBM.SYSDUMMY1"]);
+    expect(blank.success && blank.data.verificationQuery).toBeNull();
+  });
+
+  it.each(["4", "3601", "0", "12.5", "trinta", "", "-30"])("recusa o intervalo %j no campo dele, com a frase da API", (verificationInterval) => {
+    expect(fieldErrors(createConnectionSchema, { ...form, verificationInterval }).verificationInterval).toEqual(["A verificação deve ser feita a cada 5 a 3.600 segundos."]);
+  });
+
+  it.each(["5", "3600", "30"])("aceita o intervalo %j", (verificationInterval) => {
+    expect(createConnectionSchema.safeParse({ ...form, verificationInterval }).success).toBe(true);
+  });
+
+  it("a consulta de verificação tem até 1.000 caracteres depois de aparada, como a API conta", () => {
+    expect(createConnectionSchema.safeParse({ ...form, verificationQuery: ` ${"x".repeat(1000)} ` }).success).toBe(true);
+    expect(fieldErrors(createConnectionSchema, { ...form, verificationQuery: "x".repeat(1001) }).verificationQuery).toEqual(["A consulta de verificação pode ter no máximo 1.000 caracteres."]);
+  });
+
+  it("sem os campos da sessão da conexão o formulário é recusado, em vez de gravar a verificação padrão por cima da escolhida", () => {
+    const without: Partial<typeof form> = { ...form };
+    delete without.verificationEnabled;
+    delete without.verificationInterval;
+    delete without.verificationQuery;
+
+    expect(Object.keys(fieldErrors(createConnectionSchema, without)).sort()).toEqual(["verificationEnabled", "verificationInterval", "verificationQuery"]);
+  });
+
+  it("as proteções próprias (RN-PROT-001 e 002) vêm dos campos escondidos: “Não” vai nulo, como a API devolve, e o somente leitura vira booleano", () => {
+    const protegida = createConnectionSchema.safeParse({ ...form, confirmCommands: "all", readOnly: "true" });
+    const irreversiveis = createConnectionSchema.safeParse({ ...form, confirmCommands: "irreversible" });
+
+    expect(protegida.success && [protegida.data.confirmCommands, protegida.data.readOnly]).toEqual(["all", true]);
+    expect(irreversiveis.success && irreversiveis.data.confirmCommands).toBe("irreversible");
+  });
+
+  it("sem os campos das proteções, ou com um valor fora da lista, o formulário é recusado em vez de gravar a proteção mais fraca", () => {
+    const withoutProtections: Partial<typeof form> = { ...form };
+    delete withoutProtections.confirmCommands;
+    delete withoutProtections.readOnly;
+
+    expect(Object.keys(fieldErrors(createConnectionSchema, withoutProtections)).sort()).toEqual(["confirmCommands", "readOnly"]);
+    expect(fieldErrors(createConnectionSchema, { ...form, confirmCommands: "sempre" }).confirmCommands).toEqual(["Escolha não confirmar, só os comandos irreversíveis ou todos os comandos."]);
   });
 
   it.each(["0", "65536", "-1", "12.5", "abc", ""])("recusa a porta %j, no campo da porta", (port) => {
@@ -124,17 +209,42 @@ describe("connectionSchema (RN-CONN-001)", () => {
   it("não quebra por um campo novo que não é senha", () => {
     expect(connectionSchema.safeParse({ ...saved, outroCampo: 1 }).success).toBe(true);
   });
+
+  it("traz as proteções próprias, as que valem com a pasta de onde vêm, e a verificação (RN-PROT-004, RN-VERIF-001); o “none” é “Não”, nulo", () => {
+    const protegida = connectionSchema.parse({ ...saved, confirmCommands: "none", readOnly: true, verificationEnabled: false, verificationInterval: 120, verificationQuery: "SELECT 1 FROM systables WHERE tabid = 1", protections: { readOnly: true, readOnlyFolderID: null, confirmCommands: "all", confirmCommandsFolderID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" } });
+
+    expect([protegida.confirmCommands, protegida.readOnly, protegida.verificationEnabled, protegida.verificationInterval, protegida.verificationQuery]).toEqual([null, true, false, 120, "SELECT 1 FROM systables WHERE tabid = 1"]);
+    expect(protegida.protections).toEqual({ readOnly: true, readOnlyFolderID: null, confirmCommands: "all", confirmCommandsFolderID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" });
+  });
+
+  it("recusa a resposta sem as proteções ou com uma confirmação que a tela não conhece: o PATCH seguinte gravaria a proteção mais fraca sem ninguém pedir", () => {
+    const withoutProtections: Partial<typeof saved> = { ...saved };
+    delete withoutProtections.protections;
+
+    expect(connectionSchema.safeParse(withoutProtections).success).toBe(false);
+    expect(connectionSchema.safeParse({ ...saved, confirmCommands: "sempre" }).success).toBe(false);
+    expect(connectionSchema.safeParse({ ...saved, readOnly: undefined }).success).toBe(false);
+  });
 });
 
 describe("folderSchema e formulários de pasta (RN-PASTA-001, RN-PASTA-005 e RN-PASTA-007)", () => {
-  const folder = { id: "8d0c5a54-5b51-4a0f-9d3b-6f0f5b8a2d11", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" };
-  const noEnvironment = { color: "", environmentName: "", environmentColor: "" };
+  const folder = { id: "8d0c5a54-5b51-4a0f-9d3b-6f0f5b8a2d11", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, confirmCommands: null, readOnly: false, protections: { readOnly: false, readOnlyFolderID: null, confirmCommands: null, confirmCommandsFolderID: null }, createdAt: "2026-10-09T12:00:00Z", updatedAt: "2026-10-09T12:00:00Z" };
+  const noEnvironment = { color: "", environmentName: "", environmentColor: "", confirmCommands: "none", readOnly: "false" };
 
   it("aceita a pasta da API, na raiz ou dentro de outra, com ou sem ambiente", () => {
     expect(folderSchema.safeParse(folder).success).toBe(true);
     expect(folderSchema.safeParse({ ...folder, parentID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" }).success).toBe(true);
     expect(folderSchema.safeParse({ ...folder, environmentName: "Produção", environmentColor: "#FF8A7A" }).success).toBe(true);
     expect(folderSchema.safeParse({ ...folder, color: "#7DB2FF" }).success).toBe(true);
+  });
+
+  it("a pasta traz as proteções próprias e as que valem (RN-PROT-004); sem elas, é recusada", () => {
+    const protegida = folderSchema.parse({ ...folder, confirmCommands: "irreversible", readOnly: true, protections: { readOnly: true, readOnlyFolderID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12", confirmCommands: "all", confirmCommandsFolderID: "3f2b8a54-5b51-4a0f-9d3b-6f0f5b8a2d12" } });
+    const withoutProtections: Partial<typeof folder> = { ...folder };
+    delete withoutProtections.protections;
+
+    expect([protegida.confirmCommands, protegida.readOnly, protegida.protections.confirmCommands]).toEqual(["irreversible", true, "all"]);
+    expect(folderSchema.safeParse(withoutProtections).success).toBe(false);
   });
 
   it("a pasta sem a cor é recusada: a API a devolve sempre, nula quando não há (RN-PASTA-007)", () => {
@@ -155,19 +265,19 @@ describe("folderSchema e formulários de pasta (RN-PASTA-001, RN-PASTA-005 e RN-
   it("nome da pasta: aparado, de 1 a 60 caracteres; o ambiente em branco vira nulo", () => {
     const ok = createFolderSchema.safeParse({ name: "  Fábrica ", parentID: "", ...noEnvironment });
 
-    expect(ok.success && ok.data).toEqual({ name: "Fábrica", parentID: null, color: null, environmentName: null, environmentColor: null });
+    expect(ok.success && ok.data).toEqual({ name: "Fábrica", parentID: null, color: null, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false });
     expect(fieldErrors(createFolderSchema, { name: "   ", parentID: "", ...noEnvironment })).toHaveProperty("name");
     expect(fieldErrors(createFolderSchema, { name: "a".repeat(61), parentID: "", ...noEnvironment })).toHaveProperty("name");
     expect(createFolderSchema.safeParse({ name: "a".repeat(60), parentID: "", ...noEnvironment }).success).toBe(true);
   });
 
   it("o ambiente da pasta tem as regras do da conexão: até 30 caracteres e cor #RRGGBB", () => {
-    const ok = createFolderSchema.safeParse({ name: "Produção", parentID: "", color: "", environmentName: "  Produção ", environmentColor: "#FF8A7A" });
+    const ok = createFolderSchema.safeParse({ ...noEnvironment, name: "Produção", parentID: "", environmentName: "  Produção ", environmentColor: "#FF8A7A" });
 
-    expect(ok.success && ok.data).toEqual({ name: "Produção", parentID: null, color: null, environmentName: "Produção", environmentColor: "#FF8A7A" });
-    expect(fieldErrors(createFolderSchema, { name: "Produção", parentID: "", color: "", environmentName: "a".repeat(31), environmentColor: "" })).toHaveProperty("environmentName");
-    expect(fieldErrors(createFolderSchema, { name: "Produção", parentID: "", color: "", environmentName: "", environmentColor: "vermelho" })).toHaveProperty("environmentColor");
-    expect(fieldErrors(editConnectionSchema, { ...form, environmentName: "a".repeat(31) }).environmentName).toEqual(fieldErrors(createFolderSchema, { name: "P", parentID: "", color: "", environmentName: "a".repeat(31), environmentColor: "" }).environmentName);
+    expect(ok.success && ok.data).toEqual({ name: "Produção", parentID: null, color: null, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false });
+    expect(fieldErrors(createFolderSchema, { ...noEnvironment, name: "Produção", parentID: "", environmentName: "a".repeat(31) })).toHaveProperty("environmentName");
+    expect(fieldErrors(createFolderSchema, { ...noEnvironment, name: "Produção", parentID: "", environmentColor: "vermelho" })).toHaveProperty("environmentColor");
+    expect(fieldErrors(editConnectionSchema, { ...form, environmentName: "a".repeat(31) }).environmentName).toEqual(fieldErrors(createFolderSchema, { ...noEnvironment, name: "P", parentID: "", environmentName: "a".repeat(31) }).environmentName);
   });
 
   it("a cor da pasta (RN-PASTA-007) tem a regra da cor do ambiente: #RRGGBB, e vazia é sem cor", () => {
@@ -178,11 +288,11 @@ describe("folderSchema e formulários de pasta (RN-PASTA-001, RN-PASTA-005 e RN-
     expect(fieldErrors(createFolderSchema, { name: "Produção", parentID: "", ...noEnvironment, color: "#7DB2F" })).toHaveProperty("color");
   });
 
-  it("editar (Editar pasta…, RN-PASTA-006) pede o nome, a cor e o ambiente; renomear (F2, RN-NAV-009), só o nome; e mover, só a pasta pai", () => {
-    const renamed = editFolderSchema.safeParse({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644" });
+  it("editar (Editar pasta…, RN-PASTA-006) pede o nome, a cor, o ambiente e as proteções; renomear (F2, RN-NAV-009), só o nome; e mover, só a pasta pai", () => {
+    const renamed = editFolderSchema.safeParse({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644", confirmCommands: "all", readOnly: "true" });
 
-    expect(renamed.success && renamed.data).toEqual({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644" });
-    expect(Object.keys(editFolderSchema.shape).sort()).toEqual(["color", "environmentColor", "environmentName", "name"]);
+    expect(renamed.success && renamed.data).toEqual({ name: "Nova", color: "#B79CFF", environmentName: "QAS", environmentColor: "#F2B644", confirmCommands: "all", readOnly: true });
+    expect(Object.keys(editFolderSchema.shape).sort()).toEqual(["color", "confirmCommands", "environmentColor", "environmentName", "name", "readOnly"]);
     expect(Object.keys(renameFolderSchema.shape)).toEqual(["name"]);
     expect(fieldErrors(editFolderSchema, { name: "", ...noEnvironment })).toHaveProperty("name");
 

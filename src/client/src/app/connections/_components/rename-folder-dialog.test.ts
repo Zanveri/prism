@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import type { Folder } from "../_lib/connections.schema";
+import { unprotected, type Folder } from "../_lib/connections.schema";
 import { RenameFolderDialog } from "./rename-folder-dialog";
 
 // O `Dialog` de verdade desenha num portal em `document.body`, que o renderizador de servidor não tem: aqui ele só devolve o que receberia.
@@ -15,7 +15,7 @@ vi.mock("@/components/ui/dialog", () => ({
 vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui")>()), useToast: () => ({ success() {}, warning() {}, error() {} }) }));
 
 const now = "2026-10-15T12:00:00Z";
-const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f2", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: "#7DB2FF", createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f2", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: "#7DB2FF", confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 
 const render = () => renderToStaticMarkup(createElement(QueryClientProvider, { client: new QueryClient() }, createElement(RenameFolderDialog, { folder: fabrica, onClose: () => {} })));
 const footerButtons = (markup: string) => [.../<footer>([\s\S]*?)<\/footer>/.exec(markup)?.[1].matchAll(/<button[^>]*>([^<]*)<\/button>/g) ?? []].map((match) => match[1]);

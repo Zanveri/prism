@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -37,18 +38,22 @@ public sealed record ExecuteQueryCommand : IRequest<Result<QueryResultDto, ApiEr
     public override string ToString() => nameof(ExecuteQueryCommand);
 }
 
-internal sealed class ExecuteQueryHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
+internal sealed class ExecuteQueryHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
 {
     /// <summary>
     /// O validator já recusou o que não é um inteiro da faixa (aqui só há o número ou a falta dele) e o filtro que não se junta ao
-    /// comando. Sem filtro, o comando vai como veio.
+    /// comando. Sem filtro (nulo ou só de espaços), o comando vai como veio. RN-PROT-002 e 006: a conexão somente leitura é a do cofre agora,
+    /// e o registro de sessões recusa o que não é leitura antes de ir ao banco.
     /// </summary>
     public async Task<Result<QueryResultDto, ApiErrorDto>> Handle(ExecuteQueryCommand request, CancellationToken cancellationToken)
     {
+        var readOnly = await connectionQueries.IsReadOnly(databaseSessionService, request.SessionID, cancellationToken);
+        if (readOnly.IsFailure)
+            return Result.Failure<QueryResultDto, ApiErrorDto>(readOnly.Error);
+
         var pageSize = request.PageSize is { ValueKind: JsonValueKind.Number } size ? size.GetInt32() : QueryPaging.DefaultPageSize;
-        var outcome = string.IsNullOrWhiteSpace(request.Filter)
-            ? await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, pageSize, cancellationToken)
-            : await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, request.Filter, pageSize, cancellationToken);
+        var filter = string.IsNullOrWhiteSpace(request.Filter) ? null : request.Filter;
+        var outcome = await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, filter, pageSize, readOnly.Value, cancellationToken);
 
         return outcome.Map(executed => executed.ToDto()).MapError(DatabaseSessionErrors.From);
     }

@@ -7,6 +7,7 @@ using Prism.Application.Connections.Features.GetConnections;
 using Prism.Application.Connections.Features.RevealConnectionPassword;
 using Prism.Application.Connections.Features.TestConnection;
 using Prism.Application.Connections.Features.UpdateConnection;
+using Prism.Application.Connections.Features.VerifyConnection;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
 
@@ -53,7 +54,11 @@ public sealed class UserConnectionsController(IMediator mediator) : ControllerBa
         return Created($"/api/user/connections/{result.Value.ID}", result.Value);
     }
 
-    /// <summary>O corpo leva `id` e todos os campos; `password` ausente ou nulo mantém a senha gravada, desde que o host e a porta não mudem (RN-CONN-004: 422 `CONNECTION_INVALID`).</summary>
+    /// <summary>
+    /// O corpo leva `id` e todos os campos; `password` ausente ou nulo mantém a senha gravada, desde que o host e a porta não mudem (RN-CONN-004: 422
+    /// `CONNECTION_INVALID`). `userPassword` é a senha do usuário que a mudança do somente leitura pede (RN-PROT-003: 422 `USER_PASSWORD_REQUIRED` ou
+    /// `INVALID_PASSWORD`, e 401 `VAULT_LOCKED` no quinto erro seguido).
+    /// </summary>
     [HttpPatch]
     public async Task<IActionResult> UpdateConnection([FromBody] UpdateConnectionCommand command, CancellationToken cancellationToken)
     {
@@ -89,7 +94,8 @@ public sealed class UserConnectionsController(IMediator mediator) : ControllerBa
     }
 
     /// <summary>
-    /// RN-CONN-013: abre, confere e fecha, sem gravar nada. O corpo leva os campos da conexão; `id` e `password` são opcionais, e sem
+    /// RN-CONN-013: abre, confere e fecha, sem gravar nada. O corpo leva os campos da conexão e, opcional, a consulta de verificação do formulário
+    /// (`verificationQuery`, RN-VERIF-001), que o teste executa no lugar da do banco; `id` e `password` são opcionais, e sem
     /// `password` e com `id` a API usa a senha guardada, se o host e a porta são os gravados (RN-CONN-013: 422 `CONNECTION_INVALID`, sem conectar). A rota `test` é literal e não colide com `{id:guid}`.
     /// </summary>
     [HttpPost("test")]
@@ -100,6 +106,21 @@ public sealed class UserConnectionsController(IMediator mediator) : ControllerBa
             return result.ToIActionResult();
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// RN-VERIF-002: a verificação periódica da conexão conectada, sem corpo. Roda a consulta de verificação numa sessão já aberta e livre dela, e
+    /// responde 200 `{ status, checkedAt, elapsedMs, message, sqlState }` (`ok`, `failed`, `busy` ou `notConnected`): a falha do banco é resposta,
+    /// e não erro. 404 `CONNECTION_NOT_FOUND`.
+    /// </summary>
+    [HttpPost("{id:guid}/verification")]
+    public async Task<IActionResult> VerifyConnection(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(new VerifyConnectionCommand(id), cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
     }
 
     /// <summary>

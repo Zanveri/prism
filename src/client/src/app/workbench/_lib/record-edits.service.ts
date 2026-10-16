@@ -9,11 +9,14 @@ import { editPreviewSchema, editsAppliedSchema, editTargetSchema, type ApiChange
  * viram o aviso central (RN-AVISO-004).
  */
 
-/** O que a tela mostra de um `edit-target` recusado: o resultado mudou, é só leitura, a sessão caiu ou a consulta ao catálogo falhou. */
-const targetRefusals = ["RESULT_NOT_EDITABLE", "RESULT_CHANGED", "DATABASE_SESSION_NOT_FOUND", "SQL_EXECUTION_FAILED", "DATABASE_CONNECTION_FAILED", "SESSION_BUSY"];
+/**
+ * O que a tela mostra de um `edit-target` recusado: o resultado mudou, é só leitura (também por a conexão ser somente leitura agora, RN-PROT-002), a sessão
+ * caiu ou a consulta ao catálogo falhou.
+ */
+const targetRefusals = ["RESULT_NOT_EDITABLE", "CONNECTION_READ_ONLY", "RESULT_CHANGED", "DATABASE_SESSION_NOT_FOUND", "SQL_EXECUTION_FAILED", "DATABASE_CONNECTION_FAILED", "SESSION_BUSY"];
 
-/** O que a faixa mostra de um Salvar recusado, com a alteração que falhou quando a API a aponta. */
-const saveRefusals = ["EDIT_ROW_MISMATCH", "EDIT_INVALID", "SQL_EXECUTION_FAILED", "RESULT_CHANGED", "RESULT_NOT_EDITABLE", "SESSION_BUSY", "DATABASE_SESSION_NOT_FOUND"];
+/** O que a faixa mostra de um Salvar recusado, com a alteração que falhou quando a API a aponta; e a conexão que passou a ser somente leitura (RN-PROT-002). */
+const saveRefusals = ["EDIT_ROW_MISMATCH", "EDIT_INVALID", "SQL_EXECUTION_FAILED", "RESULT_CHANGED", "RESULT_NOT_EDITABLE", "CONNECTION_READ_ONLY", "SESSION_BUSY", "DATABASE_SESSION_NOT_FOUND"];
 
 /**
  * RN-EDIT-002, 003 e 010: o que se edita no resultado da página, perguntado na primeira tentativa de editar. `catalogSessionId` é a

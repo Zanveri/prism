@@ -16,8 +16,29 @@ public interface IDatabaseSessionService
     /// </summary>
     Task<Result<DatabaseSessionInfo, DatabaseFailure>> OpenAsync(Guid connectionID, ConnectionSettings settings, long vaultGeneration, CancellationToken cancellationToken);
 
-    /// <summary>RN-CONN-013: abre, roda a consulta de verificação e fecha. Não registra sessão. Falha `ConnectionFailed`.</summary>
+    /// <summary>RN-CONN-013: abre, roda a consulta de verificação do banco e fecha. Não registra sessão. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001: o mesmo, com a consulta de verificação própria do formulário (já validada como uma leitura só) no lugar da do
+    /// banco, quando ela vem. A falha dela é `ConnectionFailed`, com a mensagem do banco.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, string? verificationQuery, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-VERIF-002: roda a consulta de verificação (a própria, já validada, ou a do banco quando ela é nula) numa sessão já aberta da conexão, do cofre
+    /// da geração `vaultGeneration`, e nunca numa nova: sem nenhuma, `NotConnected`. Nunca numa sessão com cursor aberto, que a consulta fecharia
+    /// (RN-SQL-007), nem numa com comando em andamento: primeiro a sessão sem resultado (a da árvore) e depois a de uma aba sem cursor; com todas
+    /// ocupadas, `Busy` na hora, sem esperar a vez. A falha do banco é `Failed`, e a sessão cuja conexão caiu sai do registro. Não é atividade:
+    /// não mexe no tempo sem leitura do cursor (RN-SQL-007) nem no resultado da sessão.
+    /// </summary>
+    Task<ConnectionVerification> VerifyAsync(Guid connectionID, string? verificationQuery, long vaultGeneration, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002 e 006: a conexão de que a sessão é, para quem decide as proteções dela a cada comando (as do cofre, que a Application lê). Nulo
+    /// quando a sessão não existe: aí a operação pedida responde `SessionNotFound` por conta própria.
+    /// </summary>
+    Guid? ConnectionOf(Guid sessionID);
 
     /// <summary>
     /// Fecha a sessão, interrompendo o comando e a contagem que estiverem rodando nela. Espera o comando parar por no máximo dez
@@ -66,6 +87,15 @@ public interface IDatabaseSessionService
     /// <summary>Executar e carregar mais não esperam: com outro comando rodando na sessão, `SessionBusy` (RN-SESSAO-002).</summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" do cursor que o comando abrir.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002: o mesmo, numa conexão que pode ser somente leitura, que é como a Application executa todo comando da pessoa (as proteções vêm
+    /// do cofre a cada comando, RN-PROT-006). Com `readOnly`, o comando montado (com o filtro) que não é uma leitura (`ReadOnlySql`) é recusado com
+    /// `ConnectionReadOnly`, antes de ir ao banco e sem tirar o resultado anterior; o que é leitura roda pelo `ExecuteReadOnlyAsync` da conexão, e a
+    /// página diz que o resultado inteiro é só leitura (RN-EDIT-002). Sem `readOnly`, é o comando de sempre, e a sessão que estava no modo só de
+    /// leitura do banco sai dele.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken);
 
     /// <summary>
     /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é

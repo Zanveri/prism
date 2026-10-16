@@ -11,12 +11,14 @@ import type { ColumnLink } from "../_lib/foreign-key-links";
 import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
 import { autoLoadArmed } from "../_lib/result-paging";
+import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
 import type { RecordsSort } from "../_lib/table-sql";
 import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
+import { KeptResultNote } from "./script-tabs";
 
 const copy = workbenchCopy.result;
 
@@ -164,6 +166,21 @@ type ResultPanelProps = {
    * consulta, que não tem o botão (o F5 e "Executar" fazem a vez dele), na barra, antes do zoom, que fica também com a área recolhida.
    */
   autoRefresh?: ReactNode;
+  /**
+   * Seção 31 (RN-SQL-020): as abas do script, no lugar do título "Resultado". O corpo da área passa a ser o painel da aba escolhida (`role="tabpanel"`,
+   * rotulado por ela).
+   */
+  tabs?: { list: ReactNode; panelId: string; labelledBy: string };
+  /** RN-SQL-019: o comando do script em execução ("Executando 3 de 12…"), na barra, em qualquer aba e com a área recolhida, no lugar do "Executando…". */
+  progress?: string | null;
+  /** RN-SQL-020: as Estatísticas do script no corpo, no lugar do resultado; `summary` é o que a barra recolhida diz delas. */
+  statistics?: { body: ReactNode; summary: string };
+  /**
+   * RN-SQL-020: uma aba guardada do script. As linhas lidas, só para leitura (sem contar, sem "Carregar mais", sem filtro, sem menu nem edição), e a nota
+   * dela (`KeptResultNote`), com "Executar este comando", no lugar do rodapé do cursor. `busy`: há comando da pessoa em andamento na aba (o `state` desta
+   * área é a cópia guardada, que não sabe disso), e o botão não executa.
+   */
+  kept?: { busy: boolean; onRunAlone: () => void };
 };
 
 /**
@@ -171,7 +188,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept }: ResultPanelProps) {
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -179,7 +196,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   // (linhas, linhas afetadas ou um erro de SQL). Só a API aceitar o comando novo o substitui;
   // recusado antes disso, ele continua valendo.
   const shown = state.status === "running" ? state.previous : state;
-  const rows = shown?.status === "rows" ? shown : null;
+  // As Estatísticas do script (RN-SQL-020) tomam o corpo: nem grade, nem resumo das linhas na barra.
+  const rows = statistics === undefined && shown?.status === "rows" ? shown : null;
   // O que a grade mostra por gosto do usuário, lido aqui e não passado por quem usa a área: vale nas duas grades (a da consulta e a dos Registros), na hora.
   const { preferences, update } = usePreferences();
   // O zoom da grade (RN-GRADE-010): uma preferência só, a mesma para as duas grades, que os botões da barra e o Ctrl+roda sobre a grade mudam.
@@ -203,12 +221,13 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   const busy = isPersonBusy(state);
   const cancelling = (state.status === "running" || state.status === "rows") && state.cancelling;
   // RN-CONFIG-005: a grade só avisa que chegou ao fim; quem decide se a página seguinte pode vir é esta conta.
-  const autoLoad = autoLoadArmed(state, { enabled: autoLoadMore, connected });
+  const autoLoad = kept === undefined && autoLoadArmed(state, { enabled: autoLoadMore, connected });
   const loadedHint = autoLoadMore ? copy.loadedHintAuto : copy.loadedHint;
   const exportHintId = useId();
 
   // RN-SQL-006: o botão de contar que sai da página com o foco (o resultado novo não tem o que contar) não o deixa cair no `body`, fora da aba, onde o F5
-  // não vale: o foco vai para a grade ou, sem ela (ou com ela recolhida), para a própria área.
+  // não vale: o foco vai para a grade ou, sem ela (ou com ela recolhida), para a própria área. O mesmo com "Executar este comando", de uma aba guardada do
+  // script (RN-SQL-020), que sai com os resultados do script.
   const section = useRef<HTMLElement>(null);
   const focusLost = useRef(false);
   const rescueFocus = useCallback(() => {
@@ -226,12 +245,12 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
 
   return (
     // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
-    <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
+    <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running || progress !== null} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
       <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !collapsed && "border-b border-border")}>
-        <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2>
+        {tabs === undefined ? <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2> : tabs.list}
         {collapsed ? (
-          <span role={running ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
-            {collapsedSummary(state)}
+          <span role={running || progress !== null ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
+            {progress ?? statistics?.summary ?? collapsedSummary(state)}
           </span>
         ) : null}
         {/*
@@ -254,32 +273,46 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 {rows.counting ? ` · ${copy.recounting}` : null}
               </span>
             )}
-            {connected && (rows.hasMore || rows.total !== null) ? <CountButton rows={rows} busy={busy} onCount={onCount} onFocusLost={rescueFocus} /> : null}
+            {connected && kept === undefined && (rows.hasMore || rows.total !== null) ? <CountButton rows={rows} busy={busy} onCount={onCount} onFocusLost={rescueFocus} /> : null}
           </>
         )}
-        {/* Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo. */}
-        {!collapsed && running && shown !== null ? (
+        {/* Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo. O script diz qual comando roda (RN-SQL-019). */}
+        {!collapsed && progress !== null ? (
+          <span role="status" className="px-2 text-xs text-muted">
+            {progress}
+          </span>
+        ) : !collapsed && running && shown !== null ? (
           <span role="status" className="px-2 text-xs text-muted">
             {copy.running}
           </span>
         ) : null}
-        {records ? null : (autoRefresh ?? null)}
+        {records || kept !== undefined || statistics !== undefined ? null : (autoRefresh ?? null)}
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
         {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} /> : null}
         {actions}
       </div>
 
       {/* Recolhida, `inert` tira o corpo da ordem do Tab e da leitura de tela sem desmontá-lo. */}
-      <div inert={collapsed} className={cn("flex min-h-0 flex-1 flex-col", collapsed && "h-0 flex-none overflow-hidden")}>
-        {filter ?? null}
-        {shown === null ? (
+      <div
+        inert={collapsed}
+        role={tabs === undefined ? undefined : "tabpanel"}
+        id={tabs?.panelId}
+        aria-labelledby={tabs?.labelledBy}
+        // As Estatísticas não têm nada que receba o foco: o painel entra no Tab, como pede a lista de abas.
+        tabIndex={statistics === undefined ? undefined : 0}
+        className={cn("flex min-h-0 flex-1 flex-col", collapsed && "h-0 flex-none overflow-hidden")}
+      >
+        {kept !== undefined || statistics !== undefined ? null : (filter ?? null)}
+        {statistics !== undefined ? (
+          statistics.body
+        ) : shown === null ? (
           // `flex-1`: na vista Registros o rodapé (com "Cancelar") fica no fim da área, e não colado à frase.
           <p role="status" className="flex-1 p-4 text-muted">
             {copy.running}
           </p>
         ) : rows !== null ? (
           <>
-            {banner ?? null}
+            {kept === undefined ? (banner ?? null) : null}
             {/* O mesmo lugar na árvore com o comando rodando ou não: a grade não é refeita, e a rolagem fica onde estava. */}
             <div className={cn("flex min-h-0 flex-1 flex-col", running && "opacity-50")}>
               <ResultGrid
@@ -300,11 +333,14 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 showTypes={preferences.results.showColumnTypes}
                 zoom={zoom}
                 onZoom={zoomTo}
-                editing={editing}
+                editing={kept === undefined ? editing : undefined}
               />
             </div>
 
-            {running || records ? null : rows.cursorClosed ? (
+            {kept !== undefined ? (
+              // O botão sai da página com o foco quando o comando executado troca os resultados do script: o foco vai à grade nova (RN-SQL-006).
+              <KeptResultNote busy={kept.busy} onRunAlone={kept.onRunAlone} onFocusLost={rescueFocus} />
+            ) : running || records ? null : rows.cursorClosed ? (
               // RN-SQL-007: o cursor fechou; o que resta é executar de novo.
               <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-raised px-3 py-1.5 text-xs">
                 <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
@@ -347,7 +383,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
               ) : (
                 <div className="flex flex-col gap-1">
                   <p className="text-body">{copy.empty}</p>
-                  <p className="text-muted">{copy.emptyHint}</p>
+                  <p className="text-muted">{copy.emptyHint(platformScriptShortcut)}</p>
                 </div>
               )
             ) : shown.status === "affected" ? (

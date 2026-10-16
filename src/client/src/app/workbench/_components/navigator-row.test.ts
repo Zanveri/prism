@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { elementsOf } from "@/lib/testing/react-tree";
 
-import type { Connection } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 
 import { navKey, objectNodes, type NavNode } from "../_lib/navigator-model";
 import { NavigatorRow, type NavigatorRowProps } from "./navigator-row";
@@ -186,7 +186,7 @@ describe("o botão direito na linha (RN-MENU-001)", () => {
 
 describe("a dica da linha da conexão (o que a lista da tela de Conexões mostrava, RN-NAV-003)", () => {
   const now = "2026-10-12T12:00:00Z";
-  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 3, host: "srv-ifx", port: 9089, database: "mes", userName: "informix", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
   const node: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 0, hasChildren: true };
 
   it("o nome e, embaixo, o banco e o endereço (host:porta / banco), que a lista de Conexões trazia em cada conexão e a árvore não mostra", () => {
@@ -200,8 +200,8 @@ describe("a dica da linha da conexão (o que a lista da tela de Conexões mostra
 
 describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () => {
   const now = "2026-10-13T12:00:00Z";
-  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
-  const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
+  const fabrica = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: "f1", name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 1, hasChildren: true };
   const folderNode: NavNode = { key: navKey({ type: "folder", id: "f1" }), kind: "folder", label: "Fábrica", depth: 0, hasChildren: true };
   const pill = (markup: string) => /<span[^>]*style="background-color:#FF8A7A[^"]*"[^>]*>Produção<\/span>/.exec(markup)?.[0];
@@ -259,7 +259,7 @@ describe("a cor da pasta no ícone dela (RN-PASTA-007)", () => {
 
 describe("a densidade do navegador na linha (RN-NAV-011)", () => {
   const now = "2026-10-15T12:00:00Z";
-  const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+  const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
   const connectionNode: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES", depth: 0, hasChildren: true };
   const [table] = objectNodes("c1", "public", "tables", [{ name: "pedido", kind: "table" }]);
   const loading: NavNode = { key: "k#loading", kind: "loading", label: "Carregando…", depth: 2, hasChildren: false };
@@ -300,5 +300,57 @@ describe("a densidade do navegador na linha (RN-NAV-011)", () => {
     expect(rowClass(render(loading))).toContain("h-[30px]");
     expect(rowClass(render(loading, { density: "compact" }))).toContain("h-[22px]");
     expect(rowClass(render(error(), { density: "compact" })).some((name) => name.startsWith("h-"))).toBe(false);
+  });
+});
+
+describe("o cadeado da conexão somente leitura na árvore (RN-PROT-002)", () => {
+  const now = "2026-10-15T12:00:00Z";
+  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: true, ...newVerification, protections: { ...unprotected, readOnly: true }, createdAt: now, updatedAt: now };
+  const node: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 0, hasChildren: true };
+
+  it("ao lado do nome, com a dica de onde vem, que o leitor de tela também lê", () => {
+    expect(render(node, { connection, status: "disconnected", readOnly: "Somente leitura, herdado da pasta Fábrica" })).toMatch(/<span role="img" aria-label="Somente leitura, herdado da pasta Fábrica" title="Somente leitura, herdado da pasta Fábrica"/);
+  });
+
+  it("a conexão que não é somente leitura não tem cadeado", () => {
+    expect(render(node, { connection, status: "disconnected" })).not.toContain("Somente leitura");
+  });
+});
+
+describe("o indicador da verificação periódica na árvore (RN-VERIF-003)", () => {
+  const now = "2026-10-15T12:00:00Z";
+  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
+  const node: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 0, hasChildren: true };
+  const failed = { kind: "failed", checkedAt: "2026-10-15T14:32:35Z", elapsedMs: 12, message: "FATAL: terminating connection", sqlState: "57P01", busy: false } as const;
+  const dot = (markup: string) => /<span role="img" aria-label="([^"]*)"[^>]*data-check="([a-zA-Z]+)"/.exec(markup)?.slice(1);
+
+  it("no lugar do ponto de conectada: “Respondeu na última verificação”, com a hora e o tempo na dica da linha, que o mouse alcança", () => {
+    const markup = render(node, { connection, status: "connected", check: { kind: "ok", checkedAt: "2026-10-15T14:32:05Z", elapsedMs: 3, busy: false } });
+
+    expect(dot(markup)).toEqual(["Respondeu na última verificação", "ok"]);
+    expect(markup).not.toContain('aria-label="Conectada"');
+    expect(markup).toMatch(/title="MES Produção\nPostgreSQL · pg:5432 \/ mes\nRespondeu às \d{2}:\d{2}:05, em 3 ms"/);
+  });
+
+  it("“Não respondeu”, no tom de erro, com a mensagem do banco na dica, e um botão das ações da linha que a mostra num clique", () => {
+    const onCheckFailure = vi.fn();
+    const markup = render(node, { connection, status: "connected", check: failed, onCheckFailure });
+    const row = elementsOf(NavigatorRow({ node, index: 1, open: false, tabbable: true, selected: false, connection, status: "connected", check: failed, onCheckFailure, onSelect: noop, onToggle: noop, onRetry: noop, onRefresh: noop, onNewQuery: noop, onDisconnect: noop, onOpenTable: noop, onContextMenu: () => true, onKeyDown: noop }));
+    const open = row.find((element) => element.props.label === "Ver por que MES Produção não respondeu");
+
+    expect(dot(markup)).toEqual(["Não respondeu", "failed"]);
+    expect(markup).toContain("FATAL: terminating connection");
+    (open?.props.onClick as () => void)();
+    expect(onCheckFailure).toHaveBeenCalledExactlyOnceWith(node);
+  });
+
+  it("sem verificação (desligada), e na conexão desconectada, fica o ponto de sempre", () => {
+    expect(render(node, { connection, status: "connected", check: null })).toContain('aria-label="Conectada"');
+    expect(dot(render(node, { connection, status: "disconnected", check: failed }))).toBeUndefined();
+  });
+
+  it("sem sessão aberta e ainda não verificada têm o desenho deles", () => {
+    expect(dot(render(node, { connection, status: "connected", check: { kind: "notConnected" } }))).toEqual(["Sem sessão aberta", "notConnected"]);
+    expect(dot(render(node, { connection, status: "connected", check: { kind: "waiting", busy: false } }))).toEqual(["Conectada, ainda não verificada", "waiting"]);
   });
 });

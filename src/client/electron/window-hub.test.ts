@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createWindowHub, newWindowBounds, type HubWindow, type Rect } from "./window-hub";
+import { createWindowHub, newWindowBounds, verificationClaimTtlMs, verificationSlackMs, type HubWindow, type Rect } from "./window-hub";
 import type { TabTransfer } from "./window-messages";
 
 const transfer: TabTransfer = {
@@ -13,8 +13,9 @@ const transfer: TabTransfer = {
 
 type Sent = { to: number; channel: string; payload: unknown };
 
-/** Janelas de mentira: anotam o que receberam e quando foram trazidas à frente. */
+/** Janelas de mentira: anotam o que receberam e quando foram trazidas à frente. O relógio da vez da verificação é o do teste (`clock.now`). */
 function setup() {
+  const clock = { now: 1_000_000 };
   const sent: Sent[] = [];
   const focused: number[] = [];
   const created: { at: unknown; source: Rect | null }[] = [];
@@ -31,9 +32,10 @@ function setup() {
       return fakeWindow(nextId++, { x: 2000, y: 0, width: 1000, height: 800 });
     },
     log: (message) => void logs.push(message),
+    now: () => clock.now,
   });
 
-  return { hub, sent, focused, created, logs, fakeWindow };
+  return { hub, sent, focused, created, logs, fakeWindow, clock };
 }
 
 describe("o processo principal e as janelas (RN-ABAS-002 a 005)", () => {
@@ -206,5 +208,89 @@ describe("newWindowBounds: onde a janela nova abre", () => {
   it("não sai da área útil da tela: perto da borda, ela encosta; maior que a tela, fica do tamanho dela", () => {
     expect(newWindowBounds({ at: { x: 1900, y: 1030 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea })).toEqual({ x: 720, y: 240, width: 1200, height: 800 });
     expect(newWindowBounds({ at: { x: 10, y: 5 }, source: { x: 0, y: 0, width: 1200, height: 800 }, workArea: { x: 1920, y: 0, width: 1280, height: 700 } })).toEqual({ x: 1920, y: 0, width: 1200, height: 700 });
+  });
+});
+
+describe("a vez da verificação periódica entre as janelas (RN-VERIF-002)", () => {
+  const ok = { status: "ok", checkedAt: "2026-10-15T14:32:05Z", elapsedMs: 3, message: null, sqlState: null } as const;
+  const claim = (intervalMs = 30_000) => ({ connectionId: "c-1", intervalMs });
+
+  function twoWindows() {
+    const run = setup();
+    run.hub.add(run.fakeWindow(1));
+    run.hub.add(run.fakeWindow(2));
+    run.hub.add(run.fakeWindow(3));
+    run.hub.setReady(1, true);
+    run.hub.setReady(2, true);
+    return run;
+  }
+
+  it("uma janela por vez verifica a mesma conexão: enquanto a 1 verifica, a 2 não ganha a vez; outra conexão é outra vez", () => {
+    const { hub } = twoWindows();
+
+    expect(hub.claimVerification(1, claim())).toBe(true);
+    expect(hub.claimVerification(2, claim())).toBe(false);
+    expect(hub.claimVerification(2, { connectionId: "c-2", intervalMs: 30_000 })).toBe(true);
+  });
+
+  it("a resposta vai às outras janelas com a área de trabalho montada (a do login não), e a vez fica livre", () => {
+    const { hub, sent } = twoWindows();
+    hub.claimVerification(1, claim());
+    hub.finishVerification(1, { connectionId: "c-1", result: ok });
+
+    expect(sent).toEqual([{ to: 2, channel: "prism:verification-peer", payload: { connectionId: "c-1", result: ok } }]);
+  });
+
+  it("depois da resposta de uma janela, a outra só ganha a vez quando passa o intervalo (menos a folga): o relógio dela recomeça com a resposta", () => {
+    const { hub, clock } = twoWindows();
+    hub.claimVerification(1, claim());
+    hub.finishVerification(1, { connectionId: "c-1", result: ok });
+
+    clock.now += 2;
+    expect(hub.claimVerification(2, claim())).toBe(false);
+    clock.now += 30_000 - verificationSlackMs - 2;
+    expect(hub.claimVerification(2, claim())).toBe(true);
+  });
+
+  it("a janela que verificou por último pode verificar de novo: o relógio dela é que conta o intervalo", () => {
+    const { hub } = twoWindows();
+    hub.claimVerification(1, claim());
+    hub.finishVerification(1, { connectionId: "c-1", result: ok });
+
+    expect(hub.claimVerification(1, claim())).toBe(true);
+  });
+
+  it("o fim sem resposta (a chamada falhou, ou a conexão desconectou no meio) só solta a vez: nada vai às outras, e elas verificam na vez delas", () => {
+    const { hub, sent } = twoWindows();
+    hub.claimVerification(1, claim());
+    hub.finishVerification(1, { connectionId: "c-1", result: null });
+
+    expect(sent).toEqual([]);
+    expect(hub.claimVerification(2, claim())).toBe(true);
+  });
+
+  it("a janela que fecha no meio da verificação solta a vez; a que travou a solta depois do prazo", () => {
+    const { hub, clock } = twoWindows();
+    hub.claimVerification(1, claim());
+    hub.remove(1);
+    expect(hub.claimVerification(2, claim())).toBe(true);
+
+    expect(hub.claimVerification(3, { connectionId: "c-1", intervalMs: 30_000 })).toBe(false);
+    clock.now += verificationClaimTtlMs;
+    expect(hub.claimVerification(3, claim())).toBe(true);
+  });
+
+  it("o pedido fora do schema, o de uma janela que não existe e o fim de quem não tinha a vez não valem", () => {
+    const { hub, sent } = twoWindows();
+
+    expect(hub.claimVerification(1, { connectionId: "c-1", intervalMs: 10 })).toBe(false);
+    expect(hub.claimVerification(1, { connectionId: "", intervalMs: 30_000 })).toBe(false);
+    expect(hub.claimVerification(9, claim())).toBe(false);
+    hub.finishVerification(1, { connectionId: "c-1", result: { ...ok, status: "talvez" } });
+    expect(sent).toEqual([]);
+
+    hub.claimVerification(1, claim());
+    hub.finishVerification(2, { connectionId: "c-1", result: null });
+    expect(hub.claimVerification(2, claim())).toBe(false);
   });
 });

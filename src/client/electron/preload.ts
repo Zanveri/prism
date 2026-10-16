@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
-import type { PeerEvent, TabMoveRequest, TabRequest, WindowSummary } from "./window-messages";
+import type { PeerEvent, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
 import type { WorkspaceReport } from "./workspace-messages";
 
 /**
@@ -27,6 +27,7 @@ export type PrismBridge = {
   updates: PrismUpdates;
   windows: PrismWindows;
   session: PrismSession;
+  verification: PrismVerification;
   workspace: PrismWorkspace;
   zoom: PrismZoom;
 };
@@ -93,6 +94,17 @@ export type PrismWindows = {
 export type PrismSession = {
   share(event: PeerEvent): Promise<void>;
   onPeer(listener: (event: unknown) => void): () => void;
+};
+
+/**
+ * RN-VERIF-002: a verificação periódica de uma conexão conectada em mais de uma janela sai de uma só por intervalo. A janela pede a vez antes de chamar a
+ * API (`claim`, que responde se ela a ganhou), conta o fim com a resposta (`finish`, `verificationDoneSchema`), e ouve a resposta das outras (`onPeer`,
+ * `verificationPeerSchema`). Só ids, intervalos e a resposta da API: nada aqui chama a API nem abre arquivo.
+ */
+export type PrismVerification = {
+  claim(claim: VerificationClaim): Promise<unknown>;
+  finish(done: VerificationDone): Promise<void>;
+  onPeer(listener: (peer: unknown) => void): () => void;
 };
 
 /**
@@ -213,6 +225,15 @@ const bridge: PrismBridge = {
       const handler = (_event: unknown, event: unknown) => listener(event);
       ipcRenderer.on("prism:session-peer", handler);
       return () => ipcRenderer.removeListener("prism:session-peer", handler);
+    },
+  },
+  verification: {
+    claim: (claim) => ipcRenderer.invoke("prism:verification-claim", claim),
+    finish: (done) => ipcRenderer.invoke("prism:verification-finish", done),
+    onPeer(listener) {
+      const handler = (_event: unknown, peer: unknown) => listener(peer);
+      ipcRenderer.on("prism:verification-peer", handler);
+      return () => ipcRenderer.removeListener("prism:verification-peer", handler);
     },
   },
 };

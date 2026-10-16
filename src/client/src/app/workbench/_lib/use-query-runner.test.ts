@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/query-client";
 
 import { queryOutcomeCopy } from "./query-outcome.copy";
+import { platformScriptShortcut } from "./script-run";
 import { scriptsCopy } from "./scripts.copy";
 import { countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { createQueryRunner, isBusyState, type RunnerState } from "./use-query-runner";
@@ -295,8 +296,10 @@ describe("uma execução leva um comando só (RN-SQL-001)", () => {
     await runner.run({ sql: "update t set a = 1;\ndelete from t;\nselect 3;", offset: 0 });
 
     expect(api.calls).toEqual([]);
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
-    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements);
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements(platformScriptShortcut));
+    // Os dois ensinam o script, que executa todos (RN-SQL-019).
+    expect(copy.tooManyStatements("Alt+X")).toBe("A seleção tem mais de um comando. Nada foi executado: para executar todos, use Executar script (Alt+X).");
   });
 
   it("seleção com um comando só vai como está, com o `;` e o comentário que vieram juntos (RN-SQL-003)", async () => {
@@ -329,7 +332,7 @@ describe("uma execução leva um comando só (RN-SQL-001)", () => {
     await runner.run({ sql, offset: 0, engine: 3 });
 
     expect(api.calls).toEqual([]);
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
   });
 });
 
@@ -545,7 +548,7 @@ describe("o resultado na tela só é substituído quando a API aceitou um comand
 
     expect(runner.getState()).toBe(result);
     expect(api.calls).toHaveLength(2);
-    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements);
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements(platformScriptShortcut));
 
     // O cursor continua aberto: "carregar mais" segue lendo dele.
     api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
@@ -824,7 +827,7 @@ describe("linhas afetadas e erro de SQL também são resultado na tela", () => {
     expect(runner.getState()).toMatchObject({ status: "notice" });
 
     await runner.run({ sql: "select 1; select 2; select 3", offset: 0 });
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
 
     api.on(`POST ${sessions}`, session("s1"));
     api.on(`POST ${sessions}/s1/queries`, problem(500, "INTERNAL_SERVER_ERROR"));
@@ -1895,5 +1898,43 @@ describe("o resultado depois de um Salvar da edição na aba de consulta (RN-EDI
 
     reply.resolve(page([["9", "z"]], { resultID: "r2" }));
     await running;
+  });
+});
+
+describe("a recusa do somente leitura (RN-PROT-002)", () => {
+  const refusal = "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco.";
+
+  it("com linhas na tela, elas e o cursor ficam (nada foi ao banco), e a frase da API vai no aviso de erro, sem o aviso central", async () => {
+    const { api, toast, runner, result } = await withResult();
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "delete from t", offset: 0 });
+
+    expect(runner.getState()).toBe(result);
+    expect(result).toMatchObject({ cursorClosed: false });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de CONNECTION_READ_ONLY", refusal);
+  });
+
+  it("com o cursor aberto, a recusa não o fecha: “Carregar mais” continua lendo", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { hasMore: true }));
+    await runner.run({ sql: "select * from t", offset: 0 });
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "update t set a = 1", offset: 0 });
+
+    expect(runner.getState()).toMatchObject({ status: "rows", hasMore: true, cursorClosed: false });
+  });
+
+  it("sem resultado na tela, a frase da API vai à área de resultado, com o aviso curto", async () => {
+    const { api, toast, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "delete from t", offset: 0 });
+
+    expect(runner.getState()).toEqual({ status: "error", source: "api", title: "Título de CONNECTION_READ_ONLY", message: refusal, sqlState: null, errorAt: null });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(copy.commandFailed);
   });
 });

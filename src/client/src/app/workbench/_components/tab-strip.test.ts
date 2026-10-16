@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { Folder } from "@/app/connections/_lib/connections.schema";
+import { unprotected, type Folder } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 
 import type { QueryTab } from "../_lib/workbench-model";
@@ -97,9 +97,21 @@ describe("a faixa de abas (D2)", () => {
   });
 });
 
+describe("a marca do estado da aba (RN-SQL-021)", () => {
+  it("o que a aba diz do estado dela vem depois do nome, dentro da aba: a do script parado na pergunta de erro, só nela", () => {
+    const tabs = [query("q0", "consulta-1.sql"), query("q1", "carga.sql")];
+    const markup = renderToStaticMarkup(
+      createElement(TabStrip, { tabs, activeTabId: "q0", connectionOf: () => undefined, environmentOf: () => null, onSelect: noop, onClose: noop, windowId: 1, onReorder: noop, onMove: noop, onReceive: noop, markOf: (tabId) => (tabId === "q1" ? createElement("span", { "data-mark": tabId }) : null) }),
+    );
+
+    expect(markup.match(/data-mark=/g)).toHaveLength(1);
+    expect(markup).toMatch(new RegExp(`id="${tabElementId("q1")}"[^>]*>(?:(?!</button>).)*carga\\.sql</span><span data-mark="q1">`));
+  });
+});
+
 describe("a etiqueta do ambiente na aba (RN-CONN-015 e RN-PASTA-005)", () => {
   const now = "2026-10-13T12:00:00Z";
-  const producao: Folder = { id: "f1", parentID: null, name: "Produção", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, createdAt: now, updatedAt: now };
+  const producao: Folder = { id: "f1", parentID: null, name: "Produção", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 
   it("a aba mostra o ambiente que a conexão mostra: o herdado da pasta, com a dica de onde vem", () => {
     const markup = render([query("q1", "consulta.sql")], "q1", (connectionId) => (connectionId === "c-1" ? { name: "Produção", color: "#FF8A7A", folder: producao } : null));

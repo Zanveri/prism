@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { Connection, Folder } from "./connections.schema";
+import { newVerification, unprotected, type Connection, type Folder } from "./connections.schema";
 import { environmentKey, findEnvironment, userEnvironments } from "./user-environments";
 
 function folder(id: string, environmentName: string | null, environmentColor: string | null, updatedAt: string): Folder {
-  return { id, parentID: null, name: `Pasta ${id}`, environmentName, environmentColor, color: null, createdAt: updatedAt, updatedAt };
+  return { id, parentID: null, name: `Pasta ${id}`, environmentName, environmentColor, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: updatedAt, updatedAt };
 }
 
 function connection(id: string, environmentName: string | null, environmentColor: string | null, updatedAt: string): Connection {
-  return { id, folderID: null, name: `Conexão ${id}`, engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName, environmentColor, createdAt: updatedAt, updatedAt };
+  return { id, folderID: null, name: `Conexão ${id}`, engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName, environmentColor, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: updatedAt, updatedAt };
 }
 
 describe("os ambientes do usuário (RN-AMB-001)", () => {

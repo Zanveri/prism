@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { currentAppZoom, onAppZoomChanged, onWindowCloseRequested, readDataFolder, requestAppZoom } from "./bridge";
+import { claimVerification, currentAppZoom, finishVerification, onAppZoomChanged, onVerificationPeer, onWindowCloseRequested, readDataFolder, requestAppZoom } from "./bridge";
 
 /** A ponte com só o que a pasta de dados usa: o resto não importa aqui. */
 const bridgeAnswering = (reply: () => Promise<unknown>) => vi.stubGlobal("window", { prism: { getDataFolder: reply } });
@@ -118,5 +118,59 @@ describe("o zoom do programa pela ponte (RN-ZOOM-001): só um dos passos é resp
 
     vi.stubGlobal("window", {});
     expect(() => onAppZoomChanged(() => {})()).not.toThrow();
+  });
+});
+
+describe("a vez da verificação periódica pela ponte (RN-VERIF-002)", () => {
+  const ok = { status: "ok", checkedAt: "2026-10-15T14:32:05Z", elapsedMs: 3, message: null, sqlState: null } as const;
+  const bridgeWith = (verification: Record<string, unknown> | undefined) => vi.stubGlobal("window", { prism: verification === undefined ? {} : { verification } });
+
+  it("a vez é só um `true` do processo principal; qualquer outra resposta, ou a ponte que falha, é “não”", async () => {
+    const claim = vi.fn(async () => true);
+    bridgeWith({ claim });
+    expect(await claimVerification("c1", 30_000)).toBe(true);
+    expect(claim).toHaveBeenCalledExactlyOnceWith({ connectionId: "c1", intervalMs: 30_000 });
+
+    bridgeWith({ claim: async () => "sim" });
+    expect(await claimVerification("c1", 30_000)).toBe(false);
+
+    bridgeWith({
+      claim: async () => {
+        throw new Error("Pedido de origem desconhecida.");
+      },
+    });
+    expect(await claimVerification("c1", 30_000)).toBe(false);
+  });
+
+  it("sem a ponte das janelas (uma janela só) a vez é sempre desta", async () => {
+    bridgeWith(undefined);
+    expect(await claimVerification("c1", 30_000)).toBe(true);
+  });
+
+  it("o fim vai ao processo principal e nunca lança, nem sem a ponte", () => {
+    const finish = vi.fn(async () => {});
+    bridgeWith({ finish });
+    finishVerification({ connectionId: "c1", result: ok });
+    expect(finish).toHaveBeenCalledExactlyOnceWith({ connectionId: "c1", result: ok });
+
+    vi.stubGlobal("window", {});
+    expect(() => finishVerification({ connectionId: "c1", result: null })).not.toThrow();
+  });
+
+  it("a resposta de outra janela chega só no formato do schema", () => {
+    let deliver: (raw: unknown) => void = () => {};
+    bridgeWith({
+      onPeer: (listener: (raw: unknown) => void) => {
+        deliver = listener;
+        return () => {};
+      },
+    });
+    const heard = vi.fn();
+    onVerificationPeer(heard);
+
+    deliver({ connectionId: "c1", result: ok });
+    deliver({ connectionId: "c1", result: { ...ok, status: "talvez" } });
+    deliver("c1");
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ connectionId: "c1", result: ok });
   });
 });

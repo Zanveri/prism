@@ -642,6 +642,70 @@ public sealed class DatabaseSessionServiceTests
         Assert.That(executedAgain.Rows[0][0], Is.EqualTo("1001"));
     }
 
+    /// <summary>
+    /// RN-PROT-002 e RN-SQL-007: a recusa da conexão somente leitura no meio de um cursor aberto não chega a ele nem conta como leitura. Aos cinco
+    /// minutos da última página o cursor fecha, como fecharia sem ela, e a transação só de leitura da leitura paginada acaba junto; o relógio que
+    /// segue andando depois disso não tem mais o que fechar.
+    /// </summary>
+    [Test]
+    public async Task Cursor_AfterAReadOnlyRefusal_IsClosedFiveMinutesAfterTheLastRead()
+    {
+        var session = await OpenSessionAsync();
+        var read = await _service.ExecuteAsync(session.ID, PedidoQuery, null, QueryPaging.DefaultPageSize, true, CancellationToken.None);
+
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        var refused = await _service.ExecuteAsync(session.ID, "DELETE FROM loja.pedido", null, QueryPaging.DefaultPageSize, true, CancellationToken.None);
+        _clock.Advance(TimeSpan.FromMinutes(4));
+
+        var watch = Stopwatch.StartNew();
+        var afterTimeout = await _service.FetchNextAsync(session.ID, CancellationToken.None);
+        while (afterTimeout.IsFailure && afterTimeout.Error.Kind == EDatabaseFailure.SessionBusy && watch.Elapsed < Patience)
+        {
+            await Task.Delay(25);
+            afterTimeout = await _service.FetchNextAsync(session.ID, CancellationToken.None);
+        }
+
+        _clock.Advance(TimeSpan.FromHours(3));
+        var executedAgain = await _service.ExecuteAsync(session.ID, PedidoQuery, null, QueryPaging.DefaultPageSize, true, CancellationToken.None);
+
+        Assert.That(read.IsSuccess, Is.True, read.IsFailure ? read.Error.Message : null);
+        Assert.That(read.Value.Page!.HasMore, Is.True);
+        Assert.That(refused.IsFailure, Is.True);
+        Assert.That(refused.Error.Kind, Is.EqualTo(EDatabaseFailure.ConnectionReadOnly));
+        Assert.That(afterTimeout.IsFailure, Is.True);
+        Assert.That(afterTimeout.Error.Kind, Is.EqualTo(EDatabaseFailure.NoOpenCursor));
+        Assert.That(executedAgain.IsSuccess, Is.True, executedAgain.IsFailure ? executedAgain.Error.Message : null);
+        Assert.That(executedAgain.Value.Page!.Rows[0][0], Is.EqualTo("1001"));
+    }
+
+    /// <summary>
+    /// RN-VERIF-002 e RN-SQL-010: o comando que chega durante uma verificação demorada espera o fim dela, e o "cancelar" o faz desistir na hora,
+    /// sem esperar a verificação e sem ir ao banco. A verificação não é interrompida e responde como respondeu.
+    /// </summary>
+    [Test]
+    public async Task Cancel_OfACommandWaitingForASlowVerification_GivesUpAtOnce()
+    {
+        var connectionID = Guid.NewGuid();
+        var session = await OpenSessionAsync(connectionID);
+        var verifying = _service.VerifyAsync(connectionID, "SELECT pg_sleep(5)", _vault.Generation, CancellationToken.None);
+        await WaitForRunningSleepAsync();
+        var executing = _service.ExecuteAsync(session.ID, "SELECT 1", CancellationToken.None);
+
+        var watch = Stopwatch.StartNew();
+        var canceled = _service.Cancel(session.ID);
+        var executed = await executing.WaitAsync(Patience);
+        var waited = watch.Elapsed;
+        var verified = await verifying.WaitAsync(Patience);
+        var executedAfterwards = await ExecutePageAsync(session.ID, "SELECT 1 AS um");
+
+        Assert.That(canceled.IsSuccess, Is.True);
+        Assert.That(executed.IsFailure, Is.True);
+        Assert.That((executed.Error.Kind, executed.Error.Outcome), Is.EqualTo((EDatabaseFailure.ExecutionFailed, (ECancelOutcome?)ECancelOutcome.Canceled)));
+        Assert.That(waited, Is.LessThan(TimeSpan.FromSeconds(2)));
+        Assert.That(verified.Status, Is.EqualTo(EVerificationStatus.Ok));
+        Assert.That(executedAfterwards.Rows[0][0], Is.EqualTo("1"));
+    }
+
     /// <summary>RN-CONN-014.</summary>
     [Test]
     public async Task CloseByConnection_ClosesOnlyThatConnectionsSessions()

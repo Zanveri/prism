@@ -139,6 +139,58 @@ export const connectionsCopy = {
     submitting: "Movendo…",
   },
 
+  // RN-VERIF-001: o painel "Sessão da conexão" do formulário, como no canvas, com a consulta de verificação que a pessoa pode preencher no lugar da fixa e sem
+  // o "Encerrar a conexão após N minutos sem uso", que continua fora (seção 13).
+  session: {
+    title: "Sessão da conexão",
+    verify: "Verificar a cada",
+    interval: "Intervalo da verificação, em segundos",
+    seconds: "segundos",
+    hint: "Enquanto a conexão estiver aberta, o Prism executa a consulta abaixo nesse intervalo e atualiza o indicador ao lado do nome da conexão.",
+    query: "Consulta de verificação",
+    queryHint:
+      "Em branco, vale a do banco, a sua forma de SELECT 1: no PostgreSQL, SELECT 1; no Db2, SELECT 1 FROM SYSIBM.SYSDUMMY1; no Informix, SELECT 1 FROM systables WHERE tabid = 1. A sua tem de ser uma leitura só e é lida até o fim a cada verificação: prefira uma que devolva uma linha. “Testar conexão” também a usa.",
+  },
+
+  // RN-PROT-001 a 004: a seção Proteções, a mesma no formulário da conexão e no diálogo da pasta (o canvas, com a escolha de três no lugar da caixa).
+  protections: {
+    title: "Proteções",
+    confirm: {
+      legend: "Confirmar antes de executar",
+      choices: { none: "Não", irreversible: "Só comandos irreversíveis", all: "Todos os comandos" },
+      connectionHint:
+        "Antes de executar, o Prism abre um aviso com o nome e a cor do ambiente e só executa depois da sua confirmação: em “Só comandos irreversíveis”, antes de DROP, TRUNCATE, ou DELETE e UPDATE sem WHERE; em “Todos os comandos”, antes de qualquer comando.",
+      folderHint: "Vale para todas as conexões da pasta e das subpastas: em “Só comandos irreversíveis”, DROP, TRUNCATE, ou DELETE e UPDATE sem WHERE só executam depois da sua confirmação; em “Todos os comandos”, qualquer comando.",
+    },
+    readOnly: {
+      label: "Somente leitura",
+      connectionHint: "Nenhum comando que altere dados ou estrutura é executado nesta conexão: INSERT, UPDATE, DELETE, CREATE, ALTER, DROP e TRUNCATE ficam bloqueados. Para marcar ou desmarcar esta opção, o Prism pede a sua senha.",
+      folderHint: "Nenhum comando que altere dados ou estrutura é executado nas conexões desta pasta. Para marcar ou desmarcar esta opção, o Prism pede a sua senha.",
+    },
+    // RN-PROT-002: o cadeado ao lado do nome da conexão (a árvore, a lista do botão da conexão da aba, a barra de status) e a dica dele.
+    readOnlyMark: (folder: string | null) => (folder === null ? "Somente leitura" : `Somente leitura, herdado da pasta ${folder}`),
+    // RN-PROT-004: a proteção herdada aparece marcada e desabilitada, e a frase diz de onde vem e por que não se afrouxa aqui.
+    inheritedFrom: (folder: string) => `Herdado da pasta ${folder}`,
+    connectionCannotLoosen: (folder: string) => `A pasta ${folder} impõe esta proteção a tudo o que está dentro dela, e a conexão não a afrouxa: para tirá-la, mude a pasta ou mova a conexão para fora dela.`,
+    folderCannotLoosen: (folder: string) => `A pasta ${folder} impõe esta proteção a tudo o que está dentro dela, e esta pasta não a afrouxa: para tirá-la, mude a pasta ${folder} ou mova esta para fora dela.`,
+  },
+
+  // RN-PROT-003: a senha do usuário que a mudança do somente leitura pede, num diálogo como o de revelar a senha.
+  userPassword: {
+    title: "Confirme a sua senha",
+    description: "Esta mudança tira ou põe uma proteção. Para salvar, digite a sua senha do Prism.",
+    markReadOnly: (name: string) => `Marcar “Somente leitura” em ${name}`,
+    unmarkReadOnly: (name: string) => `Desmarcar “Somente leitura” de ${name}`,
+    leaveReadOnly: (name: string) => `Tirar ${name} de uma pasta somente leitura`,
+    password: "Sua senha do Prism",
+    required: "Informe a sua senha do Prism.",
+    invalidPassword: "Senha incorreta.",
+    attempts: "Cinco senhas erradas seguidas fecham o cofre, e o Prism volta à tela de entrada.",
+    cancel: "Cancelar",
+    submit: "Confirmar e salvar",
+    submitting: "Verificando…",
+  },
+
   // RN-NAV-009: renomear uma conexão pelo navegador (F2 ou o menu), num diálogo só com o nome.
   rename: {
     title: "Renomear conexão",

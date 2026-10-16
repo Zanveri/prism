@@ -15,8 +15,23 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// <summary>`false` quando a conexão caiu (rede, banco reiniciado, sessão derrubada por um administrador): depois de uma falha, é o que diz que ela não serve mais.</summary>
     bool IsOpen { get; }
 
+    /// <summary>
+    /// RN-SQL-007: há um cursor aberto entre páginas, à espera do "carregar mais". Toda operação que vai ao banco o fecha antes de ser
+    /// enviada, menos o "carregar mais", que lê dele e o fecha quando acaba ou falha. A recusa antes de ir ao banco (controle de
+    /// transação, mais de um comando) não o toca. Lido por quem tem a vez da sessão: é por aqui que o registro de sessões sabe, depois
+    /// de uma operação, se o cursor continua aberto, e se a verificação periódica (RN-VERIF-002) pode rodar na sessão sem fechá-lo.
+    /// </summary>
+    bool HasOpenCursor { get; }
+
     /// <summary>RN-CONN-013: a consulta de verificação do banco. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001 e 002: a consulta de verificação própria da conexão, já validada como uma leitura só, ou a do banco quando ela é
+    /// nula. Lida até o fim, com o prazo do driver; no PostgreSQL a própria roda numa transação só de leitura. Fecha o cursor aberto, como qualquer
+    /// comando: quem chama confere antes (<see cref="HasOpenCursor"/>). Falha `ConnectionFailed`, com a mensagem e o SQLSTATE do banco.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken);
 
     /// <summary>
     /// Envia o comando como está, um por vez (RN-SQL-003); controle de transação é recusado com `TransactionControlNotSupported`, sem
@@ -27,6 +42,14 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// </summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" deste cursor. Quem valida a faixa é a rota.</param>
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002 e 006: o comando de uma conexão somente leitura, que quem chama já conferiu pelo texto (`ReadOnlySql`). Roda sempre como leitura
+    /// paginada, e no PostgreSQL na transação só de leitura, com a sessão posta antes no modo só de leitura do banco: a recusa do banco por gravar
+    /// (uma função que grava, chamada pelo `SELECT`) é a resposta, também no "carregar mais", e o comando nunca roda de novo fora dela. O
+    /// <see cref="ExecuteAsync"/> seguinte, de quando a conexão deixa de ser somente leitura, tira a sessão do modo antes de rodar.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken);
 
     /// <summary>RN-SQL-005: as linhas seguintes do mesmo cursor, sem executar de novo, no tamanho com que ele foi aberto. Sem cursor aberto, `NoOpenCursor`.</summary>
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken);

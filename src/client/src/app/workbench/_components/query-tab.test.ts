@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Engine } from "@/components/ui";
 
 import type { AutoRefreshBlocker, AutoRefreshState } from "../_lib/auto-refresh";
+import { createScriptRun, finishRun, startEntry, withEntry, type ScriptChoice, type ScriptRun } from "../_lib/script-run";
+import { scriptRunCopy } from "../_lib/script-run.copy";
 import type { EditTarget } from "../_lib/record-edits.schema";
 import type { QueryRunner, RowsState, RunnerState, RunTarget } from "../_lib/use-query-runner";
 import type { QueryTab } from "../_lib/workbench-model";
@@ -23,6 +25,12 @@ const rt = await vi.hoisted(async () => {
     cells: { resultCells: vi.fn() },
     /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
     screen: { on: true },
+    /**
+     * RN-PROT-001: as proteções da conexão da aba, que o aviso de mentira (`useCommandConfirmation`) usa para decidir, e as perguntas que ele abriu, com as
+     * respostas. Sem proteção, nada pergunta e tudo segue na mesma chamada, como antes.
+     */
+    protections: { readOnly: null, confirm: null } as { readOnly: { from: null } | null; confirm: { level: "irreversible" | "all"; from: null } | null },
+    asked: [] as { question: { kind: string } & Record<string, unknown>; proceed: () => void; cancelled?: () => void }[],
   };
 });
 
@@ -34,6 +42,22 @@ vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unk
 vi.mock("../_lib/record-edits.service", () => rt.service);
 vi.mock("../_lib/full-values.service", () => rt.cells);
 vi.mock("../_lib/use-workbench-on-screen", () => ({ useWorkbenchOnScreen: () => rt.screen.on }));
+// O aviso de confirmação de mentira (RN-PROT-001): decide pela pergunta que a aba monta com as proteções de `rt.protections`, e guarda a que abriria.
+vi.mock("../_lib/use-command-confirmation", () => ({
+  useCommandConfirmation: () => ({
+    confirm: (make: (protections: unknown) => ({ kind: string } & Record<string, unknown>) | null, proceed: () => void, cancelled?: () => void) => {
+      const question = make(rt.protections);
+      if (question === null) return proceed();
+      rt.asked.push({ question, proceed, cancelled });
+    },
+    confirmed: (make: (protections: unknown) => ({ kind: string } & Record<string, unknown>) | null) => {
+      const question = make(rt.protections);
+      if (question === null) return true;
+      return new Promise<boolean>((resolve) => rt.asked.push({ question, proceed: () => resolve(true), cancelled: () => resolve(false) }));
+    },
+    open: null,
+  }),
+}));
 // O editor de SQL é CodeMirror, que precisa da página; aqui basta o que a aba entrega a ele.
 vi.mock("./sql-editor", () => ({ SqlEditor: function SqlEditor() {
   return null;
@@ -53,11 +77,15 @@ import { DatabasePicker } from "./database-picker";
 import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
 import { QueryTabPanel } from "./query-tab";
+import { ResultActions } from "./result-actions";
 import { ResultPanel } from "./result-panel";
 import { SqlEditor } from "./sql-editor";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 import { AutoRefreshControl, AutoRefreshDialog } from "./auto-refresh-control";
 import { RecordsFilter } from "./table-tab/records-filter";
+import { ScriptErrorDialog } from "./script-error-dialog";
+import { ScriptStatistics } from "./script-statistics";
+import { ScriptTabs } from "./script-tabs";
 import type { FilterRefusal } from "../_lib/use-query-runner";
 
 const copy = recordsCopy.edit;
@@ -110,6 +138,18 @@ function fakeRunner(initial: RunnerState) {
       return Promise.resolve();
     }),
     rerun: vi.fn(() => Promise.resolve()),
+    /** RN-SQL-019: os scripts aceitos (o espião conta também os recusados), e o estado do script que a aba desenha. */
+    scripts: [] as RunTarget[][],
+    runScript: vi.fn((targets: RunTarget[]): Promise<void> => {
+      if (!isPersonBusy(runner.state) && targets.length > 0) {
+        runner.scripts.push(targets);
+        runner.state = { status: "running", cancelling: false, previous: runner.state.status === "rows" ? runner.state : null };
+      }
+      return Promise.resolve();
+    }),
+    runCommand: vi.fn<(target: RunTarget) => Promise<void>>(() => Promise.resolve()),
+    scriptState: null as ScriptRun | null,
+    script: { subscribe: () => () => {}, getState: (): ScriptRun | null => runner.scriptState, decide: vi.fn<(choice: ScriptChoice) => void>() },
     cancel: vi.fn(),
     loadMore: vi.fn(),
     countTotal: vi.fn(),
@@ -149,8 +189,9 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = 
     const keys = found.find((element) => typeof element.props.onKeyDown === "function")!.props.onKeyDown as (event: unknown) => void;
     const auto = elementsOf(area.autoRefresh).find((element) => element.type === AutoRefreshControl)?.props as unknown as ComponentProps<typeof AutoRefreshControl> | undefined;
     const autoDialog = found.find((element) => element.type === AutoRefreshDialog)?.props as unknown as ComponentProps<typeof AutoRefreshDialog> | undefined;
+    const scriptError = found.find((element) => element.type === ScriptErrorDialog)?.props as unknown as ComponentProps<typeof ScriptErrorDialog> | undefined;
 
-    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys, auto, autoDialog, toolbar };
+    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys, auto, autoDialog, toolbar, scriptError };
   }
 
   return { show, props };
@@ -172,6 +213,8 @@ beforeEach(() => {
   forgetExcept(new Set());
   unsavedEdits.forgetExcept(new Set());
   rt.screen.on = true;
+  rt.protections = { readOnly: null, confirm: null };
+  rt.asked.length = 0;
 });
 
 afterEach(() => rt.unmount());
@@ -919,5 +962,501 @@ describe("QueryTabPanel: a atualização automática do resultado (RN-GRADE-014)
     const ids = view.show().menu!.groups.flatMap(groupItems).map((item) => item.id);
 
     expect(ids.indexOf("autoRefresh")).toBe(ids.indexOf("refresh") + 1);
+  });
+});
+
+describe("QueryTabPanel: executar script (seção 31, RN-SQL-019 a 022)", () => {
+  const targets: RunTarget[] = [
+    { sql: "select 1", offset: 0, engine: pg },
+    { sql: "update t set a = 1", offset: 10, engine: pg },
+    { sql: "select * from loja.pedido", offset: 30, engine: pg },
+  ];
+  const key = (over: Record<string, unknown>) => ({ key: "x", code: "KeyX", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn(), ...over });
+  const pauses = (runner: ReturnType<typeof fakeRunner>) => runner.autoRefresh.pause.mock.calls.filter(([reason]) => reason === "hidden").map(([, on]) => on);
+
+  /** O script terminado: o primeiro e o último devolveram linhas, e o último tem o cursor aberto (a aba dele é o executor). */
+  function finished(runner: ReturnType<typeof fakeRunner>): ScriptRun {
+    const first = rowsState({ id: 7, target: targets[0], rows: [["1", "a"]] });
+    let run = createScriptRun(1, targets);
+    run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    run = withEntry(run, 1, { status: "ok", affected: 3 });
+    run = withEntry(run, 2, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    run = { ...finishRun(run, "done"), results: [{ entry: 0, rows: first }, { entry: 2, rows: runner.state as RowsState }], live: 2 };
+    runner.scriptState = run;
+    return run;
+  }
+
+  it("a barra tem Executar script, ao lado de Executar, com o atalho da plataforma", () => {
+    const { toolbar } = mount(fakeRunner(rowsState())).show();
+
+    expect(toolbar.scriptShortcut).toEqual({ label: scriptRunCopy.editor.shortcut, aria: "Alt+X" });
+    expect(typeof toolbar.onRunScript).toBe("function");
+  });
+
+  it("Alt+X com o foco em qualquer ponto da aba é o atalho; o que outro já tratou, e o Alt+Shift+X, não", () => {
+    const { keys } = mount(fakeRunner(rowsState())).show();
+
+    const alt = key({ altKey: true });
+    keys(alt);
+    expect(alt.preventDefault).toHaveBeenCalledOnce();
+
+    const handled = key({ altKey: true, defaultPrevented: true });
+    keys(handled);
+    expect(handled.preventDefault).not.toHaveBeenCalled();
+
+    const shifted = key({ altKey: true, shiftKey: true });
+    keys(shifted);
+    expect(shifted.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("segurar Alt+X não começa o script de novo: só o primeiro evento o começa, e a repetição (`repeat`) só é consumida", () => {
+    const view = mount(fakeRunner(rowsState()));
+    const runScript = vi.fn();
+    (view.show().editor.ref as { current: unknown }).current = { runScript, focus: vi.fn() };
+    const { keys } = view.show();
+
+    const first = key({ altKey: true });
+    const held = key({ altKey: true, repeat: true });
+    keys(first);
+    keys(held);
+    keys(key({ altKey: true, repeat: true }));
+
+    expect(runScript).toHaveBeenCalledOnce();
+    expect(held.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("o editor manda os comandos ao executor; com alterações não salvas, pergunta antes (RN-EDIT-007), e Descartar roda o script", () => {
+    const free = fakeRunner(rowsState());
+    mount(free).show().editor.onRunScript!(targets);
+    expect(free.scripts).toEqual([targets]);
+    rt.unmount();
+
+    withPending();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().editor.onRunScript!(targets);
+    expect(runner.runScript).not.toHaveBeenCalled();
+
+    view.show().question!.onDiscard();
+    expect(runner.scripts).toEqual([targets]);
+  });
+
+  it("sem comando nenhum, o executor só avisa: nada pergunta", () => {
+    withPending();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRunScript!([]);
+
+    expect(runner.runScript).toHaveBeenCalledWith([]);
+    expect(view.show().question).toBeUndefined();
+  });
+
+  it("enquanto roda: as Estatísticas à frente, o progresso na barra e a marca do comando em execução no editor", () => {
+    const runner = fakeRunner({ status: "running", cancelling: false, previous: null });
+    runner.scriptState = startEntry(withEntry(createScriptRun(1, targets), 0, { status: "ok" }), 1);
+    const shown = mount(runner).show();
+
+    expect((shown.area.tabs?.list as { type: unknown }).type).toBe(ScriptTabs);
+    expect((shown.area.statistics?.body as { type: unknown }).type).toBe(ScriptStatistics);
+    expect(shown.area.progress).toBe(scriptRunCopy.progress(2, 3));
+    expect(shown.editor.runningAt).toBe(targets[1]);
+    expect(shown.toolbar.busy).toBe(true);
+  });
+
+  it("no fim, a aba do último comando vem à frente e é o resultado do executor, com a edição, o filtro e a atualização automática", () => {
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    finished(runner);
+    const { area, editor } = mount(runner).show();
+
+    expect(area.state).toBe(runner.state);
+    expect(area.statistics).toBeUndefined();
+    expect(area.kept).toBeUndefined();
+    expect(area.editing).toBeDefined();
+    expect(area.progress).toBeNull();
+    expect(editor.runningAt).toBeNull();
+    expect(pauses(runner).at(-1)).toBe(false);
+  });
+
+  it("uma aba guardada mostra as linhas dela, só para leitura, com a nota; Executar este comando executa só ele, depois da pergunta das alterações", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    const run = finished(runner);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+    const { area } = view.show();
+
+    expect(area.state).toBe(run.results[0].rows);
+    expect(area.connected).toBe(false);
+    expect(area.autoLoadMore).toBe(false);
+    expect(area.kept).toMatchObject({ busy: false });
+    // O resultado do último comando não está à vista: a atualização automática dele espera (RN-GRADE-014).
+    expect(pauses(runner).at(-1)).toBe(true);
+
+    area.kept!.onRunAlone();
+    expect(runner.runCommand).not.toHaveBeenCalled();
+    view.show().question!.onDiscard();
+    expect(runner.runCommand).toHaveBeenCalledWith(targets[0]);
+  });
+
+  it("na conexão que confirma (RN-PROT-001), Executar este comando pergunta como o Ctrl+Enter nele, pelo comando da aba guardada; cancelado, nada roda", () => {
+    rt.protections = { readOnly: null, confirm: { level: "all", from: null } };
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    finished(runner);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+
+    view.show().area.kept!.onRunAlone();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select 1", irreversible: null } }]);
+    rt.asked[0].cancelled?.();
+    expect(runner.runCommand).not.toHaveBeenCalled();
+
+    view.show().area.kept!.onRunAlone();
+    rt.asked[1].proceed();
+    expect(runner.runCommand).toHaveBeenCalledExactlyOnceWith(targets[0]);
+  });
+
+  it("com um comando em andamento na aba, Executar este comando diz que está ocupado e não pergunta, não limpa o filtro nem abre a área recolhida", () => {
+    withPending();
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    finished(runner);
+    const view = mount(runner);
+    view.show().filter!.onDraft("id > 0");
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+    (view.show().area.actions as { props: ComponentProps<typeof ResultActions> }).props.onAction("collapse");
+    runner.state = { status: "running", cancelling: false, previous: rowsState({ target: targets[2] }) };
+    const { area } = view.show();
+
+    expect(area.kept).toMatchObject({ busy: true });
+    area.kept!.onRunAlone();
+
+    // O executor recusa calado (a aba ocupada); a tela não muda por um comando que não vai rodar.
+    expect(view.show().question).toBeUndefined();
+    expect(runner.runCommand).toHaveBeenCalledOnce();
+    expect(view.show().filter).toMatchObject({ draft: "id > 0" });
+    expect(view.show().area.collapsed).toBe(true);
+  });
+
+  it("trocar o executor (o banco, a conexão, o bloqueio) tira a aba do script escolhida: o primeiro script do novo, que também é o 1, abre nas Estatísticas", () => {
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    finished(runner);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+    expect((view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.shown).toBe(0);
+
+    // O executor novo numera os scripts dele desde o 1, e o primeiro está rodando: as Estatísticas à frente, e não a aba escolhida no anterior.
+    const next = fakeRunner({ status: "running", cancelling: false, previous: null });
+    next.scriptState = { ...startEntry(withEntry(createScriptRun(1, targets), 0, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true }), 1), results: [{ entry: 0, rows: rowsState({ target: targets[0] }) }] };
+    view.props.runner = next as unknown as QueryRunner;
+
+    expect((view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.shown).toBe("statistics");
+    expect(view.show().area.statistics).toBeDefined();
+  });
+
+  it("o F5 só executa de novo na aba do resultado do último comando", () => {
+    const runner = fakeRunner(rowsState({ target: targets[2] }));
+    finished(runner);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose("statistics");
+
+    const onStatistics = key({ key: "F5", code: "F5" });
+    view.show().keys(onStatistics);
+    expect(onStatistics.preventDefault).toHaveBeenCalledOnce();
+    expect(runner.rerun).not.toHaveBeenCalled();
+
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(2);
+    view.show().keys(key({ key: "F5", code: "F5" }));
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("a pergunta de erro: com o script parado no comando, o diálogo o mostra, e a escolha vai ao executor (RN-SQL-021)", () => {
+    const runner = fakeRunner({ status: "error", source: "database", title: "Erro do banco", message: "boom", sqlState: "42601", errorAt: 12 });
+    const failedEntry = { title: "Erro do banco", message: "boom", sqlState: "42601" };
+    runner.scriptState = { ...withEntry(withEntry(createScriptRun(1, targets), 0, { status: "ok" }), 1, { status: "error", error: failedEntry }), phase: "paused", current: 1 };
+    const { scriptError, editor } = mount(runner).show();
+
+    expect(scriptError).toMatchObject({ number: 2, total: 3, entry: { target: targets[1], error: failedEntry } });
+    expect(editor.errorAt).toBe(12);
+    expect(editor.runningAt).toBeNull();
+
+    scriptError!.onChoose("skip");
+    expect(runner.script.decide).toHaveBeenCalledWith("skip");
+  });
+
+  it.each([
+    ["outra aba à frente", { active: false }, true],
+    ["a área de trabalho por baixo de Configurações", { active: true }, false],
+  ] as const)("a pergunta de erro só aparece na aba à vista: com %s, o script espera, e nada cobre a tela (RN-SQL-021)", (_name, over, onScreen) => {
+    const runner = fakeRunner({ status: "error", source: "database", title: "Erro do banco", message: "boom", sqlState: "42601", errorAt: 12 });
+    runner.scriptState = { ...withEntry(createScriptRun(1, targets), 0, { status: "error", error: { title: "Erro do banco", message: "boom", sqlState: "42601" } }), phase: "paused", current: 0 };
+    rt.screen.on = onScreen;
+    const view = mount(runner);
+    Object.assign(view.props, over);
+
+    expect(view.show().scriptError).toBeUndefined();
+    expect(view.show().area.progress).toBe(scriptRunCopy.paused(1, 3));
+    expect(runner.script.decide).not.toHaveBeenCalled();
+
+    // A pessoa volta à aba: a pergunta aparece.
+    rt.screen.on = true;
+    view.props.active = true;
+    expect(view.show().scriptError).toMatchObject({ number: 1, total: 3 });
+  });
+});
+
+describe("QueryTabPanel: o aviso antes de executar, na conexão que confirma (RN-PROT-001)", () => {
+  const drop: RunTarget = { sql: "DELETE FROM loja.pedido", offset: 0, engine: pg };
+  const irreversible = () => (rt.protections = { readOnly: null, confirm: { level: "irreversible", from: null } });
+  const all = () => (rt.protections = { readOnly: null, confirm: { level: "all", from: null } });
+
+  it("sem proteção nada pergunta, e o comando sai na mesma chamada", () => {
+    const runner = fakeRunner(rowsState());
+    mount(runner).show().editor.onRun(drop, noFlash);
+
+    expect(rt.asked).toEqual([]);
+    expect(runner.sent).toEqual([drop]);
+  });
+
+  it("“Só comandos irreversíveis”: o DELETE sem WHERE espera o “Executar mesmo assim”, e o destaque só acende quando ele sai; a leitura não pergunta", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const flash = vi.fn();
+    const view = mount(runner);
+
+    view.show().editor.onRun(drop, flash);
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: drop.sql, irreversible: { kind: "delete", target: "loja.pedido" } } }]);
+    expect(runner.sent).toEqual([]);
+    expect(flash).not.toHaveBeenCalled();
+
+    rt.asked[0].proceed();
+    expect(runner.sent).toEqual([drop]);
+    expect(flash).toHaveBeenCalledOnce();
+
+    rt.unmount();
+    const reader = fakeRunner(rowsState());
+    mount(reader).show().editor.onRun(command, noFlash);
+    expect(rt.asked).toHaveLength(1);
+    expect(reader.sent).toEqual([command]);
+  });
+
+  it("cancelar não executa nada e deixa a aba como estava, com o resultado de antes", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRun(drop, noFlash);
+    rt.asked[0].cancelled?.();
+
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(view.show().area.state).toMatchObject({ status: "rows", resultId: "r1" });
+  });
+
+  it("numa conexão somente leitura, “Só comandos irreversíveis” não pergunta (a API recusa); “Todos os comandos” continua perguntando", () => {
+    rt.protections = { readOnly: { from: null }, confirm: { level: "irreversible", from: null } };
+    const runner = fakeRunner(rowsState());
+    mount(runner).show().editor.onRun(drop, noFlash);
+    expect(rt.asked).toEqual([]);
+    expect(runner.sent).toEqual([drop]);
+
+    rt.unmount();
+    rt.protections = { readOnly: { from: null }, confirm: { level: "all", from: null } };
+    const other = fakeRunner(rowsState());
+    mount(other).show().editor.onRun(command, noFlash);
+    expect(rt.asked.map(({ question }) => question.kind)).toEqual(["command"]);
+    expect(other.sent).toEqual([]);
+  });
+
+  it("com alterações não salvas, a pergunta delas vem antes, e o aviso depois, logo antes de o comando sair", () => {
+    all();
+    withPending();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRun(command, noFlash);
+    expect(view.show().question).toBeDefined();
+    expect(rt.asked).toEqual([]);
+
+    view.show().question!.onDiscard();
+    expect(rt.asked.map(({ question }) => question.kind)).toEqual(["command"]);
+    rt.asked[0].proceed();
+    expect(runner.sent).toEqual([command]);
+  });
+
+  it("o que o executor não enviaria (dois comandos na seleção) não pergunta: ele só avisa", () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const several: RunTarget = { sql: "select 1; select 2", offset: 0, engine: pg };
+    mount(runner).show().editor.onRun(several, noFlash);
+
+    expect(rt.asked).toEqual([]);
+    expect(runner.run).toHaveBeenCalledWith(several);
+  });
+
+  it("o script pergunta uma vez, antes do primeiro comando, com a lista dos irreversíveis e o número de cada; confirmado, roda inteiro", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const targets: RunTarget[] = [command, drop, { sql: "TRUNCATE loja.item", offset: 40, engine: pg }];
+    mount(runner).show().editor.onRunScript!(targets);
+
+    expect(rt.asked).toHaveLength(1);
+    expect(rt.asked[0].question).toMatchObject({ kind: "script", total: 3, commands: [{ number: 2, sql: drop.sql }, { number: 3, sql: "TRUNCATE loja.item" }] });
+    expect(runner.scripts).toEqual([]);
+
+    rt.asked[0].proceed();
+    expect(runner.scripts).toEqual([targets]);
+  });
+
+  it("o script cancelado não roda nada; o sem nenhum irreversível roda sem perguntar", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().editor.onRunScript!([drop]);
+    rt.asked[0].cancelled?.();
+    expect(runner.runScript).not.toHaveBeenCalled();
+
+    view.show().editor.onRunScript!([command]);
+    expect(rt.asked).toHaveLength(1);
+    expect(runner.scripts).toEqual([[command]]);
+  });
+
+  it("F5 e “Executar de novo” perguntam pelo comando do resultado, como qualquer execução", () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().keys({ key: "F5", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault: vi.fn() });
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select * from loja.pedido", irreversible: null } }]);
+    expect(runner.rerun).not.toHaveBeenCalled();
+    rt.asked[0].proceed();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+
+    view.show().area.onRerun();
+    expect(rt.asked).toHaveLength(2);
+    rt.asked[1].cancelled?.();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("o “Atualizar” do menu da grade pergunta como o F5, pelo comando do resultado", async () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 0, y: 0 }, false);
+    await settle();
+
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "refresh")!.onSelect!();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select * from loja.pedido", irreversible: null } }]);
+    expect(runner.rerun).not.toHaveBeenCalled();
+    rt.asked[0].proceed();
+    expect(runner.rerun).toHaveBeenCalledOnce();
+  });
+
+  it("aplicar o filtro pergunta pelo comando que vai ao banco, com o filtro junto; cancelado, o campo e o filtro em vigor ficam", async () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().filter!.onDraft(`"status" = 'aberta'`);
+    view.show().filter!.onApply();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "command", command: { number: null, sql: "select * from loja.pedido", filter: `"status" = 'aberta'`, irreversible: null } }]);
+    rt.asked[0].cancelled?.();
+    await settle();
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(view.show().filter).toMatchObject({ applied: "", draft: `"status" = 'aberta'` });
+
+    view.show().filter!.onApply();
+    rt.asked[1].proceed();
+    await settle();
+    expect(runner.sent).toEqual([{ sql: "select * from loja.pedido", offset: 0, engine: pg, filter: `"status" = 'aberta'` }]);
+  });
+
+  it("“Todos os comandos”: ligar a atualização automática pergunta uma vez; trocar só o intervalo, com ela ligada, não", () => {
+    all();
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().auto!.onChoose("autoRefresh:every:10000");
+    expect(rt.asked.map(({ question }) => question.kind)).toEqual(["autoRefresh"]);
+    expect(runner.autoRefresh.start).not.toHaveBeenCalled();
+    rt.asked[0].proceed();
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(10_000);
+
+    runner.autoRefresh.getState = () => ({ status: "on", everyMs: 10_000, lastAt: null, running: false, paused: null });
+    view.show().auto!.onChoose("autoRefresh:every:30000");
+    expect(rt.asked).toHaveLength(1);
+    expect(runner.autoRefresh.start).toHaveBeenLastCalledWith(30_000);
+  });
+
+  it("“Só comandos irreversíveis” não pergunta ao ligar a atualização automática: ela só repete uma leitura", () => {
+    irreversible();
+    const runner = fakeRunner(rowsState());
+    mount(runner).show().auto!.onChoose("autoRefresh:every:10000");
+
+    expect(rt.asked).toEqual([]);
+    expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(10_000);
+  });
+
+  it("“Todos os comandos”: o Salvar da grade pergunta uma vez, com quantas alterações vão; cancelado, nada é gravado e a alteração fica", async () => {
+    all();
+    withPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().banner!.props.onSave();
+    await settle();
+    expect(rt.asked.map(({ question }) => question)).toEqual([{ kind: "save", count: 1 }]);
+    rt.asked[0].cancelled?.();
+    await settle();
+    expect(rt.service.saveEditsOrRefuse).not.toHaveBeenCalled();
+    expect(view.show().banner?.props.pending).toBe(1);
+
+    view.show().banner!.props.onSave();
+    await settle();
+    rt.asked[1].proceed();
+    await settle();
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledOnce();
+    expect(runner.keepSaved).toHaveBeenCalledOnce();
+  });
+
+  it("“Só comandos irreversíveis”: o Salvar não pergunta (cada comando dele é pela chave da linha, com WHERE)", async () => {
+    irreversible();
+    withPending();
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().banner!.props.onSave();
+    await settle();
+
+    expect(rt.asked).toEqual([]);
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledOnce();
+  });
+});
+
+describe("QueryTabPanel: a grade de uma conexão somente leitura não se edita (RN-PROT-002 e RN-EDIT-002)", () => {
+  it("a página da conexão somente leitura já diz por quê: a faixa mostra o motivo, e “Editar célula” fica desabilitado com ele, sem perguntar o alvo", async () => {
+    const view = mount(fakeRunner(rowsState({ readOnly: "a conexão é somente leitura" })));
+
+    expect(view.show().banner?.props.readOnly).toBe("Somente leitura: a conexão é somente leitura.");
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems);
+
+    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: "Somente leitura: a conexão é somente leitura." });
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("a conexão que passou a ser somente leitura depois do resultado (a API recusa o alvo com CONNECTION_READ_ONLY) fica só leitura, com o mesmo motivo", async () => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: false, error: { status: 422, code: "CONNECTION_READ_ONLY", title: "Conexão somente leitura.", detail: "A conexão é somente leitura: nada se grava nela, e a edição de registros não vale. Nada foi enviado ao banco.", errors: null, extensions: {} } });
+    const view = mount(fakeRunner(rowsState()));
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems);
+
+    expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.connectionReadOnly) });
+    expect(view.show().banner?.props.readOnly).toBe(copy.readOnly(copy.reasons.connectionReadOnly));
   });
 });

@@ -16,4 +16,11 @@ public interface IConnectionQueries
     /// para abrir a sessão). Nunca vai a uma resposta.
     /// </summary>
     Task<Result<VaultConnectionRecord?, EVaultError>> GetRecordByID(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002, 004 e 006: se a conexão é somente leitura agora, pela opção dela ou de uma pasta acima, no documento do cofre aberto. É o que o
+    /// registro de sessões aplica a cada comando: mudar a proteção vale para o comando seguinte das sessões abertas. Sucesso com `null` quando a
+    /// conexão não existe; `Locked` com o cofre fechado.
+    /// </summary>
+    Task<Result<bool?, EVaultError>> IsReadOnly(Guid id, CancellationToken cancellationToken);
 }

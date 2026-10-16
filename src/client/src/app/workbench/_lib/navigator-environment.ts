@@ -27,8 +27,14 @@ export function filterByEnvironment<F extends Folder, C extends Connection>(fold
     const shown = lookup.connection(connection);
     return choice.type === "none" ? shown === null : shown !== null && environmentKey(shown.name) === choice.key;
   };
-  const kept = connections.filter(matches);
+  return withFolderPath(folders, connections.filter(matches));
+}
 
+/**
+ * As conexões `kept` e as pastas no caminho até elas, na ordem da lista, que é o que os filtros do navegador mostram (o de ambiente, RN-NAV-010, e o das
+ * conectadas, RN-NAV-013): a pasta sem nenhuma delas dentro não aparece, e a pasta em ciclo (que a API recusa, RN-PASTA-003) não prende o caminho num laço.
+ */
+export function withFolderPath<F extends Folder, C extends Connection>(folders: F[], kept: C[]): { folders: F[]; connections: C[] } {
   const parentOf = new Map(folders.map((folder) => [folder.id, folder.parentID]));
   const onPath = new Set<string>();
   for (const connection of kept) {
