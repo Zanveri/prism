@@ -1421,7 +1421,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
     só avisa). O Salvar que gravou tudo NÃO executa de novo (RN-EDIT-009): `savedResultOf` (`record-edits.ts`) monta a grade que fica (os valores
     salvos, as excluídas fora, a linha nova no fim com o que foi digitado) e `runner.keepSaved` a põe no executor, com `cursorClosed` quando havia
-    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"). As colunas da linha nova que a
+    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"; numa aba guardada do script, a cópia
+    dela fica com o que foi salvo, e o cursor que fecha é o do último, RN-SQL-023). As colunas da linha nova que a
     pessoa não preencheu ficam em `RowsState.generated` ("gerado pelo banco — execute de novo para ver", em itálico e `text-subtle`): a célula não
     se edita e, com a chave entre elas, a linha também não (`cellAccess`, `deleteRowAccess`). `generated` viaja com a aba para outra janela
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
@@ -1462,8 +1463,8 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     (`GridEditing.bar`: os botões e a ação), que `useRecordEdits` monta a cada renderização (`barOf`, sobre o estado da tela, com a célula ativa só numa
     linha que existe); quem a põe na tela é a `ResultPanel`, só onde a grade recebe a edição e com a grade no corpo (também sem nenhuma linha, e com outro
     comando rodando, desabilitada): nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, numa linha própria (`border-t`,
-    alinhada à esquerda) entre a grade e os rodapés ("Carregar mais", o cursor fechado, a nota da aba guardada). A aba guardada do script não recebe a
-    edição (`kept`), e por isso hoje não tem barra: quando ela passar a receber, a barra vem junto. Recolhida, a área esconde a barra com o corpo (`inert`).
+    alinhada à esquerda) entre a grade e os rodapés ("Carregar mais", o cursor fechado, a nota da aba guardada). A aba guardada do script recebe a
+    edição (`kept`, RN-SQL-023), e a barra vem com ela, antes da nota. Recolhida, a área esconde a barra com o corpo (`inert`).
     - **O componente** (`edit-bar.tsx`, `EditBar`): `role="toolbar"` com o nome "Edição da grade", uma parada de tabulação só (o último botão com o foco,
       de começo "Editar célula") e as setas, Home e End pelo `stripKeyTarget`, como a barra de ações do navegador. Os botões são os da área de resultado
       (`Button` `secondary` `compact`, `h-7 px-2.5 text-xs`), com o ícone do traço do canvas (`PencilIcon`, `PlusIcon`, `DuplicateIcon` e o `CloseIcon` em
@@ -1724,14 +1725,16 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   pasta do `postgres` (`/var/lib/postgresql/<nome>`), com porta e soquete próprios, e sai no fim. Encerre só os PID que você iniciou: um `pkill -f` com o
   caminho da árvore mata também o shell que o roda, e outra frente pode ter um Xvfb e um `pnpm dev` de pé ao lado.
 
-## Executar script (RN-SQL-019 a 022)
+## Executar script (RN-SQL-019 a 024)
 
 Seção 31 da especificação, pedido do dono em 2026-10-15 ("igual a do dbeaver do alt + x"): os comandos do editor um depois do outro, uma aba por
-resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando é um `POST …/queries`, como no Ctrl+Enter.
+resultado, as Estatísticas e a pergunta no erro. Cada comando é um `POST …/queries`, como no Ctrl+Enter, com o `keep` da seção 33 (abaixo, "As abas
+guardadas se editam").
 
 - **Onde mora cada parte.** `_lib/script-run.ts` (puro, com teste): o atalho (`scriptShortcut`, `scriptShortcutLabel`, e `platformScriptShortcut`
   para os textos que o ensinam), o estado do script (`ScriptRun`, `ScriptEntry`, as funções que o mudam, `entryAt` e `entriesOf`), os totais, as
-  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas e o aviso do fim; os textos em
+  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas, o aviso do fim, o `keep` de cada
+  execução (`keptResultIds`) e a aba guardada que fica com o que foi salvo (`withSavedResult`); os textos em
   `script-run.copy.ts` (não confundir com `scripts.copy.ts`, que é o dos scripts salvos). A divisão é `scriptStatements` em `sql-statements.ts`; o
   executor é o `runScript` de `use-query-runner.ts`; a tela é `script-tabs.tsx` (as abas, a nota da aba guardada e a marca da faixa de abas,
   `ScriptWaitingMark`), `script-statistics.tsx` (com `useCoalescedRun`), `script-error-dialog.tsx`, a marca do editor (`_lib/script-mark.ts`) e as
@@ -1791,7 +1794,7 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
 - **As abas e o cursor.** Cada comando que devolve linhas guarda a página dele (`results`, até `scriptResultCap`, 20); no fim, o do último comando
   executado, quando devolveu linhas, fica sempre (`live`), também depois do limite: é o do cursor aberto (RN-SQL-007: um por sessão, e cada comando
   novo fecha o anterior), e a aba dele desenha o **estado do executor**, e não a cópia guardada, com tudo o que vale num resultado. As outras desenham a
-  cópia (`kept`): grade sem `editing` (uma tabela só para leitura, sem o menu da grade), sem contar, sem "Carregar mais", sem filtro nem atualização
+  cópia (`kept`), que se edita (ver "As abas guardadas se editam"), sem contar, sem "Carregar mais", sem filtro nem atualização
   automática, e a nota com "Executar este comando" (`runCommand`: o "executar de novo" do comando, com o lugar no texto de quando o script rodou, que
   troca os resultados do script). Com um comando em andamento na aba o botão fica `aria-disabled`, com o porquê na dica (o executor recusaria calado),
   e o `handleRunAlone` só pergunta das alterações, limpa o filtro e abre a área quando o comando vai rodar (`commandWillRun`, como os outros caminhos);
@@ -1809,7 +1812,8 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   o texto para o leitor de tela), e a pergunta aparece quando a pessoa vai até ela.
 - **Quem troca os resultados do script**: o comando aceito do `run` (o Ctrl+Enter), o `runCommand` e outro `runScript`. O filtro do resultado manda
   `run(…, { keepScript: true })`, e o F5 e a execução automática não trocam: mudam só o resultado do último. A recusa antes de executar (a sessão
-  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`).
+  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`), e a API também não esquece os
+  guardados nela (RN-SQL-024: a recusa antes do banco não aplica o `keep`).
 - **A barra e o leitor de tela.** "Executando 3 de 12…" é o `progress` da barra (um `role="status"` só, em qualquer aba e com a área recolhida); as
   Estatísticas marcam a linha do comando com `aria-current="step"` e não repetem o progresso. As abas são uma lista de abas (`role="tablist"`, só a
   escolhida no Tab, setas com a volta, Home e End, o foco vai à escolhida); o corpo da área é o `tabpanel` dela, e entra no Tab nas Estatísticas, que
@@ -1817,9 +1821,36 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   abas, e um `ResizeObserver` para a faixa que estava sem largura); "Estatísticas" fica fora da rolagem, na ponta direita. Sem isso, com umas oito
   abas, a do último comando, que vem à frente sozinha no fim, e as Estatísticas ficavam fora da faixa. Cada linha das Estatísticas é memorizada: o
   script publica um estado novo a cada comando, e só a linha que mudou é outro objeto.
-- **O que não foi feito**: as abas guardadas não têm o menu da grade nem o copiar da célula (a seleção do texto com o mouse continua); levar a aba
-  para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); o script que é uma transação só e continuar o
-  script a partir de um comando escolhido ficam para depois (seção 31). Não há atalho para "Cancelar": o botão da barra.
+- **As abas guardadas se editam** (seção 33, RN-SQL-023 e 024). A API guardava um resultado só por sessão; agora ela guarda o que a edição precisa
+  dos resultados que a tela lista em `keep` no `POST …/queries` (`executeQuery`, que só põe o campo no corpo com a lista cheia), e as rotas da edição
+  aceitam o `resultID` deles. **Quem manda o quê** (`runWith` e `runScriptNow`, pelo `keptResultIds`): cada comando do script manda os das abas que o
+  script já tem (enquanto ele roda não há `live`, e vão todas, a do comando anterior também), e o "Tentar de novo" a mesma lista; o F5, "Executar de
+  novo", o filtro e a execução automática do resultado do último (`clearsScript` falso) mandam os das outras abas, menos a do `live`, que eles
+  substituem; o Ctrl+Enter, "Executar este comando" e o primeiro comando de outro script não mandam nenhum, e a API esquece os guardados. A lista
+  nunca passa de 20: a aba do último que passou do limite (`live` além dos 20) não vai. **A edição** é a mesma `useRecordEdits` da aba, com `kept` (as
+  linhas da aba guardada à frente, no lugar das do executor) e `scriptBusy` (o script roda ou espera a pergunta de erro: com a pergunta, o executor
+  não está ocupado, e a edição está, em todas as abas); o `moved` de uma aba guardada confere se o script ainda a tem, e não o resultado do executor (a
+  cópia do `live` em `results` guarda o `resultID` de antes do F5, e por isso a aba do último segue conferindo pelo executor). O menu da aba guardada não
+  tem "Filtrar", "Atualizar" nem "Atualizar automaticamente" (a aba de consulta não passa `filter`, `refresh` nem `autoRefresh`), e a área mostra a faixa
+  e passa a edição à grade também com `kept`, e com ela a barra de edição (RN-EDIT-013), entre a grade e a nota; a barra e o menu têm o "Duplicar
+  linha", e os quatro botões ficam ocupados com o mesmo motivo enquanto o script roda (`personBusy` conta o `scriptBusy`). Copiar a célula cortada
+  leva o valor cortado, com o aviso: a rota das células responde 404 para um guardado, que `cellRefusals` já tratava; pela mesma resposta, duplicar
+  a linha que tem célula cortada numa coluna que se copia não duplica nada, e a faixa diz "Execute o comando de novo para duplicá-la." (RN-EDIT-016).
+  **O Salvar** passa pelo `onSaved` de sempre: `runner.keepSaved` acha o resultado na cópia guardada
+  (`withSavedResult`, sem mexer nas Estatísticas, que continuam com as linhas que cada comando leu) e, como o Salvar foi um comando na sessão, fecha o
+  cursor do resultado do executor (`cursorClosed`, calado, como no Salvar dele mesmo). **Trocar de aba** (`chooseScriptTab`) com alterações não
+  salvas pergunta antes, pelo `guard` (a pendência é uma só por aba de consulta, a do resultado à frente): a aba que já está à frente não pergunta, e
+  `ScriptTabs` leva o foco à escolhida na hora quando `onChoose` não devolve `false`; a troca pelo teclado que espera a pergunta fica guardada
+  (`awaiting`), e o foco vai à escolhida quando a pergunta troca de aba ("Salvar" ou "Descartar"), num efeito sobre `shown` que roda depois de o diálogo
+  devolver o foco à aba de antes (que já saiu da ordem do Tab); "Cancelar" não troca a aba, e outra escolha a esquece. A sessão que caiu responde como no
+  resultado do último ("Não foi possível saber o que se edita neste resultado." com o motivo da API). **Cada resultado lembra a sessão em que foi lido**
+  (`RowsState.sessionId`), e a edição dele pergunta e grava nela (`sessionOfShown`, em `use-record-edits.ts`; sem ela, a da aba): depois de o F5 ou o
+  filtro reabrirem a sessão que caiu, a sessão nova não conhece os guardados da de antes, e a aba guardada responde que a sessão com o banco não existe
+  mais, como a que caiu, e não o 409 de "outro comando foi executado nela depois dele". Levar a aba para outra janela pergunta pelo
+  registro `unsaved-edits.ts`, que conta as pendências da aba guardada também.
+- **O que não foi feito**: levar a aba para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); guardar as
+  pendências de várias abas do script ao mesmo tempo e o valor completo das células cortadas nas abas guardadas, o script que é uma transação só e
+  continuar o script a partir de um comando escolhido ficam para depois (seções 31 e 33). Não há atalho para "Cancelar": o botão da barra.
 - **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55481, o usuário e a conexão criados
   por `fetch` à API com `window.prism.getApiConfig()`, o login pelo formulário): com um script de cinco comandos separados por `;` e por linha em
   branco, o Alt+X de verdade (`xdotool key alt+x`, no `pnpm dev` com o menu padrão do Electron) rodou os três primeiros e parou no `SELECT * FORM
