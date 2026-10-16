@@ -1,4 +1,5 @@
 using FluentValidation;
+using Prism.Application.Common.Texts;
 using Prism.Core.Extensions;
 
 namespace Prism.Application.Common.Environments;
@@ -15,14 +16,30 @@ internal static class EnvironmentRules
     public const int NameMaxLength = 30;
 
     public static IRuleBuilderOptions<T, string?> MustBeAnEnvironmentName<T>(this IRuleBuilder<T, string?> rule)
-        => rule.Must(NameIsValid).WithMessage("O ambiente pode ter no máximo 30 caracteres.");
+        => rule.MustPass(NameRefusal);
 
     public static IRuleBuilderOptions<T, string?> MustBeAnEnvironmentColor<T>(this IRuleBuilder<T, string?> rule)
-        => rule.Must(ColorIsValid).WithMessage("Use uma cor no formato #RRGGBB.");
+        => rule.MustPass(ColorRefusal);
 
     /// <summary>Opcional: em branco é "sem ambiente".</summary>
     public static bool NameIsValid(string? environmentName)
-        => environmentName.NormalizeName().Length <= NameMaxLength;
+        => NameRefusal(environmentName) is null;
+
+    /// <summary>
+    /// Por que o nome do ambiente não serve, ou nulo quando serve: até 30 caracteres e, desde a seção 34 (RN-PASTA-001 e RN-CONN-010), sem caractere de
+    /// controle nem de direção do texto, os dois depois de normalizado. A mesma frase no formulário da conexão, no da pasta e na importação (RN-TRANSF-014).
+    /// </summary>
+    public static string? NameRefusal(string? environmentName)
+    {
+        var normalized = environmentName.NormalizeName();
+        if (normalized.Length > NameMaxLength)
+            return "O ambiente pode ter no máximo 30 caracteres.";
+
+        return TextRules.HasControlOrDirection(normalized) ? "O ambiente não pode ter caractere de controle nem de direção do texto." : null;
+    }
+
+    public static string? ColorRefusal(string? color)
+        => ColorIsValid(color) ? null : "Use uma cor no formato #RRGGBB.";
 
     /// <summary>Opcional: em branco é "sem cor". Quando vem, é `#RRGGBB`.</summary>
     public static bool ColorIsValid(string? environmentColor)
