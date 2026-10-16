@@ -414,6 +414,7 @@ public sealed class ScriptsTests
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/folders"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/connections"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/workspace"))).GetProperty("tabs").GetArrayLength(), Is.Zero);
+        Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/script-folders"))).GetArrayLength(), Is.Zero);
         Assert.That(JsonNode.Parse(await File.ReadAllTextAsync(path))!["version"]!.GetValue<int>(), Is.EqualTo(4));
         Assert.That(await File.ReadAllBytesAsync(path + ".bak"), Is.EqualTo(before));
         await CreateAsync(host, "Primeiro script");

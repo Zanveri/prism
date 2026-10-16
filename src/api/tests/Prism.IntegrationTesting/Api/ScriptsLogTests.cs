@@ -7,7 +7,8 @@ namespace Prism.IntegrationTesting.Api;
 
 /// <summary>
 /// RN-SCRIPT-002 e RN-LOG-001: o log da API nunca leva o texto do SQL de um script, nem o nome dele, em nenhum dos caminhos das rotas `api/user/scripts`
-/// (criar, ler, alterar, recusar, excluir, a falha de disco). Roda a API como processo, e não no `ApiHost`: só o processo liga o Serilog e escreve `logs/`.
+/// (criar, ler, alterar, recusar, excluir, a falha de disco), nem o nome de uma pasta de scripts nos caminhos de `api/user/script-folders` (seção 33: criar,
+/// listar, renomear, a recusa da pasta que não está vazia e excluir), que registram os IDs e as contagens. Roda a API como processo, e não no `ApiHost`: só o processo liga o Serilog e escreve `logs/`.
 /// Por isso o teste começa conferindo que o log existe e registrou a falha de disco: procurar uma marca num log que nunca foi escrito passaria sem provar nada.
 /// Não precisa de PostgreSQL: os scripts só falam com o arquivo do cofre.
 /// </summary>
@@ -22,6 +23,7 @@ public sealed class ScriptsLogTests
     private static readonly string MarkedName = $"NOME-MARCADO-{Run}";
 
     private const string ScriptsPath = "/api/user/scripts";
+    private const string ScriptFoldersPath = "/api/user/script-folders";
 
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(15);
 
@@ -49,6 +51,20 @@ public sealed class ScriptsLogTests
         Assert.That((await api.Client.PostAsJsonAsync(ScriptsPath, new { name = $"{MarkedName} 2", sql = MarkedSql })).StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
         Directory.Delete(temporary);
         Assert.That((await api.Client.DeleteAsync($"{ScriptsPath}/{id}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        // As pastas de scripts: criar (com a recusa do nome repetido e a do nome inválido), listar, renomear, a recusa da pasta que não está vazia e excluir.
+        var folder = await api.Client.PostAsJsonAsync(ScriptFoldersPath, new { name = $"{MarkedName} pasta" });
+        Assert.That(folder.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        var folderID = (await folder.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var subfolder = await api.Client.PostAsJsonAsync(ScriptFoldersPath, new { name = $"{MarkedName} sub", parentID = folderID });
+        Assert.That(subfolder.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        var subfolderID = (await subfolder.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        Assert.That((await api.Client.PostAsJsonAsync(ScriptFoldersPath, new { name = $"{MarkedName} pasta" })).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+        Assert.That((await api.Client.PostAsJsonAsync(ScriptFoldersPath, new { name = $"{MarkedName}\u0001" })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+        Assert.That((await api.Client.GetAsync(ScriptFoldersPath)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        var rename = new HttpRequestMessage(HttpMethod.Patch, ScriptFoldersPath) { Content = JsonContent.Create(new { id = folderID, name = $"{MarkedName} renomeada" }) };
+        Assert.That((await api.Client.SendAsync(rename)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await api.Client.DeleteAsync($"{ScriptFoldersPath}/{folderID}")).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+        Assert.That((await api.Client.DeleteAsync($"{ScriptFoldersPath}/{subfolderID}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
         // O desligamento de verdade: o host é descartado e o Serilog grava até o fim antes de o arquivo ser lido.
         Assert.That(await ApiProcess.StopThroughParentAsync(parent, api, ShutdownTimeout), Is.Zero);
@@ -56,6 +72,7 @@ public sealed class ScriptsLogTests
 
         Assert.That(logs, Is.Not.Empty, "A API não escreveu nenhum arquivo em logs/.");
         Assert.That(logs.Values.Any(log => log.Contains("O arquivo do cofre falhou em Write", StringComparison.Ordinal)), Is.True, "O log não registra a falha de disco: o teste não prova nada se o log não está ligado.");
+        Assert.That(logs.Values.Any(log => log.Contains($"Pasta de scripts \"{folderID}\" não excluída: tem 1 subpastas e 0 scripts.", StringComparison.Ordinal)), Is.True, "O log não registra a recusa da pasta que não está vazia, com o ID e as contagens.");
         foreach (var (file, log) in logs)
         {
             Assert.That(log, Does.Not.Contain("SQL-MARCADO"), $"{file} tem o SQL de um script.");
