@@ -172,7 +172,7 @@ describe("connectedConnectionIds: as conexões conectadas, para a lista da troca
   it("é a mesma definição de isConnected, na ordem recebida: a sessão da árvore, ou a de uma aba", () => {
     const tabs = [tab("a", "c3"), { ...tab("b", "c2"), sessionId: null }];
 
-    expect(connectedConnectionIds(["c1", "c2", "c3", "c4"], tabs, (connectionId) => connectionId === "c4" || connectionId === "c1")).toEqual(["c1", "c3", "c4"]);
-    expect(connectedConnectionIds(["c2"], tabs, () => false)).toEqual([]);
+    expect(connectedConnectionIds(["c1", "c2", "c3", "c4"], tabs, (connectionId) => connectionId === "c4" || connectionId === "c1", new Set())).toEqual(["c1", "c3", "c4"]);
+    expect(connectedConnectionIds(["c2"], tabs, () => false, new Set())).toEqual([]);
   });
 });

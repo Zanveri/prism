@@ -407,6 +407,16 @@ export function StarIcon(props: ComponentProps<"svg">) {
 }
 
 /** Bandeira: o mastro e o pano recortado. */
+/** RN-VERIF-003: a conexão que não respondeu à verificação (o triângulo de atenção, com a exclamação). */
+export function AlertIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 2.5l6 10.5H2z" />
+      <path d="M8 6.75v2.75M8 11.25v.01" />
+    </Icon>
+  );
+}
+
 export function FlagIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

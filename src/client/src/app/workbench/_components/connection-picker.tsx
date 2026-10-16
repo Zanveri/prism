@@ -13,10 +13,13 @@ import { engineTags } from "@/components/ui/engine-tag";
 import { controlClassName } from "@/components/ui/field";
 import { cn } from "@/lib/utils/cn";
 
+import { checkView, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
 import { choiceKeyTarget, connectionChoices, connectionShortcut, connectionShortcutLabel, type ConnectionChoice } from "../_lib/tab-connection";
 import { useConnectedIds } from "../_lib/use-connected-ids";
+import { useConnectionCheck } from "../_lib/use-connection-checks";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CheckDot } from "./connection-check";
 
 const copy = workbenchCopy.editor.connection;
 
@@ -32,6 +35,8 @@ type ConnectionButtonViewProps = {
   environment: ShownEnvironment | null;
   /** RN-PROT-002: a dica do cadeado da conexão somente leitura (`readOnlyHintOf`); nula quando ela não é. */
   readOnly?: string | null;
+  /** RN-VERIF-003: o que a verificação periódica diz da conexão da aba, conectada e com ela ligada; nulo sem ela. */
+  check?: CheckState | null;
   shortcut: { label: string; aria: string };
   open: boolean;
   panelId: string;
@@ -40,17 +45,20 @@ type ConnectionButtonViewProps = {
 };
 
 /**
- * RN-ARVORE-008, só o desenho do botão: a sigla do banco, o nome da conexão, a etiqueta do ambiente (o próprio ou o herdado da pasta) e, na conexão
- * somente leitura (RN-PROT-002), o cadeado, como o botão "Conexão e esquema desta aba" do canvas; a dica traz o servidor, o usuário e o atalho. Na aba sem
- * conexão, "Sem conexão". O nome acessível começa pelo que se vê, na mesma ordem, e só depois diz que é a conexão desta aba.
+ * RN-ARVORE-008, só o desenho do botão: a sigla do banco, o nome da conexão, a etiqueta do ambiente (o próprio ou o herdado da pasta), na conexão somente
+ * leitura (RN-PROT-002) o cadeado, como o botão "Conexão e esquema desta aba" do canvas, e, com a conexão conectada e a verificação ligada, o indicador dela
+ * na ponta, como na árvore (RN-VERIF-003); a dica traz o servidor, o usuário, a última verificação e o atalho. Na aba sem conexão, "Sem conexão". O nome
+ * acessível começa pelo que se vê, na mesma ordem, e só depois diz que é a conexão desta aba.
  */
-export function ConnectionButtonView({ connection, environment, readOnly = null, shortcut, open, panelId, buttonRef, onToggle }: ConnectionButtonViewProps) {
+export function ConnectionButtonView({ connection, environment, readOnly = null, check = null, shortcut, open, panelId, buttonRef, onToggle }: ConnectionButtonViewProps) {
+  const view = connection == null || check === null ? null : checkView(check);
+  const title = connection == null ? copy.noneTitle(shortcut.label) : copy.title(connection.host, connection.port, connection.userName, shortcut.label);
   return (
     <button
       ref={buttonRef}
       type="button"
-      aria-label={connection === undefined ? copy.loadingLabel : connection === null ? copy.noneLabel : copy.label(engineTags[connection.engine], connection.name, environment?.name ?? null, readOnly)}
-      title={connection == null ? copy.noneTitle(shortcut.label) : copy.title(connection.host, connection.port, connection.userName, shortcut.label)}
+      aria-label={connection === undefined ? copy.loadingLabel : connection === null ? copy.noneLabel : copy.label(engineTags[connection.engine], connection.name, environment?.name ?? null, readOnly, view?.label ?? null)}
+      title={view === null ? title : `${title}\n${view.tip}`}
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-controls={open ? panelId : undefined}
@@ -71,6 +79,7 @@ export function ConnectionButtonView({ connection, environment, readOnly = null,
           <span className="min-w-0 truncate">{connection.name}</span>
           <ShownEnvironmentPill environment={environment} />
           <ReadOnlyMark hint={readOnly} />
+          {view === null ? null : <CheckDot view={view} />}
         </>
       )}
       <ChevronIcon aria-hidden className="flex-none text-subtle" />
@@ -311,6 +320,7 @@ export function ConnectionPicker({ connectionId, busy, open, onOpenChange, onCho
   const shortcut = connectionShortcutLabel(typeof navigator === "undefined" ? "" : navigator.platform);
 
   const connection = connectionId === null ? null : connections.data?.find((candidate) => candidate.id === connectionId);
+  const check = useConnectionCheck(connectionId);
 
   // Quem tinha o foco ao abrir (o botão, ou o editor no Ctrl+9) o recebe de volta ao fechar pela lista. A lista só monta depois deste efeito (a posição nasce
   // nula a cada abertura), e o campo de busca, que pega o foco, ainda não existe aqui.
@@ -369,7 +379,13 @@ export function ConnectionPicker({ connectionId, busy, open, onOpenChange, onCho
         connection={connection}
         environment={connection == null ? null : environments.connection(connection)}
         readOnly={connection == null ? null : readOnlyHintOf(connection.protections, folders.data ?? [])}
-        shortcut={shortcut} open={open} panelId={panelId} buttonRef={button} onToggle={() => onOpenChange(!open)} />
+        check={check}
+        shortcut={shortcut}
+        open={open}
+        panelId={panelId}
+        buttonRef={button}
+        onToggle={() => onOpenChange(!open)}
+      />
       {open && position !== null
         ? createPortal(
             <div

@@ -4,7 +4,19 @@ import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
 import { allowRefusal, apiRequest, unwrap, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
-import { connectionSchema, connectionsSchema, foldersSchema, folderSchema, revealedPasswordSchema, type Connection, type ConnectionInput, type Folder, type FolderInput } from "./connections.schema";
+import {
+  connectionSchema,
+  connectionsSchema,
+  connectionVerificationSchema,
+  foldersSchema,
+  folderSchema,
+  revealedPasswordSchema,
+  type Connection,
+  type ConnectionInput,
+  type ConnectionVerificationResult,
+  type Folder,
+  type FolderInput,
+} from "./connections.schema";
 
 /**
  * Uma função por rota de `api/user`. Devolvem `ApiResult`; quem as chama numa `queryFn` ou
@@ -66,6 +78,15 @@ export function testConnection(input: ConnectionInput, id?: string): Promise<Api
  */
 export async function runConnectionTest(input: ConnectionInput, id?: string): Promise<ApiResult<void>> {
   return allowRefusal(await testConnection(input, id), "CONNECTION_INVALID", "DATABASE_CONNECTION_FAILED", driverNotInstalledCode);
+}
+
+/**
+ * RN-VERIF-002: verifica a conexão conectada numa sessão que já está aberta (sem corpo: a consulta é a gravada). Quem chama é a verificação periódica, que
+ * não passa pelo cache de mutações: a falha da chamada não vira aviso (a do banco é resposta 200, e vai ao indicador), e o `signal` a abandona quando a
+ * conexão desconecta ou o cofre bloqueia.
+ */
+export function verifyConnection(id: string, signal?: AbortSignal): Promise<ApiResult<ConnectionVerificationResult>> {
+  return apiRequest(prismEndpoints.userConnectionVerification(id), { method: "POST", schema: connectionVerificationSchema, signal });
 }
 
 /**

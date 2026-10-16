@@ -1,7 +1,24 @@
 import { z } from "zod";
 
 import type { PrismBridge, PrismWorkspace } from "../../../electron/preload";
-import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowCloseRequestSchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowCloseRequest, type WindowEntry } from "../../../electron/window-messages";
+import {
+  peerEventSchema,
+  tabDeliverySchema,
+  tabGiveSchema,
+  tabMoveReplySchema,
+  verificationPeerSchema,
+  windowCloseRequestSchema,
+  windowListSchema,
+  type PeerEvent,
+  type TabDelivery,
+  type TabGive,
+  type TabMoveReply,
+  type TabMoveRequest,
+  type VerificationDone,
+  type VerificationPeer,
+  type WindowCloseRequest,
+  type WindowEntry,
+} from "../../../electron/window-messages";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "../../../electron/workspace-hub";
 import type { SavedWorkspace } from "../../../electron/workspace-messages";
 import { isAppZoom, type AppZoom } from "../../../electron/zoom";
@@ -140,6 +157,8 @@ export function getBridge(): PrismBridge {
         onCloseRequested: () => () => {},
       },
       session: { share: async () => {}, onPeer: () => () => {} },
+      // Uma janela só: a vez da verificação é sempre dela (RN-VERIF-002), e não há a quem contar a resposta.
+      verification: { claim: async () => true, finish: async () => {}, onPeer: () => () => {} },
       workspace: devWorkspaceBridge({ baseUrl: url.replace(/\/$/, ""), token }),
       // Fora do Electron o zoom é o do navegador: não há o do programa (RN-ZOOM-001), e a tela passa sem o controle.
       zoom: { get: async () => null, set: async () => null, onChanged: () => () => {} },
@@ -249,6 +268,47 @@ export function onPeerEvent(listener: (kind: PeerEvent["kind"]) => void): () => 
     getBridge().session.onPeer((raw) => {
       const parsed = peerEventSchema.safeParse(raw);
       if (parsed.success) listener(parsed.data.kind);
+    }),
+  );
+}
+
+/**
+ * RN-VERIF-002: a vez da verificação de uma conexão, do lado da tela. O processo principal a dá a uma janela por vez, e não de novo antes do intervalo
+ * (`window-hub.ts`). Sem a ponte das janelas (fora do Electron, ou uma ponte antiga) há uma janela só, e a vez é dela; a resposta que não é `true` é "não".
+ */
+export async function claimVerification(connectionId: string, intervalMs: number): Promise<boolean> {
+  let verification: PrismBridge["verification"] | undefined;
+  try {
+    verification = getBridge().verification;
+  } catch {
+    return true;
+  }
+  if (verification === undefined) return true;
+
+  try {
+    return (await verification.claim({ connectionId, intervalMs })) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** A verificação que esta janela fez terminou: a resposta vai às outras janelas (ou, nula, só a vez fica livre). Nunca lança. */
+export function finishVerification(done: VerificationDone): void {
+  try {
+    void getBridge()
+      .verification.finish(done)
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há outras janelas.
+  }
+}
+
+/** A resposta da verificação que outra janela fez (conferida com o schema): o que não confere é ignorado. */
+export function onVerificationPeer(listener: (peer: VerificationPeer) => void): () => void {
+  return listen(() =>
+    getBridge().verification.onPeer((raw) => {
+      const parsed = verificationPeerSchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data);
     }),
   );
 }

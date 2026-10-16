@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useDriverActions } from "@/app/drivers/_components/driver-actions";
@@ -43,6 +43,8 @@ type ConnectionDialogProps = {
   onClose: () => void;
   /** Gravou: quem abriu fecha o diálogo e deixa a conexão à vista na árvore. */
   onSaved: (connection: Connection) => void;
+  /** RN-VERIF-003: o indicador da última verificação da conexão gravada e conectada, no painel "Sessão da conexão" (quem o lê é a área de trabalho). */
+  checkIndicator?: ReactNode;
 };
 
 /**
@@ -60,7 +62,7 @@ type ConnectionDialogProps = {
  * configurações apareceram. O bloqueio por inatividade descarta o diálogo (RN-SEG-001): quem o abre não o desenha com a época do bloqueio
  * trocada.
  */
-export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved }: ConnectionDialogProps) {
+export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved, checkIndicator }: ConnectionDialogProps) {
   const connection = request.mode === "edit" ? request.connection : null;
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -321,6 +323,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
               engine={engine}
               verifying={verifying}
               onVerifyingChange={setVerifying}
+              checkIndicator={checkIndicator}
             />
             {refusal === null ? null : <FormMessage tone="error">{refusal}</FormMessage>}
           </form>

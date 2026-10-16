@@ -17,6 +17,7 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
 
+import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
@@ -31,11 +32,13 @@ import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, 
 import { refreshKey } from "../_lib/grid-editing";
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
+import { useConnectionChecksSnapshot } from "../_lib/use-connection-checks";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { connectedConnectionIds, isConnected } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
 import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CheckFailureDialog } from "./connection-check";
 import { FolderActionDialogs, type FolderAction } from "./folder-action-dialogs";
 import { NavigatorConnectedFilter, NavigatorFilteredEmpty } from "./navigator-connected-filter";
 import { NavigatorEnvironmentFilter } from "./navigator-environment-filter";
@@ -166,6 +169,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [environmentChoice, setEnvironmentChoice] = useState<EnvironmentChoice>(allEnvironments);
   // RN-NAV-013: "Só as conectadas", estado daqui pelo mesmo motivo: vale enquanto a janela está aberta, como a do ambiente.
   const [onlyConnected, setOnlyConnected] = useState(false);
+  // RN-VERIF-003: o indicador da verificação de cada conexão (um estado só para a árvore inteira) e a falha aberta num clique, pela conexão.
+  const checks = useConnectionChecksSnapshot();
+  const [checkFailure, setCheckFailure] = useState<string | null>(null);
   // O filtro roda sobre o texto adiado: a digitação não espera a lista de milhares de linhas.
   const searchText = useDeferredValue(query);
   // A conexão que o formulário acabou de salvar (RN-NAV-004), e a última que esta árvore já mostrou (o número do pedido).
@@ -194,11 +200,13 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const sessions = useQueries({ queries: connectionList.map((connection) => ({ ...databaseSessionQuery(connection.id), enabled: expanded.has(navKey({ type: "connection", connectionId: connection.id })) })) });
   const sessionById = new Map(connectionList.map((connection, index) => [connection.id, sessions[index]]));
   const statuses = new Map(connectionList.map((connection, index) => [connection.id, statusOf(sessions[index], isConnected(connection.id, tabs, sessions[index].isSuccess))]));
-  // RN-NAV-013: as conectadas, na definição única (`isConnected`, a do ponto de estado), numa chave de texto: a árvore filtrada só se refaz quando elas mudam.
+  // RN-NAV-013: as conectadas, na definição única (`connectedConnectionIds`: a do ponto de estado, menos as que a verificação achou sem sessão na API, que o
+  // indicador mostra como "Sem sessão aberta"), numa chave de texto: a árvore filtrada só se refaz quando elas mudam.
   const connectedIds = connectedConnectionIds(
     connectionList.map((connection) => connection.id),
     tabs,
     (connectionId) => sessionById.get(connectionId)?.isSuccess === true,
+    new Set(notConnectedIds(checks)),
   );
   const connectedKey = onlyConnected ? connectedIds.join(" ") : null;
 
@@ -623,6 +631,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           folderColors={folderColors}
           readOnlyHints={readOnlyHints}
           statuses={statuses}
+          checks={checks}
+          onCheckFailure={(node) => setCheckFailure(ownerConnectionId(node))}
           disconnecting={disconnecting}
           onToggle={search === null ? toggle : toggleInSearch}
           onRetry={retry}
@@ -646,6 +656,12 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     );
   }
 
+  // RN-VERIF-003: a falha que a pessoa abriu, enquanto a conexão continua sem responder: a resposta seguinte que dá certo (ou a desconexão) fecha a janela,
+  // que não tem mais o que dizer, e de vez (ajuste durante a renderização): a falha seguinte não a abre sozinha.
+  const failure = checkFailure === null ? undefined : checks.get(checkFailure);
+  const failureConnection = checkFailure === null ? undefined : connectionById.get(checkFailure);
+  if (checkFailure !== null && (failure?.kind !== "failed" || failureConnection === undefined)) setCheckFailure(null);
+
   return (
     <div ref={area} onKeyDown={handleShortcut} onContextMenu={handleBackgroundMenu} className="flex min-h-0 flex-1 flex-col">
       {/* A barra de ações fica em qualquer estado: sem conexão nenhuma, ou com as listas por chegar, é por ela que se cria a primeira pasta e a
@@ -662,6 +678,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           onClose={() => setMenu(null)}
         />
       )}
+      {failure?.kind === "failed" && failureConnection !== undefined ? <CheckFailureDialog connection={failureConnection.name} state={failure} onClose={() => setCheckFailure(null)} /> : null}
       {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
       {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
@@ -689,6 +706,9 @@ type NavigatorListProps = {
   /** RN-PROT-002: a dica do cadeado das conexões somente leitura, pelo id. */
   readOnlyHints: ReadonlyMap<string, string>;
   statuses: ReadonlyMap<string, ConnectionStatus>;
+  /** RN-VERIF-003: o que a verificação diz de cada conexão conectada com ela ligada, e o clique que mostra a falha. */
+  checks: ReadonlyMap<string, CheckState>;
+  onCheckFailure: (node: NavNode) => void;
   disconnecting: string | null;
   onToggle: (node: NavNode) => void;
   onRetry: (node: NavNode) => void;
@@ -719,7 +739,7 @@ type NavigatorListProps = {
  * árvore. Teclado de árvore: setas movem entre linhas, direita abre, esquerda fecha, F2 renomeia a pasta e a conexão; só uma linha
  * entra na ordem do Tab.
  */
-function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
+function NavigatorList({ rows, density, open, connectionById, environments, folderColors, readOnlyHints, statuses, checks, onCheckFailure, disconnecting, onToggle, onRetry, onRefresh, onNewQuery, onOpenTable, onDisconnect, onKeyAction, onContextMenu, matches, searching, scrollResetKey, selectedKey, onSelect, reveal }: NavigatorListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // A tela filtrada tem outra altura ("limpar devolve a árvore como estava"): a rolagem da árvore é acompanhada enquanto ela está à mostra, e volta ao
@@ -879,6 +899,8 @@ function NavigatorList({ rows, density, open, connectionById, environments, fold
                 folderColor={folderId === null ? null : (folderColors.get(folderId) ?? null)}
                 readOnly={connection ? (readOnlyHints.get(connection.id) ?? null) : null}
                 status={connection ? statuses.get(connection.id) : undefined}
+                check={connection ? (checks.get(connection.id) ?? null) : null}
+                onCheckFailure={onCheckFailure}
                 busy={connection !== undefined && disconnecting === connection.id}
                 match={matches?.get(node.key)}
                 onSelect={(selected) => onSelect(selected.key)}

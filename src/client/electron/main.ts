@@ -356,7 +356,8 @@ function serveRenderer() {
 }
 
 /**
- * O centro das janelas (`window-hub.ts`): leva as abas de uma janela para outra e repassa o que uma conta às outras sobre o cofre. A janela nova
+ * O centro das janelas (`window-hub.ts`): leva as abas de uma janela para outra, repassa o que uma conta às outras sobre o cofre e dá a vez da verificação
+ * de cada conexão (RN-VERIF-002). A janela nova
  * (a área de trabalho inteira, RN-ABAS-002) nasce aqui, onde a aba foi solta, e aparece quando a tela dela está pronta.
  */
 const hub = createWindowHub({
@@ -543,6 +544,16 @@ ipcMain.handle("prism:workspace-flush", (event) => {
 ipcMain.handle("prism:session-share", (event, peerEvent: unknown) => {
   assertFromApp(event);
   hub.share(windowIdOf(event.sender), peerEvent);
+});
+// RN-VERIF-002: a verificação periódica de uma conexão conectada em mais de uma janela sai de uma só por intervalo (a vez é pedida aqui), e a resposta
+// vai às outras. O centro confere o pedido e o fim com o schema; daqui nada chama a API.
+ipcMain.handle("prism:verification-claim", (event, claim: unknown) => {
+  assertFromApp(event);
+  return hub.claimVerification(windowIdOf(event.sender), claim);
+});
+ipcMain.handle("prism:verification-finish", (event, done: unknown) => {
+  assertFromApp(event);
+  hub.finishVerification(windowIdOf(event.sender), done);
 });
 
 if (!app.requestSingleInstanceLock()) {

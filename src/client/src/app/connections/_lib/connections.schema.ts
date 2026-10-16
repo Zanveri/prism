@@ -92,6 +92,21 @@ export type Connection = Omit<z.infer<typeof connectionSchema>, "password">;
 
 export const connectionsSchema = z.array(connectionSchema);
 
+/**
+ * RN-VERIF-002: a resposta da verificação periódica (`POST api/user/connections/{id}/verification`). `status` é `ok`, `failed`, `busy` ou `notConnected`;
+ * `checkedAt`, o instante da resposta (UTC); `elapsedMs`, o tempo da consulta (só em `ok` e `failed`); `message` e `sqlState`, só em `failed`, com a mensagem
+ * do banco como veio. A falha do banco é resposta 200: a tela a mostra no indicador (RN-VERIF-003), sem o aviso de erro.
+ */
+export const connectionVerificationSchema = z.object({
+  status: z.enum(["ok", "failed", "busy", "notConnected"]),
+  checkedAt: z.string().min(1),
+  elapsedMs: z.number().min(0).nullish().transform((value) => value ?? null),
+  message: z.string().nullish().transform((value) => value ?? null),
+  sqlState: z.string().nullish().transform((value) => value ?? null),
+});
+
+export type ConnectionVerificationResult = z.output<typeof connectionVerificationSchema>;
+
 /** A resposta de revelar: a senha da conexão, que só o formulário aberto guarda. */
 export const revealedPasswordSchema = z.object({ password: z.string() });
 

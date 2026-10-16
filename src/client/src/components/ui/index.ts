@@ -8,6 +8,7 @@ export { Field, FieldLabel, Input } from "./field";
 export { FieldError, FormMessage, type FormMessageProps } from "./form-message";
 export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
+  AlertIcon,
   BugIcon,
   ChartIcon,
   CheckIcon,

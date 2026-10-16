@@ -1,5 +1,8 @@
 import { formatCount, formatElapsed } from "@/lib/utils/format";
 
+/** A frase com a primeira letra em minúscula, para entrar no meio de outra ("Somente leitura" vira "somente leitura"). */
+const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+
 /** Os textos da área de trabalho, num lugar só (RN-AVISO-002 a 005, RN-SESSAO-005, RN-ARVORE-003, RN-SQL-004 a 009). */
 export const workbenchCopy = {
   navigator: {
@@ -124,8 +127,10 @@ export const workbenchCopy = {
     connection: {
       // O nome acessível começa pelo que o botão mostra (a sigla, o nome e o ambiente, na ordem da tela), e diz depois o que ele é: quem usa comando de voz
       // diz o que vê, e o leitor de tela ouve o ambiente, que é o aviso da conexão.
-      // RN-PROT-002: a dica do cadeado vai no nome acessível, depois do ambiente ("Somente leitura, herdado da pasta Fábrica").
-      label: (engine: string, name: string, environment: string | null, readOnly: string | null = null) => `${engine} ${name}${environment === null ? "" : ` ${environment}`}${readOnly === null ? "" : `, ${readOnly.charAt(0).toLowerCase()}${readOnly.slice(1)}`}, conexão desta aba`,
+      // RN-PROT-002: a dica do cadeado vai no nome acessível, depois do ambiente ("Somente leitura, herdado da pasta Fábrica"). RN-VERIF-003: o indicador
+      // da verificação vai depois dele, como na tela, em que o ponto fica na ponta, como na árvore ("…, respondeu na última verificação").
+      label: (engine: string, name: string, environment: string | null, readOnly: string | null = null, check: string | null = null) =>
+        `${engine} ${name}${environment === null ? "" : ` ${environment}`}${readOnly === null ? "" : `, ${lowerFirst(readOnly)}`}${check === null ? "" : `, ${lowerFirst(check)}`}, conexão desta aba`,
       none: "Sem conexão",
       noneLabel: "Sem conexão, escolher a conexão desta aba",
       // A lista de conexões ainda não chegou.
