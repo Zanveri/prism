@@ -263,6 +263,12 @@ describe("IdleAnnouncer: o que o leitor de tela ouve do aviso, uma vez", () => {
     expect(String(announcing.props.children)).not.toMatch(/\d/);
   });
 
+  it("com exportações cuja entrega falhou, a frase de que o bloqueio as descarta vai junto, lida uma vez como o resto: o desenho do aviso é escondido do leitor", () => {
+    expect(IdleAnnouncer({ active: true, discardedExports: 2 }).props.children).toBe(`${lockCopy.warning.announcement} 2 exportações com a entrega que falhou serão descartadas.`);
+    expect(IdleAnnouncer({ active: true, discardedExports: 1 }).props.children).toBe(`${lockCopy.warning.announcement} 1 exportação com a entrega que falhou será descartada.`);
+    expect(IdleAnnouncer({ active: false, discardedExports: 2 }).props.children).toBe("");
+  });
+
   it("fica escondida da tela (só o leitor de tela a vê)", () => {
     expect(IdleAnnouncer({ active: false }).props.className).toContain("sr-only");
   });

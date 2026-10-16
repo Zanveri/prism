@@ -107,6 +107,15 @@ describe("VaultLock: liga as preferências, o temporizador e a tela (RN-SEG-001)
     expect(elementsOf(element).find((found) => found.type === IdleAnnouncer)?.props.active).toBe(true);
   });
 
+  it("faltando pouco, com entregas que falharam: o aviso e o anunciador dizem quantas o bloqueio descarta", () => {
+    mocks.secondsLeft = 25;
+
+    const element = VaultLock({ isBusy, discard: vi.fn(), discardedExports: () => 2 });
+
+    expect(elementsOf(element).find((found) => found.type === IdleWarning)?.props.discardedExports).toBe(2);
+    expect(elementsOf(element).find((found) => found.type === IdleAnnouncer)?.props.discardedExports).toBe(2);
+  });
+
   it("bloqueado: mostra a tela de bloqueio e o temporizador para (não conta com o cofre fechado)", () => {
     vaultLock.lock();
 
