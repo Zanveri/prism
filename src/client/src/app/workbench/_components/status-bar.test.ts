@@ -24,7 +24,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import { workbenchCopy } from "../_lib/workbench.copy";
-import { StatusBar } from "./status-bar";
+import { StatusBar, StatusConnectionState } from "./status-bar";
 
 const copy = workbenchCopy.status;
 
@@ -59,5 +59,18 @@ describe("StatusBar: o cadeado da conexão somente leitura (RN-PROT-002)", () =>
 
     rt.protections = { readOnly: true, readOnlyFolderID: null, confirmCommands: null, confirmCommandsFolderID: null };
     expect(mark()?.props.title).toBe("Somente leitura");
+  });
+});
+
+describe("StatusBar: a conexão conectada da aba (RN-VERIF-003)", () => {
+  it("conectada, o estado é o da verificação (o indicador dela ou, sem ela, o ponto e “Conectada”); desconectada, “Desconectada”", () => {
+    rt.tabs = [{ id: "q1", title: "consulta-1.sql", connectionId: "c1", sessionId: "s1", sql: "" }];
+    rt.activeTabId = "q1";
+    expect(elementsOf(StatusBar()).find((element) => element.type === StatusConnectionState)?.props).toEqual({ connectionId: "c1", name: "MES Produção" });
+
+    rt.tabs = [{ ...rt.tabs[0], sessionId: null }];
+    const found = elementsOf(StatusBar());
+    expect(found.some((element) => element.type === StatusConnectionState)).toBe(false);
+    expect(found.some((element) => element.props.children === copy.disconnected)).toBe(true);
   });
 });

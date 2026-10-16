@@ -316,3 +316,41 @@ describe("o cadeado da conexão somente leitura na árvore (RN-PROT-002)", () =>
     expect(render(node, { connection, status: "disconnected" })).not.toContain("Somente leitura");
   });
 });
+
+describe("o indicador da verificação periódica na árvore (RN-VERIF-003)", () => {
+  const now = "2026-10-15T12:00:00Z";
+  const connection: Connection = { id: "c1", folderID: null, name: "MES Produção", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
+  const node: NavNode = { key: navKey({ type: "connection", connectionId: "c1" }), kind: "connection", label: "MES Produção", depth: 0, hasChildren: true };
+  const failed = { kind: "failed", checkedAt: "2026-10-15T14:32:35Z", elapsedMs: 12, message: "FATAL: terminating connection", sqlState: "57P01", busy: false } as const;
+  const dot = (markup: string) => /<span role="img" aria-label="([^"]*)"[^>]*data-check="([a-zA-Z]+)"/.exec(markup)?.slice(1);
+
+  it("no lugar do ponto de conectada: “Respondeu na última verificação”, com a hora e o tempo na dica da linha, que o mouse alcança", () => {
+    const markup = render(node, { connection, status: "connected", check: { kind: "ok", checkedAt: "2026-10-15T14:32:05Z", elapsedMs: 3, busy: false } });
+
+    expect(dot(markup)).toEqual(["Respondeu na última verificação", "ok"]);
+    expect(markup).not.toContain('aria-label="Conectada"');
+    expect(markup).toMatch(/title="MES Produção\nPostgreSQL · pg:5432 \/ mes\nRespondeu às \d{2}:\d{2}:05, em 3 ms"/);
+  });
+
+  it("“Não respondeu”, no tom de erro, com a mensagem do banco na dica, e um botão das ações da linha que a mostra num clique", () => {
+    const onCheckFailure = vi.fn();
+    const markup = render(node, { connection, status: "connected", check: failed, onCheckFailure });
+    const row = elementsOf(NavigatorRow({ node, index: 1, open: false, tabbable: true, selected: false, connection, status: "connected", check: failed, onCheckFailure, onSelect: noop, onToggle: noop, onRetry: noop, onRefresh: noop, onNewQuery: noop, onDisconnect: noop, onOpenTable: noop, onContextMenu: () => true, onKeyDown: noop }));
+    const open = row.find((element) => element.props.label === "Ver por que MES Produção não respondeu");
+
+    expect(dot(markup)).toEqual(["Não respondeu", "failed"]);
+    expect(markup).toContain("FATAL: terminating connection");
+    (open?.props.onClick as () => void)();
+    expect(onCheckFailure).toHaveBeenCalledExactlyOnceWith(node);
+  });
+
+  it("sem verificação (desligada), e na conexão desconectada, fica o ponto de sempre", () => {
+    expect(render(node, { connection, status: "connected", check: null })).toContain('aria-label="Conectada"');
+    expect(dot(render(node, { connection, status: "disconnected", check: failed }))).toBeUndefined();
+  });
+
+  it("sem sessão aberta e ainda não verificada têm o desenho deles", () => {
+    expect(dot(render(node, { connection, status: "connected", check: { kind: "notConnected" } }))).toEqual(["Sem sessão aberta", "notConnected"]);
+    expect(dot(render(node, { connection, status: "connected", check: { kind: "waiting", busy: false } }))).toEqual(["Conectada, ainda não verificada", "waiting"]);
+  });
+});

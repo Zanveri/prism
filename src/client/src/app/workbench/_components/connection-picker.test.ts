@@ -10,6 +10,7 @@ import { elementsOf } from "@/lib/testing/react-tree";
 
 import { connectionChoices } from "../_lib/tab-connection";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CheckDot } from "./connection-check";
 import { ConnectionButtonView, ConnectionListView } from "./connection-picker";
 
 const copy = workbenchCopy.editor.connection;
@@ -50,6 +51,18 @@ describe("ConnectionButtonView: a conexão da aba na barra do editor (RN-ARVORE-
     expect(view({ connection: mes, environment: null }).tree.props["aria-label"]).toBe("PG MES, conexão desta aba");
     expect(view({ connection: null, environment: null }).tree.props["aria-label"]).toMatch(new RegExp(`^${copy.none}`));
     expect(view({ connection: undefined, environment: null }).tree.props["aria-label"]).toBe(copy.loadingLabel);
+  });
+
+  it("RN-VERIF-003: com a verificação, o indicador vai na ponta (como na árvore), o estado entra no nome acessível e a dica ganha a última verificação", () => {
+    const failed = { kind: "failed", checkedAt: "2026-10-15T14:32:35Z", elapsedMs: 12, message: "FATAL: terminating connection", sqlState: null, busy: false } as const;
+    const { tree, found } = view({ check: failed });
+    const dot = found.find((element) => element.type === CheckDot);
+
+    expect(dot?.props.view).toMatchObject({ tone: "failed", label: "Não respondeu" });
+    expect(tree.props["aria-label"]).toBe("IFX ERP Produção Produção, não respondeu, conexão desta aba");
+    expect(tree.props.title).toMatch(/troca a conexão desta aba\nNão respondeu às \d{2}:\d{2}:35:\nFATAL: terminating connection$/);
+    // Sem verificação (desligada, ou a conexão desconectada), nada muda.
+    expect(view({ check: null }).found.some((element) => element.type === CheckDot)).toBe(false);
   });
 
   it("o clique abre (e fecha) a lista; aberta, o botão aponta para ela", () => {
