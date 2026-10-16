@@ -19,6 +19,9 @@ export type UserPasswordDialogProps<T> = {
   send: (userPassword: string) => Promise<ApiResult<T>>;
   /** As recusas do pedido que quem abriu mostra no próprio lugar (o 422 dos campos, o nome repetido): voltam a ele, como valor. */
   refusals?: readonly string[];
+  /** O texto embaixo do título e o botão de confirmar, quando não são os do somente leitura: a exportação com senhas de banco tem os dela (RN-TRANSF-005). */
+  description?: string;
+  submitLabel?: string;
   /**
    * O pedido terminou sem ser pela senha: gravou (`ok`), ou foi recusado por um motivo que quem abriu mostra; `null` quando a falha já foi ao aviso
    * central (a API fora do ar, uma regra que só ela conhece). Quem abriu fecha o diálogo.
@@ -30,14 +33,15 @@ export type UserPasswordDialogProps<T> = {
 /**
  * "Confirme a sua senha" da mudança do somente leitura (RN-PROT-003), como o de revelar a senha (RN-CONN-002): diz o que muda, avisa que cinco senhas
  * erradas seguidas fecham o cofre e mostra o erro no campo. Abre ao salvar a mudança que pede a senha (marcar ou desmarcar "Somente leitura" numa conexão
- * ou pasta que já existe) e quando a API a pede sem a tela prever (422 `USER_PASSWORD_REQUIRED`: mover para fora de uma pasta somente leitura).
+ * ou pasta que já existe) e quando a API a pede sem a tela prever (422 `USER_PASSWORD_REQUIRED`: mover para fora de uma pasta somente leitura). É também o
+ * da exportação com senhas de banco (RN-TRANSF-005), com o texto e o botão dela, na mesma contagem de erros.
  *
  * A senha errada (`INVALID_PASSWORD`) e a que faltou (`USER_PASSWORD_REQUIRED`) ficam no campo, que volta vazio; o quinto erro seguido fecha o cofre (401
  * `VAULT_LOCKED`): a tela vai ao login e o aviso de atenção explica por quê, como no de revelar. Não há transação aberta a avisar: a tela ainda não tem o
  * Commit manual (RN-TX-001), e o Salvar da grade é uma transação própria. A senha não fica guardada depois da resposta: a mutação não é guardada
  * (`gcTime: 0`) e é esvaziada (`reset`) assim que a resposta chega.
  */
-export function UserPasswordDialog<T>({ change, send, refusals = [], onDone, onClose }: UserPasswordDialogProps<T>) {
+export function UserPasswordDialog<T>({ change, send, refusals = [], description = copy.description, submitLabel = copy.submit, onDone, onClose }: UserPasswordDialogProps<T>) {
   const toast = useToast();
   const [errors, setErrors] = useState<FieldErrors>({});
   // Trocar a chave do campo o esvazia e devolve o foco a ele depois de uma senha recusada.
@@ -89,7 +93,7 @@ export function UserPasswordDialog<T>({ change, send, refusals = [], onDone, onC
       size="sm"
       icon={<LockIcon />}
       title={copy.title}
-      description={copy.description}
+      description={description}
       pending={pending}
       onClose={onClose}
       footer={
@@ -98,7 +102,7 @@ export function UserPasswordDialog<T>({ change, send, refusals = [], onDone, onC
             {copy.cancel}
           </Button>
           <Button type="submit" form={formID} disabled={pending}>
-            {pending ? copy.submitting : copy.submit}
+            {pending ? copy.submitting : submitLabel}
           </Button>
         </>
       }

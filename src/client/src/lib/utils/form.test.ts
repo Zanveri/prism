@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { apiFieldErrors, fieldAria, firstFieldErrors, hasUnshownFieldErrors } from "./form";
+import { apiFieldErrors, enterInputID, fieldAria, firstFieldErrors, hasUnshownFieldErrors } from "./form";
 
 describe("firstFieldErrors", () => {
   it("devolve a primeira mensagem de cada campo recusado, na ordem do schema", () => {
@@ -57,5 +57,18 @@ describe("fieldAria", () => {
 
   it("sem erro, não põe nenhum atributo", () => {
     expect(fieldAria("cx-host", undefined)).toEqual({ "aria-invalid": undefined, "aria-describedby": undefined });
+  });
+});
+
+describe("enterInputID", () => {
+  it("o Enter num `<input>` (texto, caixa, rádio, busca) devolve o `id` dele: é o que o navegador transformaria em envio do formulário", () => {
+    expect(enterInputID({ key: "Enter", target: { tagName: "INPUT", id: "busca" } })).toBe("busca");
+    expect(enterInputID({ key: "Enter", target: { tagName: "INPUT" } })).toBe("");
+  });
+
+  it("outra tecla, ou o Enter num botão ou numa lista, não: eles fazem o que é deles", () => {
+    expect(enterInputID({ key: " ", target: { tagName: "INPUT", id: "busca" } })).toBeNull();
+    expect(enterInputID({ key: "Enter", target: { tagName: "BUTTON", id: "importar" } })).toBeNull();
+    expect(enterInputID({ key: "Enter", target: null })).toBeNull();
   });
 });
