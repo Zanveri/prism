@@ -42,7 +42,9 @@ export const scriptRunCopy = {
     sqlState: "SQLSTATE",
     executed: (ok: number, total: number) => `Comandos executados: ${ok.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")}`,
     withErrors: (count: number) => `Com erro: ${count.toLocaleString("pt-BR")}`,
-    changed: (count: number) => `Linhas alteradas: ${count.toLocaleString("pt-BR")}`,
+    // RN-SQL-013: o comando que gravou e devolveu linhas não soma (a API diz quantas ele devolveu, e não quantas alterou), e o total diz quantos ficaram de fora.
+    changed: (count: number, returning = 0) =>
+      `Linhas alteradas: ${count.toLocaleString("pt-BR")}${returning === 0 ? "" : ` (sem contar ${returning === 1 ? "1 comando que gravou e devolveu linhas" : `${returning.toLocaleString("pt-BR")} comandos que gravaram e devolveram linhas`})`}`,
     totalTime: (elapsedMs: number) => `Tempo total: ${formatElapsed(elapsedMs)}`,
     // RN-SQL-020: o script guarda as abas dos 20 primeiros comandos que devolvem linhas, e a do último.
     dropped: (count: number, cap: number) =>

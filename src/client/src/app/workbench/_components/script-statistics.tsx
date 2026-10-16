@@ -160,7 +160,7 @@ const StatisticsTable = memo(function StatisticsTable({ run }: { run: ScriptRun 
       <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-ink">
         <span>{copy.executed(totals.ok, totals.total)}</span>
         {totals.errors === 0 ? null : <span className="text-danger">{copy.withErrors(totals.errors)}</span>}
-        <span>{copy.changed(totals.changed)}</span>
+        <span>{copy.changed(totals.changed, totals.returning)}</span>
         <span>{copy.totalTime(totals.elapsedMs)}</span>
       </p>
       {totals.dropped === 0 ? null : <p className="mt-1 text-muted">{copy.dropped(totals.dropped, scriptResultCap)}</p>}

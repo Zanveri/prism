@@ -101,10 +101,20 @@ describe("o estado do script", () => {
     let current = withEntry(run(), 0, { status: "ok", rows: { read: 200, more: true, total: null }, elapsedMs: 40, kept: true });
     current = withEntry(current, 1, { status: "ok", affected: 12, elapsedMs: 10 });
     current = withEntry(current, 2, { status: "skipped", error: { title: "Erro", message: "x", sqlState: null } });
-    expect(scriptTotals(current)).toEqual({ ok: 2, total: 3, errors: 1, changed: 12, elapsedMs: 50, dropped: 0 });
+    expect(scriptTotals(current)).toEqual({ ok: 2, total: 3, errors: 1, changed: 12, returning: 0, elapsedMs: 50, dropped: 0 });
 
     expect(scriptTotals(withEntry(current, 1, { affected: -1 })).changed).toBe(0);
     expect(scriptTotals(withEntry(current, 0, { kept: false })).dropped).toBe(1);
+  });
+
+  it("o comando que gravou e devolveu linhas (RN-SQL-013) não soma nas linhas alteradas: a API diz quantas ele devolveu, e não quantas alterou; ele conta à parte", () => {
+    let current = withEntry(run(), 0, { status: "ok", rows: { read: 3, more: false, total: 3 }, elapsedMs: 5, kept: true });
+    current = withEntry(current, 1, { status: "ok", affected: 12, elapsedMs: 10 });
+
+    expect(scriptTotals(current)).toMatchObject({ changed: 12, returning: 1 });
+    expect(copy.statistics.changed(12, 1)).toBe("Linhas alteradas: 12 (sem contar 1 comando que gravou e devolveu linhas)");
+    expect(copy.statistics.changed(1200, 2)).toBe("Linhas alteradas: 1.200 (sem contar 2 comandos que gravaram e devolveram linhas)");
+    expect(copy.statistics.changed(12)).toBe("Linhas alteradas: 12");
   });
 
   it("o comando que fica com erro no fim (a rede de segurança) conta nos totais", () => {
@@ -143,6 +153,7 @@ describe("um script de milhares de comandos (RN-SQL-020)", () => {
         total: entries.length,
         errors: is("error", "skipped"),
         changed: entries.reduce((sum, entry) => sum + (entry.affected !== null && entry.affected > 0 ? entry.affected : 0), 0),
+        returning: entries.filter((entry) => entry.rows !== null && entry.rows.total !== null).length,
         elapsedMs: entries.reduce((sum, entry) => sum + (entry.elapsedMs ?? 0), 0),
         dropped: entries.filter((entry) => entry.kept === false).length,
       };
@@ -150,7 +161,7 @@ describe("um script de milhares de comandos (RN-SQL-020)", () => {
     let current = many(600);
     for (let index = 0; index < 600; index += 7) {
       current = startEntry(current, index);
-      current = withEntry(current, index, index % 3 === 0 ? { status: "ok", affected: index % 5 === 0 ? -1 : index, elapsedMs: 3 } : index % 3 === 1 ? { status: "error", error: { title: "Erro", message: null, sqlState: null }, elapsedMs: 2 } : { status: "ok", rows: { read: 1, more: false, total: null }, kept: index <= 300, elapsedMs: 1 });
+      current = withEntry(current, index, index % 3 === 0 ? { status: "ok", affected: index % 5 === 0 ? -1 : index, elapsedMs: 3 } : index % 3 === 1 ? { status: "error", error: { title: "Erro", message: null, sqlState: null }, elapsedMs: 2 } : { status: "ok", rows: { read: 1, more: false, total: index % 4 === 0 ? 1 : null }, kept: index <= 300, elapsedMs: 1 });
       // "Tentar de novo" e "Pular": o mesmo comando muda outra vez.
       if (index % 3 === 1) current = withEntry(startEntry(current, index), index, { status: "skipped", error: { title: "Erro", message: null, sqlState: null } });
     }

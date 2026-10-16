@@ -64,8 +64,13 @@ export type ScriptPhase = "running" | "paused" | "done" | "stopped" | "cancelled
 /** Uma aba de resultado guardada: o comando (a posição dele no script, `entryAt`) e as linhas como estavam quando ele terminou. */
 export type ScriptResult = { entry: number; rows: RowsState };
 
-/** Os totais das Estatísticas (RN-SQL-020): os que deram certo, quantos o script tem, os com erro, as linhas alteradas, o tempo e os resultados sem aba. */
-export type ScriptTotals = { ok: number; total: number; errors: number; changed: number; elapsedMs: number; dropped: number };
+/**
+ * Os totais das Estatísticas (RN-SQL-020): os que deram certo, quantos o script tem, os com erro, as linhas alteradas, o tempo e os resultados sem aba.
+ * `returning` são os comandos que gravaram e devolveram linhas (RN-SQL-013, o `INSERT … RETURNING`): a API diz quantas linhas eles devolveram, e não
+ * quantas alteraram (um `WITH` que apaga mil linhas e devolve a contagem delas devolve uma), então eles não somam nas linhas alteradas, e as
+ * Estatísticas dizem quantos ficaram de fora.
+ */
+export type ScriptTotals = { ok: number; total: number; errors: number; changed: number; returning: number; elapsedMs: number; dropped: number };
 
 /** Quantos comandos vão numa página do script (`ScriptRun.pages`). */
 const pageSize = 256;
@@ -102,7 +107,7 @@ export function createScriptRun(id: number, commands: readonly RunTarget[]): Scr
   for (let start = 0; start < commands.length; start += pageSize) {
     pages.push(commands.slice(start, start + pageSize).map((target) => ({ target, status: "pending", rows: null, affected: null, elapsedMs: null, error: null, kept: null })));
   }
-  return { id, pages, size: commands.length, totals: { ok: 0, total: commands.length, errors: 0, changed: 0, elapsedMs: 0, dropped: 0 }, results: [], live: null, phase: "running", current: null };
+  return { id, pages, size: commands.length, totals: { ok: 0, total: commands.length, errors: 0, changed: 0, returning: 0, elapsedMs: 0, dropped: 0 }, results: [], live: null, phase: "running", current: null };
 }
 
 /** O comando `index` do script. */
@@ -125,6 +130,8 @@ function weigh(totals: ScriptTotals, entry: ScriptEntry, sign: 1 | -1): ScriptTo
     errors: totals.errors + (entry.status === "error" || entry.status === "skipped" ? sign : 0),
     // O comando para o qual o banco não conta linhas responde um número negativo (RN-SQL-008): não soma.
     changed: totals.changed + (entry.affected !== null && entry.affected > 0 ? sign * entry.affected : 0),
+    // RN-SQL-013: o que gravou e devolveu linhas tem o total das devolvidas, e não o das alteradas: fica de fora da soma, e conta aqui.
+    returning: totals.returning + (entry.rows !== null && entry.rows.total !== null ? sign : 0),
     elapsedMs: totals.elapsedMs + sign * (entry.elapsedMs ?? 0),
     dropped: totals.dropped + (entry.kept === false ? sign : 0),
   };
