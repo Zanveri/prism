@@ -318,6 +318,12 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   (`CONNECTION_INVALID`, `FOLDER_NAME_INVALID`) no campo, e `INVALID_PASSWORD` no diálogo de revelar. As recusas de
   regra (`FOLDER_NOT_EMPTY`, `FOLDER_CYCLE`, `*_ALREADY_EXISTS`) seguem para o aviso central, que escreve o
   `title` e o `detail` da API: a frase da regra é da API, não da tela.
+- **Os textos da conexão e da pasta** (RN-CONN-010 e RN-PASTA-001, seção 34): o nome, o host, o banco de dados, o usuário e o nome do ambiente recusam o
+  caractere de controle e o de direção do texto (`withoutControl`, em `connections.schema.ts`: `\p{Cc}`, U+200E, U+200F, U+202A a U+202E e U+2066 a U+2069),
+  com "<campo> não pode ter caractere de controle nem de direção do texto."; nos nomes (`asName`) a conferência é depois da normalização da API, que junta
+  os espaços (a tabulação e a quebra de linha viram espaço e passam), e no host, no banco e no usuário, depois de aparados. O host tem até 255 caracteres,
+  o banco de dados e o usuário até 128, e a senha até 1.024, contada como veio. São as regras da importação (RN-TRANSF-014), para o arquivo que o Prism
+  exporta voltar por ela; a API confere do mesmo jeito.
 - **Revelar senha** (`reveal-password-dialog.tsx`): `gcTime: 0` e `mutation.reset()` assim que a resposta chega, para
   nem a senha do usuário nem a da conexão ficarem no cache. A senha da conexão vai ao estado do formulário aberto
   (`ConnectionForm`) e sai com ele: a página o remonta (`key`) a cada conexão e a cada gravação. O `VAULT_LOCKED`
@@ -1167,7 +1173,9 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   copiar."), "Copiar nome" copia o nome cru, e "Copiar nome qualificado" o que o "Gerar SELECT" escreve depois do `FROM`: `"esquema"."nome"`,
   pelo mesmo `quoteIdentifier` do `table-sql.ts` (**a regra única das aspas**: duas aspas duplas sempre, nos três bancos, com a aspa de
   dentro dobrada); "Editar conexão" usa `editConnectionTo` (ver "Conexões"); a pasta reaproveita o `FolderDialog` e o
-  `DeleteFolderDialog` da tela de Conexões (`folder-action-dialogs.tsx` só escolhe qual).
+  `DeleteFolderDialog` da tela de Conexões (`folder-action-dialogs.tsx` só escolhe qual). Exportar e importar conexões (RN-TRANSF-001) têm um grupo
+  próprio antes de "Copiar nome" na conexão e na pasta, e um depois de "Nova conexão" e "Nova pasta" no espaço vazio (`backgroundMenu(temItens)`): ver
+  "Exportar e importar conexões".
 - **F2, Renomear e Duplicar conexão** (RN-NAV-009 e RN-CONN-016). O F2 sem modificador na linha da pasta ou da conexão é `keyActionFor`
   (`_lib/navigator-menu.ts`, pura), que devolve a MESMA `MenuAction` do item do menu que mostra o atalho F2 (o "Renomear" da pasta e o da
   conexão), e a árvore a executa pelo `runMenuAction`, como se viesse do menu; nas outras linhas, e com Shift, Ctrl, Alt ou Cmd, não faz nada.
@@ -2004,6 +2012,93 @@ quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota
   duplicada, desliga os dois filtros quando eles a escondem.
 - **O que não foi feito**: a verificação de cada banco aberto da conexão (RN-ARVORE-006; uma sessão qualquer da conexão responde por ela, como a
   especificação deixa para depois) e a conferência na tela (só os testes; o arrasto entre janelas sob o Xvfb não foi refeito para a vez da verificação).
+
+## Exportar e importar conexões (RN-TRANSF-001 a 016)
+
+Seção 34 da especificação, pedido do dono em 2026-10-16 ("compartilhar alguns dos bancos ou todos os bancos e eu decidir se deve ir o usuário e senha
+junto"). **Quem monta e quem lê o arquivo é a API**: a tela nunca recebe uma senha de banco (RN-CONN-001). Na exportação ela recebe o texto do arquivo já
+cifrado e o entrega ao diálogo de salvar do sistema; na importação ela lê o arquivo escolhido como texto e o manda à API, que o abre e devolve a prévia. O
+Electron não ganhou canal novo.
+
+- **Onde mora cada parte** (`src/app/connections`). `_lib/transfer.schema.ts` (o contrato das três rotas, com zod: a prévia que traga `password` é recusada
+  por inteiro, e o item que não pode ser importado vem como veio, com os textos nulos e o banco que este Prism não conhece nulo), `_lib/transfer.service.ts`
+  (as rotas, as recusas que cada diálogo mostra no lugar, `exportRefusals` e `importRefusals`, e as mutações `exportMutation`, `previewMutation` e
+  `importMutation`), `_lib/transfer.copy.ts` (todos os textos), `_lib/passphrase.ts` (a senha de exportação), `_lib/check-tree.ts` (a árvore de marcar, a
+  mesma nos dois diálogos), `_lib/export-model.ts` e `_lib/import-model.ts` (o que cada diálogo decide), todos puros e testados; e os diálogos,
+  `export-connections-dialog.tsx` e `import-connections-dialog.tsx`, com `check-tree-view.tsx` (a caixa de três estados, a linha e a busca). O navegador os
+  abre (`TransferDialog` em `navigator.tsx`, um de cada por janela).
+- **As entradas** (RN-TRANSF-001, `navigator-menu.ts`): "Exportar conexão…" na conexão (só ela marcada), "Exportar conexões…" e "Importar conexões aqui…" na
+  pasta (ela e tudo o que está dentro marcados; ela como o lugar), e, no espaço vazio, "Exportar conexões…" (nada marcado; desabilitado, com "Não há pastas
+  nem conexões para exportar.", sem pasta e sem conexão no cofre) e "Importar conexões…" (na raiz). Valem em qualquer estado da conexão. A barra de ações não
+  ganhou botão (não cabe, RN-NAV-002), e a seção Scripts não tem as entradas. Os ícones são a seta de baixar (`DownloadIcon`) e a de subir (`UploadIcon`).
+- **Nada sobra quando o diálogo fecha.** As marcas, as escolhas, as senhas digitadas, o arquivo lido e a prévia são estado do diálogo, e mais nada: nem o
+  navegador, nem as preferências, nem `localStorage`. O bloqueio e o "Sair" os fecham (o navegador guarda a época do bloqueio com o diálogo aberto e o tira
+  quando ela muda; o "Sair" desmonta tudo). **As chamadas que levam senha ou arquivo não ficam no cache de mutações**: as três mutações têm `gcTime: 0` (a
+  mutação sem observador, do diálogo que fechou antes da resposta, sai do cache quando ela chega) e o diálogo chama `reset()` assim que a resposta chega,
+  também na recusa e na falha (assinada, ela ficaria lá com `variables` e `data`). O `transfer.service.test.ts` roda as mutações num cache de verdade e
+  confere o cache vazio depois de cada chamada; os testes dos diálogos conferem o `reset()`.
+- **A árvore de marcar** (`check-tree.ts`, RN-TRANSF-002 e 011). **O que se marca são as folhas**: as conexões e as pastas vazias; na prévia, também a pasta que
+  pode ser importada e só tem dentro o que não pode (ela vai sozinha, e a API a conta marcada na prévia), que tem a caixa dela e continua com a seta de abrir e
+  fechar (`node.end > node.index + 1`, e não `!leaf`). A caixa da pasta com algo que se marca dentro mostra o estado de tudo o que está dentro dela, à vista ou
+  não (`checkStates`, de baixo para cima, de uma vez), e o clique nela marca ou desmarca esse conteúdo; com a busca, "Marcar todas", "Desmarcar todas" e a caixa
+  da pasta agem só no que a busca mostra (`visible`). **As pastas fechadas são guardadas como no navegador** (`Collapsed`, `collapsedFor` e `toggleCollapsed`,
+  RN-BUSCA-001): as fechadas sem busca e as fechadas na busca de agora, à parte; com a busca, o que casa aparece com os ancestrais abertos (a pasta fechada
+  antes dela abre), outro texto começa com tudo aberto, e limpar a busca devolve as fechadas de antes. As pastas do caminho de cada folha marcada vão sozinhas
+  (`foldersInFile`): por isso a pasta de uma conexão marcada fica mista e não há como deixá-la de fora. O que outra janela excluiu sai com a marca
+  (`validMarks`), e o que ela criou aparece desmarcado. A lista não é virtual: o Tab anda por todas as caixas e escolhas, e as linhas têm
+  `content-visibility: auto` para o navegador pular o desenho das que estão fora da vista (com 4.000 linhas, RN-TRANSF-006). A caixa mista é o `indeterminate`
+  do próprio `<input>`, posto pela referência a cada desenho (`indeterminateRef`, testada sem DOM). **Acessível**: a caixa tem o nome do item e, por
+  `aria-describedby` (um texto `hidden`, que o leitor lê pela ligação e não de novo ao percorrer a lista), o caminho de pastas (`pathOf`, "Na pasta Estoque /
+  Production PRD": as "NOMINAL" se repetem em cada ambiente), também na escolha do que vai; na prévia, também a segunda linha e cada marca com a explicação dela
+  (`rowDescription`), que na tela só está na dica do mouse. A seta da pasta tem um nome que não muda ("Conteúdo de Estoque") e o `aria-expanded`. O motivo do
+  item que não pode ser importado aparece inteiro, numa linha que quebra (`note`), e não no fim da segunda linha, que corta. **O Enter nunca envia o formulário
+  sem querer**: o botão de enviar fica no rodapé (o atributo `form`), e o navegador transformaria o Enter numa busca, numa caixa, num rádio ou em "Mostrar
+  senha" em envio. Os dois diálogos barram o Enter num `<input>` (`enterInputID`, no `onKeyDown` do formulário): na exportação, menos nos dois campos da senha,
+  onde ele exporta; na importação, sempre (importar é só o botão), e na senha de exportação, antes da prévia, ele é o "Abrir arquivo". A busca engole o Enter
+  dela também.
+- **Exportar** (RN-TRANSF-002 a 008). A árvore é a das listas do navegador, inteira, sem os filtros dele; aberto pela conexão ou pela pasta, o diálogo rola
+  até ela. Cada conexão tem a escolha do que vai ("Sem usuário e senha", o padrão; "Só o usuário"; "Usuário e senha"), só com o que ela tem gravado
+  (`credentialsOffered`) e desabilitada quando desmarcada; os botões "Para as marcadas:" põem a escolha em todas (as que a busca mostra), cada uma com o mais
+  perto que ela tem (`closestCredentials`). A senha de exportação (`passphrase.ts`): NFC antes de contar e de usar, de 12 a 128 unidades UTF-16, sem espaço
+  nas pontas pela lista da RN-TRANSF-004 (e não o `trim()`), sem caractere de controle; as duas comparadas em NFC; a mesma lista de casos de teste vale na
+  API. A ordem ao clicar "Exportar…": os limites que a tela sabe (2.000 conexões, 2.000 pastas, 32 níveis da raiz, `exceedsLimits`), as recusas da senha,
+  e só então, com alguma senha de banco no arquivo, o "Confirme a sua senha" (o `UserPasswordDialog` genérico, com o texto e o botão da exportação, na
+  mesma contagem de cinco erros); sem senha de banco, o pedido sai direto, sem `userPassword`. A recusa que não é da senha do Prism fecha o "Confirme a sua
+  senha" e volta ao diálogo: a senha de exportação igual à do Prism no campo dela (a frase é da tela), os limites acima dos botões, e o item que outra janela
+  excluiu (as listas vêm de novo, o aviso de erro diz o que fazer e o diálogo fica). Feita a exportação, o texto vai ao `saveText` (o do "Exportar CSV")
+  como `conexoes-prism-AAAA-MM-DD.prismconexoes` (a data da máquina), tipo `application/octet-stream`, e o aviso de sucesso diz o que foi; a resposta que
+  chega com o cofre bloqueado, ou depois de um bloqueio (a época mudou), é descartada.
+- **Importar** (RN-TRANSF-009 a 014). Um `<input type="file" accept=".prismconexoes">` escondido, aberto pelo botão "Escolher arquivo…"; o de mais de 5 MiB é
+  recusado antes de ser lido, e o resto é lido por `File.text()`. A senha perde os espaços das pontas (a mesma lista) e passa a NFC. "Abrir arquivo" pede a
+  prévia; trocar o arquivo ou a senha a apaga (`generation`: a resposta de um pedido de antes é ignorada), e com ela o que era dela: a busca, as pastas fechadas (as
+  chaves `f1`, `c1`… se repetem de um arquivo para outro), a escolha dos conflitos e a caixa "Manter as consultas de verificação do arquivo", que volta
+  desmarcada (o arquivo de outra pessoa não herda o "manter" do de antes); o lugar fica; trocar "Onde colocar" com ela à vista a refaz e
+  mantém as marcas, um pedido por vez (a troca durante o pedido espera e refaz uma vez, com o último lugar). As recusas da leitura vão ao campo a que se
+  referem, com a frase da tela (`readRefusal`), sem aviso: a senha recusada fica no campo, selecionada; a do arquivo leva o foco ao "Escolher arquivo…"; a
+  pasta escolhida que sumiu deixa "Onde colocar" sem escolha. As frases do arquivo e do lugar têm `role="alert"`, e a frase de cima da prévia (a que diz
+  como chegar a ela, "Abrindo…" e o resumo) é uma região `aria-live` que está sempre na tela, para o resumo ser anunciado quando chega. A prévia mostra o resumo, o aviso de conferir os servidores, a árvore do arquivo (o que não pode ser importado sem caixa que se marque, com o
+  motivo) e as marcas de cada linha (`folderTags`, `connectionTags`: "já existe", "entra como …"/"não será importada", o que a importação grava para não
+  ficar mais fraco, com a pasta do arquivo que dava a proteção na dica, e "consulta própria", com a consulta inteira); a escolha dos conflitos e a caixa
+  "Manter as consultas de verificação do arquivo" só aparecem quando há o que escolher. Importado, as listas vêm de novo (na `onSuccess` da própria
+  mutação), o aviso diz o que aconteceu (`importToast`), e o navegador abre as pastas até o que entrou e dá o foco à primeira linha importada
+  (`importRevealOf`, em `navigator-reveal.ts`, depois de as listas trazerem tudo, `importArrived`); com um filtro que a esconda, à pasta de destino ou à
+  primeira linha à vista, e os filtros ficam.
+- **A conexão sem usuário e senha** (RN-TRANSF-015 e 016, `workbench/_lib/credentials-missing.ts`). A dica da linha na árvore ganha " · sem usuário e senha"
+  ou " · sem senha" (`credentialsHint`); a linha não ganha marca. Abrir uma sessão com ela é recusado pela API com 422 `CONNECTION_CREDENTIALS_MISSING` no
+  campo que falta (`credentialsMissingField`), que não vira aviso (é erro de campo). Quem abre sessão pede o "Editar conexão" pelo `credentialsRequests` (um
+  pedido só, o último): o executor da aba pede direto (a aba fica com o resultado de antes e o comando sem sair), e as sessões da árvore (o nó, a Estrutura,
+  o Diagrama, a lista dos bancos da barra do editor, outro banco do servidor) são observadas no cache (`watchCredentialsMissing`, ligado pela página da área
+  de trabalho). O nó da conexão recusada fica fechado e desconectado, sem a linha de erro (`lacksCredentials`, em `navigator.tsx`). A página atende o
+  pedido uma vez, com a área de trabalho na tela, e não abre por cima de um diálogo de conexão já aberto. O formulário, aberto assim ou pelo menu, diz no
+  topo o que falta e põe o foco no campo (`missingCredentials`); salvar a edição de uma conexão sem senha gravada exige a senha
+  (`editWithoutPasswordSchema`), e "Testar conexão" com a senha em branco leva a recusa da API ao campo da senha.
+- **O contrato que a tela assume** (a API foi feita ao mesmo tempo, pela seção 34): `POST api/user/connections/export` com `{ folderIDs, connections: [{ id,
+  credentials }], passphrase, userPassword? }` → `{ content, folders, connections, withUser, withPassword }`; `POST api/user/connections/import/preview` com
+  `{ content, passphrase, targetFolderID }` → `{ folders, connections }` (os campos da tabela da seção 34); `POST api/user/connections/import` com `{ content,
+  passphrase, targetFolderID, items, onConflict, keepVerificationQueries }` → `{ folderIDs, connectionIDs, mergedFolders, renamed, skipped }`. Os testes
+  simulam a API.
+- **O que não foi feito**: a conferência na tela (só os testes; a API das rotas não estava pronta), e o diálogo de salvar do sistema concluído por uma
+  pessoa, como no "Exportar CSV".
 
 ## Configurações (`src/app/settings`)
 
