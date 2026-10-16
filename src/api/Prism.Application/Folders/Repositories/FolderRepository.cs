@@ -114,7 +114,10 @@ internal sealed class FolderRepository(IVaultService vaultService) : IFolderRepo
             return document with { Folders = [.. document.Folders.Where(record => record.ID != id)] };
         }, cancellationToken);
 
-    /// <summary>O padrão das proteções se grava nulo (RN-PROT-001 e 002): a pasta gravada antes delas e a de agora sem nada escolhido são iguais.</summary>
-    private static VaultFolderRecord ToRecord(Folder folder)
+    /// <summary>
+    /// O padrão das proteções se grava nulo (RN-PROT-001 e 002): a pasta gravada antes delas e a de agora sem nada escolhido são iguais. A importação de
+    /// conexões (RN-TRANSF-014) cria as pastas dela por aqui também.
+    /// </summary>
+    internal static VaultFolderRecord ToRecord(Folder folder)
         => new(folder.ID, folder.ParentID, folder.Name, folder.CreatedAt, folder.UpdatedAt, folder.EnvironmentName, folder.EnvironmentColor, folder.Color, folder.ConfirmCommands, ProtectionRules.ToRecord(folder.ReadOnly));
 }

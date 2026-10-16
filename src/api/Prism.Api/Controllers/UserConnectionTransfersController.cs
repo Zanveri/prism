@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Prism.Application.ConnectionTransfers.Features.ExportConnections;
+using Prism.Application.ConnectionTransfers.Features.ImportConnections;
+using Prism.Application.ConnectionTransfers.Features.PreviewConnectionsImport;
 using Prism.Application.ConnectionTransfers.Models;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
@@ -26,6 +28,38 @@ public sealed class UserConnectionTransfersController(IMediator mediator) : Cont
     [HttpPost("export")]
     [RequestSizeLimit(TransferLimits.ExportRequestBytes)]
     public async Task<IActionResult> ExportConnections([FromBody] ExportConnectionsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-TRANSF-010 e 011: `{ content, passphrase, targetFolderID? }` responde 200 `{ folders, connections }`, a árvore do arquivo com o que a importação faria
+    /// no lugar escolhido, sem gravar nada. Recusas: 404 `FOLDER_NOT_FOUND` (o lugar); 409 `IMPORT_FILE_NEWER`; 422 `IMPORT_FILE_INVALID` e
+    /// `IMPORT_LIMITS_EXCEEDED` (no campo `content`), `IMPORT_PASSPHRASE_INVALID` e `IMPORT_PASSPHRASE_WRONG` (no campo `passphrase`).
+    /// </summary>
+    [HttpPost("import/preview")]
+    [RequestSizeLimit(TransferLimits.ImportRequestBytes)]
+    public async Task<IActionResult> PreviewConnectionsImport([FromBody] PreviewConnectionsImportCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// RN-TRANSF-012 a 014: `{ content, passphrase, targetFolderID?, items, onConflict, keepVerificationQueries? }` responde 200 `{ folderIDs, connectionIDs,
+    /// mergedFolders, renamed, skipped }`, numa gravação só do cofre. Recusas: as da prévia, mais 422 `IMPORT_EMPTY` e `IMPORT_INVALID` (no campo `items` ou
+    /// `onConflict`); 401 `VAULT_LOCKED` quando o cofre muda antes da gravação.
+    /// </summary>
+    [HttpPost("import")]
+    [RequestSizeLimit(TransferLimits.ImportRequestBytes)]
+    public async Task<IActionResult> ImportConnections([FromBody] ImportConnectionsCommand command, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(command, cancellationToken);
         if (result.IsFailure)

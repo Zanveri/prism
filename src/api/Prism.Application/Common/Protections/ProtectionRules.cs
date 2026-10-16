@@ -107,7 +107,8 @@ internal static class ProtectionRules
     public static IReadOnlyDictionary<Guid, VaultFolderRecord> FoldersOf(VaultDocument document)
         => document.Folders.ToDictionary(folder => folder.ID);
 
-    private static int Rank(string? confirmCommands)
+    /// <summary>RN-PROT-001 e 004: a força da confirmação, de "Não" (0) a "Todos os comandos" (2). Vale a mais forte; a importação a usa para não afrouxar (RN-TRANSF-013).</summary>
+    public static int Rank(string? confirmCommands)
         => confirmCommands switch
         {
             ConfirmAll => 2,
