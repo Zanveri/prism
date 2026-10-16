@@ -234,7 +234,14 @@ public sealed class TransferServiceTests : IAsyncDisposable
         var service = CreateService([new ExportConnection(), .. blocked, new ExportConnection()]);
         var done = service.StartExport(Job()).Value;
         await FinishedAsync(service, done);
-        var running = blocked.Select(_ => service.StartExport(Job()).Value).ToList();
+
+        // Um de cada vez: os trabalhos pegam a conexão da fila na ordem em que conectam, e não na ordem do começo.
+        var running = new List<Guid>();
+        foreach (var connection in blocked)
+        {
+            running.Add(service.StartExport(Job()).Value);
+            await UntilAsync(service, running[^1], _ => connection.Reading);
+        }
 
         //Act
         var fourth = service.StartExport(Job());
@@ -302,15 +309,19 @@ public sealed class TransferServiceTests : IAsyncDisposable
         //Arrange
         var stuck = new ExportConnection { Block = new TaskCompletionSource(), IgnoresCancel = true };
         var service = CreateService([stuck, new ExportConnection(), new ExportConnection(), new ExportConnection()]);
+        // O parado primeiro, e só depois os outros: os trabalhos pegam a conexão da fila na ordem em que conectam.
         var id = service.StartExport(Job()).Value;
-        service.StartExport(Job());
-        service.StartExport(Job());
         await UntilAsync(service, id, _ => stuck.Reading);
+        service.StartExport(Job());
+        service.StartExport(Job());
 
         //Act
+        // A tela consulta enquanto espera, como faria: com a máquina carregada o laço pode passar dos 5 minutos do relógio de mentira antes de o
+        // `DELETE` voltar, e o trabalho sem consulta seria abandonado no meio do teste.
         var deleting = service.DeleteAsync(id);
         while (!deleting.IsCompleted)
         {
+            service.Get(id);
             _clock.Advance(TimeSpan.FromSeconds(1));
             await Task.Delay(10);
         }
@@ -323,6 +334,94 @@ public sealed class TransferServiceTests : IAsyncDisposable
         Assert.Equal(ETransferState.Canceled, info!.State);
         Assert.True(another.IsSuccess);
         stuck.Block!.SetResult();
+    }
+
+    /// <summary>
+    /// RN-EXPORT-016: a conexão meio aberta pode prender o próprio `Cancel` na rede; o prazo de 10 segundos corre assim mesmo, e o `DELETE` volta com o
+    /// trabalho cancelado, em vez de esperar o aviso do cancelamento.
+    /// </summary>
+    [Trait("TransferService", "DeleteAsync")]
+    [Fact(DisplayName = "OK o prazo do cancelamento corre mesmo com o Cancel da conexão preso")]
+    public async Task Delete_ShouldGiveUp_EvenWhenTheCancelOfTheConnectionHangs()
+    {
+        //Arrange
+        var hang = new TaskCompletionSource();
+        var stuck = new ExportConnection { Block = new TaskCompletionSource(), IgnoresCancel = true, CancelHangs = hang.Task };
+        var service = CreateService(stuck);
+        var id = service.StartExport(Job()).Value;
+        await UntilAsync(service, id, _ => stuck.Reading);
+
+        //Act
+        var deleting = service.DeleteAsync(id);
+        for (var attempt = 0; attempt < 1000 && !deleting.IsCompleted; attempt++)
+        {
+            service.Get(id);
+            _clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10);
+        }
+
+        var returned = deleting.IsCompleted;
+        var info = service.Get(id);
+        hang.SetResult();
+        stuck.Block!.SetResult();
+
+        //Assert
+        Assert.True(returned);
+        Assert.True(await deleting);
+        Assert.Equal(ETransferState.Canceled, info!.State);
+        Assert.True(stuck.Canceled);
+    }
+
+    /// <summary>
+    /// RN-EXPORT-016: o cancelamento que chega depois do fim não muda o fim, e esquece. O trabalho que termina `done` com o `DELETE` a caminho (o último
+    /// lote chegou antes do cancelamento) sai do registro com o arquivo pronto: a tela já o deu por cancelado, e ele não ficaria como pronto e não
+    /// entregue até o abandono.
+    /// </summary>
+    [Trait("TransferService", "DeleteAsync")]
+    [Fact(DisplayName = "OK o trabalho que termina apesar do cancelamento é esquecido, sem arquivo")]
+    public async Task Delete_ShouldForgetTheTransferThatFinishedDespiteTheCancel()
+    {
+        //Arrange
+        var connection = new ExportConnection { Block = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously), FinishesDespiteCancel = true };
+        var service = CreateService(connection);
+        var id = service.StartExport(Job()).Value;
+        await UntilAsync(service, id, _ => connection.Reading);
+
+        //Act
+        var deleted = await service.DeleteAsync(id);
+
+        //Assert
+        Assert.True(deleted);
+        Assert.True(connection.Canceled);
+        Assert.Null(service.Get(id));
+        Assert.Empty(service.List());
+        Assert.Empty(Directory.GetFiles(Folder));
+    }
+
+    /// <summary>
+    /// RN-EXPORT-018: o `DELETE` que chega com o trabalho já `done`, mas antes de o fim dele acabar (aqui, preso no log do fim), apaga o arquivo pronto: quem
+    /// apaga se decide sob a trava, e não pela tarefa que ainda não completou.
+    /// </summary>
+    [Trait("TransferService", "DeleteAsync")]
+    [Fact(DisplayName = "OK esquecer o trabalho cujo fim ainda escreve o log apaga o arquivo pronto")]
+    public async Task Delete_ShouldRemoveTheReadyFile_WhileTheEndIsStillLogging()
+    {
+        //Arrange
+        var sink = new BlockingSink("Exportação {TransferID} terminou");
+        var logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
+        var service = CreateService(new QueueClient([new ExportConnection()]), logger);
+        var id = service.StartExport(Job()).Value;
+        await sink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        //Act
+        var forgotten = await service.DeleteAsync(id);
+        var files = Directory.GetFiles(Folder);
+        sink.Release.SetResult();
+
+        //Assert
+        Assert.True(forgotten);
+        Assert.Empty(files);
+        Assert.Null(service.Get(id));
     }
 
     /// <summary>RN-EXPORT-016: o trabalho que ninguém consulta por 5 minutos, em qualquer estado, é abandonado: cancelado, esquecido e sem arquivo.</summary>
@@ -460,6 +559,42 @@ public sealed class TransferServiceTests : IAsyncDisposable
         Assert.Empty(Directory.GetFiles(Folder));
     }
 
+    /// <summary>RN-EXPORT-016: a API que encerra não fica presa no `Cancel` da conexão meio aberta: o prazo de 10 segundos corre assim mesmo.</summary>
+    [Trait("TransferService", "DisposeAsync")]
+    [Fact(DisplayName = "OK o descarte termina no prazo mesmo com o Cancel da conexão preso")]
+    public async Task Dispose_ShouldGiveUp_EvenWhenTheCancelOfTheConnectionHangs()
+    {
+        //Arrange
+        var hang = new TaskCompletionSource();
+        var stuck = new ExportConnection { Block = new TaskCompletionSource(), IgnoresCancel = true, CancelHangs = hang.Task };
+        var service = CreateService(stuck);
+        _services.Remove(service);
+        var id = service.StartExport(Job()).Value;
+        await UntilAsync(service, id, _ => stuck.Reading);
+
+        //Act
+        var disposing = service.DisposeAsync().AsTask();
+        for (var attempt = 0; attempt < 1000 && !disposing.IsCompleted; attempt++)
+        {
+            _clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10);
+        }
+
+        var returned = disposing.IsCompleted;
+        hang.SetResult();
+        stuck.Block!.SetResult();
+        await disposing;
+
+        // O trabalho para depois de solto e apaga o arquivo dele, que saiu do registro: o teste espera isso antes de apagar a pasta.
+        for (var attempt = 0; attempt < 1000 && Directory.GetFiles(Folder).Length > 0; attempt++)
+            await Task.Delay(10);
+
+        //Assert
+        Assert.True(returned);
+        Assert.True(stuck.Canceled);
+        Assert.Empty(Directory.GetFiles(Folder));
+    }
+
     /// <summary>RN-LOG-001: o log da exportação leva o identificador, a conexão, o formato e as contagens; nunca o comando, os valores, os nomes nem a mensagem do banco.</summary>
     [Trait("TransferService", "StartExport")]
     [Fact(DisplayName = "OK o log não leva o comando, os valores, os nomes nem a mensagem do banco")]
@@ -482,6 +617,23 @@ public sealed class TransferServiceTests : IAsyncDisposable
         Assert.Contains("22012", text, StringComparison.Ordinal);
         foreach (var secret in new[] { "SELECT", "loja.pedido", "cliente", "secreto", "segredo", "db.invalid", "pedido", _data })
             Assert.DoesNotContain(secret, text, StringComparison.Ordinal);
+    }
+
+    /// <summary>O sink que prende a thread que escreve a mensagem dada até o teste soltá-la, e avisa quando a prendeu.</summary>
+    private sealed class BlockingSink(string template) : Serilog.Core.ILogEventSink
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Emit(LogEvent logEvent)
+        {
+            if (!logEvent.MessageTemplate.Text.StartsWith(template, StringComparison.Ordinal))
+                return;
+
+            Entered.TrySetResult();
+            Release.Task.Wait(TimeSpan.FromSeconds(30));
+        }
     }
 
     private sealed class CollectingSink : Serilog.Core.ILogEventSink
@@ -514,7 +666,9 @@ public sealed class TransferServiceTests : IAsyncDisposable
 
     /// <summary>
     /// A conexão de mentira da exportação: as colunas e as linhas dadas, entregues num lote só; a recusa ao ler; o valor acima do teto; e a leitura que
-    /// espera (`Block`), que o cancelamento interrompe, a não ser a da conexão que não responde a ele (`IgnoresCancel`).
+    /// espera (`Block`), que o cancelamento interrompe, a não ser a da conexão que não responde a ele (`IgnoresCancel`) e a da que termina a leitura
+    /// apesar dele (`FinishesDespiteCancel`: o último lote chega antes do cancelamento). `CancelHangs` prende o próprio `Cancel`, como a rede da conexão
+    /// meio aberta, até o teste soltá-lo.
     /// </summary>
     private sealed class ExportConnection : IDatabaseConnection
     {
@@ -534,6 +688,10 @@ public sealed class TransferServiceTests : IAsyncDisposable
 
         public bool IgnoresCancel { get; init; }
 
+        public bool FinishesDespiteCancel { get; init; }
+
+        public Task? CancelHangs { get; init; }
+
         public List<string> Calls { get; } = [];
 
         public ExportReadPlan? Plan { get; private set; }
@@ -551,7 +709,13 @@ public sealed class TransferServiceTests : IAsyncDisposable
         public bool HasOpenCursor => false;
 
         public void Cancel()
-            => Canceled = true;
+        {
+            Canceled = true;
+            if (FinishesDespiteCancel)
+                Block?.TrySetResult();
+
+            CancelHangs?.Wait(TimeSpan.FromSeconds(60));
+        }
 
         public ValueTask DisposeAsync()
         {
@@ -587,8 +751,8 @@ public sealed class TransferServiceTests : IAsyncDisposable
             Reading = true;
             if (Block is not null)
             {
-                await Task.WhenAny(Block.Task, IgnoresCancel ? Block.Task : Task.Delay(Timeout.Infinite, cancellationToken));
-                if (cancellationToken.IsCancellationRequested)
+                await Task.WhenAny(Block.Task, IgnoresCancel || FinishesDespiteCancel ? Block.Task : Task.Delay(Timeout.Infinite, cancellationToken));
+                if (cancellationToken.IsCancellationRequested && !FinishesDespiteCancel)
                     return new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "O comando foi cancelado.", Outcome: ECancelOutcome.Canceled);
             }
 
