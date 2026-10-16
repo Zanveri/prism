@@ -5,6 +5,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using ILogger = Serilog.ILogger;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -27,6 +28,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 {
     private const string CommitSql = "COMMIT";
     private const string RollbackSql = "ROLLBACK";
+
+    /// <summary>RN-EXPORT-017: o ponto de salvamento da contagem da exportação, dentro da transação da leitura (no PostgreSQL).</summary>
+    private const string CountSavepointSql = "SAVEPOINT prism_count";
+    private const string ReleaseCountSavepointSql = "RELEASE SAVEPOINT prism_count";
+    private const string RollbackToCountSavepointSql = "ROLLBACK TO SAVEPOINT prism_count";
 
     /// <summary>O SQLSTATE com que o PostgreSQL e o Db2 dizem que interromperam o comando a pedido ("query canceled").</summary>
     private const string QueryCanceledSqlState = "57014";
@@ -271,6 +277,38 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>RN-EDIT-010: o comando que dá à conexão à parte do catálogo um prazo de espera de trava, em vez de esperar para sempre.</summary>
     protected abstract string LockTimeoutSql { get; }
+
+    /// <summary>
+    /// RN-EXPORT-017: os comandos que preparam a conexão à parte da exportação, logo depois de conectar e antes de qualquer transação: o prazo de espera
+    /// de trava, por padrão. O banco que escreve o texto das células conforme a sessão fixa aqui a forma dele (o PostgreSQL).
+    /// </summary>
+    protected virtual IReadOnlyList<string> ExportSessionSql => [LockTimeoutSql];
+
+    /// <summary>
+    /// RN-EXPORT-017: o comando que abre a transação em que a contagem e a leitura da exportação veem o mesmo instante do banco, sem poder gravar; ela é
+    /// confirmada quando a leitura chega ao fim. Nulo, por padrão: o banco sem transação só de leitura (Db2 e Informix) lê como uma sessão nova.
+    /// </summary>
+    protected virtual string? BeginExportSql => null;
+
+    /// <summary>RN-EXPORT-017: como o leitor da exportação é aberto. O banco que lê o valor em pedaços (<see cref="ReadExportCellAsync"/>) pede o acesso sequencial.</summary>
+    protected virtual CommandBehavior ExportBehavior => CommandBehavior.Default;
+
+    /// <summary>
+    /// RN-EXPORT-017: uma célula da exportação, inteira, no texto em que a grade a escreve (ou os bytes do binário), com o tamanho dela (o texto em bytes
+    /// de UTF-8, o binário em bytes). O valor acima de `limit` não é guardado: volta nulo, com o tamanho que passou do teto. Por padrão o driver entrega o
+    /// valor inteiro (<see cref="ReadCell"/>), e o teto vale logo depois dele; o banco cujo driver lê em pedaços para ao passar dele, sem montar o valor.
+    /// </summary>
+    protected virtual ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, CancellationToken cancellationToken)
+    {
+        var value = ReadCell(reader, ordinal, kind);
+        if (value is null or DBNull)
+            return ValueTask.FromResult(new ExportCellRead(ExportCell.Null, 0));
+
+        var cell = CellFormatter.ForExport(value);
+        var bytes = cell.Bytes?.LongLength ?? Encoding.UTF8.GetByteCount(cell.Text!);
+
+        return ValueTask.FromResult(bytes > limit ? new ExportCellRead(ExportCell.Null, bytes) : new ExportCellRead(cell, bytes));
+    }
 
     /// <summary>
     /// RN-EDIT-003: de que tabela e coluna vem cada coluna do resultado, quando o banco diz isso na própria resposta, sem consulta a
@@ -787,6 +825,119 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return result.Value.Error with { Applied = written };
     }
 
+    /// <summary>
+    /// RN-EXPORT-017. Os comandos da sessão vão antes da transação (dentro dela seriam desfeitos com ela). A marca da transação sobe antes do envio, como
+    /// na leitura paginada: o `BEGIN` que o banco executou e cuja resposta se perdeu é desfeito pelo fim de sempre.
+    /// </summary>
+    public async Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken)
+        => await RunAsync(nameof(BeginExportAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            foreach (var sql in ExportSessionSql)
+                await NonQueryAsync(sql, token);
+
+            if (BeginExportSql is { } begin)
+            {
+                _inTransaction = true;
+                await NonQueryAsync(begin, token);
+            }
+
+            return true;
+        }, cancellationToken);
+
+    /// <summary>
+    /// RN-EXPORT-017. A contagem passa pelo próprio `Send`, dentro do comando: a recusa do banco é a resposta procurada (sem total), e não a falha do
+    /// comando, que desfaria a transação da leitura. Dentro da transação ela tem um ponto de salvamento só dela, desfeito quando o banco a recusa. O que
+    /// falha depois disso (o ponto de salvamento que não volta, a conexão que caiu) é a falha da operação, e a transação é desfeita pelo fim de sempre.
+    /// Sem transação só de leitura, só a leitura só é contada (<see cref="MayBeCounted"/>), como no "Contar total".
+    /// </summary>
+    public async Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken)
+    {
+        if (!MayBeCounted(sql))
+            return Result.Success<long?, DatabaseFailure>(null);
+
+        return await RunAsync(nameof(CountExportAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var savepoint = _inTransaction;
+            if (savepoint)
+                await NonQueryAsync(CountSavepointSql, token);
+
+            var counted = await Send(nameof(CountExportAsync), EDatabaseFailure.ExecutionFailed, () => CountRowsAsync(CountSql(sql), token));
+
+            // O comando da contagem recusada ficou no campo, para o `Cancel`: sai daqui, descartado.
+            if (_command is { } refused)
+            {
+                _command = null;
+                await refused.DisposeAsync();
+            }
+
+            if (savepoint)
+                await NonQueryAsync(counted.IsSuccess ? ReleaseCountSavepointSql : RollbackToCountSavepointSql, token);
+
+            return counted.IsSuccess ? counted.Value : (long?)null;
+        }, cancellationToken, continuesTheCursor: true);
+    }
+
+    public async Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
+        => await RunAsync(nameof(StartExportReadAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var reader = await StartAsync(sql, [], userCommand: true, token, behavior: ExportBehavior);
+            _columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
+
+            return _columns;
+        }, cancellationToken, continuesTheCursor: true);
+
+    /// <summary>
+    /// RN-EXPORT-017. Um lote por vez, com o mesmo leitor do começo ao fim: quem escreve o arquivo entre um lote e outro é o trabalho, fora do comando,
+    /// e o `Cancel` só alcança a leitura em andamento. O fim do resultado é parte do comando (<see cref="FinishCursorAsync"/>: o `COMMIT` da transação
+    /// e o erro que o banco deixa depois da última linha). O valor ou a linha acima do teto param o lote ali, sem guardar o valor.
+    /// </summary>
+    public async Task<Result<ExportBatch, DatabaseFailure>> ReadExportRowsAsync(ExportReadPlan plan, CancellationToken cancellationToken)
+    {
+        if (_reader is null)
+            return new DatabaseFailure(EDatabaseFailure.NoOpenCursor, NoOpenCursorMessage);
+
+        return await RunAsync(nameof(ReadExportRowsAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var reader = _reader!;
+            var rows = new List<IReadOnlyList<ExportCell>>();
+            long batchBytes = 0;
+
+            while (rows.Count < plan.MaxRows && batchBytes < plan.MaxBatchBytes)
+            {
+                if (!await reader.ReadAsync(token))
+                {
+                    await FinishCursorAsync(token);
+
+                    return new ExportBatch(rows, Finished: true);
+                }
+
+                var cells = new ExportCell[plan.Ordinals.Count];
+                long rowBytes = 0;
+                for (var index = 0; index < cells.Length; index++)
+                {
+                    var ordinal = plan.Ordinals[index];
+                    if (plan.Skipped.Contains(ordinal))
+                        continue;
+
+                    var read = await ReadExportCellAsync(reader, ordinal, _columns[ordinal].Kind, Math.Min(plan.MaxValueBytes, plan.MaxRowBytes - rowBytes), token);
+                    if (read.Bytes > plan.MaxValueBytes)
+                        return new ExportBatch(rows, Finished: false, new ExportOversize(index, WholeRow: false));
+
+                    rowBytes += read.Bytes;
+                    if (rowBytes > plan.MaxRowBytes)
+                        return new ExportBatch(rows, Finished: false, new ExportOversize(index, WholeRow: true));
+
+                    cells[index] = read.Cell;
+                }
+
+                batchBytes += rowBytes;
+                rows.Add(cells);
+            }
+
+            return new ExportBatch(rows, Finished: false);
+        }, cancellationToken, continuesTheCursor: true);
+    }
+
     internal static IReadOnlyList<DatabaseInfo> CurrentFirst(IReadOnlyList<DatabaseInfo> databases)
         => [.. databases.Where(database => database.IsCurrent), .. databases.Where(database => !database.IsCurrent)];
 
@@ -1162,7 +1313,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// </summary>
     /// <param name="userCommand">É comando do usuário: sem tempo limite, porque só para quando ele cancela (RN-SQL-010), e com o ajuste que o banco pede.</param>
     /// <param name="userText">O texto é da pessoa, mas o comando tem o prazo do driver (a consulta de verificação própria, RN-VERIF-001): leva o ajuste que o banco pede num texto dela.</param>
-    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken, bool userText = false)
+    /// <param name="behavior">RN-EXPORT-017: o leitor da exportação, no banco que lê o valor em pedaços, é sequencial.</param>
+    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken, bool userText = false, CommandBehavior behavior = CommandBehavior.Default)
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
@@ -1183,9 +1335,39 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         }
 
         _command = command;
-        _reader = await ExecuteReaderAsync(command, cancellationToken);
+        _reader = behavior == CommandBehavior.Default ? await ExecuteReaderAsync(command, cancellationToken) : await command.ExecuteReaderAsync(behavior, cancellationToken);
 
         return _reader;
+    }
+
+    /// <summary>
+    /// RN-EXPORT-017: a contagem da exportação, lida pelo próprio leitor, sem tocar no da leitura (que nem foi aberto). O comando fica no campo enquanto
+    /// roda, para o `Cancel`; quem chama o tira dele quando a contagem é recusada.
+    /// </summary>
+    private async Task<long> CountRowsAsync(string sql, CancellationToken cancellationToken)
+    {
+        var command = _connection!.CreateCommand();
+        command.CommandText = sql;
+        command.CommandTimeout = 0;
+        ConfigureUserCommand(command);
+
+        _command = command;
+        long total;
+        await using (var reader = await ExecuteReaderAsync(command, cancellationToken))
+        {
+            await reader.ReadAsync(cancellationToken);
+
+            // O total chega como inteiro de 32 bits nos drivers da IBM, de 64 no PostgreSQL tipado e como texto no formato de texto.
+            total = Convert.ToInt64(reader.GetValue(0), CultureInfo.InvariantCulture);
+            while (await reader.NextResultAsync(cancellationToken))
+            {
+            }
+        }
+
+        _command = null;
+        await command.DisposeAsync();
+
+        return total;
     }
 
     /// <summary>
@@ -1387,6 +1569,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>Um par de colunas de uma chave estrangeira, com a chave, as duas pontas e as regras dela.</summary>
     private sealed record ForeignKeyRow(string Name, string ReferencingSchema, string ReferencingTable, string Column, string ReferencedSchema, string ReferencedTable, string ReferencedColumn, string? OnDelete, string? OnUpdate);
+
+    /// <summary>RN-EXPORT-017: uma célula lida para a exportação e o tamanho dela; acima do teto, a célula vem nula, com o tamanho que passou dele.</summary>
+    protected readonly record struct ExportCellRead(ExportCell Cell, long Bytes)
+    {
+        public override string ToString()
+            => nameof(ExportCellRead);
+    }
 
     /// <summary>RN-SESSAO-005: o que a sonda de transação de um banco respondeu, depois de um comando utilitário que o banco confirmou.</summary>
     protected enum ETransactionProbe

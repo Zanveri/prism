@@ -49,6 +49,10 @@ internal static class CellFormatter
     public static FullCellValue Full(object value)
         => value is byte[] bytes ? FullCellValue.Binary(bytes) : FullCellValue.Text(ToText(value));
 
+    /// <summary>RN-EXPORT-002 e 017: a célula da exportação, inteira e sem o corte da grade: o texto no mesmo formato, ou os bytes do binário.</summary>
+    public static ExportCell ForExport(object value)
+        => value is byte[] bytes ? ExportCell.FromBytes(bytes) : ExportCell.FromText(ToText(value));
+
     /// <summary>`text`, `number`, `datetime`, `boolean` ou `binary`, pelo tipo que o driver diz que a coluna entrega.</summary>
     public static string KindOf(Type type)
     {

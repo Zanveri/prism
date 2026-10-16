@@ -1,4 +1,4 @@
-namespace Prism.Infrastructure.Transfers.Models;
+namespace Prism.Infrastructure.Databases.Models;
 
 /// <summary>
 /// RN-EXPORT-002 e 017: uma célula lida para a exportação, inteira e sem o corte da grade: o texto como a grade o escreve (o número com ponto, a data

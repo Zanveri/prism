@@ -1,3 +1,4 @@
+using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Transfers.Models;
 using System.Globalization;
 using System.Text;

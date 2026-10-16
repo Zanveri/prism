@@ -1,7 +1,9 @@
 using Npgsql;
 using NpgsqlTypes;
 using Prism.Infrastructure.Databases.Models;
+using System.Data;
 using System.Data.Common;
+using System.Text;
 using ILogger = Serilog.ILogger;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -49,6 +51,12 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>Uma por conexão, descartada com ela: `new NpgsqlConnection(texto)` guardaria a string de conexão, com a senha, num registro estático do driver até o processo acabar.</summary>
     private NpgsqlDataSource? _dataSource;
+
+    /// <summary>RN-EXPORT-017: os caracteres de cada pedaço de um valor da exportação.</summary>
+    private const int ExportChunkChars = 64 * 1024;
+
+    /// <summary>O pedaço da leitura da exportação, um por conexão (a conexão à parte da exportação lê um valor por vez).</summary>
+    private char[]? _exportBuffer;
 
     /// <summary>
     /// RN-SQL-003: o driver deixa de dividir o texto pelo `;` e de reescrevê-lo, e o comando vai ao banco como o usuário escreveu. Mais
@@ -322,6 +330,58 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
                                                ORDER BY pg_index.indisprimary DESC, index_class.relname, key_position.ordinal";
 
     protected override string LockTimeoutSql => "SET lock_timeout = '5s'";
+
+    /// <summary>
+    /// RN-EXPORT-017 e RN-IMPORT-028: além do prazo de trava, a forma do texto que o servidor escreve, para ela ser a mesma em qualquer servidor e o
+    /// arquivo voltar igual pela importação: a data em ISO, o número de ponto flutuante com todos os dígitos e o binário em hexadecimal. Só a forma do
+    /// texto: nada muda no banco. Num servidor com os padrões, o texto é o mesmo da grade.
+    /// </summary>
+    protected override IReadOnlyList<string> ExportSessionSql => [LockTimeoutSql, "SET DateStyle = 'ISO, YMD'", "SET extra_float_digits = 3", "SET bytea_output = 'hex'"];
+
+    /// <summary>RN-EXPORT-017: a contagem e a leitura veem o mesmo instante do banco, e o que o banco recusa ali por gravar (25006) é a falha da exportação.</summary>
+    protected override string BeginExportSql => "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY";
+
+    /// <summary>RN-EXPORT-017: a leitura sequencial deixa o Npgsql entregar cada valor em pedaços (`GetChars`), sem montar a linha inteira na memória.</summary>
+    protected override CommandBehavior ExportBehavior => CommandBehavior.SequentialAccess;
+
+    /// <summary>
+    /// RN-EXPORT-017. O resultado do comando vem em texto (`AllResultTypesAreUnknown`), e cada valor é lido em pedaços de 64 Ki caracteres, contando os
+    /// bytes enquanto lê (o texto em UTF-8; o binário, `\x` e dois dígitos por byte, pela metade dos dígitos), e para ao passar do teto, sem montar o
+    /// resto. Depois, a mesma volta do <see cref="ReadCell"/>: `t` e `f` viram `true` e `false`, e o binário vira os bytes.
+    /// </summary>
+    protected override async ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, CancellationToken cancellationToken)
+    {
+        if (await reader.IsDBNullAsync(ordinal, cancellationToken))
+            return new ExportCellRead(ExportCell.Null, 0);
+
+        _exportBuffer ??= new char[ExportChunkChars];
+        var text = new StringBuilder();
+        var encoder = Encoding.UTF8.GetEncoder();
+        long offset = 0;
+        long bytes = 0;
+        long read;
+
+        while ((read = reader.GetChars(ordinal, offset, _exportBuffer, 0, _exportBuffer.Length)) > 0)
+        {
+            offset += read;
+            bytes = kind == "binary" ? Math.Max(0, offset - 2) / 2 : bytes + encoder.GetByteCount(_exportBuffer, 0, (int)read, flush: false);
+            if (bytes > limit)
+                return new ExportCellRead(ExportCell.Null, bytes);
+
+            text.Append(_exportBuffer, 0, (int)read);
+        }
+
+        var value = text.ToString();
+        var cell = (kind, value) switch
+        {
+            ("boolean", "t") => ExportCell.FromText("true"),
+            ("boolean", "f") => ExportCell.FromText("false"),
+            ("binary", _) when value.StartsWith(@"\x", StringComparison.Ordinal) => ExportCell.FromBytes(Convert.FromHexString(value.AsSpan(2))),
+            _ => ExportCell.FromText(value)
+        };
+
+        return new ExportCellRead(cell, bytes);
+    }
 
     /// <summary>O nome vem com o modificador (`numeric(12,2)`, `timestamp(3) without time zone`), que sai antes da consulta à tabela.</summary>
     protected override string ColumnKind(DbDataReader reader, int ordinal)
