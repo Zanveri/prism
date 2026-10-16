@@ -3410,11 +3410,14 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
   - No PostgreSQL a origem de cada coluna é a tabela pelo identificador interno dela (o OID), que vem
     na resposta do comando, e não pelo nome: o que um guardado edita é sempre a tabela que ele leu. Se o
     nome escrito sem esquema leva agora a outra tabela (um `SET search_path` depois dele), ou se a
-    tabela foi apagada e criada de novo (o OID é outro), as colunas dele ficam só leitura, e nada vai
-    para a outra tabela. Isso vale na primeira pergunta do alvo; quando o alvo já tinha sido perguntado
-    antes da mudança, quem a descobre é a conferência de dentro da transação do "Salvar" (RN-EDIT-005):
-    409 `RESULT_CHANGED`, com o detalhe da tabela que mudou ("A tabela <nome> mudou desde a
-    consulta…"), e nada é gravado.
+    tabela foi apagada e criada de novo (o OID é outro), nada vai para a outra tabela. A tabela criada
+    de novo já aparece na primeira pergunta do alvo, e as colunas dela ficam só leitura. O nome que
+    leva a outra tabela, não: a pergunta do alvo roda na sessão da árvore ou numa conexão à parte
+    (RN-EDIT-010), que não têm o `search_path` da aba, e por isso quem descobre a mudança é a
+    conferência de dentro da transação do "Salvar", na própria sessão da aba (RN-EDIT-005), que lê de
+    novo o nome escrito sem esquema: 409 `RESULT_CHANGED`, com o detalhe da tabela que mudou ("A
+    tabela <nome> mudou desde a consulta…"), e nada é gravado. O mesmo vale quando o alvo já tinha
+    sido perguntado antes da mudança.
   - No Db2 e no Informix, a tabela recriada com o mesmo nome, a mesma chave e as mesmas colunas e tipos
     passa pela conferência do "Salvar" (RN-EDIT-005), e a alteração vai à tabela nova pela chave, como
     iria se outra sessão a tivesse recriado (RN-EDIT-011).
