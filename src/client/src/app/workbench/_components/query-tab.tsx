@@ -335,10 +335,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       if (!isPersonBusy(runner.getState()) && liveShown) handleRerun();
       return;
     }
-    // RN-SQL-019: Alt+X (Cmd+Option+X no macOS), como no DBeaver, com o foco em qualquer ponto da aba; o campo da célula não deixa a tecla subir.
+    // RN-SQL-019: Alt+X (Cmd+Option+X no macOS), como no DBeaver, com o foco em qualquer ponto da aba; o campo da célula não deixa a tecla subir. Segurar as
+    // teclas repete o evento (`repeat`): o script começa uma vez só, no primeiro, e a repetição não o começa de novo (com a pergunta de erro esperando, ela a
+    // responderia "Parar" e começaria outro).
     if (!event.defaultPrevented && scriptShortcut(event, platform)) {
       event.preventDefault();
-      editor.current?.runScript();
+      if (!event.repeat) editor.current?.runScript();
       return;
     }
     // RN-ARVORE-008: Ctrl+9, como no DBeaver, abre a lista das conexões desta aba, e fecha com o foco no botão dela. Com o foco dentro da lista (a busca),
