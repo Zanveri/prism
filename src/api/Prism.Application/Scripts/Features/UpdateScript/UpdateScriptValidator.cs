@@ -16,6 +16,9 @@ public sealed class UpdateScriptValidator : AbstractValidator<UpdateScriptComman
         RuleFor(request => request.ConnectionID).Null().When(request => request.Generic).WithMessage("O script genérico não tem conexão nem banco.").WithErrorCode("SCRIPT_PLACE_INVALID");
         RuleFor(request => request.Database).Null().When(request => request.Generic).WithMessage("O script genérico não tem conexão nem banco.").WithErrorCode("SCRIPT_PLACE_INVALID");
 
+        // RN-SCRIPT-009: o script vai para uma pasta ou para a raiz, não para as duas. Pedir as duas é contradição, e não "a raiz ganha".
+        RuleFor(request => request.FolderID).Null().When(request => request.Root).WithMessage("O script vai para uma pasta ou para a raiz, não para as duas.").WithErrorCode("SCRIPT_PLACE_INVALID");
+
         // RN-SCRIPT-006: o ícone é um da lista fechada, e a cor dele é `#RRGGBB`, a regra da cor do ambiente. O vazio volta ao padrão, e o ausente fica.
         RuleFor(request => request.Icon).Must(ScriptRules.IsKnownIcon).WithMessage("Escolha um dos ícones da lista.").WithErrorCode("SCRIPT_ICON_INVALID");
         RuleFor(request => request.Color).MustBeAnEnvironmentColor().WithErrorCode("SCRIPT_ICON_INVALID");

@@ -63,6 +63,7 @@ public sealed class ScriptsLogTests
         Assert.That((await api.Client.GetAsync(ScriptFoldersPath)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var rename = new HttpRequestMessage(HttpMethod.Patch, ScriptFoldersPath) { Content = JsonContent.Create(new { id = folderID, name = $"{MarkedName} renomeada" }) };
         Assert.That((await api.Client.SendAsync(rename)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await api.Client.PostAsJsonAsync(ScriptsPath, new { name = $"{MarkedName} na pasta", sql = MarkedSql, folderID })).StatusCode, Is.EqualTo(HttpStatusCode.Created));
         Assert.That((await api.Client.DeleteAsync($"{ScriptFoldersPath}/{folderID}")).StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
         Assert.That((await api.Client.DeleteAsync($"{ScriptFoldersPath}/{subfolderID}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 
@@ -72,7 +73,7 @@ public sealed class ScriptsLogTests
 
         Assert.That(logs, Is.Not.Empty, "A API não escreveu nenhum arquivo em logs/.");
         Assert.That(logs.Values.Any(log => log.Contains("O arquivo do cofre falhou em Write", StringComparison.Ordinal)), Is.True, "O log não registra a falha de disco: o teste não prova nada se o log não está ligado.");
-        Assert.That(logs.Values.Any(log => log.Contains($"Pasta de scripts \"{folderID}\" não excluída: tem 1 subpastas e 0 scripts.", StringComparison.Ordinal)), Is.True, "O log não registra a recusa da pasta que não está vazia, com o ID e as contagens.");
+        Assert.That(logs.Values.Any(log => log.Contains($"Pasta de scripts \"{folderID}\" não excluída: tem 1 subpastas e 1 scripts.", StringComparison.Ordinal)), Is.True, "O log não registra a recusa da pasta que não está vazia, com o ID e as contagens.");
         foreach (var (file, log) in logs)
         {
             Assert.That(log, Does.Not.Contain("SQL-MARCADO"), $"{file} tem o SQL de um script.");

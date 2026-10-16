@@ -225,6 +225,25 @@ public sealed class ScriptFoldersTests
         await AssertProblemAsync(await host.Client.DeleteAsync($"{FoldersPath}/{parent}"), HttpStatusCode.NotFound, "SCRIPT_FOLDER_NOT_FOUND");
     }
 
+    /// <summary>A pasta com um script dentro não se exclui (RN-SCRIPT-007), e a recusa conta os scripts; depois de mover o script para a raiz, ela se exclui.</summary>
+    [Test]
+    public async Task Delete_FolderWithAScript_IsRefusedWithTheCounts_AndAfterMovingItOutIs204()
+    {
+        await using var host = await StartWithUserAsync();
+        var folder = await CreateAsync(host, "Fechamento");
+        var script = await host.Client.PostAsJsonAsync("/api/user/scripts", new { name = "Mensal", sql = "SELECT 1", folderID = folder });
+        Assert.That(script.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        var scriptID = (await ReadJsonAsync(script)).GetProperty("id").GetGuid();
+
+        var refused = await AssertProblemAsync(await host.Client.DeleteAsync($"{FoldersPath}/{folder}"), HttpStatusCode.Conflict, "SCRIPT_FOLDER_NOT_EMPTY");
+        Assert.That((refused.GetProperty("folders").GetInt32(), refused.GetProperty("scripts").GetInt32()), Is.EqualTo((0, 1)));
+        Assert.That(refused.GetProperty("detail").GetString(), Is.EqualTo("A pasta Fechamento tem 1 script. Só uma pasta vazia pode ser excluída: mova ou exclua antes o que está dentro dela."));
+
+        var moved = await host.Client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, "/api/user/scripts") { Content = JsonContent.Create(new { id = scriptID, root = true }) });
+        Assert.That(moved.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That((await host.Client.DeleteAsync($"{FoldersPath}/{folder}")).StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+    }
+
     /// <summary>RN-API-005: com o cofre fechado (o "Sair"), toda rota das pastas de scripts responde 401 `VAULT_LOCKED`.</summary>
     [Test]
     public async Task Routes_WithTheVaultClosed_Return401()
@@ -282,7 +301,9 @@ public sealed class ScriptFoldersTests
 
         Assert.That(signIn.StatusCode, Is.EqualTo(HttpStatusCode.OK), await signIn.Content.ReadAsStringAsync());
         Assert.That(await ListAsync(host), Is.Empty);
-        Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/scripts"))).GetArrayLength(), Is.EqualTo(2));
+        var scripts = await ReadJsonAsync(await host.Client.GetAsync("/api/user/scripts"));
+        Assert.That(scripts.GetArrayLength(), Is.EqualTo(2));
+        Assert.That(scripts.EnumerateArray().Select(script => script.GetProperty("folderID").ValueKind), Is.All.EqualTo(JsonValueKind.Null));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/folders"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/connections"))).GetArrayLength(), Is.EqualTo(1));
         Assert.That((await ReadJsonAsync(await host.Client.GetAsync("/api/user/workspace"))).GetProperty("tabs").GetArrayLength(), Is.EqualTo(2));

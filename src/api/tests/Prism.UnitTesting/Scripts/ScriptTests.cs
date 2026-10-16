@@ -22,7 +22,7 @@ public sealed class ScriptTests
         const string sql = "  SELECT 1\n\tFROM dual  ";
 
         //Act
-        var script = Script.Create("  Fechamento   do mês ", sql, connectionID, "vendas", Now);
+        var script = Script.Create("  Fechamento   do mês ", sql, connectionID, "vendas", null, Now);
 
         //Assert
         Assert.NotEqual(Guid.Empty, script.ID);
@@ -41,8 +41,8 @@ public sealed class ScriptTests
     public void Create_WithoutConnectionOrWithAnEmptyDatabase_HasNoDatabase()
     {
         //Act
-        var withoutConnection = Script.Create("a", "SELECT 1", null, "vendas", Now);
-        var withEmptyDatabase = Script.Create("b", "SELECT 1", Guid.CreateVersion7(), "", Now);
+        var withoutConnection = Script.Create("a", "SELECT 1", null, "vendas", null, Now);
+        var withEmptyDatabase = Script.Create("b", "SELECT 1", Guid.CreateVersion7(), "", null, Now);
 
         //Assert
         Assert.Null(withoutConnection.ConnectionID);
@@ -279,5 +279,68 @@ public sealed class ScriptTests
         Assert.False(plainChanged);
         Assert.Equal(Now, colored.UpdatedAt);
         Assert.Equal(Now, plain.UpdatedAt);
+    }
+
+    /// <summary>RN-SCRIPT-009: o "Mover para…" leva o script para a pasta ou para a raiz, e não muda mais nada (RN-SCRIPT-007).</summary>
+    [Trait("Script", "MoveTo")]
+    [Fact(DisplayName = "OK mover para uma pasta e de volta para a raiz muda só a pasta, e carimba a data")]
+    public void MoveTo_FolderAndRoot_ChangesOnlyTheFolder()
+    {
+        //Arrange
+        var connectionID = Guid.CreateVersion7();
+        var folderID = Guid.CreateVersion7();
+        var script = ScriptFakers.Create(name: "Fechamento", sql: "SELECT 1", connectionID: connectionID, database: "vendas", createdAt: Now, icon: "chart", color: "#7DB2FF");
+
+        //Act
+        var moved = script.MoveTo(folderID, false, Later);
+        var inFolder = script.FolderID;
+        var backToRoot = script.MoveTo(null, true, Later.AddMinutes(1));
+
+        //Assert
+        Assert.True(moved);
+        Assert.Equal(folderID, inFolder);
+        Assert.True(backToRoot);
+        Assert.Null(script.FolderID);
+        Assert.Equal(Later.AddMinutes(1), script.UpdatedAt);
+        Assert.Equal(("Fechamento", "SELECT 1", connectionID, "vendas", "chart", "#7DB2FF"), (script.Name, script.Sql, script.ConnectionID, script.Database, script.Icon, script.Color));
+    }
+
+    /// <summary>O `PATCH` é parcial: a pasta nula é "fica", e o `root` falso não faz nada; o mesmo destino não muda nada nem carimba a data.</summary>
+    [Trait("Script", "MoveTo")]
+    [Fact(DisplayName = "OK a pasta ausente, o mesmo destino e a raiz de quem já está nela não mudam nada")]
+    public void MoveTo_NothingNew_ReturnsFalse()
+    {
+        //Arrange
+        var folderID = Guid.CreateVersion7();
+        var inFolder = ScriptFakers.Create(createdAt: Now, folderID: folderID);
+        var atRoot = ScriptFakers.Create(createdAt: Now);
+
+        //Act
+        var absent = inFolder.MoveTo(null, false, Later);
+        var same = inFolder.MoveTo(folderID, false, Later);
+        var root = atRoot.MoveTo(null, true, Later);
+
+        //Assert
+        Assert.False(absent);
+        Assert.False(same);
+        Assert.False(root);
+        Assert.Equal(folderID, inFolder.FolderID);
+        Assert.Equal((Now, Now), (inFolder.UpdatedAt, atRoot.UpdatedAt));
+    }
+
+    [Trait("Script", "Create")]
+    [Fact(DisplayName = "OK nasce na pasta do campo Pasta, ou na raiz")]
+    public void Create_InAFolder_KeepsTheFolder()
+    {
+        //Arrange
+        var folderID = Guid.CreateVersion7();
+
+        //Act
+        var inFolder = Script.Create("Fechamento", "SELECT 1", null, null, folderID, Now);
+        var atRoot = Script.Create("Outro", "SELECT 1", null, null, null, Now);
+
+        //Assert
+        Assert.Equal(folderID, inFolder.FolderID);
+        Assert.Null(atRoot.FolderID);
     }
 }
