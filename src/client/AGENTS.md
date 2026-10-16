@@ -105,13 +105,17 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
 - Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
+  Os três (o `before-quit`, o `stopApi` e o "Reiniciar") soltam antes os destinos das exportações de dados (`transferDesk.releaseAll`), o que interrompe a
+  entrega em andamento e apaga a cópia pela metade (RN-EXPORT-023).
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
   `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
   periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
-  próxima entrada") e `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima). Os canais da API são
+  próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
+  exportações de dados, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
   os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
-  passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
+  `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -131,6 +135,25 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   negado, mesmo para o app. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
   ou falha calada. Conferido no Electron sob Xvfb: `local-fonts` sai `granted` sem gesto da pessoa (quem responde é o tratador da consulta, e a API não precisa pedir), copiar e
   colar funcionam, e `geolocation` e `notifications` saem `denied`.
+- **O destino das exportações de dados** (RN-EXPORT-019 e 020; `electron/transfer-desk.ts`, sem Electron, com teste em pastas temporárias de
+  verdade; as mensagens em `electron/transfer-messages.ts`, `zod` dos dois lados). **O processo principal é o dono do destino: nenhum caminho vem da
+  tela, e nenhum vai a ela.** `prism:transfer-destination` recebe só `{ suggestedName, extension }` (a extensão de uma lista fixa, `exportExtensions`), passa
+  o nome de novo por `safeFileBase` (`electron/file-name.ts`, a mesma regra do "Exportar CSV"), abre o diálogo de salvar sobre a janela que pediu (os
+  filtros, "Todos os arquivos" e `showOverwriteConfirmation` escritos aqui; a pasta é a última desta abertura do app, ou Downloads), confere que a pasta
+  existe e aceita gravação (um arquivo de prova `.prism-<id>.tmp`, criado e apagado), recusa a pasta de dados do Prism e o destino já reservado por outra
+  exportação, e responde `chosen` com um identificador e o nome do arquivo, `canceled`, `notWritable` ou `inUse`. O destino é de uso único e da janela
+  que o pediu. `prism:transfer-deliver` (`{ transferId, destinationId, reveal }`) acha o `.ready` na pasta `transfers` só pelo id conferido como `Guid`
+  minúsculo, move-o (`rename`; entre unidades, a cópia em fluxo para um `.<nome>.<id>.part` escondido ao lado e o `rename` dele), numera o nome (`pedido
+  (2).csv`) quando um arquivo apareceu lá depois da escolha sem a pessoa ter confirmado a troca, e responde `delivered` (com um `deliveryId` para o
+  "Mostrar na pasta"), `missing`, `canceled` (o destino foi solto no meio) ou `failed` com o motivo (`diskFull`, `notWritable`, `folderMissing`,
+  `inUse`, `other`) e a frase; o destino que falhou fica reservado para o "Salvar como…". **O diálogo só perguntou pelo nome que devolveu**: com a
+  extensão posta pelo processo principal (o nome escolhido sem nenhuma), o `pedido.csv` que já existia conta como não confirmado e é numerado, e nunca
+  substituído. O arquivo renomeado ganha o modo da prova de gravação da pasta (`chmod`, fora do Windows), e não o 0600 do temporário da API, como o
+  copiado entre unidades; o gerenciador de arquivos que não abre depois da entrega fica no log, e a entrega continua `delivered`.
+  `prism:transfer-copy` lê o `.ready` (até 10 MiB, `tooLarge` acima) para a área de transferência; `prism:transfer-reveal` abre a pasta de uma
+  entrega; `prism:transfer-release` solta um destino. A janela que recarrega, cai ou fecha solta os dela (`releaseWindow`, `windowClosed`), e o diálogo
+  de salvar que ela tinha aberto, quando volta, responde `canceled` sem registrar o destino. O log leva só ids e tamanhos. A ponte de desenvolvimento tem
+  `transfers.available: false`, e as chamadas que gravam recusam com "Exportar só funciona no app do Prism." (RN-EXPORT-019).
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -269,6 +292,10 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `toast-queue.ts`; `toast.tsx` só desenha.
 - Resultado de ação é aviso; o que precisa ficar até ser resolvido é estado na tela (`FormMessage`,
   `FieldError`, a área de resultado).
+- **O aviso pode ter um botão de ação** (RN-AVISO-006): o terceiro argumento de `success`, `warning` e `error` é `{ label, run }` (`ToastAction`); o
+  botão roda a ação e fecha o aviso. O aviso com ação fica `actionToastDurationMs` (8 s), também no tom de sucesso, e pausa com o foco, como no hover;
+  dois avisos iguais com ações diferentes não se juntam. A ação nunca é o único caminho (o "Mostrar na pasta" da exportação tem a opção "Mostrar na
+  pasta ao terminar", RN-EXPORT-014).
 - **A pilha de avisos fica acima do rodapé do resultado** (`bottom-20`, em `toast.tsx`). Ela é do canto inferior direito, o mesmo
   do "Carregar mais 200" e do "Executar de novo" do rodapé do resultado: com `bottom-5` o aviso de erro que acabava de sair
   cobria o botão e engolia o clique por 8 s (e sem prazo com o mouse em cima, porque o cartão pausa no hover; Marco B, D3).
@@ -1300,8 +1327,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   e valor cujo primeiro caractere, depois de espaços, tabulação ou retorno de carro, é `=`, `+`, `-` ou `@` com um apóstrofo na frente, para a
   planilha não o executar. **O número simples, inclusive o negativo (`-12,50`), sai como está, sem apóstrofo** (`simpleNumber`, em `csv.ts`: é o
   que a especificação diz, e a coluna segue somando na planilha). A entrega é `saveText` (`_lib/save-file.ts`): o download do próprio navegador,
-  um `Blob` e um link com `download`, que no Electron abre o diálogo de salvar do sistema. **Não há canal novo, e a ponte não grava arquivo.** O
-  nome proposto (`csvFileName`) é `esquema.tabela.csv` sem o que o sistema de arquivos recusa: saem os caracteres de controle, os de direção de
+  um `Blob` e um link com `download`, que no Electron abre o diálogo de salvar do sistema. **O "Exportar CSV" não usa canal nenhum, e a ponte não
+  grava arquivo**; exportar TODAS as linhas é o "Exportar…" ao lado dele (seção 35, ver "Exportar dados"), que vai pela API e pelo destino do
+  processo principal. O nome proposto (`csvFileName`, pela regra de `electron/file-name.ts`, que o processo principal também aplica) é
+  `esquema.tabela.csv`, cortado em 120 pontos de código (um emoji não se parte ao meio), sem o que o sistema de arquivos recusa: saem os caracteres de controle, os de direção de
   texto e os invisíveis (o espaço de largura zero, os separadores de linha e de parágrafo, a marca de ordem de bytes, o juntador de palavras e o
   hífen opcional); o que o Windows não aceita vira `_`; e o nome de
   dispositivo do Windows antes do primeiro ponto (`con`, `prn`, `aux`, `nul`, `com0` a `com9`, `lpt0` a `lpt9`, `conin$`, `conout$`, também
@@ -2114,6 +2143,71 @@ Electron não ganhou canal novo.
 - **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
   salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
 
+## Exportar dados (seção 35, RN-EXPORT-001 a 024)
+
+A seção 35 da especificação manda; o que segue diz onde ficam as peças e o que não é óbvio. A API exporta num trabalho em segundo plano
+(`api/user/transfers`, seção 6), numa conexão à parte, e escreve o arquivo na pasta `transfers` da pasta de dados; a tela acompanha o trabalho e o
+processo principal leva o arquivo pronto ao destino que a pessoa escolheu (ver "O destino das exportações de dados", em "Processo principal").
+
+- **As entradas** (RN-EXPORT-001). O "Exportar dados…" do menu da tabela e da visão no navegador (`navigator-menu.ts`, grupo próprio depois de
+  "Gerar SELECT"; a origem é a tabela inteira, e as colunas vêm do catálogo ao abrir a Extração), o "Exportar…" do rodapé dos Registros (logo depois de
+  "Exportar CSV") e da barra da área de resultado (depois do zoom, antes de recolher e maximizar, também com a área recolhida), e o "Exportar dados…" do
+  menu da célula (`cell-menu.ts`, `exportData`, grupo próprio depois do da vista). Estão sempre lá; o motivo de não valer vem de `exportBlocker`
+  (`_lib/data-export/export-entry.ts`, com teste), na ordem: as Estatísticas do script à frente, a aba ocupada (o comando da pessoa, o "Salvar", o
+  script rodando ou parado na pergunta de erro; a execução da atualização automática não conta), sem resultado, e o comando que não é só de leitura.
+  **O "só leitura" é o `read` da página do resultado** (`query.schema.ts`, nulo quando a API não o deu): `read !== true` desabilita, e o resultado que
+  gravou e devolveu linhas (`totalRows` preenchido, RN-SQL-013) também. O `read` viaja com as linhas (o executor, o script, a aba que vai para outra
+  janela). Desabilitado é `aria-disabled`, com o motivo no `title` e num `sr-only` ligado por `aria-describedby` (`ExportButton`, em `result-panel.tsx`).
+  A conexão desconectada e a tela fora do Electron não desabilitam nada.
+- **A origem** (`export-source.ts`): `table` (a do navegador), `records` (o comando que a grade dos Registros mostra, `rows.target.sql`, com o filtro
+  aplicado só para o subtítulo) ou `result` (o comando daquele resultado, com o filtro dele, o nome da aba e o número do comando no script). No resultado,
+  a tabela de destino do SQL e do DbUnit vem de `singleTable` de `useRecordEdits`, quando o alvo da edição já disse que o resultado é de uma tabela só
+  (`rowOperations`), e em branco quando não (o campo é obrigatório). As alterações não salvas da grade vão com a origem, para o aviso da Confirmação.
+- **O assistente** (`_components/data-export/export-wizard.tsx` e `export-wizard-steps.tsx`; as decisões em `_lib/data-export/export-wizard.ts`,
+  `export-options.ts`, `export-file-name.ts` e `export-request.ts`, puras e com teste). Um por janela (`openExportWizard`, em `data-exports.ts`,
+  montado por `ExportWizardHost` em `page.tsx`). As cinco etapas, as voltas só para trás, e os números dos campos como texto até o pedido. **"Banco
+  de dados" aparece desabilitado com "Em breve"**: a cópia para outro banco é da seção 36, que esta frente não implementa. As escolhas lembradas
+  (`export-choices.ts`) ficam no `localStorage`, por usuário (`prism:data-export:<usuário>`), lidas campo a campo com o padrão no lugar do que não
+  confere (o que não é um objeto, também uma lista, vale o padrão inteiro); a tabela de destino e as colunas não se lembram. **O motivo que segura uma
+  etapa fica no campo**, porque o "Avançar" desabilitado não recebe o foco e a dica dele não chega ao leitor de tela: "Marque ao menos uma coluna." na
+  lista das colunas, descrevendo cada caixa (`extractionProblem`); e, nos Registros, o SQL sem "Incluir as colunas que o banco calcula" espera o catálogo
+  dizer quais são (`generatedUnknown` do contexto, `generatedProblem`: "Lendo as colunas…", ou a mensagem do banco com "Tentar de novo", no campo da
+  opção), para a coluna calculada não ir no `INSERT` sem o aviso. A linha "Conexão" da Confirmação é a do cabeçalho (`ExportConnection`). **A ordem do "Exportar"**: fora do Electron, a recusa "Exportar só funciona no app do
+  Prism." sem pedir nada; o diálogo de salvar (desistir deixa o assistente como estava); o tamanho do pedido (8 MiB, `requestBytes`); o `POST`, com as
+  recusas de `startRefusals` no lugar (`refusalsOf`: a de campo vai ao campo pelo caminho da API, em minúsculas, e o assistente pula para a etapa dele;
+  `CONNECTION_CREDENTIALS_MISSING` vira a frase de cada campo no alto da Confirmação). **A recusa de um campo que o assistente não desenha** (`source.sql`,
+  o comando de mais de 1 MB que o `queries` aceitou; `format`; `windowID`; uma opção de escolha; a opção de outro formato) vai ao alto da Confirmação
+  (`placeRefusals`, pelos campos de `fieldsShown`): sem isso ela ia para um campo que não existe, e o "Exportar" voltava sem dizer nada. Qualquer recusa
+  ou falha depois do diálogo solta o destino escolhido (`releaseExportDestination`). Aceito o 202, as escolhas são gravadas, a exportação entra no
+  acompanhamento e o assistente fecha.
+- **O acompanhamento** (`transfer-tracker.ts`, um objeto fora do React com as peças injetadas, e `exportTracker`, o desta janela, em
+  `data-exports.ts`). Uma consulta por segundo para todas as exportações da janela (um laço só, que para quando não há o que consultar); pronta, a
+  entrega (`deliverExport`) ou a cópia para a área de transferência (`copyExport`), e o aviso de sucesso com "Mostrar na pasta" (ou com a pasta aberta,
+  quando a pessoa pediu "Mostrar na pasta ao terminar"); falhou, o aviso de erro com a mensagem do banco e o SQLSTATE; cancelada pela exclusão da
+  conexão, o de atenção. A entrega que falhou fica na barra com o motivo, "Salvar como…" (solta o destino, abre o diálogo de novo e entrega o mesmo
+  arquivo pronto) e "Descartar". `TRANSFER_NOT_FOUND` tira a exportação da barra com o aviso de erro ("se perdeu antes de ser gravada"); três consultas
+  seguidas que falham a deixam na barra com "Não foi possível saber como está a exportação." e "Cancelar" (que tenta o `DELETE` de novo); ela deixa
+  de ser consultada e não segura o bloqueio. A exportação é da
+  janela, e não da aba: fechar a aba ou levá-la para outra janela não a muda. **O desmonte da área de trabalho** (`connectExports`, chamado pelo
+  `WorkbenchProvider`) cala os avisos, fecha o assistente e esquece tudo (`reset`, que solta os destinos); ao montar, os trabalhos da lista da API
+  com o número desta janela que ninguém acompanha (da página que recarregou) são cancelados.
+- **A barra de status** (`transfer-status.tsx`, RN-EXPORT-021): a exportação mais antiga, com o nome isolado em `<bdi>`, a porcentagem (com o total)
+  e "Cancelar" com o nome no `aria-label`; com mais de uma, "+N exportações" abre a lista (Esc fecha e devolve o foco ao botão, também com o foco ainda
+  nele: `closeListOnEscape` está no grupo da barra, e não na lista, que não toma o foco ao abrir). A barra de progresso tem `aria-valuetext` com as
+  linhas e o tamanho; sem o total, não tem medida.
+- **As saídas** (RN-EXPORT-023; `export-exits.ts` e `exportExits`, em `data-exports.ts`). A conta é da lista da API, de todas as janelas (`ahead`: as
+  que rodam e as prontas não entregues), e só com a área de trabalho montada e o cofre aberto: fora disso, nenhuma, sem pedir (o pedido com o cofre
+  bloqueado esperaria o desbloqueio). "Sair" (`top-bar.tsx`) pergunta antes, com "Continuar exportando" no foco e no Esc; o reinício do serviço (o
+  diálogo e a faixa, `useDriverActions`) e a instalação que encerra o Prism (só o instalador do Windows, `update-dialog.tsx`) põem a frase no aviso que já
+  existe (`useExportsAhead`, que relê a conta a cada 3 s enquanto o aviso está na tela). Confirmada a saída, `cancelForExit` lê a lista de novo, cancela
+  as das outras janelas pelo `DELETE` e as desta pelo acompanhamento (que solta os destinos), e só então a saída segue. **Fechar a janela**
+  (`workbench-tabs.tsx`, `windowCloseStep`) pergunta pelas exportações começadas nela antes das perguntas das abas, com o texto de fechar o Prism quando
+  ela é a última; nada é cancelado antes da última resposta (o cancelamento fica em `finishWindow`). O diálogo de excluir a conexão diz quantas
+  exportações dela serão canceladas (quem cancela é a API). O "Bloquear" do menu do usuário ainda não existe.
+- **O que não tem teste**: o assistente montado com as consultas de verdade (as etapas e as decisões têm), o diálogo de salvar do sistema, a entrega
+  numa unidade de rede, e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato da seção 6 e da seção 35, com a
+  API simulada nos testes.
+
 ## Configurações (`src/app/settings`)
 
 RN-CONFIG-001. A rota é `/settings` (`pathsConfig.settings`), sob o `WorkbenchProvider` como as outras telas de dentro: abrir e
@@ -2277,6 +2371,11 @@ inicial; "Sair" encerra de verdade.
   cache e das abas). **A ordem dos passos e as falhas ficam em `lock-vault.ts` e no teste dele; este guia não as repete.**
 - **Com mais de uma janela** a contagem é de todas e o bloqueio também (RN-ABAS-004): `peers` do `useIdleLock`, `peerAction` e
   `closedByAnotherWindow`, descritos em "Abas que se movem e outras janelas".
+- **A exportação de dados é comando em andamento** da janela que a começou, do começo até a entrega (`exportTracker.holdsLock()`, no `isBusy` do
+  `WorkbenchProvider`), e segura também as outras janelas. A entrega que falhou e espera o "Salvar como…" não segura: o aviso de antes do bloqueio diz
+  quantas serão descartadas (`discardedExports` do `VaultLock`; o `IdleAnnouncer` diz o mesmo ao leitor de tela, junto da frase fixa, porque o desenho do
+  aviso é `aria-hidden`), e o bloqueio as descarta (`exportTracker.vaultClosed()`, que solta os destinos)
+  (RN-EXPORT-023).
 - **A verificação periódica das conexões** (RN-VERIF-002) não é atividade nem comando em andamento: ela não passa pelos executores das abas nem pelos
   eventos da janela, e bloqueado nada dela sai (ver "Verificação periódica e Só as conectadas").
 - **A barreira.** Bloqueado, `apiRequest` espera o desbloqueio (não falha e não avisa); só passa o pedido com `whileLocked` (`signIn` e
