@@ -106,10 +106,11 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
-  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `workspace` (ver "Abas que voltam na
+  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
+  periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
   próxima entrada") e `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
+  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
@@ -397,8 +398,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `environmentColor`, `color`), que o diálogo já mostra no lugar.
 - **O `PATCH` da conexão também grava a conexão por inteiro** (seção 32): as proteções próprias (`confirmCommands`, `readOnly`) e a verificação
   (`verificationEnabled`, `verificationInterval`, `verificationQuery`) vão sempre. Renomear e mover mandam as da conexão (`movedConnectionInput`, que
-  o `renamedConnectionInput` usa); o formulário manda as proteções pelos campos escondidos da seção Proteções e a verificação gravada
-  (`verificationOf`, na nova o `newVerification`: o formulário ainda não tem o painel "Sessão da conexão"). As herdadas (`protections`) nunca vão: elas
+  o `renamedConnectionInput` usa, com o `verificationOf`); o formulário manda as proteções pelos campos escondidos da seção Proteções e a verificação
+  pelo painel "Sessão da conexão" (abaixo), que nasce com a gravada (na nova, o `newVerification`). As herdadas (`protections`) nunca vão: elas
   mudam com a pasta. O `connectionSchema` e o `folderSchema` exigem os campos: a resposta sem eles, ou com uma confirmação que a tela não conhece, é
   recusada, em vez de o PATCH seguinte gravar a proteção mais fraca sem ninguém pedir (o `none` da API vale nulo, "Não"). Os testes dos corpos
   (`folder-input`, `move-connection`, `rename-connection`, `rename-folder`) conferem que renomear e mover levam as proteções e a verificação, e os dos
@@ -406,6 +407,17 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `rename-folder-dialog.save`), o `PATCH` que cada um manda de fato, por inteiro, e quando a senha é pedida. **Quem passar a gravar uma conexão ou uma
   pasta por outro caminho** (o arrastar na árvore, que a especificação cita e a árvore ainda não tem, ou um atalho que troque só a cor) monta o corpo
   pelo `movedConnectionInput` ou pelo `folderInputOf` e trata o `USER_PASSWORD_REQUIRED` pelo `passwordAsked`, como o "Mover".
+- **O painel "Sessão da conexão"** (`session-section.tsx`, RN-VERIF-001), só no formulário da conexão, logo depois dos campos e antes do Ambiente: a
+  ordem de leitura do canvas (`Conexoes.dc.html`), que põe a sessão embaixo dos campos, na coluna da esquerda, e o Ambiente e as Proteções na da direita.
+  "Verificar a cada [N] segundos" é estado do diálogo (`verifying`) e vai pelo campo escondido `verificationEnabled`, como o somente leitura; o intervalo
+  (`verificationInterval`, de 5 a 3.600, com a frase da API) e a "Consulta de verificação" (`verificationQuery`, um `<textarea>`, aparada, até 1.000
+  caracteres e nula em branco) são campos não controlados do `FormData`, no `connectionFields`. O intervalo não se desabilita com a caixa desmarcada:
+  desabilitado, ele sairia do `FormData`. A dica da consulta é a do banco escolhido (`engineOptions[].verificationQuery`, as `PingSql` da API), e que ela
+  seja uma leitura só quem diz é a API: a recusa (`CONNECTION_INVALID` no `verificationQuery`, com o motivo) vai ao campo, com o foco, como as outras; o
+  `readForm` serve a gravar e a testar, então o "Testar conexão" leva a consulta digitada (RN-CONN-013), e não a gravada. À direita da linha da caixa vai o
+  indicador da última verificação da conexão aberta, como no canvas (`checkIndicator`, que a página da área de trabalho passa: o `ConnectionCheckLabel`,
+  ver "Verificação periódica e Só as conectadas"). O "Encerrar a conexão após N minutos sem uso" do canvas não é desenhado: o encerramento por ociosidade
+  continua fora (seção 13), e o teste confere que ele não aparece.
 - **A seção Proteções** (`protections-section.tsx`, RN-PROT-001 a 004), a mesma no formulário da conexão e nos diálogos de nova pasta e de "Editar
   pasta…", depois da seção Ambiente (o "Mover" não a mostra), como no canvas, com a escolha de três no lugar da caixa: "Confirmar antes de executar"
   ("Não", "Só comandos irreversíveis", "Todos os comandos", rádios) e "Somente leitura" (caixa, com o cadeado). As escolhas PRÓPRIAS são estado do
@@ -606,7 +618,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   (`1,3 s`), em minutos e segundos até uma hora (`1 min 10 s`) e em horas e minutos daí em diante (`2 h 5 min`); a unidade é a do valor já
   arredondado, e o que não é um tempo (não finito, ou negativo) sai como um traço.
 - **"Conectada" tem uma definição só**, `isConnected` (`workbench-model.ts`): a árvore abriu a sessão da conexão, ou
-  alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status.
+  alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status. As listas das conectadas
+  (`connectedConnectionIds`: a conta e o "Só as conectadas" do navegador, a lista do botão da conexão da aba e o script genérico) tiram dela a que a
+  verificação periódica achou sem sessão na API (`notConnectedIds`, o "Sem sessão aberta"; ver "Verificação periódica e Só as conectadas").
 - **Aba à vista (RN-SEG-001): só ela fala com o banco.** `visible` é "a aba é a ativa E a área de trabalho é a tela mostrada"
   (`selected && useWorkbenchOnScreen()`, em `workbench-tabs.tsx`; o `useWorkbenchOnScreen` usa a regra do `WorkbenchSlot`: a rota é
   `/workbench`). Chega ao `TableTabPanel` e dali à vista Registros (`needsFirstRun(estado, { engine, visible, disconnected })`: a primeira
@@ -810,6 +824,8 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 - **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele (na última janela, só a da grade, RN-ABAS-007); cancelar uma
   pergunta deixa a janela aberta; quando a última aba fechou, `releaseWindow` espera os fechamentos de sessão a caminho e fecha as sessões da
   árvore DESTA janela, e só então a janela fecha. Com o cofre bloqueado fecha direto (a API já fechou as sessões).
+- **A vez da verificação periódica** (RN-VERIF-002): o centro das janelas também diz qual janela verifica cada conexão conectada em mais de uma, e repassa
+  a resposta às outras (`claimVerification`, `finishVerification`); ver "Verificação periódica e Só as conectadas".
 - **O cofre é um só** (RN-ABAS-004). O que uma janela conta às outras (`prism:session-share`, `peerEventSchema`: `activity`, `lock`, `unlock`,
   `signOut`, `signIn`, só o tipo) o centro repassa a todas as outras, também às que estão no login, e cada uma decide com `peerAction`
   (`app/_lib/peer-session.ts`, puro e testado). A atividade vai no máximo uma vez por segundo (`shouldShareActivity`), e a cada conferência
@@ -953,7 +969,7 @@ caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL
   salvo que a aba guarda). Se a conexão não existe mais, a aba abre **sem conexão** (`connectionId` nulo), com aviso: o texto já está no editor, a faixa acima
   dele (`NoConnectionBarView`) pede uma conexão, e "Usar esta conexão" passa pelo mesmo `switchConnection` do botão da conexão (ver "A conexão da aba de
   consulta"): a aba ganha um executor novo, na conexão escolhida e no banco dela. **O script genérico** (RN-SCRIPT-005) abre na única conexão conectada
-  (`scriptPlace` recebe as conectadas deste instante: `connectedConnectionIds` sobre o cache das sessões da árvore e as abas); com mais de uma, ou nenhuma, abre
+  (`scriptPlace` recebe as conectadas deste instante: `connectedConnectionIds` sobre o cache das sessões da árvore, as abas e a foto da verificação); com mais de uma, ou nenhuma, abre
   sem conexão, sem aviso, e a faixa pergunta com a frase dele. A frase da faixa vem do `reason` (`scriptMissing`, `generic`, `restored`), e as opções dela
   vêm na ordem da lista do botão da conexão (`connectionChoices`: as conectadas primeiro, com o caminho de pastas e a marca "conectada"); nada vem escolhido. Sem conexão o executor não abre sessão nem chama a
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
@@ -987,8 +1003,9 @@ aparece, seção 9), e deixa trocá-la.
 - **O que a lista mostra** (`connectionChoices`, `_lib/tab-connection.ts`, puro e testado): as conectadas primeiro, num grupo com título ("Conectadas" e
   "Desconectadas", só quando há alguma conectada), e em cada grupo por nome (`Intl.Collator` do pt-BR, sem caixa nem acento, com os números pela grandeza); cada
   conexão com a sigla, o nome, o ambiente e o caminho de pastas (`folderPathOf`, "Sem pasta" na raiz), e a da aba marcada (`aria-selected` e o visto). A busca
-  acha o pedaço no nome, no caminho e no `host`. "Conectada" é a de sempre (`isConnected`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
-  sessões da árvore com `enabled: false`, que nunca abrem sessão, e as abas): só a lista aberta o usa. No fim, "Mostrar no navegador" pede ao navegador a
+  acha o pedaço no nome, no caminho e no `host`. "Conectada" é a das listas (`connectedConnectionIds`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
+  sessões da árvore com `enabled: false`, que nunca abrem sessão, as abas e as que a verificação achou sem sessão, `useNotConnectedIds`, numa chave de texto
+  que só muda com elas): só a lista aberta e a faixa da aba sem conexão o usam. No fim, "Mostrar no navegador" pede ao navegador a
   conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela, a escolhe, lhe dá o foco e aparece se estava escondido.
 - **A troca** (`switchConnection` no provedor, sobre `withConnection`, puro e testado; substitui o antigo `assignConnection`): passa pela pergunta das alterações
   não salvas da grade (o `guard` da edição, como a troca do banco), e então a aba ganha um executor novo na conexão escolhida, no banco padrão dela; o de antes
@@ -1599,7 +1616,8 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   ponto da aba (a barra, a grade, o campo de filtro); o campo de edição da célula para a propagação e fica com as teclas dele. Nada mais usa a tecla: o
   mapa padrão do CodeMirror tem `Alt-l`, `Alt-u` e `Alt-A` (Shift), mas não `Alt-x`; o `before-input-event` do Electron só pega Ctrl (zoom, F5, Ctrl+R);
   o menu de desenvolvimento não tem mnemônico X, e o app empacotado do Windows e do Linux não tem menu. O botão escreve o atalho da plataforma
-  (`aria-keyshortcuts`).
+  (`aria-keyshortcuts`). Segurar as teclas repete o evento (`event.repeat`): a repetição só é consumida, e o script começa uma vez, no primeiro (com a
+  pergunta de erro à espera o executor não está ocupado, e a repetição a responderia e começaria outro).
 - **A divisão é o leitor do Ctrl+Enter** (`scan`), com uma peça a mais: os `;` que estão no corpo de um bloco não separam (`innerSemicolons`, com o
   mesmo `dialect.body()` do `statementCount`, recomeçado no `;` que fecha e em cada corte da linha em branco; o corpo que chega aberto ao fim prende os
   `;`, menos com o `extra` do Informix, a rotina sem `END PROCEDURE`, em que todo `;` separa). O `splitStatements` e o `statementAt` seguem separando
@@ -1611,7 +1629,12 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   `running` do primeiro ao último comando (ocupado para a pessoa e para o bloqueio por inatividade), com o `previous` sendo o que o comando anterior
   deixou, e termina com o do último. **A pergunta de erro não ocupa**: o estado é o do comando que falhou (o editor marca a posição do erro, pelo
   `offset` do comando no texto inteiro, como no Ctrl+Enter), e o bloqueio pode vir; ele aposenta o executor (`retire`), que responde "Parar" à
-  pergunta (`deciding`) e tira o script. `release` (Desconectar) para o script: o comando em andamento fica "cancelado". Cada comando passa por
+  pergunta (`deciding`) e tira o script. `release` (Desconectar) para o script: o comando em andamento fica "cancelado". **Uma execução nova na aba com
+  a pergunta à espera** (`run`, `runScript`, `runCommand` e `rerun`: o caminho não passa pela tela, em que o diálogo cobre a aba, mas o executor o aceita)
+  é a resposta "Parar" (`afterPausedScript`), como a RN-SQL-020 manda trocar os resultados do script por uma execução nova: o script para com o que já
+  rodou e o aviso do fim, e o comando novo só sai depois de o laço dele terminar (`scriptLoop`); antes, a promessa do script ficava esperando para sempre, e
+  uma resposta atrasada o retomava por cima do comando novo. O que o executor recusaria antes de enviar (`sends`: mais de um comando, nada a enviar, a aba
+  sem conexão; o F5 sem resultado de linhas na tela) não mexe na pergunta, e sem pergunta à espera nada muda (quem chama vê a aba ocupada na mesma chamada). Cada comando passa por
   `execute`, com as recusas do comando a mais (`scriptCommandRefusals`: o controle de transação, o comando que não roda em transação, mais de um
   comando e, na conexão somente leitura, o que não é leitura, `CONNECTION_READ_ONLY`), que perguntam como o erro do banco, sem o aviso central; o resto (a sessão ocupada, a API fora do ar, a sessão que caiu) para o script
   sem perguntar. A sessão que cai só é reaberta antes da primeira resposta (`!answered`): depois, o que os comandos de antes deixaram nela se perdeu.
@@ -1632,6 +1655,12 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   executor e o `set` dele no mesmo trecho síncrono (o fim de um comando e o começo do seguinte) já saem num desenho só: o React junta as atualizações
   de `useSyncExternalStore` numa microtarefa. Medido na tela (abaixo): antes, 3.000 comandos levavam 115 s no app de produção com as Estatísticas à
   frente (contra 23 s com uma aba de resultado à frente), com a janela parada por até 27 s.
+- **O começo do comando** nas abas e nas Estatísticas (`commandHead(target)`) pula os espaços e os comentários de cima pelo leitor do projeto, no banco do
+  comando (`commandStart` de `sql-statements.ts`: o comentário de bloco aninhado do PostgreSQL e do Db2, o primeiro fecho no Informix, o `{ … }` só no
+  Informix, o `--` que no PostgreSQL acaba também no retorno de carro), e não por uma expressão regular, que lia o aninhado errado e tomava `{` por
+  comentário em todo banco. **"Linhas alteradas"** soma só as linhas afetadas dos comandos que não devolvem linhas: o que grava e devolve linhas (RN-SQL-013)
+  traz da API o total devolvido (`totalRows`), e não o de alteradas, e fica de fora, contado em `ScriptTotals.returning`, que o total diz ("Linhas
+  alteradas: 12 (sem contar 1 comando que gravou e devolveu linhas)"); a especificação diz por quê.
 - **As abas e o cursor.** Cada comando que devolve linhas guarda a página dele (`results`, até `scriptResultCap`, 20); no fim, o do último comando
   executado, quando devolveu linhas, fica sempre (`live`), também depois do limite: é o do cursor aberto (RN-SQL-007: um por sessão, e cada comando
   novo fecha o anterior), e a aba dele desenha o **estado do executor**, e não a cópia guardada, com tudo o que vale num resultado. As outras desenham a
@@ -1644,6 +1673,8 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
   (pelo `id` do script; o seguinte volta às Estatísticas). Cada executor numera os scripts dele desde o 1, e o painel continua montado quando a aba
   ganha outro (o banco, a conexão, o bloqueio): a escolha sai junto com o filtro, no ajuste do `filterRunner`. O F5 só executa de novo com a aba do
   último à frente, e a atualização automática espera (`hidden`) com outra aba do script à frente.
+- **A pergunta de erro se fecha só pelo Esc**, que é o "Parar" da especificação (`dismissible="escape"` do `Dialog`: sem o X e sem o clique fora, que
+  paravam o script calados; `canClose` diz por qual caminho, o Esc, o fundo ou o X).
 - **A pergunta de erro só na aba à vista** (`active && onScreen`, como a atualização automática). O `Dialog` vai por portal ao `body`, fora do `hidden`
   da aba e do `inert` da área de trabalho escondida: sem isso, o script de uma aba de trás abria a pergunta por cima da aba da frente, ou de
   Configurações, tirava o foco de quem digitava (um Espaço ou Enter caía no "Parar") e dois scripts empilhavam dois diálogos iguais. O de outra aba
@@ -1691,8 +1722,8 @@ resultado, as Estatísticas e a pergunta no erro. A API não muda: cada comando 
 Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
 pasta que o usuário desejar", e a conexão "apenas readonly, ou seja, permite apenas select"). Quem impõe o somente leitura é a API, que recusa o que não é
 leitura antes de ir ao banco; a confirmação é da tela, que pergunta antes de enviar. A seção Proteções do formulário, a senha do somente leitura e o PATCH
-que leva tudo estão em "Conexões", acima. O painel "Sessão da conexão" (a verificação periódica, RN-VERIF-001 a 003) e o "Só as conectadas" do navegador
-(RN-NAV-013) ainda não estão na tela.
+que leva tudo estão em "Conexões", acima. O painel "Sessão da conexão" está lá também, e a verificação periódica e o "Só as conectadas" do navegador, na
+seção seguinte.
 
 - **O que é irreversível** (`_lib/irreversible.ts`, `irreversibleOf`, com teste nos três bancos). Lido pelo leitor único do projeto (`sqlTokens`): texto,
   nomes entre aspas, comentários de cada banco (o `{ … }` do Informix, o aninhado do PostgreSQL e do Db2) e `$tag$` não contam. É irreversível o `DROP`
@@ -1746,8 +1777,74 @@ que leva tudo estão em "Conexões", acima. O painel "Sessão da conexão" (a ve
 - **A recusa do comando** (`CONNECTION_READ_ONLY`, 422): o executor a trata no lugar, como o controle de transação recusado antes de executar (`failed`):
   nada foi ao banco, então com linhas na tela elas e o cursor ficam ("Carregar mais" continua), e a frase da API vai no aviso de erro; sem resultado, ela
   vai à área de resultado, com o aviso curto. No script, ela é o erro do comando (`scriptCommandRefusals`), e o script pergunta o que fazer.
-- **O que não foi feito**: o painel "Sessão da conexão" e o indicador da verificação (RN-VERIF-001 a 003) e o "Só as conectadas" (RN-NAV-013); o
-  cadeado na faixa de abas; e a conferência na tela (só os testes).
+- **O que não foi feito**: o cadeado na faixa de abas; e a conferência na tela (só os testes).
+
+## Verificação periódica e Só as conectadas (RN-VERIF-001 a 003, RN-NAV-013)
+
+Seção 32 da especificação, pedidos do dono e de um colega em 2026-10-15 ("validar a conexão fazendo o select 1 ou o usuário se informar qual select ele
+quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota (`POST api/user/connections/{id}/verification`, que responde `ok`, `failed`,
+`busy` ou `notConnected`, a falha do banco como resposta 200); o painel do formulário está em "Conexões".
+
+- **Onde mora cada parte.** `_lib/connection-checks.ts` (puro, com teste): `createConnectionChecks`, a verificação de uma janela, com as dependências de
+  fora (o pedido, a vez entre as janelas, o fim, o relógio e o bloqueio), e `checkView`, o que o indicador diz; os textos em `connection-checks.copy.ts`.
+  `_lib/use-connection-checks.tsx`: a instância da janela (`connectionChecks`, de módulo, como o `vaultLock`), as conexões a verificar (`checkTargets`,
+  puro), o `ConnectionChecks` que as entrega e avisa das passagens, e os ganchos dos indicadores (`useConnectionCheck`, `useConnectionChecksSnapshot`).
+  `_components/connection-check.tsx`: o ponto (`CheckDot`), o ponto com o texto (`CheckLabel`, `ConnectionCheckLabel`) e a janela da falha
+  (`CheckFailureDialog`). A rota é o `verifyConnection` de `connections.service.ts`, com o `connectionVerificationSchema`.
+- **Um relógio por conexão conectada, numa instância por janela, e não um por componente.** Quem alimenta é o `ConnectionChecks`, montado UMA vez em
+  `routes.tsx`, dentro do `WorkbenchProvider` (ele lê as abas; montado no provedor, o arquivo do provedor e o da verificação se importariam um ao outro).
+  Ele monta os alvos a cada desenho (`checkTargets`: as conexões com a verificação ligada e conectadas nesta janela, na conta de `isConnected`, a sessão da
+  árvore em cache, lida com `enabled: false`, ou uma aba com sessão; o intervalo; e as sessões numa chave) e os entrega por um efeito com a chave em texto.
+  Os indicadores só leem: o navegador lê a foto inteira uma vez (as linhas não cabem num gancho por linha), e o botão da conexão da aba, a barra de status e
+  o formulário leem a da conexão deles (o mesmo objeto enquanto nada muda: o botão fechado de cada aba não redesenha a cada verificação).
+- **Um pedido por vez, e o intervalo conta do fim.** A conexão que entra espera um intervalo antes da primeira verificação (a sessão acabou de abrir, e a
+  abertura já respondeu; até lá o indicador diz "Conectada, ainda não verificada"); a resposta agenda a seguinte, e com o pedido a caminho não há relógio.
+  A conexão que desconecta (ou some da lista, ou desliga a verificação) sai na hora: o pedido a caminho é abandonado pelo `AbortSignal`, e a resposta dele
+  não volta ao indicador. `notConnected` para a verificação da conexão até a chave das sessões mudar (uma sessão nova abriu, pela próxima ação na árvore ou
+  na aba); a chamada que falhou (a API fora do ar) deixa o indicador como estava e tenta no intervalo seguinte. A falha nunca reconecta nada.
+- **Entre as janelas, uma verificação por intervalo** (decisão desta entrega: a especificação diz "a tela", e cada janela tem a árvore e as abas dela). A
+  conexão conectada em duas janelas seria verificada duas vezes por intervalo. Nenhuma janela fala com outra: antes de chamar a API a janela pede a vez ao
+  processo principal (`claimVerification`, `prism:verification-claim`), que a dá (`window-hub.ts`, `claimVerification`) se nenhuma outra está verificando
+  a mesma conexão e se a última verificação dela, feita por outra janela, não acabou há menos que o intervalo menos um segundo (`verificationSlackMs`). O
+  fim (`finishVerification`, `prism:verification-finish`) solta a vez e manda a resposta às outras janelas com a área de trabalho montada
+  (`prism:verification-peer`, `verificationPeerSchema`, conferido nos dois lados), que a mostram e recomeçam o relógio dela (`peer`): quem verificou por
+  último é quem verifica de novo, e as outras só a ouvem. Sem a vez, a janela não chama a API e volta a contar. A resposta de outra janela com a verificação
+  daqui a caminho, ou para uma conexão sem sessão aqui, fica de fora, e o `busy` e o `notConnected` de lá (que dizem das sessões de lá) só recomeçam o
+  relógio. A janela que fecha no meio solta a vez (`remove`), e a que travou a solta em dois minutos (`verificationClaimTtlMs`). Fora do Electron a vez é
+  sempre da janela. Só ids, o intervalo e a resposta da API passam: nada de nome, endereço ou SQL; o processo principal não chama a API.
+- **Não é atividade nem comando em andamento** (RN-SEG-001). O pedido sai pelo `apiRequest`, e não pelo cache de mutações (a falha da chamada não vira
+  aviso central) nem por um executor de aba (o bloqueio só olha a tecla, o ponteiro e os executores), então a verificação não segura o bloqueio nem o
+  adia. Bloqueado, nada sai: os alvos ficam vazios (o `ConnectionChecks` lê o `vaultLock`), o relógio que disparar antes do desenho não pede a vez
+  (`paused`), e o pedido a caminho é abandonado (a barreira dos pedidos o soltaria só no desbloqueio). Sair do cofre desmonta o `ConnectionChecks`, que
+  esvazia a verificação.
+- **O indicador** (`checkView`, RN-VERIF-003): "Respondeu na última verificação", o ponto do canvas, com "Respondeu às 14:32:05, em 3 ms" na dica (a hora
+  do relógio da máquina, `clockOf`); "Não respondeu", no tom de erro, com a hora, o SQLSTATE e a mensagem do banco na dica; `busy` deixa como estava, com
+  "Ocupada: verificada na próxima" na dica; "Sem sessão aberta" (o anel no tom do acento); antes da primeira resposta, o anel verde. Com a verificação
+  desligada não há indicador: fica o ponto de conectada de sempre. Na árvore ele fica no lugar do ponto de conectada, e a dica dele vai também na dica da
+  linha: com o mouse em cima, as ações da linha cobrem o ponto. No botão da conexão da aba (o pedido desta entrega, além da barra de status que a
+  especificação cita) ele vai na ponta, depois do cadeado, e entra no nome acessível depois dele. Na barra de status ele troca o "Conectada", com o
+  texto; no formulário, à direita da linha da caixa.
+- **A falha num clique**, como o erro de um nó da árvore (RN-ARVORE-005): na árvore, um botão das ações da linha ("Ver por que MES Produção não
+  respondeu", o `AlertIcon`), só com a conexão sem responder; na barra de status, o próprio texto "Não respondeu". Os dois abrem a `CheckFailureDialog`
+  (a hora, o tempo, a mensagem como veio, o SQLSTATE, e que o Prism não reconecta sozinho), que acompanha as respostas seguintes e fecha de vez quando a
+  conexão volta a responder (ajuste durante a renderização: a falha seguinte não a reabre sozinha).
+- **Os avisos de passagem**: de responder (ou de ainda não verificada) a não responder, um aviso de atenção ("MES Produção não respondeu à verificação"),
+  uma vez, e não de novo enquanto ela continuar sem responder; de volta, um de sucesso ("MES Produção voltou a responder à verificação"). Cada janela que
+  verifica a conexão avisa na dela, também com a resposta que veio de outra (a pessoa pode estar olhando qualquer uma). O nome é o de agora.
+- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) depois do
+  seletor de ambiente, na mesma linha do campo de busca (desce com eles no navegador estreito), com a conta das conectadas ("3 conectadas", "1
+  conectada", "Nenhuma conectada"), ligado ou não. O nome acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas", o rótulo num `sr-only`), e a
+  dica diz o que o clique faz agora. Conectada é a definição única (`connectedConnectionIds`), então a que desconecta sai na hora e a que conecta por uma
+  aba ou por um script entra. A que a verificação achou sem sessão na API (`notConnected`) também sai, e a conta não diz "conectada" ao lado do indicador
+  que diz "Sem sessão aberta": a sessão da árvore em cache e o `sessionId` das abas continuam lá, mortos, e ninguém os apaga (a próxima ação na árvore ou na
+  aba abre uma nova, a chave das sessões muda e ela volta a contar). O ponto, o "Desconectar" e a barra de status seguem com o `isConnected`: com a
+  verificação ligada o indicador já diz o estado, e "Desconectar" encerra o que ainda houver. O filtro (`filterConnected`, puro) roda sobre o que o seletor de ambiente deixou, pelo mesmo `withFolderPath` (as pastas no
+  caminho até as conexões), e a busca filtra depois; os memos do `Navigator` dependem de uma chave em texto com as conectadas, só com o filtro ligado, e a
+  árvore não se refaz com ele desligado. Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
+  todas", que o desliga. É estado do navegador, como o ambiente: vale enquanto a janela está aberta. A conexão que o formulário acabou de salvar, ou a
+  duplicada, desliga os dois filtros quando eles a escondem.
+- **O que não foi feito**: a verificação de cada banco aberto da conexão (RN-ARVORE-006; uma sessão qualquer da conexão responde por ela, como a
+  especificação deixa para depois) e a conferência na tela (só os testes; o arrasto entre janelas sob o Xvfb não foi refeito para a vez da verificação).
 
 ## Configurações (`src/app/settings`)
 
@@ -1912,6 +2009,8 @@ inicial; "Sair" encerra de verdade.
   cache e das abas). **A ordem dos passos e as falhas ficam em `lock-vault.ts` e no teste dele; este guia não as repete.**
 - **Com mais de uma janela** a contagem é de todas e o bloqueio também (RN-ABAS-004): `peers` do `useIdleLock`, `peerAction` e
   `closedByAnotherWindow`, descritos em "Abas que se movem e outras janelas".
+- **A verificação periódica das conexões** (RN-VERIF-002) não é atividade nem comando em andamento: ela não passa pelos executores das abas nem pelos
+  eventos da janela, e bloqueado nada dela sai (ver "Verificação periódica e Só as conectadas").
 - **A barreira.** Bloqueado, `apiRequest` espera o desbloqueio (não falha e não avisa); só passa o pedido com `whileLocked` (`signIn` e
   `signOut`). Um 401 `VAULT_LOCKED` que chega com o app bloqueado não leva ao login (um pedido que já estava a caminho apagaria as abas), e a
   falha de consulta não vira aviso. `vaultLock.reset()` no desmonte do `VaultGuard` solta o que ficou preso: sem isso o login seguinte
