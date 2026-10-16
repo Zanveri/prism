@@ -96,16 +96,17 @@ export const connectionsSchema = z.array(connectionSchema);
 export const revealedPasswordSchema = z.object({ password: z.string() });
 
 /**
- * Os bancos que o Prism abre e a porta sugerida de cada um (RN-CONN-012). O Informix é 9089, a
- * porta DRDA, e não a 9088 do canvas (seção 9 da especificação).
+ * Os bancos que o Prism abre, a porta sugerida de cada um (RN-CONN-012) e a consulta com que a API o verifica quando a conexão não tem uma própria (RN-CONN-013
+ * e RN-VERIF-001: a `PingSql` de cada banco na API), que é a dica do campo "Consulta de verificação". O Informix é 9089, a porta DRDA, e não a 9088 do canvas
+ * (seção 9 da especificação).
  */
 export const engineOptions = [
-  { value: 1, label: "PostgreSQL", tag: engineTags[1], defaultPort: 5432 },
-  { value: 2, label: "Db2", tag: engineTags[2], defaultPort: 50000 },
-  { value: 3, label: "Informix", tag: engineTags[3], defaultPort: 9089 },
+  { value: 1, label: "PostgreSQL", tag: engineTags[1], defaultPort: 5432, verificationQuery: "SELECT 1" },
+  { value: 2, label: "Db2", tag: engineTags[2], defaultPort: 50000, verificationQuery: "SELECT 1 FROM SYSIBM.SYSDUMMY1" },
+  { value: 3, label: "Informix", tag: engineTags[3], defaultPort: 9089, verificationQuery: "SELECT 1 FROM systables WHERE tabid = 1" },
 ] as const;
 
-/** O rótulo, a etiqueta e a porta sugerida de um banco. */
+/** O rótulo, a etiqueta, a porta sugerida e a consulta de verificação de um banco. */
 export function engineOption(engine: Engine) {
   return engineOptions.find((option) => option.value === engine) ?? engineOptions[0];
 }
@@ -130,6 +131,25 @@ const protectionFields = {
   readOnly: z.enum(["true", "false"]).transform((value) => value === "true"),
 };
 
+/** RN-VERIF-001: a frase do intervalo fora da faixa, a mesma da API (na criação, na alteração e no teste). */
+const verificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3.600 segundos.";
+
+/**
+ * A sessão da conexão do formulário (RN-VERIF-001): "Verificar a cada [N] segundos" (`verificationEnabled`, `true` ou `false`, do campo escondido, e o
+ * intervalo, de 5 a 3.600 inteiros) e a consulta de verificação, aparada, até 1.000 caracteres e nula em branco (vale a do banco). Que ela seja uma leitura só
+ * quem diz é a API, no banco da conexão: a recusa volta no campo, com o motivo.
+ */
+const verificationFields = {
+  verificationEnabled: z.enum(["true", "false"]).transform((value) => value === "true"),
+  verificationInterval: z
+    .string()
+    .trim()
+    .regex(/^\d+$/, verificationIntervalMessage)
+    .transform(Number)
+    .pipe(z.number().min(5, verificationIntervalMessage).max(3600, verificationIntervalMessage)),
+  verificationQuery: z.string().trim().max(1000, "A consulta de verificação pode ter no máximo 1.000 caracteres.").transform(emptyToNull),
+};
+
 /** Os campos do formulário de conexão (RN-CONN-010), como o `FormData` os entrega: tudo texto. */
 const connectionFields = z.object({
   engine: z.coerce.number().pipe(engineSchema),
@@ -141,6 +161,7 @@ const connectionFields = z.object({
   userName: z.string().trim().min(1, "Informe o usuário do banco."),
   ...environmentFields,
   ...protectionFields,
+  ...verificationFields,
 });
 
 /** Na criação a senha é obrigatória. Não é aparada: espaço nas pontas faz parte dela. */
@@ -153,8 +174,8 @@ export const editConnectionSchema = connectionFields.extend({ password: z.string
 export const renameConnectionSchema = connectionFields.pick({ name: true });
 
 /**
- * RN-VERIF-001: a verificação periódica da conexão. O formulário ainda não a pergunta, e o `PATCH` grava a conexão por inteiro: vai a que a conexão já
- * tem, e na nova o padrão (`newVerification`).
+ * RN-VERIF-001: a verificação periódica da conexão. O formulário a pergunta (o painel "Sessão da conexão"), e o `PATCH` grava a conexão por inteiro: quem
+ * não a pergunta (renomear, mover) manda a que a conexão já tem (`verificationOf`).
  */
 export type ConnectionVerification = Pick<Connection, "verificationEnabled" | "verificationInterval" | "verificationQuery">;
 
@@ -170,7 +191,7 @@ export function verificationOf(connection: ConnectionVerification): ConnectionVe
  * O que a API recebe para criar ou alterar uma conexão; `password` nulo só na alteração. O `PATCH` grava a conexão por inteiro: as proteções e a
  * verificação vão sempre, as que a conexão já tem quando quem chama não as pergunta (sem elas, voltariam ao padrão).
  */
-export type ConnectionInput = z.output<typeof editConnectionSchema> & ConnectionVerification;
+export type ConnectionInput = z.output<typeof editConnectionSchema>;
 
 /** A senha do usuário no diálogo de revelar. Como no login, não se apara nem se impõe regra de criação. */
 export const revealPasswordSchema = z.object({ password: z.string().min(1, "Informe a sua senha do Prism.") });

@@ -9,7 +9,7 @@ import { allowRefusal, type ApiError, type ApiResult } from "@/lib/api/prism-api
 import { apiFieldErrors, focusFirstField, hasUnshownFieldErrors, parseForm, type FieldErrors } from "@/lib/utils/form";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import { createConnectionSchema, editConnectionSchema, engineOption, newVerification, verificationOf, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
+import { createConnectionSchema, editConnectionSchema, engineOption, type Connection, type ConnectionInput, type Folder } from "../_lib/connections.schema";
 import { connectionsQuery, createConnection, invalidateLists, runConnectionTest, updateConnection } from "../_lib/connections.service";
 import { choiceOf, engineChoices } from "../_lib/engine-choices";
 import { environmentLookup } from "../_lib/environment";
@@ -84,6 +84,8 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
   // RN-PROT-001 e 002: as proteções PRÓPRIAS; as herdadas da pasta escolhida aparecem na seção, e não são gravadas aqui.
   const [confirm, setConfirm] = useState<ConfirmationChoice>(confirmationChoiceOf(connection?.confirmCommands ?? null));
   const [readOnly, setReadOnly] = useState(connection?.readOnly ?? false);
+  // RN-VERIF-001: "Verificar a cada", ligada na conexão nova; o intervalo e a consulta são campos do formulário.
+  const [verifying, setVerifying] = useState(connection?.verificationEnabled ?? true);
   // RN-PROT-003: a gravação que espera a senha do usuário (o somente leitura que muda, ou a API que a pediu), com a frase do que muda.
   const [asking, setAsking] = useState<{ input: ConnectionInput; change: string } | null>(null);
   const [password, setPassword] = useState("");
@@ -200,8 +202,8 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
   }
 
   /**
-   * Lê e valida o formulário (o mesmo para gravar e para testar); nulo, com os erros nos campos, se algo foi recusado. A verificação periódica (RN-VERIF-001)
-   * ainda não está no formulário e vai como a conexão a tem (na nova, o padrão): o `PATCH` grava a conexão por inteiro.
+   * Lê e valida o formulário (o mesmo para gravar e para testar); nulo, com os erros nos campos, se algo foi recusado. A sessão da conexão (RN-VERIF-001) vai
+   * junto: o `PATCH` grava a conexão por inteiro, e "Testar conexão" usa a consulta de verificação do formulário (RN-CONN-013).
    */
   function readForm(form: HTMLFormElement): ConnectionInput | null {
     setRefusal(null);
@@ -209,7 +211,7 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
 
     const parsed = connection ? parseForm(form, editConnectionSchema) : parseForm(form, createConnectionSchema);
     setErrors(parsed.ok ? {} : parsed.errors);
-    return parsed.ok ? { ...parsed.data, ...(connection ? verificationOf(connection) : newVerification) } : null;
+    return parsed.ok ? parsed.data : null;
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -316,6 +318,9 @@ export function ConnectionDialog({ request, folders, openTabs, onClose, onSaved 
               onConfirmChange={setConfirm}
               readOnly={readOnly}
               onReadOnlyChange={setReadOnly}
+              engine={engine}
+              verifying={verifying}
+              onVerifyingChange={setVerifying}
             />
             {refusal === null ? null : <FormMessage tone="error">{refusal}</FormMessage>}
           </form>

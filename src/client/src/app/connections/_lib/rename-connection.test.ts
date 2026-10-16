@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ApiError } from "@/lib/api/prism-api";
 
 import { connectionsCopy } from "./connections.copy";
-import { editConnectionSchema, newVerification, renameConnectionSchema, unprotected, verificationOf, type Connection } from "./connections.schema";
+import { editConnectionSchema, newVerification, renameConnectionSchema, unprotected, type Connection } from "./connections.schema";
 import { renamedConnectionInput, renameRefusalFields } from "./rename-connection";
 
 const now = "2026-10-13T12:00:00Z";
@@ -28,7 +28,9 @@ describe("renamedConnectionInput: renomear uma conexão pelo navegador (RN-NAV-0
   });
 
   it("é o mesmo pedido que o formulário mandaria mudando só o nome (o mesmo PATCH, que leva tudo por inteiro)", () => {
-    const fromForm = { ...editConnectionSchema.parse({ engine: "3", name: "MES Novo", folderID: "f1", host: protegida.host, port: String(protegida.port), database: protegida.database, userName: protegida.userName, password: "", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: "all", readOnly: "true" }), ...verificationOf(protegida) };
+    // A sessão da conexão (RN-VERIF-001) vai pelo painel dela, que nasce com a gravada.
+    const sessionFields = { verificationEnabled: String(protegida.verificationEnabled), verificationInterval: String(protegida.verificationInterval), verificationQuery: protegida.verificationQuery ?? "" };
+    const fromForm = { ...editConnectionSchema.parse({ engine: "3", name: "MES Novo", folderID: "f1", host: protegida.host, port: String(protegida.port), database: protegida.database, userName: protegida.userName, password: "", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: "all", readOnly: "true", ...sessionFields }) };
 
     expect(renamedConnectionInput(protegida, "MES Novo")).toEqual(fromForm);
   });

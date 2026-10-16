@@ -3,7 +3,23 @@ import { z } from "zod";
 
 import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema } from "./connections.schema";
 
-const form = { engine: "1", name: "ERP", folderID: "", host: "srv-pg.exemplo.local", port: "5432", database: "erp", userName: "prism_leitura", password: "demonstracao", environmentName: "", environmentColor: "", confirmCommands: "none", readOnly: "false" };
+const form = {
+  engine: "1",
+  name: "ERP",
+  folderID: "",
+  host: "srv-pg.exemplo.local",
+  port: "5432",
+  database: "erp",
+  userName: "prism_leitura",
+  password: "demonstracao",
+  environmentName: "",
+  environmentColor: "",
+  confirmCommands: "none",
+  readOnly: "false",
+  verificationEnabled: "true",
+  verificationInterval: "30",
+  verificationQuery: "",
+};
 
 /** As mensagens por campo da recusa, ou `{}` quando o schema aceitou. */
 function fieldErrors(schema: z.ZodType, input: unknown) {
@@ -34,11 +50,11 @@ const saved = {
 };
 
 describe("engineOptions (RN-CONN-012)", () => {
-  it("traz o rótulo, a etiqueta e a porta sugerida de cada banco", () => {
-    expect(engineOptions.map(({ value, label, tag, defaultPort }) => [value, label, tag, defaultPort])).toEqual([
-      [1, "PostgreSQL", "PG", 5432],
-      [2, "Db2", "DB2", 50000],
-      [3, "Informix", "IFX", 9089],
+  it("traz o rótulo, a etiqueta, a porta sugerida e a consulta de verificação de cada banco, a da API (RN-CONN-013 e RN-VERIF-001)", () => {
+    expect(engineOptions.map(({ value, label, tag, defaultPort, verificationQuery }) => [value, label, tag, defaultPort, verificationQuery])).toEqual([
+      [1, "PostgreSQL", "PG", 5432, "SELECT 1"],
+      [2, "Db2", "DB2", 50000, "SELECT 1 FROM SYSIBM.SYSDUMMY1"],
+      [3, "Informix", "IFX", 9089, "SELECT 1 FROM systables WHERE tabid = 1"],
     ]);
   });
 });
@@ -47,7 +63,53 @@ describe("createConnectionSchema (RN-CONN-010)", () => {
   it("aceita um formulário válido e entrega a porta e o banco como número", () => {
     const result = createConnectionSchema.safeParse(form);
 
-    expect(result.success && result.data).toEqual({ engine: 1, name: "ERP", folderID: null, host: "srv-pg.exemplo.local", port: 5432, database: "erp", userName: "prism_leitura", password: "demonstracao", environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false });
+    expect(result.success && result.data).toEqual({
+      engine: 1,
+      name: "ERP",
+      folderID: null,
+      host: "srv-pg.exemplo.local",
+      port: 5432,
+      database: "erp",
+      userName: "prism_leitura",
+      password: "demonstracao",
+      environmentName: null,
+      environmentColor: null,
+      confirmCommands: null,
+      readOnly: false,
+      verificationEnabled: true,
+      verificationInterval: 30,
+      verificationQuery: null,
+    });
+  });
+
+  it("a sessão da conexão (RN-VERIF-001): a caixa vem do campo escondido, o intervalo vira número e a consulta é aparada, nula em branco", () => {
+    const off = createConnectionSchema.safeParse({ ...form, verificationEnabled: "false", verificationInterval: " 120 ", verificationQuery: "  SELECT 1 FROM SYSIBM.SYSDUMMY1\n" });
+    const blank = createConnectionSchema.safeParse({ ...form, verificationQuery: " \n " });
+
+    expect(off.success && [off.data.verificationEnabled, off.data.verificationInterval, off.data.verificationQuery]).toEqual([false, 120, "SELECT 1 FROM SYSIBM.SYSDUMMY1"]);
+    expect(blank.success && blank.data.verificationQuery).toBeNull();
+  });
+
+  it.each(["4", "3601", "0", "12.5", "trinta", "", "-30"])("recusa o intervalo %j no campo dele, com a frase da API", (verificationInterval) => {
+    expect(fieldErrors(createConnectionSchema, { ...form, verificationInterval }).verificationInterval).toEqual(["A verificação deve ser feita a cada 5 a 3.600 segundos."]);
+  });
+
+  it.each(["5", "3600", "30"])("aceita o intervalo %j", (verificationInterval) => {
+    expect(createConnectionSchema.safeParse({ ...form, verificationInterval }).success).toBe(true);
+  });
+
+  it("a consulta de verificação tem até 1.000 caracteres depois de aparada, como a API conta", () => {
+    expect(createConnectionSchema.safeParse({ ...form, verificationQuery: ` ${"x".repeat(1000)} ` }).success).toBe(true);
+    expect(fieldErrors(createConnectionSchema, { ...form, verificationQuery: "x".repeat(1001) }).verificationQuery).toEqual(["A consulta de verificação pode ter no máximo 1.000 caracteres."]);
+  });
+
+  it("sem os campos da sessão da conexão o formulário é recusado, em vez de gravar a verificação padrão por cima da escolhida", () => {
+    const without: Partial<typeof form> = { ...form };
+    delete without.verificationEnabled;
+    delete without.verificationInterval;
+    delete without.verificationQuery;
+
+    expect(Object.keys(fieldErrors(createConnectionSchema, without)).sort()).toEqual(["verificationEnabled", "verificationInterval", "verificationQuery"]);
   });
 
   it("as proteções próprias (RN-PROT-001 e 002) vêm dos campos escondidos: “Não” vai nulo, como a API devolve, e o somente leitura vira booleano", () => {

@@ -139,6 +139,19 @@ export const connectionsCopy = {
     submitting: "Movendo…",
   },
 
+  // RN-VERIF-001: o painel "Sessão da conexão" do formulário, como no canvas, com a consulta de verificação que a pessoa pode preencher no lugar da fixa e sem
+  // o "Encerrar a conexão após N minutos sem uso", que continua fora (seção 13).
+  session: {
+    title: "Sessão da conexão",
+    verify: "Verificar a cada",
+    interval: "Intervalo da verificação, em segundos",
+    seconds: "segundos",
+    hint: "Enquanto a conexão estiver aberta, o Prism executa a consulta abaixo nesse intervalo e atualiza o indicador ao lado do nome da conexão.",
+    query: "Consulta de verificação",
+    queryHint:
+      "Em branco, vale a do banco, a sua forma de SELECT 1: no PostgreSQL, SELECT 1; no Db2, SELECT 1 FROM SYSIBM.SYSDUMMY1; no Informix, SELECT 1 FROM systables WHERE tabid = 1. A sua tem de ser uma leitura só e é lida até o fim a cada verificação: prefira uma que devolva uma linha. “Testar conexão” também a usa.",
+  },
+
   // RN-PROT-001 a 004: a seção Proteções, a mesma no formulário da conexão e no diálogo da pasta (o canvas, com a escolha de três no lugar da caixa).
   protections: {
     title: "Proteções",

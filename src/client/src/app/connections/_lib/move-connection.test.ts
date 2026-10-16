@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { editConnectionSchema, newVerification, unprotected, verificationOf, type Connection } from "./connections.schema";
+import { editConnectionSchema, newVerification, unprotected, type Connection } from "./connections.schema";
 import { movedConnectionInput } from "./move-connection";
 
 const now = "2026-10-12T12:00:00Z";
@@ -28,8 +28,9 @@ describe("movedConnectionInput: mover uma conexão de pasta pelo navegador (RN-N
   });
 
   it("é o mesmo pedido que o formulário mandaria sem mexer em nada além da pasta (o mesmo PATCH, que leva tudo por inteiro)", () => {
-    // O formulário manda as proteções próprias pelos campos escondidos, e a verificação como a conexão a tem (o `readForm` do diálogo).
-    const fromForm = { ...editConnectionSchema.parse({ engine: "3", name: protegida.name, folderID: "f2", host: protegida.host, port: String(protegida.port), database: protegida.database, userName: protegida.userName, password: "", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: "irreversible", readOnly: "true" }), ...verificationOf(protegida) };
+    // O formulário manda as proteções próprias pelos campos escondidos, e a sessão da conexão (RN-VERIF-001) pelo painel dela, que nasce com a gravada.
+    const sessionFields = { verificationEnabled: String(protegida.verificationEnabled), verificationInterval: String(protegida.verificationInterval), verificationQuery: protegida.verificationQuery ?? "" };
+    const fromForm = { ...editConnectionSchema.parse({ engine: "3", name: protegida.name, folderID: "f2", host: protegida.host, port: String(protegida.port), database: protegida.database, userName: protegida.userName, password: "", environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: "irreversible", readOnly: "true", ...sessionFields }) };
 
     expect(movedConnectionInput(protegida, "f2")).toEqual(fromForm);
   });

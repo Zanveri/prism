@@ -1,14 +1,17 @@
-import { EyeIcon, EyeOffIcon, Field, FieldError, FieldLabel, LockIcon, Select, TextField } from "@/components/ui";
+import type { ReactNode } from "react";
+
+import { EyeIcon, EyeOffIcon, Field, FieldError, FieldLabel, LockIcon, Select, TextField, type Engine } from "@/components/ui";
 import type { FieldErrors } from "@/lib/utils/form";
 
 import { buildConnectionTree, folderOptions } from "../_lib/connection-tree";
 import { connectionsCopy } from "../_lib/connections.copy";
-import type { Connection, Folder } from "../_lib/connections.schema";
+import { newVerification, verificationOf, type Connection, type Folder } from "../_lib/connections.schema";
 import { environmentLookup } from "../_lib/environment";
 import { inheritedProtections, type ConfirmationChoice } from "../_lib/protections";
 import type { UserEnvironment } from "../_lib/user-environments";
 import { EnvironmentPicker } from "./environment-picker";
 import { ProtectionsSection } from "./protections-section";
+import { SessionSection } from "./session-section";
 
 const copy = connectionsCopy.form;
 const monoClassName = "font-mono text-sm";
@@ -36,14 +39,21 @@ type ConnectionFieldsProps = {
   onConfirmChange: (confirm: ConfirmationChoice) => void;
   readOnly: boolean;
   onReadOnlyChange: (readOnly: boolean) => void;
+  /** RN-VERIF-001: o banco escolhido (a consulta dele é a dica da consulta de verificação) e "Verificar a cada", estado do diálogo. */
+  engine: Engine | null;
+  verifying: boolean;
+  onVerifyingChange: (verifying: boolean) => void;
+  /** RN-VERIF-003: o indicador da última verificação da conexão gravada e conectada, no painel "Sessão da conexão". */
+  checkIndicator?: ReactNode;
 };
 
 /**
  * Os campos da conexão (RN-CONN-010), os mesmos da tela de Conexões de antes, no passo das configurações do diálogo: nome, pasta, host,
- * porta, banco, usuário, senha (com o olho e o aviso de que ela fica cifrada), o ambiente e as proteções. O que é texto livre vai pelo `FormData` (campos
- * não controlados); a pasta, a porta (que acompanha o banco, RN-CONN-012), a senha, a cor e as proteções são do diálogo.
+ * porta, banco, usuário, senha (com o olho e o aviso de que ela fica cifrada), a sessão da conexão (RN-VERIF-001), o ambiente e as proteções, na ordem de
+ * leitura do canvas (a coluna da esquerda, com a sessão embaixo dos campos, e depois a da direita). O que é texto livre vai pelo `FormData` (campos não
+ * controlados); a pasta, a porta (que acompanha o banco, RN-CONN-012), a senha, a cor, as proteções e a caixa da verificação são do diálogo.
  */
-export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange }: ConnectionFieldsProps) {
+export function ConnectionFields({ connection, folders, errors, folderID, onFolderChange, port, onPortChange, password, onPasswordChange, passwordShown, onPasswordEye, color, onColorChange, environments = [], confirm, onConfirmChange, readOnly, onReadOnlyChange, engine, verifying, onVerifyingChange, checkIndicator }: ConnectionFieldsProps) {
   const folder = folderID === "" ? null : folderID;
 
   return (
@@ -94,6 +104,9 @@ export function ConnectionFields({ connection, folders, errors, folderID, onFold
           <span>{copy.passwordNotice}</span>
         </p>
       </div>
+
+      {/* RN-VERIF-001: na conexão nova, a verificação padrão (ligada, a cada 30 segundos, com a consulta do banco). */}
+      <SessionSection idPrefix="cx" engine={engine} saved={connection === null ? newVerification : verificationOf(connection)} verifying={verifying} onVerifyingChange={onVerifyingChange} indicator={checkIndicator} errors={errors} />
 
       {/* RN-PASTA-005: sem ambiente próprio, a conexão herda o da pasta escolhida aqui (a do campo, que pode ainda não estar gravada). */}
       <EnvironmentPicker
