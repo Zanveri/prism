@@ -22,6 +22,10 @@ export const scriptsCopy = {
     generic: "Script genérico (sem conexão)",
     genericHint: "Abre na conexão que estiver conectada; com mais de uma, pergunta qual.",
     genericLocked: "Esta aba não tem conexão: o script fica genérico.",
+    // RN-SCRIPT-010: o campo "Pasta", depois do nome e antes da caixa do script genérico.
+    folder: "Pasta",
+    noFolder: "Sem pasta",
+    folderGone: "A pasta escolhida não existe mais.",
     save: "Salvar",
     saving: "Salvando…",
     cancel: "Cancelar",
@@ -64,6 +68,8 @@ export const scriptsCopy = {
   },
   toasts: {
     saved: (name: string) => `Script ${name} salvo.`,
+    // RN-SCRIPT-010: o script novo numa pasta diz onde ficou; na raiz, e o Ctrl+S que grava por cima, o `saved` de sempre.
+    savedIn: (name: string, folder: string) => `Script ${name} salvo em ${folder}.`,
     // RN-SCRIPT-009.
     moved: "Script movido.",
     renamed: (name: string) => `Script renomeado para ${name}.`,

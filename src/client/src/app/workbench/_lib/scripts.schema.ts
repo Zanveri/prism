@@ -23,9 +23,9 @@ export type Script = z.infer<typeof scriptSchema>;
 
 /**
  * O que o Ctrl+S manda (RN-SCRIPT-001): o nome, o texto e o lugar da aba (a conexão e o banco; nulo é o banco da conexão). O script genérico (RN-SCRIPT-005)
- * vai com os dois nulos.
+ * vai com os dois nulos. `folderID` é a pasta do campo "Pasta" (RN-SCRIPT-010), nula na raiz.
  */
-export type ScriptInput = { name: string; sql: string; connectionID: string | null; database: string | null };
+export type ScriptInput = { name: string; sql: string; connectionID: string | null; database: string | null; folderID: string | null };
 
 /**
  * Uma pasta de scripts (`GET api/user/script-folders`, seção 33: RN-SCRIPT-007): o nome e a pasta pai, nula na raiz da seção Scripts. A lista traz as pastas de

@@ -28,9 +28,12 @@ export function getScript(id: string, signal?: AbortSignal): Promise<ApiResult<S
   return apiRequest(prismEndpoints.userScript(id), { schema: scriptSchema, signal });
 }
 
-/** RN-SCRIPT-001: o Ctrl+S da primeira vez e o "Salvar como". */
+/**
+ * RN-SCRIPT-001: o Ctrl+S da primeira vez e o "Salvar como". A pasta escolhida que outra janela excluiu (`SCRIPT_FOLDER_NOT_FOUND`, RN-SCRIPT-010) também volta
+ * como valor: o diálogo a mostra no campo "Pasta".
+ */
 export async function createScriptOrRefuse(input: ScriptInput, signal: AbortSignal = deadline()): Promise<ApiResult<ScriptSummary>> {
-  return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "POST", body: input, schema: scriptSummarySchema, signal }), ...nameRefusals);
+  return allowRefusal(await apiRequest(prismEndpoints.userScripts, { method: "POST", body: input, schema: scriptSummarySchema, signal }), ...nameRefusals, "SCRIPT_FOLDER_NOT_FOUND");
 }
 
 /**

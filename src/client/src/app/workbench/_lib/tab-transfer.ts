@@ -88,6 +88,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
               ...(script.generic === true ? { generic: true as const } : {}),
               ...(script.savedConnectionId === undefined ? {} : { savedConnectionId: script.savedConnectionId }),
               ...(script.savedDatabase === undefined ? {} : { savedDatabase: script.savedDatabase }),
+              ...(script.folderId === undefined ? {} : { folderId: script.folderId }),
             },
           }),
     },

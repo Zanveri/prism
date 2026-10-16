@@ -6,28 +6,35 @@ import type { QueryTab } from "../_lib/workbench-model";
 // O Ctrl+S e o "Salvar como" de uma aba de consulta (`useScriptSaving`) com os ganchos do React simulados, como os testes do provedor
 // (`workbench-state.*.test.ts`): o que se confere é a LIGAÇÃO do lugar do script (RN-SCRIPT-003 e 005). O que cada chamada à API leva (a conexão e o banco
 // da aba, ou o genérico), como a caixa "Script genérico (sem conexão)" nasce no diálogo do nome, e o lugar salvo que a aba guarda. As decisões são de
-// `saved-scripts.ts` e o corpo das rotas de `scripts.service.ts`, com teste próprio; a API e o provedor são de mentira.
+// `saved-scripts.ts` e o corpo das rotas de `scripts.service.ts`, com teste próprio; a API e o provedor são de mentira. E o campo "Pasta" (RN-SCRIPT-010): a pasta
+// que ele traz escolhida, a que vai à API, a recusa da pasta que outra janela excluiu e o aviso que diz onde o script ficou.
 const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
 
   return {
     ...createHookRuntime(),
     tabs: [] as QueryTab[],
+    scripts: [] as unknown[],
+    folders: [] as unknown[],
     workbench: { setTabScript: vi.fn(), forgetScript: vi.fn() },
-    queryClient: { getQueryData: vi.fn(() => [] as unknown), invalidateQueries: vi.fn(() => Promise.resolve()) },
+    queryClient: { getQueryData: vi.fn((key: readonly unknown[]) => (key[0] === "script-folders" ? rt.folders : rt.scripts) as unknown), invalidateQueries: vi.fn(() => Promise.resolve()) },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     service: { createScriptOrRefuse: vi.fn(), overwriteScriptOrRefuse: vi.fn() },
   };
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
-vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => rt.queryClient }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => rt.queryClient,
+  useQuery: (options: { queryKey: readonly unknown[] }) => ({ data: options.queryKey[0] === "script-folders" ? rt.folders : undefined }),
+}));
 vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, run: () => Promise<unknown>) => run() }));
 vi.mock("../_lib/workbench-state", () => ({ useWorkbench: () => ({ tabs: rt.tabs, ...rt.workbench }) }));
 vi.mock("../_lib/scripts.service", async (importOriginal) => ({ ...(await importOriginal<typeof import("../_lib/scripts.service")>()), ...rt.service }));
 
-import type { ScriptSummary } from "../_lib/scripts.schema";
+import type { ScriptFolder, ScriptSummary } from "../_lib/scripts.schema";
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { ScriptNameDialog } from "./script-dialogs";
 import { useScriptSaving } from "./use-script-saving";
@@ -36,6 +43,7 @@ type Dialog = ComponentProps<typeof ScriptNameDialog>;
 
 const summary = (over: Partial<ScriptSummary> = {}): ScriptSummary => ({ id: "s1", name: "Fechamento", connectionID: "c1", database: null, folderID: null, icon: null, color: null, updatedAt: "2026-10-15T00:00:00Z", ...over });
 const queryTab = (over: Partial<QueryTab> = {}): QueryTab => ({ id: "q1", title: "consulta-1.sql", connectionId: "c1", sessionId: null, sql: "select 2", ...over });
+const folder = (id: string, name: string, parentID: string | null = null): ScriptFolder => ({ id, parentID, name, createdAt: "", updatedAt: "" });
 
 /** O que o gancho entrega agora: `save` e o diálogo do nome, se está aberto. Duas voltas: o efeito da primeira guarda a lista de abas mais recente. */
 function show() {
@@ -51,7 +59,8 @@ const settle = () => new Promise((done) => setTimeout(done, 0));
 beforeEach(() => {
   vi.clearAllMocks();
   rt.tabs = [];
-  rt.queryClient.getQueryData.mockReturnValue([summary()]);
+  rt.scripts = [summary()];
+  rt.folders = [folder("f1", "Fechamento"), folder("f2", "Mensal", "f1")];
   rt.service.overwriteScriptOrRefuse.mockResolvedValue({ ok: true, data: summary() });
   rt.service.createScriptOrRefuse.mockImplementation((input: { name: string }) => Promise.resolve({ ok: true, data: summary({ id: "s2", name: input.name }) }));
 });
@@ -117,7 +126,7 @@ describe("useScriptSaving: o diálogo do nome e a caixa do script genérico (RN-
     show().dialog!.onSubmit("Relatório", true);
     await settle();
 
-    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: null, database: null });
+    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: null, database: null, folderID: null });
     expect(rt.workbench.setTabScript).toHaveBeenCalledWith("q1", { id: "s2", name: "Relatório" }, "select 2", { generic: true });
     expect(await saved).toBe(true);
     expect(show().dialog).toBeNull();
@@ -130,7 +139,7 @@ describe("useScriptSaving: o diálogo do nome e a caixa do script genérico (RN-
     show().dialog!.onSubmit("Relatório", false);
     await settle();
 
-    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: "c1", database: "vendas" });
+    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: "c1", database: "vendas", folderID: null });
     expect(rt.workbench.setTabScript).toHaveBeenCalledWith("q1", { id: "s2", name: "Relatório" }, "select 2", { savedConnectionId: "c1", savedDatabase: "vendas" });
   });
 
@@ -141,7 +150,7 @@ describe("useScriptSaving: o diálogo do nome e a caixa do script genérico (RN-
     show().dialog!.onSubmit("Relatório", false);
     await settle();
 
-    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: null, database: null });
+    expect(rt.service.createScriptOrRefuse).toHaveBeenCalledWith({ name: "Relatório", sql: "select 2", connectionID: null, database: null, folderID: null });
     expect(rt.workbench.setTabScript).toHaveBeenCalledWith("q1", { id: "s2", name: "Relatório" }, "select 2", { generic: true });
   });
 });

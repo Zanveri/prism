@@ -71,7 +71,7 @@ type WorkbenchState = {
    * RN-SCRIPT-001: a aba foi salva como o script dado, com este texto e neste lugar (a conexão e o banco da aba, ou o genérico, RN-SCRIPT-005). O ponto é
    * refeito pelo texto do editor deste instante e pelo lugar da aba: o que mudou enquanto a gravação ia continua marcado.
    */
-  setTabScript: (tabId: string, script: { id: string; name: string }, savedSql: string, saved: SavedPlace) => void;
+  setTabScript: (tabId: string, script: { id: string; name: string; folderId?: string }, savedSql: string, saved: SavedPlace) => void;
   /** RN-SCRIPT-005: o menu do script o tornou genérico ou o vinculou à conexão da aba; as abas dele guardam o lugar novo e refazem o ponto. */
   setScriptPlace: (scriptId: string, saved: SavedPlace) => void;
   /** RN-SCRIPT-001: o texto do editor mudou, sem atraso: o ponto da aba de um script acende na hora (só a primeira tecla muda o estado). */
@@ -283,11 +283,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // O ponto é recalculado contra o que acabou de ser salvo, pelo texto do editor deste instante e pelo lugar da aba: o texto, a conexão (RN-ARVORE-008) ou o
   // banco (RN-ARVORE-007) podem ter mudado enquanto a gravação ia.
   const setTabScript = useCallback(
-    (tabId: string, saved: { id: string; name: string }, savedSql: string, place: SavedPlace) =>
+    (tabId: string, saved: { id: string; name: string; folderId?: string }, savedSql: string, place: SavedPlace) =>
       setTabs((current) =>
         current.map((tab) => {
           if (tab.id !== tabId) return tab;
-          const script: Omit<ScriptRef, "dirty"> = { id: saved.id, name: saved.name, savedSql, ...place };
+          // RN-SCRIPT-010: a aba lembra a pasta em que gravou o script, sem gravá-la no cofre.
+          const script: Omit<ScriptRef, "dirty"> = { id: saved.id, name: saved.name, savedSql, ...place, ...(saved.folderId === undefined ? {} : { folderId: saved.folderId }) };
           return { ...tab, title: saved.name, script: { ...script, dirty: isScriptDirty(script, liveSql(tab.id) ?? tab.sql, tab) } };
         }),
       ),
@@ -366,7 +367,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const open = tabs.find((tab) => tab.script?.id === script.id);
       if (open !== undefined) return setActiveTabId(open.id);
 
-      const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...place.saved, dirty: false };
+      // RN-SCRIPT-010: a aba lembra a pasta em que o script estava quando ela o abriu.
+      const ref: ScriptRef = { id: script.id, name: script.name, savedSql: script.sql, ...place.saved, ...(script.folderID === null ? {} : { folderId: script.folderID }), dirty: false };
       addTab({ id: crypto.randomUUID(), title: script.name, connectionId: place.connectionId, ...inDatabase(place.database), sessionId: null, sql: script.sql, script: ref });
     },
     [tabs, addTab],

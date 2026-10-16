@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { ColorField } from "@/app/connections/_components/color-field";
-import { Button, Dialog, FieldError, Select, TextField, type SelectOption } from "@/components/ui";
+import { Button, Dialog, Field, FieldError, FieldLabel, Select, TextField, type SelectOption } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import type { EditScriptErrors } from "../_lib/edit-script-errors";
@@ -27,17 +27,22 @@ type ScriptNameDialogProps = {
    * aba sem conexão, em que ela vem marcada e não se desmarca.
    */
   generic?: { initial: boolean; locked: boolean };
+  /**
+   * RN-SCRIPT-010: o campo "Pasta", na primeira vez e no "Salvar como" (renomear não o tem): a escolhida (vazio é "Sem pasta", a raiz), as pastas com o caminho
+   * (`scriptFolderOptions`) e a recusa da pasta que outra janela excluiu. Quem chama guarda a escolha.
+   */
+  folder?: { value: string; options: SelectOption[]; error: string | null; onChange: (value: string) => void };
   /** O nome digitado e, com a caixa, se ela está marcada. */
   onSubmit: (name: string, generic: boolean) => void;
   onCancel: () => void;
 };
 
 /**
- * O nome de um script: salvar a primeira vez, "Salvar como" e renomear (RN-SCRIPT-001, 003 e 004), e, ao salvar, a caixa do script genérico (RN-SCRIPT-005).
- * Só desenha: quem chama confere o nome, grava e diz o erro. Montado ao abrir e desmontado ao fechar, o que foi digitado não sobra para a próxima vez. Enquanto
- * grava, nada se envia de novo nem fecha.
+ * O nome de um script: salvar a primeira vez, "Salvar como" e renomear (RN-SCRIPT-001, 003 e 004), e, ao salvar, o campo "Pasta" (RN-SCRIPT-010), depois do
+ * nome, e a caixa do script genérico (RN-SCRIPT-005). Só desenha: quem chama confere o nome, grava e diz o erro. Montado ao abrir e desmontado ao fechar, o que
+ * foi digitado não sobra para a próxima vez. Enquanto grava, nada se envia de novo nem fecha.
  */
-export function ScriptNameDialog({ title, description = copy.save.description, submitLabel, pendingLabel, initialName, pending, error, generic, onSubmit, onCancel }: ScriptNameDialogProps) {
+export function ScriptNameDialog({ title, description = copy.save.description, submitLabel, pendingLabel, initialName, pending, error, generic, folder, onSubmit, onCancel }: ScriptNameDialogProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
@@ -70,6 +75,24 @@ export function ScriptNameDialog({ title, description = copy.save.description, s
     >
       <form id={formID} onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <TextField id="script-name" name="name" label={copy.save.nameLabel} defaultValue={initialName} maxLength={maxScriptNameLength} autoComplete="off" spellCheck={false} autoFocus onFocus={(event) => event.currentTarget.select()} error={error ?? undefined} />
+        {folder === undefined ? null : (
+          <Field>
+            <FieldLabel htmlFor="script-folder">{copy.save.folder}</FieldLabel>
+            <Select
+              id="script-folder"
+              value={folder.value}
+              onChange={folder.onChange}
+              options={folder.options}
+              placeholder={copy.save.noFolder}
+              invalid={folder.error !== null}
+              aria-describedby={folder.error === null ? undefined : "script-folder-error"}
+            />
+            {/* A recusa da pasta chega com o foco no nome: o papel de alerta a anuncia, como a de um campo que o foco não está. */}
+            <FieldError id="script-folder-error" role="alert">
+              {folder.error ?? undefined}
+            </FieldError>
+          </Field>
+        )}
         {generic === undefined ? null : (
           <div className="flex flex-col gap-1">
             <label className="flex items-center gap-2.5 text-sm">

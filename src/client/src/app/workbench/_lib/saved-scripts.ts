@@ -26,6 +26,11 @@ export type ScriptRef = {
   generic?: true;
   savedConnectionId?: string;
   savedDatabase?: string;
+  /**
+   * RN-SCRIPT-010: a pasta de scripts em que ele estava quando a aba o abriu ou o gravou pela última vez, que a aba lembra sem gravar no cofre: é a que o
+   * diálogo do nome traz escolhida quando outra janela excluiu o script. A aba que voltou numa entrada nova (RN-ABAS-006) não a sabe.
+   */
+  folderId?: string;
   dirty: boolean;
 };
 

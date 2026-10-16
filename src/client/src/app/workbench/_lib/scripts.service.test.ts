@@ -50,8 +50,8 @@ describe("as rotas dos scripts (seção 23)", () => {
   it("salvar a primeira vez manda o nome, o SQL e o lugar da aba", async () => {
     const fake = fetchAnswers(json(summary, 201));
 
-    expect(await createScriptOrRefuse({ name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas" })).toEqual({ ok: true, data: summary });
-    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "POST", body: { name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas" } });
+    expect(await createScriptOrRefuse({ name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas", folderID: null })).toEqual({ ok: true, data: summary });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/scripts`, method: "POST", body: { name: "Fechamento", sql: "SELECT 1", connectionID, database: "vendas", folderID: null } });
   });
 
   it("o Mover para… do script manda só a pasta, ou root na raiz; a recusa vai ao aviso central (RN-SCRIPT-009)", async () => {
@@ -131,7 +131,7 @@ describe("as rotas dos scripts (seção 23)", () => {
   ])("ao salvar, %s %s volta como valor, para o diálogo mostrar no lugar", async (status, code) => {
     fetchAnswers(refusal(status, code));
 
-    expect(await createScriptOrRefuse({ name: "a", sql: "", connectionID: null, database: null })).toMatchObject({ ok: false, error: { code } });
+    expect(await createScriptOrRefuse({ name: "a", sql: "", connectionID: null, database: null, folderID: null })).toMatchObject({ ok: false, error: { code } });
     fetchAnswers(refusal(status, code));
     expect(await renameScriptOrRefuse(id, "a")).toMatchObject({ ok: false, error: { code } });
     fetchAnswers(refusal(status, code));
@@ -149,6 +149,6 @@ describe("as rotas dos scripts (seção 23)", () => {
     expect(await overwriteScriptOrRefuse({ id, sql: "", connectionID: null, database: null })).toMatchObject({ ok: false, error: { code: "SCRIPT_NOT_FOUND" } });
 
     fetchAnswers(refusal(503, "VAULT_UNAVAILABLE"));
-    await expect(createScriptOrRefuse({ name: "a", sql: "", connectionID: null, database: null })).rejects.toMatchObject({ error: { code: "VAULT_UNAVAILABLE" } });
+    await expect(createScriptOrRefuse({ name: "a", sql: "", connectionID: null, database: null, folderID: null })).rejects.toMatchObject({ error: { code: "VAULT_UNAVAILABLE" } });
   });
 });
