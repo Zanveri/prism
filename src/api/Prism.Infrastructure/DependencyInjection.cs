@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Prism.Infrastructure.ConnectionFiles.Clients;
+using Prism.Infrastructure.ConnectionFiles.Models;
+using Prism.Infrastructure.ConnectionFiles.Services;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
@@ -33,6 +36,12 @@ public static class DependencyInjection
         // e não por instância pronta: o contêiner só descarta o que ele mesmo cria, e é o descarte no
         // desligamento da API que zera a chave (RN-COFRE-008).
         services.AddSingleton<IVaultService>(provider => new VaultService(provider.GetRequiredService<IVaultFileClient>(), provider.GetRequiredService<IOptions<VaultOptions>>(), VaultCrypto.DeriveKey, VaultCrypto.NewKey, provider.GetRequiredService<ILogger>()));
+
+        // O arquivo da exportação de conexões (RN-TRANSF-007 a 010): a cifra do cofre, sem o cofre. Singleton pela fila das derivações (RN-TRANSF-008), uma
+        // por vez em toda a API e fora da trava do cofre; a derivação é a do cofre, por fábrica, como lá, para o teste trocá-la por uma barata.
+        services.AddOptions<ConnectionFileOptions>();
+        services.AddTransient<IConnectionFileClient, ConnectionFileClient>();
+        services.AddSingleton<IConnectionFileService>(provider => new ConnectionFileService(provider.GetRequiredService<IConnectionFileClient>(), provider.GetRequiredService<IOptions<ConnectionFileOptions>>(), VaultCrypto.DeriveKey));
 
         // Um client por banco, sem estado: o registro de sessões escolhe pelo `Engine` da conexão. Os do Db2 e do Informix só existem
         // nas plataformas para as quais a IBM publica o driver (RN-ABERTO-006); nas outras o registro de sessões responde que o Prism
