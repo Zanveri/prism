@@ -2955,7 +2955,8 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
     nó da árvore (RN-ARVORE-005);
   - a resposta `busy` deixa o indicador como estava, com "Ocupada: verificada na próxima" na dica;
   - com `notConnected` a tela para de verificar a conexão, e o indicador diz "Sem sessão aberta"; a
-    próxima ação na árvore ou na aba abre a sessão de novo, como hoje (RN-AVISO-003).
+    próxima ação na árvore ou na aba abre a sessão de novo, como hoje (RN-AVISO-003). Até lá ela não
+    conta como conectada (RN-NAV-013).
   - Quando a conexão passa de responder a não responder, um aviso de atenção diz isso uma vez ("MES
     Produção não respondeu à verificação"), e não se repete enquanto ela continuar sem responder;
     quando ela volta a responder, um aviso de sucesso diz isso.
@@ -2967,7 +2968,12 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   seletor de ambiente (RN-NAV-010), que mostra quantas conexões estão conectadas ("3 conectadas"),
   ligado ou não: é o que o colega pediu, saber se há conexões abertas.
   - Conectada é a conexão com a sessão da árvore aberta ou com uma aba conectada, a mesma conta da
-    lista do botão da conexão da aba (RN-ARVORE-008).
+    lista do botão da conexão da aba (RN-ARVORE-008) e do script genérico (RN-SCRIPT-005).
+  - A conexão cuja verificação respondeu que a API não tem sessão aberta com ela (o "Sem sessão
+    aberta" da RN-VERIF-003) não conta como conectada, na conta, no filtro e na lista do botão da
+    conexão, até uma sessão nova abrir (a próxima ação na árvore ou na aba): o indicador e a conta
+    dizem o mesmo. O "Desconectar" do menu continua valendo para ela, e na árvore e na barra de
+    status quem diz o estado dela é o indicador.
   - Ligado, a árvore mostra só as conexões conectadas e as pastas no caminho até elas. Combina com o
     campo de filtro e com o seletor de ambiente, como os dois entre si.
   - A conexão que desconecta sai da árvore filtrada na hora, e a que conecta (pela árvore, por uma
@@ -2975,7 +2981,8 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - Sem nenhuma conectada, o botão diz "Nenhuma conectada", e, ligado, a árvore diz "Nenhuma conexão
     conectada." com "Mostrar todas", que o desliga.
   - A escolha vale enquanto a janela está aberta, como a do ambiente.
-  - A API não muda: a tela já sabe quais conexões estão conectadas.
+  - A API não muda: a tela já sabe quais conexões estão conectadas, e a verificação diz quais
+    perderam a sessão.
 
 ### Rotas e respostas
 
