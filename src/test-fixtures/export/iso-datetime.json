@@ -1,0 +1,65 @@
+{
+  "rule": "RN-EXPORT-010, 'Datas em ISO 8601' do JSON e do Código fonte. Só da API (ExportText.IsoDateTime), pronta para quando a tela a escrever.",
+  "cases": [
+    {
+      "name": "com microssegundos",
+      "value": "2024-01-15 10:30:00.000000",
+      "expected": "2024-01-15T10:30:00.000000"
+    },
+    {
+      "name": "sem fração",
+      "value": "2024-01-15 10:30:00",
+      "expected": "2024-01-15T10:30:00"
+    },
+    {
+      "name": "fuso em horas ganha os minutos",
+      "value": "2024-01-15 10:30:00+00",
+      "expected": "2024-01-15T10:30:00+00:00"
+    },
+    {
+      "name": "fuso negativo com fração",
+      "value": "2024-01-15 10:30:00.5-03",
+      "expected": "2024-01-15T10:30:00.5-03:00"
+    },
+    {
+      "name": "fuso com minutos fica",
+      "value": "2024-01-15 10:30:00+05:30",
+      "expected": "2024-01-15T10:30:00+05:30"
+    },
+    {
+      "name": "data sem hora fica",
+      "value": "2024-01-15",
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "hora sem data fica",
+      "value": "10:30:00",
+      "expected": "10:30:00"
+    },
+    {
+      "name": "antes de Cristo fica",
+      "value": "2024-01-15 10:30:00 BC",
+      "expected": "2024-01-15 10:30:00 BC"
+    },
+    {
+      "name": "fuso com segundos fica",
+      "value": "2024-01-15 10:30:00+05:30:15",
+      "expected": "2024-01-15 10:30:00+05:30:15"
+    },
+    {
+      "name": "outro formato fica",
+      "value": "15/01/2024 10:30",
+      "expected": "15/01/2024 10:30"
+    },
+    {
+      "name": "já em ISO fica",
+      "value": "2024-01-15T10:30:00",
+      "expected": "2024-01-15T10:30:00"
+    },
+    {
+      "name": "data e hora seguida de quebra de linha fica como está",
+      "value": "2024-01-15 10:30:00\n",
+      "expected": "2024-01-15 10:30:00\n"
+    }
+  ]
+}

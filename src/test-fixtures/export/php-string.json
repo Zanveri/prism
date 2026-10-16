@@ -1,0 +1,181 @@
+{
+  "rule": "RN-EXPORT-010, Código fonte: o texto como literal do PHP, nas aspas duplas (double) ou simples (single). Só da API (ExportText.PhpString). removed é quantos caracteres de direção saíram (só nas aspas simples).",
+  "notes": [
+    "value e expected são texto ou { codePoints: [...] }."
+  ],
+  "cases": [
+    {
+      "name": "texto simples",
+      "value": "Ana",
+      "quote": "double",
+      "expected": "\"Ana\"",
+      "removed": 0
+    },
+    {
+      "name": "cifrão",
+      "value": "custa $5",
+      "quote": "double",
+      "expected": "\"custa \\$5\"",
+      "removed": 0
+    },
+    {
+      "name": "interpolação",
+      "value": "{$x}",
+      "quote": "double",
+      "expected": "\"{\\$x}\"",
+      "removed": 0
+    },
+    {
+      "name": "aspas",
+      "value": "diz \"oi\"",
+      "quote": "double",
+      "expected": "\"diz \\\"oi\\\"\"",
+      "removed": 0
+    },
+    {
+      "name": "barra invertida",
+      "value": "a\\b",
+      "quote": "double",
+      "expected": "\"a\\\\b\"",
+      "removed": 0
+    },
+    {
+      "name": "formas curtas",
+      "value": "l1\nl2\r\tx\u000b\f",
+      "quote": "double",
+      "expected": "\"l1\\nl2\\r\\tx\\v\\f\"",
+      "removed": 0
+    },
+    {
+      "name": "outros controles em \\xHH",
+      "value": "\u0000\u001b\u007f",
+      "quote": "double",
+      "expected": "\"\\x00\\x1B\\x7F\"",
+      "removed": 0
+    },
+    {
+      "name": "controle de C1 pelos bytes do UTF-8",
+      "value": "\u0085",
+      "quote": "double",
+      "expected": "\"\\xC2\\x85\"",
+      "removed": 0
+    },
+    {
+      "name": "U+202E pelos bytes do UTF-8",
+      "value": "abc\u202edef",
+      "quote": "double",
+      "expected": "\"abc\\xE2\\x80\\xAEdef\"",
+      "removed": 0
+    },
+    {
+      "name": "U+200E pelos bytes do UTF-8",
+      "value": "\u200e",
+      "quote": "double",
+      "expected": "\"\\xE2\\x80\\x8E\"",
+      "removed": 0
+    },
+    {
+      "name": "U+061C pelos bytes do UTF-8",
+      "value": "\u061c",
+      "quote": "double",
+      "expected": "\"\\xD8\\x9C\"",
+      "removed": 0
+    },
+    {
+      "name": "emoji e ideogramas ficam",
+      "value": "😀 漢字",
+      "quote": "double",
+      "expected": "\"😀 漢字\"",
+      "removed": 0
+    },
+    {
+      "name": "U+FEFF fica",
+      "value": "\ufeff",
+      "quote": "double",
+      "expected": "\"\ufeff\"",
+      "removed": 0
+    },
+    {
+      "name": "fim de CDATA e script ficam",
+      "value": "]]><script>",
+      "quote": "double",
+      "expected": "\"]]><script>\"",
+      "removed": 0
+    },
+    {
+      "name": "par substituto solto fica (o UTF-8 o troca por U+FFFD)",
+      "value": {
+        "codePoints": [
+          55357,
+          97
+        ]
+      },
+      "quote": "double",
+      "expected": {
+        "codePoints": [
+          34,
+          55357,
+          97,
+          34
+        ]
+      },
+      "removed": 0
+    },
+    {
+      "name": "simples: texto",
+      "value": "Ana",
+      "quote": "single",
+      "expected": "'Ana'",
+      "removed": 0
+    },
+    {
+      "name": "simples: apóstrofo",
+      "value": "d'água",
+      "quote": "single",
+      "expected": "'d\\'água'",
+      "removed": 0
+    },
+    {
+      "name": "simples: barra invertida",
+      "value": "a\\b",
+      "quote": "single",
+      "expected": "'a\\\\b'",
+      "removed": 0
+    },
+    {
+      "name": "simples: quebra de linha fica dentro",
+      "value": "l1\nl2",
+      "quote": "single",
+      "expected": "'l1\nl2'",
+      "removed": 0
+    },
+    {
+      "name": "simples: cifrão fica",
+      "value": "$x",
+      "quote": "single",
+      "expected": "'$x'",
+      "removed": 0
+    },
+    {
+      "name": "simples: controle fica",
+      "value": "a\u0000b",
+      "quote": "single",
+      "expected": "'a\u0000b'",
+      "removed": 0
+    },
+    {
+      "name": "simples: U+202E sai",
+      "value": "abc\u202edef",
+      "quote": "single",
+      "expected": "'abcdef'",
+      "removed": 1
+    },
+    {
+      "name": "simples: dois caracteres de direção saem",
+      "value": "\u2066a\u2069",
+      "quote": "single",
+      "expected": "'a'",
+      "removed": 2
+    }
+  ]
+}

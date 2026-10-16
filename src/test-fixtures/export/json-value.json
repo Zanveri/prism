@@ -1,0 +1,221 @@
+{
+  "rule": "RN-EXPORT-010: uma célula como valor do JSON, com o escape do JSON.stringify. Na tela, jsonValue (to-json.ts) com a célula inteira; na API, ExportText.JsonValue.",
+  "notes": [
+    "value é texto, null ou { codePoints: [...] }; expected é o texto do valor como sai no arquivo."
+  ],
+  "cases": [
+    {
+      "name": "número com zeros",
+      "kind": "number",
+      "value": "12.50",
+      "expected": "12.50"
+    },
+    {
+      "name": "menos zero",
+      "kind": "number",
+      "value": "-0",
+      "expected": "-0"
+    },
+    {
+      "name": "número de 30 dígitos",
+      "kind": "number",
+      "value": "123456789012345678901234567890",
+      "expected": "123456789012345678901234567890"
+    },
+    {
+      "name": "expoente",
+      "kind": "number",
+      "value": "1e5",
+      "expected": "1e5"
+    },
+    {
+      "name": "ponto sem zero não é número",
+      "kind": "number",
+      "value": ".5",
+      "expected": "\".5\""
+    },
+    {
+      "name": "sinal de mais não é número",
+      "kind": "number",
+      "value": "+1",
+      "expected": "\"+1\""
+    },
+    {
+      "name": "zero à esquerda não é número",
+      "kind": "number",
+      "value": "01",
+      "expected": "\"01\""
+    },
+    {
+      "name": "NaN é texto",
+      "kind": "number",
+      "value": "NaN",
+      "expected": "\"NaN\""
+    },
+    {
+      "name": "ponto no fim não é número",
+      "kind": "number",
+      "value": "1.",
+      "expected": "\"1.\""
+    },
+    {
+      "name": "espaço não é número",
+      "kind": "number",
+      "value": " 1",
+      "expected": "\" 1\""
+    },
+    {
+      "name": "número na coluna de texto é texto",
+      "kind": "text",
+      "value": "1",
+      "expected": "\"1\""
+    },
+    {
+      "name": "verdadeiro",
+      "kind": "boolean",
+      "value": "true",
+      "expected": "true"
+    },
+    {
+      "name": "falso",
+      "kind": "boolean",
+      "value": "false",
+      "expected": "false"
+    },
+    {
+      "name": "booleano em maiúsculas é texto",
+      "kind": "boolean",
+      "value": "TRUE",
+      "expected": "\"TRUE\""
+    },
+    {
+      "name": "t é texto",
+      "kind": "boolean",
+      "value": "t",
+      "expected": "\"t\""
+    },
+    {
+      "name": "nulo",
+      "kind": "text",
+      "value": null,
+      "expected": "null"
+    },
+    {
+      "name": "nulo de número",
+      "kind": "number",
+      "value": null,
+      "expected": "null"
+    },
+    {
+      "name": "aspas",
+      "kind": "text",
+      "value": "diz \"oi\"",
+      "expected": "\"diz \\\"oi\\\"\""
+    },
+    {
+      "name": "barra invertida",
+      "kind": "text",
+      "value": "a\\b",
+      "expected": "\"a\\\\b\""
+    },
+    {
+      "name": "formas curtas",
+      "kind": "text",
+      "value": "l1\nl2\r\tx\b\f",
+      "expected": "\"l1\\nl2\\r\\tx\\b\\f\""
+    },
+    {
+      "name": "controles em \\u00xx minúsculo, DEL como está",
+      "kind": "text",
+      "value": "\u0000\u001f\u007f",
+      "expected": "\"\\u0000\\u001f\u007f\""
+    },
+    {
+      "name": "barra e script ficam",
+      "kind": "text",
+      "value": "</script>",
+      "expected": "\"</script>\""
+    },
+    {
+      "name": "U+202E fica",
+      "kind": "text",
+      "value": "abc\u202edef",
+      "expected": "\"abc\u202edef\""
+    },
+    {
+      "name": "U+2028 fica",
+      "kind": "text",
+      "value": "a\u2028b",
+      "expected": "\"a\u2028b\""
+    },
+    {
+      "name": "U+FEFF fica",
+      "kind": "text",
+      "value": "\ufeff",
+      "expected": "\"\ufeff\""
+    },
+    {
+      "name": "U+FFFE fica",
+      "kind": "text",
+      "value": "\ufffe",
+      "expected": "\"\ufffe\""
+    },
+    {
+      "name": "emoji e ideogramas",
+      "kind": "text",
+      "value": "😀漢字",
+      "expected": "\"😀漢字\""
+    },
+    {
+      "name": "par substituto alto solto",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          55357,
+          97
+        ]
+      },
+      "expected": "\"\\ud83da\""
+    },
+    {
+      "name": "par substituto baixo solto",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          56832
+        ]
+      },
+      "expected": "\"\\ude00\""
+    },
+    {
+      "name": "fim de CDATA",
+      "kind": "text",
+      "value": "]]>",
+      "expected": "\"]]>\""
+    },
+    {
+      "name": "_x0041_ já escrito",
+      "kind": "text",
+      "value": "_x0041_",
+      "expected": "\"_x0041_\""
+    },
+    {
+      "name": "data e hora é texto",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.000000",
+      "expected": "\"2024-01-15 10:30:00.000000\""
+    },
+    {
+      "name": "binário é texto",
+      "kind": "binary",
+      "value": "0xDEADBEEF",
+      "expected": "\"0xDEADBEEF\""
+    },
+    {
+      "name": "número seguido de quebra de linha é texto",
+      "kind": "number",
+      "value": "1\n",
+      "expected": "\"1\\n\""
+    }
+  ]
+}
