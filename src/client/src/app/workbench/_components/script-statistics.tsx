@@ -39,7 +39,7 @@ const StatisticsRow = memo(function StatisticsRow({ entry, number, current }: { 
       <tr aria-current={current ? "step" : undefined} className={cn(current && "bg-selected")}>
         <td className={cn(cell, "text-right font-mono text-muted tabular-nums")}>{number.toLocaleString("pt-BR")}</td>
         <td className={cn(cell, "max-w-0 truncate font-mono text-ink")} title={commandHint(entry.target.sql)}>
-          {commandHead(entry.target.sql, 96)}
+          {commandHead(entry.target, 96)}
         </td>
         <td className={cn(cell, "whitespace-nowrap", statusTone[entry.status])}>{copy.statuses[entry.status]}</td>
         <td className={cn(cell, "whitespace-nowrap text-ink")}>{rowsOf(entry)}</td>

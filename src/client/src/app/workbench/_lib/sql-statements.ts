@@ -765,6 +765,25 @@ export function hasStatement(sql: string, engine?: Engine): boolean {
 }
 
 /**
+ * Onde o texto do comando começa, depois dos espaços e dos comentários de cima, pelas regras do banco (as de `splitStatements`: o comentário de bloco
+ * aninhado do PostgreSQL e do Db2, o primeiro fecho no Informix, o `{ … }` só no Informix, e o `--` que no PostgreSQL acaba também no retorno de carro). Quem
+ * pergunta é quem mostra o começo do comando (o título da aba do resultado do script e a coluna das Estatísticas, RN-SQL-020). Só espaço e comentário: o
+ * tamanho do texto.
+ */
+export function commandStart(sql: string, engine?: Engine): number {
+  const dialect = dialectOf(engine);
+
+  let position = 0;
+  while (position < sql.length) {
+    const comment = afterComment(sql, position, dialect);
+    if (comment !== null) position = comment;
+    else if (isWhitespace(sql.charCodeAt(position))) position++;
+    else return position;
+  }
+  return sql.length;
+}
+
+/**
  * Se o caractere em `index` é de um comentário, pelas regras do banco (as mesmas de `splitStatements`): `-- até o fim da linha`, o de bloco
  * e, no Informix, `{ ... }`. Quem pergunta é o editor, para o que a gramática dele não lê: o `lang-sql` não conhece o `{ ... }` do Informix, e
  * a palavra-chave escrita ali parece código. A chave dentro de texto entre aspas, de nome entre aspas duplas, de `$tag$ ... $tag$` ou de outro

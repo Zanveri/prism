@@ -74,7 +74,7 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
 
   const tab = (item: ScriptTab) => {
     const selected = item === shown;
-    const label = item === "statistics" ? copy.statistics : copy.result(item + 1, commandHead(entryAt(run, item).target.sql));
+    const label = item === "statistics" ? copy.statistics : copy.result(item + 1, commandHead(entryAt(run, item).target));
     return (
       <button
         key={item}

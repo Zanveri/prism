@@ -1,4 +1,5 @@
 import { scriptRunCopy } from "./script-run.copy";
+import { commandStart } from "./sql-statements";
 import type { RowsState, RunTarget } from "./use-query-runner";
 
 /**
@@ -206,17 +207,14 @@ export function statisticsSummary(run: ScriptRun): string {
 /** Quanto do começo do texto vai no título da aba e na coluna das Estatísticas. */
 const headLength = 32;
 
-/** O que fica no começo do comando antes do texto dele: espaços, comentários de linha (`--`), de bloco e, no Informix, `{ … }`. */
-const leading = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?(?:\*\/|$)|\{[^}]*(?:\}|$))/;
-
 /**
- * O começo do comando, numa linha: sem os comentários de cima (o comentário logo acima do comando vai com ele, RN-SQL-018) e com os espaços e as quebras
- * de linha juntos num espaço só, cortado com reticências. Só comentário (não acontece: não é comando), o texto como está, cortado.
+ * O começo do comando, numa linha: sem os espaços e os comentários de cima (o comentário logo acima do comando vai com ele, RN-SQL-018), lidos pelo leitor
+ * do projeto nas regras do banco do comando (`commandStart`: o aninhado do PostgreSQL e do Db2, o `{ … }` só no Informix), e com os espaços e as quebras de
+ * linha juntos num espaço só, cortado com reticências. Só comentário (não acontece: não é comando), o texto como está, cortado.
  */
-export function commandHead(sql: string, length = headLength): string {
-  let text = sql;
-  for (let match = leading.exec(text); match !== null && match[0] !== ""; match = leading.exec(text)) text = text.slice(match[0].length);
-  const line = (text === "" ? sql : text).replace(/\s+/g, " ").trim();
+export function commandHead(target: Pick<RunTarget, "sql" | "engine">, length = headLength): string {
+  const text = target.sql.slice(commandStart(target.sql, target.engine));
+  const line = (text === "" ? target.sql : text).replace(/\s+/g, " ").trim();
   return line.length <= length ? line : `${line.slice(0, length - 1).trimEnd()}…`;
 }
 

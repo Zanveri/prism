@@ -61,11 +61,33 @@ describe("o atalho do script (RN-SQL-019)", () => {
 });
 
 describe("o título das abas e a coluna das Estatísticas (RN-SQL-020)", () => {
+  const pg = (sql: string) => ({ sql, engine: 1 as const });
+  const db2 = (sql: string) => ({ sql, engine: 2 as const });
+  const ifx = (sql: string) => ({ sql, engine: 3 as const });
+
   it("o começo do comando, numa linha, sem os comentários de cima, cortado com reticências", () => {
-    expect(commandHead("SELECT *\n  FROM pedido\n WHERE a = 1")).toBe("SELECT * FROM pedido WHERE a = 1");
-    expect(commandHead("-- os pedidos abertos\n/* de hoje */\nSELECT * FROM pedido WHERE status = 'aberto' AND criado_em > now()")).toBe("SELECT * FROM pedido WHERE stat…");
-    expect(commandHead("{ Informix }\nselect 1")).toBe("select 1");
-    expect(commandHead("select 1", 4)).toBe("sel…");
+    expect(commandHead(pg("SELECT *\n  FROM pedido\n WHERE a = 1"))).toBe("SELECT * FROM pedido WHERE a = 1");
+    expect(commandHead(pg("-- os pedidos abertos\n/* de hoje */\nSELECT * FROM pedido WHERE status = 'aberto' AND criado_em > now()"))).toBe("SELECT * FROM pedido WHERE stat…");
+    expect(commandHead(ifx("{ Informix }\nselect 1"))).toBe("select 1");
+    expect(commandHead(pg("select 1"), 4)).toBe("sel…");
+  });
+
+  it("os comentários são os do banco do comando, lidos pelo leitor do projeto: o aninhado no PostgreSQL e no Db2, o `{ … }` só no Informix", () => {
+    // No PostgreSQL e no Db2 o comentário de bloco aceita outro dentro: só o fecho do de fora o encerra.
+    expect(commandHead(pg("/* fora /* dentro */ ainda fora */ SELECT 1"))).toBe("SELECT 1");
+    expect(commandHead(db2("/* fora /* dentro */ ainda fora */ SELECT 1 FROM SYSIBM.SYSDUMMY1"))).toBe("SELECT 1 FROM SYSIBM.SYSDUMMY1");
+    // No Informix o primeiro fecho encerra, e o resto é texto do comando; o `{ … }` é comentário nele, e só nele.
+    expect(commandHead(ifx("/* a /* b */ select 1"))).toBe("select 1");
+    expect(commandHead(ifx("{ carga de hoje }\n-- e mais\nselect 1 from systables"))).toBe("select 1 from systables");
+    expect(commandHead(pg("{ não é comentário } select 1"))).toBe("{ não é comentário } select 1");
+    // No PostgreSQL o `--` acaba também no retorno de carro; no Informix, só na quebra de linha.
+    expect(commandHead(pg("-- linha\rSELECT 2"))).toBe("SELECT 2");
+    expect(commandHead(ifx("-- linha\rselect 2\nfrom t"))).toBe("from t");
+  });
+
+  it("sem o banco, vale o PostgreSQL, e só comentário fica como está", () => {
+    expect(commandHead({ sql: "/* a /* b */ c */ select 1" })).toBe("select 1");
+    expect(commandHead(pg("-- só isto"))).toBe("-- só isto");
   });
 
   it("a dica traz o texto inteiro, e um texto enorme vai cortado", () => {
