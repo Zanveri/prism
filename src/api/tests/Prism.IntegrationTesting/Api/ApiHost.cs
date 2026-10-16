@@ -9,6 +9,7 @@ using Prism.Api.Hosting;
 using Prism.Application;
 using Prism.Application.Sessions.Models.Dtos;
 using Prism.Infrastructure;
+using Prism.Infrastructure.ConnectionFiles.Models;
 using Prism.Infrastructure.Vault.Models;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -48,7 +49,7 @@ public sealed class ApiHost : IAsyncDisposable
 
     /// <param name="configure">
     /// Troca ou acrescenta registros depois dos de verdade, para o teste que precisa de um substituto.
-    /// O Argon2id já vem pequeno (8 MiB, uma passada): com o padrão da RN-COFRE-002 cada entrada leva
+    /// O Argon2id já vem pequeno (8 MiB, uma passada), no cofre e no arquivo da exportação de conexões: com o padrão da RN-COFRE-002 cada entrada leva
     /// cerca de 0,3 s e a suíte ficaria lenta. Um teste que quer outros parâmetros reconfigura aqui.
     /// </param>
     public static async Task<ApiHost> StartAsync(Action<IServiceCollection>? configure = null)
@@ -66,6 +67,14 @@ public sealed class ApiHost : IAsyncDisposable
             vault.MemoryKiB = 8192;
             vault.Iterations = 1;
             vault.Parallelism = 1;
+        });
+
+        // O arquivo da exportação de conexões (RN-TRANSF-007) com o mesmo Argon2id pequeno: o cabeçalho registra os parâmetros, e a importação usa os dele.
+        builder.Services.Configure<ConnectionFileOptions>(file =>
+        {
+            file.MemoryKiB = 8192;
+            file.Iterations = 1;
+            file.Parallelism = 1;
         });
         configure?.Invoke(builder.Services);
 
