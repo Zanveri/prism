@@ -12,6 +12,7 @@ Prism é um cliente de banco de dados para desktop, no lugar do DBeaver, para qu
 | `docs/design/canvas/` | Canvas de design aprovado (`*.dc.html`): a medida de cores, espaçamentos e textos. Onde a especificação e o canvas divergem, vale a especificação (seção 9 dela). |
 | `src/api/` | A API em C#; leia [src/api/AGENTS.md](src/api/AGENTS.md). |
 | `src/client/` | A interface: Electron, React e Vite. |
+| `src/test-fixtures/export/` | As fixtures de ouro da exportação de dados (RN-EXPORT-024): JSON escritos à mão com a entrada e a saída esperada de cada caso, lidos pelos testes da tela e da API. Mudar uma regra é mudar a fixture; nunca se regera a partir do código. |
 
 ## Projeto de referência
 
