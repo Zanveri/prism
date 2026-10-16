@@ -60,7 +60,7 @@ import { canClear } from "../../_lib/table-view";
 import { isPersonBusy } from "../../_lib/use-query-runner";
 import { workbenchCopy } from "../../_lib/workbench.copy";
 import { ResultPanel } from "../result-panel";
-import { deleteRow, editCell, noEdits } from "../../_lib/record-edits";
+import { addRow, deleteRow, editCell, noEdits } from "../../_lib/record-edits";
 import { recordsCopy } from "../../_lib/records.copy";
 import { remember } from "../../_lib/tab-memory";
 import { EditsBanner } from "../edits-banner";
@@ -1646,5 +1646,154 @@ describe("RecordsView: Duplicar linha (RN-EDIT-016)", () => {
 
     expect(view.show().panel.editing!.rows).toHaveLength(2);
     expect(runner.autoRefresh.pause.mock.calls.at(-1)).toEqual(["editing", false]);
+  });
+});
+
+describe("RecordsView: a barra de edição (RN-EDIT-013 e 014)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const bannerOf = (view: ReturnType<typeof mount>) => (view.show().panel.banner as { props: ComponentProps<typeof EditsBanner> }).props;
+  const barOf = (view: ReturnType<typeof mount>) => view.show().panel.editing!.bar;
+  const reasonsOf = (view: ReturnType<typeof mount>) => barOf(view).buttons.map((button) => button.reason);
+  const target = {
+    tables: [{ schema: "loja", name: "pedidos", key: [0], editable: true, reason: null }],
+    columns: [
+      { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+      { table: 0, baseColumn: "cliente_id", editable: true, reason: null, nullable: true, generated: null },
+    ],
+    rowOperations: true,
+    oneAtATime: false,
+  };
+  const loaded = (over: Partial<RowsState> = {}) => rowsState({ resultId: "r1", rows: [["10", "4"], ["20", "5"]], ...over });
+  const edit = recordsCopy.edit;
+
+  beforeEach(() => {
+    rt.service.editTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: target }) as never);
+  });
+  afterEach(() => rt.service.editTargetOrRefuse.mockReset());
+
+  it("sem célula ativa, \"Adicionar linha\" vale e os outros pedem uma célula ou uma linha; sem o catálogo perguntado, nada mais os desabilita (RN-EDIT-010)", () => {
+    const view = mount(fakeRunner(loaded()));
+
+    expect(barOf(view).buttons.map((button) => button.label)).toEqual(["Editar célula", "Adicionar linha", "Duplicar linha", "Excluir linha"]);
+    expect(reasonsOf(view)).toEqual([edit.bar.chooseCell, null, edit.bar.chooseRow, edit.bar.chooseRow]);
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    expect(reasonsOf(view)).toEqual([null, null, null, null]);
+  });
+
+  it("\"Editar célula\" abre o campo na célula ativa, com o valor, como o F2", async () => {
+    const view = mount(fakeRunner(loaded()));
+    view.show().panel.editing!.onActivate({ row: 1, column: 1 });
+
+    barOf(view).onAction("edit");
+    await settle();
+
+    expect(view.show().panel.editing!.editor).toMatchObject({ row: 1, column: 1, draft: "5" });
+  });
+
+  it("\"Adicionar linha\" põe a linha nova no fim, com a célula ativa nela; \"Duplicar linha\" e \"Excluir linha\" agem na linha da célula ativa", async () => {
+    const view = mount(fakeRunner(loaded()));
+
+    barOf(view).onAction("newRow");
+    await settle();
+    expect(view.show().panel.editing!.rows).toEqual([["10", "4"], ["20", "5"], [null, null]]);
+    expect(view.show().panel.editing!.active).toEqual({ row: 2, column: 0 });
+
+    view.show().panel.editing!.onActivate({ row: 1, column: 1 });
+    barOf(view).onAction("duplicateRow");
+    await settle();
+    expect(view.show().panel.editing!.rows[3]).toEqual(["20", "5"]);
+
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    barOf(view).onAction("deleteRow");
+    await settle();
+    expect(view.show().panel.editing!.marks.get(0)?.deleted).toBe(true);
+    // Riscada, a linha não se exclui de novo, e a célula dela não se edita.
+    expect(reasonsOf(view)).toEqual([edit.readOnly(edit.reasons.deleted), null, null, edit.readOnly(edit.reasons.alreadyDeleted)]);
+    expect(bannerOf(view).pending).toBe(3);
+  });
+
+  it("a primeira tentativa pergunta ao catálogo; se a ação não vale, a faixa diz o motivo, e dali em diante o botão fica desabilitado com ele", async () => {
+    rt.service.editTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: { ...target, rowOperations: false } }) as never);
+    const view = mount(fakeRunner(loaded()));
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    expect(reasonsOf(view)).toEqual([null, null, null, null]);
+
+    barOf(view).onAction("newRow");
+    await settle();
+
+    const reason = edit.readOnly(edit.reasons.noRowOperations);
+    expect(bannerOf(view).notice).toBe(reason);
+    expect(reasonsOf(view)).toEqual([null, reason, reason, reason]);
+    expect(barOf(view).buttons[1].title).toBe(`Adicionar linha (Alt+Insert). ${reason}`);
+  });
+
+  it("o resultado só leitura pela página desabilita os quatro com o motivo da barra do resultado, sem perguntar ao catálogo", () => {
+    const view = mount(fakeRunner(loaded({ readOnly: "DISTINCT" })));
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+
+    expect(reasonsOf(view)).toEqual(Array(4).fill(edit.readOnly("DISTINCT")));
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("com a aba ocupada os quatro ficam desabilitados; com a atualização automática lendo as linhas de novo, com o motivo dela", () => {
+    expect(reasonsOf(mount(fakeRunner({ status: "running", cancelling: false, previous: loaded() })))).toEqual(Array(4).fill(edit.readOnly(edit.reasons.busy)));
+    rt.unmount();
+    expect(reasonsOf(mount(fakeRunner({ status: "running", cancelling: false, previous: loaded(), auto: true })))).toEqual(Array(4).fill(edit.readOnly(edit.reasons.refreshing)));
+  });
+
+  it("sem nenhuma linha, os três que agem numa dizem que não há linhas, e \"Adicionar linha\" vale", () => {
+    expect(reasonsOf(mount(fakeRunner(loaded({ rows: [] }))))).toEqual([edit.bar.noRows, null, edit.bar.noRows, edit.bar.noRows]);
+  });
+
+  it("Ctrl+Alt+Insert e Alt+Delete sem célula ativa não fazem nada, e a faixa diz o que a barra diz", async () => {
+    const view = mount(fakeRunner(loaded()));
+
+    view.show().panel.editing!.onDuplicateRow();
+    await settle();
+    expect(bannerOf(view)).toMatchObject({ pending: 0, notice: edit.bar.chooseRow });
+    view.show().panel.editing!.onDeleteRow();
+    await settle();
+    expect(bannerOf(view)).toMatchObject({ pending: 0, notice: edit.bar.chooseRow });
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("o botão segura a atualização automática desde o começo, como o menu, e a ação cujo resultado mudou no meio não age (RN-GRADE-014)", async () => {
+    let respond!: () => void;
+    rt.service.editTargetOrRefuse.mockImplementationOnce(() => new Promise((resolve) => (respond = () => resolve({ ok: true, data: target }))) as never);
+    const runner = fakeRunner(loaded());
+    const view = mount(runner);
+    view.show().panel.editing!.onActivate({ row: 0, column: 1 });
+    runner.autoRefresh.pause.mockClear();
+
+    barOf(view).onAction("deleteRow");
+    expect(runner.autoRefresh.pause.mock.calls).toEqual([["editing", true]]);
+
+    runner.state = loaded({ resultId: "r2", rows: [["5", "9"], ["10", "4"]] });
+    view.show();
+    respond();
+    await settle();
+
+    expect(view.show().panel.editing!.marks.size).toBe(0);
+    expect(runner.autoRefresh.pause.mock.calls.at(-1)).toEqual(["editing", false]);
+  });
+
+  it("\"Excluir linha\" duas vezes na mesma linha nova enquanto o alvo é perguntado tira só ela: a linha nova que passou ao lugar dela fica", async () => {
+    let respond!: () => void;
+    rt.service.editTargetOrRefuse.mockImplementationOnce(() => new Promise((resolve) => (respond = () => resolve({ ok: true, data: target }))) as never);
+    // As pendências lembradas com a aba voltam sem o alvo: duas linhas novas.
+    remember("t1", "edits", { resultId: "r1", edits: addRow(addRow(noEdits, { 0: "30" }).edits, { 0: "40" }).edits });
+    const view = mount(fakeRunner(loaded()));
+    view.show().panel.editing!.onActivate({ row: 2, column: 0 });
+
+    barOf(view).onAction("deleteRow");
+    barOf(view).onAction("deleteRow");
+    respond();
+    await settle();
+
+    expect(view.show().panel.editing!.rows).toEqual([["10", "4"], ["20", "5"], ["40", null]]);
+    expect(view.show().panel.editing!.active).toEqual({ row: 2, column: 0 });
+    expect(bannerOf(view).pending).toBe(1);
   });
 });

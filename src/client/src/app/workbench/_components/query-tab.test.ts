@@ -1496,5 +1496,20 @@ describe("QueryTabPanel: a grade de uma conexão somente leitura não se edita (
 
     expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly(copy.reasons.connectionReadOnly) });
     expect(view.show().banner?.props.readOnly).toBe(copy.readOnly(copy.reasons.connectionReadOnly));
+    // Dali em diante, os quatro botões da barra de edição também (RN-EDIT-014).
+    expect(view.show().area.editing!.bar.buttons.map((button) => button.reason)).toEqual(Array(4).fill(copy.readOnly(copy.reasons.connectionReadOnly)));
+  });
+
+  it("os quatro botões da barra de edição ficam desabilitados desde o começo, com o motivo da página (RN-EDIT-013 e 014)", () => {
+    const view = mount(fakeRunner(rowsState({ readOnly: "a conexão é somente leitura" })));
+    const { buttons } = view.show().area.editing!.bar;
+
+    expect(buttons.map((button) => button.title)).toEqual([
+      "Editar célula (F2). Somente leitura: a conexão é somente leitura.",
+      "Adicionar linha (Alt+Insert). Somente leitura: a conexão é somente leitura.",
+      "Duplicar linha (Ctrl+Alt+Insert). Somente leitura: a conexão é somente leitura.",
+      "Excluir linha (Alt+Delete). Somente leitura: a conexão é somente leitura.",
+    ]);
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
   });
 });
