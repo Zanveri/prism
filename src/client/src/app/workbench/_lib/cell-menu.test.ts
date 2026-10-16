@@ -133,13 +133,13 @@ describe("o que uma célula permite editar (RN-EDIT-002)", () => {
 
 const menu = copy.menu;
 
-const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "aberta", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, deleteRow: { editable: true }, ...over });
+const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "aberta", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, duplicateRow: { editable: true }, deleteRow: { editable: true }, ...over });
 
 /** Os itens como a tela os mostra: o rótulo, se está desabilitado e o motivo. */
 const shown = (groups: ReturnType<typeof cellMenu>) => groups.map((group) => group.map((item) => [item.label, item.disabled === true, item.hint ?? null]));
 
 describe("o menu de contexto da célula", () => {
-  it("numa célula que se edita: copiar, colar, editar e NULL habilitados; desfazer só com pendência; separador, linha nova e excluir", () => {
+  it("numa célula que se edita: copiar, colar, editar e NULL habilitados; desfazer só com pendência; separador, adicionar, duplicar e excluir linha", () => {
     expect(shown(cellMenu(state()))).toEqual([
       [
         [menu.copyValue, false, null],
@@ -150,6 +150,7 @@ describe("o menu de contexto da célula", () => {
       ],
       [
         [menu.newRow, false, null],
+        [menu.duplicateRow, false, null],
         [menu.deleteRow, false, null],
       ],
     ]);

@@ -49,6 +49,8 @@ export type GridEditing = {
   onSave: () => void;
   /** Alt+Insert com o foco na grade (RN-EDIT-015). */
   onNewRow: () => void;
+  /** Ctrl+Alt+Insert com o foco na grade: duplica a linha da célula ativa (RN-EDIT-015 e 016). */
+  onDuplicateRow: () => void;
   /** Alt+Delete com o foco na grade: exclui a linha da célula ativa (RN-EDIT-015). */
   onDeleteRow: () => void;
   /**

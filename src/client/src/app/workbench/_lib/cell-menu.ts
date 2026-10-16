@@ -6,7 +6,7 @@ import { recordsCopy } from "./records.copy";
 
 const copy = recordsCopy.edit.menu;
 
-export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction;
+export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "duplicateRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction;
 
 /**
  * Um item do menu da célula. O modelo só descreve; quem executa é a vista Registros, que tem as pendências e a área de transferência. `checked`: o item é
@@ -29,6 +29,8 @@ export type CellMenuState = {
   /** A coluna aceita NULL (o catálogo diz; sem o alvo, aceita). */
   nullable: boolean;
   newRow: EditAccess;
+  /** RN-EDIT-016: "Duplicar linha" vale onde "Adicionar linha" vale (`newRowAccess`). */
+  duplicateRow: EditAccess;
   deleteRow: EditAccess;
   /** O "Filtrar" (F11) com o submenu dele (`filterMenuItem`), quando a grade tem campo de filtro. */
   filter?: CellMenuItem;
@@ -48,7 +50,7 @@ const hintOf = (access: EditAccess) => (access.editable ? {} : { disabled: true,
  * O menu de contexto de uma célula dos Registros (pedido do dono, ao lado da RN-EDIT-001): copiar o valor, colar como alteração
  * pendente, editar, definir como NULL e desfazer a alteração; depois, o "Filtrar" (F11, com o submenu), o "Atualizar" (F5) e o "Atualizar automaticamente"
  * (com o submenu dos intervalos), quando a grade os tem;
- * depois do separador, "Adicionar linha" e "Excluir linha" (RN-GRADE-004). O que não se aplica vem desabilitado, sem sumir, com o motivo quando é de só
+ * depois do separador, "Adicionar linha", "Duplicar linha" e "Excluir linha" (RN-GRADE-004). O que não se aplica vem desabilitado, sem sumir, com o motivo quando é de só
  * leitura (o de `cellAccess`). Copiar vale sempre, também na célula só leitura; o nulo copia vazio. Os atalhos são os que a grade trata (RN-EDIT-015), como a
  * plataforma os escreve.
  */
@@ -72,6 +74,7 @@ export function cellMenu(state: CellMenuState): CellMenuItem[][] {
     ...(view.length === 0 ? [] : [view]),
     [
       { id: "newRow", label: copy.newRow, shortcut: shortcuts.newRow.label, ...hintOf(state.newRow) },
+      { id: "duplicateRow", label: copy.duplicateRow, shortcut: shortcuts.duplicateRow.label, ...hintOf(state.duplicateRow) },
       { id: "deleteRow", label: copy.deleteRow, shortcut: shortcuts.deleteRow.label, ...hintOf(state.deleteRow) },
     ],
   ];

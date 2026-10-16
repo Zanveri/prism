@@ -455,12 +455,13 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       editing.onSave();
       return;
     }
-    // RN-EDIT-015: Alt+Insert adiciona e Alt+Delete exclui a linha da célula ativa, com os modificadores exatos (o Ctrl+Alt+Insert é outro atalho).
+    // RN-EDIT-015: Alt+Insert adiciona, Ctrl+Alt+Insert duplica e Alt+Delete exclui a linha da célula ativa, com os modificadores exatos.
     const row = rowShortcut(event, platform);
     if (row !== null) {
       event.preventDefault();
       if (row === "newRow") editing.onNewRow();
-      else if (row === "deleteRow") editing.onDeleteRow();
+      else if (row === "duplicateRow") editing.onDuplicateRow();
+      else editing.onDeleteRow();
       return;
     }
 

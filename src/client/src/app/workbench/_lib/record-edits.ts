@@ -107,9 +107,10 @@ export function undoDelete(edits: PendingEdits, row: number): PendingEdits {
   return { ...edits, deleted: edits.deleted.filter((item) => item !== row) };
 }
 
-export function addRow(edits: PendingEdits): { edits: PendingEdits; id: number } {
+/** Uma linha nova no fim da grade; `values` são as colunas que já vêm preenchidas (a duplicada, RN-EDIT-016), e sem elas a linha vem em branco. */
+export function addRow(edits: PendingEdits, values: Readonly<Record<number, EditValue>> = {}): { edits: PendingEdits; id: number } {
   const id = edits.nextId;
-  return { edits: { ...edits, added: [...edits.added, { id, values: {} }], nextId: id + 1 }, id };
+  return { edits: { ...edits, added: [...edits.added, { id, values: { ...values } }], nextId: id + 1 }, id };
 }
 
 export function editNewCell(edits: PendingEdits, id: number, column: number, value: EditValue): PendingEdits {

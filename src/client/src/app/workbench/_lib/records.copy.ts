@@ -83,6 +83,8 @@ export const recordsCopy = {
       setNull: "Definir como nulo",
       undo: "Desfazer alteração",
       newRow: "Adicionar linha",
+      // RN-EDIT-016.
+      duplicateRow: "Duplicar linha",
       deleteRow: "Excluir linha",
       // RN-GRADE-012: o "Atualizar" da grade (F5), que lê de novo os Registros ou executa de novo o comando do resultado, com o filtro.
       refresh: "Atualizar",
@@ -102,6 +104,14 @@ export const recordsCopy = {
       duplicateRowMac: "Cmd+Option+Insert",
       deleteRow: "Alt+Delete",
       deleteRowMac: "Option+Delete",
+    },
+    // RN-EDIT-016: o que a faixa diz depois de "Duplicar linha", e por que a linha não foi duplicada.
+    duplicate: {
+      keyCopied: (table: string, columns: readonly string[]) => `A linha duplicada copiou a chave de ${table} (${columns.join(", ")}): troque-a antes de salvar, ou o banco vai recusar a linha repetida.`,
+      notCopied: (columns: readonly string[]) => (columns.length === 1 ? `Não copiada (fica com o padrão da tabela): ${columns[0]}.` : `Não copiadas (ficam com o padrão da tabela): ${columns.join(", ")}.`),
+      // Nos Registros não há comando a executar de novo: quem lê de novo é "Atualizar".
+      fullValueMissing: (column: string, subject: "table" | "result") => `A linha não foi duplicada: o valor completo de ${column} não pôde vir. ${subject === "table" ? "Atualize os registros para duplicá-la." : "Execute o comando de novo para duplicá-la."}`,
+      fetchCancelled: "A linha não foi duplicada: a busca dos valores completos foi cancelada.",
     },
     // RN-SQL-017: enquanto copiar ou exportar busca na API o valor completo das células cortadas.
     fullValues: { fetching: "Buscando os valores completos…", cancel: "Cancelar" },

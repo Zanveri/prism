@@ -12,6 +12,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 import { cellMenu, type CellMenuAction, type CellMenuItem } from "./cell-menu";
 import type { DatabaseSession } from "./database-sessions.schema";
 import { databaseSessionKey } from "./database-sessions.service";
+import { duplicatePlan, type DuplicateSource } from "./duplicate-row";
 import { customPlan, filterMenuItem, filterPlan, isFilterAction, valuesPlan, type FilterMenuContext, type FilterPlan } from "./filter-menu";
 import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullValues, type GridPosition } from "./full-values";
 import { resultCells } from "./full-values.service";
@@ -35,8 +36,11 @@ const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 /** O que o catálogo respondeu para um resultado: o alvo, ou o motivo de o resultado inteiro ser só leitura. */
 type TargetAnswer = { resultId: string; target: EditTarget | null; readOnly: string | null };
 
-/** A faixa: o último Salvar recusado (com a linha dele na grade) e o recado da última tentativa. */
-type Banner = { resultId: string | null; failure: SaveFailure | null; failedRow: number | null; notice: string | null };
+/**
+ * A faixa: o último Salvar recusado (com a linha dele na grade) e o recado da última tentativa; `tone` `warning` é o recado que não é motivo de só leitura
+ * (o de "Duplicar linha", RN-EDIT-016).
+ */
+type Banner = { resultId: string | null; failure: SaveFailure | null; failedRow: number | null; notice: string | null; tone?: "warning" };
 
 export type OpenCellMenu = {
   groups: CellMenuItem[][];
@@ -229,7 +233,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     [tabId],
   );
 
-  const say = useCallback((notice: string | null) => setBanner((current) => ({ ...(current.resultId === latest.current.resultId ? current : noBanner), resultId: latest.current.resultId, notice })), []);
+  const say = useCallback(
+    (notice: string | null, tone?: "warning") => setBanner((current) => ({ ...(current.resultId === latest.current.resultId ? current : noBanner), resultId: latest.current.resultId, notice, tone })),
+    [],
+  );
 
   /** RN-EDIT-010: o alvo da edição, perguntado uma vez por resultado; nulo quando o resultado é só leitura ou a pergunta falhou (a faixa diz). */
   const ensureTarget = useCallback(async (): Promise<EditTarget | null> => {
@@ -500,7 +507,70 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
   }, [ensureTarget, rowOf, putEdits, say, hold, moved]);
 
+  /** Cada "Duplicar linha" que busca os valores completos ganha uma vez: a busca nova cancela a anterior, que não é o "Cancelar" da pessoa. */
+  const duplicating = useRef(0);
+
+  /**
+   * RN-EDIT-016: "Duplicar linha" põe no fim da grade uma linha nova pendente com o valor que a tela mostra em cada coluna da tabela que se copia
+   * (`duplicatePlan`), onde "Adicionar linha" vale. A célula cortada vai com o valor completo, buscado antes na API (RN-SQL-017, com "Buscando os valores
+   * completos…" e "Cancelar" na faixa); o valor que não vem inteiro, ou a busca cancelada, não duplica nada, e a faixa diz por quê. Depois, a célula ativa vai
+   * para a linha nova, na primeira coluna editável (na que copiou a chave, na coluna da chave mais à esquerda), e a faixa avisa a chave copiada e as colunas
+   * que ficaram de fora. A atualização automática fica em pausa desde o começo, também durante a busca, e o resultado que mudou no meio não recebe a linha
+   * (RN-GRADE-014). `from` é o resultado da linha (por padrão, o da tela).
+   */
+  const duplicateRow = useCallback(async (row: number, from: string | null = latest.current.resultId) => {
+    if (moved(from)) return;
+    const early = newRowAccess(latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
+    if (!early.editable) return say(early.reason);
+    const release = hold();
+    try {
+      const known = await ensureTarget();
+      if (moved(from)) return;
+      const { readOnlyReason: reason, busy: running, saving: writing, shown: current, edits: pending } = latest.current;
+      const access = newRowAccess(reason, known, writing || running);
+      if (!access.editable) return say(access.reason);
+      if (known === null || current === null) return;
+
+      const read = current.rows.length;
+      const source: DuplicateSource | null =
+        row < read
+          ? { kind: "read", values: current.columns.map((_, column) => valueAt({ row, column })), truncated: current.truncated.get(row), generated: current.generated?.get(row) }
+          : pending.added[row - read] === undefined
+            ? null
+            : { kind: "new", values: pending.added[row - read].values };
+      if (source === null) return;
+
+      const plan = duplicatePlan(known, source);
+      const values = { ...plan.values };
+      if (plan.cut.length > 0) {
+        const turn = ++duplicating.current;
+        const full = await completeValues(plan.cut.map((column) => ({ row, column })), current);
+        if (moved(from)) return;
+        // A busca de um "Duplicar linha" seguinte (o duplo clique no botão) cancela esta: quem duplica e diz o que houve é o seguinte, e esta sai calada.
+        if (full === null && duplicating.current !== turn) return;
+        if (full === null) return say(copy.duplicate.fetchCancelled, "warning");
+        const missing = plan.cut.find((column) => full.valueOf(row, column) === undefined);
+        if (missing !== undefined) return say(copy.duplicate.fullValueMissing(current.columns[missing]?.name ?? "", subject), "warning");
+        for (const column of plan.cut) values[column] = full.valueOf(row, column) ?? null;
+      }
+
+      // As pendências e as linhas de agora: a busca deixa a grade livre, e o que foi feito nela enquanto isso (uma célula editada, o "Carregar mais") fica.
+      const { edits: next } = addRow(latest.current.edits, values);
+      putEdits(next);
+      const first = known.columns.findIndex((info) => info.editable);
+      setActive({ row: (latest.current.shown?.rows.length ?? read) + next.added.length - 1, column: plan.key === null ? Math.max(first, 0) : plan.key[0] });
+
+      const names = (columns: readonly number[]) => columns.map((column) => current.columns[column]?.name ?? "");
+      const notes = [plan.key === null ? null : copy.duplicate.keyCopied(known.tables[0]?.name ?? "", names(plan.key)), plan.skipped.length === 0 ? null : copy.duplicate.notCopied(names(plan.skipped))].filter((note) => note !== null);
+      say(notes.length === 0 ? null : notes.join(" "), "warning");
+    } finally {
+      release();
+    }
+  }, [ensureTarget, valueAt, completeValues, putEdits, setActive, say, hold, moved, subject]);
+
   const undo = useCallback((cell: GridCell) => {
+    // O recado da faixa é da última tentativa (o aviso do "Duplicar linha" fica até a próxima ação de edição, RN-EDIT-016).
+    say(null);
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
     if (cell.row < read) putEdits(pending.deleted.includes(cell.row) ? undoDelete(pending, cell.row) : undoCell(pending, cell.row, cell.column, changeAt(cell)));
@@ -508,7 +578,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       const row = pending.added[cell.row - read];
       if (row !== undefined) putEdits(undoNewCell(pending, row.id, cell.column));
     }
-  }, [putEdits, changeAt]);
+  }, [putEdits, changeAt, say]);
 
   const discard = useCallback(() => {
     setEditor(null);
@@ -664,6 +734,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         deletedRow: cell.row < read && pending.deleted.includes(cell.row),
         nullable: known?.columns[cell.column]?.nullable ?? true,
         newRow: newRowAccess(reason, known, writing || running),
+        duplicateRow: newRowAccess(reason, known, writing || running),
         deleteRow: deleteRowAccess(rowOf(cell.row), reason, known, writing || running),
         shortcuts: editShortcuts(platform),
         ...(filterContext === null ? {} : { filter: filterMenuItem(filterContext) }),
@@ -718,6 +789,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
             case "newRow":
               void newRow();
               break;
+            case "duplicateRow":
+              void duplicateRow(cell.row, from);
+              break;
             case "deleteRow":
               void removeRow(cell.row, from);
               break;
@@ -727,7 +801,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     } finally {
       release();
     }
-  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, removeRow, copyCell, toast, viewNow, filterContextOf, runFilterPlan, hold, moved]);
+  }, [ensureTarget, accessOf, valueAt, rowOf, whenEditable, applyValue, openEditor, undo, newRow, duplicateRow, removeRow, copyCell, toast, viewNow, filterContextOf, runFilterPlan, hold, moved]);
 
   /** RN-EDIT-007: com pendências, a ação (filtrar, ordenar, atualizar, executar de novo) espera a resposta da pergunta. */
   const guard = useCallback((proceed: () => void) => {
@@ -779,6 +853,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCopy: (cell) => void copyCell(cell),
           onSave: () => void save(),
           onNewRow: () => void newRow(),
+          onDuplicateRow: () => {
+            const cell = latest.current.active;
+            if (cell !== null) void duplicateRow(cell.row);
+          },
           onDeleteRow: () => {
             const cell = latest.current.active;
             if (cell !== null) void removeRow(cell.row);
@@ -802,6 +880,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       saving,
       readOnly: resultReadOnly(readOnlyReason, target),
       notice: banner.notice,
+      noticeTone: banner.tone ?? ("lock" as const),
       failure: banner.failure,
       fetching: fetching !== null,
       onCancelFetch: cancelFetch,

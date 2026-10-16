@@ -186,12 +186,12 @@ describe("visibleValues: o que o diálogo “Filtrar por valor…” mostra para
 });
 
 describe("cellMenu com o Filtrar e o Atualizar (RN-GRADE-013 e RN-GRADE-012)", () => {
-  const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "11.901", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, deleteRow: { editable: true }, ...over });
+  const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "11.901", access: { editable: true }, pending: false, deletedRow: false, nullable: true, newRow: { editable: true }, duplicateRow: { editable: true }, deleteRow: { editable: true }, ...over });
 
-  it("o Filtrar (F11) e o Atualizar (F5) entram num grupo depois dos de célula, antes de linha nova e excluir", () => {
+  it("o Filtrar (F11) e o Atualizar (F5) entram num grupo depois dos de célula, antes de adicionar, duplicar e excluir linha", () => {
     const groups = cellMenu(state({ filter: filterMenuItem(context()), refresh: { editable: true } }));
 
-    expect(groups.map((group) => group.map((item) => item.id))).toEqual([["copy", "paste", "edit", "setNull", "undo"], ["filter", "refresh"], ["newRow", "deleteRow"]]);
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([["copy", "paste", "edit", "setNull", "undo"], ["filter", "refresh"], ["newRow", "duplicateRow", "deleteRow"]]);
     expect(groups[1].map((item) => [item.label, item.shortcut, item.disabled === true])).toEqual([
       ["Filtrar", "F11", false],
       ["Atualizar", "F5", false],
@@ -204,6 +204,6 @@ describe("cellMenu com o Filtrar e o Atualizar (RN-GRADE-013 e RN-GRADE-012)", (
   });
 
   it("sem os dois, o menu é o de antes", () => {
-    expect(cellMenu(state()).map((group) => group.map((item) => item.id))).toEqual([["copy", "paste", "edit", "setNull", "undo"], ["newRow", "deleteRow"]]);
+    expect(cellMenu(state()).map((group) => group.map((item) => item.id))).toEqual([["copy", "paste", "edit", "setNull", "undo"], ["newRow", "duplicateRow", "deleteRow"]]);
   });
 });

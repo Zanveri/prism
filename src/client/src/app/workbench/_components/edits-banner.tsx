@@ -1,4 +1,5 @@
-import { Button, LockIcon } from "@/components/ui";
+import { AlertIcon, Button, LockIcon } from "@/components/ui";
+import { cn } from "@/lib/utils/cn";
 
 import type { SaveFailure } from "../_lib/record-edits";
 import { recordsCopy } from "../_lib/records.copy";
@@ -15,6 +16,11 @@ type EditsBannerProps = {
   readOnly: string | null;
   /** O que a última tentativa disse e não é erro: o motivo de a célula não se editar, a conferência do catálogo em andamento. */
   notice: string | null;
+  /**
+   * `warning`: o recado não é um motivo de só leitura, e vem com o triângulo de atenção no lugar do cadeado: o que "Duplicar linha" avisa (a chave
+   * copiada, as colunas que ficaram de fora) e por que ele não duplicou (RN-EDIT-016).
+   */
+  noticeTone?: "lock" | "warning";
   /** O último Salvar recusado, com a mensagem do banco como veio. */
   failure: SaveFailure | null;
   /** RN-SQL-017: copiar ou exportar está buscando na API o valor completo das células cortadas; "Cancelar" desiste, e a grade segue livre. */
@@ -31,7 +37,7 @@ type EditsBannerProps = {
  * veio, que fica até o próximo Salvar ou o Descartar); e o motivo de só leitura. É estado da tela, e não aviso (RN-AVISO-005). Sem
  * nada disso, não aparece.
  */
-export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, failure, fetching, onCancelFetch, onViewSql, onDiscard, onSave }: EditsBannerProps) {
+export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, noticeTone = "lock", failure, fetching, onCancelFetch, onViewSql, onDiscard, onSave }: EditsBannerProps) {
   if (pending === 0 && failure === null && readOnly === null && notice === null && !fetching) return null;
 
   return (
@@ -74,8 +80,8 @@ export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, fai
         </div>
       )}
       {readOnly === null && notice === null ? null : (
-        <p role="status" className="flex items-center gap-1.5 text-muted">
-          <LockIcon aria-hidden className="size-3.5 flex-none" />
+        <p role="status" className={cn("flex items-center gap-1.5", notice !== null && noticeTone === "warning" ? "text-ink" : "text-muted")}>
+          {notice !== null && noticeTone === "warning" ? <AlertIcon aria-hidden className="size-3.5 flex-none text-accent" /> : <LockIcon aria-hidden className="size-3.5 flex-none" />}
           <span>{notice ?? readOnly}</span>
         </p>
       )}
