@@ -31,12 +31,12 @@ const flat = (groups: MenuItem[][]) => groups.flat();
 const byId = (groups: MenuItem[][], id: string) => flat(groups).find((item) => item.id === id);
 
 describe("menuFor: conexão (RN-MENU-001)", () => {
-  it("desconectada: Conectar, Nova consulta, Atualizar (desabilitado, não há o que atualizar), Editar conexão, Renomear, Duplicar conexão, Mover, Excluir e Copiar nome", () => {
+  it("desconectada: Conectar, Nova consulta, Atualizar (desabilitado, não há o que atualizar), Editar conexão, Renomear, Duplicar conexão, Mover, Excluir, Exportar conexão… e Copiar nome", () => {
     const groups = menuFor(connectionNode, state("disconnected"));
 
     // Mover e Excluir vieram da tela de Conexões (RN-NAV-003): lá, mover era trocar a pasta no formulário, e excluir era o botão dele.
-    // Renomear e Duplicar conexão são da RN-NAV-009 e da RN-CONN-016.
-    expect(ids(groups)).toEqual([["connect", "newQuery"], ["refresh", "editConnection"], ["renameConnection", "duplicateConnection", "moveConnection", "deleteConnection"], ["copyName"]]);
+    // Renomear e Duplicar conexão são da RN-NAV-009 e da RN-CONN-016; Exportar conexão…, da RN-TRANSF-001, num grupo próprio antes de Copiar nome.
+    expect(ids(groups)).toEqual([["connect", "newQuery"], ["refresh", "editConnection"], ["renameConnection", "duplicateConnection", "moveConnection", "deleteConnection"], ["exportConnection"], ["copyName"]]);
     expect(flat(groups).filter((item) => item.disabled).map((item) => item.id)).toEqual(["refresh"]);
   });
 
@@ -72,8 +72,18 @@ describe("menuFor: conexão (RN-MENU-001)", () => {
       { type: "duplicateConnection" },
       { type: "moveConnection" },
       { type: "deleteConnection" },
+      { type: "exportConnections" },
       { type: "copy", text: "MES Produção" },
     ]);
+  });
+
+  it("Exportar conexão… (RN-TRANSF-001) vale em qualquer estado da conexão: exportar não mexe em sessão, em proteção nem no cofre", () => {
+    for (const status of ["disconnected", "connecting", "connected", "failed"] as const) {
+      expect(byId(menuFor(connectionNode, state(status, true)), "exportConnection")).toMatchObject({ label: "Exportar conexão…", action: { type: "exportConnections" } });
+      expect(byId(menuFor(connectionNode, state(status, true)), "exportConnection")?.disabled).toBeFalsy();
+    }
+    // Uma conexão somente leitura não muda nada: o menu nem olha a proteção.
+    expect(byId(menuFor(connectionNode, idle), "exportConnection")?.shortcut).toBeUndefined();
   });
 
   it("Mover e Excluir valem em qualquer estado: excluir uma conexão conectada encerra as sessões dela (RN-CONN-014)", () => {
@@ -201,11 +211,12 @@ describe("menuFor: o resto da árvore", () => {
     expect(menuFor(node, idle)).toEqual([[expect.objectContaining({ id: "copyName", action: { type: "copy", text: name } })]]);
   });
 
-  it("pasta: Nova conexão e Nova pasta (criam dentro dela), Renomear, Editar pasta…, Mover, Excluir e Copiar nome (o que a tela de Conexões oferecia, RN-NAV-003)", () => {
+  it("pasta: Nova conexão e Nova pasta (criam dentro dela), Renomear, Editar pasta…, Mover, Excluir, Exportar conexões…, Importar conexões aqui… e Copiar nome (RN-NAV-003 e RN-TRANSF-001)", () => {
     const groups = menuFor(folderNode, idle);
 
-    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "editFolder", "moveFolder", "deleteFolder"], ["copyName"]]);
-    expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "editFolder", "moveFolder", "deleteFolder", "copy"]);
+    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "editFolder", "moveFolder", "deleteFolder"], ["exportConnections", "importHere"], ["copyName"]]);
+    expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "editFolder", "moveFolder", "deleteFolder", "exportConnections", "importConnections", "copy"]);
+    expect([byId(groups, "exportConnections")?.label, byId(groups, "importHere")?.label]).toEqual(["Exportar conexões…", "Importar conexões aqui…"]);
     expect([byId(groups, "newConnection")?.label, byId(groups, "newFolder")?.label]).toEqual(["Nova conexão", "Nova pasta"]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
   });
@@ -283,14 +294,25 @@ describe("keyActionFor: as teclas da linha que são ações do menu (RN-NAV-009)
 });
 
 describe("backgroundMenu: o botão direito no espaço vazio do navegador (RN-NAV-003)", () => {
-  it("Nova conexão e Nova pasta, que criam na raiz, sempre habilitadas", () => {
+  it("Nova conexão e Nova pasta, que criam na raiz, sempre habilitadas, e, num grupo depois delas, Exportar conexões… e Importar conexões… (RN-TRANSF-001)", () => {
     const groups = backgroundMenu();
 
-    expect(ids(groups)).toEqual([["newConnection", "newFolder"]]);
+    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["exportConnections", "importConnections"]]);
     expect(flat(groups).map((item) => [item.label, item.disabled ?? false])).toEqual([
       ["Nova conexão", false],
       ["Nova pasta", false],
+      ["Exportar conexões…", false],
+      ["Importar conexões…", false],
     ]);
+    expect(flat(groups).map((item) => item.action)).toEqual([{ type: "newConnection" }, { type: "newFolder" }, { type: "exportConnections" }, { type: "importConnections" }]);
+  });
+
+  it("sem nenhuma pasta e nenhuma conexão no cofre, Exportar conexões… fica desabilitado, com o motivo; Importar conexões… continua", () => {
+    const groups = backgroundMenu(false);
+
+    expect(byId(groups, "exportConnections")).toMatchObject({ disabled: true, hint: "Não há pastas nem conexões para exportar." });
+    expect(byId(groups, "importConnections")?.disabled).toBeFalsy();
+    expect(byId(groups, "newConnection")?.disabled).toBeFalsy();
   });
 });
 

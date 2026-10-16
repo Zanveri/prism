@@ -51,6 +51,7 @@ export {
   TableIcon,
   TimerIcon,
   TrashIcon,
+  UploadIcon,
   WorkbenchIcon,
   WrenchIcon,
 } from "./icons";
