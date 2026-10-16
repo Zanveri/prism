@@ -31,6 +31,17 @@ describe("runConnectionTest: as recusas que o formulário mostra no lugar", () =
 
     expect(await runConnectionTest(input)).toEqual({ ok: true, data: undefined });
   });
+
+  it("o corpo leva a consulta de verificação do formulário (RN-CONN-013 e RN-VERIF-001), e sem senha digitada a chave nem vai", async () => {
+    const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetch);
+    await runConnectionTest({ ...input, password: null, verificationQuery: "SELECT 1 FROM SYSIBM.SYSDUMMY1" }, "c1");
+
+    const [url, init] = fetch.mock.calls[0];
+    expect(url).toBe(`${base}/api/user/connections/test`);
+    expect(JSON.parse(String(init.body))).toEqual({ id: "c1", ...input, password: undefined, verificationQuery: "SELECT 1 FROM SYSIBM.SYSDUMMY1" });
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("password");
+  });
 });
 
 describe("duplicateConnection: \"Duplicar conexão\" (RN-CONN-016)", () => {

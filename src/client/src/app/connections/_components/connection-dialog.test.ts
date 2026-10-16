@@ -110,6 +110,25 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     expect(markup).toContain(connectionsCopy.protections.readOnly.connectionHint);
   });
 
+  it("a Sessão da conexão (RN-VERIF-001) vem logo depois dos campos e antes do Ambiente, como na leitura do canvas, com a verificação gravada", () => {
+    const markup = render({ mode: "edit", connection: { ...mes, verificationEnabled: false, verificationInterval: 120, verificationQuery: "SELECT COUNT(*) FROM SYSCAT.TABLES" } });
+
+    expect(markup.indexOf('id="cx-password"')).toBeLessThan(markup.indexOf('id="cx-session-title"'));
+    expect(markup.indexOf('id="cx-session-title"')).toBeLessThan(markup.indexOf('id="cx-environment-title"'));
+    expect(markup).toContain('<input type="hidden" name="verificationEnabled" value="false"/>');
+    expect(markup).toMatch(/<input id="cx-verification-interval"[^>]*name="verificationInterval" value="120"/);
+    expect(markup).toMatch(/<textarea id="cx-verification-query" name="verificationQuery"[^>]*placeholder="SELECT 1 FROM SYSIBM.SYSDUMMY1"[^>]*>SELECT COUNT\(\*\) FROM SYSCAT.TABLES<\/textarea>/);
+    expect(markup).not.toContain("Encerrar a conexão");
+  });
+
+  it("a conexão nova nasce verificando a cada 30 segundos, com a consulta do banco", () => {
+    const markup = render({ mode: "new", folderID: null });
+
+    expect(markup).toContain('<input type="hidden" name="verificationEnabled" value="true"/>');
+    expect(markup).toMatch(/<input id="cx-verify" type="checkbox"(?=[^>]*checked="")/);
+    expect(markup).toMatch(/<input id="cx-verification-interval"[^>]*name="verificationInterval" value="30"/);
+  });
+
   it("na pasta que impõe as proteções, elas aparecem marcadas e desabilitadas, com “Herdado da pasta Fábrica”, e a nova conexão nasce sem as próprias (RN-PROT-004)", () => {
     const protegida: Folder = { ...fabrica, readOnly: true, confirmCommands: "all", protections: { readOnly: true, readOnlyFolderID: null, confirmCommands: "all", confirmCommandsFolderID: null } };
     const markup = render({ mode: "new", folderID: protegida.id }, [protegida]);
