@@ -1,7 +1,7 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
 import type { FilterRequest } from "./filter-handoff";
-import { nextSort, orderOf, recordsRunPlan, sortOf, withOrder, type RecordsRunPlan } from "./table-sql";
+import { nextSort, orderOf, recordsRunPlan, sortOf, withOrder, type RecordsRunPlan, type RecordsSort } from "./table-sql";
 import { isPersonBusy, type RunnerState } from "./use-query-runner";
 import type { TableView } from "./workbench-model";
 
@@ -148,8 +148,15 @@ export function runRecords({ engine, schema, name }: RecordsTable, next: string,
  * mostrar o texto novo quando ele é de fato enviado: com a aba ocupada nada muda, e com mais de um comando só o aviso aparece.
  */
 export function sortRecords(table: RecordsTable, { draft, filter, column, columns }: { draft: string; filter: string; column: string; columns: readonly { name: string }[] }, state: RunnerState, deps: FieldDeps): void {
-  const next = nextSort(sortOf(filter, columns, table.engine), column);
-  const plan = recordsRunPlan(table.engine, table.schema, table.name, withOrder(draft, next, table.engine), isPersonBusy(state));
+  orderRecords(table, { draft, sort: nextSort(sortOf(filter, columns, table.engine), column) }, state, deps);
+}
+
+/**
+ * O "Ordenar" do menu da grade (RN-GRADE-004): a ordem escolhida (crescente, decrescente, ou `null`, sem ordem) para a coluna da célula ativa, pelo mesmo
+ * caminho do clique no cabeçalho: o `ORDER BY` escrito, trocado ou tirado no texto do campo, enviado inteiro, e o campo só muda quando ele é de fato enviado.
+ */
+export function orderRecords(table: RecordsTable, { draft, sort }: { draft: string; sort: RecordsSort | null }, state: RunnerState, deps: FieldDeps): void {
+  const plan = recordsRunPlan(table.engine, table.schema, table.name, withOrder(draft, sort, table.engine), isPersonBusy(state));
 
   if (plan.kind === "send") {
     deps.setDraft(plan.filter);

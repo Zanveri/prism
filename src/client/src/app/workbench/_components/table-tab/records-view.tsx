@@ -21,15 +21,15 @@ import { saveText } from "../../_lib/save-file";
 import { recall, remember } from "../../_lib/tab-memory";
 import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import type { TableRef } from "../../_lib/table-diagram";
-import { recordsSql, sortOf, sqlLiteral } from "../../_lib/table-sql";
+import { recordsSql, sortOf, sqlLiteral, type RecordsSort } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
-import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
+import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, orderRecords, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
 import { saveQuestion } from "../../_lib/command-confirmation";
 import { useAutoRefresh } from "../../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../../_lib/use-command-confirmation";
 import { isAutoRun, isPersonBusy, useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
-import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../../_lib/use-record-edits";
+import { useRecordEdits, type GridFilterSource, type GridFollowSource, type GridSortSource, type SavedEdits } from "../../_lib/use-record-edits";
 import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
 import { ConfirmCommandDialog } from "../confirm-command-dialog";
 import { EditsBanner } from "../edits-banner";
@@ -167,7 +167,19 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const { confirmed } = confirmation;
   const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, exportData: menuExport });
+  // RN-GRADE-004 e RN-TABELA-007: o "Ordenar" e o "Ir para o registro referenciado" do menu da grade, pelo que está mais abaixo (a ordem em vigor, as chaves
+  // estrangeiras, o seguir do link), lido na hora por uma ref.
+  const gridMenuRef = useRef<{ sort: RecordsSort | null; order: (sort: RecordsSort | null) => void; links: ReadonlyMap<number, unknown> | undefined; linkable: (value: string) => boolean; follow: (column: number, value: string) => void }>({
+    sort: null,
+    order: () => {},
+    links: undefined,
+    linkable: () => false,
+    follow: () => {},
+  });
+  const sortSource = useMemo<GridSortSource>(() => ({ current: () => gridMenuRef.current.sort, apply: (next) => gridMenuRef.current.order(next) }), []);
+  const followSource = useMemo<GridFollowSource>(() => ({ links: (column) => gridMenuRef.current.links?.has(column) === true, linkable: (value) => gridMenuRef.current.linkable(value), follow: (column, value) => gridMenuRef.current.follow(column, value) }), []);
+
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, exportData: menuExport, engine, sort: sortSource, follow: followSource });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {
@@ -316,6 +328,14 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   function sortBy(column: string) {
     if (engine !== undefined && gridColumns !== null) guard(() => sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
+
+  /** O "Ordenar" do menu da grade (RN-GRADE-004): a ordem escolhida para a coluna, pelo mesmo caminho do clique no cabeçalho (`orderRecords`). */
+  function orderBy(next: RecordsSort | null) {
+    if (engine !== undefined) guard(() => orderRecords({ engine, schema, name }, { draft, sort: next }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
+  }
+  useEffect(() => {
+    gridMenuRef.current = { sort, order: orderBy, links, linkable, follow };
+  });
 
   /** "Limpar" tira a condição e a ordem de uma vez (`clearRecords`, RN-TABELA-010). */
   function clear() {

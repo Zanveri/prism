@@ -328,6 +328,15 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
           <>
             <span className="px-2 text-xs text-muted">{summaryOf(rows)}</span>
             {/*
+              RN-GRADE-001: com mais de uma célula escolhida, quantas, ao lado do resumo ("3 linhas escolhidas", "12 células escolhidas"). O lugar fica na página
+              também vazio, para o leitor de tela anunciar a mudança; ela vem quando a seleção para de mudar (ao soltar o botão ou a tecla).
+            */}
+            {editing === undefined ? null : (
+              <span role="status" className={cn("text-xs text-ink", editing.status !== null && "px-2")}>
+                {editing.status ?? ""}
+              </span>
+            )}
+            {/*
               RN-SQL-006: o total só é contado quando a pessoa pede, e só há o que contar quando há linhas
               que a tela não leu (`hasMore`, com o cursor aberto ou já fechado). Com o resultado inteiro na
               tela, o total é o número do resumo, sem ir ao banco. O total contado se conta de novo (issue #10):

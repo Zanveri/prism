@@ -76,7 +76,6 @@ export const recordsCopy = {
     // O menu de contexto da célula.
     menu: {
       label: "Ações da célula",
-      copyValue: "Copiar valor",
       paste: "Colar",
       // Os rótulos da RN-EDIT-001 (seção 33: "Linha nova" passou a se chamar "Adicionar linha"; as marcas da linha nova na grade continuam).
       edit: "Editar célula",
@@ -110,7 +109,7 @@ export const recordsCopy = {
     bar: {
       label: "Edição da grade",
       title: (label: string, shortcut: string) => `${label} (${shortcut})`,
-      disabledTitle: (label: string, shortcut: string, reason: string) => `${label} (${shortcut}). ${reason}`,
+      disabledTitle: (title: string, reason: string) => `${title}. ${reason}`,
       chooseCell: "Escolha uma célula na grade.",
       chooseRow: "Escolha uma linha na grade.",
       noRows: "O resultado não tem linhas.",

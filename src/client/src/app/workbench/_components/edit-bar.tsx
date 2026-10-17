@@ -31,7 +31,8 @@ type EditBarProps = {
  *
  * É uma barra de ferramentas, como a de ações do navegador: uma parada de tabulação só (o botão que teve o foco por último, de começo "Editar célula"), e as
  * setas, Home e End andam entre os quatro. O que não se aplica usa `aria-disabled`, e não `disabled`: fica no caminho das setas e não perde o foco, e diz
- * por quê na dica e, para o leitor de tela, num texto só para ele (`aria-describedby`), como o "Exportar CSV". Cada botão declara o atalho da plataforma
+ * por quê na dica e, para o leitor de tela, num texto só para ele (`aria-describedby`), como o "Exportar CSV"; com várias linhas na seleção, o mesmo texto
+ * diz sobre quantas o botão age ("Excluir as 3 linhas escolhidas", RN-EDIT-013). Cada botão declara o atalho da plataforma
  * (`aria-keyshortcuts`, RN-EDIT-015), que a dica também escreve. O clique no campo de edição aberto o confirma antes (o campo confirma ao perder o foco),
  * e só então o botão age.
  */
@@ -60,7 +61,7 @@ export function EditBar({ buttons, onAction, onDone }: EditBarProps) {
             title={button.title}
             aria-keyshortcuts={button.shortcut.aria}
             aria-disabled={button.reason === null ? undefined : true}
-            aria-describedby={button.reason === null ? undefined : `${hintId}-${button.id}`}
+            aria-describedby={button.description === null ? undefined : `${hintId}-${button.id}`}
             tabIndex={index === tabStop ? 0 : -1}
             onFocus={() => setFocused(index)}
             onClick={() => {
@@ -73,9 +74,9 @@ export function EditBar({ buttons, onAction, onDone }: EditBarProps) {
             {icons[button.id]}
             {button.label}
           </Button>
-          {button.reason === null ? null : (
+          {button.description === null ? null : (
             <span id={`${hintId}-${button.id}`} className="sr-only">
-              {button.reason}
+              {button.description}
             </span>
           )}
         </Fragment>

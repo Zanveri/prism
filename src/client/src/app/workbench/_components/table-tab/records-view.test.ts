@@ -1506,7 +1506,7 @@ describe("RecordsView: Duplicar linha (RN-EDIT-016)", () => {
 
     view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 2 }, false);
     await settle();
-    const group = view.show().menu!.groups.at(-1) as ContextMenuItem[];
+    const group = view.show().menu!.groups.find((items) => (items as ContextMenuItem[]).some((item) => item.id === "newRow")) as ContextMenuItem[];
 
     expect(group.map((item) => [item.label, item.shortcut, item.disabled === true])).toEqual([
       ["Adicionar linha", "Alt+Insert", false],
@@ -1543,6 +1543,8 @@ describe("RecordsView: Duplicar linha (RN-EDIT-016)", () => {
     const view = mount(fakeRunner(loaded()));
     await duplicate(view, 0);
 
+    // A cópia vem escolhida inteira (RN-EDIT-014): o clique escolhe só a célula, e o "Desfazer alteração" age nela.
+    view.show().panel.editing!.onActivate({ row: 2, column: 1 });
     view.show().panel.editing!.onMenu({ row: 2, column: 1 }, { x: 1, y: 2 }, false);
     await settle();
     view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "undo")!.onSelect!();

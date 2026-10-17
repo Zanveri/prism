@@ -18,9 +18,9 @@ import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, useQueryRunner, useScriptRun, type QueryRunner, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
-import { conditionOf } from "../_lib/table-sql";
+import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
 import { canClear } from "../_lib/table-view";
-import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../_lib/use-record-edits";
+import { useRecordEdits, type GridFilterSource, type GridSortSource, type SavedEdits } from "../_lib/use-record-edits";
 import { inDatabase } from "../_lib/navigator-model";
 import { useAutoRefresh } from "../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../_lib/use-command-confirmation";
@@ -209,6 +209,19 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     }),
     [engine, sendFilter],
   );
+  // RN-GRADE-004: o "Ordenar" do menu da grade, pelo campo de filtro do resultado (RN-GRADE-011): a ordem em uso é a do filtro aplicado, e a escolhida é
+  // escrita no campo (`withOrder`) e aplicada como o "Aplicar".
+  const resultSort = useMemo<GridSortSource>(
+    () => ({
+      current: () => {
+        const now = runner.getState();
+        const rows = now.status === "rows" ? now : now.status === "running" && now.previous?.status === "rows" ? now.previous : null;
+        return rows === null ? null : sortOf(filterNow.current.applied, rows.columns, engine);
+      },
+      apply: (next) => sendFilter(withOrder(filterNow.current.draft, next, engine)),
+    }),
+    [runner, engine, sendFilter],
+  );
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
   // RN-EXPORT-001: o "Exportar dados…" do menu da célula lê o motivo e abre o assistente pelo que está mais abaixo (o "Salvar" em andamento vem da edição).
@@ -258,6 +271,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     kept: kept?.rows ?? null,
     scriptBusy,
     exportData: menuExport,
+    engine,
+    sort: kept === null && base !== null ? resultSort : undefined,
   });
   const { guard } = edits;
   useEffect(() => {

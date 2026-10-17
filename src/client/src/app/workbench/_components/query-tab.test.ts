@@ -68,6 +68,7 @@ import { groupItems } from "@/components/ui/context-menu";
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import { editCell, noEdits } from "../_lib/record-edits";
+import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
@@ -245,7 +246,7 @@ describe("QueryTabPanel: a grade do resultado de um comando se edita como a dos 
     const items = view.show().menu!.groups.flatMap(groupItems);
 
     expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("união de consultas") });
-    expect(items.find((item) => item.label === copy.menu.copyValue)?.disabled).toBe(false);
+    expect(items.find((item) => item.label === gridSelectionCopy.menu.copy)?.disabled).toBe(false);
     expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
   });
 
@@ -273,7 +274,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onCopy();
     await settle();
 
     expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 1 }], expect.any(AbortSignal));
@@ -281,14 +283,14 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     expect(rt.toast.success.mock.calls).toEqual([[copy.menu.copied]]);
   });
 
-  it("'Copiar valor' do menu da célula também leva o valor completo", async () => {
+  it("'Copiar' do menu da célula também leva o valor completo", async () => {
     rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
     rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
     const view = mount(fakeRunner(cut()));
 
     view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
     await settle();
-    view.show().menu!.groups.flatMap(groupItems).find((item) => item.label === copy.menu.copyValue)!.onSelect!();
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.label === gridSelectionCopy.menu.copy)!.onSelect!();
     await settle();
 
     expect(clipboard.writeText.mock.calls).toEqual([[full]]);
@@ -297,7 +299,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
   it("sem célula cortada, nada é pedido: copia o que a grade tem", async () => {
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 0 });
+    view.show().area.editing!.onActivate({ row: 0, column: 0 });
+    view.show().area.editing!.onCopy();
     await settle();
 
     expect(rt.cells.resultCells).not.toHaveBeenCalled();
@@ -308,7 +311,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     rt.cells.resultCells.mockResolvedValue({ ok: false, error: { status: 404, code: "RESULT_NOT_FOUND", title: "Resultado não localizado.", detail: null, errors: null, extensions: {} } });
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onCopy();
     await settle();
 
     expect(clipboard.writeText.mock.calls).toEqual([[full.slice(0, 10_000)]]);
@@ -323,7 +327,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     }));
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onCopy();
     const busy = view.show();
     busy.banner!.props.onCancelFetch();
     await settle();
@@ -1265,7 +1270,7 @@ describe("QueryTabPanel: as abas guardadas do script se editam (seção 33, RN-S
     return run;
   }
 
-  it("a aba guardada recebe a edição e a faixa; o alvo é o do resultado dela, e o menu da célula não tem Filtrar, Atualizar nem Atualizar automaticamente", async () => {
+  it("a aba guardada recebe a edição e a faixa; o alvo é o do resultado dela, e o menu da célula não tem Filtrar, Ordenar, Atualizar nem Atualizar automaticamente", async () => {
     rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
     const runner = fakeRunner(rowsState({ target: last }));
     twoTabs(runner);
@@ -1283,8 +1288,10 @@ describe("QueryTabPanel: as abas guardadas do script se editam (seção 33, RN-S
     const ids = view.show().menu!.groups.flatMap(groupItems).map((item) => item.id);
 
     expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
-    expect(ids).toEqual(expect.arrayContaining(["copy", "paste", "edit", "setNull", "undo", "newRow", "duplicateRow", "deleteRow"]));
+    expect(ids).toEqual(expect.arrayContaining(["copy", "copyWithHeader", "advancedCopy", "paste", "edit", "setNull", "undo", "newRow", "duplicateRow", "deleteRow"]));
     expect(ids).not.toContain("filter");
+    // RN-SQL-023: o "Ordenar" é do resultado do último comando, como o "Filtrar".
+    expect(ids).not.toContain("sort");
     expect(ids).not.toContain("refresh");
     expect(ids).not.toContain("autoRefresh");
   });
