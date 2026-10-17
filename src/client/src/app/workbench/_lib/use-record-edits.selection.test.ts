@@ -12,14 +12,16 @@ const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
   return {
     ...createHookRuntime(),
-    service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
+    service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn(), sqlTargetOrRefuse: vi.fn() },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     cells: { resultCells: vi.fn() },
+    // O cache da tela: a lista das conexões diz o somente leitura (RN-PROT-002); sem ela, nada.
+    client: { getQueryData: vi.fn<(key: unknown) => unknown>(() => undefined) },
   };
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
-vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => ({ getQueryData: () => undefined }) }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => rt.client }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
 vi.mock("./record-edits.service", () => rt.service);
@@ -116,6 +118,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   forgetExcept(new Set());
   rt.service.editTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: target }));
+  rt.client.getQueryData.mockImplementation(() => undefined);
   clipboard = { writeText: vi.fn(async () => {}), readText: vi.fn(async () => "") };
   vi.stubGlobal("navigator", { clipboard, platform: "Win32" });
 });
@@ -526,5 +529,174 @@ describe("o contrato com as frentes do Copiar avançado e do Gerar SQL (seção 
     const completed = await contexts[0].complete(contexts[0].slice());
     expect(completed?.slice.rows).toEqual([["inteiro"]]);
     expect(completed?.missing).toBe(0);
+  });
+});
+
+describe("o alvo do Gerar SQL e do Copiar como, a busca e a faixa no contexto (seção 37, RN-GRADE-020 e RN-EDIT-010)", () => {
+  /** O contexto que o Ctrl+Shift+C entregaria agora, com a célula `Nome` da primeira linha. */
+  const contextOf = (view: ReturnType<typeof mount>) => {
+    view.show().editing!.onActivate({ row: 0, column: 1 });
+    return view.show().selectionContext()!;
+  };
+  const sqlTarget = { ...target, tables: target.tables.map((table) => ({ ...table, kind: "table" as const, keyColumns: ["id"] })) };
+
+  it("pergunta o edit-target com purpose sql uma vez por resultado, com a frase na faixa enquanto a API responde; a resposta não vai para a edição", async () => {
+    let answer!: (value: unknown) => void;
+    rt.service.sqlTargetOrRefuse.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const view = mount(fakeRunner(rowsState()));
+    const context = contextOf(view);
+
+    const first = context.sqlTarget("Conferindo a tabela deste resultado…");
+    const second = context.sqlTarget();
+    expect(view.show().banner.notice).toBe("Conferindo a tabela deste resultado…");
+    answer({ ok: true, data: sqlTarget });
+    expect(await first).toEqual({ kind: "target", target: sqlTarget });
+    expect(await second).toEqual({ kind: "target", target: sqlTarget });
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r1", null);
+    expect(view.show().banner.notice).toBeNull();
+
+    expect(view.show().selectionContext()!.knownSqlTarget()).toEqual({ kind: "target", target: sqlTarget });
+    await view.show().selectionContext()!.sqlTarget();
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    // A edição não recebe o alvo do "Gerar SQL": o da conexão somente leitura não serve a ela, e ela pergunta o dela.
+    expect(view.show().selectionContext()!.target).toBeNull();
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("o alvo que a edição já tem, com o tipo e a chave pelo nome, serve sem perguntar; o motivo da página também", async () => {
+    rt.service.editTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: sqlTarget }));
+    const view = mount(fakeRunner(rowsState()));
+    await contextOf(view).ensureTarget();
+    expect(await view.show().selectionContext()!.sqlTarget()).toEqual({ kind: "target", target: sqlTarget });
+    expect(rt.service.sqlTargetOrRefuse).not.toHaveBeenCalled();
+
+    rt.unmount();
+    const readOnly = mount(fakeRunner(rowsState({ readOnly: "UNION" })));
+    expect(contextOf(readOnly).knownSqlTarget()).toEqual({ kind: "notEditable", reason: "UNION" });
+  });
+
+  it("na conexão somente leitura o motivo da página não serve: o alvo vem da API com purpose sql (RN-GRADE-020 e RN-PROT-002)", async () => {
+    rt.client.getQueryData.mockImplementation((key: unknown) => (Array.isArray(key) && key[0] === "connections" ? [{ id: "c1", protections: { readOnly: true } }] : undefined));
+    rt.service.sqlTargetOrRefuse.mockResolvedValueOnce({ ok: true, data: sqlTarget });
+    const view = mount(fakeRunner(rowsState({ readOnly: edit.reasons.connectionReadOnly })));
+    const context = contextOf(view);
+
+    expect(context.knownSqlTarget()).toBeNull();
+    expect(await context.sqlTarget()).toEqual({ kind: "target", target: sqlTarget });
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(view.show().selectionContext()!.knownSqlTarget()).toEqual({ kind: "target", target: sqlTarget });
+    expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  describe("o somente leitura desmarcado ou marcado depois da leitura (RN-PROT-002 e 003)", () => {
+    /** A lista das conexões em cache, com o somente leitura de `c1` agora. */
+    const readOnlyNow = (on: boolean) => rt.client.getQueryData.mockImplementation((key: unknown) => (Array.isArray(key) && key[0] === "connections" ? [{ id: "c1", protections: { readOnly: on } }] : undefined));
+
+    it("lido na conexão somente leitura e desmarcado depois: o motivo da página não vale, e a edição e o Gerar SQL perguntam à API como numa página sem motivo", async () => {
+      readOnlyNow(false);
+      rt.service.sqlTargetOrRefuse.mockResolvedValueOnce({ ok: true, data: sqlTarget });
+      const view = mount(fakeRunner(rowsState({ readOnly: edit.reasons.connectionReadOnly })));
+
+      expect(view.show().banner.readOnly).toBeNull();
+      const context = contextOf(view);
+      expect(context.knownSqlTarget()).toBeNull();
+      expect(await context.sqlTarget()).toEqual({ kind: "target", target: sqlTarget });
+      expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+      expect(await context.ensureTarget()).toEqual(target);
+      expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s1", "r1", null);
+      expect(view.show().banner.readOnly).toBeNull();
+    });
+
+    it("lido e ainda somente leitura: o motivo da página vale, a edição não pergunta, e o Gerar SQL pergunta o alvo dele (purpose sql)", async () => {
+      readOnlyNow(true);
+      rt.service.sqlTargetOrRefuse.mockResolvedValueOnce({ ok: true, data: sqlTarget });
+      const view = mount(fakeRunner(rowsState({ readOnly: edit.reasons.connectionReadOnly })));
+
+      expect(view.show().banner.readOnly).toBe(edit.readOnly(edit.reasons.connectionReadOnly));
+      const context = contextOf(view);
+      expect(await context.ensureTarget()).toBeNull();
+      expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+      expect(await context.sqlTarget()).toEqual({ kind: "target", target: sqlTarget });
+    });
+
+    it("o outro motivo da página vale também com a conexão livre: o Gerar SQL não pergunta", () => {
+      readOnlyNow(false);
+      const view = mount(fakeRunner(rowsState({ readOnly: "UNION" })));
+      expect(view.show().banner.readOnly).toBe(edit.readOnly("UNION"));
+      expect(contextOf(view).knownSqlTarget()).toEqual({ kind: "notEditable", reason: "UNION" });
+    });
+
+    it("marcado depois da leitura: a página não traz motivo, a API recusa e a recusa vale enquanto ele vale; desmarcado de novo, a edição pergunta outra vez", async () => {
+      readOnlyNow(true);
+      rt.service.editTargetOrRefuse.mockResolvedValueOnce({ ok: false, error: { code: "CONNECTION_READ_ONLY", title: "Somente leitura", detail: "A conexão é somente leitura.", extensions: {} } });
+      const view = mount(fakeRunner(rowsState()));
+
+      expect(view.show().banner.readOnly).toBeNull();
+      expect(await contextOf(view).ensureTarget()).toBeNull();
+      expect(view.show().banner.readOnly).toBe(edit.readOnly(edit.reasons.connectionReadOnly));
+      expect(rt.service.editTargetOrRefuse).toHaveBeenCalledTimes(1);
+
+      readOnlyNow(false);
+      expect(view.show().banner.readOnly).toBeNull();
+      expect(await view.show().selectionContext()!.ensureTarget()).toEqual(target);
+      expect(rt.service.editTargetOrRefuse).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("a recusa de que o resultado não se edita fica para o resultado; a falha não, e a seguinte pergunta de novo", async () => {
+    rt.service.sqlTargetOrRefuse.mockResolvedValueOnce({ ok: false, error: { code: "SESSION_BUSY", title: "Ocupada", detail: "a sessão está ocupada", extensions: {} } });
+    rt.service.sqlTargetOrRefuse.mockResolvedValueOnce({ ok: false, error: { code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: "x", extensions: { reason: "DISTINCT" } } });
+    const view = mount(fakeRunner(rowsState()));
+    const context = contextOf(view);
+
+    expect(await context.sqlTarget()).toEqual({ kind: "failed", message: "a sessão está ocupada" });
+    expect(context.knownSqlTarget()).toBeNull();
+    expect(await context.sqlTarget()).toEqual({ kind: "notEditable", reason: "DISTINCT" });
+    expect(context.knownSqlTarget()).toEqual({ kind: "notEditable", reason: "DISTINCT" });
+  });
+
+  it("o contexto diz a aba ocupada e as pendências como a grade as mostra", () => {
+    remember("t1", "edits", { resultId: "r1", edits: editCell(noEdits, 0, 1, "Ana Maria", "Ana") });
+    const view = mount(fakeRunner(rowsState()));
+    const context = contextOf(view);
+    expect(context.busy).toBe(false);
+    expect(context.pending.cells).toEqual([expect.objectContaining({ row: 0, column: 1, value: "Ana Maria" })]);
+  });
+
+  it("a busca dos valores completos desiste pelo sinal de quem pediu (o \"Cancelar a busca\" do diálogo), como pelo \"Cancelar\" da faixa", async () => {
+    rt.cells.resultCells.mockImplementation((_session: string, _result: string, _cells: unknown, signal: AbortSignal) => new Promise((resolve) => signal.addEventListener("abort", () => resolve({ ok: false, error: { code: "CANCELLED", title: "", detail: null, extensions: {} } }))));
+    const view = mount(fakeRunner(rowsState({ truncated: new Map([[0, new Set([1])]]) })));
+    const context = contextOf(view);
+    const controller = new AbortController();
+
+    const fetching = context.complete(context.slice(), undefined, controller.signal);
+    expect(view.show().banner.fetching).toBe(true);
+    controller.abort();
+    expect(await fetching).toBeNull();
+    expect(view.show().banner.fetching).toBe(false);
+
+    const already = new AbortController();
+    already.abort();
+    expect(await context.fullValues([{ row: 0, column: 1 }], already.signal)).toBeNull();
+  });
+
+  it("a faixa \"Copiando…\" de uma cópia de outra frente aparece passado meio segundo, e o Cancelar dela aborta a cópia", () => {
+    vi.useFakeTimers();
+    try {
+      const view = mount(fakeRunner(rowsState()));
+      const controller = new AbortController();
+      const done = contextOf(view).copying(controller);
+      expect(view.show().banner.copying).toBe(false);
+      vi.advanceTimersByTime(500);
+      expect(view.show().banner.copying).toBe(true);
+
+      view.show().banner.onCancelFetch();
+      expect(controller.signal.aborted).toBe(true);
+      expect(view.show().banner.copying).toBe(false);
+      done();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
