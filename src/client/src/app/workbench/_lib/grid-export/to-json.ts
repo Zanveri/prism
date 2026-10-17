@@ -21,9 +21,10 @@ export function jsonKeys(names: readonly string[]): string[] {
  * Uma célula como valor do JSON. Célula cortada (RN-SQL-011) nunca vira número nem booleano, ainda que o texto pareça. Numa coluna `number`, o texto que
  * é um número na gramática do JSON (`strictNumber`) vai para o arquivo COMO ESTÁ, dígito por dígito, sem passar por `Number` nem por `JSON.stringify`
  * (`12.50` fica `12.50`, um decimal de 30 dígitos fica com os 30, `-0` fica `-0`): perder precisão, se perder, é de quem lê. O que não casa com a
- * gramática (`.5`, `+1`, `1.`, `NaN`, zero à esquerda, espaço) é texto.
+ * gramática (`.5`, `+1`, `1.`, `NaN`, zero à esquerda, espaço) é texto. É a regra da exportação da API também (RN-EXPORT-010): a fixture de ouro
+ * `json-value.json` confere os dois lados (RN-EXPORT-024).
  */
-function jsonValue(kind: string, value: string | null, cut: boolean): string {
+export function jsonValue(kind: string, value: string | null, cut: boolean): string {
   if (value === null) return "null";
   if (!cut && kind === "number" && strictNumber.test(value)) return value;
   if (!cut && kind === "boolean" && (value === "true" || value === "false")) return value;
