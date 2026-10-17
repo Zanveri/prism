@@ -444,7 +444,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   ordem de leitura do canvas (`Conexoes.dc.html`), que põe a sessão embaixo dos campos, na coluna da esquerda, e o Ambiente e as Proteções na da direita.
   "Verificar a cada [N] segundos" é estado do diálogo (`verifying`) e vai pelo campo escondido `verificationEnabled`, como o somente leitura; o intervalo
   (`verificationInterval`, de 5 a 3.600, com a frase da API) e a "Consulta de verificação" (`verificationQuery`, um `<textarea>`, aparada, até 1.000
-  caracteres e nula em branco) são campos não controlados do `FormData`, no `connectionFields`. O intervalo não se desabilita com a caixa desmarcada:
+  caracteres, sem caractere de controle nem de direção do texto fora a tabulação, a quebra de linha e o retorno de carro, `queryWithoutControl`, emenda
+  de 2026-10-17 da RN-VERIF-001, com as frases da API, e nula em branco) são campos não controlados do `FormData`, no `connectionFields`. O intervalo não se desabilita com a caixa desmarcada:
   desabilitado, ele sairia do `FormData`. A dica da consulta é a do banco escolhido (`engineOptions[].verificationQuery`, as `PingSql` da API), e que ela
   seja uma leitura só quem diz é a API: a recusa (`CONNECTION_INVALID` no `verificationQuery`, com o motivo) vai ao campo, com o foco, como as outras; o
   `readForm` serve a gravar e a testar, então o "Testar conexão" leva a consulta digitada (RN-CONN-013), e não a gravada. À direita da linha da caixa vai o

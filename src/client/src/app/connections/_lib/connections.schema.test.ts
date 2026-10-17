@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, editWithoutPasswordSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema, withoutControl } from "./connections.schema";
+import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, editWithoutPasswordSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema, queryWithoutControl, withoutControl } from "./connections.schema";
 
 const form = {
   engine: "1",
@@ -213,6 +213,23 @@ describe("os tetos e os caracteres de controle e de direção do texto (RN-CONN-
     expect(withoutControl("Fábrica\u0085Norte", true)).toBe(true);
     expect(withoutControl("srv\tdb")).toBe(false);
     expect(fieldErrors(createConnectionSchema, { ...form, name: "ERP\tNorte", host: "srv\tdb" })).toEqual({ host: ["O host não pode ter caractere de controle nem de direção do texto."] });
+  });
+
+  it.each(refused)("a consulta de verificação recusa U+%s, também num comentário ou numa cadeia, na criação, na edição e na edição sem senha (RN-VERIF-001)", (character) => {
+    const message = ["A consulta de verificação não pode ter caractere de controle nem de direção do texto."];
+
+    for (const schema of [createConnectionSchema, editConnectionSchema, editWithoutPasswordSchema]) {
+      expect(fieldErrors(schema, { ...form, verificationQuery: `SELECT 1 /* ${character} */` })).toEqual({ verificationQuery: message });
+      expect(fieldErrors(schema, { ...form, verificationQuery: `SELECT '${character}abc'` })).toEqual({ verificationQuery: message });
+    }
+  });
+
+  it("a consulta de verificação, que é SQL de várias linhas, aceita a tabulação, a quebra de linha e o retorno de carro; a tabulação vertical e o NEL, não", () => {
+    expect(queryWithoutControl("SELECT 1\r\n\tFROM systables\n\tWHERE tabid = 1")).toBe(true);
+    expect(queryWithoutControl("SELECT\u000B1")).toBe(false);
+    expect(queryWithoutControl("SELECT \u0085 1")).toBe(false);
+    const multiline = createConnectionSchema.safeParse({ ...form, verificationQuery: " SELECT 1\r\n\tFROM systables\r\n" });
+    expect(multiline.success && multiline.data.verificationQuery).toBe("SELECT 1\r\n\tFROM systables");
   });
 
   it("o caractere comum, o acento e o emoji passam", () => {

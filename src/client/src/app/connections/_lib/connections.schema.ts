@@ -142,6 +142,17 @@ export function withoutControl(value: string, asName = false): boolean {
   return !controlOrBidi.test(asName ? value.replace(nameSpaces, " ") : value);
 }
 
+/** O que um texto de várias linhas, a consulta de verificação, tem e os outros campos não: a tabulação, a quebra de linha e o retorno de carro. */
+const lineBreaks = /[\t\n\r]/g;
+
+/**
+ * RN-VERIF-001 (alterada a pedido do dono em 2026-10-17): a consulta de verificação passa, quanto aos caracteres de controle e de direção, com a tabulação, a
+ * quebra de linha e o retorno de carro, que uma consulta de várias linhas tem; os outros, não. É a regra da API (`HasControlOrDirectionBesidesLineBreaks`).
+ */
+export function queryWithoutControl(value: string): boolean {
+  return withoutControl(value.replace(lineBreaks, ""));
+}
+
 /** A frase da recusa, com o nome do campo (RN-CONN-010). */
 const controlMessage = (field: string) => `${field} não pode ter caractere de controle nem de direção do texto.`;
 
@@ -173,8 +184,9 @@ const verificationIntervalMessage = "A verificação deve ser feita a cada 5 a 3
 
 /**
  * A sessão da conexão do formulário (RN-VERIF-001): "Verificar a cada [N] segundos" (`verificationEnabled`, `true` ou `false`, do campo escondido, e o
- * intervalo, de 5 a 3.600 inteiros) e a consulta de verificação, aparada, até 1.000 caracteres e nula em branco (vale a do banco). Que ela seja uma leitura só
- * quem diz é a API, no banco da conexão: a recusa volta no campo, com o motivo.
+ * intervalo, de 5 a 3.600 inteiros) e a consulta de verificação, aparada, até 1.000 caracteres, sem caractere de controle nem de direção do texto (menos a
+ * tabulação e as quebras de linha, `queryWithoutControl`), com as frases da API, e nula em branco (vale a do banco). Que ela seja uma leitura só quem diz é a
+ * API, no banco da conexão: a recusa volta no campo, com o motivo.
  */
 const verificationFields = {
   verificationEnabled: z.enum(["true", "false"]).transform((value) => value === "true"),
@@ -184,7 +196,12 @@ const verificationFields = {
     .regex(/^\d+$/, verificationIntervalMessage)
     .transform(Number)
     .pipe(z.number().min(5, verificationIntervalMessage).max(3600, verificationIntervalMessage)),
-  verificationQuery: z.string().trim().max(1000, "A consulta de verificação pode ter no máximo 1.000 caracteres.").transform(emptyToNull),
+  verificationQuery: z
+    .string()
+    .trim()
+    .max(1000, "A consulta de verificação pode ter no máximo 1.000 caracteres.")
+    .refine(queryWithoutControl, controlMessage("A consulta de verificação"))
+    .transform(emptyToNull),
 };
 
 /**
