@@ -13,7 +13,11 @@ public sealed class SqlExportWriterTests
     private static SqlExportOptions Options(int rowsPerStatement = 10, EExportBinary binary = EExportBinary.Literal)
         => new("estoque", "pedido", false, rowsPerStatement, binary);
 
-    /// <summary>A constante hexadecimal do Db2 tem até 32.672 dígitos: o valor maior vai em pedaços unidos por `||`, cada um no `BLOB(...)` da coluna `BLOB`.</summary>
+    /// <summary>
+    /// As constantes do Db2 (a hexadecimal e a binária) têm até 32.672 dígitos: o valor maior vai em pedaços unidos por `||`, cada um no `BLOB(...)` da coluna
+    /// `BLOB`, como constante binária (`BX'…'`) na `VARBINARY` (o maior `VARBINARY`, 32.672 bytes, são dois pedaços inteiros) e como hexadecimal no texto
+    /// `FOR BIT DATA`.
+    /// </summary>
     [Trait("ExportText", "BinaryLiteral")]
     [Fact(DisplayName = "OK o binário do Db2 em pedaços de 16.336 bytes")]
     public void BinaryLiteral_Db2_IsSplitIntoPiecesOf16336Bytes()
@@ -23,15 +27,20 @@ public sealed class SqlExportWriterTests
         var first = Convert.ToHexString(bytes, 0, ExportText.Db2HexPieceBytes);
         var second = Convert.ToHexString(bytes, ExportText.Db2HexPieceBytes, ExportText.Db2HexPieceBytes);
         var last = Convert.ToHexString(bytes, 2 * ExportText.Db2HexPieceBytes, 1);
+        var afterFirst = Convert.ToHexString(bytes, ExportText.Db2HexPieceBytes, 1);
 
         //Act
         var blob = ExportText.BinaryLiteral(EDatabaseEngine.Db2, bytes, "BLOB");
         var varbinary = ExportText.BinaryLiteral(EDatabaseEngine.Db2, bytes[..(ExportText.Db2HexPieceBytes + 1)], "VARBINARY");
+        var largestVarbinary = ExportText.BinaryLiteral(EDatabaseEngine.Db2, bytes[..(2 * ExportText.Db2HexPieceBytes)], "VARBINARY");
+        var bitData = ExportText.BinaryLiteral(EDatabaseEngine.Db2, bytes[..(ExportText.Db2HexPieceBytes + 1)], "VARCHAR () FOR BIT DATA");
         var exact = ExportText.BinaryLiteral(EDatabaseEngine.Db2, bytes[..ExportText.Db2HexPieceBytes], "BLOB");
 
         //Assert
         Assert.Equal($"BLOB(X'{first}') || BLOB(X'{second}') || BLOB(X'{last}')", blob);
-        Assert.Equal($"X'{first}' || X'{Convert.ToHexString(bytes, ExportText.Db2HexPieceBytes, 1)}'", varbinary);
+        Assert.Equal($"BX'{first}' || BX'{afterFirst}'", varbinary);
+        Assert.Equal($"BX'{first}' || BX'{second}'", largestVarbinary);
+        Assert.Equal($"X'{first}' || X'{afterFirst}'", bitData);
         Assert.Equal($"BLOB(X'{first}')", exact);
     }
 

@@ -448,7 +448,7 @@
       "skippedRows": 0
     },
     {
-      "name": "Db2: o binário no BLOB e no VARBINARY",
+      "name": "Db2: o binário no BLOB, no VARBINARY e no VARCHAR FOR BIT DATA",
       "engine": "db2",
       "options": {
         "schema": null,
@@ -471,6 +471,11 @@
           "name": "hash",
           "type": "VARBINARY",
           "kind": "binary"
+        },
+        {
+          "name": "marca",
+          "type": "VARCHAR () FOR BIT DATA",
+          "kind": "binary"
         }
       ],
       "rows": [
@@ -481,10 +486,13 @@
           },
           {
             "bytes": "00FF"
+          },
+          {
+            "bytes": "0A0B"
           }
         ]
       ],
-      "expected": "INSERT INTO \"pedido\" (\"id\", \"foto\", \"hash\") VALUES\n  (1, BLOB(X'CAFE'), X'00FF');\n",
+      "expected": "INSERT INTO \"pedido\" (\"id\", \"foto\", \"hash\", \"marca\") VALUES\n  (1, BLOB(X'CAFE'), BX'00FF', X'0A0B');\n",
       "skippedRows": 0
     },
     {
