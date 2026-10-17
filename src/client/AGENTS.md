@@ -1526,6 +1526,17 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     como antes) e "Duplicar linha" (as cortadas das colunas que ela copia; o que não vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
     nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
     passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
+  - **As fixtures de ouro da exportação** (RN-EXPORT-024): a API escreve a exportação de todas as linhas (seção 35) com os mesmos valores e escapes
+    desta biblioteca, e os dois lados leem as mesmas fixtures, em `src/test-fixtures/export/` (fora de `src/client` e de `src/api`), escritas à mão e
+    conferidas por inteiro. Aqui quem as lê é o `_lib/grid-export/export-fixtures.test.ts`, pelo caminho a partir da raiz do repositório: o campo do CSV
+    (`toDelimited` com as opções, e o `csvFieldOf` nos padrões do "Exportar CSV"; a aspa "Em todos os valores" é `always` aqui e `all` na API), o texto
+    do HTML, a célula do Markdown (`markdownCell`), o valor e as chaves do JSON (`jsonValue` e `jsonKeys`), o literal do SQL (`sqlLiteral` e
+    `scriptLiteral`), o texto e o atributo do XML com o `isXmlChar`, e a planilha (`xlsxText`, `spreadsheetNumber`, `sheetNameOf` e `withinCell`).
+    `jsonValue`, `markdownCell` e `withinCell` são exportados só por isso. **Mudar um escape destas funções é mudar a fixture**, e a API falha até
+    seguir a regra nova (o `ExportFixturesTests` dela lê os mesmos arquivos); a fixture nunca se regera a partir do código. Os casos com o par
+    substituto solto vêm como `{ "codePoints": [...] }`, montados por `String.fromCharCode` (o par solto) e `String.fromCodePoint`. As fixtures só da
+    API (o TXT, o PHP, a data em ISO 8601, o literal do binário, o `INSERT` de várias linhas, o nome do XML e o DbUnit) ficam para quando a tela
+    escrever essas regras.
   - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
     (RN-EDIT-009): `savedResultOf` devolve `sourceRows` (a linha de antes de cada uma, nula na nova; um segundo Salvar continua a conta), o
     executor a guarda (`RowsState.sourceRows`, por `keepSaved`) e ela viaja com a aba para outra janela (`window-messages.ts`). Sem ela, a cópia de
