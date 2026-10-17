@@ -8,7 +8,15 @@ import { cn } from "@/lib/utils/cn";
  * Uma opção. `content` desenha a opção no lugar do rótulo, na lista e no controle fechado (a etiqueta colorida de um ambiente, RN-NAV-010); o rótulo
  * continua sendo o nome dela na busca pela inicial, e o que o `content` mostra tem de dizer o mesmo para o leitor de tela.
  */
-export type SelectOption = { value: string; label: string; content?: ReactNode };
+export type SelectOption = {
+  value: string;
+  label: string;
+  content?: ReactNode;
+  /** A opção que não se escolhe agora: fica na lista, nas setas, com `aria-disabled` e o motivo (`hint`) embaixo do rótulo, e o clique não a escolhe. */
+  disabled?: boolean;
+  /** Uma linha embaixo do rótulo: o tipo de uma coluna, ou o motivo da opção desabilitada. */
+  hint?: string;
+};
 
 type SelectProps = {
   id?: string;
@@ -20,6 +28,11 @@ type SelectProps = {
   /** Primeira opção, de valor vazio. Ausente, não existe escolha nula. */
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * Desabilitado sem sair do Tab (`aria-disabled`): a lista não abre e nada se escolhe, mas o controle continua com o foco, como os botões que esperam uma
+   * resposta (o `disabled` o tiraria, e o foco cairia no `body`).
+   */
+  "aria-disabled"?: boolean;
   invalid?: boolean;
   /** Rótulo acessível quando o controle não tem um `<label htmlFor>`. */
   "aria-label"?: string;
@@ -52,7 +65,7 @@ function normalizeSearch(value: string) {
  * `position: fixed` em `document.body`, para o `overflow-hidden` de um painel não a recortar.
  * Teclado como o de um `<select>`: setas, Home, End, Enter, espaço, Esc e a inicial da opção.
  */
-export function Select({ id, name, value, onChange, options, placeholder, disabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, className }: SelectProps) {
+export function Select({ id, name, value, onChange, options, placeholder, disabled = false, "aria-disabled": ariaDisabled = false, invalid = false, "aria-label": ariaLabel, "aria-describedby": ariaDescribedBy, onOpen, className }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
@@ -64,6 +77,10 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const inert = disabled || ariaDisabled;
+
+  // O controle que passa a não valer com a lista aberta a fecha (ajuste durante a renderização, como o da escolhida, abaixo).
+  if (open && inert) setOpen(false);
 
   // O placeholder é uma opção de valor vazio, a primeira da lista.
   const items: SelectOption[] = placeholder === undefined ? options : [{ value: "", label: placeholder }, ...options];
@@ -138,7 +155,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
 
   function choose(index: number) {
     const item = items[index];
-    if (!item) return;
+    if (!item || item.disabled === true || inert) return;
 
     setOpen(false);
     // Como num `<select>`: depois de escolher, o foco volta ao controle. Na hora, e antes do `onChange`: quem recebe a escolha pode abrir uma pergunta (trocar
@@ -149,7 +166,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (disabled) return;
+    if (inert) return;
 
     switch (event.key) {
       case "ArrowDown":
@@ -223,15 +240,16 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         disabled={disabled}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
+        aria-disabled={ariaDisabled || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
         aria-invalid={invalid || undefined}
-        onClick={() => (open ? setOpen(false) : openAt(selectedIndex >= 0 ? selectedIndex : 0))}
+        onClick={() => (inert ? undefined : open ? setOpen(false) : openAt(selectedIndex >= 0 ? selectedIndex : 0))}
         onKeyDown={onKeyDown}
         // `h-auto`: um rótulo comprido quebra a linha em vez de ser cortado.
-        className={cn(controlClassName, "flex h-auto min-h-10 cursor-pointer items-center justify-between gap-2 py-2 text-left", open && "border-accent", className)}
+        className={cn(controlClassName, "flex h-auto min-h-10 cursor-pointer items-center justify-between gap-2 py-2 text-left aria-disabled:cursor-not-allowed aria-disabled:opacity-50", open && "border-accent", className)}
       >
         <span className={cn("min-w-0 flex-1 break-words", selected === undefined || selected.value === "" ? "text-subtle" : "text-ink")}>{selected === undefined ? (placeholder ?? "") : (selected.content ?? selected.label)}</span>
         <span aria-hidden className="flex-none text-xs text-subtle">▾</span>
@@ -250,11 +268,18 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
                     data-index={index}
                     role="option"
                     aria-selected={isSelected}
+                    aria-disabled={item.disabled === true || undefined}
                     onPointerEnter={() => setActiveIndex(index)}
                     onClick={() => choose(index)}
-                    className={cn("cursor-pointer rounded-sm px-2.5 py-2 break-words", index === activeIndex ? "bg-selected" : "bg-transparent", isSelected ? "font-semibold text-ink" : item.value === "" ? "text-subtle" : "text-body")}
+                    className={cn(
+                      "rounded-sm px-2.5 py-2 break-words",
+                      item.disabled === true ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                      index === activeIndex ? "bg-selected" : "bg-transparent",
+                      isSelected ? "font-semibold text-ink" : item.value === "" ? "text-subtle" : "text-body",
+                    )}
                   >
                     {item.content ?? item.label}
+                    {item.hint === undefined ? null : <span className="block text-xs font-normal text-muted">{item.hint}</span>}
                   </div>
                 );
               })}

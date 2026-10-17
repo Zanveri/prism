@@ -27,6 +27,7 @@ import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-runner";
 import { connectExports, exportTracker } from "./data-export/data-exports";
+import { connectLoads, loadTracker } from "./data-import/data-imports";
 import { createLockHandles } from "./workbench-lock";
 import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type TableView } from "./workbench-model";
 import { workbenchCopy } from "./workbench.copy";
@@ -224,6 +225,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // RN-EXPORT-016 e 021: as exportações desta janela avisam pelos avisos do app; as da página de antes (que caiu ou recarregou) são canceladas; e sair do
   // cofre (o provedor desmonta) as esquece e solta os destinos.
   useEffect(() => connectExports(toast), [toast]);
+  // RN-IMPORT-019 e 020: as importações e as cópias desta janela avisam pelos avisos do app, e o "Abrir registros" abre a aba da tabela aqui; sair do cofre
+  // fecha o assistente (solta o arquivo) e as esquece.
+  const openRecordsRef = useRef<(table: { connectionId: string; database?: string; schema: string; name: string }) => void>(() => {});
+  useEffect(() => connectLoads(toast, (table) => openRecordsRef.current(table), queryClient), [toast, queryClient]);
 
   // O filtro pedido que ninguém levou a tempo (a aba da tabela estava ocupada, ou a conexão desconectada) não some calado.
   useEffect(() => filterHandoff.onExpired((table) => toast.warning(workbenchCopy.toasts.filterNotApplied(`${table.schema}.${table.name}`))), [toast]);
@@ -363,10 +368,12 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const lockHandles = createLockHandles({ runners, tabs, createRunner, setTabs, queryClient });
   // RN-SEG-001 e RN-EXPORT-023: a exportação de dados em andamento é comando em andamento desta janela, do começo até a entrega; a entrega que falhou não
   // segura, e o bloqueio a descarta (a API fecha o cofre e esquece os trabalhos; a tela solta os destinos).
-  const isBusy = () => lockHandles.isBusy() || exportTracker.holdsLock();
+  // RN-IMPORT-021: a importação e a cópia também, do começo ao fim lido; a entrada da falha não segura, e o bloqueio a descarta.
+  const isBusy = () => lockHandles.isBusy() || exportTracker.holdsLock() || loadTracker.holdsLock();
   const discard = () => {
     lockHandles.discard();
     void exportTracker.vaultClosed();
+    loadTracker.vaultClosed();
   };
 
   const openQueryTab = useCallback(
@@ -450,6 +457,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     },
     [tabs, addTab, setTableView],
   );
+
+  // "Abrir registros" do aviso da importação e da cópia (RN-IMPORT-020): a aba dos Registros da tabela nesta janela.
+  useEffect(() => {
+    openRecordsRef.current = (table) => openTableTab(table.connectionId, { schema: table.schema, name: table.name, view: "data", ...inDatabase(table.database) });
+  });
 
   const runnerOf = useCallback(
     (tabId: string) => {

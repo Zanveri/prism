@@ -254,7 +254,7 @@ function OriginText({ origin }: { origin: ExportOrigin }) {
 }
 
 /** Um campo de escolha com rótulo visível (o `Select` do app). */
-function ChoiceField<T extends string>({ label, value, options, onChange, disabled = false, hint }: { label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; hint?: string }) {
+export function ChoiceField<T extends string>({ label, value, options, onChange, disabled = false, hint }: { label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; hint?: string }) {
   const id = useId();
   const hintId = `${id}-hint`;
   return (
@@ -273,7 +273,7 @@ function ChoiceField<T extends string>({ label, value, options, onChange, disabl
 }
 
 /** Um campo de texto (ou de número escrito) com a recusa no lugar. */
-function TextOption({ label, value, onChange, error, hint, disabled = false, inputMode, className }: { label: string; value: string; onChange: (value: string) => void; error?: string; hint?: string; disabled?: boolean; inputMode?: "numeric"; className?: string }) {
+export function TextOption({ label, value, onChange, error, hint, disabled = false, inputMode, className }: { label: string; value: string; onChange: (value: string) => void; error?: string; hint?: string; disabled?: boolean; inputMode?: "numeric"; className?: string }) {
   const id = useId();
   const aria = fieldAria(id, error);
   return (
@@ -511,8 +511,11 @@ export function ExportConnection({ engine, name, database, environment, readOnly
 
 export type SummaryLine = { label: string; value: ReactNode; hint?: string };
 
-/** RN-EXPORT-015: as recusas no alto, o resumo em linhas de rótulo e valor, e os avisos no tom de atenção. */
-export function ConfirmationStep({ refusals, lines, warnings }: { refusals: readonly WizardRefusal[]; lines: readonly SummaryLine[]; warnings: readonly string[] }) {
+/**
+ * RN-EXPORT-015: as recusas no alto, o resumo em linhas de rótulo e valor, e os avisos no tom de atenção. `after` vem embaixo dos avisos: a caixa "Entendo que
+ * as linhas atuais … serão apagadas." da importação e da cópia (RN-IMPORT-013 e 025).
+ */
+export function ConfirmationStep({ refusals, lines, warnings, after }: { refusals: readonly WizardRefusal[]; lines: readonly SummaryLine[]; warnings: readonly string[]; after?: ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
       {refusals.length === 0 ? null : (
@@ -545,6 +548,7 @@ export function ConfirmationStep({ refusals, lines, warnings }: { refusals: read
           ))}
         </ul>
       )}
+      {after ?? null}
     </div>
   );
 }

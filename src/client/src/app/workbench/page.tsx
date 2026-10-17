@@ -19,6 +19,7 @@ import { useNavigatorHidden } from "./_lib/use-navigator-layout";
 import { useWorkbenchOnScreen } from "./_lib/use-workbench-on-screen";
 import { useWorkbench } from "./_lib/workbench-state";
 import { ExportWizardHost } from "./_components/data-export/transfer-status";
+import { ImportWizardHost } from "./_components/data-import/import-wizard";
 import { StatusBar } from "./_components/status-bar";
 import { WorkbenchTabs } from "./_components/workbench-tabs";
 import { workbenchCopy } from "./_lib/workbench.copy";
@@ -214,6 +215,7 @@ export function WorkbenchPage() {
       <StatusBar />
       {/* RN-EXPORT-003: o assistente "Exportar dados", um por janela, aberto por qualquer entrada (RN-EXPORT-001). */}
       <ExportWizardHost />
+      <ImportWizardHost />
 
       {dialogRequest === null ? null : (
         <ConnectionDialog

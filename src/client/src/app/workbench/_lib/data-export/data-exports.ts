@@ -16,6 +16,10 @@ import { cancelExports, exportsInProgress, forgetTransfer, getTransfer, listTran
  */
 
 const silent: TrackerNotify = { success: () => {}, warning: () => {}, error: () => {} };
+
+/** A ordem em que as transferências desta janela começaram (exportações, importações e cópias): a barra de status mostra a mais antiga (RN-EXPORT-021). */
+let transferSeq = 0;
+export const nextTransferSeq = () => ++transferSeq;
 let notices: TrackerNotify = silent;
 
 export const exportTracker = createTransferTracker({
@@ -35,6 +39,7 @@ export const exportTracker = createTransferTracker({
     const timer = setTimeout(run, ms);
     return () => clearTimeout(timer);
   },
+  sequence: nextTransferSeq,
 });
 
 /** A área de trabalho está montada nesta janela: o cofre está aberto (`connectExports`). */

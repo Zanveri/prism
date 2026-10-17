@@ -26,6 +26,8 @@ function titleOf(question: CommandQuestion): string {
       return copy.titles.save;
     case "autoRefresh":
       return copy.titles.autoRefresh;
+    case "load":
+      return question.title;
   }
 }
 
@@ -45,6 +47,8 @@ export function describedIds(question: CommandQuestion, base: string): string {
     case "script":
     case "save":
       return summary;
+    case "load":
+      return `${does} ${sql}`;
   }
 }
 
@@ -90,7 +94,8 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
     </div>
   );
 
-  const confirmLabel = question.kind === "script" ? copy.confirm.script : question.kind === "save" ? copy.confirm.save : question.kind === "autoRefresh" ? copy.confirm.autoRefresh : copy.confirm.command;
+  const confirmLabel =
+    question.kind === "script" ? copy.confirm.script : question.kind === "save" ? copy.confirm.save : question.kind === "autoRefresh" ? copy.confirm.autoRefresh : question.kind === "load" ? question.confirm : copy.confirm.command;
 
   return (
     <Dialog
@@ -128,6 +133,16 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
           <p id={`${ids}-resumo`} className="text-body">
             {copy.save.description(question.count)}
           </p>
+        ) : null}
+        {question.kind === "load" ? (
+          <div className="flex flex-col gap-2">
+            <p id={`${ids}-faz`} className="text-body">
+              {question.does}
+            </p>
+            <code id={`${ids}-comando`} className="block max-h-40 overflow-auto rounded-md border border-border bg-background px-3 py-2.5 font-mono text-sm leading-5 whitespace-pre text-ink">
+              {question.commands.join("\n")}
+            </code>
+          </div>
         ) : null}
         {question.kind === "script" ? (
           <>

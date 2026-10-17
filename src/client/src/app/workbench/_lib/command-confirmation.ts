@@ -20,7 +20,12 @@ export type CommandQuestion =
   | { kind: "command"; command: AskedCommand }
   | { kind: "script"; commands: AskedCommand[]; total: number }
   | { kind: "save"; count: number }
-  | { kind: "autoRefresh"; command: AskedCommand };
+  | { kind: "autoRefresh"; command: AskedCommand }
+  /**
+   * A importação de dados e a cópia para outro banco (RN-IMPORT-013 e 025), pela conexão de destino: o título ("Esvaziar a tabela e importar?"), o que ela
+   * faz, os comandos (o `DELETE` do esvaziamento e o `INSERT` com as colunas mapeadas) e o botão ("Importar mesmo assim", "Copiar mesmo assim").
+   */
+  | { kind: "load"; title: string; does: string; commands: string[]; confirm: string };
 
 /** De quem é o aviso: a conexão, o banco da aba, o ambiente (próprio ou herdado, RN-PASTA-005) e a proteção que o pede, com a pasta de onde ela vem. */
 export type ConfirmationContext = { connection: string; database: string; environment: ShownEnvironment | null; level: Confirmation; from: Folder | null };
@@ -72,4 +77,15 @@ export function saveQuestion(protections: Protections, count: number): CommandQu
  */
 export function autoRefreshQuestion(protections: Protections, target: ConfirmedTarget): CommandQuestion | null {
   return protections.confirm?.level === "all" ? { kind: "autoRefresh", command: asked(target, null, irreversibleOf(target.sql, target.engine)) } : null;
+}
+
+/**
+ * O aviso da importação de dados e da cópia para outro banco (RN-PROT-001, RN-IMPORT-013 e 025), pela conexão de destino, uma vez, antes de começar: em
+ * "Todos os comandos", sempre; em "Só comandos irreversíveis", só com "Esvaziar a tabela antes" ligado (o `DELETE` sem `WHERE` é irreversível; os `INSERT`
+ * não são). Nulo quando não pergunta.
+ */
+export function loadQuestion(protections: Protections, load: { empty: boolean; title: string; does: string; commands: string[]; confirm: string }): CommandQuestion | null {
+  const level = protections.confirm?.level ?? null;
+  if (level === null || (level === "irreversible" && !load.empty)) return null;
+  return { kind: "load", title: load.title, does: load.does, commands: load.commands, confirm: load.confirm };
 }
