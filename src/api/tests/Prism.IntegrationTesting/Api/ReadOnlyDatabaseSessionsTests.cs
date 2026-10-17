@@ -100,6 +100,45 @@ public sealed class ReadOnlyDatabaseSessionsTests
     }
 
     /// <summary>
+    /// RN-GRADE-020: o `edit-target` do "Gerar SQL" (`purpose: sql`) vale na conexão somente leitura: as tabelas, o tipo, a chave pelo nome e as colunas como
+    /// numa conexão comum, com tudo só leitura pelo motivo da conexão. Esse alvo não serve à edição: o "Salvar" continua recusado, e, desmarcado o somente
+    /// leitura, o `edit-target` da edição pergunta de novo e vem editável. O `purpose` fora da lista é 422 `EDIT_INVALID` no campo.
+    /// </summary>
+    [Test]
+    public async Task ReadOnlyConnection_AnswersTheTargetOfTheGeneratedSql_WithoutKeepingItForTheSave()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var (connectionID, password) = await CreateConnectionAsync(host, readOnly: true);
+        var session = await host.Client.OpenSessionAsync(connectionID);
+        var resultID = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {Tabela} ORDER BY id")).GetProperty("resultID").GetGuid();
+        var editTargetPath = $"{PrismCalls.SessionsPath}/{session}/queries/edit-target";
+
+        var forSql = await host.Client.PostAsJsonAsync(editTargetPath, new { resultID, purpose = "sql" });
+        var forEdit = await host.Client.PostAsJsonAsync(editTargetPath, new { resultID, purpose = "edit" });
+        var unknown = await host.Client.PostAsJsonAsync(editTargetPath, new { resultID, purpose = "gerar" });
+        var save = await host.Client.PostAsJsonAsync($"{PrismCalls.SessionsPath}/{session}/queries/edits", new { resultID, changes = new[] { new { kind = "delete", table = 0, key = new[] { "1" } } } });
+        var unmarked = await host.Client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, ConnectionsPath) { Content = JsonContent.Create(new Dictionary<string, object?>(ConnectionBody(readOnly: false, userPassword: password)) { ["id"] = connectionID }) });
+        var afterwards = await host.Client.PostAsJsonAsync(editTargetPath, new { resultID });
+
+        Assert.That(forSql.StatusCode, Is.EqualTo(HttpStatusCode.OK), await forSql.Content.ReadAsStringAsync());
+        var target = await ReadJsonAsync(forSql);
+        var table = target.GetProperty("tables")[0];
+        Assert.That((table.GetProperty("name").GetString(), table.GetProperty("kind").GetString(), table.GetProperty("editable").GetBoolean(), table.GetProperty("reason").GetString()), Is.EqualTo(("pedido", "table", false, "a conexão é somente leitura")));
+        Assert.That(table.GetProperty("keyColumns").EnumerateArray().Select(name => name.GetString()), Is.EqualTo(new[] { "id" }));
+        Assert.That(target.GetProperty("columns").EnumerateArray().Select(column => (column.GetProperty("table").GetInt32(), column.GetProperty("baseColumn").GetString(), column.GetProperty("editable").GetBoolean(), column.GetProperty("reason").GetString())), Is.EqualTo(new[] { (0, "id", false, "a conexão é somente leitura"), (0, "status", false, "a conexão é somente leitura") }));
+        Assert.That(target.GetProperty("rowOperations").GetBoolean(), Is.False);
+        await AssertProblemAsync(forEdit, HttpStatusCode.UnprocessableEntity, "CONNECTION_READ_ONLY");
+        var refused = await AssertProblemAsync(unknown, HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+        Assert.That(refused.GetProperty("errors").TryGetProperty("Purpose", out _), Is.True, refused.ToString());
+        await AssertProblemAsync(save, HttpStatusCode.UnprocessableEntity, "CONNECTION_READ_ONLY");
+        Assert.That(unmarked.StatusCode, Is.EqualTo(HttpStatusCode.OK), await unmarked.Content.ReadAsStringAsync());
+        Assert.That(afterwards.StatusCode, Is.EqualTo(HttpStatusCode.OK), await afterwards.Content.ReadAsStringAsync());
+        var edit = await ReadJsonAsync(afterwards);
+        Assert.That((edit.GetProperty("tables")[0].GetProperty("editable").GetBoolean(), edit.GetProperty("rowOperations").GetBoolean()), Is.EqualTo((true, true)));
+        Assert.That(await _observer.CountAsync($"SELECT COUNT(*) FROM {Tabela}"), Is.EqualTo(2));
+    }
+
+    /// <summary>
     /// RN-PROT-002 e 006: a função que grava, chamada pelo `SELECT`, é recusada pelo banco na transação só de leitura (25006), e o comando não roda
     /// de novo fora dela; numa conexão comum, a mesma leitura grava (RN-SQL-013). A sessão fica no modo só de leitura do banco.
     /// </summary>

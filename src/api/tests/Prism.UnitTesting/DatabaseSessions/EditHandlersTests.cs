@@ -45,6 +45,8 @@ public sealed class EditHandlersTests
         var table = Assert.Single(result.Value.Tables);
         Assert.Equal(("loja", "pedido", true, (string?)null), (table.Schema, table.Name, table.Editable, table.Reason));
         Assert.Equal([0], table.Key);
+        Assert.Equal("table", table.Kind);
+        Assert.Equal(["id"], table.KeyColumns);
         Assert.Equal([new EditColumnDto(0, "id", true, null, false, null), new EditColumnDto(null, null, false, "coluna calculada", true, null)], result.Value.Columns);
         Assert.True(result.Value.RowOperations);
         Assert.False(result.Value.OneAtATime);
@@ -163,6 +165,73 @@ public sealed class EditHandlersTests
         result.ShouldHaveValidationErrorFor(command => command.ResultID).WithErrorCode("EDIT_INVALID");
     }
 
+    [Trait("GetEditTargetValidator", "GetEditTargetCommand")]
+    [Fact(DisplayName = "Erro o pedido fora de edit e sql é EDIT_INVALID no purpose; ausente, edit e sql passam")]
+    public void GetEditTargetValidator_ShouldBeError_UnknownPurpose()
+    {
+        //Arrange
+        var resultID = Guid.CreateVersion7();
+
+        //Act
+        var unknown = GetEditTargetValidator.TestValidate(new GetEditTargetCommand { ResultID = resultID, Purpose = "SQL" });
+        var accepted = new[] { null, "edit", "sql" }.Select(purpose => GetEditTargetValidator.TestValidate(new GetEditTargetCommand { ResultID = resultID, Purpose = purpose }));
+
+        //Assert
+        unknown.ShouldHaveValidationErrorFor(command => command.Purpose).WithErrorCode("EDIT_INVALID").WithErrorMessage("O pedido (purpose) deve ser edit ou sql.");
+        Assert.All(accepted, result => result.ShouldNotHaveAnyValidationErrors());
+    }
+
+    /// <summary>
+    /// RN-GRADE-020: o pedido do "Gerar SQL" numa conexão somente leitura não é recusado: vai ao alvo que não fica guardado, com o motivo da conexão, e a
+    /// resposta traz o tipo e a chave pelo nome de cada tabela, com tudo só leitura.
+    /// </summary>
+    [Trait("GetEditTargetHandler", "GetEditTargetCommand")]
+    [Fact(DisplayName = "OK com purpose sql na conexão somente leitura o alvo vem, só leitura, com o tipo e a chave pelo nome, e não se guarda")]
+    public async Task GetEditTarget_ShouldBeOK_ForGeneratedSqlOnAReadOnlyConnection()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID, connectionID) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        const string reason = "a conexão é somente leitura";
+        var target = new EditTarget([new EditTable("loja", "resumo", [], false, reason, EditTableKind.View, [])], [new EditColumn(0, "id", false, reason, true, null, "integer")], false, false);
+        _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
+        _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
+        _databaseSessionService.Setup(s => s.GetReadOnlyEditTargetAsync(sessionID, resultID, null, reason, cancellationToken)).ReturnsAsync(Result.Success<EditTarget, DatabaseFailure>(target));
+
+        //Act
+        var result = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID, Purpose = "sql" }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        var table = Assert.Single(result.Value.Tables);
+        Assert.Equal(("loja", "resumo", false, reason, "view"), (table.Schema, table.Name, table.Editable, table.Reason, table.Kind));
+        Assert.Empty(table.KeyColumns);
+        Assert.Equal([new EditColumnDto(0, "id", false, reason, true, null)], result.Value.Columns);
+        _databaseSessionService.Verify(s => s.GetEditTargetAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    /// <summary>RN-GRADE-020: numa conexão comum, o pedido do "Gerar SQL" é o alvo da edição, o mesmo guardado com o resultado, com o tipo e a chave pelo nome.</summary>
+    [Trait("GetEditTargetHandler", "GetEditTargetCommand")]
+    [Fact(DisplayName = "OK com purpose sql numa conexão comum o alvo é o da edição, com o tipo e a chave pelo nome")]
+    public async Task GetEditTarget_ShouldBeOK_ForGeneratedSqlOnAnOrdinaryConnection()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        var target = new EditTarget([new EditTable("loja", "pedido", [], false, "a chave de pedido não está inteira no resultado: faltam id", EditTableKind.Table, ["id"])], [new EditColumn(0, "status", false, "a chave de pedido não está inteira no resultado: faltam id", true, null, "text")], false, false);
+        _databaseSessionService.Setup(s => s.GetEditTargetAsync(sessionID, resultID, null, cancellationToken)).ReturnsAsync(Result.Success<EditTarget, DatabaseFailure>(target));
+
+        //Act
+        var result = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID, Purpose = "sql" }, cancellationToken);
+
+        //Assert
+        var table = Assert.Single(result.Value.Tables);
+        Assert.Equal(("table", false), (table.Kind, table.Editable));
+        Assert.Equal(["id"], table.KeyColumns);
+        Assert.Empty(table.Key);
+        _databaseSessionService.Verify(s => s.GetReadOnlyEditTargetAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     /// <summary>RN-PROT-002: a edição de registros não existe numa conexão somente leitura; as três rotas recusam antes de chegar ao registro de sessões.</summary>
     [Trait("EditHandlers", "ConnectionReadOnly")]
     [Fact(DisplayName = "Erro na conexão somente leitura edit-target, edits e preview viram 422 CONNECTION_READ_ONLY sem ir ao banco")]
@@ -177,15 +246,17 @@ public sealed class EditHandlersTests
 
         //Act
         var target = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID }, cancellationToken);
+        var edit = await new GetEditTargetHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new GetEditTargetCommand { SessionID = sessionID, ResultID = resultID, Purpose = "edit" }, cancellationToken);
         var applied = await new ApplyEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new ApplyEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = changes }, cancellationToken);
         var preview = await new PreviewEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new PreviewEditsCommand { SessionID = sessionID, ResultID = resultID, Changes = changes }, cancellationToken);
 
         //Assert
         const string refusal = "A conexão é somente leitura: nada se grava nela, e a edição de registros não vale. Nada foi enviado ao banco.";
         Assert.Equal(("CONNECTION_READ_ONLY", HttpStatusCode.UnprocessableEntity, refusal), (target.Error.Type, target.Error.StatusCode, target.Error.Detail));
+        Assert.Equal(("CONNECTION_READ_ONLY", refusal), (edit.Error.Type, edit.Error.Detail));
         Assert.Equal(("CONNECTION_READ_ONLY", refusal), (applied.Error.Type, applied.Error.Detail));
         Assert.Equal(("CONNECTION_READ_ONLY", refusal), (preview.Error.Type, preview.Error.Detail));
-        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.Exactly(3));
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.Exactly(4));
         _databaseSessionService.VerifyNoOtherCalls();
     }
 }

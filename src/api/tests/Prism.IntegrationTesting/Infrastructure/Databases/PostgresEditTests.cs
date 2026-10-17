@@ -61,6 +61,8 @@ public sealed class PostgresEditTests : DatabaseEditContractTests
     protected override string Name(string name)
         => name;
 
+    protected override bool AcceptsRowListInIn => true;
+
     /// <summary>RN-EDIT-010: o `edit-target` não usa a sessão do resultado, e o cursor dela continua aberto para "carregar mais".</summary>
     [Test]
     public async Task EditTarget_KeepsTheCursorOfTheResultOpen()
