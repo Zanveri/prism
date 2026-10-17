@@ -1,5 +1,6 @@
 using Prism.Application.Scripts.Models;
 using Prism.Application.Transfers.Features.StartExport;
+using Prism.Application.Transfers.Models.Dtos;
 using Prism.Infrastructure.Transfers.Writers;
 
 namespace Prism.Application.Transfers.Models;
@@ -66,6 +67,9 @@ internal static class ExportRequestRules
         else
             refusals.AddRange(ExportOptionsReader.Read(format!, request.Options, DefaultTable(source)).Errors.Select(error => (error.Field, error.Message)));
 
+        if (!refusals.Any(refusal => refusal.Item1 == "columns") && FormatColumnsRefusal(format, columns!) is { } formatColumns)
+            refusals.Add(("columns", formatColumns));
+
         var output = request.Output ?? new();
         if (format == ExportFormats.Xlsx)
         {
@@ -96,6 +100,18 @@ internal static class ExportRequestRules
             refusals.Add(("windowID", "O número da janela é um inteiro positivo."));
 
         return refusals;
+    }
+
+    /// <summary>
+    /// RN-EXPORT-011: o que o formato não aceita nas colunas marcadas, que o assistente já não deixa passar da Extração. No SQL, duas colunas com o mesmo
+    /// nome fariam um `INSERT` que o banco recusa.
+    /// </summary>
+    private static string? FormatColumnsRefusal(string? format, IReadOnlyList<ExportColumnDto> columns)
+    {
+        if (format == ExportFormats.Sql && columns.GroupBy(column => column?.Name, StringComparer.Ordinal).FirstOrDefault(group => group.Key is not null && group.Count() > 1) is { } repeated)
+            return $"O resultado tem duas colunas chamadas {repeated.Key}: deixe uma de fora na Extração.";
+
+        return null;
     }
 
     /// <summary>RN-EXPORT-011 e 012: a tabela de destino do SQL e do DbUnit, quando ela não vem: a da origem (`source.table`, ou `source.name` nos Registros).</summary>

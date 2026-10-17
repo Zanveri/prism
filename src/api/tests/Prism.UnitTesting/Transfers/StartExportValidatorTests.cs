@@ -124,13 +124,30 @@ public sealed class StartExportValidatorTests
 
     [Trait("StartExportValidator", "StartExportCommand")]
     [Theory(DisplayName = "Erro o formato que esta versão ainda não escreve")]
-    [InlineData("sql")]
     [InlineData("xml")]
     [InlineData("dbUnit")]
     [InlineData("xlsx")]
     public void Validate_FormatNotWrittenYet_ShouldBeRefusedOnTheField(string format)
         => Validator.TestValidate(Command(format: format)).ShouldHaveValidationErrorFor("format").WithErrorCode(OptionsInvalid)
             .WithErrorMessage($"O formato {format} ainda não é exportado por esta versão do Prism.");
+
+    /// <summary>RN-EXPORT-011: duas colunas com o mesmo nome fariam um `INSERT` que o banco recusa; nos outros formatos o nome repetido passa.</summary>
+    [Trait("StartExportValidator", "StartExportCommand")]
+    [Fact(DisplayName = "Erro o SQL com duas colunas de mesmo nome; OK nos outros formatos")]
+    public void Validate_SqlWithRepeatedColumnNames_ShouldBeRefused()
+    {
+        //Arrange
+        ExportColumnDto[] columns = [new() { Position = 0, Name = "id" }, new() { Position = 1, Name = "ID" }, new() { Position = 2, Name = "id" }];
+        var source = new ExportSourceDto { Kind = "query", ConnectionID = Guid.CreateVersion7(), Sql = "SELECT a.id, a.id AS \"ID\", b.id FROM a, b", Name = "pedido" };
+
+        //Act
+        var sql = Validator.TestValidate(Command(source: source, columns: columns, format: "sql"));
+        var json = Validator.TestValidate(Command(source: source, columns: columns, format: "json"));
+
+        //Assert
+        sql.ShouldHaveValidationErrorFor("columns").WithErrorCode(OptionsInvalid).WithErrorMessage("O resultado tem duas colunas chamadas id: deixe uma de fora na Extração.");
+        json.ShouldNotHaveAnyValidationErrors();
+    }
 
     /// <summary>RN-EXPORT-014: o XLSX não é texto e já é compactado: sem BOM, sem .zip e sem a área de transferência.</summary>
     [Trait("StartExportValidator", "StartExportCommand")]
