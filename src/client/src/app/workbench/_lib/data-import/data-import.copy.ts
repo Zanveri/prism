@@ -164,6 +164,45 @@ export const dataImportCopy = {
     rowProblem: "Problema da linha",
   },
 
+  // RN-IMPORT-022 e 023: o destino "Banco de dados" no "Exportar dados" e a etapa "Tabela de destino".
+  copyTarget: {
+    steps: { target: "Tabela de destino", mapping: "Mapeamento", load: "Carga" },
+    copyRows: "Copiar linhas",
+    copying: "Copiando…",
+    connection: "Conexão",
+    database: "Banco de dados",
+    schema: "Esquema",
+    table: "Tabela",
+    search: "Buscar tabela",
+    tables: "Tabelas do esquema",
+    readOnlyOption: "somente leitura",
+    connecting: (name: string) => `Conectando a ${name}…`,
+    loadingDatabases: "Carregando os bancos…",
+    loadingSchemas: "Lendo os esquemas…",
+    loadingTables: "Lendo as tabelas…",
+    noTables: "Este esquema não tem tabelas.",
+    noMatch: "Nenhuma tabela com esse nome.",
+    chooseConnection: "Escolha a conexão de destino.",
+    chooseSchema: "Escolha o esquema da tabela de destino.",
+    chooseTable: "Escolha a tabela de destino.",
+    readOnly: "A conexão é somente leitura, e a cópia grava na tabela. Escolha outra conexão.",
+    readOnlyRefused: "A conexão de destino é somente leitura, e a cópia grava na tabela. Nada foi enviado ao banco.",
+    isSource: "A tabela de destino é a própria origem. Escolha outra tabela.",
+    db2Locked: "No Db2, a conexão usa um banco só.",
+    countForced: "A origem e o destino estão no mesmo banco: a contagem é obrigatória.",
+    retry: "Tentar de novo",
+    userNameMissing: "A conexão de destino não tem usuário gravado. Preencha-o em Editar conexão e copie de novo.",
+    passwordMissing: "A conexão de destino não tem senha gravada. Preencha-a em Editar conexão e copie de novo.",
+    // RN-IMPORT-025: a Confirmação da cópia.
+    rereadWarning: "As linhas são lidas de novo, numa conexão à parte: a cópia leva o que o banco tem agora, e não o que a grade mostra.",
+    unsavedSource: (count: number) =>
+      count === 1
+        ? "A grade tem 1 alteração não salva. A cópia lê o que está gravado no banco e não leva essa alteração."
+        : `A grade tem ${formatCount(count)} alterações não salvas. A cópia lê o que está gravado no banco e não leva essas alterações.`,
+    readsTarget: (table: string) =>
+      `O comando da origem lê ${table}, que é a tabela de destino. A cópia vai gravar nela as linhas que lê; no Db2 e no Informix, a leitura pode alcançar as linhas gravadas, e a cópia para quando passar das linhas contadas.`,
+  },
+
   // RN-IMPORT-024: as notas da conversão na cópia, por par de colunas.
   copyNotes: {
     classes: { text: "texto", number: "número", date: "data", dateTime: "data e hora", time: "hora", boolean: "lógico", binary: "binário", other: "outro tipo" } as Record<string, string>,
@@ -238,10 +277,10 @@ export const dataImportCopy = {
     oneAtATime: "cada linha gravada sozinha",
     previewProblems: (values: number, rows: number, line: number) =>
       `${rows === 1 ? "Na primeira linha" : `Nas ${formatCount(rows)} primeiras linhas`}, ${formatCount(values)} ${plural(values, "valor não converte", "valores não convertem")}: a importação vai parar na linha ${formatCount(line)} do arquivo.`,
-    unsaved: (table: string, count: number, empty: boolean) =>
+    unsaved: (table: string, count: number, empty: boolean, copy = false) =>
       empty
         ? `A aba de registros de ${table} tem ${formatCount(count)} ${plural(count, "alteração não salva", "alterações não salvas")}: depois de esvaziar a tabela, ${plural(count, "ela não acha", "elas não acham")} mais as linhas.`
-        : `A aba de registros de ${table} tem ${formatCount(count)} ${plural(count, "alteração não salva", "alterações não salvas")}. A importação não ${plural(count, "a leva, e ela continua pendente", "as leva, e elas continuam pendentes")}.`,
+        : `A aba de registros de ${table} tem ${formatCount(count)} ${plural(count, "alteração não salva", "alterações não salvas")}. A ${copy ? "cópia" : "importação"} não ${plural(count, "a leva, e ela continua pendente", "as leva, e elas continuam pendentes")}.`,
     understand: (schema: string, table: string) => `Entendo que as linhas atuais de ${schema}.${table} serão apagadas.`,
     understandFirst: "Marque que entende que a tabela será esvaziada.",
     outsideElectron: "Importar só funciona no app do Prism.",

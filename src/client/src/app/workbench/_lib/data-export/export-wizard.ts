@@ -15,7 +15,13 @@ import { knowsGenerated, tableRequired, type ExportOrigin, type SourceColumn } f
 
 export const wizardSteps = ["format", "extraction", "formatting", "output", "confirmation"] as const;
 
-export type WizardStep = (typeof wizardSteps)[number];
+/** Com o destino "Banco de dados" (RN-IMPORT-022), as seis etapas da cópia: "Formatação" e "Saída" saem, porque não há arquivo. */
+export const copySteps = ["format", "extraction", "target", "mapping", "load", "confirmation"] as const;
+
+export type WizardStep = (typeof wizardSteps)[number] | (typeof copySteps)[number];
+
+/** As etapas à esquerda: as cinco da exportação, ou as seis da cópia. */
+export const stepsOf = (database: boolean): readonly WizardStep[] => (database ? copySteps : wizardSteps);
 
 /** O que a pessoa escolheu até aqui: as escolhas lembradas (RN-EXPORT-003) e as colunas marcadas, uma por coluna da origem, na ordem dela. */
 export type WizardChoices = ExportChoices & { checked: readonly boolean[] | null };
@@ -33,7 +39,8 @@ export type WizardContext = { origin: ExportOrigin; engine: Engine | undefined; 
 /** As colunas que vão no arquivo (RN-EXPORT-002 e 011): as marcadas, na ordem da origem; no SQL sem "Incluir as colunas que o banco calcula", sem as que ele calcula sempre. */
 export function chosenColumns(choices: WizardChoices, context: WizardContext): ChosenColumn[] {
   if (context.columns === null || choices.checked === null) return [];
-  const dropGenerated = choices.format === "sql" && !choices.options.sql.includeGenerated && knowsGenerated(context.origin);
+  // Na cópia (RN-IMPORT-024) vão todas as marcadas: a coluna que o banco de destino calcula fica de fora pelo Mapeamento, e não pela opção do SQL.
+  const dropGenerated = !choices.database && choices.format === "sql" && !choices.options.sql.includeGenerated && knowsGenerated(context.origin);
   return context.columns.flatMap((column, position) => (choices.checked?.[position] === true && !(dropGenerated && column.generated === "always") ? [{ position, name: column.name }] : []));
 }
 
@@ -87,20 +94,25 @@ export function stepProblem(step: WizardStep, choices: WizardChoices, context: W
       return usesClipboard(choices) ? null : filePatternProblem(choices.pattern);
     case "confirmation":
       return null;
+    // As etapas da cópia: quem as segura é o `copy-wizard.ts`, com o que só o componente sabe (as listas da tabela de destino, a prévia).
+    case "target":
+    case "mapping":
+    case "load":
+      return null;
   }
 }
 
 /** As etapas anteriores levam de volta; as seguintes, não (RN-EXPORT-003). */
-export function canVisit(step: WizardStep, current: WizardStep): boolean {
-  return wizardSteps.indexOf(step) < wizardSteps.indexOf(current);
+export function canVisit(step: WizardStep, current: WizardStep, steps: readonly WizardStep[] = wizardSteps): boolean {
+  return steps.indexOf(step) < steps.indexOf(current);
 }
 
-export function nextStep(step: WizardStep): WizardStep | null {
-  return wizardSteps[wizardSteps.indexOf(step) + 1] ?? null;
+export function nextStep(step: WizardStep, steps: readonly WizardStep[] = wizardSteps): WizardStep | null {
+  return steps[steps.indexOf(step) + 1] ?? null;
 }
 
-export function previousStep(step: WizardStep): WizardStep | null {
-  return wizardSteps[wizardSteps.indexOf(step) - 1] ?? null;
+export function previousStep(step: WizardStep, steps: readonly WizardStep[] = wizardSteps): WizardStep | null {
+  return steps[steps.indexOf(step) - 1] ?? null;
 }
 
 /** Os nomes que saem do padrão agora, com a extensão do formato (ou o .zip). */
@@ -216,8 +228,8 @@ export function placeRefusals(refusals: readonly WizardRefusal[], format: DataFo
 
 /** As escolhas que se lembram, a partir do estado do assistente (sem as colunas, que são da origem). */
 export function choicesToRemember(choices: WizardChoices): ExportChoices {
-  const { format, options, bom, count, pattern, zip, reveal, clipboard } = choices;
-  return { format, options, bom, count, pattern, zip, reveal, clipboard };
+  const { format, options, bom, count, pattern, zip, reveal, clipboard, database, copyLoad } = choices;
+  return { format, options, bom, count, pattern, zip, reveal, clipboard, database, copyLoad };
 }
 
 /** "Voltar aos padrões" da Formatação: as opções do formato escolhido voltam aos padrões dele, com a tabela de destino da origem. */

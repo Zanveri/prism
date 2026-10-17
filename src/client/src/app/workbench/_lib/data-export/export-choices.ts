@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { commitEveryOf, type CommitChoices } from "../data-import/import-choices";
+
 import { defaultFilePattern, filePatternProblem } from "./export-file-name";
 import { dataFormats, defaultBom, defaultOptions, integerIn, type DataFormat, type FormatOptions } from "./export-options";
 
@@ -9,6 +11,9 @@ import { dataFormats, defaultBom, defaultOptions, integerIn, type DataFormat, ty
  * transferência. As colunas e a tabela de destino do SQL e do DbUnit são da origem e não se lembram. Numa chave própria do `localStorage`
  * (`prism:data-export:<usuário>`), como o navegador escondido, com a leitura tolerante campo a campo: a escolha lembrada que não vale mais (um formato que
  * não existe, um valor fora da faixa) volta ao padrão, sem erro. Nada de segredo nem de dado de conexão passa por aqui.
+ *
+ * Com o destino "Banco de dados" (RN-IMPORT-022): `database` diz que foi ele o escolhido (o formato de arquivo de antes continua lembrado, para a troca de
+ * volta), e `copyLoad`, a escolha do "Commit" da Carga. A conexão e a tabela de destino, e "Esvaziar a tabela antes de copiar", não se lembram.
  */
 
 export type ExportChoices = {
@@ -20,6 +25,8 @@ export type ExportChoices = {
   zip: boolean;
   reveal: boolean;
   clipboard: boolean;
+  database: boolean;
+  copyLoad: CommitChoices;
 };
 
 export const exportChoicesKey = (userName: string) => `prism:data-export:${userName.trim().toLowerCase()}`;
@@ -67,6 +74,16 @@ const choicesSchema = z.object({
   zip: flag(false),
   reveal: flag(false),
   clipboard: flag(false),
+  database: flag(false),
+  copyLoad: z
+    .object({
+      commit: z.enum(["every", "single"]).catch("every"),
+      commitEvery: z
+        .string()
+        .refine((text) => commitEveryOf(text) !== null)
+        .catch("10000"),
+    })
+    .catch({ commit: "every" as const, commitEvery: "10000" }),
 });
 
 /**

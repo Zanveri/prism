@@ -72,7 +72,6 @@ export const dataExportCopy = {
     },
     database: "Banco de dados",
     databaseDescription: "Copiar as linhas para uma tabela que já existe, nesta ou em outra conexão.",
-    soon: "Em breve",
   },
 
   // RN-EXPORT-005: Extração.

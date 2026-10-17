@@ -8,7 +8,7 @@ const target = { schema: "estoque", table: "pedido" };
 
 describe("as escolhas lembradas da última exportação (RN-EXPORT-003)", () => {
   it("nada gravado: os padrões, com a tabela de destino da origem", () => {
-    expect(parseExportChoices(null, target)).toEqual({ format: "csv", options: defaultOptions(target), bom: defaultBom(), count: true, pattern: defaultFilePattern, zip: false, reveal: false, clipboard: false });
+    expect(parseExportChoices(null, target)).toEqual({ format: "csv", options: defaultOptions(target), bom: defaultBom(), count: true, pattern: defaultFilePattern, zip: false, reveal: false, clipboard: false, database: false, copyLoad: { commit: "every", commitEvery: "10000" } });
   });
 
   it("volta o que foi gravado: o formato, as opções de cada um, o BOM, o contar, o padrão do nome, o .zip, o mostrar e a área de transferência", () => {
@@ -16,7 +16,7 @@ describe("as escolhas lembradas da última exportação (RN-EXPORT-003)", () => 
     options.csv.delimiter = "\t";
     options.txt.minWidth = "8";
     options.sql.rowsPerStatement = "1";
-    const saved = serializeExportChoices({ format: "txt", options, bom: { ...defaultBom(), json: true }, count: false, pattern: "${tabela}", zip: true, reveal: true, clipboard: true });
+    const saved = serializeExportChoices({ format: "txt", options, bom: { ...defaultBom(), json: true }, count: false, pattern: "${tabela}", zip: true, reveal: true, clipboard: true, database: false, copyLoad: { commit: "every", commitEvery: "10000" } });
 
     const parsed = parseExportChoices(saved, target);
 
@@ -56,5 +56,14 @@ describe("as escolhas lembradas da última exportação (RN-EXPORT-003)", () => 
     writeExportChoices("ana", { ...parseExportChoices(null, target), format: "json" }, storage);
     expect(readExportChoices("ANA", target, storage).format).toBe("json");
     expect(readExportChoices(null, target, storage).format).toBe("csv");
+  });
+
+  it("o destino \"Banco de dados\" (RN-IMPORT-022): lembra que foi ele, com o formato de arquivo de antes, e a escolha do \"Commit\" da Carga", () => {
+    const saved = serializeExportChoices({ ...parseExportChoices(null, target), format: "json", database: true, copyLoad: { commit: "single", commitEvery: "500" } });
+    expect(parseExportChoices(saved, target)).toMatchObject({ format: "json", database: true, copyLoad: { commit: "single", commitEvery: "500" } });
+
+    // O N fora da faixa e a escolha que não existe voltam ao padrão, sem levar o resto junto.
+    expect(parseExportChoices(JSON.stringify({ database: "sim", copyLoad: { commit: "tudo", commitEvery: "0" } }), target)).toMatchObject({ database: false, copyLoad: { commit: "every", commitEvery: "10000" } });
+    expect(parseExportChoices(JSON.stringify({ database: true, copyLoad: { commit: "every", commitEvery: "2000000" } }), target).copyLoad).toEqual({ commit: "every", commitEvery: "10000" });
   });
 });
