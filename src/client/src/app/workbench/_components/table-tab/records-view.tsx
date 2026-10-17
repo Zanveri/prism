@@ -9,7 +9,7 @@ import { useToast, type Engine } from "@/components/ui";
 import { csvExportOf } from "../../_lib/csv";
 import { openExportWizard } from "../../_lib/data-export/data-exports";
 import { exportRows, recordsSource, runnerExportBlocker } from "../../_lib/data-export/export-entry";
-import { openImportWizard } from "../../_lib/data-import/data-imports";
+import { openImportWizard, useImportedAfterRead } from "../../_lib/data-import/data-imports";
 import { importBlockerOf } from "../../_lib/data-import/import-entry";
 import { treeQuery } from "../../_lib/database-sessions.service";
 import { filterHandoff } from "../../_lib/filter-handoff";
@@ -235,6 +235,8 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const views = useQuery(treeQuery({ type: "objects", connectionId, ...inDatabase(database), schema, objects: "views" }, queryClient, false));
   const importBlocker = importBlockerOf(readOnly, objectKindOf(name, { tables: tables.data, views: views.data }));
   const openImport = useCallback(() => openImportWizard({ connectionId, ...inDatabase(database), schema, name }), [connectionId, database, schema, name]);
+  // RN-IMPORT-020: uma importação nesta tabela terminou depois do começo da leitura que está na tela; a faixa diz isso até a aba ler de novo.
+  const importedAfterRead = useImportedAfterRead(runner, { connectionId, ...inDatabase(database), schema, name });
 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
@@ -358,7 +360,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
           disconnected: notice.disconnected,
         }}
         editing={edits.editing}
-        banner={<EditsBanner {...edits.banner} />}
+        banner={<EditsBanner {...edits.banner} onImportedRefresh={importedAfterRead ? refresh : null} />}
         // No rodapé, ao lado de "Atualizar": o menu dos intervalos abre para cima.
         autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} opensUp onChoose={auto.choose} />}
         exporter={{ blocker: exportBlocker, onExport: openExport }}

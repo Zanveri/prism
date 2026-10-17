@@ -9,8 +9,10 @@ import { allowRefusal, type ApiResult } from "@/lib/api/prism-api";
 
 import { nextTransferSeq } from "../data-export/data-exports";
 import { forgetTransfer, getTransfer } from "../data-export/transfers.service";
+import type { RunnerState } from "../use-query-runner";
 import { readImportChoices, writeImportChoices } from "./import-choices";
 import { createImportFlow, type ImportFlow } from "./import-flow";
+import { importedAfterRead, initialReadWatch, watchRead, type ReadWatch } from "./imported-note";
 import { importStartRefusals, previewImport, previewRefusals, readImportFile, readRefusals, startImport } from "./imports.service";
 import { createLoadTracker, type LoadNotify, type LoadTable, type TrackedLoad } from "./load-tracker";
 
@@ -56,6 +58,34 @@ export function useImportedMark(table: LoadTable): number {
     () => imported.get(key) ?? 0,
     () => 0,
   );
+}
+
+/**
+ * O que cada aba de Registros viu das leituras dela (`imported-note.ts`), pelo executor da aba: a vista desmonta ao trocar para a Estrutura e volta a montar,
+ * e o executor (com as linhas) fica.
+ */
+const readWatches = new WeakMap<object, ReadWatch>();
+
+/**
+ * RN-IMPORT-020: a nota "Linhas foram importadas nesta tabela depois da leitura." vale nos Registros desta tabela: o executor da aba é acompanhado enquanto
+ * a vista está montada, e a nota sai quando a aba lê de novo.
+ */
+export function useImportedAfterRead(runner: { subscribe: (listener: () => void) => () => void; getState: () => RunnerState }, table: LoadTable): boolean {
+  const mark = useImportedMark(table);
+  // A cada mudança do executor, o React lê o estado de novo, e a passagem é anotada; `watchRead` devolve o mesmo objeto para o mesmo estado (ler duas
+  // vezes não muda nada).
+  const watch = useSyncExternalStore(
+    runner.subscribe,
+    () => {
+      const now = importedMarkOf(table);
+      const before = readWatches.get(runner) ?? initialReadWatch(runner.getState(), now);
+      const next = watchRead(before, runner.getState(), now);
+      readWatches.set(runner, next);
+      return next;
+    },
+    () => null,
+  );
+  return watch !== null && importedAfterRead(watch, mark);
 }
 
 export const loadTracker = createLoadTracker({

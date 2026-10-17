@@ -1,6 +1,7 @@
 import { AlertIcon, Button, LockIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { dataImportCopy } from "../_lib/data-import/data-import.copy";
 import type { SaveFailure } from "../_lib/record-edits";
 import { recordsCopy } from "../_lib/records.copy";
 
@@ -26,6 +27,11 @@ type EditsBannerProps = {
   /** RN-SQL-017: copiar ou exportar está buscando na API o valor completo das células cortadas; "Cancelar" desiste, e a grade segue livre. */
   fetching: boolean;
   onCancelFetch: () => void;
+  /**
+   * RN-IMPORT-020: a tabela recebeu linhas de uma importação depois da leitura que está na tela; a faixa diz isso, com "Atualizar" (o da aba, que pergunta
+   * pelas alterações não salvas, RN-EDIT-007). Nulo (ou ausente) sem a nota.
+   */
+  onImportedRefresh?: (() => void) | null;
   onViewSql: () => void;
   onDiscard: () => void;
   onSave: () => void;
@@ -34,11 +40,11 @@ type EditsBannerProps = {
 /**
  * A faixa sobre a grade dos Registros (RN-EDIT-004, 005 e 012): "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; no
  * banco sem log, o aviso de que cada alteração é gravada sozinha; o erro do último Salvar (a frase de cima e a mensagem do banco, como
- * veio, que fica até o próximo Salvar ou o Descartar); e o motivo de só leitura. É estado da tela, e não aviso (RN-AVISO-005). Sem
- * nada disso, não aparece.
+ * veio, que fica até o próximo Salvar ou o Descartar); o motivo de só leitura; e a nota das linhas importadas depois da leitura (RN-IMPORT-020). É estado
+ * da tela, e não aviso (RN-AVISO-005). Sem nada disso, não aparece.
  */
-export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, noticeTone = "lock", failure, fetching, onCancelFetch, onViewSql, onDiscard, onSave }: EditsBannerProps) {
-  if (pending === 0 && failure === null && readOnly === null && notice === null && !fetching) return null;
+export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, noticeTone = "lock", failure, fetching, onCancelFetch, onImportedRefresh = null, onViewSql, onDiscard, onSave }: EditsBannerProps) {
+  if (pending === 0 && failure === null && readOnly === null && notice === null && !fetching && onImportedRefresh === null) return null;
 
   return (
     <div className="flex flex-none flex-col gap-1.5 border-b border-border bg-raised px-3 py-1.5 text-xs">
@@ -53,6 +59,17 @@ export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, not
           </Button>
         </div>
       ) : null}
+      {onImportedRefresh === null ? null : (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
+          <span role="status" className="text-ink">
+            {dataImportCopy.records.imported}
+          </span>
+          <Button type="button" variant="secondary" size="compact" className="ml-auto h-7 px-2.5 text-xs" onClick={onImportedRefresh} disabled={saving}>
+            {dataImportCopy.records.refresh}
+          </Button>
+        </div>
+      )}
       {pending === 0 ? null : (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
