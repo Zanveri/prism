@@ -1581,9 +1581,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   - **Onde vale**: Ctrl+C com o foco na grade, "Copiar" e "Copiar com cabeçalho" copiam a seleção (`copySelection`, ver "A seleção da grade", abaixo:
     só as cortadas que vão no texto, e a busca para quando o texto passa de 10 MiB, `fetchFullValues` com `keepGoing`), "Exportar CSV" dos Registros (as
     cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora, como antes) e "Duplicar linha(s)" (as cortadas das colunas que ela copia; o que não
-    vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. Os "Copiar como" e o "Gerar SQL" das outras
-    frentes pedem o recorte da seleção ao contexto (`GridSelectionContext.slice`) e o completam por `complete`, que passa por `completeValues` e por
-    `completeSlice` (`grid-slice.ts`).
+    vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **Os "Copiar como" e o "Copiar avançado…" (RN-GRADE-003 e 016)**
+    e o "Gerar SQL" pedem o recorte da seleção ao contexto (`GridSelectionContext.slice`) e o completam por `complete`, que passa por `completeValues`
+    e por `completeSlice` (`grid-slice.ts`); o `runCopyAs` só chama a busca com célula cortada nas colunas que vão (ver "Copiar como e Copiar avançado",
+    abaixo).
   - **As fixtures de ouro da exportação** (RN-EXPORT-024): a API escreve a exportação de todas as linhas (seção 35) com os mesmos valores e escapes
     desta biblioteca, e os dois lados leem as mesmas fixtures, em `src/test-fixtures/export/` (fora de `src/client` e de `src/api`), escritas à mão e
     conferidas por inteiro. Aqui quem as lê é o `_lib/grid-export/export-fixtures.test.ts`, pelo caminho a partir da raiz do repositório: o campo do CSV
@@ -1592,9 +1593,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     `scriptLiteral`), o texto e o atributo do XML com o `isXmlChar`, e a planilha (`xlsxText`, `spreadsheetNumber`, `sheetNameOf` e `withinCell`).
     `jsonValue`, `markdownCell` e `withinCell` são exportados só por isso. **Mudar um escape destas funções é mudar a fixture**, e a API falha até
     seguir a regra nova (o `ExportFixturesTests` dela lê os mesmos arquivos); a fixture nunca se regera a partir do código. Os casos com o par
-    substituto solto vêm como `{ "codePoints": [...] }`, montados por `String.fromCharCode` (o par solto) e `String.fromCodePoint`. As fixtures só da
-    API (o TXT, o PHP, a data em ISO 8601, o literal do binário, o `INSERT` de várias linhas, o nome do XML e o DbUnit) ficam para quando a tela
-    escrever essas regras.
+    substituto solto vêm como `{ "codePoints": [...] }`, montados por `String.fromCharCode` (o par solto) e `String.fromCodePoint`. Desde a seção 37 a
+    tela lê também as que eram só da API (o "Em todos os textos" do CSV, o TXT, o PHP, a data em ISO 8601, o literal do binário, o `INSERT` de várias
+    linhas, o nome do XML e o DbUnit), a `document.json` (o documento inteiro de cada formato de texto, dos dois lados) e a `copy-as.json` (só da tela):
+    ver "Copiar como e Copiar avançado".
   - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
     (RN-EDIT-009): `savedResultOf` devolve `sourceRows` (a linha de antes de cada uma, nula na nova; um segundo Salvar continua a conta), o
     executor a guarda (`RowsState.sourceRows`, por `keepSaved`) e ela viaja com a aba para outra janela (`window-messages.ts`). Sem ela, a cópia de
@@ -2252,6 +2254,76 @@ Electron não ganhou canal novo.
   demais recusas da leitura, 422. Os testes simulam a API.
 - **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
   salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
+
+## Copiar como e Copiar avançado (RN-GRADE-003, 016 e 017)
+
+Seção 37 da especificação. **Esta frente fez os escritores, as escolhas lembradas e os dois diálogos, todos puros ou só de propriedades e estado; a ligação
+com a seleção da grade (o submenu "Copiar avançado" do menu, o Ctrl+Shift+C, a pausa da atualização automática, a busca dos completos, a área de
+transferência e os avisos) é da etapa que junta a seleção (RN-GRADE-001)**, e nenhuma tela os abre ainda.
+
+- **Os nove documentos de texto** (`_lib/grid-export/`: `document.ts` com os tipos, `documents.ts` com o escritor de cada formato e as duas montagens, e
+  um arquivo por formato: `to-csv.ts`, `to-txt.ts`, `to-html.ts`, `to-markdown.ts`, `to-json.ts`, `to-source-code.ts`, `to-sql.ts` e `to-xml.ts`, com o
+  XML e o DbUnit). **Cada um é o escritor da API portado linha a linha** (`Prism.Infrastructure/Transfers/Writers`): `begin`, `write` a cada linha e
+  `end`, cada um devolvendo o pedaço que escreveu, com as mesmas contagens (`DocumentCounts`: os valores cortados do TXT, os caracteres tirados, as linhas
+  comentadas do SQL, e `notWhole`, só da tela, os valores que ficaram cortados). As opções são as da exportação (`FormatOptions`, de
+  `data-export/export-options.ts`), os números ainda como o texto do campo. O texto sai com o par substituto solto como U+FFFD (`wellFormed`, a troca do
+  UTF-8 da API) e o tamanho conta em UTF-8 (`utf8Length`). `writeDocument` monta de uma vez; `buildDocument` monta em partes, cede a vez à tela a cada
+  5.000 células (`pause`), para no limite (`clipboardLimitBytes`, 10 MiB: passar recusa, chegar não) e desiste pelo sinal. O que a linha da grade tem e o
+  arquivo da API não: `number` (o da grade, que o comentário do SQL escreve; `null` na linha nova ainda não salva), `cut` e `generated` (a célula "gerado
+  pelo banco"), que viram o nulo nos formatos de dados e o comentário de frase fixa no SQL (`document.copy.ts`, RN-GRADE-016); no JSON e no Código fonte o
+  valor cortado nunca é número. O binário chega como a grade o escreve (`0x…`): o hexadecimal nos formatos de dados, o nulo com "Deixar vazio", e no SQL o
+  literal (`binaryLiteral`: o `decode('…', 'hex')` do PostgreSQL; no Db2, pelo tipo da coluna, o `BX'…'` do `BINARY` e do `VARBINARY`, o `BLOB(X'…')`
+  do `BLOB` e o `X'…'` do texto `FOR BIT DATA`, em pedaços de 16.336 bytes; e no Informix a linha comentada), como a RN-EXPORT-011 e a API dizem. **Mudar
+  uma regra de formato é mudar os dois lados e a fixture.**
+- **O nome do XML** (`xml-name.ts`) é o `XmlConvert.EncodeLocalName` do .NET, unidade UTF-16 por unidade, com o `_x` já escrito ganhando o `_x005F_`. O
+  que cabe num nome é o do XML 1.0 da **4ª** edição (o Apêndice B, do Unicode 2.0), e não o da 5ª: um caractere mais novo vira escape também no meio do
+  nome. As duas tabelas de faixas vieram do próprio .NET 10 (caractere por caractere do plano básico, uma vez, por um programa descartável) e o
+  `xml-name.test.ts` confere a forma delas; a regra, a `xml-name.json`, dos dois lados. As maiúsculas do DbUnit são as do `ToUpperInvariant`
+  (`upperInvariant`): a maiúscula simples de cada ponto de código (o `ß` e o `ﬁ` ficam), o `ı` fica (como o .NET faz com o ICU), e as formas gregas com
+  iota subscrito vão à simples (`ᾳ` → `ᾼ`); comparado em todos os pontos de código contra o .NET 10, só diferem os caracteres que o Unicode de um dos
+  dois ainda não tem (cinco do plano básico, `U+019B`, `U+0264`, `U+1C8A`, `U+A7CD` e `U+A7DB`).
+- **A prova de que os dois lados escrevem o mesmo**: as fixtures (`export-fixtures.test.ts` aqui, `ExportFixturesTests` na API), com a `document.json`
+  dos dois lados (as opções como a rota as recebe: a API as lê pelo `ExportOptionsReader`, e o binário deixado vazio chega nulo, como na leitura dela) e a
+  `copy-as.json` só daqui. Além delas, uma conferência descartável (não está no repositório) escreveu 20 mil documentos sorteados (os nove formatos, os três
+  bancos, opções sorteadas, nomes e valores hostis, lotes do TXT de mais de 200 linhas) pelos dois lados e comparou o texto e as contagens: nenhuma
+  diferença. **Para repetir depois de mudar um escritor**: um teste temporário escreve os casos e o texto da tela num JSON (as cadeias como unidades UTF-16,
+  porque o `System.Text.Json` recusa o par solto), e um programa do .NET que referencia o `Prism.Infrastructure.dll` chama `ExportFormats.Create` (é
+  `internal`: por reflexão) e compara.
+- **A origem da cópia e a cópia** (`_lib/copy-as/copy-as.ts`, puro). `CopySource` é o contrato com a seleção: o banco, o nome da origem (o da tabela nos
+  Registros, `resultSourceName` no resultado), a tabela de destino quando se sabe (a dos Registros, ou a do alvo da edição de uma tabela só, RN-GRADE-020;
+  `null` quando não) e as colunas (`CopyColumn`: o nome, o tipo do banco, o da grade e o `generated` do alvo) e as linhas (`CopyRow`: os valores como a
+  grade os mostra, com a pendência, o lido na linha excluída e o preenchido na nova; `number`, `cut` e `generated`). `pickColumns` restringe às colunas da
+  seleção. `runCopyAs(pedido, peças)` recusa no SQL, antes de tudo, a coluna repetida (`duplicateColumn`: duas das colunas que vão no `INSERT` com o mesmo
+  nome, pelo `duplicateOf` da exportação, que diz o nome que aparece primeiro, como o `GroupBy` da API, e lê só os nomes, sem montar as linhas; com a frase do "Copiar como", "O resultado tem duas colunas chamadas id: deixe uma de fora da seleção.",
+  `duplicateColumnRefusal`; a tabela de destino não a resolve, e os outros formatos copiam o nome repetido), confere a tabela do SQL e do DbUnit (`needsTable`: sem ela, `needsTable`, e a tela abre o "Copiar avançado…" no
+  formato, com `focusTable`), tira do SQL as colunas `generated: always` sem "Incluir as colunas que o banco calcula" (sem nenhuma que sobre, `noColumns`,
+  com uma frase que a especificação não escreve), e, com célula cortada nas colunas que vão, monta antes com o que a grade tem e recusa sem buscar o que
+  já passa do limite; depois busca os completos (`complete`, a peça da tela, que devolve a mesma origem com os valores inteiros, ou `null` cancelada), monta
+  e põe na área de transferência (`write`; a recusa ou a exceção dela é `failed`, "Não foi possível copiar."). As fases (`onPhase`: `writing`, `fetching`)
+  são para a faixa e o diálogo. O aviso é `copyAsNotice` ("3 linhas copiadas em JSON.", e o resumo depois do ponto, no tom de atenção). A prévia,
+  `previewOf`: o começo do texto (até 100 linhas e 64 KB, sem partir um par), escrito só com as linhas que ele precisa (no TXT, o primeiro lote inteiro,
+  para as larguras serem as de verdade), com as cortadas como a grade as tem; no SQL com a coluna repetida, vazia, com a recusa (`refusal`), que o diálogo
+  mostra no lugar do texto.
+- **As escolhas lembradas** (`copy-as-choices.ts`): `prism:copy-as:<usuário>` no `localStorage`, separada da `prism:data-export:` da exportação
+  (RN-GRADE-017), com o último formato do "Copiar avançado…" e as opções de cada formato, lidas pela mesma leitura tolerante da exportação
+  (`parseFormatOptions`, `rememberedFormatOptions` e `storedObject`, de `export-choices.ts`); a tabela de destino é da origem e não se grava
+  (`readCopyAsChoices(usuário, targetOf(origem))`). O "Copiar como" direto lê as escolhas na hora do clique.
+- **Os diálogos** (`_components/copy-as/`, só de propriedades e estado; o teste os roda com os ganchos simulados). `CopyAdvancedDialog` recebe as três
+  origens de "O que copiar" (`sources`: `cells`, `rows`, `loaded`), as escolhas, o formato e o foco iniciais, e `onCopy` (o `runCopyAs` da tela, que avisa
+  quando copiou), `onRemember` (no clique em "Copiar") e `onClose`; o "Cancelar a busca" aborta o sinal que ele passa ao `onCopy`. `ConfigureCopyAsDialog`
+  recebe as escolhas e entrega todas as opções no `onSave` (quem o abre grava, avisa "Opções do 'Copiar como' salvas." e fecha). Os dois usam a lista
+  `CopyFormatList` (a marca do formato com campo recusado também para o leitor de tela; a coluna repetida do SQL vai em `columns`, pelo `copyProblems`, e
+  desabilita "Copiar" como um campo recusado) e a `FormattingStep` da exportação, que ganhou `target` (sem a
+  tabela de destino, no configurar) e `focusTable`. **Decisões onde a regra deixava espaço**: no configurar, "Incluir as colunas que o banco calcula"
+  aparece sempre, e as linhas por comando ficam editáveis também numa aba do Informix (as opções valem para qualquer banco; o Informix escreve sempre uma);
+  o diálogo grava as escolhas no clique em "Copiar",
+  antes de saber se copiou.
+- **O que falta, na ligação**: montar as três `CopySource` da seleção (as linhas na ordem da grade, as colunas escolhidas, os valores mostrados, as
+  marcas), o `complete` pela rota das células (o `completeValues` de `use-record-edits.ts` devolve os valores pela posição na API), o `write` pelo
+  `navigator.clipboard.writeText`, a pausa da atualização automática do começo ao fim, o pedido do alvo da edição antes do "Copiar como SQL" e do DbUnit
+  sem tabela ("Conferindo a tabela deste resultado…", `copyAsCopy.checkingTable`), a faixa "Copiando…" passado meio segundo, os avisos
+  (`copyAsNotice`, o `tooLarge`, o `failed`) e os itens do menu (`copyAsCopy.menu`). A recusa do limite tem a mesma frase do "Copiar" simples
+  (RN-GRADE-002), que o outro lado também escreve: junte as duas numa só.
 
 ## Exportar dados (seção 35, RN-EXPORT-001 a 024)
 
