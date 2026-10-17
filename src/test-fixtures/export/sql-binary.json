@@ -1,0 +1,72 @@
+{
+  "rule": "RN-EXPORT-011: o literal do binário, que o Gerar SQL da tela não escreve. Só da API (ExportText.BinaryLiteral), pronta para quando a tela o escrever.",
+  "notes": [
+    "bytes são os dígitos hexadecimais do valor; type é o tipo da coluna como o banco o diz. O corte em pedaços de 16.336 bytes do Db2 está nos testes do escritor.",
+    "expected null é: o banco não tem literal para binário, e a linha sai como comentário."
+  ],
+  "cases": [
+    {
+      "name": "PostgreSQL",
+      "engine": "postgresql",
+      "type": "bytea",
+      "bytes": "DEADBEEF",
+      "expected": "decode('DEADBEEF', 'hex')"
+    },
+    {
+      "name": "PostgreSQL em maiúsculas",
+      "engine": "postgresql",
+      "type": "bytea",
+      "bytes": "00ff10",
+      "expected": "decode('00FF10', 'hex')"
+    },
+    {
+      "name": "PostgreSQL vazio",
+      "engine": "postgresql",
+      "type": "bytea",
+      "bytes": "",
+      "expected": "decode('', 'hex')"
+    },
+    {
+      "name": "Db2 VARBINARY",
+      "engine": "db2",
+      "type": "VARBINARY",
+      "bytes": "DEADBEEF",
+      "expected": "X'DEADBEEF'"
+    },
+    {
+      "name": "Db2 BLOB",
+      "engine": "db2",
+      "type": "BLOB",
+      "bytes": "DEADBEEF",
+      "expected": "BLOB(X'DEADBEEF')"
+    },
+    {
+      "name": "Db2 blob em minúsculas",
+      "engine": "db2",
+      "type": "blob",
+      "bytes": "CAFE",
+      "expected": "BLOB(X'CAFE')"
+    },
+    {
+      "name": "Db2 VARBINARY vazio",
+      "engine": "db2",
+      "type": "VARBINARY",
+      "bytes": "",
+      "expected": "X''"
+    },
+    {
+      "name": "Db2 BLOB vazio",
+      "engine": "db2",
+      "type": "BLOB",
+      "bytes": "",
+      "expected": "BLOB(X'')"
+    },
+    {
+      "name": "Informix não tem literal",
+      "engine": "informix",
+      "type": "BYTE",
+      "bytes": "DEADBEEF",
+      "expected": null
+    }
+  ]
+}

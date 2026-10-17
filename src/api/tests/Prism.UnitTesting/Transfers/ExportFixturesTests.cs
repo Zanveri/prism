@@ -91,6 +91,42 @@ public sealed class ExportFixturesTests
             return ($"{text}|{counts.CutValues}", $"{test.GetProperty("expected").GetString()}|{test.GetProperty("cutValues").GetInt64()}");
         });
 
+    [Trait("ExportText", "SqlLiteral")]
+    [Fact(DisplayName = "OK o literal do SQL, de uma linha e de script, é o da fixture")]
+    public void SqlLiteral_ShouldMatchTheFixture()
+        => AssertAll("sql-literal.json", test =>
+        {
+            var engine = Engine(test.GetProperty("engine").GetString()!);
+            var value = Text(test.GetProperty("value"))!;
+            var kind = test.GetProperty("kind").GetString()!;
+            var literal = test.GetProperty("function").GetString() switch
+            {
+                "sqlLiteral" => ExportText.SqlLiteral(engine, value, kind),
+                "scriptLiteral" => ExportText.ScriptLiteral(engine, value, kind),
+                var other => throw new InvalidOperationException($"A função {other} não existe.")
+            };
+
+            return (literal, Text(test.GetProperty("expected")));
+        });
+
+    [Trait("ExportText", "BinaryLiteral")]
+    [Fact(DisplayName = "OK o literal do binário é o da fixture")]
+    public void BinaryLiteral_ShouldMatchTheFixture()
+        => AssertAll("sql-binary.json", test => (ExportText.BinaryLiteral(Engine(test.GetProperty("engine").GetString()!), Convert.FromHexString(test.GetProperty("bytes").GetString()!), test.GetProperty("type").GetString()!), Text(test.GetProperty("expected"))));
+
+    [Trait("SqlExportWriter", "Write")]
+    [Fact(DisplayName = "OK o arquivo SQL e as linhas puladas são os da fixture")]
+    public void SqlInsert_ShouldMatchTheFixture()
+        => AssertAll("sql-insert.json", test =>
+        {
+            var options = test.GetProperty("options");
+            var sql = new SqlExportOptions(options.GetProperty("schema").GetString(), options.GetProperty("table").GetString()!, options.GetProperty("omitSchema").GetBoolean(), options.GetProperty("rowsPerStatement").GetInt32(), EExportBinary.Literal);
+            var columns = test.GetProperty("columns").EnumerateArray().Select(column => new ExportColumn(column.GetProperty("name").GetString()!, column.GetProperty("type").GetString()!, column.GetProperty("kind").GetString()!)).ToList();
+            var (text, counts) = ExportWriting.Write(ExportFormats.Sql, columns, Rows(test.GetProperty("rows")), sql, engine: Engine(test.GetProperty("engine").GetString()!));
+
+            return ($"{text}|{counts.SkippedRows}", $"{test.GetProperty("expected").GetString()}|{test.GetProperty("skippedRows").GetInt64()}");
+        });
+
     /// <summary>Confere cada caso e junta as diferenças numa falha só, com o nome de cada caso: a fixture inteira é a regra.</summary>
     private static void AssertAll(string file, Func<JsonElement, (string? Actual, string? Expected)> check)
     {
@@ -129,6 +165,27 @@ public sealed class ExportFixturesTests
 
         return text.ToString();
     }
+
+    /// <summary>As linhas de um documento: cada valor é texto, nulo, `{ codePoints: [...] }` ou `{ bytes: "HEX" }`, o binário.</summary>
+    private static List<IReadOnlyList<ExportCell>> Rows(JsonElement rows)
+        => [.. rows.EnumerateArray().Select(row => (IReadOnlyList<ExportCell>)[.. row.EnumerateArray().Select(Cell)])];
+
+    private static ExportCell Cell(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object && value.TryGetProperty("bytes", out var bytes))
+            return ExportCell.FromBytes(Convert.FromHexString(bytes.GetString()!));
+
+        return Text(value) is { } text ? ExportCell.FromText(text) : ExportCell.Null;
+    }
+
+    private static EDatabaseEngine Engine(string name)
+        => name switch
+        {
+            "postgresql" => EDatabaseEngine.PostgreSql,
+            "db2" => EDatabaseEngine.Db2,
+            "informix" => EDatabaseEngine.Informix,
+            _ => throw new InvalidOperationException($"O banco {name} não existe.")
+        };
 
     private static List<string> Strings(JsonElement array)
         => [.. array.EnumerateArray().Select(item => item.GetString()!)];

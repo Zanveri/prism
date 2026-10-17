@@ -1,0 +1,593 @@
+{
+  "rule": "RN-EXPORT-011: o arquivo SQL inteiro, com várias linhas por comando e as linhas sem literal. Só da API (SqlExportWriter), pronta para quando a tela o escrever.",
+  "notes": [
+    "options: schema (null é sem esquema), table, omitSchema e rowsPerStatement; o binário é sempre o literal do banco.",
+    "columns: name, type (o tipo do banco) e kind (o da grade). Cada valor de rows é texto, null, { codePoints: [...] } ou { bytes: \"HEX\" }.",
+    "expected é o texto do arquivo em UTF-8 (o par solto já como U+FFFD); skippedRows, as linhas que viraram comentário."
+  ],
+  "cases": [
+    {
+      "name": "dez linhas por comando, duas linhas",
+      "engine": "postgresql",
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "criado",
+          "type": "timestamp",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "Ana",
+          "2024-01-15 10:30:00.000000"
+        ],
+        [
+          "2",
+          "Bia",
+          null
+        ]
+      ],
+      "expected": "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"cliente\", \"criado\") VALUES\n  (1, 'Ana', '2024-01-15 10:30:00.000000'),\n  (2, 'Bia', NULL);\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "uma linha por comando",
+      "engine": "postgresql",
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 1
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "criado",
+          "type": "timestamp",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "Ana",
+          "2024-01-15 10:30:00.000000"
+        ],
+        [
+          "2",
+          "Bia",
+          null
+        ]
+      ],
+      "expected": "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"cliente\", \"criado\") VALUES (1, 'Ana', '2024-01-15 10:30:00.000000');\nINSERT INTO \"estoque\".\"pedido\" (\"id\", \"cliente\", \"criado\") VALUES (2, 'Bia', NULL);\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "duas linhas por comando, cinco linhas",
+      "engine": "db2",
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 2
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "2"
+        ],
+        [
+          "3"
+        ],
+        [
+          "4"
+        ],
+        [
+          "5"
+        ]
+      ],
+      "expected": "INSERT INTO \"estoque\".\"pedido\" (\"id\") VALUES\n  (1),\n  (2);\nINSERT INTO \"estoque\".\"pedido\" (\"id\") VALUES\n  (3),\n  (4);\nINSERT INTO \"estoque\".\"pedido\" (\"id\") VALUES\n  (5);\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "sem esquema",
+      "engine": "postgresql",
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        [
+          "1"
+        ]
+      ],
+      "expected": "INSERT INTO \"pedido\" (\"id\") VALUES\n  (1);\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "omitir o esquema",
+      "engine": "postgresql",
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": true,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        [
+          "1"
+        ]
+      ],
+      "expected": "INSERT INTO \"pedido\" (\"id\") VALUES\n  (1);\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "nomes hostis entre aspas, com a aspa dobrada",
+      "engine": "postgresql",
+      "options": {
+        "schema": "es\"q",
+        "table": "ped;ido",
+        "omitSchema": false,
+        "rowsPerStatement": 1
+      },
+      "columns": [
+        {
+          "name": "a\"b",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "--c",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "x",
+          "y"
+        ]
+      ],
+      "expected": "INSERT INTO \"es\"\"q\".\"ped;ido\" (\"a\"\"b\", \"--c\") VALUES ('x', 'y');\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "sem linhas o arquivo fica vazio",
+      "engine": "postgresql",
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "criado",
+          "type": "timestamp",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [],
+      "expected": "",
+      "skippedRows": 0
+    },
+    {
+      "name": "a linha com controle fecha o comando e vira comentário",
+      "engine": "postgresql",
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "a"
+        ],
+        [
+          "2",
+          "x\u0001y"
+        ],
+        [
+          "3",
+          "c"
+        ]
+      ],
+      "expected": "INSERT INTO \"pedido\" (\"id\", \"nome\") VALUES\n  (1, 'a');\n-- Linha 2 não exportada: um valor tem caractere de controle que não vira literal.\nINSERT INTO \"pedido\" (\"id\", \"nome\") VALUES\n  (3, 'c');\n",
+      "skippedRows": 1
+    },
+    {
+      "name": "a linha pulada depois de um comando cheio não fecha outro",
+      "engine": "postgresql",
+      "options": {
+        "schema": null,
+        "table": "t",
+        "omitSchema": false,
+        "rowsPerStatement": 3
+      },
+      "columns": [
+        {
+          "name": "v",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1"
+        ],
+        [
+          "2"
+        ],
+        [
+          "3"
+        ],
+        [
+          "4\u007f"
+        ],
+        [
+          "5"
+        ]
+      ],
+      "expected": "INSERT INTO \"t\" (\"v\") VALUES\n  ('1'),\n  ('2'),\n  ('3');\n-- Linha 4 não exportada: um valor tem caractere de controle que não vira literal.\nINSERT INTO \"t\" (\"v\") VALUES\n  ('5');\n",
+      "skippedRows": 1
+    },
+    {
+      "name": "duas linhas puladas seguidas",
+      "engine": "db2",
+      "options": {
+        "schema": null,
+        "table": "t",
+        "omitSchema": false,
+        "rowsPerStatement": 2
+      },
+      "columns": [
+        {
+          "name": "v",
+          "type": "VARCHAR",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "\u0000"
+        ],
+        [
+          "\u001b"
+        ],
+        [
+          "ok"
+        ]
+      ],
+      "expected": "-- Linha 1 não exportada: um valor tem caractere de controle que não vira literal.\n-- Linha 2 não exportada: um valor tem caractere de controle que não vira literal.\nINSERT INTO \"t\" (\"v\") VALUES\n  ('ok');\n",
+      "skippedRows": 2
+    },
+    {
+      "name": "Informix: o binário vira comentário",
+      "engine": "informix",
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 1
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "BYTE",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "DEAD"
+          }
+        ],
+        [
+          "2",
+          null
+        ]
+      ],
+      "expected": "-- Linha 1 não exportada: o Informix não tem literal para binário.\nINSERT INTO \"pedido\" (\"id\", \"foto\") VALUES (2, NULL);\n",
+      "skippedRows": 1
+    },
+    {
+      "name": "Informix: a data e hora de seis casas vira comentário",
+      "engine": "informix",
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 1
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number"
+        },
+        {
+          "name": "criado",
+          "type": "DATETIME YEAR TO FRACTION(5)",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "2024-01-15 10:30:00.123456"
+        ],
+        [
+          "2",
+          "2024-01-15 10:30:00.123450"
+        ]
+      ],
+      "expected": "-- Linha 1 não exportada: no Informix, a data e hora tem mais de cinco casas de segundo.\nINSERT INTO \"pedido\" (\"id\", \"criado\") VALUES (2, DATETIME (2024-01-15 10:30:00.12345) YEAR TO FRACTION(5));\n",
+      "skippedRows": 1
+    },
+    {
+      "name": "Informix: sempre uma linha por comando, com o lógico e a quebra por CHR",
+      "engine": "informix",
+      "options": {
+        "schema": "loja",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number"
+        },
+        {
+          "name": "obs",
+          "type": "LVARCHAR",
+          "kind": "text"
+        },
+        {
+          "name": "ativo",
+          "type": "BOOLEAN",
+          "kind": "boolean"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "a\nb",
+          "true"
+        ],
+        [
+          "2",
+          "c",
+          "false"
+        ]
+      ],
+      "expected": "INSERT INTO \"loja\".\"pedido\" (\"id\", \"obs\", \"ativo\") VALUES (1, 'a' || CHR(10) || 'b', 't');\nINSERT INTO \"loja\".\"pedido\" (\"id\", \"obs\", \"ativo\") VALUES (2, 'c', 'f');\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "Db2: o binário no BLOB e no VARBINARY",
+      "engine": "db2",
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "BLOB",
+          "kind": "binary"
+        },
+        {
+          "name": "hash",
+          "type": "VARBINARY",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "CAFE"
+          },
+          {
+            "bytes": "00FF"
+          }
+        ]
+      ],
+      "expected": "INSERT INTO \"pedido\" (\"id\", \"foto\", \"hash\") VALUES\n  (1, BLOB(X'CAFE'), X'00FF');\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "PostgreSQL: o binário e o texto com barra e quebra",
+      "engine": "postgresql",
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        },
+        {
+          "name": "obs",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "bytes": "DEADBEEF"
+          },
+          "C:\\temp\n"
+        ]
+      ],
+      "expected": "INSERT INTO \"pedido\" (\"foto\", \"obs\") VALUES\n  (decode('DEADBEEF', 'hex'), E'C:\\\\temp\n');\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "PostgreSQL: o retorno de carro de um json e de uma lista vai como \\r num E'…', um literal só",
+      "engine": "postgresql",
+      "options": {
+        "schema": "loja",
+        "table": "documento",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "conteudo",
+          "type": "json",
+          "kind": "text"
+        },
+        {
+          "name": "marcas",
+          "type": "_text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "{\"a\":\r\n\"O'Brien \\\\ x\"}",
+          "{\"x\ry\",z}"
+        ],
+        [
+          "2",
+          null,
+          "{}"
+        ]
+      ],
+      "expected": "INSERT INTO \"loja\".\"documento\" (\"id\", \"conteudo\", \"marcas\") VALUES\n  (1, E'{\"a\":\\r\n\"O''Brien \\\\\\\\ x\"}', E'{\"x\\ry\",z}'),\n  (2, NULL, '{}');\n",
+      "skippedRows": 0
+    },
+    {
+      "name": "o par substituto solto sai como U+FFFD",
+      "engine": "postgresql",
+      "options": {
+        "schema": null,
+        "table": "t",
+        "omitSchema": false,
+        "rowsPerStatement": 10
+      },
+      "columns": [
+        {
+          "name": "v",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "codePoints": [
+              97,
+              55357
+            ]
+          }
+        ]
+      ],
+      "expected": "INSERT INTO \"t\" (\"v\") VALUES\n  ('a\ufffd');\n",
+      "skippedRows": 0
+    }
+  ]
+}

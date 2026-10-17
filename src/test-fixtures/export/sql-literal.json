@@ -1,0 +1,1298 @@
+{
+  "rule": "RN-EXPORT-011 e 024: o literal do SQL. Na tela, sqlLiteral (table-sql.ts) e scriptLiteral (grid-export/script-literal.ts); na API, ExportText.SqlLiteral e ExportText.ScriptLiteral.",
+  "notes": [
+    "function: sqlLiteral (o literal de uma linha só, o do filtro) ou scriptLiteral (o do script, com quebra de linha, retorno de carro e tabulação).",
+    "engine: postgresql, db2 ou informix (1, 2 e 3 na tela). kind: o tipo da coluna na grade (text, number, datetime, boolean ou binary).",
+    "value e expected são texto ou { codePoints: [...] }, que cada lado monta ponto de código por ponto de código; expected null é: o valor não tem literal."
+  ],
+  "cases": [
+    {
+      "name": "texto simples (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "Ana",
+      "expected": "'Ana'"
+    },
+    {
+      "name": "aspa dobrada (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "O'Brien",
+      "expected": "'O''Brien'"
+    },
+    {
+      "name": "quebra de linha não cabe numa linha (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "expected": null
+    },
+    {
+      "name": "retorno de carro não cabe numa linha (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\rb",
+      "expected": null
+    },
+    {
+      "name": "tabulação não cabe numa linha (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\tb",
+      "expected": null
+    },
+    {
+      "name": "U+0000 não tem literal (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\u0000b",
+      "expected": null
+    },
+    {
+      "name": "DEL não tem literal (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\u007fb",
+      "expected": null
+    },
+    {
+      "name": "ESC não tem literal (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\u001bb",
+      "expected": null
+    },
+    {
+      "name": "controle C1 vai entre aspas (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\u0085b",
+      "expected": "'a\u0085b'"
+    },
+    {
+      "name": "emoji e ideogramas, fora do plano básico (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "🙂 漢字 👨\u200d👩\u200d👧",
+      "expected": "'🙂 漢字 👨\u200d👩\u200d👧'"
+    },
+    {
+      "name": "U+202E, U+FEFF e U+FFFE ficam como estão (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\u202eb\ufeffc\ufffe",
+      "expected": "'a\u202eb\ufeffc\ufffe'"
+    },
+    {
+      "name": "par substituto solto fica como está (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          97,
+          55357,
+          98
+        ]
+      },
+      "expected": {
+        "codePoints": [
+          39,
+          97,
+          55357,
+          98,
+          39
+        ]
+      }
+    },
+    {
+      "name": "marcação e ]]> (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "<script>alert(\"x\")</script> ]]> & _x0041_",
+      "expected": "'<script>alert(\"x\")</script> ]]> & _x0041_'"
+    },
+    {
+      "name": "número simples numa coluna de número (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "12.50",
+      "expected": "12.50"
+    },
+    {
+      "name": "número negativo (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "-1",
+      "expected": "-1"
+    },
+    {
+      "name": "número com expoente (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "1E-3",
+      "expected": "1E-3"
+    },
+    {
+      "name": "número terminado em ponto (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "5.",
+      "expected": "5."
+    },
+    {
+      "name": "número começado em ponto (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": ".5",
+      "expected": ".5"
+    },
+    {
+      "name": "vírgula decimal não é número simples (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "1,5",
+      "expected": "'1,5'"
+    },
+    {
+      "name": "sinal de mais não é número simples (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "+1",
+      "expected": "'+1'"
+    },
+    {
+      "name": "NaN vai entre aspas (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "NaN",
+      "expected": "'NaN'"
+    },
+    {
+      "name": "dígitos que não são do ASCII vão entre aspas (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "١٢",
+      "expected": "'١٢'"
+    },
+    {
+      "name": "número numa coluna de texto vai entre aspas (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "12",
+      "expected": "'12'"
+    },
+    {
+      "name": "número seguido de quebra de linha não tem literal de uma linha (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "12\n",
+      "expected": null
+    },
+    {
+      "name": "binário em texto vai entre aspas (postgresql)",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "binary",
+      "value": "0xDEAD",
+      "expected": "'0xDEAD'"
+    },
+    {
+      "name": "texto simples (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "Ana",
+      "expected": "'Ana'"
+    },
+    {
+      "name": "aspa dobrada (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "O'Brien",
+      "expected": "'O''Brien'"
+    },
+    {
+      "name": "quebra de linha não cabe numa linha (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "expected": null
+    },
+    {
+      "name": "retorno de carro não cabe numa linha (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\rb",
+      "expected": null
+    },
+    {
+      "name": "tabulação não cabe numa linha (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\tb",
+      "expected": null
+    },
+    {
+      "name": "U+0000 não tem literal (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\u0000b",
+      "expected": null
+    },
+    {
+      "name": "DEL não tem literal (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\u007fb",
+      "expected": null
+    },
+    {
+      "name": "ESC não tem literal (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\u001bb",
+      "expected": null
+    },
+    {
+      "name": "controle C1 vai entre aspas (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\u0085b",
+      "expected": "'a\u0085b'"
+    },
+    {
+      "name": "emoji e ideogramas, fora do plano básico (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "🙂 漢字 👨\u200d👩\u200d👧",
+      "expected": "'🙂 漢字 👨\u200d👩\u200d👧'"
+    },
+    {
+      "name": "U+202E, U+FEFF e U+FFFE ficam como estão (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\u202eb\ufeffc\ufffe",
+      "expected": "'a\u202eb\ufeffc\ufffe'"
+    },
+    {
+      "name": "par substituto solto fica como está (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          97,
+          55357,
+          98
+        ]
+      },
+      "expected": {
+        "codePoints": [
+          39,
+          97,
+          55357,
+          98,
+          39
+        ]
+      }
+    },
+    {
+      "name": "marcação e ]]> (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "<script>alert(\"x\")</script> ]]> & _x0041_",
+      "expected": "'<script>alert(\"x\")</script> ]]> & _x0041_'"
+    },
+    {
+      "name": "número simples numa coluna de número (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "12.50",
+      "expected": "12.50"
+    },
+    {
+      "name": "número negativo (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "-1",
+      "expected": "-1"
+    },
+    {
+      "name": "número com expoente (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "1E-3",
+      "expected": "1E-3"
+    },
+    {
+      "name": "número terminado em ponto (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "5.",
+      "expected": "5."
+    },
+    {
+      "name": "número começado em ponto (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": ".5",
+      "expected": ".5"
+    },
+    {
+      "name": "vírgula decimal não é número simples (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "1,5",
+      "expected": "'1,5'"
+    },
+    {
+      "name": "sinal de mais não é número simples (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "+1",
+      "expected": "'+1'"
+    },
+    {
+      "name": "NaN vai entre aspas (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "NaN",
+      "expected": "'NaN'"
+    },
+    {
+      "name": "dígitos que não são do ASCII vão entre aspas (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "١٢",
+      "expected": "'١٢'"
+    },
+    {
+      "name": "número numa coluna de texto vai entre aspas (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "12",
+      "expected": "'12'"
+    },
+    {
+      "name": "número seguido de quebra de linha não tem literal de uma linha (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "number",
+      "value": "12\n",
+      "expected": null
+    },
+    {
+      "name": "binário em texto vai entre aspas (db2)",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "binary",
+      "value": "0xDEAD",
+      "expected": "'0xDEAD'"
+    },
+    {
+      "name": "texto simples (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "Ana",
+      "expected": "'Ana'"
+    },
+    {
+      "name": "aspa dobrada (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "O'Brien",
+      "expected": "'O''Brien'"
+    },
+    {
+      "name": "quebra de linha não cabe numa linha (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "expected": null
+    },
+    {
+      "name": "retorno de carro não cabe numa linha (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\rb",
+      "expected": null
+    },
+    {
+      "name": "tabulação não cabe numa linha (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\tb",
+      "expected": null
+    },
+    {
+      "name": "U+0000 não tem literal (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\u0000b",
+      "expected": null
+    },
+    {
+      "name": "DEL não tem literal (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\u007fb",
+      "expected": null
+    },
+    {
+      "name": "ESC não tem literal (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\u001bb",
+      "expected": null
+    },
+    {
+      "name": "controle C1 vai entre aspas (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\u0085b",
+      "expected": "'a\u0085b'"
+    },
+    {
+      "name": "emoji e ideogramas, fora do plano básico (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "🙂 漢字 👨\u200d👩\u200d👧",
+      "expected": "'🙂 漢字 👨\u200d👩\u200d👧'"
+    },
+    {
+      "name": "U+202E, U+FEFF e U+FFFE ficam como estão (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\u202eb\ufeffc\ufffe",
+      "expected": "'a\u202eb\ufeffc\ufffe'"
+    },
+    {
+      "name": "par substituto solto fica como está (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          97,
+          55357,
+          98
+        ]
+      },
+      "expected": {
+        "codePoints": [
+          39,
+          97,
+          55357,
+          98,
+          39
+        ]
+      }
+    },
+    {
+      "name": "marcação e ]]> (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "<script>alert(\"x\")</script> ]]> & _x0041_",
+      "expected": "'<script>alert(\"x\")</script> ]]> & _x0041_'"
+    },
+    {
+      "name": "número simples numa coluna de número (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "12.50",
+      "expected": "12.50"
+    },
+    {
+      "name": "número negativo (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "-1",
+      "expected": "-1"
+    },
+    {
+      "name": "número com expoente (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "1E-3",
+      "expected": "1E-3"
+    },
+    {
+      "name": "número terminado em ponto (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "5.",
+      "expected": "5."
+    },
+    {
+      "name": "número começado em ponto (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": ".5",
+      "expected": ".5"
+    },
+    {
+      "name": "vírgula decimal não é número simples (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "1,5",
+      "expected": "'1,5'"
+    },
+    {
+      "name": "sinal de mais não é número simples (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "+1",
+      "expected": "'+1'"
+    },
+    {
+      "name": "NaN vai entre aspas (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "NaN",
+      "expected": "'NaN'"
+    },
+    {
+      "name": "dígitos que não são do ASCII vão entre aspas (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "١٢",
+      "expected": "'١٢'"
+    },
+    {
+      "name": "número numa coluna de texto vai entre aspas (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "12",
+      "expected": "'12'"
+    },
+    {
+      "name": "número seguido de quebra de linha não tem literal de uma linha (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "12\n",
+      "expected": null
+    },
+    {
+      "name": "binário em texto vai entre aspas (informix)",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "binary",
+      "value": "0xDEAD",
+      "expected": "'0xDEAD'"
+    },
+    {
+      "name": "barra invertida no PostgreSQL vira E'…' com a barra dobrada",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\\b",
+      "expected": "E'a\\\\b'"
+    },
+    {
+      "name": "barra invertida e aspa no PostgreSQL",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "it's\\",
+      "expected": "E'it''s\\\\'"
+    },
+    {
+      "name": "barra invertida no Db2 fica como está",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\\b",
+      "expected": "'a\\b'"
+    },
+    {
+      "name": "barra invertida no Informix fica como está",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\\b",
+      "expected": "'a\\b'"
+    },
+    {
+      "name": "lógico no PostgreSQL vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "boolean",
+      "value": "true",
+      "expected": "'true'"
+    },
+    {
+      "name": "lógico no Db2 vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "boolean",
+      "value": "false",
+      "expected": "'false'"
+    },
+    {
+      "name": "lógico verdadeiro no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "boolean",
+      "value": "true",
+      "expected": "'t'"
+    },
+    {
+      "name": "lógico falso no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "boolean",
+      "value": "false",
+      "expected": "'f'"
+    },
+    {
+      "name": "lógico 1 no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "boolean",
+      "value": "1",
+      "expected": null
+    },
+    {
+      "name": "lógico TRUE no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "boolean",
+      "value": "TRUE",
+      "expected": null
+    },
+    {
+      "name": "data no Informix vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15",
+      "expected": "'2024-01-15'"
+    },
+    {
+      "name": "hora no Informix vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "10:30:00",
+      "expected": "'10:30:00'"
+    },
+    {
+      "name": "data e hora sem casas no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00",
+      "expected": "DATETIME (2024-01-15 10:30:00.00000) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 1 casa no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.1",
+      "expected": "DATETIME (2024-01-15 10:30:00.10000) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 2 casas no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.12",
+      "expected": "DATETIME (2024-01-15 10:30:00.12000) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 3 casas no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.123",
+      "expected": "DATETIME (2024-01-15 10:30:00.12300) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 4 casas no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.1234",
+      "expected": "DATETIME (2024-01-15 10:30:00.12340) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 5 casas no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.12345",
+      "expected": "DATETIME (2024-01-15 10:30:00.12345) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 6 casas, a sexta zero, no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.123450",
+      "expected": "DATETIME (2024-01-15 10:30:00.12345) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 6 casas, todas zero, no Informix",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.000000",
+      "expected": "DATETIME (2024-01-15 10:30:00.00000) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "data e hora com 6 casas, a sexta não zero, no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.123456",
+      "expected": null
+    },
+    {
+      "name": "data e hora com 7 casas no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.1234500",
+      "expected": null
+    },
+    {
+      "name": "data e hora com T no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15T10:30:00",
+      "expected": null
+    },
+    {
+      "name": "data e hora com fuso no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00+00",
+      "expected": null
+    },
+    {
+      "name": "hora com fração no Informix não tem literal",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "10:30:00.1230000",
+      "expected": null
+    },
+    {
+      "name": "data e hora numa coluna de texto do Informix vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "2024-01-15 10:30:00.123456",
+      "expected": "'2024-01-15 10:30:00.123456'"
+    },
+    {
+      "name": "data e hora no PostgreSQL vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "postgresql",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.123456+00",
+      "expected": "'2024-01-15 10:30:00.123456+00'"
+    },
+    {
+      "name": "data e hora no Db2 vai entre aspas",
+      "function": "sqlLiteral",
+      "engine": "db2",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.123456",
+      "expected": "'2024-01-15 10:30:00.123456'"
+    },
+    {
+      "name": "número no Informix sem aspas",
+      "function": "sqlLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "42",
+      "expected": "42"
+    },
+    {
+      "name": "sem quebra é o sqlLiteral",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "O'Brien",
+      "expected": "'O''Brien'"
+    },
+    {
+      "name": "sem quebra, o lógico do Informix é o do sqlLiteral",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "boolean",
+      "value": "true",
+      "expected": "'t'"
+    },
+    {
+      "name": "sem quebra, a data e hora de 6 casas do Informix continua sem literal",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00.123456",
+      "expected": null
+    },
+    {
+      "name": "quebra de linha dentro das aspas no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "expected": "'linha1\nlinha2'"
+    },
+    {
+      "name": "quebra de linha dentro das aspas no Db2",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "expected": "'linha1\nlinha2'"
+    },
+    {
+      "name": "quebra de linha por CHR(10) no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "expected": "'linha1' || CHR(10) || 'linha2'"
+    },
+    {
+      "name": "tabulação dentro das aspas no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\tb",
+      "expected": "'a\tb'"
+    },
+    {
+      "name": "tabulação por CHR(9) no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\tb",
+      "expected": "'a' || CHR(9) || 'b'"
+    },
+    {
+      "name": "retorno de carro como \\r num E'…' (postgresql)",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "só\rCR",
+      "expected": "E'só\\rCR'"
+    },
+    {
+      "name": "só um retorno de carro (postgresql)",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "\r",
+      "expected": "E'\\r'"
+    },
+    {
+      "name": "outro controle junto da quebra não tem literal (postgresql)",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\nb\u0000",
+      "expected": null
+    },
+    {
+      "name": "tabulação vertical não tem literal (postgresql)",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\u000bb\n",
+      "expected": null
+    },
+    {
+      "name": "outro controle junto do retorno de carro não tem literal (postgresql)",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\rb\u0000",
+      "expected": null
+    },
+    {
+      "name": "o DEL junto do retorno de carro não tem literal (postgresql)",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\r\u007f",
+      "expected": null
+    },
+    {
+      "name": "retorno de carro por CHR(13) (db2)",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "só\rCR",
+      "expected": "'só' || CHR(13) || 'CR'"
+    },
+    {
+      "name": "só um retorno de carro (db2)",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "\r",
+      "expected": "CHR(13)"
+    },
+    {
+      "name": "outro controle junto da quebra não tem literal (db2)",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\nb\u0000",
+      "expected": null
+    },
+    {
+      "name": "tabulação vertical não tem literal (db2)",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\u000bb\n",
+      "expected": null
+    },
+    {
+      "name": "retorno de carro por CHR(13) (informix)",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "só\rCR",
+      "expected": "'só' || CHR(13) || 'CR'"
+    },
+    {
+      "name": "só um retorno de carro (informix)",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "\r",
+      "expected": "CHR(13)"
+    },
+    {
+      "name": "outro controle junto da quebra não tem literal (informix)",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\nb\u0000",
+      "expected": null
+    },
+    {
+      "name": "tabulação vertical não tem literal (informix)",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\u000bb\n",
+      "expected": null
+    },
+    {
+      "name": "CRLF no PostgreSQL: a quebra de linha fica dentro do E'…'",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\r\nb",
+      "expected": "E'a\\r\nb'"
+    },
+    {
+      "name": "CRLF no Db2",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\r\nb",
+      "expected": "'a' || CHR(13) || '\nb'"
+    },
+    {
+      "name": "tabulação, retorno de carro e quebra no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\t\r\nb",
+      "expected": "E'a\t\\r\nb'"
+    },
+    {
+      "name": "retorno de carro nas pontas no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "\rx\r",
+      "expected": "E'\\rx\\r'"
+    },
+    {
+      "name": "aspa e retorno de carro no PostgreSQL: a aspa dobrada dentro do E'…'",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "O'Brien\r",
+      "expected": "E'O''Brien\\r'"
+    },
+    {
+      "name": "um \\r já escrito no dado, junto do retorno de carro, no PostgreSQL: a barra dobrada antes",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "x\\r\ry",
+      "expected": "E'x\\\\r\\ry'"
+    },
+    {
+      "name": "json com CRLF no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "{\"a\":\r\n\"b\\\"c\"}",
+      "expected": "E'{\"a\":\\r\n\"b\\\\\"c\"}'"
+    },
+    {
+      "name": "lista com retorno de carro no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "{\"a\rb\",c}",
+      "expected": "E'{\"a\\rb\",c}'"
+    },
+    {
+      "name": "número com retorno de carro é texto no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "12\r",
+      "expected": "E'12\\r'"
+    },
+    {
+      "name": "emoji, ideograma e U+202E com retorno de carro no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "🙂\r漢\u202e",
+      "expected": "E'🙂\\r漢\u202e'"
+    },
+    {
+      "name": "CRLF no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\r\nb",
+      "expected": "'a' || CHR(13) || CHR(10) || 'b'"
+    },
+    {
+      "name": "quebras nas pontas no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "\nx\n",
+      "expected": "'\nx\n'"
+    },
+    {
+      "name": "quebras nas pontas no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "\nx\n",
+      "expected": "CHR(10) || 'x' || CHR(10)"
+    },
+    {
+      "name": "retorno de carro no fim no Db2",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\r",
+      "expected": "'a' || CHR(13)"
+    },
+    {
+      "name": "tabulação e retorno de carro no Db2",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\t\rb",
+      "expected": "'a\t' || CHR(13) || 'b'"
+    },
+    {
+      "name": "barra invertida e quebra no PostgreSQL: o E vale para o literal inteiro",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\\b\nc",
+      "expected": "E'a\\\\b\nc'"
+    },
+    {
+      "name": "barra invertida só depois da quebra no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "x\ny\\z",
+      "expected": "E'x\ny\\\\z'"
+    },
+    {
+      "name": "barra invertida e quebra no Db2",
+      "function": "scriptLiteral",
+      "engine": "db2",
+      "kind": "text",
+      "value": "a\\b\nc",
+      "expected": "'a\\b\nc'"
+    },
+    {
+      "name": "barra invertida e quebra no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "a\\b\nc",
+      "expected": "'a\\b' || CHR(10) || 'c'"
+    },
+    {
+      "name": "barra invertida antes do retorno de carro no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "a\\\rb",
+      "expected": "E'a\\\\\\rb'"
+    },
+    {
+      "name": "só barra invertida e quebra no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "\\\n",
+      "expected": "E'\\\\\n'"
+    },
+    {
+      "name": "aspa e quebra no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "O'\nB",
+      "expected": "'O''\nB'"
+    },
+    {
+      "name": "aspa e quebra no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "text",
+      "value": "O'\nB",
+      "expected": "'O''' || CHR(10) || 'B'"
+    },
+    {
+      "name": "número com quebra é texto no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "number",
+      "value": "12\n34",
+      "expected": "'12\n34'"
+    },
+    {
+      "name": "número com quebra é texto no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "number",
+      "value": "12\n34",
+      "expected": "'12' || CHR(10) || '34'"
+    },
+    {
+      "name": "data com quebra é texto no Informix",
+      "function": "scriptLiteral",
+      "engine": "informix",
+      "kind": "datetime",
+      "value": "2024-01-15\n",
+      "expected": "'2024-01-15' || CHR(10)"
+    },
+    {
+      "name": "emoji e ideograma com quebra no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": "🙂\n漢",
+      "expected": "'🙂\n漢'"
+    },
+    {
+      "name": "par substituto solto com quebra no PostgreSQL",
+      "function": "scriptLiteral",
+      "engine": "postgresql",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          55357,
+          10,
+          97
+        ]
+      },
+      "expected": {
+        "codePoints": [
+          39,
+          55357,
+          10,
+          97,
+          39
+        ]
+      }
+    }
+  ]
+}
