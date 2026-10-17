@@ -411,8 +411,10 @@ export const dataImportCopy = {
     refresh: "Atualizar",
   },
 
-  // RN-IMPORT-021: as saídas, com importações ou cópias.
+  // RN-IMPORT-021, RN-DRIVER-005, RN-ATUALIZA-006 e RN-CONN-014: as saídas e os avisos, com importações ou cópias (com só exportações valem os textos da
+  // RN-EXPORT-023, em `dataExportCopy.exits`).
   exits: {
+    /** A conta, com as partes que não são zero, na ordem exportação, importação e cópia. */
     count: (exports: number, imports: number, copies: number) => {
       const parts = [
         exports > 0 ? `${formatCount(exports)} ${plural(exports, "exportação", "exportações")}` : null,
@@ -423,5 +425,40 @@ export const dataImportCopy = {
       if (parts.length === 1) return `Há ${parts[0]} em andamento.`;
       return `Há ${formatCount(total)} transferências em andamento: ${listOf(parts)}.`;
     },
+    /** Quem faz a saída, na frase ("Sair cancela…") e no botão ("Sair e cancelar…"). */
+    verbs: { signOut: "Sair", window: "Fechar a janela", app: "Fechar o Prism" },
+    buttonVerbs: { signOut: "Sair", window: "Fechar", app: "Fechar o Prism" },
+    /** O nome do que se cancela, no singular e no plural: `mixed` com mais de um tipo. */
+    nouns: {
+      export: ["exportação", "exportações"],
+      import: ["importação", "importações"],
+      copy: ["cópia", "cópias"],
+      mixed: ["transferência", "transferências"],
+    } as Record<"export" | "import" | "copy" | "mixed", readonly [string, string]>,
+    keep: { export: "Continuar exportando", import: "Continuar importando", copy: "Continuar copiando", mixed: "Continuar transferindo" } as Record<"export" | "import" | "copy" | "mixed", string>,
+    title: (verb: string, plural: string) => `${verb} com ${plural} em andamento?`,
+    confirm: (verb: string, what: string) => `${verb} e cancelar ${what}`,
+    pending: (what: string) => `Cancelando ${what}…`,
+    /** O que a saída faz com as importações (ou com as cópias), de um tipo só: "Sair cancela a importação: …". */
+    cancelsOne: (verb: string, what: string, single: boolean) =>
+      single
+        ? `${verb} cancela ${what}: as linhas que ela já confirmou ficam na tabela, e as da transação em andamento são desfeitas.`
+        : `${verb} cancela ${what}: as linhas que elas já confirmaram ficam nas tabelas, e as das transações em andamento são desfeitas.`,
+    cancelsLoads: (verb: string) => `${verb} cancela todas: as linhas que elas já confirmaram ficam nas tabelas, e as das transações em andamento são desfeitas.`,
+    cancelsMixed: (verb: string, exports: number, loads: string, single: boolean) =>
+      `${verb} cancela todas: ${exports === 1 ? "o arquivo da exportação não é gravado" : "os arquivos das exportações não são gravados"}, e ${loads} ${single ? "deixa na tabela só as linhas que já confirmou" : "deixam nas tabelas só as linhas que já confirmaram"}.`,
+    /** O aviso de antes do reinício do serviço e da instalação de uma atualização. */
+    aheadOne: (noun: string) => `A ${noun} em andamento será cancelada, e ficam na tabela só as linhas que ela já confirmou.`,
+    aheadKind: (count: number, plural: string) => `As ${formatCount(count)} ${plural} em andamento serão canceladas, e ficam nas tabelas só as linhas que elas já confirmaram.`,
+    aheadMixed: (count: number, loads: string, single: boolean) =>
+      `As ${formatCount(count)} transferências em andamento serão canceladas: ${single ? `fica na tabela só o que ${loads} já confirmou` : `ficam nas tabelas só as linhas que ${loads} já confirmaram`}.`,
+    /** O diálogo de excluir a conexão. */
+    connectionOne: (noun: string) => `A ${noun} em andamento desta conexão será cancelada, e fica na tabela só o que ela já confirmou.`,
+    connectionMany: (count: number, plural: string, loads: string, single: boolean) =>
+      `As ${formatCount(count)} ${plural} em andamento desta conexão serão canceladas. ${loads.charAt(0).toUpperCase()}${loads.slice(1)} ${single ? "deixa na tabela só as linhas que já confirmou" : "deixam nas tabelas só as linhas que já confirmaram"}.`,
+    /** As importações e as cópias, como sujeito: "a importação", "as cópias", "as importações e as cópias". */
+    loads: (imports: number, copies: number) =>
+      imports > 0 && copies > 0 ? "as importações e as cópias" : imports > 0 ? (imports === 1 ? "a importação" : "as importações") : copies === 1 ? "a cópia" : "as cópias",
+    copyNoun: "cópia para outro banco",
   },
 } as const;

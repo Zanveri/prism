@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
@@ -6,15 +6,18 @@ import type { ToastAction } from "@/components/ui";
 import { chooseImportSource, currentWindowId, importSourceStatus, releaseImportSource, transfersAvailable } from "@/lib/api/bridge";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal, type ApiResult } from "@/lib/api/prism-api";
+import { vaultLock } from "@/lib/api/vault-lock";
 
-import { nextTransferSeq } from "../data-export/data-exports";
-import { forgetTransfer, getTransfer } from "../data-export/transfers.service";
+import { exportTracker, nextTransferSeq, workbenchMounted } from "../data-export/data-exports";
+import { createTransferExits } from "../data-export/export-exits";
+import { cancelTransfers, forgetTransfer, getTransfer, transfersInProgress } from "../data-export/transfers.service";
 import type { RunnerState } from "../use-query-runner";
 import { readImportChoices, writeImportChoices } from "./import-choices";
 import { createImportFlow, type ImportFlow } from "./import-flow";
 import { importedAfterRead, initialReadWatch, watchRead, type ReadWatch } from "./imported-note";
 import { importStartRefusals, previewImport, previewRefusals, readImportFile, readRefusals, startImport } from "./imports.service";
 import { createLoadTracker, type LoadNotify, type LoadTable, type TrackedLoad } from "./load-tracker";
+import { countsOf, noTransfers, type TransferCounts } from "./transfer-exits";
 
 /**
  * As importações de dados e as cópias para outro banco desta janela (seção 36), de módulo como as exportações (`data-exports.ts`): o assistente "Importar
@@ -112,6 +115,50 @@ export function useTrackedLoads(): readonly TrackedLoad[] {
 /** "Abrir registros" do diálogo "Importação interrompida" (RN-IMPORT-020): o mesmo do aviso, a aba dos Registros da tabela nesta janela. */
 export function openLoadRecords(table: LoadTable): void {
   openRecords(table);
+}
+
+/**
+ * As saídas que perguntam pelas transferências em andamento (RN-EXPORT-023 e RN-IMPORT-021), pela lista da API, de todas as janelas e de todos os tipos:
+ * `ahead` conta, e `cancelForExit` cancela tudo depois da última resposta (as desta janela pelos acompanhamentos dela). Fora da área de trabalho (a tela de
+ * entrada, o cofre bloqueado), nenhuma, sem pedir: o pedido com o cofre bloqueado esperaria o desbloqueio.
+ */
+export const transferExits = createTransferExits({
+  open: () => workbenchMounted() && !vaultLock.isLocked(),
+  list: transfersInProgress,
+  forget: cancelTransfers,
+  trackers: [exportTracker, loadTracker],
+});
+
+/** De quanto em quanto a conta de um aviso aberto é lida de novo: a transferência que termina, ou que começa noutra janela, muda a frase. */
+const aheadEveryMs = 3_000;
+
+/**
+ * Quantas transferências estão em andamento, por tipo (de uma conexão, quando dada: a da origem ou a do destino), para a frase de um aviso que está na tela
+ * (o reinício do serviço, a atualização, o diálogo de excluir a conexão). Lida ao abrir e a cada 3 segundos enquanto `enabled`; nenhuma antes da primeira
+ * resposta e sem o cofre aberto.
+ */
+export function useTransfersAhead(enabled: boolean, connectionId?: string): TransferCounts {
+  const [counts, setCounts] = useState<TransferCounts>(noTransfers);
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    const read = () =>
+      void transferExits.ahead(connectionId).then((list) => {
+        if (active) setCounts(countsOf(list));
+      });
+    read();
+    const timer = setInterval(read, aheadEveryMs);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [enabled, connectionId]);
+  return enabled ? counts : noTransfers;
+}
+
+/** As transferências começadas nesta janela que ainda não terminaram, por tipo: a pergunta de fechar a janela (RN-EXPORT-023 e RN-IMPORT-021). */
+export function windowTransfers(): TransferCounts {
+  return { exports: exportTracker.count(), ...loadTracker.counts() };
 }
 
 /** O assistente "Importar dados" aberto nesta janela: a tabela de destino, o estado dele (`flow`) e um número que muda a cada abertura. */

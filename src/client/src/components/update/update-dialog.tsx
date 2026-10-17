@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { dataExportCopy } from "@/app/workbench/_lib/data-export/data-export.copy";
-import { exportExits, useExportsAhead } from "@/app/workbench/_lib/data-export/data-exports";
+import { transferExits, useTransfersAhead } from "@/app/workbench/_lib/data-import/data-imports";
+import { canceledAheadNote } from "@/app/workbench/_lib/data-import/transfer-exits";
 import { Button, Dialog, FormMessage, RefreshIcon, StatusBadge, useToast } from "@/components/ui";
 import { getBridge } from "@/lib/api/bridge";
 
@@ -268,9 +268,10 @@ export function UpdateDialog() {
   const [busy, setBusy] = useState(false);
   const [noStartupCheck, setNoStartupCheck] = useState(false);
   const open = state.status !== "none" && state.checkId !== dismissed;
-  // RN-EXPORT-023: a conta das exportações em andamento, lida enquanto o diálogo oferece a instalação que encerra o Prism (o cofre aberto nesta janela).
+  // RN-EXPORT-023 e RN-IMPORT-021: a conta das transferências em andamento, lida enquanto o diálogo oferece a instalação que encerra o Prism (o cofre
+  // aberto nesta janela).
   const closesPrism = open && state.format === "nsis" && (state.status === "available" || state.status === "failed" || state.status === "ready" || state.status === "downloading");
-  const exportsAhead = useExportsAhead(closesPrism);
+  const transfersAhead = useTransfersAhead(closesPrism);
 
   // A atualização que não foi instalada (RN-INSTALA-003): o processo principal guarda o aviso, e a primeira janela que pergunta
   // o leva, uma vez. O aviso entra na fila mesmo se o efeito já foi desfeito (o `StrictMode` monta duas vezes, e a segunda
@@ -368,9 +369,10 @@ export function UpdateDialog() {
     }
   }
 
-  // RN-EXPORT-023: a instalação que encerra o Prism cancela antes as exportações em andamento (o `DELETE` de cada uma) e solta os destinos.
+  // RN-EXPORT-023 e RN-IMPORT-021: a instalação que encerra o Prism cancela antes as transferências em andamento (o `DELETE` de cada uma) e solta os
+  // destinos das exportações.
   const install = async () => {
-    if (state.format === "nsis") await exportExits.cancelForExit();
+    if (state.format === "nsis") await transferExits.cancelForExit();
     adoptUpdateState(await updates.install(version));
   };
 
@@ -395,7 +397,7 @@ export function UpdateDialog() {
           adoptUpdateState({ status: "none" });
         })
       }
-      exportsNote={exportsAhead === 0 ? null : dataExportCopy.exits.canceledAhead(exportsAhead)}
+      exportsNote={canceledAheadNote(transfersAhead)}
       onNoStartupCheckChange={(checked) => {
         setNoStartupCheck(checked);
         updates.setCheckOnStartup(!checked).catch(() => setNoStartupCheck(!checked));

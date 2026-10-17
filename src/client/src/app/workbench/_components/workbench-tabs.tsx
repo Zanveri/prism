@@ -10,8 +10,9 @@ import { vaultLock } from "@/lib/api/vault-lock";
 import type { TabMoveTarget } from "../../../../electron/window-messages";
 
 import { createDisconnectLog } from "../_lib/connection-intent";
-import { dataExportCopy } from "../_lib/data-export/data-export.copy";
 import { exportTracker } from "../_lib/data-export/data-exports";
+import { loadTracker, windowTransfers } from "../_lib/data-import/data-imports";
+import { exitQuestion, totalOf, type ExitQuestion } from "../_lib/data-import/transfer-exits";
 import { windowCloseStep } from "../_lib/data-export/export-exits";
 import { liveEditors } from "../_lib/live-editors";
 import { recallForTransfer } from "../_lib/tab-memory";
@@ -37,7 +38,6 @@ import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
 import { useScriptSaving, type SaveMode } from "./use-script-saving";
 
 const copy = workbenchCopy.tabs;
-const exits = dataExportCopy.exits;
 
 /** Fechar abas, ou uma janela que não é a última, pergunta tudo (RN-ABAS-007). */
 const askEverything = closeAsks({ closesTheApp: false });
@@ -277,14 +277,14 @@ export function WorkbenchTabs() {
   // RN-ABAS-006: a janela que fecha segura as abas dela no que volta (`holdForWindowClose`: fechar a última janela é o app saindo, e as abas voltam na
   // próxima entrada); a pergunta cancelada deixa a janela aberta e solta (`releaseWindowClose`), e o que fechou até ali sai do que volta.
   const [windowClosing, setWindowClosing] = useState(false);
-  // RN-EXPORT-023: a pergunta das exportações começadas nesta janela, que vem antes das outras; `last`: a janela é a última, e fechá-la fecha o Prism.
-  const [exportQuestion, setExportQuestion] = useState<{ last: boolean; count: number } | null>(null);
+  // RN-EXPORT-023 e RN-IMPORT-021: a pergunta das transferências começadas nesta janela, que vem antes das outras; `last`: a janela é a última, e fechá-la
+  // fecha o Prism.
+  const [transferQuestion, setTransferQuestion] = useState<{ last: boolean; question: ExitQuestion } | null>(null);
   const finishWindow = useCallback(() => {
     setWindowClosing(false);
-    // RN-EXPORT-023: as exportações desta janela são canceladas só aqui, depois da última resposta (nada se cancela antes), e os destinos soltos; só então a
-    // janela fecha. Sem nenhuma, não há o que esperar.
-    void exportTracker
-      .cancelAll()
+    // RN-EXPORT-023 e RN-IMPORT-021: as transferências desta janela são canceladas só aqui, depois da última resposta (nada se cancela antes), e os destinos
+    // das exportações soltos; só então a janela fecha. Sem nenhuma, não há o que esperar.
+    void Promise.all([exportTracker.cancelAll(), loadTracker.cancelAll()])
       .then(() => releaseWindow())
       .finally(() => tellWindows((windows) => windows.close()));
   }, [releaseWindow]);
@@ -308,10 +308,10 @@ export function WorkbenchTabs() {
   useEffect(
     () =>
       onWindowCloseRequested(({ last }) => {
-        const exports = exportTracker.count();
-        const step = windowCloseStep({ locked: vaultLock.isLocked(), exports, tabs: latestTabs.current.length });
+        const counts = windowTransfers();
+        const step = windowCloseStep({ locked: vaultLock.isLocked(), transfers: totalOf(counts), tabs: latestTabs.current.length });
         if (step === "finish") finishWindow();
-        else if (step === "askExports") setExportQuestion({ last, count: exports });
+        else if (step === "askTransfers") setTransferQuestion({ last, question: exitQuestion(counts, last ? "app" : "window") });
         else closeWindowTabs(last);
       }),
     [finishWindow, closeWindowTabs],
@@ -444,19 +444,19 @@ export function WorkbenchTabs() {
       {saveDialog}
 
       {/* RN-EXPORT-023: "Continuar exportando" tem o foco e o Esc, e deixa a janela aberta; confirmado, seguem as perguntas das abas. */}
-      {exportQuestion === null ? null : (
+      {transferQuestion === null ? null : (
         <ConfirmDialog
           open
           tone="danger"
-          title={exits.windowTitle}
-          description={exportQuestion.last ? exits.app(exportQuestion.count) : exits.window(exportQuestion.count)}
-          confirmLabel={exportQuestion.last ? exits.appConfirm(exportQuestion.count) : exits.windowConfirm(exportQuestion.count)}
-          cancelLabel={exits.keepExporting}
+          title={transferQuestion.question.title}
+          description={transferQuestion.question.description}
+          confirmLabel={transferQuestion.question.confirm}
+          cancelLabel={transferQuestion.question.keep}
           onConfirm={() => {
-            setExportQuestion(null);
-            closeWindowTabs(exportQuestion.last);
+            setTransferQuestion(null);
+            closeWindowTabs(transferQuestion.last);
           }}
-          onCancel={() => setExportQuestion(null)}
+          onCancel={() => setTransferQuestion(null)}
         />
       )}
 
