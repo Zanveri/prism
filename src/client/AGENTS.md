@@ -2390,6 +2390,78 @@ arquivo das importações de dados", em "Processo principal"). Tudo em `_lib/dat
   sistema, a cópia de um arquivo de 2 GiB e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato das seções 6 e
   36, com a API simulada nos testes. A aba em Commit manual (o aviso da transação aberta da RN-IMPORT-013) não existe ainda na tela, e o aviso não sai.
 
+## Gerar SQL (seção 37, RN-GRADE-006 e 018 a 020)
+
+O submenu "Gerar SQL" da grade e o diálogo dele. **Esta etapa construiu as peças, e não a ligação**: o texto de cada item, o plano do resultado, o motivo dos
+itens desabilitados, o diálogo e o gancho que o move; quem as liga à seleção da grade (seção 37, RN-GRADE-001), ao menu (RN-GRADE-004) e ao alvo que a
+edição já pediu é a etapa seguinte (ver "O que falta ligar", abaixo). O "CREATE" é o DDL aproximado da Estrutura (`approximateDdl`, RN-TABELA-008), e não
+o `CREATE` das colunas do resultado, que a especificação deixou para depois.
+
+- **As peças** (`_lib/generate-sql/`, puras, com teste, menos o gancho):
+  - `generate-sql.ts`: o texto de cada item (`generateSql(item, plano, linhas, opções)`, RN-GRADE-019) sobre os tipos `SqlPlan` (a tabela, as colunas DELA no
+    resultado, cada uma com `at`, a posição no resultado, e `name`, o nome na tabela, e a chave: `complete`, `partial` ou `none`), `SqlRow` (por linha
+    escolhida que está no banco: `number` na grade, `values` como a grade mostra, `read` como o banco leu, `changed`, `cut` e `generated`, tudo pela posição
+    no resultado) e `SqlOptions` (`qualified`, `compact`, `excludeGenerated` e, no INSERT da tabela que o Prism não conhece, `target`). O SELECT lista as
+    colunas da tabela que estão no resultado; a condição é a chave LIDA (`read`), e os valores, os da grade (`values`); a chave com pendência entra no `SET`
+    do UPDATE. O `IN` da chave composta é a lista de linhas no PostgreSQL e o `OR` de `AND`s no Db2 e no Informix (e sem chave nos três). Sem chave, a
+    condição deixa de fora os tipos que o banco não compara com `=` (`comparable`: o tipo sem o tamanho e sem o `[]`). A linha que fica de fora vai para o
+    comentário do motivo, no fim (`rowList` faz as faixas). `valueLiteral` é o literal da exportação em SQL: `scriptLiteral` e `binaryLiteral`.
+  - `sql-plan.ts`: o plano a partir do alvo pedido com `purpose: "sql"` (`sqlPlanOf`: "de uma tabela só" é o `tables` com um item que não é `elsewhere`, e a
+    chave está inteira quando cada nome do `keyColumns` é o `baseColumn` de uma coluna do resultado daquela tabela; o `key` e o `rowOperations` não decidem),
+    `planRefusal` (o motivo do item que o plano não permite, já como frase), `sqlMenuStates` (o motivo de cada um dos seis itens no submenu, também antes do
+    alvo: sem linhas, só linhas novas, a aba ocupada, a atualização automática, a visão dos Registros), `neededColumns` e `cutCellsFor` (as células cortadas que
+    o item usa: só elas vão à rota das células, RN-SQL-017), `completeRows` (as linhas com o valor completo; a pendência já é inteira) e `optionRefusal` (o
+    que as opções impedem: a tabela de destino que falta ou que um campo recusa, as colunas de mesmo nome, o INSERT sem coluna que o banco não gere).
+  - `generate-sql-flow.ts`: o caminho do diálogo (`runSqlFlow`: "Conferindo…", "Buscando os valores completos…" com "Cancelar", "Lendo o catálogo…", o texto,
+    a recusa, a falha com "Tentar de novo", o resultado que mudou) com as peças que falam com a API injetadas (`SqlFlowDeps`: `target`, `fullValues`,
+    `catalog`, `stillCurrent`), e o que o diálogo desenha de cada fase (`sqlDialogView`: o cabeçalho, as caixas que o item tem, os campos da tabela de
+    destino, os avisos, o lugar do SQL e se as saídas valem). O teto de 1 MB é medido em UTF-8 (`utf8Bytes`, pelo `TextEncoder`).
+  - `generate-sql-choices.ts`: as três caixas, lembradas por usuário em `prism:generate-sql:<usuário>` (o `localStorage` desta instalação, como as escolhas
+    da exportação e as do "Copiar como"), lidas campo a campo; a tabela de destino não se lembra.
+  - `use-generate-sql.ts`: o gancho (`useGenerateSql({ userName, deps })` devolve `open(pedido)`, `close()`, `dialog` (as propriedades do componente, nulo
+    fechado) e `planOf(resultId)`, o plano depois da primeira resposta, para o `sqlMenuStates`), e as duas peças que não dependem da grade:
+    `sqlTargetReader` (o alvo que a tela já tem, pelo `known`, ou o `edit-target` com `purpose: "sql"` pelo cache de mutações) e `catalogReader` (as três
+    listas da Estrutura, pelo mesmo cache). A resposta do alvo fica guardada por resultado: a segunda escolha não pergunta de novo, e o "Tentar de novo"
+    pergunta. O `hold` das dependências segura a atualização automática do abrir ao fechar (RN-GRADE-014), e fechar interrompe o que estava em andamento.
+    A execução que troca as linhas com o diálogo aberto (`stillCurrent` falso) deixa o lugar do SQL em "O resultado mudou…", sem saídas.
+  - Os textos estão em `generate-sql.copy.ts`; os comentários do SQL são frases fixas e números.
+- **O componente** (`_components/generate-sql/generate-sql-dialog.tsx`, `GenerateSqlDialog({ dialog, engine, connection })`): o diálogo grande, com o que se
+  gera embaixo do título e a linha da conexão (`connection`: quem liga passa o `ExportConnection` do assistente da exportação, com o ambiente e o cadeado), as
+  "Opções" pelo `CheckboxRow` da exportação, os campos "Esquema" e "Tabela" com o motivo de recusa no campo, os avisos no tom de atenção e o lugar do SQL; no
+  rodapé, "Fechar" à esquerda, e "Abrir numa aba de consulta" e "Copiar" (o principal), desabilitados até o texto ficar pronto. O texto fica no
+  `SqlViewer` (`sql-viewer.tsx`): um CodeMirror só de leitura (`EditorState.readOnly`, focável, com seleção e Ctrl+C), com o realce do banco, a fonte do
+  editor e as linhas quebradas na largura (`EditorView.lineWrapping`); o foco começa nele, menos no INSERT da tabela não conhecida, em que ele apareceria no
+  meio da digitação do nome. O documento troca a cada opção sem recriar o editor. O bloqueio por inatividade fecha o diálogo pelo Esc (`closeOpenPortals`).
+- **O alvo na tela** (`record-edits.schema.ts` e `record-edits.service.ts`, RN-GRADE-020): `sqlTargetSchema` (cada tabela com `kind`, o que a tela não conhece
+  vale `other`, e `keyColumns`, os dois exigidos) e `sqlTargetOrRefuse` (com `purpose: "sql"`; o `RESULT_NOT_EDITABLE`, o `RESULT_CHANGED` e as falhas
+  voltam como valor). O `editTargetSchema` da edição ficou com os dois campos opcionais, para guardar o que vier sem exigir: `sqlTargetOf` diz se o alvo que
+  a edição já pediu serve ao "Gerar SQL" (RN-EDIT-010: o mesmo alvo, uma vez). O contrário não vale na conexão somente leitura: o alvo do "Gerar SQL" dali
+  não vai para a edição.
+- **O literal do binário** (`binaryLiteral` e `binaryDigitsOf`, em `grid-export/script-literal.ts`, ao lado do `scriptLiteral`): `decode('…', 'hex')` no
+  PostgreSQL; no Db2, pelo tipo da coluna, `BX'…'` no `BINARY` e no `VARBINARY`, `BLOB(X'…')` no `BLOB` e `X'…'` no texto `FOR BIT DATA` (o `X'…'` é um
+  texto, que o Db2 recusa numa coluna `BINARY` ou `VARBINARY`), em pedaços de 16.336 bytes; e nenhum no Informix, conferido pela fixture `sql-binary.json`,
+  que a API também lê.
+  O `to-sql.ts` do "Copiar como" (a outra frente desta seção) tem uma cópia igual; a ligação deixa uma só, aqui.
+- **A fixture de ouro** (RN-EXPORT-024): `src/test-fixtures/export/generate-sql.json`, só da tela (a API não gera estes comandos), com cada item nos três
+  bancos, com e sem chave, a chave composta, compacto e não, com e sem os nomes completos, a tabela não conhecida, o binário, a quebra de linha, o Unicode
+  fora do plano básico, os nomes hostis e as linhas de fora com os comentários; quem a lê é `generate-sql.fixtures.test.ts`. As formas de condição também
+  rodam nos três servidores, no teste de integração da API (`GeneratedSql_TheConditionsOfEachItem_FindTheRightRowsOnTheServer`, compilado, sem rodar).
+- **Saiu**: o `generate-sql.ts` antigo da `grid-export` (o `generateSql` de `SELECT *` e o `generateInsertInto`, que confiava no nome digitado) e o
+  `formats.ts` dos oito formatos, que nenhuma tela usava.
+- **O que falta ligar** (a etapa seguinte):
+  - o submenu "Gerar SQL" no menu da grade (`cell-menu.ts`), com os seis itens (`sqlItems` e `generateSqlCopy.items`) e o motivo de cada um pelo
+    `sqlMenuStates` (com o `planOf` do gancho e o `busy` da edição);
+  - o pedido (`GenerateSqlRequest`) montado da seleção daquele instante: as linhas da seleção que estão no banco viram `SqlRow` (as lidas, as marcadas para
+    exclusão, com os valores lidos, e as novas já salvas, com as células `generated`), as novas não salvas só contam (`newRows`), e o `cut` diz as células
+    cortadas do resultado; nos Registros, `records` com a tabela da aba e o `objectKindOf` da árvore;
+  - as dependências: `target` pelo `sqlTargetReader` (com o alvo da edição em `known`, quando `sqlTargetOf` o aceita), `fullValues` pelo `completeValues` da
+    edição (a resposta por linha e posição; o cancelado e o `RESULT_NOT_FOUND` como o `FullValuesAnswer` diz), `catalog` pelo `catalogReader` (com o banco
+    da aba), `stillCurrent` pelo `resultId` da tela, `hold` pela pausa da atualização automática e `openQueryTab` pelo `openQueryTab(conexão, sql, banco)`
+    do provedor;
+  - conferir na tela que a aba nova nasce com o cursor no começo e o foco no editor.
+- **Não conferido numa janela**: nada disto foi visto na tela (não há Xvfb nem banco nesta etapa), só nos testes; o `SqlViewer` não tem teste (o vitest não
+  tem DOM).
+
 ## Configurações (`src/app/settings`)
 
 RN-CONFIG-001. A rota é `/settings` (`pathsConfig.settings`), sob o `WorkbenchProvider` como as outras telas de dentro: abrir e
