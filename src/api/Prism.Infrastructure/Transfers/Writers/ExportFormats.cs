@@ -4,7 +4,7 @@ namespace Prism.Infrastructure.Transfers.Writers;
 
 /// <summary>
 /// RN-EXPORT-004 e seção 6: os formatos da exportação de dados, pelo nome que a rota recebe (`format`), e o escritor de cada um. O formato da lista
-/// que ainda não tem escritor (XML, DbUnit e XLSX, nesta entrega) é recusado ao começar, no campo `format`, até ganhar o dele.
+/// que ainda não tem escritor (o XLSX, nesta entrega) é recusado ao começar, no campo `format`, até ganhar o dele.
 /// </summary>
 public static class ExportFormats
 {
@@ -30,7 +30,9 @@ public static class ExportFormats
         [Markdown] = (context, output) => new MarkdownExportWriter(context, output),
         [Json] = (context, output) => new JsonExportWriter(context, output),
         [SourceCode] = (context, output) => new SourceCodeExportWriter(context, output),
-        [Sql] = (context, output) => new SqlExportWriter(context, output)
+        [Sql] = (context, output) => new SqlExportWriter(context, output),
+        [Xml] = (context, output) => new XmlExportWriter(context, output),
+        [DbUnit] = (context, output) => new DbUnitExportWriter(context, output)
     };
 
     public static bool Exists(string? format)

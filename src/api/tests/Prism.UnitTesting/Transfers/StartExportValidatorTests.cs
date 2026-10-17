@@ -124,8 +124,6 @@ public sealed class StartExportValidatorTests
 
     [Trait("StartExportValidator", "StartExportCommand")]
     [Theory(DisplayName = "Erro o formato que esta versão ainda não escreve")]
-    [InlineData("xml")]
-    [InlineData("dbUnit")]
     [InlineData("xlsx")]
     public void Validate_FormatNotWrittenYet_ShouldBeRefusedOnTheField(string format)
         => Validator.TestValidate(Command(format: format)).ShouldHaveValidationErrorFor("format").WithErrorCode(OptionsInvalid)
