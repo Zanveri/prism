@@ -31,7 +31,7 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>
     /// O texto que o driver da IBM manda como `CLOB` quando o parâmetro não tem tipo: o de mais caracteres que isso. E o tamanho do `LONG VARCHAR` do driver,
-    /// em bytes de UTF-8, que é como ele manda o texto (<see cref="BindImportParameter"/>).
+    /// em bytes de UTF-8, que é como ele manda o texto (<see cref="BindEditParameter"/>).
     /// </summary>
     private const int UntypedTextCharacters = 16_350;
     private const int LongVarCharBytes = 32_767;
@@ -161,13 +161,14 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
         => 1;
 
     /// <summary>
-    /// RN-IMPORT-010 e 015: o texto de mais de 16.350 caracteres, que o driver mandaria como `CLOB`, vai como `LONG VARCHAR` enquanto cabe nos 32.767 bytes
-    /// dele: o Informix não converte `CLOB` nem `TEXT` em `LVARCHAR` ("No cast from text to lvarchar"), e o `LONG VARCHAR` entra no `LVARCHAR`, no `TEXT` e
-    /// no `CLOB`. O maior que isso segue como o driver o manda, e só o `TEXT` e o `CLOB` o guardam. O texto menor fica sem tipo, como sempre.
+    /// RN-EDIT-006, e a importação por ele (RN-IMPORT-010 e 015): o texto de mais de 16.350 caracteres, que o driver mandaria como `CLOB`, vai como `LONG
+    /// VARCHAR` enquanto cabe nos 32.767 bytes dele: o Informix não converte `CLOB` nem `TEXT` em `LVARCHAR` ("No cast from text to lvarchar"), e o `LONG
+    /// VARCHAR` entra no `LVARCHAR`, no `TEXT` e no `CLOB`. O maior que isso segue como o driver o manda, e só o `TEXT` e o `CLOB` o guardam. O texto menor
+    /// fica sem tipo, como sempre.
     /// </summary>
-    protected override void BindImportParameter(DbParameter parameter, EditParameter value)
+    protected override void BindEditParameter(DbParameter parameter, EditParameter value)
     {
-        base.BindImportParameter(parameter, value);
+        base.BindEditParameter(parameter, value);
         if (value.Value is string { Length: > UntypedTextCharacters } text && Encoding.UTF8.GetByteCount(text) <= LongVarCharBytes)
             ((DB2Parameter)parameter).DB2Type = DB2Type.LongVarChar;
     }

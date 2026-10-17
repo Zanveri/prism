@@ -99,6 +99,33 @@ public sealed class InformixEditTests : DatabaseEditContractTests
     }
 
     /// <summary>
+    /// RN-EDIT-006: o texto de mais de 16.350 caracteres num `LVARCHAR`, que o driver da IBM mandaria como `CLOB` e o Informix recusaria ("No cast from
+    /// text to lvarchar"), é gravado inteiro.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfALongLvarchar_SaveTheWholeText()
+    {
+        var table = Table("longo");
+        await RunAsync(Settings, $"CREATE TABLE {_owner}.{table} (id INTEGER NOT NULL PRIMARY KEY, texto LVARCHAR(20000))", $"INSERT INTO {_owner}.{table} (id) VALUES (1)");
+
+        try
+        {
+            var session = await OpenSessionAsync();
+            var page = await EditableRecordsAsync(session, "longo");
+
+            var applied = await Service.ApplyEditsAsync(session, page.ResultID!.Value, [new EditChange(EEditKind.Update, 0, ["1"], [new EditValue(Column(page, "texto"), new string('x', 20_000))])], CancellationToken.None);
+
+            Assert.That(applied.IsSuccess, Is.True, applied.IsFailure ? applied.Error.Message : null);
+            var read = Value(await Service.ExecuteAsync(session, $"SELECT LENGTH(texto) FROM {Quoted("longo")}", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+            Assert.That(read.Rows[0][0], Is.EqualTo("20000"));
+        }
+        finally
+        {
+            await RunAsync(Settings, $"DROP TABLE {_owner}.{table}");
+        }
+    }
+
+    /// <summary>
     /// RN-EDIT-012: sem log de transação, o "Salvar" grava uma alteração por vez, cada uma confirmada sozinha, e para na primeira que
     /// falha: as anteriores ficam gravadas, e a recusa diz quantas (`Applied`).
     /// </summary>
