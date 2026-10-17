@@ -1852,3 +1852,42 @@ describe("RecordsView: \"Importar…\" e a nota das linhas importadas (RN-IMPORT
     expect(bannerOf(view.show().panel).onImportedRefresh).toBeNull();
   });
 });
+
+describe("RecordsView: o \"Ordenar\" e o \"Ir para o registro referenciado\" do menu da grade (RN-GRADE-004)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const submenuOf = (item: ContextMenuItem) => item.submenu!.groups.flatMap(groupItems);
+
+  it("o \"Ordenar\" marca a ordem em vigor da coluna, e a escolhida vai ao campo e é executada, como o clique no cabeçalho", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
+    await settle();
+
+    const sort = view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "sort")!;
+    expect(submenuOf(sort).map((item) => [item.label, item.checked])).toEqual([
+      ["Crescente", false],
+      ["Decrescente", false],
+      ["Sem ordem", true],
+    ]);
+    submenuOf(sort).find((item) => item.id === "sort:desc")!.onSelect!();
+
+    expect(runner.sent.at(-1)).toEqual(sent('ORDER BY "cliente_id" DESC'));
+    expect(view.show().filter.draft).toBe('ORDER BY "cliente_id" DESC');
+  });
+
+  it("numa coluna de chave estrangeira, \"Ir para o registro referenciado\" abre a tabela de lá, filtrada pelo valor; nas outras, o item não aparece", async () => {
+    rt.catalog.data = foreignKeys;
+    const view = mount(fakeRunner(rowsState()));
+    view.show();
+
+    view.show().panel.editing!.onMenu({ row: 0, column: 0 }, { x: 1, y: 1 }, false);
+    await settle();
+    expect(view.show().menu!.groups.flatMap(groupItems).some((item) => item.id === "follow")).toBe(false);
+
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
+    await settle();
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "follow")!.onSelect!();
+
+    expect(view.onOpenTable).toHaveBeenCalledWith({ ...clientes, view: "data" });
+  });
+});

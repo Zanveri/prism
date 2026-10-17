@@ -1746,3 +1746,21 @@ describe("QueryTabPanel: a grade de uma conexão somente leitura não se edita (
     expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
   });
 });
+
+describe("QueryTabPanel: o \"Ordenar\" do menu da grade, pelo campo de filtro do resultado (RN-GRADE-004 e 011)", () => {
+  const filtered = (text: string) => ({ ...rowsState().target, filter: text });
+
+  it("a ordem escolhida é escrita no campo e aplicada; a ordem em uso, a do filtro aplicado, vem marcada", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
+    await settle();
+    const sort = () => view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "sort")!.submenu!.groups.flatMap(groupItems);
+    expect(sort().map((item) => item.checked)).toEqual([false, false, true]);
+    sort().find((item) => item.id === "sort:asc")!.onSelect!();
+    await settle();
+
+    expect(runner.sent).toEqual([filtered('ORDER BY "status" ASC')]);
+  });
+});

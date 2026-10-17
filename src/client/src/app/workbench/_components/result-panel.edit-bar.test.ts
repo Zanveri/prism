@@ -111,3 +111,14 @@ describe("onde fica a barra de edição (RN-EDIT-013)", () => {
     expect(typeof captured.props[0].onDone).toBe("function");
   });
 });
+
+describe("a contagem da seleção na barra do resultado (RN-GRADE-001)", () => {
+  it("com mais de uma célula escolhida, diz quantas ao lado do resumo, num status; sem, o lugar fica vazio na página", () => {
+    const chosen = render(rows, { editing: { ...editing, status: "3 linhas escolhidas" } as GridEditing });
+    const at = chosen.search(/role="status" class="[^"]*">3 linhas escolhidas<\/span>/);
+
+    expect(at).toBeGreaterThan(chosen.indexOf(copy.firstRows(2, 42)));
+    expect(render(rows, { editing: { ...editing, status: null } as GridEditing })).toContain('<span role="status" class="text-xs text-ink"></span>');
+    expect(render(rows, { editing: undefined })).not.toContain('class="text-xs text-ink"');
+  });
+});
