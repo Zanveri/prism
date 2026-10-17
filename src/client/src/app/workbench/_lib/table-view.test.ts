@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FilterRequest } from "./filter-handoff";
 import { recordsRunPlan } from "./table-sql";
 import type { RunnerState } from "./use-query-runner";
-import { afterHandoff, applyRunPlan, canClear, clearRecords, handoffToTake, idleNotice, filterRecords, needsFirstRun, runRecords, settleHandoff, sortRecords, tableViews, tabForKey, takeHandoff, viewOf } from "./table-view";
+import { afterHandoff, applyRunPlan, canClear, clearRecords, handoffToTake, idleNotice, filterRecords, needsFirstRun, orderRecords, runRecords, settleHandoff, sortRecords, tableViews, tabForKey, takeHandoff, viewOf } from "./table-view";
 
 const all = ["data", "structure", "diagram"] as const;
 
@@ -595,5 +595,27 @@ describe("filterRecords: o Filtrar do menu da célula escreve o campo com a cond
 
     expect(deps.setProblem.mock.calls).toEqual([["severalStatements"]]);
     expect([deps.setDraft, deps.setFilter, deps.execute].every((spy) => spy.mock.calls.length === 0)).toBe(true);
+  });
+});
+
+describe("orderRecords: o \"Ordenar\" do menu da grade, com a ordem escolhida, pelo caminho do cabeçalho (RN-GRADE-004)", () => {
+  const spies = () => ({ setProblem: vi.fn(), setFilter: vi.fn(), setDraft: vi.fn(), execute: vi.fn() });
+  const table = { engine: 1 as const, schema: "s", name: "t" };
+
+  it("escreve a ordem no texto do campo, com a condição digitada, e o envia; \"Sem ordem\" a tira", () => {
+    const deps = spies();
+    orderRecords(table, { draft: "id > 1", sort: { column: "is_active", direction: "desc" } }, loaded, deps);
+    expect(deps.execute.mock.calls).toEqual([['id > 1 ORDER BY "is_active" DESC']]);
+    expect(deps.setDraft.mock.calls).toEqual(deps.execute.mock.calls);
+
+    const none = spies();
+    orderRecords(table, { draft: 'id > 1 ORDER BY "is_active" DESC', sort: null }, loaded, none);
+    expect(none.execute.mock.calls).toEqual([["id > 1"]]);
+  });
+
+  it("com a aba ocupada nada muda: o campo, o filtro em vigor e o executor ficam como estavam", () => {
+    const deps = spies();
+    orderRecords(table, { draft: "", sort: { column: "id", direction: "asc" } }, { status: "running", cancelling: false, previous: null }, deps);
+    expect([deps.execute, deps.setDraft, deps.setFilter].map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0]);
   });
 });

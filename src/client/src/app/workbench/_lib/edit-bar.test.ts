@@ -138,3 +138,32 @@ describe("quando cada botão vale (RN-EDIT-014)", () => {
     expect(reasons({ target: join, active: null, rows: 0 })).toEqual([copy.bar.noRows, copy.readOnly(copy.reasons.joinRowOperations), copy.readOnly(copy.reasons.joinRowOperations), copy.readOnly(copy.reasons.joinRowOperations)]);
   });
 });
+
+describe("com várias linhas na seleção (RN-GRADE-001, RN-EDIT-013 e 014)", () => {
+  const several = (over: Partial<NonNullable<EditBarState["selection"]>> = {}): Partial<EditBarState> => ({ selection: { rows: 3, duplicate: { editable: true }, remove: { editable: true }, ...over } });
+
+  it("\"Duplicar linhas\" e \"Excluir linhas\", com quantas na dica e na descrição para o leitor de tela; o ícone e o lugar não mudam", () => {
+    const [, , duplicate, remove] = editBar(state(several()));
+
+    expect([duplicate.label, duplicate.title, duplicate.description]).toEqual(["Duplicar linhas", "Duplicar as 3 linhas escolhidas (Ctrl+Alt+Insert)", "Duplicar as 3 linhas escolhidas"]);
+    expect([remove.label, remove.title, remove.description]).toEqual(["Excluir linhas", "Excluir as 3 linhas escolhidas (Alt+Delete)", "Excluir as 3 linhas escolhidas"]);
+  });
+
+  it("o motivo das linhas da seleção vem depois dos do resultado, da aba e do `rowOperations`, e entra na dica e na descrição", () => {
+    const limit = "Duplicar vale para até 1.000 linhas de uma vez: escolha menos linhas.";
+    const key = copy.readOnly("a chave da linha 7 chegou cortada");
+    const [, , duplicate, remove] = editBar(state(several({ duplicate: { editable: false, reason: limit }, remove: { editable: false, reason: key } })));
+
+    expect([duplicate.reason, duplicate.title]).toEqual([limit, `Duplicar as 3 linhas escolhidas (Ctrl+Alt+Insert). ${limit}`]);
+    expect([remove.reason, remove.description]).toEqual([key, `Excluir as 3 linhas escolhidas ${key}`]);
+    expect(editBar(state({ ...several({ remove: { editable: false, reason: key } }), busy: true }))[3].reason).toBe(copy.readOnly(copy.reasons.busy));
+  });
+
+  it("com uma linha só na seleção, os rótulos ficam no singular, e o motivo é o da linha dela", () => {
+    const reason = copy.readOnly(copy.reasons.alreadyDeleted);
+    const [, , duplicate, remove] = editBar(state({ selection: { rows: 1, duplicate: { editable: true }, remove: { editable: false, reason } } }));
+
+    expect([duplicate.label, duplicate.description]).toEqual(["Duplicar linha", null]);
+    expect([remove.label, remove.reason, remove.description]).toEqual(["Excluir linha", reason, reason]);
+  });
+});
