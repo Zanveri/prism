@@ -4939,9 +4939,12 @@ e 13. O canvas não desenha nada disto (seção 9).
     - o nulo, `NULL`.
   - O binário, que o "Gerar SQL" não escreve, tem literal aqui. No PostgreSQL é `decode('DEADBEEF', 'hex')`, que
     vale qualquer que seja o `standard_conforming_strings` (o `'\x…'::bytea` dependeria dele, como a barra
-    invertida do texto, que por isso já vai como `E'…'`). No Db2 é `X'DEADBEEF'`, e `BLOB(X'…')` quando a
-    coluna é `BLOB`, em pedaços de até 16.336 bytes (o teto da constante hexadecimal do Db2, 32.672 dígitos)
-    unidos por `||`. No Informix não há literal de binário.
+    invertida do texto, que por isso já vai como `E'…'`). No Db2 ele depende do tipo da coluna: `BX'DEADBEEF'`, a
+    constante binária, no `BINARY` e no `VARBINARY`; `BLOB(X'…')` no `BLOB`; e `X'DEADBEEF'`, a constante
+    hexadecimal, no texto binário (`CHAR` e `VARCHAR FOR BIT DATA`). A constante hexadecimal é um texto, e o Db2
+    não a aceita numa coluna `BINARY` ou `VARBINARY`: só o texto `FOR BIT DATA` é compatível com o binário. Os
+    três vão em pedaços de até 16.336 bytes (o teto das duas constantes do Db2, 32.672 dígitos) unidos por `||`.
+    No Informix não há literal de binário.
   - A linha com um valor sem literal não sai: o binário no Informix (com "Literal do banco"); o texto com outro
     caractere de controle, que não é quebra de linha, retorno de carro nem tabulação; no Informix, a data e hora
     com mais de cinco casas de segundo que não são zeros. O comando em andamento fecha com `;` antes dela, e no
@@ -4964,6 +4967,10 @@ e 13. O canvas não desenha nada disto (seção 9).
     o `INSERT` com ele numa coluna `json`, `xml` ou de lista falhava ao voltar para o banco, porque a expressão
     unida por `||` é `text`, que essas colunas não aceitam sem conversão. Passou a `\r` num `E'…'`, também no
     "Gerar SQL" (RN-GRADE-006), que escreve os mesmos literais; o Db2 e o Informix continuam como eram.*
+  - *Alterada em 2026-10-17, correção: no Db2, o binário de uma coluna `BINARY` ou `VARBINARY` saía como
+    `X'…'`, que é um texto, e o `INSERT` falhava ao voltar para o banco (SQL0408N, o valor não é compatível com
+    a coluna). Passou à constante binária, `BX'…'`; o `BLOB` continua em `BLOB(X'…')`, e o texto `FOR BIT DATA`,
+    em `X'…'`.*
 
 - **RN-EXPORT-012.** XML e DbUnit.
   - **XML**: o formato do DBeaver, com um elemento por linha e um por coluna:
