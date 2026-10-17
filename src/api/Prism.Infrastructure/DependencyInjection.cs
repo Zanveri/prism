@@ -73,6 +73,10 @@ public static class DependencyInjection
         services.AddTransient<ITransferFileClient, TransferFileClient>();
         services.AddSingleton<ITransferService, TransferService>();
 
+        // RN-IMPORT-007 a 011 e 017: o arquivo da importação, que o processo principal copia para a pasta `transfers`, e as prévias dele.
+        services.AddTransient<IImportFileClient, ImportFileClient>();
+        services.AddTransient<IImportPreviewService, ImportPreviewService>();
+
         return services;
     }
 
