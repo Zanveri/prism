@@ -578,7 +578,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
 | `POST api/user/database-sessions/{id}/transaction/commit` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone` quando o banco desfez) |
 | `POST api/user/database-sessions/{id}/transaction/rollback` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone`: a conexão caiu, e a transação já estava perdida) |
-| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` (`resultID`: o do resultado atual ou o de um guardado, RN-SQL-024) | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST .../queries/edit-target` `{ resultID, catalogSessionID?, purpose? }` (`resultID`: o do resultado atual ou o de um guardado, RN-SQL-024; `purpose`: `edit`, o padrão, ou `sql`, o pedido do "Gerar SQL", RN-GRADE-020, seção 37) | 200 `{ tables, columns, rowOperations, oneAtATime }`, cada tabela com `kind` e `keyColumns` (RN-GRADE-020) | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `EDIT_INVALID` (`purpose` fora da lista), `CONNECTION_READ_ONLY` (RN-PROT-002; não com `purpose: sql`) |
 | `POST .../queries/edits` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`), `CONNECTION_READ_ONLY` (RN-PROT-002) |
 | `POST .../queries/edits/preview` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
 | `POST api/user/transfers/exports` `{ source, columns, count, format, options, output, windowID }` (a exportação de dados, RN-EXPORT-016, seção 35) | 202 `{ id }`, o trabalho em segundo plano | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED` (3 em andamento); 422 `EXPORT_OPTIONS_INVALID` (no campo), `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING` (no campo `userName` ou `password`), `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
@@ -753,6 +753,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   para cima do "Importar conexões". As entradas da importação e da cópia na barra de status seguem a da
   exportação, e a da importação que parou, com "Ver o erro" e "Descartar", e o diálogo "Importação interrompida"
   são novos.
+- O canvas não desenha a seleção da grade, a contagem dela, o submenu "Copiar avançado" nem os diálogos "Copiar
+  avançado", "Configurar comandos 'Copiar como'" e "Gerar SQL" (RN-GRADE-001 a 007 e 015 a 020, seção 37). A célula
+  escolhida usa o fundo de escolha do tema, o do item escolhido do navegador, e a célula ativa continua com o
+  contorno do canvas. Os dois diálogos de cópia seguem o assistente "Exportar dados" (a lista dos formatos à
+  esquerda, com os ícones dele, e as opções da etapa Formatação); o "Gerar SQL" segue o "Ver SQL" (o SQL na fonte
+  do editor, com "Copiar" e "Fechar"), com as opções acima do SQL, que fica num editor só de leitura, com o realce
+  do editor SQL.
 
 ## 10. Riscos e sondas
 
@@ -1469,30 +1476,229 @@ Navegação:
 
 Grade de resultado (da aba de consulta e dos Registros da tabela):
 
-- **RN-GRADE-001.** Seleção. A grade tem uma célula ativa e uma seleção. Clique escolhe a
-  célula; Shift+clique, Shift+setas e arrastar estendem um retângulo; o número da linha escolhe
-  a linha inteira (Shift estende, Ctrl acrescenta ou tira); Ctrl+A escolhe todas as linhas
-  carregadas; Esc limpa. Setas, Home, End, PageUp e PageDown movem a célula ativa, e a grade
-  rola para mantê-la à vista. A grade tem papel de grade e uma parada de tabulação só. A
-  seleção atravessa a rolagem e o "carregar mais", e é esquecida numa nova execução.
-- **RN-GRADE-002.** Copiar. Ctrl+C copia a seleção como texto: células separadas por tabulação
-  e linhas por quebra de linha (o que uma planilha cola); uma célula só é copiada como o valor
-  puro. Nulo vai vazio. A célula que chegou cortada (RN-SQL-011) é copiada com o valor completo
-  (RN-SQL-017); a tela avisa só quando algum valor não pôde vir inteiro.
-- **RN-GRADE-003.** Copiar avançado (Ctrl+Shift+C, como no DBeaver): um diálogo escolhe o que
-  copiar (a seleção, as linhas inteiras da seleção ou todas as carregadas) e como: texto
-  delimitado (delimitador, cabeçalho, número da linha, aspas, como escrever o nulo), JSON,
-  Markdown, HTML ou comandos `INSERT`. As escolhas são lembradas por usuário.
-- **RN-GRADE-004.** Menu de contexto da grade (botão direito, Shift+F10, tecla de menu), nas
-  mesmas regras do menu do navegador (RN-MENU-001): Copiar, Copiar com cabeçalho, Copiar
-  avançado, Copiar nome da coluna, Filtrar, Ordenar, Gerar SQL, Exportar dados… (o assistente da
-  seção 35, com a origem da grade, RN-EXPORT-001) e, numa chave
-  estrangeira, Ir para o registro referenciado. O clique direito numa célula fora da seleção a
-  escolhe antes. O menu ganha também os itens da edição de célula (RN-EDIT-001): Editar célula,
-  Definir como nulo, Desfazer alteração, Adicionar linha, Duplicar linha e Excluir linha. *Alterada a
-  pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha", e entrou
-  "Duplicar linha" (RN-EDIT-016). Alterada a pedido do dono em 2026-10-16 (seção 35): o "Exportar" é o
-  "Exportar dados…", que abre o assistente.*
+- **RN-GRADE-001.** Seleção, como no DBeaver, nas grades dos Registros, do resultado da aba de consulta e de cada
+  aba de resultado do script.
+  - A grade tem uma célula ativa (a do foco, com o contorno de hoje) e uma seleção, que tem uma de duas formas: um
+    retângulo de células, da âncora até a célula ativa; ou linhas inteiras, uma ou várias, seguidas ou não. Sem nada
+    escolhido além da célula ativa, a seleção é ela; o resultado que acabou de chegar não tem nem uma nem outra. A
+    célula ativa está sempre dentro da seleção, menos depois do Ctrl+clique que tira a linha dela (abaixo). A âncora
+    é uma célula: a clicada ou, depois do clique no número da linha, a célula ativa que ele deixa. Um retângulo é
+    sempre um retângulo, também quando cobre todas as colunas das linhas dele (numa grade de uma coluna, a célula
+    ativa sozinha já cobre a linha): só o número da linha, o canto da grade, o Shift+Espaço e o Ctrl+A escolhem
+    linhas inteiras, e só elas valem para o Delete (RN-EDIT-015).
+  - Com o ponteiro:
+    - o clique numa célula a faz ativa, e a seleção passa a ser ela, que vira a âncora;
+    - Shift+clique numa célula estende o retângulo da âncora até ela, que passa a ser a ativa; sem âncora, é um
+      clique;
+    - arrastar a partir de uma célula, com o botão esquerdo, escolhe o retângulo da célula do começo até a que está
+      sob o ponteiro, e a grade rola sozinha quando o ponteiro passa da borda dela;
+    - o clique no número da linha escolhe a linha inteira, e a célula ativa vai para essa linha, na coluna em que
+      estava (na primeira, sem célula ativa); Shift+clique no número escolhe as linhas da linha da âncora até a
+      clicada; Ctrl+clique no número (Cmd+clique no macOS) acrescenta a linha às escolhidas, ou a tira, quando já
+      estava, e a célula ativa vai para a linha clicada; tirada a última, a seleção volta a ser a célula ativa;
+      arrastar no número escolhe as linhas da do começo até a que está sob o ponteiro, rolando sozinha, e, com Ctrl
+      (Cmd) no começo do arraste, acrescenta às que já estavam;
+    - o Ctrl+clique numa célula faz o mesmo que o clique, e, com um retângulo de células escolhido, o Ctrl+clique no
+      número faz o mesmo que o clique nele: vários retângulos ficam para depois;
+    - o clique no canto da grade, o "#" do cabeçalho da coluna do número da linha, escolhe todas as linhas, como o
+      Ctrl+A; o canto continua sendo o `columnheader` e leva dentro um botão com o nome "Escolher todas as linhas",
+      fora do caminho do Tab (a grade tem uma parada só);
+    - o clique no cabeçalho de uma coluna continua ordenando (RN-TABELA-010 e RN-GRADE-011), e não escolhe a coluna,
+      como faria no DBeaver;
+    - o botão direito numa célula fora da seleção a escolhe antes, como um clique; dentro da seleção, a seleção
+      fica, e a célula clicada passa a ser a ativa. No número da linha, fora da seleção, ele escolhe a linha
+      inteira, e dentro dela, deixa a seleção como está. Os dois abrem o menu da grade (RN-GRADE-004).
+  - Pelo teclado, com o foco na grade (e não no campo de edição de uma célula, que fica com as teclas dele):
+    - as setas, Home e End (com Ctrl, o começo e o fim da grade), PageUp e PageDown (uma altura da área à vista)
+      movem a célula ativa, e a seleção passa a ser ela;
+    - com Shift, as mesmas teclas estendem o retângulo da âncora até a nova célula ativa. Com linhas inteiras
+      escolhidas, as que andam na vertical estendem as linhas, da linha da âncora até a da célula ativa, e as que
+      andam na horizontal só movem a célula ativa;
+    - a grade só trata o PageUp e o PageDown sem Ctrl, Alt nem Cmd (o Shift só estende): com um deles, a tecla não é
+      da grade e segue adiante, e assim o Ctrl+Shift+PageUp e o Ctrl+Shift+PageDown, que movem a aba ativa
+      (RN-ABAS-001), chegam à barra de abas também com o foco na grade;
+    - Shift+Espaço escolhe as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver: é o
+      caminho do teclado até o Delete (RN-EDIT-015). Por isso o Shift+Espaço deixa de abrir o campo de edição com um
+      espaço (RN-EDIT-001);
+    - Ctrl+A (Cmd+A) escolhe todas as linhas da grade, as lidas e as novas, inteiras; sem célula ativa, a primeira
+      célula passa a ser a ativa;
+    - Esc volta a seleção para a célula ativa só.
+
+    A grade rola para manter a célula ativa à vista.
+  - O desenho: as células escolhidas têm o fundo de escolha do tema, o mesmo do item escolhido do navegador, e a
+    célula ativa continua com o contorno; o número das linhas escolhidas e o cabeçalho das colunas da seleção ficam
+    destacados. Com mais de uma célula escolhida, a barra do resultado diz quantas, ao lado do resumo (no resultado,
+    de "Primeiras 200 linhas"; nos Registros, da contagem das linhas carregadas): "3 linhas escolhidas", com linhas
+    inteiras, e "12 células escolhidas", com um retângulo ("1 linha escolhida", "2 células escolhidas"). Esse texto
+    tem o papel de status (`role="status"`) e muda quando a seleção para de mudar (ao soltar o botão ou a tecla), e
+    não a cada célula do arraste.
+  - Para o leitor de tela, a grade tem `aria-multiselectable="true"`, cada célula desenhada diz se está escolhida
+    (`aria-selected`), e a célula ativa continua anunciada pelo `aria-activedescendant`. A grade continua com uma
+    parada só do Tab.
+  - Por quanto tempo ela vale: a seleção atravessa a rolagem, o zoom, a largura das colunas e o "carregar mais". Ela
+    guarda as linhas lidas em faixas de posição e as linhas novas uma a uma, pela identidade da linha nova e não pelo
+    lugar na grade (também a âncora, a célula ativa e as linhas de um retângulo), porque o "carregar mais" põe as
+    linhas lidas que chegam antes das novas (RN-EDIT-014) e empurra as novas para baixo, e a seleção tem de ficar nas
+    mesmas linhas. As linhas lidas que chegam depois de um Ctrl+A não entram nele, como no DBeaver; as novas que já
+    estavam, sim. Abrir, confirmar e cancelar a edição de uma célula mantêm a seleção; o Tab e o Shift+Tab do campo,
+    que passam a outra célula (RN-EDIT-001), fazem a seleção ser ela, como as setas. Ela é esquecida, com a célula
+    ativa, a cada execução nova da aba (também o F5, o filtro, a ordem e a atualização automática, RN-GRADE-014) e na
+    troca de aba de resultado do script: cada aba começa sem seleção. A atualização automática espera enquanto há
+    mais de uma célula escolhida (RN-GRADE-014): escolher uma célula só, ou o Esc, a liberam. O "Salvar" e o
+    "Descartar" que tiram linhas da grade (as excluídas, as novas) e o "Excluir linhas" que tira linhas novas a
+    desfazem: fica só a célula ativa, quando a linha dela continua na grade.
+  - O que age sobre ela ("as linhas da seleção" são as que têm uma célula escolhida):
+    - o "Copiar", o "Copiar com cabeçalho" e o submenu "Copiar avançado" copiam a seleção: as linhas escolhidas, na
+      ordem da grade, e, nelas, as colunas escolhidas (todas, com linhas inteiras) (RN-GRADE-002, 003 e 015 a 017);
+    - o "Gerar SQL" age nas linhas da seleção, com todas as colunas (RN-GRADE-006);
+    - "Duplicar linha" e "Excluir linha", do menu, da barra de edição e dos atalhos, agem em todas as linhas da
+      seleção, e passam a "Duplicar linhas" e "Excluir linhas" quando elas são mais de uma (RN-EDIT-014 a 016); a
+      tecla Delete sozinha exclui as linhas inteiras escolhidas, e só elas (RN-EDIT-015);
+    - "Desfazer alteração" tira as pendências das células escolhidas (RN-EDIT-004);
+    - "Editar célula", "Filtrar", "Ordenar" e "Ir para o registro referenciado" agem na célula ativa; "Colar" e
+      "Definir como nulo" também, e ficam desabilitados com mais de uma célula escolhida, com o motivo "Vale para
+      uma célula só: escolha uma." (colar e anular várias de uma vez ficam para depois);
+    - "Exportar dados…" exporta o resultado inteiro, como antes (RN-EXPORT-002): a seleção não muda o que ele
+      exporta (RN-GRADE-007).
+  - Desempenho: a seleção é guardada como o retângulo, ou como as faixas de linhas lidas e a lista das linhas novas
+    escolhidas, e nunca célula por célula. Escolher 100 mil células (o Ctrl+A em 5.000 linhas de 20 colunas) custa o
+    mesmo que escolher uma, e rolar e desenhar a grade com ela respondem como sem ela. O copiar de uma seleção grande
+    monta o texto em partes, sem prender a janela (RN-GRADE-002).
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): a seleção foi construída, com o arraste, o canto da grade,
+    o Shift+Espaço, o PageUp e o PageDown, a âncora, o botão direito no número da linha, o desenho, a contagem, as
+    linhas novas guardadas pela identidade, o que a faz ser esquecida, a pausa da atualização automática, o desempenho e
+    as ações que agem sobre ela. Antes ela dizia só o clique, o Shift, o Ctrl no número da linha, o Ctrl+A e o Esc, e
+    nada disso tinha chegado à tela.*
+- **RN-GRADE-002.** Copiar e Copiar com cabeçalho.
+  - "Copiar" (Ctrl+C; Cmd+C no macOS), no menu e com o foco na grade, copia a seleção (RN-GRADE-001) como o texto
+    que uma planilha cola: as células de uma linha separadas por tabulação e as linhas por quebra de linha (LF,
+    também no Windows, que as planilhas e os editores colam igual), sem quebra depois da última. Uma célula só é
+    copiada como o valor puro, sem aspas. "Copiar com cabeçalho", sem atalho, põe antes uma linha com os nomes das
+    colunas copiadas, como o cabeçalho da grade os mostra, sem o tipo; com uma célula só, são duas linhas: o nome e
+    o valor. Sem célula ativa (a grade sem linhas, ou antes do primeiro clique), o Ctrl+C e o Ctrl+Shift+C
+    (RN-GRADE-003) não fazem nada, e, no menu, "Copiar" e "Copiar com cabeçalho" ficam desabilitados com "Escolha uma
+    célula na grade." (a frase da RN-EDIT-014).
+  - Com mais de uma célula, ou com o cabeçalho, o valor que tem tabulação, aspa, quebra de linha ou retorno de carro
+    vai entre aspas duplas, com a aspa de dentro dobrada, e assim volta inteiro na planilha (o DBeaver não dobra a
+    aspa); o nome da coluna também. O nulo vai vazio, nunca entre aspas. O "Copiar" não põe a proteção contra
+    fórmula do CSV: o pedido é o valor puro, e quem quer a proteção usa o "Copiar como CSV", que a põe
+    (RN-EXPORT-007).
+  - Vai o que a grade mostra: o valor com a alteração pendente, quando há (RN-EDIT-007); a linha nova com o que foi
+    preenchido nela, e o resto vazio; a linha marcada para exclusão com os valores lidos; e vazio na célula "gerado
+    pelo banco — execute de novo para ver" (RN-EDIT-009). O número sai como a grade o escreve, com ponto; a data e a
+    hora também; o booleano, `true` ou `false`; o binário, em hexadecimal (`0x…`).
+  - A célula que chegou cortada (RN-SQL-011) vai com o valor completo (RN-SQL-017): a tela o busca antes na API,
+    pela rota das células, em pedidos de até 10.000 células, só das células cortadas que vai copiar. Enquanto busca,
+    a faixa sobre a grade diz "Buscando os valores completos…", com "Cancelar", que desiste da cópia sem tocar na
+    área de transferência. Sem célula cortada, nada é pedido à API. O valor que não vem inteiro (passou do teto de
+    256 MB, é de uma aba guardada do script, RN-SQL-024, ou a sessão mudou ou caiu) vai cortado, e o aviso diz
+    quantos, como hoje: "Copiado, mas 2 valores não puderam vir inteiros e foram cortados."
+  - O limite é o da área de transferência da exportação: 10 MiB de texto (10.485.760 bytes em UTF-8, RN-EXPORT-014).
+    A tela soma o tamanho enquanto monta o texto, também com os valores completos que chegam, e para assim que passa
+    dele, sem copiar nada; o aviso de erro diz "O texto passou de 10 MiB, o limite da área de transferência. Escolha
+    menos células, ou use Exportar dados… para gravar um arquivo.", e a área de transferência fica como estava.
+    Antes de buscar os valores completos, a tela confere o que já tem (cada valor cortado conta, no mínimo, o que a
+    grade tem dele): o que já passa do limite não busca nada.
+  - O texto de uma seleção grande é montado em partes, que cedem a vez à tela entre si; passado meio segundo, a
+    faixa diz "Copiando…", com "Cancelar". Cem mil células de valores curtos não prendem a janela.
+  - O texto vai como está, também o Unicode fora do plano básico (emoji, ideogramas) e as marcas de direção; o par
+    substituto solto, que o UTF-8 não escreve, vai como U+FFFD.
+  - Os avisos de sucesso: "Copiado." com uma célula, e "Copiado, com o cabeçalho." com ela e o cabeçalho; "3 linhas
+    copiadas." com mais de uma ("1 linha copiada.", quando a linha tem várias células); e "3 linhas copiadas, com o
+    cabeçalho.". A falha da área de transferência é o aviso de atenção de hoje, "Não foi possível copiar.".
+  - Copiar não pergunta nada, não espera a aba (vale com um comando em andamento, sobre as linhas que estão na tela)
+    e vale em qualquer resultado, também no só leitura e no da conexão somente leitura (RN-PROT-002). A atualização
+    automática fica em pausa do começo da cópia até o texto ir para a área de transferência (RN-GRADE-014); se as
+    linhas mudam mesmo assim, a cópia leva as que estavam escolhidas quando começou.
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): a cópia, que era só da célula ativa, passou a ser da
+    seleção, e entraram o "Copiar com cabeçalho" como item, a aspa dobrada, o que vai de cada linha (a pendência, a
+    linha nova, a excluída), o limite de 10 MiB, a montagem em partes, os avisos, a grade sem célula ativa e a
+    proteção contra fórmula, que fica só no "Copiar como CSV".*
+- **RN-GRADE-003.** Copiar avançado, como no DBeaver. No menu da grade, "Copiar avançado" é um submenu com, nesta
+  ordem:
+  1. "Copiar avançado…" (Ctrl+Shift+C; Cmd+Shift+C no macOS), que abre o diálogo abaixo;
+  2. "Copiar nome da(s) coluna(s)" (RN-GRADE-015);
+  3. "Copiar número de linha(s)" (RN-GRADE-015);
+  4. depois de um separador, os "Copiar como", na ordem do print do dono: "Copiar como CSV", "Copiar como Código
+     fonte", "Copiar como DbUnit", "Copiar como HTML", "Copiar como JSON", "Copiar como Markdown", "Copiar como
+     SQL", "Copiar como TXT" e "Copiar como XML" (RN-GRADE-016). O XLSX não entra, como no DBeaver: não é texto;
+  5. depois de outro separador, "Configurar comandos 'Copiar como'…" (RN-GRADE-017).
+
+  Os itens valem em qualquer resultado, também no só leitura e no da conexão somente leitura, e copiam com as regras
+  da RN-GRADE-002: o que a grade mostra, o valor completo das células cortadas, o limite de 10 MiB, a montagem em
+  partes e a pausa da atualização automática.
+  - O diálogo "Copiar avançado" é o diálogo grande (760 px), como o assistente da exportação:
+    - "Formato", à esquerda: uma lista de escolha única (`listbox`) com os nove formatos dos "Copiar como", cada um
+      com o ícone e o nome, na ordem do submenu, como a etapa Formato da exportação (RN-EXPORT-004). Vem escolhido o
+      último formato usado no diálogo; na primeira vez, o CSV.
+    - "O que copiar", à direita, uma escolha de três: "As células escolhidas", o padrão, as linhas e as colunas da
+      seleção (RN-GRADE-001); "As linhas inteiras da seleção", as mesmas linhas, com todas as colunas; e "Todas as
+      linhas carregadas", todas as linhas da grade, com todas as colunas, e a frase "As linhas que ainda não foram
+      carregadas não entram. Para todas, use Exportar dados…". Cada escolha diz o tamanho dela ("3 linhas e 2
+      colunas"; "1 linha e 1 coluna"). Ela não é lembrada: o diálogo abre sempre em "As células escolhidas".
+    - "Opções": as do formato escolhido, as mesmas da etapa Formatação da exportação (RN-EXPORT-006 a 012), com os
+      mesmos rótulos, padrões, dicas e recusas no campo, e "Voltar aos padrões". Não aparecem as do arquivo (o nome,
+      a codificação, o BOM, o .zip, "Mostrar na pasta ao terminar"): o texto da área de transferência nunca leva
+      BOM. São as opções do "Copiar como" daquele formato (RN-GRADE-017): o que muda aqui vale também para ele. A
+      tabela de destino do SQL e a do DbUnit seguem a RN-GRADE-016.
+    - "Prévia": o começo do texto que sairia, até 100 linhas e 64 KB, em fonte fixa, só para ler e rolar, refeita a
+      cada mudança. A prévia não pede nada à API: a célula cortada aparece nela como a grade a tem, e, quando há
+      alguma, a frase "Na prévia, os valores cortados aparecem como na grade; a cópia leva os completos." diz isso.
+    - No rodapé, "Cancelar" à esquerda e "Copiar", o botão principal, à direita. "Copiar" fica desabilitado enquanto
+      um campo tem recusa. Do clique até o texto ir para a área de transferência, ele diz "Copiando…", e a busca dos
+      valores completos aparece no próprio diálogo, com "Cancelar a busca", que volta ao diálogo sem copiar.
+    - Copiado, o diálogo fecha, e o aviso diz o formato: "3 linhas copiadas em CSV." ("1 linha copiada em JSON."),
+      com os avisos da RN-GRADE-016. A recusa do limite de 10 MiB aparece no alto do diálogo, que continua aberto,
+      com a frase da RN-GRADE-002.
+    - "Cancelar", Esc e o X fecham sem perguntar, como no assistente da exportação. O bloqueio por inatividade, o
+      "Sair" e o quinto erro de senha fecham o diálogo (RN-SEG-001).
+    - Lembram-se por usuário, nas preferências desta instalação (RN-CONFIG-001), o formato e as opções; a tabela de
+      destino do SQL e do DbUnit é da origem e não se lembra, como na exportação (RN-EXPORT-003). A escolha lembrada
+      que não vale mais volta ao padrão, sem erro.
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): o "Copiar avançado" virou o submenu do print do dono, com o
+    diálogo, os nomes das colunas, os números das linhas, os nove "Copiar como" nos formatos e nas opções da
+    exportação (seção 35) e a configuração deles. Antes era um diálogo só, com o texto delimitado (com o número da
+    linha), o JSON, o Markdown, o HTML e os INSERT.*
+- **RN-GRADE-004.** Menu de contexto da grade (o botão direito numa célula ou no número da linha, Shift+F10 e a
+  tecla de menu), nas mesmas regras do menu do navegador (RN-MENU-001), com os grupos do menu do DBeaver que o Prism
+  tem, nesta ordem:
+  1. "Copiar" (Ctrl+C), "Copiar com cabeçalho" e o submenu "Copiar avançado" (RN-GRADE-002 e 003); e "Colar", o que a
+     tela já tinha, que cola o texto da área de transferência na célula ativa, como alteração pendente
+     (RN-EDIT-001), sem atalho: o Ctrl+V e o "Colar avançado…" do print ficam para depois, com o colar em várias
+     células;
+  2. o submenu "Filtrar" (F11, RN-GRADE-013); o submenu "Ordenar", com "Crescente", "Decrescente" e "Sem ordem" para
+     a coluna da célula ativa, a ordem em uso marcada, pelo mesmo caminho do clique no cabeçalho (RN-TABELA-010 e
+     RN-GRADE-011); e, numa coluna de chave estrangeira dos Registros, "Ir para o registro referenciado"
+     (RN-TABELA-007);
+  3. "Editar célula" (F2), "Definir como nulo" e "Desfazer alteração" (RN-EDIT-001 e 004);
+  4. "Adicionar linha" (Alt+Insert), "Duplicar linha" (Ctrl+Alt+Insert) e "Excluir linha" (Alt+Delete), que passam a
+     "Duplicar linhas" e "Excluir linhas" com mais de uma linha na seleção (RN-EDIT-014 a 016);
+  5. "Exportar dados…", o assistente da seção 35 com a origem da grade (RN-EXPORT-001), e o submenu "Gerar SQL"
+     (RN-GRADE-006);
+  6. "Atualizar" (F5, RN-GRADE-012) e o submenu "Atualizar automaticamente" (RN-GRADE-014).
+
+  - Os atalhos vêm escritos como a plataforma os escreve (no macOS, o Cmd no lugar do Ctrl e o Option no lugar do
+    Alt, RN-EDIT-015). Os submenus abrem com a seta para a direita, com Enter e com o ponteiro, e fecham com a seta
+    para a esquerda, como o "Filtrar".
+  - O que não se aplica no estado de agora aparece desabilitado, com o motivo, e não some. O item que não existe num
+    lugar não aparece: nas abas guardadas do script, o "Filtrar", o "Ordenar", o "Atualizar" e o "Atualizar
+    automaticamente" (RN-SQL-023); fora dos Registros, o "Ir para o registro referenciado".
+  - O botão direito numa célula fora da seleção a escolhe antes; dentro dela, a seleção fica (RN-GRADE-001). Cada
+    item age sobre o que a RN-GRADE-001 diz dele.
+  - Não entram os itens do menu do DBeaver que o Prism não tem: "Colar avançado…" (Ctrl+Shift+V), "Navegar",
+    "Painéis", "Visualizar/Formatar", "Hints", "Estrutura lógica", "Disposição", "Abrir com", "Ferramentas" e
+    "Alternar painéis de resultados" (F7): o item que não existe não aparece. O "Copiar nome da coluna", que esta
+    regra tinha à parte, é o "Copiar nome da(s) coluna(s)" de dentro do "Copiar avançado" (RN-GRADE-015), e o
+    "Ordenar" é o que a RN-GRADE-005 descrevia.
+  - O DBeaver põe "Copiar número de linha(s)" também no nível de cima do menu aberto pelo número da linha, como no
+    primeiro print do dono. O Prism o deixa só dentro do "Copiar avançado", de propósito: o menu é um só, aberto da
+    célula ou do número da linha, com os mesmos itens no mesmo lugar.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha", e entrou
+    "Duplicar linha" (RN-EDIT-016). Alterada a pedido do dono em 2026-10-16 (seção 35): o "Exportar" é o "Exportar
+    dados…", que abre o assistente. Alterada a pedido do dono em 2026-10-17 (seção 37): o menu segue o do DBeaver
+    nos grupos que o Prism tem; o "Copiar valor" passou a ser o "Copiar", da seleção; entraram o submenu "Copiar
+    avançado", o "Colar" que a tela já tinha, o "Ordenar" e o submenu "Gerar SQL"; o "Exportar dados…" e o "Gerar
+    SQL" ficam juntos, depois dos itens da edição; e o "Atualizar" foi para o fim.*
 - **RN-GRADE-005.** Filtrar pelo valor (Registros), como no DBeaver: sobre uma célula, o menu
   oferece igual ao valor (`=`), diferente (`<>`), maior (`>`), menor (`<`), contém (`LIKE`, em
   colunas de texto), "É nulo", "Não é nulo" e "Remover filtro". A condição escolhida entra no
@@ -1500,31 +1706,110 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   lá — e é executada. O valor vira literal pela regra da RN-TABELA-007; célula cortada ou
   binária só oferece as opções de nulo. "Ordenar" oferece crescente, decrescente e sem ordem
   para a coluna da célula, pelo mesmo caminho do cabeçalho.
-- **RN-GRADE-006.** Gerar SQL, das linhas escolhidas: `INSERT` (uma linha por comando, com as
-  colunas do resultado), `UPDATE` (as colunas que não são da chave, com a condição pela chave),
-  `DELETE` e `SELECT` (pela chave). A chave é a mesma da edição (RN-EDIT-002): a primária, ou
-  uma restrição ou índice único de colunas não nulas. Nos Registros a tabela e a chave são
-  conhecidas; sem nenhuma chave a condição usa todas as colunas (com `IS NULL` para nulo), e um
-  comentário no começo diz isso. Na aba de consulta, quando o resultado de uma tabela só é
-  editável, a tabela e a chave são conhecidas, e "Gerar SQL" oferece também `UPDATE`, `DELETE`
-  e `SELECT`; nos demais casos a tabela não é conhecida: só `INSERT`, e a tela pede o nome da
-  tabela. O resultado abre numa aba de consulta nova da mesma conexão; nada é
-  executado. Nomes entre aspas (RN-TABELA-002) e valores como literais do banco; linha com
-  célula cortada ou binária numa coluna necessária não é gerada, e um comentário diz quais
-  ficaram de fora.
-- **RN-GRADE-007.** Exportar a seleção ou as linhas carregadas (o aviso de que as não carregadas
-  não entram continua) será uma origem do assistente "Exportar dados" da seção 35, com os formatos e
-  as opções dele (RN-EXPORT-004 a 014), quando a grade tiver a seleção de várias células
-  (RN-GRADE-001); até lá, as linhas carregadas saem pelo "Exportar CSV" dos Registros
-  (RN-TABELA-006). Os valores (o literal do SQL, o campo do CSV, o escape de cada formato) são os
-  mesmos nos dois caminhos, conferidos pelas fixtures de ouro (RN-EXPORT-024). A estrutura do XML
-  (RN-EXPORT-012, a do DBeaver) e o JSON com o nome da origem (RN-EXPORT-010) são os do assistente:
-  o `to-xml.ts` e o `to-json.ts` de hoje, que escrevem `<result><row><column name="…">` e a lista
-  sem o nome, passam a escrevê-los quando a seleção entrar. O último formato usado é lembrado por
-  usuário. *Alterada a pedido do dono em 2026-10-16 (seção 35): o diálogo de oito formatos deu lugar
-  ao assistente "Exportar dados", de dez, a exportação da seleção e das linhas carregadas espera a
-  seleção de várias células, e as regras de cada formato são as da seção 35 (RN-EXPORT-006 a 013),
-  que substituem as frases de antes sobre o JSON, o XLSX, o HTML, o Markdown e o XML.*
+- **RN-GRADE-006.** Gerar SQL, como no DBeaver. No menu da grade (RN-GRADE-004), nos Registros, no resultado da aba
+  de consulta e em cada aba de resultado do script, o submenu "Gerar SQL" tem, nesta ordem:
+  1. "SELECT .. WHERE .. =": um `SELECT` por linha, pela chave;
+  2. "SELECT .. WHERE .. IN": um `SELECT` só, para todas as linhas, pela chave;
+  3. "INSERT": um `INSERT` por linha;
+  4. "UPDATE": um `UPDATE` por linha, das colunas que não são da chave, pela chave;
+  5. "DELETE pela chave única": um `DELETE` por linha, pela chave;
+  6. "CREATE": o `CREATE TABLE` da tabela, o DDL aproximado da Estrutura (RN-TABELA-008).
+
+  Cada item abre o diálogo "Gerar SQL" (RN-GRADE-018), com o texto (RN-GRADE-019), as opções e as duas saídas,
+  "Copiar" e "Abrir numa aba de consulta". Nada é executado.
+  - As linhas são as da seleção (as que têm uma célula escolhida, RN-GRADE-001), na ordem da grade; sem nada
+    escolhido além da célula ativa, a linha dela. As colunas são todas as do resultado que vêm da tabela, e não só
+    as escolhidas, como no DBeaver; a calculada no comando (uma expressão, uma constante) fica de fora. A coluna
+    entra pelo nome dela na tabela, e não pelo apelido do resultado: `SELECT nome AS cliente` gera `"nome"`.
+    - A linha nova que ainda não foi salva (RN-EDIT-004) não está no banco e fica de fora; o "Ver SQL" (RN-EDIT-008)
+      mostra o `INSERT` dela.
+    - A linha marcada para exclusão entra, com os valores lidos: ela está no banco até o "Salvar".
+    - Na linha com alteração pendente, os valores são os que a grade mostra, como no copiar (RN-EDIT-007), e a
+      condição pela chave usa o valor lido da chave, que é o que acha a linha no banco.
+    - A linha nova já salva na aba de consulta (RN-EDIT-009) entra; a célula "gerado pelo banco — execute de novo
+      para ver" não tem valor, e a linha que precisa dela fica de fora, com o comentário (RN-GRADE-019).
+  - A tabela e a chave são as do alvo da edição (RN-EDIT-002), que a tela pede à API pelo `edit-target`, com o
+    pedido do "Gerar SQL" (RN-GRADE-020):
+    - **A tabela é conhecida** nos Registros (a tabela da aba) e no resultado que o alvo diz de uma tabela só (o
+      `tables` com um item só, que não é `elsewhere`, RN-GRADE-020), na aba de consulta e nas abas do script (seção
+      33); também quando ela é uma visão, quando o resultado não se edita por causa de uma coluna ou da chave, e na
+      conexão somente leitura (RN-PROT-002). A tela decide por esse campo, e não pelo `rowOperations`, que vem falso
+      na visão e na conexão somente leitura.
+    - **A chave** é a da edição: a primária, ou uma restrição ou um índice único de colunas não nulas, inteira no
+      resultado, pelo `keyColumns` (RN-GRADE-020). Sem chave nenhuma (a tabela não tem uma; a visão), a condição usa
+      as colunas do resultado, com `IS NULL` para o nulo, e um comentário no começo diz isso (RN-GRADE-019). Com uma
+      chave que não está inteira no resultado, "SELECT .. WHERE .. =", "SELECT .. WHERE .. IN", "UPDATE" e "DELETE
+      pela chave única" ficam desabilitados, com o motivo nas palavras da edição ("a chave de pedido não está inteira
+      no resultado: faltam id"), que a tela escreve a partir do `keyColumns`, porque identificar a linha por outras
+      colunas afetaria mais do que o escolhido; "INSERT" e "CREATE" valem.
+    - **A tabela não é conhecida** num resultado de junção, de união, de `DISTINCT`, de agrupamento, de subconsulta
+      ou `WITH` no `FROM`, do filtro que a API embrulhou (RN-GRADE-011), do comando que gravou e devolveu linhas
+      (RN-SQL-013), no resultado em que o Prism não sabe de onde vêm as colunas, e na aba guardada do script cuja
+      tabela sem esquema pode ser outra agora (RN-SQL-024, o `kind` `elsewhere`). Aí só o "INSERT" vale, com a
+      tabela de destino que a pessoa escreve no diálogo; os outros cinco ficam desabilitados, com "Só num resultado
+      de uma tabela: <motivo>.", e o motivo é o da edição ("num resultado de junção só se alteram células",
+      "DISTINCT").
+  - Quando os itens valem. Habilitar não custa consulta (RN-EDIT-010): enquanto a tela não perguntou à API, os seis
+    ficam habilitados, e a primeira escolha pergunta (o diálogo diz "Conferindo a tabela e a chave deste
+    resultado…"). Se o item escolhido não vale, o diálogo diz o motivo no lugar do SQL, e dali em diante o item fica
+    desabilitado com ele. O alvo que a edição já pediu serve ao "Gerar SQL". O contrário não vale na conexão somente
+    leitura: o alvo que veio ali com `purpose: sql` não serve à edição, e a tela o pede de novo, sem `purpose`,
+    quando a conexão deixa de ser somente leitura. Ficam desabilitados desde o começo, com o motivo:
+    - os cinco primeiros, sem linha na grade ("O resultado não tem linhas.") e com só linhas novas na seleção ("As
+      linhas novas ainda não estão no banco: o Ver SQL mostra o INSERT delas."); o "CREATE" descreve a tabela, não
+      depende das linhas e vale também aí;
+    - os seis, com a aba ocupada ("há um comando em andamento na aba", RN-EDIT-014) e enquanto a atualização
+      automática lê as linhas de novo ("a atualização automática está lendo as linhas de novo; tente outra vez em um
+      instante", RN-GRADE-014);
+    - o "CREATE" numa visão ("pedido é uma visão: o Prism não monta o DDL de visões", RN-TABELA-008), e no que não é
+      tabela nem visão ("pedido não é uma tabela: o Prism só monta o DDL de tabelas").
+
+    O motivo de um item desabilitado, na dica do item e no lugar do SQL do diálogo, vai como frase: o que é um
+    fragmento (a chave, o tipo, a coluna, a aba ocupada) entra em "Indisponível: <motivo>." ("Indisponível: a chave
+    de pedido não está inteira no resultado: faltam id."), e o que já é frase vai sozinho ("O resultado não tem
+    linhas.", "Só num resultado de uma tabela: DISTINCT.").
+  - **Os valores** são os literais do banco da exportação em SQL (RN-EXPORT-011): o número simples, sem aspas, numa
+    coluna de número; o resto entre aspas simples, com a aspa dobrada; no PostgreSQL, o `E'…'` da barra invertida e
+    do retorno de carro; no Db2, o retorno de carro por `CHR(13)`; no Informix, as quebras por `CHR`, o lógico `'t'`
+    ou `'f'` e a data e hora `DATETIME (…) YEAR TO FRACTION(5)`; o nulo, `NULL`. Os nomes vão sempre entre aspas
+    duplas, com a aspa dobrada (RN-TABELA-002). Há uma implementação só disso, na tela, conferida pelas fixtures de
+    ouro (RN-EXPORT-024).
+  - **A célula cortada** (RN-SQL-011) de uma coluna que o comando usa vai com o valor completo, que a tela busca
+    antes na API (RN-SQL-017), com "Buscando os valores completos…" e "Cancelar" no diálogo. O valor que não vem
+    inteiro (passou do teto, é de uma aba guardada do script, ou a sessão mudou ou caiu) deixa a linha de fora, com
+    o comentário.
+  - **O binário** tem o literal da exportação em SQL (RN-EXPORT-011): `decode('DEADBEEF', 'hex')` no PostgreSQL;
+    no Db2, pelo tipo da coluna, `BX'DEADBEEF'` no `BINARY` e no `VARBINARY`, `BLOB(X'…')` no `BLOB` e
+    `X'DEADBEEF'` no texto `FOR BIT DATA`, em pedaços unidos por `||`. O Informix não tem literal de binário, e a
+    linha que precisa de um fica de fora, com o comentário. Antes, toda linha com binário ficava de fora.
+  - Vale também na conexão somente leitura e na que pede confirmação antes de executar (RN-PROT-001 e 002), porque
+    nada é executado: o SQL que a pessoa executar depois, na aba nova, segue as proteções como qualquer comando.
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): o "Gerar SQL" virou o submenu do print do dono, com os seis
+    itens; o texto abre num diálogo com as opções, que copia ou abre numa aba de consulta (antes, abria direto numa
+    aba nova); entraram o `SELECT .. IN`, o `CREATE`, o literal do binário, o valor completo das células cortadas, a
+    tabela e a chave na conexão somente leitura e na visão, a linha nova, a excluída e a que tem alteração pendente,
+    a chave que não está inteira no resultado e o motivo dos itens desabilitados.*
+- **RN-GRADE-007.** Exportar a seleção ou as linhas carregadas para um arquivo, pelo assistente "Exportar dados"
+  (seção 35), fica para depois. A seleção existe (RN-GRADE-001), mas a exportação é um trabalho da API, que lê de
+  novo do banco, e a seleção é o que a tela tem: levar ao arquivo as linhas da tela pede outro caminho de entrega,
+  que não cabe na seção 37. Até lá:
+  - a seleção, as linhas inteiras dela e todas as linhas carregadas vão para a área de transferência, nos nove
+    formatos de texto da exportação e com as mesmas opções, pelo "Copiar avançado…" e pelos "Copiar como"
+    (RN-GRADE-003 e 016), com o mesmo texto que a exportação escreveria para as mesmas linhas, conferido pelas
+    fixtures de ouro (RN-EXPORT-024);
+  - as linhas carregadas dos Registros saem num arquivo pelo "Exportar CSV" (RN-TABELA-006), e todas as linhas, pelo
+    "Exportar…" (RN-EXPORT-001);
+  - o "Exportar dados…" do menu da grade exporta o resultado inteiro, como antes (RN-EXPORT-002).
+
+  Quando entrar, a seleção e as linhas carregadas serão uma origem do assistente, com os formatos e as opções dele
+  (RN-EXPORT-004 a 014), o XLSX também (pelo `to-xlsx.ts`, RN-EXPORT-013), e o aviso de que as linhas não carregadas
+  não entram.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 35): o diálogo de oito formatos deu lugar ao assistente
+    "Exportar dados", de dez, a exportação da seleção e das linhas carregadas espera a seleção de várias células, e
+    as regras de cada formato são as da seção 35 (RN-EXPORT-006 a 013), que substituem as frases de antes sobre o
+    JSON, o XLSX, o HTML, o Markdown e o XML. Alterada a pedido do dono em 2026-10-17 (seção 37): a seleção entrou,
+    e a cópia dela nos formatos da exportação também; o `to-xml.ts` e o `to-json.ts` passaram ao formato do
+    assistente com os "Copiar como" (RN-GRADE-016); o arquivo da seleção ficou para depois.*
 - **RN-GRADE-008.** Exportar o resultado inteiro (todas as linhas, e não só as carregadas) é o
   "Exportar…" da seção 35 (RN-EXPORT-001 e 002): o comando é executado de novo numa conexão à parte,
   e a API escreve o arquivo à medida que as linhas chegam, num trabalho em segundo plano, com
@@ -1881,17 +2166,24 @@ até lá, o que depende delas está a provar.
 
 ### Edição de célula
 
-- **RN-EDIT-001.** **Onde e como.** Na grade dos Registros de uma tabela, na grade do resultado de um comando da aba de
-  consulta e na de cada aba de resultado do "Executar script" (RN-SQL-020 e 023), quando o resultado é editável (RN-EDIT-002).
-  A edição parte da célula ativa da grade (RN-GRADE-001): F2, Enter, duplo clique, ou começar a digitar (o que substitui o
-  valor). O campo de edição fica na própria célula, com "Confirmar edição (Enter)" e "Cancelar edição (Esc)", como no canvas;
-  Tab e Shift+Tab confirmam e passam para a próxima célula editável. O menu de contexto (RN-GRADE-004) ganha "Editar célula"
-  (F2), "Definir como nulo", "Desfazer alteração", "Adicionar linha" (Alt+Insert), "Duplicar linha" (Ctrl+Alt+Insert,
-  RN-EDIT-016) e "Excluir linha" (Alt+Delete, na linha da célula ativa; e também Delete, com linhas inteiras escolhidas pelo
-  número da linha). A barra de edição (RN-EDIT-013) deixa à vista "Editar célula", "Adicionar linha", "Duplicar linha" e
-  "Excluir linha", com os mesmos atalhos (RN-EDIT-015). O que não se aplica aparece desabilitado, com o motivo. *Alterada a
-  pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha" (as marcas da linha nova na grade
-  continuam), e entraram "Duplicar linha", o Alt+Delete, a barra de edição e as abas do script.*
+- **RN-EDIT-001.** **Onde e como.** Na grade dos Registros de uma tabela, na grade do resultado de um comando da aba
+  de consulta e na de cada aba de resultado do "Executar script" (RN-SQL-020 e 023), quando o resultado é editável
+  (RN-EDIT-002). A edição parte da célula ativa da grade (RN-GRADE-001): F2, Enter, duplo clique, ou começar a
+  digitar, o que substitui o valor (menos o Shift+Espaço, que escolhe as linhas inteiras). O campo de edição fica na
+  própria célula, com "Confirmar edição (Enter)" e "Cancelar edição (Esc)", como no canvas; Tab e Shift+Tab
+  confirmam e passam para a próxima célula editável. O menu de contexto (RN-GRADE-004) tem "Colar", sem atalho, que
+  cola o texto da área de transferência na célula ativa como alteração pendente, "Editar célula" (F2), "Definir como
+  nulo", "Desfazer alteração", "Adicionar linha" (Alt+Insert), "Duplicar linha" (Ctrl+Alt+Insert, RN-EDIT-016) e
+  "Excluir linha" (Alt+Delete; e também Delete, com linhas inteiras escolhidas, RN-EDIT-015). "Duplicar linha" e
+  "Excluir linha" agem em todas as linhas da seleção e passam a "Duplicar linhas" e "Excluir linhas" quando elas são
+  mais de uma; "Desfazer alteração" age nas células escolhidas (RN-EDIT-004); "Colar" e "Definir como nulo" valem
+  com uma célula só escolhida, e com várias ficam desabilitados com "Vale para uma célula só: escolha uma."
+  (RN-GRADE-001). A barra de edição (RN-EDIT-013) deixa à vista "Editar célula", "Adicionar linha", "Duplicar linha" e
+  "Excluir linha", com os mesmos atalhos (RN-EDIT-015). O que não se aplica aparece desabilitado, com o motivo.
+  *Alterada a pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha" (as marcas da
+  linha nova na grade continuam), e entraram "Duplicar linha", o Alt+Delete, a barra de edição e as abas do script.
+  Alterada a pedido do dono em 2026-10-17 (seção 37): as ações de linha agem na seleção, o Delete passou a valer com as
+  linhas inteiras escolhidas, o "Colar" que a tela já tinha entrou na regra, sem atalho, e entrou o Shift+Espaço.*
 - **RN-EDIT-002.** **Quando um resultado é editável.** A edição vale **coluna por coluna, na tabela de onde a coluna veio**,
   também num resultado de junção.
 
@@ -1948,14 +2240,19 @@ até lá, o que depende delas está a provar.
   Um sinônimo ou apelido de tabela do Db2 e do Informix no `FROM` não é reconhecido como tabela, e as colunas dele ficam só
   leitura ("não é uma tabela"). *Alterada a pedido do dono em 2026-10-16 (seção 33): entrou a tabela sem esquema nas abas do
   script que se editam.*
-- **RN-EDIT-004.** **Pendências** (dois passos: "Salvar" e, no Commit manual, Commit). Editar, definir nulo, criar linha,
-  duplicar linha e excluir linha não vão ao banco: ficam pendentes na tela e destacados — a célula alterada mostra o valor lido
-  riscado ao lado do novo (como no canvas), a linha nova (também a duplicada, RN-EDIT-016) é marcada no número da linha, e a
-  linha excluída aparece riscada. Uma faixa sobre a grade diz quantas alterações há ("3 alterações não salvas") e tem "Ver
-  SQL", "Descartar" e "Salvar" (Ctrl+S com o foco na grade). "Descartar" joga fora só o que não foi salvo, sem mexer na
-  transação. "Desfazer alteração" tira uma pendência. As pendências atravessam a rolagem e o "carregar mais". A barra de edição
-  (RN-EDIT-013) só cria e tira pendências: "Salvar", "Descartar" e "Ver SQL" ficam nesta faixa, que não muda. *Alterada a
-  pedido do dono em 2026-10-16 (seção 33): entraram o duplicar e a barra de edição.*
+- **RN-EDIT-004.** **Pendências** (dois passos: "Salvar" e, no Commit manual, Commit). Editar, definir nulo, criar
+  linha, duplicar linha e excluir linha não vão ao banco: ficam pendentes na tela e destacados — a célula alterada
+  mostra o valor lido riscado ao lado do novo (como no canvas), a linha nova (também a duplicada, RN-EDIT-016) é
+  marcada no número da linha, e a linha excluída aparece riscada. Uma faixa sobre a grade diz quantas alterações há
+  ("3 alterações não salvas") e tem "Ver SQL", "Descartar" e "Salvar" (Ctrl+S com o foco na grade). "Descartar" joga
+  fora só o que não foi salvo, sem mexer na transação. "Desfazer alteração" tira a pendência da célula ativa, ou,
+  com mais de uma célula escolhida (RN-GRADE-001), as de todas as células escolhidas: o valor alterado volta ao
+  lido, a linha marcada para exclusão que tem uma célula escolhida volta, e, numa linha nova, a célula volta ao
+  padrão da tabela (a linha fica: quem a tira é "Excluir linha"); o item fica habilitado quando alguma das células
+  escolhidas tem o que desfazer. As pendências atravessam a rolagem e o "carregar mais". A barra de edição
+  (RN-EDIT-013) só cria e tira pendências: "Salvar", "Descartar" e "Ver SQL" ficam nesta faixa, que não muda.
+  *Alterada a pedido do dono em 2026-10-16 (seção 33): entraram o duplicar e a barra de edição. Alterada a pedido do
+  dono em 2026-10-17 (seção 37): "Desfazer alteração" age nas células escolhidas.*
 - **RN-EDIT-005.** **Salvar** executa todas as pendências **numa transação só**, na sessão da aba: primeiro as exclusões,
   depois as alterações, depois as linhas novas, cada grupo na ordem em que foi feito. Cada alteração e cada exclusão é um
   comando pela chave da tabela dela (RN-EDIT-002), com os valores que a grade leu, e tem de afetar **exatamente uma linha**; se
@@ -1985,15 +2282,17 @@ até lá, o que depende delas está a provar.
   assistente (o separador decimal, a ordem da data), e, no Db2 e no Informix, o texto longo e o binário, que a importação grava
   porque o valor vem inteiro do arquivo, e não cortado da grade (RN-IMPORT-010). *Alterada a pedido do dono em 2026-10-16
   (seção 36): entraram a importação e a cópia para outro banco.*
-- **RN-EDIT-007.** **Com alterações pendentes**, executar outro comando na aba, executar de novo ou "Atualizar", filtrar,
-  ordenar (pelo cabeçalho, pelo menu ou pelo campo de filtro), filtrar pelo valor, chegar à aba por uma chave estrangeira
-  (RN-TABELA-007, que filtra a aba de destino), trocar o modo ou o nível, Commit, Rollback, fechar a aba, trocar de aba de
-  resultado do script (RN-SQL-023), levar a aba para outra janela (RN-ABAS-002 e 003), desconectar, excluir a conexão, "Sair"
-  e fechar o app perguntam antes: "Há N alterações não salvas" com "Salvar", "Descartar" e "Cancelar" (nas saídas que atingem
-  várias abas, só "Descartar" e "Cancelar"). Rolar, "carregar mais", copiar e exportar não perguntam; copiar leva o que está
-  na tela, e exportar avisa que há alterações não salvas. O bloqueio por inatividade as descarta (RN-TX-007). *Alterada a
-  pedido do dono em 2026-10-16 (seção 33): entrou a troca de aba de resultado do script, e a lista passou a dizer o levar a aba
-  para outra janela, que já perguntava.*
+- **RN-EDIT-007.** **Com alterações pendentes**, executar outro comando na aba, executar de novo ou "Atualizar",
+  filtrar, ordenar (pelo cabeçalho, pelo menu ou pelo campo de filtro), filtrar pelo valor, chegar à aba por uma
+  chave estrangeira (RN-TABELA-007, que filtra a aba de destino), trocar o modo ou o nível, Commit, Rollback, fechar
+  a aba, trocar de aba de resultado do script (RN-SQL-023), levar a aba para outra janela (RN-ABAS-002 e 003),
+  desconectar, excluir a conexão, "Sair" e fechar o app perguntam antes: "Há N alterações não salvas" com "Salvar",
+  "Descartar" e "Cancelar" (nas saídas que atingem várias abas, só "Descartar" e "Cancelar"). Rolar, "carregar
+  mais", copiar, gerar SQL e exportar não perguntam: copiar leva o que está na tela; o "Gerar SQL" também, com a
+  chave lida na condição, e o diálogo dele avisa (RN-GRADE-018); e exportar avisa que há alterações não salvas. O
+  bloqueio por inatividade as descarta (RN-TX-007). *Alterada a pedido do dono em 2026-10-16 (seção 33): entrou a
+  troca de aba de resultado do script, e a lista passou a dizer o levar a aba para outra janela, que já perguntava.
+  Alterada a pedido do dono em 2026-10-17 (seção 37): entrou o "Gerar SQL".*
 - **RN-EDIT-008.** **Ver SQL** mostra, na ordem em que serão executados, os comandos que o "Salvar" vai executar, com os
   valores escritos como literais do banco para leitura; o valor que não tem literal (caractere de controle) aparece como `?`,
   com o valor ao lado. Diz que na execução os valores vão como parâmetros e, no Informix sem log, que cada comando é gravado
@@ -2005,11 +2304,15 @@ até lá, o que depende delas está a provar.
   fecha é o do último, e é a aba dele que passa ao "executar de novo" (RN-SQL-023). O aviso diz "N alterações salvas"
   (Auto-commit) ou "N alterações salvas, sem commit" (Commit manual). *Alterada a pedido do dono em 2026-10-16 (seção 33):
   entrou o "Salvar" das abas do script.*
-- **RN-EDIT-010.** **Custo.** Executar um comando não custa nenhuma consulta a mais ao banco por causa da edição: no PostgreSQL
-  a origem das colunas vem na própria resposta, e no Db2 e no Informix o Prism lê o texto do comando. A primeira tentativa de
-  editar um resultado consulta o catálogo uma vez, para todas as tabelas do `FROM` juntas — na sessão da árvore daquela
-  conexão, quando ela está aberta, ou numa conexão à parte, com prazo de espera de trava — e a resposta vale para aquele
-  resultado; cada "Salvar" consulta de novo, dentro da própria transação (RN-EDIT-005).
+- **RN-EDIT-010.** **Custo.** Executar um comando não custa nenhuma consulta a mais ao banco por causa da edição: no
+  PostgreSQL a origem das colunas vem na própria resposta, e no Db2 e no Informix o Prism lê o texto do comando. A
+  primeira tentativa de editar um resultado consulta o catálogo uma vez, para todas as tabelas do `FROM` juntas — na
+  sessão da árvore daquela conexão, quando ela está aberta, ou numa conexão à parte, com prazo de espera de trava —
+  e a resposta vale para aquele resultado; cada "Salvar" consulta de novo, dentro da própria transação
+  (RN-EDIT-005). O "Gerar SQL" e o "Copiar como" do SQL e do DbUnit pedem o mesmo alvo, pela mesma consulta, na
+  primeira vez que precisam dele (RN-GRADE-020), e a resposta serve à edição e a eles, menos a que veio com `purpose:
+  sql` numa conexão somente leitura, que não serve à edição (RN-GRADE-006). *Alterada a pedido do dono em
+  2026-10-17 (seção 37): entraram o "Gerar SQL" e o "Copiar como".*
 - **RN-EDIT-011.** **Concorrência:** o "Salvar" altera pela chave, sem conferir se outra pessoa mudou a linha depois da leitura,
   como o DBeaver. No Commit manual a linha alterada fica travada pelo banco até o Commit ou o Rollback.
 - **RN-EDIT-012.** **Informix sem log** (sem transação): a edição vale, e o "Salvar" grava **uma alteração por vez**, na mesma
@@ -2031,13 +2334,14 @@ Novas, no padrão da seção 6:
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
 | `POST api/user/database-sessions/{id}/transaction/commit` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone` quando o banco desfez) |
 | `POST api/user/database-sessions/{id}/transaction/rollback` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone`: a conexão caiu, e a transação já estava perdida) |
-| `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` (`resultID`: seção 33, RN-SQL-024) | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED` |
+| `POST .../queries/edit-target` `{ resultID, catalogSessionID?, purpose? }` (`resultID`: seção 33, RN-SQL-024; `purpose`: seção 37, RN-GRADE-020) | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `EDIT_INVALID` (`purpose`) |
 | `POST .../queries/edits` `{ resultID, changes }` (`resultID`: seção 33, RN-SQL-024) | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`) |
 | `POST .../queries/edits/preview` `{ resultID, changes }` (`resultID`: seção 33, RN-SQL-024) | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` |
 
 Notas:
 
-- `edit-target` devolve `tables` (cada tabela do `FROM`: `{ schema, name, key: [coluna do resultado], editable, reason }`),
+- `edit-target` devolve `tables` (cada tabela do `FROM`: `{ schema, name, kind, key: [coluna do resultado],
+  keyColumns: [nome da coluna na tabela], editable, reason }`, com `kind` e `keyColumns` da seção 37, RN-GRADE-020),
   `columns` (cada coluna do resultado: `{ table, baseColumn, editable, reason, nullable, generated }`, com `table` nulo na
   coluna calculada, e `generated` `always`, `byDefault` ou nulo; no PostgreSQL, a coluna cujo padrão é `nextval(...)`, o
   `serial`, também é `byDefault`, seção 33, RN-EDIT-016), `rowOperations` (verdadeiro só no resultado de uma tabela:
@@ -2372,22 +2676,29 @@ Defeito relatado pelo dono em 2026-10-13: copiar uma célula `CLOB` do Informix 
 Ctrl+C ou "Copiar valor" levou o texto cortado. Num cliente de banco a cópia tem de ser o valor
 inteiro.
 
-- **RN-SQL-017.** A grade continua mostrando o valor cortado (RN-SQL-011). Copiar (Ctrl+C,
-  "Copiar valor", copiar avançado) e exportar levam o valor completo, como veio do banco.
-  - A API guarda, em memória e só no processo dela, o valor completo de cada célula que cortou,
-    nas páginas que já entregou do resultado atual. Nunca grava em disco, nunca no log.
-  - Ela guarda até 256 MB por sessão. Passando disso, as células seguintes ficam sem valor
-    completo, e a página diz quais.
-  - Larga tudo quando a aba executa outro comando, quando o resultado é descartado e quando a
-    sessão fecha.
-  - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram.
+- **RN-SQL-017.** A grade continua mostrando o valor cortado (RN-SQL-011). Copiar (o "Copiar", o "Copiar com
+  cabeçalho" e os do "Copiar avançado", RN-GRADE-002, 003 e 015 a 017), o "Gerar SQL" (RN-GRADE-006), o duplicar
+  (RN-EDIT-016) e exportar levam o valor completo, como veio do banco.
+  - A API guarda, em memória e só no processo dela, o valor completo de cada célula que cortou, nas páginas que já
+    entregou do resultado atual. Nunca grava em disco, nunca no log.
+  - Ela guarda até 256 MB por sessão. Passando disso, as células seguintes ficam sem valor completo, e a página diz
+    quais.
+  - Larga tudo quando a aba executa outro comando, quando o resultado é descartado e quando a sessão fecha.
+  - A tela pede só as células cortadas das linhas e das colunas que vai usar, em pedidos de até 10.000 células (o
+    limite da rota), e o copiar para de pedir quando o texto passa do limite da área de transferência
+    (RN-GRADE-002).
+  - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram. O "Gerar SQL" e o
+    "Copiar como SQL" deixam de fora, com um comentário, a linha que precisaria dele (RN-GRADE-016 e 019), e o
+    duplicar não duplica (RN-EDIT-016).
   - O texto vai inteiro. O binário vai como a grade o escreve (hexadecimal), inteiro.
-  - O "exportar" daqui é o das linhas que estão na tela (o "Exportar CSV", RN-TABELA-006, e a seleção, quando
-    vier, RN-GRADE-007). A exportação de todas as linhas (seção 35) não passa por estes valores guardados nem
-    pelo teto de 256 MB: ela lê de novo, direto do banco e sem corte (RN-EXPORT-002 e 017), e o arquivo
-    temporário dela, na pasta de dados, é o único lugar em que a API grava dados de um banco no disco
-    (RN-EXPORT-018). *Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a exportação de todas as
-    linhas.*
+  - O "exportar" daqui é o das linhas que estão na tela (o "Exportar CSV", RN-TABELA-006; os "Copiar como" da
+    seleção, que entrou pela seção 37, RN-GRADE-016; e o arquivo da seleção, quando vier, RN-GRADE-007). A exportação de
+    todas as linhas (seção 35) não passa por estes valores guardados nem pelo teto de 256 MB: ela lê de novo, direto do
+    banco e sem corte (RN-EXPORT-002 e 017), e o arquivo temporário dela, na pasta de dados, é o único lugar em que a
+    API grava dados de um banco no disco (RN-EXPORT-018). *Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a
+    exportação de todas as linhas. Alterada a pedido do dono em 2026-10-17 (seção 37): entraram o copiar da seleção, o
+    copiar avançado e o "Gerar SQL", a tela pede só as células que vai usar, e o "exportar" daqui inclui os "Copiar
+    como" da seleção.*
 
 | Rota | Sucesso | Erros |
 | --- | --- | --- |
@@ -2732,16 +3043,20 @@ nos dados que estão sendo acompanhados".
   - Na conexão com "Confirmar antes de executar" em "Todos os comandos" (RN-PROT-001), ligar pergunta
     uma vez, e nunca a cada intervalo: confirmada, ela roda até ser desligada, e trocar só o
     intervalo não pergunta de novo. *Alterada a pedido do dono em 2026-10-15 (seção 32).*
-  - Fica em pausa (não executa) enquanto há alteração não salva na grade (RN-EDIT-007), uma célula
-    em edição ou um menu ou diálogo da grade aberto, e enquanto a aba não está à vista (outra aba à
-    frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
-    Configurações): só a aba à vista fala com o banco sozinha. Ao sair da pausa, se o prazo já
-    passou, executa na hora; senão, espera o que falta. A pausa da grade vale desde o começo da
-    ação que abre a célula ou o menu, exclui, cola, acrescenta ou duplica uma linha (pelo menu, pela
-    barra de edição ou pelo atalho, RN-EDIT-013 a 016; a ação antes pergunta à API o que se edita), e
-    não só depois: a ação nunca cai em outra linha. Se as linhas mudam mesmo assim (a execução que
-    já rodava quando o menu abriu), o menu fecha, e a escolha sobre a célula não age. *Alterada a
-    pedido do dono em 2026-10-16 (seção 33): entraram o duplicar e a barra de edição.*
+  - Fica em pausa (não executa) enquanto há alteração não salva na grade (RN-EDIT-007), mais de uma célula escolhida
+    (RN-GRADE-001: a execução esqueceria a seleção antes do botão direito ou do Ctrl+C; escolher uma célula só, ou o
+    Esc, a liberam), uma célula em edição ou um menu ou diálogo da grade aberto (também o "Copiar avançado", o
+    "Configurar comandos 'Copiar como'" e o "Gerar SQL", RN-GRADE-003, 017 e 018), e enquanto a aba não está à vista
+    (outra aba à frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
+    Configurações): só a aba à vista fala com o banco sozinha. Ao sair da pausa, se o prazo já passou, executa na hora;
+    senão, espera o que falta. A pausa da grade vale desde o começo da ação que abre a célula ou o menu, exclui, cola,
+    acrescenta ou duplica linhas (pelo menu, pela barra de edição ou pelo atalho, RN-EDIT-013 a 016; a ação antes
+    pergunta à API o que se edita), copia (enquanto busca os valores completos e monta o texto, RN-GRADE-002) ou gera
+    SQL (RN-GRADE-006), e não só depois: a ação nunca cai em outra linha. Se as linhas mudam mesmo assim (a execução que
+    já rodava quando o menu abriu), o menu fecha, e a escolha sobre a célula não age; a cópia leva as linhas que estavam
+    escolhidas quando começou, e o "Gerar SQL" diz que o resultado mudou (RN-GRADE-018). *Alterada a pedido do dono em
+    2026-10-16 (seção 33): entraram o duplicar e a barra de edição. Alterada a pedido do dono em 2026-10-17 (seção 37):
+    entraram o copiar, o "Gerar SQL", os diálogos deles e a seleção de mais de uma célula.*
   - Para sozinha quando uma execução não traz um resultado de leitura novo: o erro do banco aparece
     uma vez, como sempre (RN-SQL-009), e o controle diz numa nota curta que a atualização
     automática parou e por quê (o erro, o cancelamento, o comando que não pôde ser executado, o
@@ -3060,13 +3375,24 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
     mais", "Contar total", "Cancelar", o valor completo das células, o catálogo, abrir a sessão e "Testar conexão"
     continuam valendo: leem o que a pessoa já executou ou o catálogo, e a contagem só executa de novo uma leitura
     (RN-SQL-006). A exportação de dados (seção 35) também vale: ela só executa leitura, em qualquer conexão, pela
-    mesma regra da RN-PROT-005, e recusa o resto com `EXPORT_SOURCE_NOT_READ` (RN-EXPORT-002). *Alterada a pedido
-    do dono em 2026-10-16 (seção 35): entrou a exportação de dados.* A importação de dados e a cópia para outro
-    banco (seção 36) gravam linhas, e por isso não valem numa conexão somente leitura de destino: a API recusa a
-    prévia e o começo delas com 422 `CONNECTION_READ_ONLY` ("A conexão é somente leitura, e a importação grava na
-    tabela. Nada foi enviado ao banco."), e as entradas e a escolha da conexão de destino ficam desabilitadas com o
-    motivo (RN-IMPORT-001 e 023). A origem da cópia pode ser somente leitura: ela só é lida, como na exportação.
-    *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação e a cópia.*
+    mesma regra da RN-PROT-005, e recusa o resto com `EXPORT_SOURCE_NOT_READ` (RN-EXPORT-002). *Alterada a pedido do
+    dono em 2026-10-16 (seção 35): entrou a exportação de dados.* A importação de dados e a cópia para outro banco
+    (seção 36) gravam linhas, e por isso não valem numa conexão somente leitura de destino: a API recusa a prévia e
+    o começo delas com 422 `CONNECTION_READ_ONLY` ("A conexão é somente leitura, e a importação grava na tabela.
+    Nada foi enviado ao banco."), e as entradas e a escolha da conexão de destino ficam desabilitadas com o motivo
+    (RN-IMPORT-001 e 023). A origem da cópia pode ser somente leitura: ela só é lida, como na exportação. *Alterada
+    a pedido do dono em 2026-10-16 (seção 36): entraram a importação e a cópia.* O copiar, o copiar avançado e o
+    "Gerar SQL" (seção 37) valem na conexão somente leitura: leem o que está na tela, e o SQL gerado não é
+    executado. O `edit-target` com o pedido do "Gerar SQL" (`purpose: "sql"`, RN-GRADE-020) também vale nela: ele só
+    lê o catálogo, e responde a tabela e a chave com tudo só leitura. *Alterada a pedido do dono em 2026-10-17
+    (seção 37): entraram o copiar avançado e o "Gerar SQL".* O motivo "a conexão é somente leitura" da página vale
+    enquanto a conexão é somente leitura: desmarcado o "Somente leitura" depois da leitura (RN-PROT-003), a tela trata
+    a editabilidade daquela página como a que não se sabe e pergunta à API pelo `edit-target`, como numa página sem
+    motivo, para a edição e para o "Gerar SQL", e a API responde pelo resultado (RN-EDIT-002). A tela sabe a proteção
+    pela lista das conexões que já tem, a mesma da árvore. O contrário fica como era: a conexão marcada depois da
+    leitura não muda a página, e a API recusa a edição com `CONNECTION_READ_ONLY`. *Alterada em 2026-10-17, decisão
+    de projeto: antes a página guardava o motivo até a consulta ser executada de novo, e a edição e o "Gerar SQL"
+    ficavam desabilitados numa conexão que já não era somente leitura.*
   - No PostgreSQL o banco também recusa. Toda leitura de uma conexão somente leitura roda na
     transação só de leitura da RN-SQL-013, e o que o banco recusa ali por gravar (uma função que
     grava chamada pelo `SELECT`, um `nextval`) é a resposta, como erro do banco (422
@@ -3155,15 +3481,19 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
     aspas, ela passa). E o `SET` é recusado também quando só muda o esquema ou o caminho de busca da
     sessão: para ler outro esquema, escreva o nome dele no comando (`esquema.tabela`).
 - **RN-PROT-006.** As sessões abertas. Mudar as proteções (na conexão, numa pasta acima, ou movendo uma das duas)
-  não fecha nenhuma sessão: o comando seguinte de cada sessão já segue a regra nova, porque a API lê as proteções
-  do cofre a cada comando. O cursor aberto continua sendo lido ("Carregar mais"): ele é de uma leitura que já
-  rodou. O resultado que já está na grade fica com a edição que tinha quando foi executado: a recusa da edição
-  (RN-PROT-002) vem da proteção do momento do pedido, e o resultado novo, executado depois da mudança, já sai com
-  ela. A sessão de uma conexão que acabou de ser excluída, e que ainda não fechou (RN-CONN-014), responde como a
-  sessão que não existe (404 `DATABASE_SESSION_NOT_FOUND`). A importação e a cópia para outro banco (seção 36), que
-  gravam numa conexão à parte, também leem as proteções do cofre antes de cada comando, e param, com a transação em
-  andamento desfeita, quando o destino passa a ser somente leitura (RN-IMPORT-014). *Alterada a pedido do dono em
-  2026-10-16 (seção 36): entraram a importação e a cópia.*
+  não fecha nenhuma sessão: o comando seguinte de cada sessão já segue a regra nova, porque a API lê as proteções do
+  cofre a cada comando. O cursor aberto continua sendo lido ("Carregar mais"): ele é de uma leitura que já rodou. O
+  resultado que já está na grade fica com a edição que tinha quando foi executado, menos o motivo "a conexão é
+  somente leitura", que deixa de valer quando a conexão deixa de ser somente leitura: a tela passa a perguntar à API
+  pelo `edit-target`, como numa página sem motivo (RN-PROT-002). A recusa da edição (RN-PROT-002) vem da proteção do
+  momento do pedido, e o resultado novo, executado depois da mudança, já sai com ela. A sessão de uma conexão que
+  acabou de ser excluída, e que ainda não fechou (RN-CONN-014), responde como a sessão que não existe (404
+  `DATABASE_SESSION_NOT_FOUND`). A importação e a cópia para outro banco (seção 36), que gravam numa conexão à
+  parte, também leem as proteções do cofre antes de cada comando, e param, com a transação em andamento desfeita,
+  quando o destino passa a ser somente leitura (RN-IMPORT-014). *Alterada a pedido do dono em 2026-10-16 (seção 36):
+  entraram a importação e a cópia.* *Alterada em 2026-10-17, decisão de projeto: o motivo "a conexão é somente
+  leitura" da página deixou de valer depois de desmarcado o "Somente leitura"; antes ele ficava até a consulta ser
+  executada de novo.*
   - No PostgreSQL, antes de cada comando da pessoa e de cada "Salvar", a sessão é posta no modo da
     conexão daquele momento: `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` quando ela é
     somente leitura, e `... READ WRITE` quando deixa de ser. O `SET` só vai ao banco quando o modo
@@ -3348,7 +3678,8 @@ os dados em vários formatos e importar dados terão complementos próprios.
 A edição já existia (seção 22), mas sem botões à vista e sem duplicar; no "Executar script" (seção 31)
 só a aba do último comando se editava, porque a API guardava um resultado só por sessão; e a seção
 Scripts era uma lista. A seleção de várias linhas da grade (RN-GRADE-001) continua especificada e por
-construir: os botões agem na linha da célula ativa. Muda a RN-EDIT-001, 002, 003, 004, 005, 007 e 009,
+construir: os botões agem na linha da célula ativa (a seleção entrou pela seção 37, e os botões
+passaram a agir nela). Muda a RN-EDIT-001, 002, 003, 004, 005, 007 e 009,
 a RN-GRADE-004 e 014, a RN-SQL-020, a RN-SCRIPT-001, 002 e 003, a RN-TABELA-002, a RN-PROT-002, a
 RN-NAV-002 e 011, e as seções 6, 9, 22, 23 e 31. O canvas não desenha a barra de edição nem as pastas
 de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
@@ -3376,6 +3707,9 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     2. o mais, "Adicionar linha", com a dica "Adicionar linha (Alt+Insert)";
     3. as duas folhas, "Duplicar linha", com a dica "Duplicar linha (Ctrl+Alt+Insert)";
     4. o X, no tom de erro do tema, "Excluir linha", com a dica "Excluir linha (Alt+Delete)".
+  - Com mais de uma linha na seleção (RN-GRADE-001), o terceiro e o quarto passam a "Duplicar linhas" e "Excluir
+    linhas", com as dicas "Duplicar as 3 linhas escolhidas (Ctrl+Alt+Insert)" e "Excluir as 3 linhas escolhidas
+    (Alt+Delete)", que o leitor de tela também recebe, pela descrição do botão. O ícone e o lugar não mudam.
   - Cada botão declara o atalho para o leitor de tela (`aria-keyshortcuts`), o da plataforma (no
     macOS, os da RN-EDIT-015, que a dica também escreve).
   - A barra é uma parada só do Tab, como a barra de ações do navegador: o Tab chega ao botão que teve
@@ -3392,147 +3726,168 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
   - Com o campo de edição de uma célula aberto, clicar num botão confirma antes o que foi digitado (o
     campo confirma ao perder o foco, como hoje), e só então o botão age.
   - *Alterada a pedido do dono em 2026-10-16 (seção 35): nos Registros, o "Exportar…" entrou antes da
-    barra. Alterada a pedido do dono em 2026-10-16 (seção 36): o "Importar…" também.*
+    barra. Alterada a pedido do dono em 2026-10-16 (seção 36): o "Importar…" também. Alterada a pedido do dono em
+    2026-10-17 (seção 37): "Duplicar linhas" e "Excluir linhas", com várias linhas na seleção.*
 - **RN-EDIT-014.** Quando cada botão vale, e o que acontece depois dele.
-  - Cada botão faz o que o item de mesmo nome do menu da célula faz sobre a célula ativa
-    (RN-GRADE-001), e só sobre ela: "Editar célula" abre o campo de edição nela, com o valor, como o
-    F2; "Adicionar linha" cria uma linha nova em branco; "Duplicar linha" duplica a linha da célula
-    ativa (RN-EDIT-016); "Excluir linha" marca para exclusão a linha da célula ativa, que fica riscada,
-    ou, quando ela é uma linha nova, a tira da grade.
-  - Habilitar não custa consulta (RN-EDIT-010): enquanto o Prism não perguntou ao catálogo o que se
-    edita naquele resultado, os botões ficam habilitados, e a primeira tentativa pergunta. Se a ação não
-    vale, a faixa diz o motivo, como o menu e o Alt+Insert já fazem, e dali em diante o botão fica
-    desabilitado com ele.
+  - Cada botão faz o que o item de mesmo nome do menu da célula faz (RN-GRADE-004): "Editar célula" abre o campo de
+    edição na célula ativa (RN-GRADE-001), com o valor, como o F2; "Adicionar linha" cria uma linha nova em branco;
+    "Duplicar linha" duplica as linhas da seleção (RN-EDIT-016); "Excluir linha" marca para exclusão as linhas da
+    seleção, que ficam riscadas, e tira da grade as que são linhas novas. As linhas da seleção são as que têm uma
+    célula escolhida (RN-GRADE-001); sem nada escolhido além da célula ativa, a linha dela. Com mais de uma, os dois
+    últimos passam a "Duplicar linhas" e "Excluir linhas" (RN-EDIT-013).
+  - Habilitar não custa consulta (RN-EDIT-010): enquanto o Prism não perguntou ao catálogo o que se edita naquele
+    resultado, os botões ficam habilitados, e a primeira tentativa pergunta. Se a ação não vale, a faixa diz o
+    motivo, como o menu e o Alt+Insert já fazem, e dali em diante o botão fica desabilitado com ele.
   - Ficam desabilitados desde o começo, com o motivo, quando ele já é sabido:
-    - os quatro, quando o resultado inteiro é só leitura pelo que a página do resultado já diz
-      (RN-EDIT-002, e a conexão somente leitura, RN-PROT-002), com o motivo da barra do resultado;
-    - os quatro, com a aba ocupada (um comando, o "Salvar", o script rodando ou parado na pergunta de
-      erro, RN-SQL-021): "há um comando em andamento na aba"; e enquanto a atualização automática lê
-      as linhas de novo: "a atualização automática está lendo as linhas de novo; tente outra vez em um
-      instante" (RN-GRADE-014);
-    - "Adicionar linha", "Duplicar linha" e "Excluir linha", quando o catálogo já respondeu que o
-      resultado não aceita linha nova nem exclusão (`rowOperations` falso): numa junção, "num
-      resultado de junção só se alteram células"; senão, o motivo da tabela, ou "este resultado não
-      aceita linha nova nem exclusão";
-    - "Editar célula", pelo que vale na célula ativa (RN-EDIT-002): a tabela da coluna que não se
-      edita, com o motivo da tabela ("<tabela> é uma visão" e os outros), e a coluna que não se edita,
-      com o motivo da coluna (essas duas, quando o catálogo já disse); a linha marcada para exclusão; a
-      célula cortada; a chave da linha cortada ou gerada pelo banco; a tabela sem linha ali numa
-      junção externa (a chave dela veio nula); a célula que o banco preencheu numa linha nova salva
-      (RN-EDIT-009);
-    - "Excluir linha", na linha cuja chave não se sabe (cortada, ou gerada pelo banco numa linha nova
-      salva) e na linha que já está marcada para exclusão: "a linha já está marcada para exclusão;
-      Desfazer alteração a devolve" (o item do menu também);
-    - sem célula ativa, "Editar célula" diz "Escolha uma célula na grade.", e "Duplicar linha" e
-      "Excluir linha" dizem "Escolha uma linha na grade."; na grade sem nenhuma linha (nem lida, nem
-      nova), os três dizem "O resultado não tem linhas.", e "Adicionar linha" continua valendo.
-  - Quando mais de um motivo vale, a dica, o leitor de tela e a faixa dizem só o primeiro, na ordem da
-    lista acima (e, dentro de um item, na ordem em que ele os escreve). Os motivos entram na frase
-    "Somente leitura: <motivo>." como os de hoje, também o da aba ocupada e o da linha marcada para
-    exclusão; os três da falta de célula ou de linha não são de só leitura e vêm sozinhos: "Editar
-    célula (F2). Escolha uma célula na grade."
-  - Depois do botão, o foco volta à grade, como volta quando o botão que o tinha sai da tela
-    (RN-SQL-006), menos no "Editar célula", em que ele vai para o campo de edição e volta à grade
-    quando o campo confirma ou cancela.
-    - "Adicionar linha" e "Duplicar linha" põem a linha nova no fim da grade, depois das lidas e das
-      novas de antes, como o Alt+Insert faz hoje; a grade rola até ela, e a célula ativa vai para ela,
-      na primeira coluna editável (na duplicada que copiou a chave, na coluna da chave mais à
-      esquerda na grade, RN-EDIT-016).
-    - "Excluir linha" deixa a célula ativa na mesma linha, riscada. Tirada uma linha nova, a célula
-      ativa passa à linha que ficou no lugar dela, ou à de cima, quando ela era a última; sem linha
-      nenhuma, não há célula ativa.
-  - A atualização automática fica em pausa desde o começo da ação, como no menu, e a ação cujo
-    resultado mudou no meio não age (RN-GRADE-014).
-- **RN-EDIT-015.** Os atalhos, com o foco na grade (e não no campo de edição de uma célula, que fica
-  com as teclas dele).
-  - F2 (e Enter) edita a célula ativa; Alt+Insert adiciona uma linha; Ctrl+Alt+Insert duplica a linha
-    da célula ativa; Alt+Delete exclui a linha da célula ativa, como no DBeaver. O menu da célula e as
-    dicas da barra escrevem os mesmos atalhos.
-  - Os modificadores são exatos: Alt+Insert sem Ctrl, Shift nem Cmd; Ctrl+Alt+Insert sem Shift;
-    Alt+Delete sem Ctrl, Shift nem Cmd. A grade confere o Ctrl+Alt+Insert antes do Alt+Insert, que
-    está dentro dele (hoje o Alt+Insert também casa com o Ctrl+Alt+Insert e com o Shift+Alt+Insert).
-    Com Shift nada acontece: o Shift+Alt+Insert e o Ctrl+Shift+Alt+Insert que o DBeaver ganhou na
-    26.1 (a linha nova e a duplicada antes da atual) ficam para depois.
-  - O Delete sozinho não exclui a linha da célula ativa: o dele é o da RN-EDIT-001, o das linhas
-    inteiras escolhidas pelo número da linha, que espera a seleção de linhas da RN-GRADE-001.
-  - No Windows, o Alt da direita do teclado ABNT2 (e dos outros teclados que têm AltGr) é o AltGr, e
-    chega como Ctrl+Alt: com ele, Insert duplica, e Delete não faz nada. Os atalhos valem com o Alt da
-    esquerda; os botões e o menu cobrem o resto. O Insert não escreve caractere, e por isso o
-    Ctrl+Alt+Insert não deixa o AltGr de fora, como o Alt+X deixa (RN-SQL-019).
-  - No macOS, como nos outros atalhos da grade (o Cmd+S, o Cmd+C), o Option faz o papel do Alt e o Cmd
-    o do Ctrl: Option+Insert, Cmd+Option+Insert e Option+Delete, e a dica e o menu os escrevem assim.
-    Control+Option+Insert, o do DBeaver no macOS, também duplica (sem Shift nem Cmd).
-    Ao contrário do Alt+X do script (RN-SQL-019), nenhum deles escreve caractere (o foco está na
-    grade, não num campo de texto, e o Insert e o Delete não são teclas de caractere), então não há
-    troca de tecla. A tecla "delete" do Mac é a de apagar para trás: Option+delete exclui a linha, e
-    Option+fn+delete (apagar para a frente) também. O teclado do Mac não tem Insert: ali "Adicionar
-    linha" e "Duplicar linha" ficam na barra e no menu, e o atalho vale para quem usa um teclado que
-    tem a tecla.
+    - os quatro, quando o resultado inteiro é só leitura pelo que a página do resultado já diz (RN-EDIT-002, e a
+      conexão somente leitura, RN-PROT-002), com o motivo da barra do resultado;
+    - os quatro, com a aba ocupada (um comando, o "Salvar", o script rodando ou parado na pergunta de erro,
+      RN-SQL-021): "há um comando em andamento na aba"; e enquanto a atualização automática lê as linhas de novo: "a
+      atualização automática está lendo as linhas de novo; tente outra vez em um instante" (RN-GRADE-014);
+    - "Adicionar linha", "Duplicar linha" e "Excluir linha", quando o catálogo já respondeu que o resultado não
+      aceita linha nova nem exclusão (`rowOperations` falso): numa junção, "num resultado de junção só se alteram
+      células"; senão, o motivo da tabela, ou "este resultado não aceita linha nova nem exclusão";
+    - "Editar célula", pelo que vale na célula ativa (RN-EDIT-002): a tabela da coluna que não se edita, com o
+      motivo da tabela ("<tabela> é uma visão" e os outros), e a coluna que não se edita, com o motivo da coluna
+      (essas duas, quando o catálogo já disse); a linha marcada para exclusão; a célula cortada; a chave da linha
+      cortada ou gerada pelo banco; a tabela sem linha ali numa junção externa (a chave dela veio nula); a célula
+      que o banco preencheu numa linha nova salva (RN-EDIT-009);
+    - "Excluir linha", quando uma das linhas da seleção não se exclui, porque a chave dela não se sabe (cortada, ou
+      gerada pelo banco numa linha nova salva): com uma linha, o motivo de hoje ("a chave desta linha chegou
+      cortada"); com mais, o da primeira delas na ordem da grade, com o número ("a chave da linha 7 chegou cortada",
+      "a chave da linha nova 2 foi gerada pelo banco; execute de novo para editá-la"). Nada é excluído, nem as
+      outras. A linha que já está marcada para exclusão não impede: fica como está. Quando todas já estão, o motivo
+      é "a linha já está marcada para exclusão; Desfazer alteração a devolve" ("as linhas já estão marcadas para
+      exclusão; Desfazer alteração as devolve", com mais de uma), também no item do menu;
+    - "Duplicar linha", com mais de 1.000 linhas na seleção: "Duplicar vale para até 1.000 linhas de uma vez:
+      escolha menos linhas." (RN-EDIT-016);
+    - sem célula ativa, "Editar célula" diz "Escolha uma célula na grade.", e "Duplicar linha" e "Excluir linha"
+      dizem "Escolha uma linha na grade."; na grade sem nenhuma linha (nem lida, nem nova), os três dizem "O
+      resultado não tem linhas.", e "Adicionar linha" continua valendo.
+  - Quando mais de um motivo vale, a dica, o leitor de tela e a faixa dizem só o primeiro, na ordem da lista acima
+    (e, dentro de um item, na ordem em que ele os escreve). Os motivos entram na frase "Somente leitura: <motivo>."
+    como os de hoje, também o da aba ocupada e o da linha marcada para exclusão; os três da falta de célula ou de
+    linha e o do limite de 1.000 não são de só leitura e vêm sozinhos: "Editar célula (F2). Escolha uma célula na
+    grade."
+  - Depois do botão, o foco volta à grade, como volta quando o botão que o tinha sai da tela (RN-SQL-006), menos no
+    "Editar célula", em que ele vai para o campo de edição e volta à grade quando o campo confirma ou cancela.
+    - "Adicionar linha" põe a linha nova no fim da grade, depois das lidas e das novas de antes, como o Alt+Insert
+      faz hoje; a grade rola até ela, e a célula ativa vai para ela, na primeira coluna editável, e a seleção passa
+      a ser essa célula.
+    - "Duplicar linha" põe as cópias no fim da grade, na ordem das linhas de origem; a grade rola até a primeira, a
+      seleção passa a ser as cópias, inteiras, e a célula ativa vai para a primeira delas, na primeira coluna
+      editável (na duplicada que copiou a chave, na coluna da chave mais à esquerda na grade, RN-EDIT-016).
+    - "Excluir linha" deixa a seleção e a célula ativa onde estavam, com as linhas lidas riscadas. Tiradas linhas
+      novas, a seleção passa a ser a célula ativa, que vai para a linha que ficou no lugar da primeira tirada, ou
+      para a de cima, quando não ficou nenhuma depois dela; sem linha nenhuma, não há célula ativa.
+  - A atualização automática fica em pausa desde o começo da ação, como no menu, e a ação cujo resultado mudou no
+    meio não age (RN-GRADE-014).
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): "Duplicar linha" e "Excluir linha" agem nas linhas da
+    seleção, com os motivos de várias linhas, o limite do duplicar e o que acontece depois.*
+- **RN-EDIT-015.** Os atalhos, com o foco na grade (e não no campo de edição de uma célula, que fica com as teclas
+  dele).
+  - F2 (e Enter) edita a célula ativa; Alt+Insert adiciona uma linha; Ctrl+Alt+Insert duplica as linhas da seleção;
+    Alt+Delete exclui as linhas da seleção (RN-EDIT-014), como no DBeaver. O menu da célula e as dicas da barra
+    escrevem os mesmos atalhos.
+  - Os modificadores são exatos: Alt+Insert sem Ctrl, Shift nem Cmd; Ctrl+Alt+Insert sem Shift; Alt+Delete sem Ctrl,
+    Shift nem Cmd. A grade confere o Ctrl+Alt+Insert antes do Alt+Insert, que está dentro dele (hoje o Alt+Insert
+    também casa com o Ctrl+Alt+Insert e com o Shift+Alt+Insert). Com Shift nada acontece: o Shift+Alt+Insert e o
+    Ctrl+Shift+Alt+Insert que o DBeaver ganhou na 26.1 (a linha nova e a duplicada antes da atual) ficam para
+    depois.
+  - O Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, exclui as linhas inteiras escolhidas (pelo número da linha, pelo
+    Shift+Espaço ou pelo Ctrl+A, RN-GRADE-001), como o "Excluir linhas", com os mesmos motivos e a mesma faixa
+    quando não vale (RN-EDIT-014). Com um retângulo de células escolhido, ou só com a célula ativa, o Delete não faz
+    nada, também quando o retângulo cobre todas as colunas (numa grade de uma coluna, a célula ativa já cobre a
+    linha): ali ele não apaga o valor (isso é o "Definir como nulo"), e uma tecla sem modificador não marca para
+    exclusão linhas que não foram escolhidas como linhas inteiras. O Shift+Espaço faz do retângulo as linhas
+    inteiras dele (RN-GRADE-001).
+  - No Windows, o Alt da direita do teclado ABNT2 (e dos outros teclados que têm AltGr) é o AltGr, e chega como
+    Ctrl+Alt: com ele, Insert duplica, e Delete não faz nada. Os atalhos valem com o Alt da esquerda; os botões e o
+    menu cobrem o resto. O Insert não escreve caractere, e por isso o Ctrl+Alt+Insert não deixa o AltGr de fora,
+    como o Alt+X deixa (RN-SQL-019).
+  - No macOS, como nos outros atalhos da grade (o Cmd+S, o Cmd+C), o Option faz o papel do Alt e o Cmd o do Ctrl:
+    Option+Insert, Cmd+Option+Insert e Option+Delete, e a dica e o menu os escrevem assim. Control+Option+Insert, o
+    do DBeaver no macOS, também duplica (sem Shift nem Cmd). Ao contrário do Alt+X do script (RN-SQL-019), nenhum
+    deles escreve caractere (o foco está na grade, não num campo de texto, e o Insert e o Delete não são teclas de
+    caractere), então não há troca de tecla. A tecla "delete" do Mac é a de apagar para trás: Option+delete exclui
+    as linhas da seleção, e Option+fn+delete (apagar para a frente) também; sozinhas, a "delete" e a fn+delete são o
+    Delete das linhas inteiras escolhidas. O teclado do Mac não tem Insert: ali "Adicionar linha" e "Duplicar linha"
+    ficam na barra e no menu, e o atalho vale para quem usa um teclado que tem a tecla.
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): o Delete sozinho passou a excluir as linhas inteiras
+    escolhidas, e nunca um retângulo, e os atalhos das linhas agem na seleção.*
 
 ### Duplicar linha
 
-- **RN-EDIT-016.** "Duplicar linha" cria uma linha nova pendente com os valores da linha da célula
-  ativa.
+- **RN-EDIT-016.** "Duplicar linha" cria uma linha nova pendente com os valores de cada linha da seleção (as que têm
+  uma célula escolhida, RN-GRADE-001; sem nada escolhido além da célula ativa, a linha dela), na ordem da grade. Com
+  mais de uma, o item e o botão dizem "Duplicar linhas".
   - Vale onde "Adicionar linha" vale: no resultado de uma tabela só que aceita linha nova e exclusão
-    (`rowOperations`, RN-EDIT-002). Numa junção fica desabilitado, com o motivo de hoje ("num
-    resultado de junção só se alteram células").
-  - A linha de origem pode ser uma lida (com alterações pendentes ou sem elas), uma marcada para
-    exclusão (copia os valores lidos), uma nova pendente (copia o que foi preenchido nela, também numa
-    duplicada) ou uma nova já salva na aba de consulta (RN-EDIT-009).
-  - A cópia vai para o fim da grade, como a linha de "Adicionar linha" (RN-EDIT-014): as linhas novas
-    vêm sempre depois das lidas. Pôr a cópia logo abaixo da linha de origem, como o DBeaver, fica para
-    depois.
-  - O que copia: o valor que a tela mostra (com a pendência, quando há; o nulo, como nulo), como o
-    copiar (RN-EDIT-007), de cada coluna do resultado que se edita na tabela. Não copia, e essas
-    colunas ficam com o padrão da tabela, como na linha em branco:
-    - as que o banco gera, "sempre" e "por padrão", para ele gerar o valor da linha nova: a
-      identidade (as duas formas, no PostgreSQL e no Db2), o `SERIAL`, o `SERIAL8` e o `BIGSERIAL` do
-      Informix e, no PostgreSQL, a coluna cujo padrão é o próximo valor de uma sequência
-      (`nextval(...)`: o `serial` e o `bigserial`). Para isso, o `edit-target` diz
-      `generated: "byDefault"` também nessa coluna do PostgreSQL; o catálogo continua a mostrá-la como
-      padrão, e não como coluna gerada (RN-CAT-001 não muda);
-    - as que não se editam: a calculada, a binária, a de um tipo que o Prism não converte
-      (RN-EDIT-006);
-    - numa linha nova já salva, as que o banco preencheu ("gerado pelo banco — execute de novo para
-      ver", RN-EDIT-009), cujo valor a tela não sabe.
+    (`rowOperations`, RN-EDIT-002). Numa junção fica desabilitado, com o motivo de hoje ("num resultado de junção só
+    se alteram células").
+  - Cada linha de origem pode ser uma lida (com alterações pendentes ou sem elas), uma marcada para exclusão (copia
+    os valores lidos), uma nova pendente (copia o que foi preenchido nela, também numa duplicada) ou uma nova já
+    salva na aba de consulta (RN-EDIT-009).
+  - As cópias vão para o fim da grade, na ordem das linhas de origem, como a linha de "Adicionar linha"
+    (RN-EDIT-014): as linhas novas vêm sempre depois das lidas. Pôr cada cópia logo abaixo da linha de origem, como
+    o DBeaver, fica para depois. Depois, a seleção é das cópias (RN-EDIT-014).
+  - Até 1.000 linhas de uma vez: com mais na seleção, nada é duplicado, e o item, o botão e o atalho dizem "Duplicar
+    vale para até 1.000 linhas de uma vez: escolha menos linhas.". Cada cópia é uma linha nova pendente, e o
+    "Salvar" grava todas numa transação só (RN-EDIT-005); para levar muitas linhas a outra tabela, há a cópia para
+    outro banco (RN-IMPORT-022).
+  - O que copia: o valor que a tela mostra (com a pendência, quando há; o nulo, como nulo), como o copiar
+    (RN-EDIT-007), de cada coluna do resultado que se edita na tabela. Não copia, e essas colunas ficam com o padrão
+    da tabela, como na linha em branco:
+    - as que o banco gera, "sempre" e "por padrão", para ele gerar o valor da linha nova: a identidade (as duas
+      formas, no PostgreSQL e no Db2), o `SERIAL`, o `SERIAL8` e o `BIGSERIAL` do Informix e, no PostgreSQL, a
+      coluna cujo padrão é o próximo valor de uma sequência (`nextval(...)`: o `serial` e o `bigserial`). Para isso,
+      o `edit-target` diz `generated: "byDefault"` também nessa coluna do PostgreSQL; o catálogo continua a
+      mostrá-la como padrão, e não como coluna gerada (RN-CAT-001 não muda);
+    - as que não se editam: a calculada, a binária, a de um tipo que o Prism não converte (RN-EDIT-006);
+    - numa linha nova já salva, as que o banco preencheu ("gerado pelo banco — execute de novo para ver",
+      RN-EDIT-009), cujo valor a tela não sabe.
 
     As colunas da tabela que o comando não trouxe também ficam com o padrão dela.
-  - A célula cortada (RN-SQL-011) de uma coluna que se copia vai com o valor completo, que a tela busca
-    antes na API (RN-SQL-017), como o copiar e o exportar: enquanto busca, a faixa diz "Buscando os
-    valores completos…", com "Cancelar". Se um valor não vem inteiro (passou do teto de 256 MB, é o
-    resultado de uma aba guardada do script, que não guarda valor completo, RN-SQL-024, ou a sessão
-    mudou ou caiu), nada é duplicado, e a faixa diz: "A linha não foi duplicada: o valor completo de
-    <coluna> não pôde vir. Execute o comando de novo para duplicá-la." Nos Registros, que não têm
-    comando: "A linha não foi duplicada: o valor completo de <coluna> não pôde vir. Atualize os
-    registros para duplicá-la." Cancelada a busca: "A linha não foi duplicada: a busca dos valores
-    completos foi cancelada."
-  - A chave: quando todas as colunas da chave da tabela (a da RN-EDIT-002) foram copiadas, a faixa
-    avisa "A linha duplicada copiou a chave de <tabela> (<colunas>): troque-a antes de salvar, ou o
-    banco vai recusar a linha repetida.", e a célula ativa vai para a coluna da chave mais à esquerda
-    na grade. A chave com uma coluna gerada pelo banco não é copiada inteira e não pede o aviso. Salvar
-    sem trocar a chave dá a recusa do banco, como veio (RN-EDIT-005).
-  - Quando uma coluna da tabela que está no resultado não foi copiada, a faixa diz quais: "Não
-    copiadas (ficam com o padrão da tabela): id, foto." (com uma só, "Não copiada (fica com o padrão
-    da tabela): id."). Na linha nova de origem, as colunas que ela não tinha preenchido não entram na
-    lista: já estavam com o padrão. As duas frases podem vir juntas, e ficam até a próxima ação de
-    edição, o "Salvar" ou o "Descartar".
-  - A linha duplicada é uma linha nova (RN-EDIT-004): tem as marcas dela ("Linha nova" no número da
-    linha, "linha nova N" na faixa), conta como uma alteração, e entra no "Ver SQL" e no "Salvar" como
-    um `INSERT` com as colunas copiadas e as que a pessoa preencheu depois (RN-EDIT-005). "Excluir
-    linha" a tira da grade; "Desfazer alteração" numa célula dela tira o valor daquela célula, que
-    volta ao padrão da tabela, como numa linha em branco.
-  - A duplicada sem nenhuma coluna copiada é a linha em branco: se nada for preenchido, o "Salvar"
-    recusa como recusa a linha em branco ("A linha nova não tem nenhuma coluna preenchida.").
+  - A célula cortada (RN-SQL-011) de uma coluna que se copia vai com o valor completo, que a tela busca antes na API
+    (RN-SQL-017), como o copiar e o exportar, para todas as linhas de uma vez: enquanto busca, a faixa diz "Buscando
+    os valores completos…", com "Cancelar". Se um valor não vem inteiro (passou do teto de 256 MB, é o resultado de
+    uma aba guardada do script, que não guarda valor completo, RN-SQL-024, ou a sessão mudou ou caiu), nada é
+    duplicado, nem as outras linhas, e a faixa diz: "A linha não foi duplicada: o valor completo de <coluna> não
+    pôde vir. Execute o comando de novo para duplicá-la." Nos Registros, que não têm comando: "A linha não foi
+    duplicada: o valor completo de <coluna> não pôde vir. Atualize os registros para duplicá-la." Com mais de uma
+    linha: "As linhas não foram duplicadas: o valor completo de <coluna>, na linha 7, não pôde vir. Execute o
+    comando de novo para duplicá-las." ("Atualize os registros para duplicá-las."). Cancelada a busca: "A linha não
+    foi duplicada: a busca dos valores completos foi cancelada." ("As linhas não foram duplicadas: …").
+  - A chave: quando todas as colunas da chave da tabela (a da RN-EDIT-002) foram copiadas, a faixa avisa "A linha
+    duplicada copiou a chave de <tabela> (<colunas>): troque-a antes de salvar, ou o banco vai recusar a linha
+    repetida." (com mais de uma: "As linhas duplicadas copiaram a chave de <tabela> (<colunas>): troque-a em cada
+    uma antes de salvar, ou o banco vai recusar as linhas repetidas."), e a célula ativa vai para a coluna da chave
+    mais à esquerda na grade, na primeira cópia. A chave com uma coluna gerada pelo banco não é copiada inteira e
+    não pede o aviso. Salvar sem trocar a chave dá a recusa do banco, como veio (RN-EDIT-005).
+  - Quando uma coluna da tabela que está no resultado não foi copiada, a faixa diz quais, uma vez para todas as
+    cópias: "Não copiadas (ficam com o padrão da tabela): id, foto." (com uma só, "Não copiada (fica com o padrão da
+    tabela): id."). Na linha nova de origem, as colunas que ela não tinha preenchido não entram na lista: já estavam
+    com o padrão. As duas frases podem vir juntas, e ficam até a próxima ação de edição, o "Salvar" ou o
+    "Descartar".
+  - Cada linha duplicada é uma linha nova (RN-EDIT-004): tem as marcas dela ("Linha nova" no número da linha, "linha
+    nova N" na faixa), conta como uma alteração, e entra no "Ver SQL" e no "Salvar" como um `INSERT` com as colunas
+    copiadas e as que a pessoa preencheu depois (RN-EDIT-005). "Excluir linha" a tira da grade; "Desfazer alteração"
+    numa célula dela tira o valor daquela célula, que volta ao padrão da tabela, como numa linha em branco.
+  - A duplicada sem nenhuma coluna copiada é a linha em branco: se nada for preenchido, o "Salvar" recusa como
+    recusa a linha em branco ("A linha nova não tem nenhuma coluna preenchida.").
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): "Duplicar linha" duplica todas as linhas da seleção, até
+    1.000 de uma vez, com as frases no plural.*
 
 ### As abas do script que se editam
 
 - **RN-SQL-023.** Toda aba de resultado que o script mantém se edita.
-  - As abas dos outros comandos que o script guarda (RN-SQL-020: as dos 20 primeiros que devolvem
-    linhas, além da do último) se editam como a do último comando: valem as regras de edição da seção 22
-    inteiras (RN-EDIT-001 a 012), a barra de edição e o duplicar (RN-EDIT-013 a 016), e o menu da
-    célula, com copiar (também o Ctrl+C), colar, editar, definir como nulo, desfazer, adicionar,
-    duplicar e excluir linha. "Filtrar" (F11), "Atualizar" (F5) e "Atualizar automaticamente" não
-    estão no menu delas: são do resultado do último comando, que tem o cursor e executa de novo.
+  - As abas dos outros comandos que o script guarda (RN-SQL-020: as dos 20 primeiros que devolvem linhas, além da do
+    último) se editam como a do último comando: valem as regras de edição da seção 22 inteiras (RN-EDIT-001 a 012),
+    a barra de edição e o duplicar (RN-EDIT-013 a 016), e o menu da célula (RN-GRADE-004), com a seleção
+    (RN-GRADE-001), o copiar e o copiar avançado (RN-GRADE-002, 003 e 015 a 017), o colar, a edição, o "Exportar
+    dados…" e o "Gerar SQL" (RN-GRADE-006). "Filtrar" (F11), "Ordenar", "Atualizar" (F5) e "Atualizar
+    automaticamente" não estão no menu delas: são do resultado do último comando, que tem o cursor e executa de
+    novo. *Alterada a pedido do dono em 2026-10-17 (seção 37): entraram a seleção, o copiar avançado e o "Gerar
+    SQL", e o "Ordenar" fica de fora delas, como o "Filtrar".*
   - Continuam só leitura, com o motivo na faixa e nos botões, as que a RN-EDIT-002 tranca, como antes:
     a do comando que gravou e devolveu linhas, a de união, de `DISTINCT`, de agrupamento e as demais, e
     todas as de uma conexão somente leitura (RN-PROT-002).
@@ -3540,9 +3895,10 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     comando seguinte rodou. Carregar mais, Contar total, o filtro e a atualização automática valem no
     resultado do último comando." "Executar este comando" continua nela, como antes: executa só aquele
     comando e substitui os resultados do script.
-  - Copiar uma célula cortada numa aba guardada leva o valor cortado, com o aviso de quantos vieram
-    cortados (RN-GRADE-002, RN-SQL-017): o valor completo fica só com o resultado do último comando.
-    Duplicar uma linha que precisa dele não acontece (RN-EDIT-016).
+  - Copiar uma célula cortada numa aba guardada (o "Copiar" e os do "Copiar avançado") leva o valor cortado, com o
+    aviso de quantos vieram cortados (RN-GRADE-002, RN-SQL-017): o valor completo fica só com o resultado do último
+    comando. Duplicar uma linha que precisa dele não acontece (RN-EDIT-016), e o "Gerar SQL" e o "Copiar como SQL"
+    deixam de fora, com o comentário, a linha que precisa dele (RN-GRADE-016 e 019).
   - As pendências são de uma aba por vez. Trocar de aba de resultado (clique, setas, Home, End,
     também para as Estatísticas) com alterações não salvas pergunta antes: "Há N alterações não
     salvas", com "Salvar", "Descartar" e "Cancelar" (RN-EDIT-007). "Salvar" grava e então troca de aba;
@@ -3844,7 +4200,7 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Pôr a linha nova e a duplicada logo abaixo da linha atual (ou acima dela, o Shift+Alt+Insert e o
   Ctrl+Shift+Alt+Insert da 26.1 do DBeaver), em vez do fim da grade.
 - Duplicar e excluir várias linhas de uma vez, e o Delete com as linhas escolhidas pelo número da linha:
-  dependem da seleção de várias linhas (RN-GRADE-001), que vem com a exportação da seleção.
+  entraram pela seção 37, com a seleção de várias linhas (RN-GRADE-001).
 - Duplicar copiando no próprio banco o binário e o valor maior que o corte (um `INSERT ... SELECT` pela
   chave da linha de origem), em vez de pelo que a grade tem.
 - "Editar célula" num editor à parte, para o valor grande (o Shift+Enter do DBeaver), e copiar o valor
@@ -4587,7 +4943,8 @@ Esta seção é a exportação para arquivo (e para a área de transferência). 
 linhas para uma tabela que já existe em outra conexão) e a importação de um arquivo para uma tabela vêm no
 complemento seguinte, juntos, porque os dois gravam linhas numa tabela pelo mesmo carregador; aqui "Banco de
 dados" aparece na lista como "Em breve". Exportar a seleção da grade, e só as linhas carregadas, com estes
-formatos espera a seleção de várias células (RN-GRADE-001).
+formatos espera a seleção de várias células (RN-GRADE-001). (A seleção entrou pela seção 37, com a cópia dela
+nestes formatos; o arquivo dela continua para depois, RN-GRADE-007.)
 
 Até aqui só existia o "Exportar CSV" dos Registros, das linhas carregadas, montado na tela (RN-TABELA-006); a
 exportação do resultado inteiro era "a tarefa seguinte" (RN-GRADE-008). Ela chega agora. A API lê de novo, numa
@@ -4618,9 +4975,9 @@ e 13. O canvas não desenha nada disto (seção 9).
     "Exportar todas as linhas deste resultado, em CSV ou outro formato". Depois de um script (RN-SQL-020), ele
     age sobre a aba de resultado que está à frente; com as Estatísticas à frente, fica desabilitado com
     "Escolha a aba de um resultado para exportar.".
-  - No menu da célula da grade (RN-GRADE-004), nos Registros e nos resultados: "Exportar dados…", num grupo
-    próprio, logo depois de "Gerar SQL" e antes de "Ir para o registro referenciado" e dos itens da edição, com
-    a origem daquela grade.
+  - No menu da célula da grade (RN-GRADE-004), nos Registros e nos resultados: "Exportar dados…", num grupo com o
+    submenu "Gerar SQL", depois dos itens da edição e antes de "Atualizar", com a origem daquela grade. *Alterada a
+    pedido do dono em 2026-10-17 (seção 37): o lugar do item no menu da grade, que segue o do DBeaver.*
   - O botão e os itens estão sempre lá, também sem resultado. O que não se aplica fica desabilitado sem sair do
     caminho do Tab (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela:
     - sem resultado na tela (antes da primeira execução, nas linhas afetadas, no erro): "Não há resultado para
@@ -4696,13 +5053,16 @@ e 13. O canvas não desenha nada disto (seção 9).
   - Há um assistente por vez em cada janela (o diálogo cobre a janela). O bloqueio por inatividade, o "Sair" e o
     quinto erro de senha o fecham (RN-SEG-001), como os outros diálogos.
   - As escolhas da última exportação ficam lembradas por usuário, nas preferências desta instalação
-    (RN-CONFIG-001, no `localStorage` da janela, como o último formato da RN-GRADE-007): o formato, as opções
+    (RN-CONFIG-001, no `localStorage` da janela, como as escolhas do copiar avançado, RN-GRADE-003 e 017): o
+    formato, as opções
     de cada formato (com o "Incluir BOM" de cada um), "Contar as linhas antes", o padrão do nome, "Compactar em
     .zip", "Mostrar na pasta ao terminar" e a área de transferência. As colunas e a tabela de destino do SQL e
     do DbUnit são da origem e não se lembram. A escolha lembrada que não vale mais (um formato que não existe, um
     valor fora da faixa) volta ao padrão, sem erro. Com "Banco de dados", lembram-se as escolhas da Carga, e não a
     conexão nem a tabela de destino (RN-IMPORT-022).
-  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as etapas e o botão do destino "Banco de dados".*
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as etapas e o botão do destino "Banco de dados".
+    Alterada a pedido do dono em 2026-10-17 (seção 37): a comparação das escolhas lembradas passou a ser com as do
+    copiar avançado, porque a RN-GRADE-007 não lembra mais um formato.*
 
 - **RN-EXPORT-004.** Formato.
   - É uma lista de escolha única (`listbox`) com o ícone (16 px, traço 1,5), o nome e uma frase de cada formato,
@@ -4778,8 +5138,8 @@ e 13. O canvas não desenha nada disto (seção 9).
 
 - **RN-EXPORT-007.** CSV.
   - "Separador": "Ponto e vírgula (;)", o padrão, que é o que o Excel em português espera; "Vírgula (,)";
-    "Tabulação"; ou "Barra vertical (|)". Com a tabulação a extensão é `.tsv` (o TSV da RN-GRADE-007); com os
-    outros, `.csv`.
+    "Tabulação"; ou "Barra vertical (|)". Com a tabulação a extensão é `.tsv` (o TSV do `to-delimited.ts` da tela); com
+    os outros, `.csv`.
   - "Cabeçalho": "Na primeira linha", o padrão, ou "Sem cabeçalho".
   - "Aspas", sempre `"`, dobrada dentro do valor:
     - "Só quando precisa", o padrão: o valor que tem o separador, a aspa, a quebra de linha ou o retorno de
@@ -4831,7 +5191,7 @@ e 13. O canvas não desenha nada disto (seção 9).
     um espaço: cada linha da origem é uma linha do arquivo.
 
 - **RN-EXPORT-009.** HTML e Markdown.
-  - **HTML**: o documento da RN-GRADE-007 (`to-html.ts`): `<!DOCTYPE html>`, a política de conteúdo do próprio
+  - **HTML**: o documento do `to-html.ts` da tela: `<!DOCTYPE html>`, a política de conteúdo do próprio
     documento, que proíbe script, a folha de estilo constante e uma `<table>`, com o nome da coluna em `<th>`, o
     número alinhado à direita, o nulo na célula vazia com o `NULL` apagado desenhado pela folha de estilo, e uma
     linha `<tr>` por linha da origem.
@@ -4841,7 +5201,7 @@ e 13. O canvas não desenha nada disto (seção 9).
     - Todo texto do dado é escapado (`&`, `<`, `>` e as duas aspas). O caractere que um documento HTML não aceita
       (controle, DEL, os de C1, não-caractere, par substituto solto) é tirado, e o aviso do fim conta quantos
       (RN-EXPORT-022).
-  - **Markdown**: a tabela no estilo do GitHub da RN-GRADE-007 (`to-markdown.ts`): `| a | b |`, a linha de
+  - **Markdown**: a tabela no estilo do GitHub do `to-markdown.ts` da tela: `| a | b |`, a linha de
     alinhamento (`---:` à direita na coluna de número) e uma linha por registro. A barra invertida, a barra
     vertical e a formatação (`*`, `_`, crase, til, colchete) são escapadas, `<` e `&` viram entidade, e a quebra
     de linha vira `<br>`. O arquivo termina em LF.
@@ -4849,7 +5209,7 @@ e 13. O canvas não desenha nada disto (seção 9).
     - "Nulo como": vazio, nas regras do CSV.
 
 - **RN-EXPORT-010.** JSON e Código fonte.
-  - **JSON**: a lista de objetos da RN-GRADE-007 (`to-json.ts`), um por linha, com uma chave por coluna, na
+  - **JSON**: a lista de objetos que o `to-json.ts` da tela escrevia, um por linha, com uma chave por coluna, na
     ordem do resultado (o nome repetido ganha `_2`, `_3`…, `jsonKeys`). O número e o booleano saem como tais
     quando o texto é um número na gramática do JSON, ou `true`/`false`, numa coluna desse tipo; o nulo é `null`;
     o resto é texto. Recuo de 2 espaços, e LF.
@@ -4858,7 +5218,7 @@ e 13. O canvas não desenha nada disto (seção 9).
       minúsculas), o par substituto solto vira `\uXXXX`, e o resto vai em UTF-8, como está. O `Utf8JsonWriter`
       do .NET, que escapa os acentos, não serve como está.
     - "Pôr o nome da origem", ligado, como o DBeaver: `{ "pedido": [ … ] }`, com a lista um nível para dentro.
-      Desligado, só a lista, como na RN-GRADE-007.
+      Desligado, só a lista.
     - "Datas em ISO 8601", ligado: o valor de data e hora no formato da grade (`aaaa-mm-dd hh:mm:ss[.f…]`, com
       ou sem o fuso `±hh` ou `±hh:mm`) ganha o `T` no lugar do espaço, e o fuso `±hh` vira `±hh:00`:
       `2024-01-15 10:30:00.000000` sai `2024-01-15T10:30:00.000000`, e `2024-01-15 10:30:00+00` sai
@@ -4897,7 +5257,8 @@ e 13. O canvas não desenha nada disto (seção 9).
       (2, 'Bia', NULL);
     ```
 
-    Com uma linha por comando, cada `INSERT` fica numa linha só, como no "Gerar SQL" (RN-GRADE-006):
+    Com uma linha por comando, cada `INSERT` fica numa linha só, como no "Gerar SQL" com "SQL compacto"
+    (RN-GRADE-019):
     `INSERT INTO "estoque"."pedido" ("id", "cliente", "criado") VALUES (1, 'Ana', '2024-01-15
     10:30:00.000000');`. Os comandos terminam em `;`, e o arquivo, em LF. No Informix, o arquivo só roda com os
     identificadores delimitados ligados, como o Prism abre a sessão (RN-TABELA-002); noutra ferramenta, com
@@ -4937,7 +5298,8 @@ e 13. O canvas não desenha nada disto (seção 9).
       no fim, como `E'O''Brien\r'`), e continua um literal só, sem tipo, que entra numa coluna `json`, `xml` ou de
       lista; no Db2, como `' || CHR(13) || '`; no Informix, as três por `||` e `CHR(10)`, `CHR(13)` e `CHR(9)`;
     - o nulo, `NULL`.
-  - O binário, que o "Gerar SQL" não escreve, tem literal aqui. No PostgreSQL é `decode('DEADBEEF', 'hex')`, que
+  - O binário tem literal aqui, e no "Gerar SQL" (RN-GRADE-019), que escreve os mesmos literais. No PostgreSQL é
+    `decode('DEADBEEF', 'hex')`, que
     vale qualquer que seja o `standard_conforming_strings` (o `'\x…'::bytea` dependeria dele, como a barra
     invertida do texto, que por isso já vai como `E'…'`). No Db2 ele depende do tipo da coluna: `BX'DEADBEEF'`, a
     constante binária, no `BINARY` e no `VARBINARY`; `BLOB(X'…')` no `BLOB`; e `X'DEADBEEF'`, a constante
@@ -4954,8 +5316,10 @@ e 13. O canvas não desenha nada disto (seção 9).
     - `-- Linha 1234 não exportada: um valor tem caractere de controle que não vira literal.`
     - `-- Linha 1234 não exportada: no Informix, a data e hora tem mais de cinco casas de segundo.`
 
-    O número é o da linha na ordem da origem, a partir de 1. As linhas seguintes começam outro `INSERT`, e o
-    aviso do fim conta as que ficaram de fora (RN-EXPORT-022).
+    O número é o da linha na ordem da origem, a partir de 1 (no "Copiar como SQL", o da linha na grade, e lá
+    entram também as frases que só a tela escreve: a do valor cortado que não veio inteiro, a do valor que o banco gerou
+    e a grade não mostra, e a da linha nova ainda não salva, RN-GRADE-016). As linhas seguintes começam outro `INSERT`,
+    e o aviso do fim conta as que ficaram de fora (RN-EXPORT-022).
   - O arquivo não confere cada comando contra o tamanho que o banco de destino aceita num comando só (no Db2, 2 MB
     de texto): com valores grandes, um `INSERT` de 10 linhas pode passar dele. A dica de "Linhas por comando" diz:
     "Com valores grandes, use 1: cada banco tem um tamanho máximo de comando."
@@ -4971,6 +5335,8 @@ e 13. O canvas não desenha nada disto (seção 9).
     `X'…'`, que é um texto, e o `INSERT` falhava ao voltar para o banco (SQL0408N, o valor não é compatível com
     a coluna). Passou à constante binária, `BX'…'`; o `BLOB` continua em `BLOB(X'…')`, e o texto `FOR BIT DATA`,
     em `X'…'`.*
+  - *Alterada a pedido do dono em 2026-10-17 (seção 37): o "Gerar SQL" passou a escrever o literal do binário, e o
+    "Copiar como SQL" escreve estes comandos, com os comentários a mais que só a tela escreve.*
 
 - **RN-EXPORT-012.** XML e DbUnit.
   - **XML**: o formato do DBeaver, com um elemento por linha e um por coluna:
@@ -5016,11 +5382,11 @@ e 13. O canvas não desenha nada disto (seção 9).
       não ser que o conjunto seja carregado com columnSensing. "Escrever [NULL]" não tem esse limite."
     - Os nomes seguem a regra de nome do XML acima, e o atributo repetido ganha `_2`, `_3`…, como a chave do
       JSON. O valor do atributo escapa também a aspa, a tabulação e a quebra de linha (`&quot;`, `&#9;`,
-      `&#10;`), como a RN-GRADE-007 escapa um atributo, e o caractere que o XML 1.0 não aceita é tirado e
+      `&#10;`), como o `to-xml.ts` da tela escapa um atributo, e o caractere que o XML 1.0 não aceita é tirado e
       contado.
 
 - **RN-EXPORT-013.** XLSX.
-  - Uma pasta de trabalho do Excel, com as regras da RN-GRADE-007 (`to-xlsx.ts`): a planilha tem o nome da
+  - Uma pasta de trabalho do Excel, com as regras do `to-xlsx.ts` da tela: a planilha tem o nome da
     origem, pelas regras do nome de planilha (sem `[ ] : * ? / \`, até 31 caracteres, nunca `History`); o
     cabeçalho tem os nomes das colunas, em negrito e congelado; o número sai como número só quando cabe no Excel
     sem perder precisão (até 15 dígitos significativos; senão, texto); a data, a hora, o booleano e o binário
@@ -5035,7 +5401,7 @@ e 13. O canvas não desenha nada disto (seção 9).
     16.384 colunas: deixe 216 de fora na Extração, ou escolha outro formato." e não avança.
   - A API escreve a pasta de trabalho em fluxo, compactada (deflate), linha a linha, sem guardar a planilha na
     memória. O `to-xlsx.ts` da tela, que monta o arquivo inteiro sem compressão, continua servindo à exportação
-    da seleção, quando ela vier.
+    da seleção para um arquivo, quando ela vier (a seleção entrou pela seção 37; o arquivo dela, não, RN-GRADE-007).
   - O XLSX não tem outra opção nesta versão, além do binário.
 
 - **RN-EXPORT-014.** Saída.
@@ -5493,47 +5859,59 @@ e 13. O canvas não desenha nada disto (seção 9).
 ### Os mesmos textos nos dois lados
 
 - **RN-EXPORT-024.** As fixtures de ouro.
-  - A tela (TypeScript: `grid-export`, `csv.ts` e `table-sql.ts`) e a API (C#) escrevem os mesmos valores, com
-    os mesmos escapes: a tela, no copiar avançado, no "Gerar SQL", no "Exportar CSV" e, quando vier, na
-    exportação da seleção; a API, nesta exportação. A estrutura do documento pode diferir enquanto a seleção não
-    entra no assistente (o XML e o JSON de hoje da tela, RN-GRADE-007). Para os dois lados não divergirem, as
-    regras que existem nos dois têm fixtures de ouro compartilhadas: arquivos JSON em `src/test-fixtures/export/`,
-    fora das pastas da tela e da API, com as entradas e a saída esperada de cada caso, que o teste de cada lado lê
-    e confere por inteiro. Os casos são escritos à mão, revistos, e nunca regerados a partir do código: mudar uma
-    regra é mudar a fixture, e os dois lados falham até seguirem a regra nova.
-  - A pasta é nova na raiz do código: o `AGENTS.md` da raiz ganha a linha dela na tabela "Onde está o quê", o
-    teste da tela a lê pelo caminho relativo à raiz do repositório, e o projeto de teste da API a copia para a
-    saída (`Content` com `CopyToOutputDirectory`).
+  - A tela (TypeScript: `grid-export`, `csv.ts` e `table-sql.ts`) e a API (C#) escrevem os mesmos valores, com os
+    mesmos escapes, e os mesmos documentos: a tela, no copiar avançado e nos "Copiar como" (RN-GRADE-003 e 016), no
+    "Gerar SQL" (RN-GRADE-019) e no "Exportar CSV" e, quando vier, na exportação da seleção; a API, nesta
+    exportação. Nos nove formatos de texto, o documento inteiro é o mesmo para a mesma entrada (RN-GRADE-016). Para
+    os dois lados não divergirem, as regras que existem nos dois têm fixtures de ouro compartilhadas: arquivos JSON
+    em `src/test-fixtures/export/`, fora das pastas da tela e da API, com as entradas e a saída esperada de cada
+    caso, que o teste de cada lado lê e confere por inteiro. Os casos são escritos à mão, revistos, e nunca
+    regerados a partir do código: mudar uma regra é mudar a fixture, e os dois lados falham até seguirem a regra
+    nova.
+  - A pasta é nova na raiz do código: o `AGENTS.md` da raiz ganha a linha dela na tabela "Onde está o quê", o teste
+    da tela a lê pelo caminho relativo à raiz do repositório, e o projeto de teste da API a copia para a saída
+    (`Content` com `CopyToOutputDirectory`).
   - Têm fixture as regras:
     - o literal do SQL (`sqlLiteral` e `scriptLiteral`): o banco (os três), o tipo da coluna e o valor, com o
       literal esperado ou nenhum. Os casos cobrem aspas, barra invertida, quebra de linha, retorno de carro,
       tabulação, outros controles, Unicode fora do plano básico, o número simples e o que não é, o lógico do
       Informix e a data e hora do Informix com 0 a 6 casas;
-    - o campo do CSV (`csvFieldOf` e `toDelimited`): o valor e as opções (separador, aspas, proteção, nulo), com
-      os casos da fórmula (`=`, `+`, `-`, `@`, também depois de espaço, tabulação e retorno de carro; o número
-      negativo; `-1+1`) e os da aspa. As aspas dos dois lados são "Só quando precisa" (`auto`) e "Em todos os
-      valores" (`all` na API, `always` na tela); "Em todos os textos" é só da API, e o "nunca" da tela, só dela;
+    - o campo do CSV (`csvFieldOf` e `toDelimited`): o valor e as opções (separador, aspas, proteção, nulo), com os
+      casos da fórmula (`=`, `+`, `-`, `@`, também depois de espaço, tabulação e retorno de carro; o número
+      negativo; `-1+1`) e os da aspa. As três aspas da exportação ("Só quando precisa", "Em todos os textos" e "Em
+      todos os valores") valem nos dois lados, desde a seção 37; o "nunca" da tela continua só dela;
     - o texto e o atributo do XML, e a limpeza do XML 1.0 (`escapeXmlText`, `escapeXmlAttribute`, `isXmlChar`);
     - o texto do HTML e a limpeza dele (`escapeHtml`, `isHtmlChar`);
     - a célula do Markdown;
-    - o valor e a chave do JSON (`jsonValue`, que passa a ser exportado por `to-json.ts`, `jsonKeys`, e o escape
-      do `JSON.stringify`);
+    - o valor e a chave do JSON (`jsonValue`, que passa a ser exportado por `to-json.ts`, `jsonKeys`, e o escape do
+      `JSON.stringify`);
     - a planilha: o texto com `_xHHHH_` (`xlsxText`), o número (`spreadsheetNumber`), o nome da planilha
       (`sheetNameOf`) e o corte nos 32.767 caracteres.
-  - O que só a API escreve (o TXT, o DbUnit, o nome de elemento do XML, o PHP, o literal do binário, a data em
-    ISO 8601, o `INSERT` de várias linhas) tem fixtures só dela, no mesmo lugar e na mesma forma, prontas para
-    quando a tela os escrever.
+  - O que só a API escrevia (o TXT, o DbUnit, o nome de elemento do XML, o PHP, o literal do binário, a data em ISO
+    8601, o `INSERT` de várias linhas) a tela passa a escrever, nos "Copiar como" e no "Gerar SQL" (seção 37), e as
+    fixtures dele, que eram só da API, passam a ser lidas pelos dois lados. A seção 37 acrescenta, na mesma pasta e
+    na mesma forma:
+    - a do documento inteiro de cada um dos nove formatos de texto: as colunas (o nome, o tipo do banco e o da
+      grade), as linhas, o número de cada linha, o nome da origem, as opções e o texto esperado, também o resumo (os
+      valores cortados, os caracteres tirados, as linhas comentadas), lida pelos dois lados;
+    - as só da tela: a linha do SQL com um valor que não veio inteiro (`-- Linha 7 não exportada: um valor não pôde
+      vir inteiro.`, RN-GRADE-016), o texto simples do "Copiar" (as aspas, o nulo, a célula só), os nomes das
+      colunas do "Copiar nome da(s) coluna(s)" e cada item do "Gerar SQL" (com chave, sem chave, com a chave
+      composta nos três bancos, compacto e não, com e sem os nomes completos, com as linhas de fora e os comentários
+      delas).
   - Os casos levam nomes e valores hostis: aspas, barra invertida, `]]>`, `<script>`, a quebra de linha nas três
-    formas, U+0000, U+202E, U+FEFF, U+FFFE, o par substituto solto, emoji e ideogramas, e um `_x0041_` já escrito
-    no dado.
+    formas, U+0000, U+202E, U+FEFF, U+FFFE, o par substituto solto, emoji e ideogramas, e um `_x0041_` já escrito no
+    dado.
   - O texto que a cadeia do JSON não guarda de um jeito que os dois lados leiam (o par substituto solto: o
-    `JSON.parse` aceita `"\ud83d"`, e o `GetString` do `System.Text.Json` recusa, com
-    `InvalidOperationException`) vai na fixture como lista de pontos de código, `{ "codePoints": [55357, 97] }`,
-    e os dois lados montam o texto a partir dela. A saída esperada que teria o par solto vai do mesmo jeito.
-  - A importação de dados (seção 36) acrescenta as dela, na mesma pasta e na mesma forma (RN-IMPORT-028): a volta
-    da proteção contra fórmula, a leitura do campo do CSV, o `_xHHHH_` do XLSX nos dois sentidos e os números e as
+    `JSON.parse` aceita `"\ud83d"`, e o `GetString` do `System.Text.Json` recusa, com `InvalidOperationException`)
+    vai na fixture como lista de pontos de código, `{ "codePoints": [55357, 97] }`, e os dois lados montam o texto a
+    partir dela. A saída esperada que teria o par solto vai do mesmo jeito.
+  - A importação de dados (seção 36) acrescenta as dela, na mesma pasta e na mesma forma (RN-IMPORT-028): a volta da
+    proteção contra fórmula, a leitura do campo do CSV, o `_xHHHH_` do XLSX nos dois sentidos e os números e as
     datas de cada formato.
-  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as fixtures da importação.*
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as fixtures da importação. Alterada a pedido do
+    dono em 2026-10-17 (seção 37): a tela passou a escrever os nove formatos de texto, com o documento inteiro igual
+    ao da API, e entraram as fixtures do documento, as do copiar e as do "Gerar SQL".*
 
 ### Rotas e respostas
 
@@ -5674,8 +6052,9 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 
 - O destino "Banco de dados" (copiar as linhas para uma tabela de outra conexão) e a importação de um arquivo para
   uma tabela: entraram pela seção 36.
-- Exportar a seleção da grade e só as linhas carregadas pelo assistente (RN-GRADE-007), com a seleção de várias
-  células (RN-GRADE-001).
+- Exportar a seleção da grade e só as linhas carregadas pelo assistente (RN-GRADE-007): a seleção de várias células
+  entrou pela seção 37 (RN-GRADE-001), e a cópia dela, nos formatos da exportação, pela área de transferência
+  (RN-GRADE-016); o arquivo continua para depois.
 - Várias tabelas numa exportação só, um esquema inteiro, e um arquivo só para várias origens.
 - Dividir a saída em vários arquivos por tamanho.
 - Outras codificações além do UTF-8.
@@ -7128,3 +7507,472 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Pular as primeiras N linhas do arquivo (o cabeçalho de um relatório antes da tabela), e recusar, como opção, a
   linha com menos valores que o cabeçalho.
 - Continuar uma importação interrompida de onde parou.
+
+## 37. Complemento de 2026-10-17, versão 0.4.0: a seleção da grade, o copiar avançado e o gerar SQL, como no DBeaver
+
+Pedido do dono em 2026-10-17: "adicione a funcionalidade do dbeaver de ao selecionar um registro do resultado de um
+script ou da própria tab de registros de uma tabela, a opção de gerar SQL … Inclusive, pode fazer todo esse copiar
+avançado também, caso eu queira copiar apenas uma célula ou a linha inteira com vários tipos que existem hoje que
+você estava fazendo antes". Com o pedido vieram dois prints do DBeaver:
+
+- a aba de dados de uma tabela, com a linha 9 escolhida pelo número da linha e o botão direito em "Gerar SQL", que
+  abre "SELECT .. WHERE .. =", "SELECT .. WHERE .. IN", "INSERT", "UPDATE", "DELETE by Unique Key" e "CREATE";
+- o resultado de um script, com a linha 6 escolhida e o botão direito em "Copiar avançado", que abre "Copiar
+  avançado …" (Ctrl+Shift+C), "Copiar nome da(s) coluna(s)", "Copiar número de linha(s)", os "Copiar como" de CSV,
+  Código fonte, DbUnit, HTML, JSON, Markdown, SQL, TXT e XML, e "Configurar comandos 'Copiar como' …"; ao lado dele,
+  "Copiar" (Ctrl+C), "Colar" (Ctrl+V) e "Colar avançado …" (Ctrl+Shift+V).
+
+A seção 20 já especificava a seleção, o copiar, o copiar avançado e o gerar SQL (RN-GRADE-001 a 006), mas nada disso
+chegou à tela: a grade tem só a célula ativa, o Ctrl+C copia uma célula, e a biblioteca `grid-export` da tela (os
+formatos e o `generateSql`) não é chamada por tela nenhuma. Esta seção constrói o que faltava e reescreve aquelas
+regras para casar com os prints:
+
+- a seleção de células e de linhas, com as ações de linha da barra de edição e a tecla Delete sobre várias linhas
+  (RN-GRADE-001 e RN-EDIT-014 a 016);
+- o "Copiar" e o "Copiar com cabeçalho" (RN-GRADE-002);
+- o submenu "Copiar avançado", com o diálogo, os nomes das colunas, os números das linhas e os nove "Copiar como"
+  nos formatos e nas opções da exportação de dados (seção 35), escritos na tela com o mesmo texto que a API escreve,
+  conferido pelas fixtures de ouro (RN-GRADE-003 e 015 a 017, RN-EXPORT-024);
+- o menu da grade, nos grupos do menu do DBeaver (RN-GRADE-004);
+- o submenu "Gerar SQL", com os seis itens, que abre um diálogo com o SQL e as opções, como o do DBeaver, em vez de
+  abrir direto numa aba (RN-GRADE-006 e 018 a 020).
+
+As regras de antes (RN-GRADE-001 a 004, 006 e 007) estão reescritas, inteiras, na seção 20, onde sempre estiveram;
+aqui ficam as novas. O que o DBeaver faz foi lido no código dele (o ramo `devel`, em 2026-10-17), porque a
+documentação só dá os nomes dos itens e das opções. O Prism segue o DBeaver, menos nos defeitos dele, que não se
+repetem: o `UPDATE` sem chave sai sem `WHERE`; o `SELECT .. WHERE .. IN` sem chave sai com SQL inválido; o `DELETE`
+sem chave provavelmente falha; o nulo dentro do `IN (…)` nunca casa; e o copiar não dobra a aspa de dentro do valor.
+
+Muda a RN-GRADE-001, 002, 003, 004, 006, 007 e 014, a RN-EDIT-001, 004, 007, 010, 013, 014, 015 e 016, a RN-SQL-017
+e 023, a RN-PROT-002, a RN-EXPORT-001, 003, 007, 009 a 013 e 024, e as seções 6, 9, 22, 33 e 35. A API muda pouco: o
+`edit-target` ganha o pedido do "Gerar SQL", que vale também na conexão somente leitura, e diz o tipo de cada tabela
+e a chave dela pelo nome (RN-GRADE-020). Nenhum canal novo entre a tela e o processo principal: a cópia vai pela
+área de transferência da janela, como o Ctrl+C de hoje. O canvas não desenha nada disto (seção 9).
+
+### Copiar avançado
+
+- **RN-GRADE-015.** "Copiar nome da(s) coluna(s)" e "Copiar número de linha(s)".
+  - "Copiar nome da(s) coluna(s)" copia o nome das colunas da seleção (todas, com linhas inteiras, RN-GRADE-001), na
+    ordem da grade, como o banco pede que ele seja escrito: sem aspas o nome simples, e entre aspas duplas o que
+    precisa delas (as maiúsculas no PostgreSQL e no Informix, as minúsculas no Db2, o espaço, o acento, a palavra
+    reservada), pela mesma regra do autocompletar do editor e do filtro (`sqlName`, RN-TABELA-011), como o DBeaver,
+    que também só põe aspas quando precisa. Com uma coluna, sai só o nome; com mais, os nomes separados por
+    tabulação, como no DBeaver, sem tabulação depois do último: `id`, `"Nome"` e `criado`, com uma tabulação entre
+    um e outro. O nome repetido (a junção com dois `id`) sai repetido.
+  - Com mais de uma coluna, o DBeaver abre um diálogo para escolher o separador; o Prism não abre o diálogo e usa a
+    tabulação, o padrão dele. A lista de colunas de um `SELECT` sai do "Gerar SQL" (RN-GRADE-019).
+  - "Copiar número de linha(s)" copia os números das linhas da seleção, como o número da linha da grade os mostra (a
+    partir de 1), um por linha, em ordem crescente, sem quebra depois do último, como o DBeaver. As linhas novas não
+    têm número (a grade mostra "+") e não entram; com só linhas novas na seleção, o item fica desabilitado, com "As
+    linhas novas não têm número.". O DBeaver abre um diálogo com mais de uma linha; o Prism, não.
+  - Os avisos: "Nome da coluna copiado." ou "3 nomes de coluna copiados."; "Número da linha copiado." ou "3 números
+    de linha copiados.". Os dois itens não pedem nada à API nem esperam a aba, e valem também nas abas guardadas do
+    script e na conexão somente leitura.
+- **RN-GRADE-016.** "Copiar como <formato>".
+  - Copia na hora as células escolhidas (as linhas e as colunas da seleção, RN-GRADE-001), no formato, com as opções
+    guardadas para ele (RN-GRADE-017), sem diálogo. Com uma célula só, sai um documento de uma linha e uma coluna,
+    que é o que o dono pediu ("copiar apenas uma célula ou a linha inteira com vários tipos"); com a linha escolhida
+    pelo número, a linha inteira. No DBeaver, uma célula só copiaria o resultado inteiro, lido de novo do banco; no
+    Prism, todas as linhas carregadas são uma escolha do "Copiar avançado…" (RN-GRADE-003), e todas as do banco, o
+    "Exportar dados…" (RN-EXPORT-001).
+  - Os formatos e as opções são os da exportação de dados (RN-EXPORT-006 a 012), com os mesmos padrões; só os do
+    arquivo não valem, e o texto nunca leva BOM (RN-EXPORT-014). O que muda com a origem segue a exportação:
+    - "O nome da origem" (o título do HTML, a chave do JSON, a variável do PHP, a raiz do XML) é o nome da tabela
+      nos Registros, e `resultado` no resultado de um comando (RN-EXPORT-006);
+    - a "Tabela de destino" do SQL e a "Tabela" do DbUnit vêm com a tabela dos Registros, e, no resultado, com a do
+      alvo da edição, quando ele diz que o resultado é de uma tabela só (o `tables` com um item só, que não é
+      `elsewhere`, qualquer que seja o `kind` e o `editable` dele, e não o `rowOperations`, RN-GRADE-020): assim a
+      visão e a conexão somente leitura também preenchem a tabela. Quando a tela ainda não tem o alvo, o
+      "Copiar como SQL" e o "Copiar como DbUnit" o pedem antes (RN-GRADE-020), com "Conferindo a tabela deste
+      resultado…" na faixa sobre a grade. Sem tabela conhecida (a junção, a união e os outros da RN-GRADE-006), eles
+      abrem o "Copiar avançado…" com o formato escolhido e o foco no campo da tabela, que diz "Informe a tabela de
+      destino."; com a aba ocupada (RN-EDIT-014), a tela não pede o alvo e faz como na tabela não conhecida;
+    - "Incluir as colunas que o banco calcula" (RN-EXPORT-011) aparece quando a tabela é conhecida, com as colunas
+      que o alvo diz `generated: always`; desligada, como na exportação, elas ficam fora do `INSERT`;
+    - no Informix, "Linhas por comando" é sempre 1;
+    - duas colunas escolhidas com o mesmo nome (a junção com dois `id`) fariam um `INSERT` que o banco recusa, como
+      na exportação (RN-EXPORT-011): o "Copiar como SQL" não copia, e o aviso de erro diz "O resultado tem duas
+      colunas chamadas id: deixe uma de fora da seleção."; no "Copiar avançado…", a mesma frase fica nas opções do
+      SQL e na prévia, no lugar do texto, e "Copiar" fica desabilitado. Conta o nome das colunas que vão no
+      `INSERT`: a que o banco calcula e fica de fora não conta. A recusa vem antes da tabela de destino, que não a
+      resolve. Os outros formatos copiam o nome repetido, e o `INSERT` do "Gerar SQL" continua com a recusa dele
+      (RN-GRADE-018). *Alterada em 2026-10-17, decisão de projeto: o "Copiar como SQL" com a coluna repetida passou
+      a ser recusado como na exportação; antes ele escrevia o `INSERT` assim mesmo, porque o texto era da pessoa.*
+  - O valor é o que a grade mostra (RN-GRADE-002), com o valor completo das células cortadas: a pendência, quando
+    há; a linha marcada para exclusão com os valores lidos; e a linha nova ainda não salva com o que foi preenchido
+    nela. Nos formatos de dados (todos menos o SQL), a célula que a grade deixa vazia sem ser um valor (a da linha
+    nova que ninguém preencheu, e a "gerado pelo banco — execute de novo para ver", RN-EDIT-009) vai como o nulo do
+    formato. O que não vem inteiro sai cortado, com o aviso de quantos, menos no SQL. No SQL, a linha que gravaria
+    outro valor vira o comentário da linha sem literal (RN-EXPORT-011), com uma frase a mais, que só a tela escreve:
+    - `-- Linha 7 não exportada: um valor não pôde vir inteiro.`, para a linha com um valor cortado que não veio
+      inteiro, porque o `INSERT` dele gravaria outro valor;
+    - `-- Linha 7 não exportada: um valor que o banco gerou não aparece na grade.`, para a linha nova já salva com
+      uma célula "gerado pelo banco": o nulo no lugar dela gravaria por cima do valor que o banco gerou;
+    - `-- Linha nova não exportada: ela ainda não está no banco.`, sem número, que a linha nova não tem, para a
+      linha nova ainda não salva: o nulo das colunas que ninguém preencheu gravaria por cima do padrão da tabela (o
+      "Ver SQL" mostra o `INSERT` dela, RN-EDIT-008).
+
+    O número do comentário é o da linha na grade, e essas linhas entram na contagem do aviso. O binário sai inteiro,
+    em hexadecimal, ou como o literal do banco no SQL (RN-EXPORT-011), ou vazio, com "Deixar vazio". A célula
+    binária cortada que sai sem o valor não é pedida à API (RN-SQL-017): a de "Deixar vazio" ou "NULL", e a do SQL
+    do Informix, que não tem literal de binário e comenta a linha com qualquer valor.
+  - O mesmo texto da API. Para as mesmas linhas, colunas e opções, o texto do "Copiar como" é, byte a byte, o da
+    exportação para a área de transferência (RN-EXPORT-014), nos nove formatos. As diferenças vêm da entrada, e não
+    de quem escreve: as linhas são as da seleção, e não as lidas de novo do banco; os valores são os da grade, com
+    as pendências; e o número da linha no comentário do SQL é o da grade, e não a ordem da origem. Para isso a tela
+    (TypeScript) escreve os nove formatos pelas regras da API (C#):
+    - o TXT, com as larguras por lote de 200 linhas (RN-EXPORT-008);
+    - o Código fonte, o DbUnit e o XML no formato do DBeaver (RN-EXPORT-010 e 012), no lugar do `to-xml.ts` de hoje,
+      que escreve `<result><row><column name="…">`;
+    - o JSON com o nome da origem e as datas em ISO 8601 (RN-EXPORT-010), no lugar da lista sem o nome do
+      `to-json.ts`;
+    - o CSV com o "Em todos os textos" (RN-EXPORT-007), que hoje é só da API;
+    - o SQL com várias linhas por comando e o literal do binário (RN-EXPORT-011).
+
+    As fixtures de ouro conferem isso (RN-EXPORT-024). O `toDelimited` simples do "Copiar" (RN-GRADE-002) continua
+    como é: ele não é um formato da exportação.
+  - O aviso diz o formato: "3 linhas copiadas em JSON." ("1 linha copiada em XML."). Ele passa ao tom de atenção
+    quando algo do dado não saiu inteiro, com o resumo da exportação depois do ponto (RN-EXPORT-022): "4 valores
+    cortados na largura máxima do TXT.", "12 caracteres que o formato não aceita foram tirados.", "3 linhas não
+    copiadas, comentadas no SQL: o comentário de cada uma diz por quê." ("1 linha não copiada, comentada no SQL: o
+    comentário diz por quê."); e os valores que não vieram inteiros, como no "Copiar".
+  - A seleção grande: o texto é montado em partes, com o mesmo limite de 10 MiB e a mesma recusa (RN-GRADE-002). Na
+    exportação, o limite é do texto que a API escreve; aqui, do que a tela monta.
+  - O HTML vai como texto, o documento da RN-EXPORT-009, como a exportação para a área de transferência; colá-lo
+    como tabela formatada fica para depois.
+- **RN-GRADE-017.** "Configurar comandos 'Copiar como'…".
+  - Abre o diálogo "Configurar comandos 'Copiar como'", o diálogo grande (760 px), como o do DBeaver: à esquerda, a
+    lista dos nove formatos, com o ícone, o nome e a frase de cada um (RN-EXPORT-004), com o CSV escolhido ao abrir;
+    à direita, as opções do formato escolhido, as mesmas do "Copiar avançado…" (RN-GRADE-003), menos a tabela de
+    destino do SQL e a do DbUnit, que são da origem, e "Voltar aos padrões".
+  - Trocar de formato na lista guarda, na memória do diálogo, o que foi mudado no outro. "Salvar" grava as opções de
+    todos os formatos de uma vez, fecha o diálogo e avisa "Opções do 'Copiar como' salvas."; "Cancelar", Esc e o X
+    fecham sem gravar e sem perguntar.
+  - O campo recusado (a largura do TXT, o texto do nulo, as linhas por comando) mostra o motivo nele, como na
+    exportação. Com algum, "Salvar" fica desabilitado, e o formato dele ganha, na lista, a marca de erro, que o
+    leitor de tela também lê ("CSV, com um campo recusado").
+  - As opções são por usuário, nas preferências desta instalação (RN-CONFIG-001), e separadas das que a exportação
+    lembra (RN-EXPORT-003), como no DBeaver: o arquivo e a área de transferência costumam pedir coisas diferentes, e
+    mudar uma não muda a outra. Começam nos padrões da exportação. O "Copiar avançado…" lê e grava as mesmas
+    (RN-GRADE-003). A opção lembrada que não vale mais volta ao padrão, sem erro.
+
+### Gerar SQL
+
+- **RN-GRADE-018.** O diálogo "Gerar SQL", como o "Generated SQL" do DBeaver.
+  - O título é "Gerar SQL", e embaixo dele vem o que se gera: o item, a tabela e as linhas, como "UPDATE ·
+    estoque.pedido · 3 linhas" ("1 linha"); no CREATE, sem as linhas ("CREATE · estoque.pedido"); no INSERT de uma
+    tabela não conhecida, sem a tabela ("INSERT · 3 linhas"). Ao lado vêm a etiqueta do banco, a conexão e o banco
+    de dados, com o ambiente e o cadeado do somente leitura (RN-PASTA-005, RN-PROT-002), como no assistente da
+    exportação. É o diálogo grande (760 px).
+  - "Opções", uma linha de caixas de marcar, cada uma só nos itens em que vale, que refazem o texto na hora e ficam
+    lembradas por usuário, nas preferências desta instalação (RN-CONFIG-001):
+    - "Nomes completos (esquema.tabela)", ligada, como o "Use fully qualified names" do DBeaver. Desligada, a tabela
+      sai só com o nome (`"pedido"`), para o esquema padrão da sessão em que o SQL for executado.
+    - "SQL compacto (uma linha por comando)", desligada. Ligada, cada comando sai numa linha só (RN-GRADE-019).
+    - "Excluir as colunas que o banco gera", ligada, só no INSERT: as que o banco gera "sempre" e "por padrão" (pelo
+      `generated` do alvo: a identidade, o `serial` e a coluna cujo padrão é `nextval(...)` do PostgreSQL, o
+      `SERIAL` do Informix, RN-EDIT-016) ficam fora do `INSERT`, e o banco gera o valor da linha nova, como no
+      "Duplicar linha". Desligada, as "por padrão" entram com o valor da linha, e as "sempre" continuam fora, porque
+      o banco recusaria um valor para elas. Na tabela não conhecida a opção não aparece: o alvo não diz quais são, e
+      vão todas as colunas. O padrão é diferente do da exportação em SQL de propósito: o `INSERT` do "Gerar SQL"
+      cria uma linha nova, e o banco gera a chave dela; o da exportação leva as linhas como são, com a identidade
+      "por padrão" e o `serial` (RN-EXPORT-011).
+
+    O CREATE não tem opções, como no DBeaver.
+  - Na tabela não conhecida, o INSERT pede a tabela de destino nos dois campos da exportação em SQL (RN-EXPORT-011):
+    "Esquema", opcional, e "Tabela", obrigatória, com os nomes como estão no banco (o Prism põe as aspas), de até
+    128 caracteres e sem caractere de controle ("O nome não pode ter caractere de controle."). Os dois abrem vazios
+    e não se lembram. Sem a tabela, o lugar do SQL diz "Informe a tabela de destino.", e "Copiar" e "Abrir numa aba
+    de consulta" ficam desabilitados. Com o esquema vazio, sai só a tabela. Duas colunas do resultado com o mesmo
+    nome fariam um `INSERT` que o banco recusa: o lugar do SQL diz "O resultado tem duas colunas chamadas id: o
+    INSERT seria recusado pelo banco.", e as saídas ficam desabilitadas. Assim o nome da tabela nunca entra no
+    comando como a pessoa o escreveu (o `generateInsertInto` de hoje, que confia no texto digitado, sai).
+  - O SQL fica num editor só de leitura, com o realce do SQL daquele banco e a fonte do editor (RN-CONFIG-008), e as
+    linhas longas quebram na largura do editor, sem mudar o texto. Dá para escolher, copiar um pedaço (Ctrl+C) e
+    rolar. O foco começa nele.
+  - Acima do editor, no tom de atenção, as frases que valem:
+    - "2 das 5 linhas ficaram de fora: o comentário no fim do SQL diz quais e por quê." (as que tinham um valor
+      cortado que não veio inteiro, um binário no Informix, um valor sem literal ou um valor que o banco gerou e a
+      grade não mostra, RN-GRADE-019);
+    - "As linhas novas ainda não salvas ficaram de fora: o Ver SQL mostra o INSERT delas.", quando a seleção tinha
+      alguma;
+    - "3 linhas têm alterações não salvas: o SQL usa os valores da grade, e a condição, a chave lida do banco." ("1
+      linha tem…");
+    - "A conexão é somente leitura: o SQL que grava será recusado nela." (RN-PROT-002), no INSERT, no UPDATE, no
+      DELETE e no CREATE.
+  - Enquanto o texto não fica pronto, o lugar dele diz o que acontece: "Conferindo a tabela e a chave deste
+    resultado…" (o `edit-target`, RN-GRADE-020); "Buscando os valores completos…", com "Cancelar", que fecha o
+    diálogo sem gerar nada (RN-SQL-017); e, no CREATE, "Lendo o catálogo…" (as colunas, as chaves estrangeiras e os
+    índices da tabela, pela sessão da árvore e do mesmo cache da Estrutura, RN-TABELA-003). A falha diz "Não foi
+    possível saber a tabela e a chave deste resultado." (no CREATE, "Não foi possível ler o catálogo da tabela."),
+    com a mensagem da API ou a do banco, como veio, e "Tentar de novo". A recusa de que o item não vale diz o motivo
+    dele (RN-GRADE-006).
+  - No rodapé, "Fechar" à esquerda, e "Abrir numa aba de consulta" e "Copiar", o botão principal, à direita; os dois
+    ficam desabilitados até o texto ficar pronto. O DBeaver tem também "Salvar em arquivo…", que fica para depois.
+    - "Copiar" copia o texto inteiro para a área de transferência, fecha o diálogo e avisa "SQL copiado.". A falha
+      da área de transferência é o aviso de atenção "Não foi possível copiar.", e o diálogo fica.
+    - "Abrir numa aba de consulta" abre uma aba de consulta nova, da mesma conexão e do mesmo banco de dados do
+      resultado (RN-ARVORE-006 e 007), com o texto no editor, o cursor no começo e o foco nele, e fecha o diálogo. É
+      a aba do "Nova consulta": sem script, com o nome das abas novas, e nada é executado.
+    - "Fechar", Esc e o X fecham sem perguntar. O bloqueio por inatividade, o "Sair" e o quinto erro de senha fecham
+      o diálogo (RN-SEG-001).
+  - O texto tem até 1 MB em UTF-8 (1.048.576 bytes), o teto do texto de uma aba de consulta (RN-ABAS-006) e de um
+    script (RN-SCRIPT-004). O que passaria disso não é gerado, e o lugar do SQL diz "O SQL passaria de 1 MB, o
+    limite do texto de uma aba de consulta. Escolha menos linhas, ou exporte em SQL (Exportar dados…).". Para muitas
+    linhas, o caminho é a exportação em SQL (RN-EXPORT-011).
+  - As linhas do diálogo são as da seleção quando ele abriu, e a atualização automática fica em pausa enquanto ele
+    está aberto (RN-GRADE-014). Se o resultado muda mesmo assim (a API responde `RESULT_CHANGED`, ou a execução que
+    já rodava trocou as linhas), nada é gerado, e o lugar do SQL diz "O resultado mudou desde a escolha das linhas.
+    Escolha as linhas de novo e gere outra vez.".
+- **RN-GRADE-019.** O texto de cada item.
+  - As palavras-chave vão em maiúsculas, os nomes entre aspas duplas (RN-TABELA-002), e há um espaço de cada lado do
+    `=`. Cada comando termina em `;`. Sem "SQL compacto", cada cláusula começa uma linha, e uma linha em branco
+    separa um comando do seguinte; com ela, cada comando fica numa linha só, sem linha em branco entre eles (menos o
+    texto com quebra de linha no PostgreSQL e no Db2, que fica dentro das aspas, como na RN-EXPORT-011, e faz o
+    comando ocupar mais de uma linha). O texto não termina em quebra de linha. Com "Nomes completos", a tabela é
+    `"esquema"."tabela"` (no Informix, o esquema é o dono); sem eles, `"tabela"`. O valor vai como está dentro das aspas
+    do literal, também o Unicode fora do plano básico (emoji, ideogramas) e as marcas de direção, como na exportação em
+    SQL (RN-EXPORT-011). Os exemplos abaixo são sem "SQL compacto".
+  - "SELECT .. WHERE .. =", um por linha, com a lista das colunas da tabela que estão no resultado, como no DBeaver:
+
+    ```
+    SELECT "id", "cliente", "criado"
+    FROM "estoque"."pedido"
+    WHERE "id" = 1;
+    ```
+
+    Com a chave de várias colunas, a condição as junta por `AND`: `WHERE "loja" = 1 AND "numero" = 10`.
+  - "SELECT .. WHERE .. IN", um só, com a chave de todas as linhas, cada uma uma vez:
+    - com a chave de uma coluna, `WHERE "id" IN (1, 2, 3);`, separados por vírgula e espaço;
+    - com a chave de várias colunas, no PostgreSQL, que aceita uma lista de linhas no `IN`:
+
+      ```
+      SELECT "loja", "numero", "total"
+      FROM "vendas"."pedido"
+      WHERE ("loja", "numero") IN (
+        (1, 10),
+        (1, 11)
+      );
+      ```
+
+      e, compacto, `WHERE ("loja", "numero") IN ((1, 10), (1, 11));`;
+    - com a chave de várias colunas, no Db2 e no Informix, um `OR` de `AND`s, uma linha da grade por linha do texto:
+
+      ```
+      SELECT "LOJA", "NUMERO", "TOTAL"
+      FROM "VENDAS"."PEDIDO"
+      WHERE ("LOJA" = 1 AND "NUMERO" = 10)
+         OR ("LOJA" = 1 AND "NUMERO" = 11);
+      ```
+
+      O exemplo é o do Db2, que guarda os nomes simples em maiúsculas; no Informix os nomes saem como o banco os
+      guarda, em minúsculas (`"loja"`, `"vendas"."pedido"`). O Db2 só aceita uma lista de linhas no `IN` contra uma
+      subconsulta (`(a, b) IN (VALUES …)` ou um `SELECT`), e o Informix não a aceita; o `OR` vale nos três, e o Prism o
+      usa onde a lista não é certa. A escolha foi feita pela documentação dos bancos, sem servidor: os testes de
+      integração provam as três formas nos três servidores, como os literais da exportação (RN-EXPORT-011);
+    - sem chave, cada linha é a condição de todas as colunas (com `IS NULL`), e as linhas se juntam por `OR`, nos
+      três bancos.
+
+    O `IN (…)` nunca leva `NULL`, que não casaria com nada: a chave é de colunas não nulas. O "SELECT .. WHERE ..
+    IN" é um comando só, e, com muitas linhas, ele pode passar do tamanho de comando que o banco aceita
+    (RN-EXPORT-011), que o teto de 1 MB do texto (RN-GRADE-018) não garante; aí o banco o recusa quando for
+    executado, e o "SELECT .. WHERE .. =" ou menos linhas resolvem.
+  - "INSERT", um por linha:
+
+    ```
+    INSERT INTO "estoque"."pedido" ("id", "cliente", "criado")
+    VALUES (1, 'Ana', '2024-01-15 10:30:00.000000');
+    ```
+
+    Compacto, é a forma da exportação em SQL com uma linha por comando (RN-EXPORT-011): `INSERT INTO
+    "estoque"."pedido" ("id", "cliente", "criado") VALUES (1, 'Ana', '2024-01-15 10:30:00.000000');`. As colunas são
+    as da tabela que estão no resultado, menos as que o banco gera, conforme a opção (RN-GRADE-018); a coluna da
+    tabela que aparece duas vezes no resultado entra uma vez, com o valor da primeira. Na tabela não conhecida, vão
+    todas as colunas do resultado, pelo nome que o resultado dá.
+  - "UPDATE", um por linha:
+
+    ```
+    UPDATE "estoque"."pedido"
+    SET "cliente" = 'Ana', "criado" = NULL
+    WHERE "id" = 1;
+    ```
+
+    O `SET` tem as colunas da tabela que estão no resultado e não são da chave, menos as que o banco gera "sempre",
+    que não aceitam valor; o nulo é `"coluna" = NULL`. Na linha cuja chave tem alteração pendente, o `SET` leva
+    também a coluna da chave, com o valor da grade, e a condição segue com a chave lida (RN-GRADE-006): é o que o
+    "Salvar" faria. Sem chave, o `SET` e a condição têm todas as colunas: o
+    comando escreve de novo o que a linha tem, como um modelo para a pessoa mudar, e nunca sai sem `WHERE`. Sem
+    coluna para o `SET` (todas são da chave, ou geradas), o item fica desabilitado, com "não há coluna fora da chave
+    para atualizar".
+  - "DELETE pela chave única", um por linha:
+
+    ```
+    DELETE FROM "estoque"."pedido"
+    WHERE "id" = 1;
+    ```
+
+    Sem chave, a condição é a de todas as colunas, com o comentário.
+  - Sem chave, em todos os itens com condição: o texto começa pelo comentário `-- Sem chave primária nem chave
+    única: a condição usa todas as colunas, e linhas iguais seriam afetadas juntas.`, e a condição deixa de fora as
+    colunas que o banco não compara com `=`, pelo tipo da coluna no resultado: no PostgreSQL, `json`, `xml` e os
+    tipos geométricos (que não têm `=`, ou têm um que compara a área ou o comprimento); no Db2, `BLOB`, `CLOB`,
+    `DBCLOB`, `XML`, `LONG VARCHAR` e `LONG VARGRAPHIC`; no Informix, `BYTE`, `TEXT`, `BLOB` e `CLOB`. Sem nenhuma
+    coluna que sirva, esses itens ficam desabilitados, com "nenhuma coluna do resultado serve de condição".
+  - "CREATE" é o DDL aproximado da Estrutura, o mesmo texto da seção DDL dela, com o aviso no começo (RN-TABELA-008
+    e RN-CAT-007), da tabela inteira, e não só das colunas do resultado nem das linhas escolhidas. O "CREATE" do
+    DBeaver monta a tabela das colunas do resultado, para criar outra com elas; o do Prism descreve a tabela de onde
+    as linhas vieram, pelo catálogo. Montar o `CREATE` das colunas do resultado fica para depois.
+  - A linha que fica de fora não interrompe as outras. No fim, um comentário por motivo diz quais ficaram, pelo
+    número da linha na grade (três ou mais seguidas viram faixa: `3, 4, 20-23`):
+    - `-- Linhas da grade não geradas, com um valor que não pôde vir inteiro: 3, 4.`
+    - `-- Linhas da grade não geradas, com um valor binário, que o Informix não escreve como literal: 7.`
+    - `-- Linhas da grade não geradas, com um valor que não cabe num literal (…): 9.`, com a frase de hoje, a do
+      caractere de controle e, no Informix, a da data e hora com mais de cinco casas de segundo e a do lógico;
+    - `-- Linhas da grade não geradas, com um valor que o banco gerou e a grade não mostra (execute de novo para
+      vê-lo): 12.`
+
+    Os comentários são frases fixas e números, sem nome nem valor do banco: uma quebra de linha num comentário `--`
+    o encerraria, e o resto viraria código. No "SELECT .. WHERE .. IN", a linha que fica de fora só não entra na
+    lista; sem nenhuma, o texto é só o comentário.
+- **RN-GRADE-020.** A tabela e a chave do resultado, na API.
+  - `POST .../queries/edit-target` ganha `purpose`, opcional: `edit`, o padrão (ausente ou nulo), ou `sql`, o pedido
+    do "Gerar SQL" e do "Copiar como" do SQL e do DbUnit (RN-GRADE-006 e 016). Outro valor é 422 `EDIT_INVALID` no
+    campo `purpose`, como o `resultID` que falta.
+  - Com `purpose: sql`, a API resolve o alvo do mesmo jeito (RN-EDIT-002 e 003, com a consulta do catálogo da
+    RN-EDIT-010, na sessão da árvore ou numa conexão à parte), com uma diferença: na conexão somente leitura ela não
+    recusa com `CONNECTION_READ_ONLY` (RN-PROT-002), porque o `edit-target` só lê o catálogo, e o SQL gerado não é
+    executado. A resposta traz as tabelas, as chaves e as colunas como numa conexão comum, com `editable` falso e o
+    motivo "a conexão é somente leitura" em todas as tabelas e colunas, e `rowOperations` falso. Esse alvo não fica
+    guardado no resultado para o "Salvar", que continua recusado ali e pergunta de novo quando a conexão deixa de
+    ser somente leitura. Só o somente leitura da conexão deixa de recusar: o resultado inteiro só leitura por outro
+    motivo (a união, o `DISTINCT`, o comando que gravou e devolveu linhas) continua 422 `RESULT_NOT_EDITABLE`, com o
+    `reason`, que o "Gerar SQL" mostra, e o guardado que mudou continua 409 `RESULT_CHANGED` (RN-SQL-024).
+  - Cada tabela de `tables` ganha:
+    - `kind`: `table`, `view`, `materializedView`, `foreign`, `other` (o que o catálogo não acha como tabela nem
+      visão, como um sinônimo) ou `elsewhere` (a tabela de uma aba guardada do script que, escrita sem esquema,
+      leva agora a outra na sessão, RN-SQL-024), o que o catálogo já diz e o motivo de hoje escreve em palavras
+      ("pedido é uma visão");
+    - `keyColumns`: os nomes, na tabela, das colunas de uma chave (a primária, ou a restrição ou o índice único de
+      colunas não nulas, RN-EDIT-002), na ordem da chave: a que a edição usa, quando ela acha uma; senão, a
+      primeira candidata, a primária antes das outras, também quando ela não está toda no resultado. Vazia quando a
+      tabela não tem chave nenhuma ou não é uma tabela.
+
+    `key` continua sendo a posição, no resultado, de cada coluna da chave que a edição usa, e vem vazia quando falta
+    uma coluna e também quando a chave tem coluna de um tipo que a edição não converte (o binário, por exemplo, que
+    a edição pula). Por isso o "Gerar SQL" não usa o `key`: para ele, a chave está inteira quando cada nome de
+    `keyColumns` é o `baseColumn` de alguma coluna do resultado daquela tabela; falta uma parte quando algum não é;
+    e não há chave quando `keyColumns` vem vazia. A tela decide pelos campos, nunca pelo texto (Ruling 135), e
+    escreve ela mesma o motivo da chave que falta, nas palavras da edição ("a chave de pedido não está inteira no
+    resultado: faltam id"), porque na conexão somente leitura o `reason` da tabela é outro.
+  - O resultado é "de uma tabela só" quando `tables` tem um único item que não é `elsewhere`, qualquer que seja o
+    `kind` e o `editable` dele. A tela decide por isso, e não pelo `rowOperations`, que vem falso na visão e na
+    conexão somente leitura. Vale para o "Gerar SQL" (RN-GRADE-006) e para a tabela de destino do "Copiar como" do
+    SQL e do DbUnit (RN-GRADE-016).
+  - Numa visão que é a única tabela do `FROM`, cada coluna do resultado que é uma coluna dela vem com `table` 0 e
+    com o `baseColumn` da visão, como numa tabela, e `editable` falso, com o motivo dela; a coluna com apelido entra
+    pelo nome que tem na visão (`SELECT cliente AS nome FROM v` gera `"cliente"`). A ligação é a mesma da tabela
+    (RN-EDIT-003): no PostgreSQL, a descrição das linhas já diz a visão e o número da coluna dela (o `TableOID` e o
+    número da coluna são os da visão, e não os da tabela de baixo, também na coluna com apelido e na que a visão
+    calcula; conferido num PostgreSQL 16 em 2026-10-17, e provado pelo teste de integração da visão nos três
+    bancos); no Db2 e no Informix, pela lista do `SELECT`. No `other`, todas as colunas do resultado são da tabela,
+    sem `baseColumn`, como hoje, e o "Gerar SQL" as usa pelo nome do resultado.
+  - O log da rota não muda: os IDs e as contagens, nunca os nomes (RN-LOG-001).
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `POST .../queries/edit-target` `{ resultID, catalogSessionID?, purpose? }` | como antes; cada tabela ganha `kind` e `keyColumns` | as de antes; com `purpose: sql`, sem `CONNECTION_READ_ONLY`; 422 `EDIT_INVALID` no campo `purpose`, com um valor fora de `edit` e `sql` |
+
+Notas:
+
+- `purpose`: `edit` (o padrão) ou `sql` (RN-GRADE-020). Com `sql`, numa conexão somente leitura, as tabelas e as
+  colunas vêm com `editable: false` e `reason: "a conexão é somente leitura"`, e `rowOperations: false`.
+- `kind`: `table`, `view`, `materializedView`, `foreign`, `other` ou `elsewhere`. `keyColumns`: lista de nomes,
+  vazia quando não há chave; a da edição, ou a primeira candidata quando a edição não usa nenhuma (RN-GRADE-020).
+  Toda chave vem sempre.
+- Nenhuma outra rota muda: o copiar e o "Gerar SQL" pedem os valores completos pela rota das células de hoje
+  (RN-SQL-017), e nenhuma rota nova grava nada. Nenhum canal novo entre a tela e o processo principal: a cópia vai
+  pela área de transferência da janela (`navigator.clipboard`), como o Ctrl+C de hoje, e o limite de 10 MiB é
+  conferido na tela.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-GRADE-001**: a seleção foi construída: o arraste, o canto da grade, o Shift+Espaço, o PageUp e o PageDown
+  (sem tomar o atalho de mover a aba), a âncora, o retângulo que nunca vale como linhas inteiras, o botão direito no
+  número da linha, o desenho, a contagem, o leitor de tela, as linhas novas guardadas pela identidade, o que a faz
+  ser esquecida, a pausa da atualização automática, o desempenho e as ações que agem sobre ela.
+- **RN-GRADE-002**: a cópia é da seleção, com o "Copiar com cabeçalho", a aspa dobrada, o que vai de cada linha, o
+  limite de 10 MiB, a montagem em partes, os avisos, a grade sem célula ativa e a proteção contra fórmula, que fica
+  só no "Copiar como CSV".
+- **RN-GRADE-003**: o "Copiar avançado" é o submenu do print, com o diálogo, os nomes, os números, os "Copiar como"
+  e a configuração; saem o texto delimitado próprio e o número da linha na cópia.
+- **RN-GRADE-004**: o menu segue os grupos do DBeaver, com o "Copiar", o "Copiar com cabeçalho", os submenus "Copiar
+  avançado", "Ordenar" e "Gerar SQL", o "Colar" que a tela já tinha, sem atalho, e o "Exportar dados…" junto do
+  "Gerar SQL"; o "Colar avançado…" não aparece, e o "Copiar número de linha(s)" fica só no "Copiar avançado".
+- **RN-GRADE-006**: o "Gerar SQL" é o submenu do print, com os seis itens, o diálogo, o `SELECT .. IN`, o `CREATE`,
+  o binário, as cortadas, a conexão somente leitura, a visão, as linhas novas, excluídas e com pendência, a tabela
+  de um item só e a chave pelo `keyColumns`, o `CREATE` que vale sem linhas e o motivo dos itens desabilitados.
+- **RN-GRADE-007**: a exportação da seleção para um arquivo fica para depois, e a cópia dela nos formatos da
+  exportação entra.
+- **RN-GRADE-014**: a pausa vale também no copiar, no "Gerar SQL", nos diálogos deles e com mais de uma célula
+  escolhida.
+- **RN-EDIT-001**: as ações de linha agem na seleção, o Delete vale com linhas inteiras, o "Colar" que a tela já
+  tinha entra na regra, sem atalho, e entra o Shift+Espaço.
+- **RN-EDIT-004**: "Desfazer alteração" age nas células escolhidas.
+- **RN-EDIT-007**: o "Gerar SQL" não pergunta e usa os valores da tela.
+- **RN-EDIT-010**: o "Gerar SQL" e o "Copiar como" pedem o mesmo alvo, uma vez; o da conexão somente leitura não
+  serve à edição.
+- **RN-EDIT-013**: "Duplicar linhas" e "Excluir linhas", com várias linhas na seleção.
+- **RN-EDIT-014**: os botões das linhas agem na seleção, com os motivos de várias linhas, o limite do duplicar e o
+  que acontece depois.
+- **RN-EDIT-015**: o Delete sozinho exclui as linhas inteiras escolhidas, e nunca um retângulo, e os atalhos das
+  linhas agem na seleção.
+- **RN-EDIT-016**: o duplicar é de todas as linhas da seleção, até 1.000, com as frases no plural.
+- **RN-SQL-017**: o copiar da seleção, o copiar avançado e o "Gerar SQL" levam o valor completo, a tela pede só as
+  células que vai usar, e o "exportar" das linhas da tela inclui os "Copiar como" da seleção.
+- **RN-SQL-023**: as abas guardadas do script têm a seleção, o copiar avançado e o "Gerar SQL", sem o "Ordenar".
+- **RN-PROT-002**: o copiar, o copiar avançado e o "Gerar SQL" valem na conexão somente leitura, e o `edit-target`
+  com `purpose: sql` também; o motivo da página só vale enquanto a conexão é somente leitura.
+- **RN-PROT-006**: o resultado que já está na grade perde o motivo "a conexão é somente leitura" quando a conexão
+  deixa de ser somente leitura.
+- **RN-EXPORT-001**: o "Exportar dados…" do menu da grade fica no grupo do "Gerar SQL", depois da edição.
+- **RN-EXPORT-003**: a comparação das escolhas lembradas é com as do copiar avançado.
+- **RN-EXPORT-011**: o "Gerar SQL" compacto, o literal do binário nele, e os comentários a mais do "Copiar como
+  SQL".
+- **RN-EXPORT-007, 009, 010, 012 e 013**: as referências à RN-GRADE-007, que já não diz os formatos, passam a citar
+  os arquivos da tela (`to-delimited.ts`, `to-html.ts`, `to-markdown.ts`, `to-json.ts`, `to-xml.ts` e `to-xlsx.ts`);
+  nenhuma regra delas muda.
+- **RN-EXPORT-024**: a tela escreve os nove formatos de texto com o documento igual ao da API, as fixtures que eram
+  só da API passam a ser dos dois lados, e entram as do documento, as do copiar e as do "Gerar SQL".
+- **Seção 6**: o `purpose` do `edit-target` e o `kind` e o `keyColumns` das tabelas.
+- **Seção 9**: a seleção, a contagem, o submenu e os três diálogos não estão no canvas.
+- **Seção 22**: a linha do `edit-target` e a nota das tabelas dele.
+- **Seção 33**: o segundo item do "Fica para depois" entrou por esta seção, e a abertura diz que a seleção entrou.
+- **Seção 35**: o item do "Fica para depois" da exportação da seleção diz o que entrou e o que continua para depois,
+  e a abertura e a RN-EXPORT-013 dizem que a seleção entrou e o arquivo dela, não.
+
+### Fica para depois
+
+- Colar e anular ("Definir como nulo") várias células de uma vez, o "Colar avançado…" (Ctrl+Shift+V), que não
+  aparece no menu, e o Ctrl+V do "Colar".
+- Vários retângulos na seleção (o Ctrl+clique e o Ctrl+arraste nas células do DBeaver), escolher colunas inteiras
+  (no Prism o cabeçalho ordena), o "Selecionar coluna(s)" do DBeaver e o menu do cabeçalho da coluna com "Copiar
+  nome da coluna".
+- Exportar a seleção e as linhas carregadas para um arquivo, pelo assistente "Exportar dados" (RN-GRADE-007), e o
+  "Copiar como XLSX".
+- O HTML também como `text/html` na área de transferência, para colar como tabela formatada (o "Copy as HTML" do
+  diálogo do DBeaver).
+- O número da linha no texto copiado (o "Copy row numbers" do DBeaver), os separadores e a aspa à escolha no
+  "Copiar" simples, o diálogo de separadores do "Copiar nome da(s) coluna(s)", e o Ctrl+Shift+Alt+C, que repete o
+  último "Copiar avançado".
+- "Salvar em arquivo…" no diálogo "Gerar SQL", e o "Use custom data/time format" do DBeaver.
+- O `CREATE` das colunas do resultado (o do DBeaver, para criar outra tabela com elas), o `MERGE` e os `JOIN` que o
+  DBeaver gera para as tabelas do navegador, e o "Gerar SQL" de `UPDATE` e `DELETE` por tabela num resultado de
+  junção (seção 22).
+- A lista de linhas no `IN` do Db2 (`(a, b) IN (VALUES …)`), se os testes nos servidores a provarem.
+- Duplicar mais de 1.000 linhas de uma vez, pôr cada cópia logo abaixo da linha de origem, e arrastar e soltar as
+  linhas escolhidas, como o DBeaver.
+- Desfazer de uma vez a última ação inteira (o Ctrl+Z da grade), como a exclusão de várias linhas.
