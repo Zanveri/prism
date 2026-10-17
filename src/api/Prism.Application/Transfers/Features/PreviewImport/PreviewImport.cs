@@ -7,7 +7,6 @@ using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
-using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Transfers.Imports;
 using Prism.Infrastructure.Transfers.Services;
@@ -41,9 +40,6 @@ public sealed record PreviewImportCommand : IRequest<Result<ImportPreviewDto, Ap
 /// </summary>
 internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries, IDriverService driverService, IImportPreviewService importPreviewService) : IRequestHandler<PreviewImportCommand, Result<ImportPreviewDto, ApiErrorDto>>
 {
-    /// <summary>RN-ARVORE-006: o teto do nome de outro banco do servidor, o mesmo da abertura de uma sessão.</summary>
-    private const int MaxDatabaseLength = 128;
-
     public async Task<Result<ImportPreviewDto, ApiErrorDto>> Handle(PreviewImportCommand request, CancellationToken cancellationToken)
     {
         var target = request.Target!;
@@ -63,7 +59,7 @@ internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries,
         if (read.Value is not { } record)
             return Result.Failure<ImportPreviewDto, ApiErrorDto>(ConnectionErrors.NotFound(target.ConnectionID));
 
-        if (target.Database is { } database && (string.IsNullOrWhiteSpace(database) || database.Length > MaxDatabaseLength || database.Any(char.IsControl)))
+        if (!TransferConnections.IsDatabaseName(target.Database))
             return Result.Failure<ImportPreviewDto, ApiErrorDto>(TransferJobErrors.DatabaseNameInvalid());
 
         // RN-TRANSF-016 e RN-IMPORT-013: a conexão que veio sem usuário ou sem senha não conecta; a recusa diz qual falta.
@@ -85,7 +81,7 @@ internal sealed class PreviewImportHandler(IConnectionQueries connectionQueries,
             return Result.Failure<ImportPreviewDto, ApiErrorDto>(ImportErrors.ReadOnly());
 
         var (options, _) = ImportReaderOptionsReader.Read(request.Format!, request.Reader, keys: true);
-        var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, target.Database ?? record.Database, record.UserName, record.Password);
+        var settings = TransferConnections.SettingsOf(record, target.Database);
         var mapping = request.Mapping?.Select(entry => new ImportMappingEntry(entry!.Source, entry.Target!)).ToList();
         var preview = await importPreviewService.PreviewAsync(new ImportPreviewRequest(fileID, request.Format!, options!, ImportRequestRules.Formats(request.Values), settings, target.Schema!, target.Table!, mapping), cancellationToken);
 

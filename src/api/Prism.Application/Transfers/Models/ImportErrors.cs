@@ -48,6 +48,13 @@ internal static class ImportErrors
     public static ApiErrorDto ReadOnly()
         => ApiErrorDto.CreateUnprocessableEntity("Conexão somente leitura.", "CONNECTION_READ_ONLY", "A conexão é somente leitura, e a importação grava na tabela. Nada foi enviado ao banco.");
 
+    /// <summary>
+    /// RN-IMPORT-014: a tabela de destino já recebe linhas de outra importação ou cópia em andamento (a mesma tabela pela regra da própria origem,
+    /// RN-IMPORT-023).
+    /// </summary>
+    public static ApiErrorDto TargetBusy(bool copy, string schema, string table)
+        => ApiErrorDto.CreateConflict("Tabela ocupada.", "IMPORT_TARGET_BUSY", $"Já há uma {(copy ? "cópia" : "importação")} para {schema}.{table} em andamento. Espere ela terminar, ou cancele-a na barra de status.");
+
     /// <summary>RN-IMPORT-013 e RN-EXPORT-015: a conexão sem usuário ou sem senha, no campo que falta, com "importe de novo".</summary>
     public static ApiErrorDto CredentialsMissing(bool userNameMissing)
         => userNameMissing

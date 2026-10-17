@@ -5,6 +5,7 @@ using Prism.Application.Transfers.Features.GetTransfers;
 using Prism.Application.Transfers.Features.PreviewImport;
 using Prism.Application.Transfers.Features.ReadImportFile;
 using Prism.Application.Transfers.Features.StartExport;
+using Prism.Application.Transfers.Features.StartImport;
 using Prism.Core.Extensions;
 using Prism.Core.Mediator;
 
@@ -12,8 +13,9 @@ namespace Prism.Api.Controllers;
 
 /// <summary>
 /// As transferências em segundo plano (seção 35, RN-EXPORT-016): começar uma exportação de dados, acompanhar e cancelar ou esquecer cada trabalho; e as
-/// prévias da importação de dados (seção 36, RN-IMPORT-007 a 011), que leem o arquivo que o processo principal copiou pelo identificador dele. Como toda
-/// rota `api/user/...`, só responde com o token e o cofre aberto. O `id` da rota e o `fileID` do corpo são só chaves: nunca viram caminho de arquivo.
+/// prévias e o começo da importação de dados (seção 36, RN-IMPORT-007 a 014), que leem o arquivo que o processo principal copiou pelo identificador dele.
+/// Como toda rota `api/user/...`, só responde com o token e o cofre aberto. O `id` da rota e o `fileID` do corpo são só chaves: nunca viram caminho de
+/// arquivo.
 /// </summary>
 [ApiController]
 [Route("api/user/transfers")]
@@ -56,6 +58,18 @@ public sealed class UserTransfersController(IMediator mediator) : ControllerBase
             return result.ToIActionResult();
 
         return Ok(result.Value);
+    }
+
+    /// <summary>RN-IMPORT-014: 202 com o `id` do trabalho, antes de falar com o banco: conectar, ler o catálogo, conferir o arquivo e gravar acontecem nele.</summary>
+    [HttpPost("imports")]
+    [RequestSizeLimit(MaxExportRequestBytes)]
+    public async Task<IActionResult> StartImport([FromBody] StartImportCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Accepted(result.Value);
     }
 
     [HttpGet]

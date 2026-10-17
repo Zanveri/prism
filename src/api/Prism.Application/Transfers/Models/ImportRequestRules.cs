@@ -1,5 +1,6 @@
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Infrastructure.Transfers.Imports;
+using Prism.Infrastructure.Transfers.Models;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -104,6 +105,59 @@ internal static partial class ImportRequestRules
 
         return refusals;
     }
+
+    /// <summary>
+    /// RN-IMPORT-012 e as notas da seção 36: a carga, `{ empty, commitEvery, check }`, lida à mão do corpo (como as opções do leitor), para o tipo errado
+    /// ser a recusa no campo: `empty` booleano, falso por padrão; `commitEvery` de 1 a 1.000.000, ou nulo para "Tudo numa transação só" (ausente, o padrão
+    /// de 10.000); `check` booleano, verdadeiro por padrão, só na importação (na cópia, presente é recusado).
+    /// </summary>
+    public static (LoadSettings? Load, IReadOnlyList<(string Field, string Message)> Errors) Load(JsonElement? load, bool copy)
+    {
+        if (load is not { ValueKind: JsonValueKind.Object } body)
+            return (null, [("load", "Informe a carga.")]);
+
+        var errors = new List<(string, string)>();
+        var empty = false;
+        if (body.TryGetProperty("empty", out var emptyValue))
+        {
+            if (emptyValue.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                empty = emptyValue.GetBoolean();
+            else
+                errors.Add(("load.empty", "O esvaziamento deve ser true ou false."));
+        }
+
+        int? commitEvery = LoadSettings.DefaultCommitEvery;
+        if (body.TryGetProperty("commitEvery", out var every))
+        {
+            if (every.ValueKind == JsonValueKind.Null)
+                commitEvery = null;
+            else if (every.ValueKind == JsonValueKind.Number && every.TryGetInt32(out var rows) && rows is >= 1 and <= LoadSettings.MaxCommitEvery)
+                commitEvery = rows;
+            else
+                errors.Add(("load.commitEvery", "Use de 1 a 1.000.000 linhas."));
+        }
+
+        var check = !copy;
+        if (body.TryGetProperty("check", out var checkValue))
+        {
+            if (copy)
+                errors.Add(("load.check", "A cópia não confere um arquivo antes de gravar."));
+            else if (checkValue.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                check = checkValue.GetBoolean();
+            else
+                errors.Add(("load.check", "A conferência do arquivo deve ser true ou false."));
+        }
+
+        return errors.Count == 0 ? (new LoadSettings(empty, commitEvery, check), []) : (null, errors);
+    }
+
+    /// <summary>RN-EXPORT-016: o número da janela que começou o trabalho.</summary>
+    public static IReadOnlyList<(string Field, string Message)> WindowRefusals(long windowID)
+        => windowID <= 0 ? [("windowID", "O número da janela é um inteiro positivo.")] : [];
+
+    /// <summary>O mapeamento do pedido já conferido.</summary>
+    public static IReadOnlyList<ImportMappingEntry> MappingOf(IReadOnlyList<ImportMappingDto?> mapping)
+        => [.. mapping.Select(entry => new ImportMappingEntry(entry!.Source, entry.Target!))];
 
     /// <summary>Os formatos dos valores do pedido já conferido; o ausente é o padrão.</summary>
     public static ImportValueFormats Formats(ImportValuesDto? values)
