@@ -63,7 +63,7 @@ public static partial class ImportValues
             return ImportConverted.Null;
 
         var text = value.Text;
-        var trims = column.Class != EImportClass.Text || rules.Trim;
+        var trims = value.Source != EImportValueSource.Copied && (column.Class != EImportClass.Text || rules.Trim);
         var compared = trims ? ImportText.TrimEnds(text) : text;
         if (rules.NullText is { } nullText && compared == nullText && (value.Source == EImportValueSource.Plain || (value.Source == EImportValueSource.Quoted && rules.NullTextQuoted)))
             return ImportConverted.Null;
@@ -83,7 +83,7 @@ public static partial class ImportValues
             text = ImportText.TrimEnds(text);
 
         // (4) e (5): o número, a data e o lógico que o JSON e o XLSX trazem como tais já vêm na forma canônica, e não passam pelos formatos.
-        var canonical = value.Source is EImportValueSource.Canonical or EImportValueSource.Json ? ImportValueFormats.Default : formats;
+        var canonical = value.Source is EImportValueSource.Canonical or EImportValueSource.Json or EImportValueSource.Copied ? ImportValueFormats.Default : formats;
         var converted = column.Class switch
         {
             EImportClass.Text => Result.Success<ImportConverted, string>(new ImportConverted(text, new EditParameter(text), false)),
@@ -99,6 +99,69 @@ public static partial class ImportValues
 
         return converted.Map(result => result with { Unguarded = unguarded });
     }
+
+    /// <summary>
+    /// RN-IMPORT-024 e 026: um valor da origem da cópia para o parâmetro do destino, sem passar pelo texto da grade (sem o corte, sem os formatos da etapa
+    /// Arquivo). O nulo é o da origem, e passa sempre. O binário só vai para uma coluna binária, e a coluna binária só recebe binário, em bytes. O resto:
+    /// - no PostgreSQL de destino, o texto vai como veio (o do servidor de origem, ou o canônico que o Prism escreve do valor do driver da IBM), num parâmetro
+    ///   sem tipo, e quem converte é o banco; o Prism só recusa o que o banco faria em silêncio: a data e hora com hora que não é zero numa coluna só de
+    ///   data e o fuso numa coluna sem fuso;
+    /// - no Db2 e no Informix de destino, o Prism converte o texto como o de um arquivo, pelos passos 4 e 5 da RN-IMPORT-010, com os formatos canônicos
+    ///   (a faixa do inteiro, as casas do decimal e da fração, a data e hora numa coluna só de data).
+    ///
+    /// A data e hora (e a hora) com fuso do PostgreSQL de origem vai a uma coluna sem fuso com a hora que ele escreveu, sem o fuso: é a única exceção à
+    /// recusa do fuso.
+    /// </summary>
+    /// <param name="sourceColumn">O nome da coluna da origem, na frase do binário.</param>
+    /// <param name="sourceType">O tipo da coluna da origem, como o driver o informa (`timestamp with time zone`).</param>
+    /// <param name="sourceKind">O tipo da grade da coluna da origem (`binary` é o binário).</param>
+    public static Result<EditParameter, string> ConvertCopied(EDatabaseEngine sourceEngine, string sourceColumn, string sourceType, string sourceKind, EDatabaseEngine targetEngine, ImportTargetColumn column, ExportCell cell)
+    {
+        if (!column.Importable)
+            return column.Reason ?? ImportColumns.UnsupportedReason;
+
+        if (cell.IsNull)
+            return new EditParameter(null);
+
+        var sourceBinary = sourceKind == "binary" || cell.Bytes is not null;
+        if (sourceBinary != (column.Class == EImportClass.Binary))
+            return sourceBinary ? $"A coluna {sourceColumn} da origem é binária, e a coluna de destino não é." : $"A coluna {sourceColumn} da origem não é binária, e a coluna de destino é.";
+
+        if (cell.Bytes is { } bytes)
+            return new EditParameter(bytes, DbType.Binary);
+
+        var text = cell.Text!;
+        if (InvalidCharacter(text, column.Class) is { } invalid)
+            return invalid;
+
+        var keepsZone = column.TimeZone && targetEngine == EDatabaseEngine.PostgreSql;
+        if (column.Class is EImportClass.DateTime or EImportClass.Time && !keepsZone && sourceEngine == EDatabaseEngine.PostgreSql && WithTimeZone(sourceType) && text.Contains(':'))
+            text = TrailingZone().Replace(text, string.Empty);
+
+        if (targetEngine != EDatabaseEngine.PostgreSql)
+        {
+            var converted = Convert(targetEngine, column, new ImportValue(text, EImportValueSource.Copied), ImportValueRules.None, ImportValueFormats.Default);
+
+            return converted.IsSuccess ? converted.Value.Parameter : converted.Error;
+        }
+
+        // No PostgreSQL de destino, o banco converte; o que não casa com a forma ISO é dele também.
+        if (column.Class is EImportClass.Date or EImportClass.DateTime or EImportClass.Time && ParseTemporal(text, EImportDates.Iso) is { Refusal: null } parsed && (parsed.Date is not null || parsed.Time is not null))
+        {
+            var quoted = ImportText.Quoted(text);
+            if (parsed.Zone.Length > 0 && !keepsZone)
+                return $"{quoted} tem fuso, e a coluna não guarda fuso.";
+
+            if (column.Class == EImportClass.Date && parsed.Time is { } time && time.Trim('0', ':', '.').Length > 0)
+                return $"{quoted} tem hora, e a coluna {column.Name} é só data.";
+        }
+
+        return new EditParameter(text);
+    }
+
+    /// <summary>O tipo do PostgreSQL que guarda o fuso: `timestamp with time zone` e `time with time zone` (com os modificadores, `timestamp(3) with time zone`).</summary>
+    private static bool WithTimeZone(string type)
+        => type.Contains("with time zone", StringComparison.OrdinalIgnoreCase) || type.Trim() is "timestamptz" or "timetz";
 
     /// <summary>
     /// RN-IMPORT-010: o par substituto solto, que nenhum dos três bancos grava em UTF-8, e o caractere nulo (U+0000) fora de uma coluna binária, que o
@@ -528,6 +591,10 @@ public static partial class ImportValues
     }
 
     private static readonly System.Buffers.SearchValues<char> HexDigits = System.Buffers.SearchValues.Create("0123456789abcdefABCDEF");
+
+    /// <summary>O fuso no fim do texto da data e hora (ou da hora) do PostgreSQL: `Z`, `+00`, `-03:00`, e o de segundos das datas antigas, `-03:06:28`.</summary>
+    [GeneratedRegex(@"(?:Z|[+-][0-9]{2}(?::?[0-9]{2}(?::?[0-9]{2})?)?)\z")]
+    private static partial Regex TrailingZone();
 
     [GeneratedRegex(@"^(?:NaN|-?Infinity)\z", RegexOptions.IgnoreCase)]
     private static partial Regex SpecialFloat();

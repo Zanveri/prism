@@ -27,6 +27,29 @@ public sealed class ImportFileClientTests : IDisposable
     private string PathOf(Guid fileID)
         => Path.Combine(Folder, $"{fileID:D}.in");
 
+    /// <summary>RN-IMPORT-014 e 017: o começo da importação toma o arquivo, que passa a ter o nome do trabalho, também com uma prévia atrasada lendo.</summary>
+    [Trait("ImportFileClient", "Take")]
+    [Fact(DisplayName = "OK o arquivo é tomado pelo trabalho, mesmo aberto por uma prévia, e o que sumiu é Missing")]
+    public void Take_ShouldRenameToTheJob()
+    {
+        //Arrange
+        var fileID = Guid.NewGuid();
+        var jobID = Guid.CreateVersion7();
+        File.WriteAllText(PathOf(fileID), "id;nome\n1;Ana\n");
+        var client = CreateClient();
+        using var preview = client.Open(fileID).Value;
+
+        //Act
+        var taken = client.Take(fileID, jobID);
+        var missing = client.Take(Guid.NewGuid(), Guid.CreateVersion7());
+
+        //Assert
+        Assert.Null(taken);
+        Assert.False(File.Exists(PathOf(fileID)));
+        Assert.True(File.Exists(PathOf(jobID)));
+        Assert.Equal(EImportFileRefusal.Missing, missing!.Kind);
+    }
+
     [Trait("ImportFileClient", "Open")]
     [Fact(DisplayName = "OK o arquivo abre só para leitura, e pode ser renomeado e apagado enquanto está aberto")]
     public void Open_ShouldReadAndLetTheFileBeTaken()

@@ -144,6 +144,33 @@ public sealed partial class AdoDatabaseConnectionTests
         Assert.Equal(bytes, batch.Value.Rows[1][0].Bytes);
     }
 
+    /// <summary>
+    /// RN-IMPORT-026: a cópia lê a data e hora do driver da IBM no texto canônico dela, com as 7 casas de fração do `DateTime`; a exportação para arquivo
+    /// continua com as 6 da grade.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "ReadExportRowsAsync")]
+    [Fact(DisplayName = "OK a cópia lê a data e hora com as 7 casas de fração, e a exportação com as 6 da grade")]
+    public async Task ReadExportRows_Copy_ShouldKeepSevenFractionDigits()
+    {
+        //Arrange
+        var moment = new DateTime(2024, 1, 15, 10, 30, 0).AddTicks(1234567);
+        _rows = 1;
+        _fieldType = typeof(DateTime);
+        _value = _ => moment;
+        var exporting = await OpenForExportAsync();
+        await exporting.StartExportReadAsync(ReadQuery, CancellationToken.None);
+        var copying = await OpenForExportAsync();
+        await copying.StartExportReadAsync(ReadQuery, CancellationToken.None);
+
+        //Act
+        var exported = await exporting.ReadExportRowsAsync(PlanOf(0), CancellationToken.None);
+        var copied = await copying.ReadExportRowsAsync(PlanOf(0) with { Copy = true }, CancellationToken.None);
+
+        //Assert
+        Assert.Equal("2024-01-15 10:30:00.123456", exported.Value.Rows[0][0].Text);
+        Assert.Equal("2024-01-15 10:30:00.1234567", copied.Value.Rows[0][0].Text);
+    }
+
     /// <summary>RN-EXPORT-006: o binário com "Deixar vazio" nem é pedido ao leitor, e chega nulo.</summary>
     [Trait("AdoDatabaseConnection", "ReadExportRowsAsync")]
     [Fact(DisplayName = "OK a coluna deixada de fora do leitor chega nula, sem ser pedida")]

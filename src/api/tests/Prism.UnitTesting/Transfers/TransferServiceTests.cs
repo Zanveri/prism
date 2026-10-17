@@ -20,7 +20,7 @@ namespace Prism.UnitTesting.Transfers;
 /// temporária e o relógio na mão do teste (o abandono, a falta de progresso e o prazo do cancelamento). Esperar o fim de um trabalho é consultar o
 /// registro em laço, e nunca um tempo chutado.
 /// </summary>
-public sealed class TransferServiceTests : IAsyncDisposable
+public sealed partial class TransferServiceTests : IAsyncDisposable
 {
     private static readonly CsvExportOptions Csv = new(";", true, ECsvQuoting.Auto, true, "\n", string.Empty, EExportBinary.Hex);
 
@@ -50,7 +50,7 @@ public sealed class TransferServiceTests : IAsyncDisposable
     private TransferService CreateService(IDatabaseClient client, ILogger logger)
     {
         var settings = TransferSettings.For(_data);
-        var service = new TransferService([client], new TransferFileClient(settings, logger), _vault.Object, settings, _clock, logger);
+        var service = new TransferService([client], new TransferFileClient(settings, logger), new ImportFileClient(settings, logger), _vault.Object, settings, _clock, logger);
         _services.Add(service);
 
         return service;

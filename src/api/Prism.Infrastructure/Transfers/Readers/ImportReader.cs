@@ -14,7 +14,8 @@ namespace Prism.Infrastructure.Transfers.Readers;
 /// É uma integração com o disco e com o conteúdo do arquivo, que é de fora: o <see cref="Send{T}"/> tem o único `try` dela. As recusas da leitura (a
 /// codificação inválida, a aspa que não fecha, os limites) saem como <see cref="ImportReadException"/> do fundo do leitor e voltam daqui como
 /// <see cref="ImportReadFailure"/>, como as exceções dos leitores do .NET (o `JsonException` do `Utf8JsonReader`, o `XmlException` do `XmlReader`, o
-/// `InvalidDataException` do `ZipArchive`) e a falha do disco. O cancelamento sobe como veio.
+/// `InvalidDataException` do `ZipArchive`) e a falha do disco. O cancelamento volta como a falha marcada `Canceled`, para o trabalho da importação, que
+/// roda fora de uma requisição, terminar como cancelado sem uma exceção solta.
 /// </summary>
 internal abstract class ImportReader(Stream stream, ILogger logger) : IDisposable
 {
@@ -119,7 +120,11 @@ internal abstract class ImportReader(Stream stream, ILogger logger) : IDisposabl
         {
             return call();
         }
-        catch (Exception exception) when (exception is not OperationCanceledException)
+        catch (OperationCanceledException)
+        {
+            return new ImportReadFailure(EImportReadReason.System, "A leitura do arquivo foi cancelada.") { Canceled = true };
+        }
+        catch (Exception exception)
         {
             var failure = FailureOf(exception);
             if (exception is ImportReadException)

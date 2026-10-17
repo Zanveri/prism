@@ -396,7 +396,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// bytes enquanto lê (o texto em UTF-8; o binário, `\x` e dois dígitos por byte, pela metade dos dígitos), e para ao passar do teto, sem montar o
     /// resto. Depois, a mesma volta do <see cref="ReadCell"/>: `t` e `f` viram `true` e `false`, e o binário vira os bytes.
     /// </summary>
-    protected override async ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, CancellationToken cancellationToken)
+    protected override async ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, bool copy, CancellationToken cancellationToken)
     {
         if (await reader.IsDBNullAsync(ordinal, cancellationToken))
             return new ExportCellRead(ExportCell.Null, 0);

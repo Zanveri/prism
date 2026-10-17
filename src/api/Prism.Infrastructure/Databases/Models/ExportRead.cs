@@ -23,6 +23,12 @@ public sealed record ExportReadPlan(IReadOnlyList<int> Ordinals, IReadOnlySet<in
 
     /// <summary>Os bytes de valores de um lote: passando deles, o lote fecha na linha que os passou.</summary>
     public long MaxBatchBytes { get; init; } = 1024 * 1024;
+
+    /// <summary>
+    /// RN-IMPORT-026: a leitura da cópia para outro banco, e não de um arquivo: a data e hora do driver da IBM sai no texto canônico da cópia, com as 7
+    /// casas de fração que ele entrega (`aaaa-mm-dd hh:mm:ss.fffffff`), e não com as 6 da grade e da exportação.
+    /// </summary>
+    public bool Copy { get; init; }
 }
 
 /// <summary>

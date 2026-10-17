@@ -319,15 +319,16 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// <summary>
     /// RN-EXPORT-017: uma célula da exportação, inteira, no texto em que a grade a escreve (ou os bytes do binário), com o tamanho dela (o texto em bytes
     /// de UTF-8, o binário em bytes). O valor acima de `limit` não é guardado: volta nulo, com o tamanho que passou do teto. Por padrão o driver entrega o
-    /// valor inteiro (<see cref="ReadCell"/>), e o teto vale logo depois dele; o banco cujo driver lê em pedaços para ao passar dele, sem montar o valor.
+    /// valor inteiro (<see cref="ReadCell"/>), e o teto vale logo depois dele; o banco cujo driver lê em pedaços para ao passar dele, sem montar o valor. Na
+    /// cópia (`copy`, RN-IMPORT-026), a data e hora vai com as 7 casas de fração do driver.
     /// </summary>
-    protected virtual ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, CancellationToken cancellationToken)
+    protected virtual ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, bool copy, CancellationToken cancellationToken)
     {
         var value = ReadCell(reader, ordinal, kind);
         if (value is null or DBNull)
             return ValueTask.FromResult(new ExportCellRead(ExportCell.Null, 0));
 
-        var cell = CellFormatter.ForExport(value);
+        var cell = copy ? CellFormatter.ForCopy(value) : CellFormatter.ForExport(value);
         var bytes = cell.Bytes?.LongLength ?? Encoding.UTF8.GetByteCount(cell.Text!);
 
         return ValueTask.FromResult(bytes > limit ? new ExportCellRead(ExportCell.Null, bytes) : new ExportCellRead(cell, bytes));
@@ -1171,7 +1172,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                     if (plan.Skipped.Contains(ordinal))
                         continue;
 
-                    var read = await ReadExportCellAsync(reader, ordinal, _columns[ordinal].Kind, Math.Min(plan.MaxValueBytes, plan.MaxRowBytes - rowBytes), token);
+                    var read = await ReadExportCellAsync(reader, ordinal, _columns[ordinal].Kind, Math.Min(plan.MaxValueBytes, plan.MaxRowBytes - rowBytes), plan.Copy, token);
                     if (read.Bytes > plan.MaxValueBytes)
                         return new ExportBatch(rows, Finished: false, new ExportOversize(index, WholeRow: false));
 

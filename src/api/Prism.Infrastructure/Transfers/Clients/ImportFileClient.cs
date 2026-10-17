@@ -7,7 +7,8 @@ namespace Prism.Infrastructure.Transfers.Clients;
 
 /// <summary>
 /// RN-IMPORT-017: o arquivo de uma importação na pasta `transfers`, que o processo principal copiou (`&lt;fileId&gt;.in`), com o nome tirado só do
-/// identificador. A API só o lê pelas prévias, sem mudá-lo nem tomá-lo. O único `try` do disco dele está no <see cref="Send{T}"/>.
+/// identificador. As prévias o leem sem mudá-lo nem tomá-lo; o começo da importação o toma (<see cref="Take"/>), e o trabalho o lê pelo identificador dele.
+/// O único `try` do disco dele está no <see cref="Send{T}"/>.
 /// </summary>
 internal interface IImportFileClient
 {
@@ -19,6 +20,12 @@ internal interface IImportFileClient
 
     /// <summary>A mesma conferência do <see cref="Open"/>, sem deixar o arquivo aberto.</summary>
     ImportFileRefusal? Check(Guid fileID);
+
+    /// <summary>
+    /// RN-IMPORT-014: o começo da importação toma o arquivo: `&lt;fileID&gt;.in` passa a se chamar `&lt;jobID&gt;.in`, e daí em diante é do trabalho (o
+    /// processo principal não o acha mais para apagar). Recusa (`Missing`) o arquivo que sumiu entre a conferência e a troca de nome.
+    /// </summary>
+    ImportFileRefusal? Take(Guid fileID, Guid jobID);
 }
 
 internal sealed class ImportFileClient(TransferSettings settings, ILogger logger) : IImportFileClient
@@ -63,6 +70,19 @@ internal sealed class ImportFileClient(TransferSettings settings, ILogger logger
         opened.Value.Dispose();
 
         return null;
+    }
+
+    public ImportFileRefusal? Take(Guid fileID, Guid jobID)
+    {
+        var taken = Send(() =>
+        {
+            // A prévia atrasada que ainda o lê não impede a troca: o `.in` é aberto com `FileShare.Delete`.
+            File.Move(PathOf(fileID), PathOf(jobID));
+
+            return true;
+        });
+
+        return taken.IsFailure ? taken.Error : null;
     }
 
     /// <summary>RN-IMPORT-017: o nome sai só do identificador, na forma de 36 caracteres em minúsculas com os hifens que o processo principal dá.</summary>

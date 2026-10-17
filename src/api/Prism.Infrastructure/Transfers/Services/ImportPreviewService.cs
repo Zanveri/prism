@@ -38,6 +38,20 @@ public sealed record ImportPreviewRequest(Guid FileID, string Format, ImportRead
         => nameof(ImportPreviewRequest);
 }
 
+/// <summary>RN-IMPORT-024: o pedido da prévia da cópia: a conexão de destino já lida do cofre, a tabela, os nomes das colunas pedidas da origem e o mapeamento, quando vem.</summary>
+public sealed record CopyPreviewRequest(ConnectionSettings Settings, string Schema, string Table, IReadOnlyList<string> SourceColumns, IReadOnlyList<ImportMappingEntry>? Mapping)
+{
+    public override string ToString()
+        => nameof(CopyPreviewRequest);
+}
+
+/// <summary>RN-IMPORT-024: a prévia da cópia: a tabela de destino e o mapeamento (o pedido, conferido, ou o sugerido pelo nome).</summary>
+public sealed record CopyPreview(ImportTargetTable Table, IReadOnlyList<ImportMappingEntry> Mapping)
+{
+    public override string ToString()
+        => nameof(CopyPreview);
+}
+
 /// <summary>
 /// RN-IMPORT-007 e 009 a 011: as prévias da importação (as rotas `imports/read` e `imports/preview`). Leem o arquivo da pasta `transfers` pelo
 /// identificador, em fluxo, sem mudá-lo nem tomá-lo; a prévia convertida lê o catálogo da tabela numa conexão à parte, que abre e fecha nela.
@@ -52,6 +66,12 @@ public interface IImportPreviewService
 
     /// <summary>RN-IMPORT-009 a 011: a tabela, o mapeamento (o pedido, conferido, ou o automático) e as primeiras 20 linhas convertidas.</summary>
     Task<Result<ImportConvertedPreview, ImportPreviewFailure>> PreviewAsync(ImportPreviewRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-IMPORT-024: a prévia da cópia (`copies/preview`): o catálogo da tabela de destino, numa conexão à parte, e o mapeamento (o pedido, conferido, ou
+    /// o automático pelo nome das colunas da origem, que sempre existe). Não lê a origem.
+    /// </summary>
+    Task<Result<CopyPreview, ImportPreviewFailure>> PreviewCopyAsync(CopyPreviewRequest request, CancellationToken cancellationToken);
 }
 
 internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients, IImportFileClient files, ILogger logger) : IImportPreviewService
@@ -83,22 +103,11 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
             return new ImportPreviewFailure(EImportPreviewFailure.Database, opened.Error.Message, Database: opened.Error);
 
         await using var connection = opened.Value;
-        var limited = await connection.LimitLockWaitAsync(cancellationToken);
-        if (limited.IsFailure)
-            return new ImportPreviewFailure(EImportPreviewFailure.Database, limited.Error.Message, Database: limited.Error);
-
-        var described = await connection.DescribeImportTargetAsync(request.Schema, request.Table, cancellationToken);
+        var described = await DescribeAsync(connection, request.Settings.Engine, request.Schema, request.Table, cancellationToken);
         if (described.IsFailure)
-            return new ImportPreviewFailure(EImportPreviewFailure.Database, described.Error.Message, Database: described.Error);
+            return described.Error;
 
-        var name = $"{request.Schema}.{request.Table}";
-        if (described.Value is not { } catalog)
-            return new ImportPreviewFailure(EImportPreviewFailure.TableNotFound, $"A tabela {name} não existe mais.");
-
-        if (NotATableReason(request.Settings.Engine, catalog.Table.Kind) is { } kind)
-            return new ImportPreviewFailure(EImportPreviewFailure.NotATable, $"Só uma tabela recebe linhas: {name} {kind}.");
-
-        var table = Table(request.Settings.Engine, catalog);
+        var table = described.Value;
         var mapping = request.Mapping ?? ImportMapping.Suggest(info.Columns, ByName(request.Options), table.Columns);
         if (request.Mapping is not null && ImportMapping.Refusal(request.Mapping, info.Columns.Count, table.Columns) is { } refusal)
             return new ImportPreviewFailure(EImportPreviewFailure.MappingInvalid, refusal.Message, Field: refusal.Field);
@@ -115,6 +124,51 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
         return new ImportConvertedPreview(table, info.Columns, mapping, shown, fitted);
     }
 
+    public async Task<Result<CopyPreview, ImportPreviewFailure>> PreviewCopyAsync(CopyPreviewRequest request, CancellationToken cancellationToken)
+    {
+        var opened = await ConnectAsync(request.Settings, cancellationToken);
+        if (opened.IsFailure)
+            return new ImportPreviewFailure(EImportPreviewFailure.Database, opened.Error.Message, Database: opened.Error);
+
+        await using var connection = opened.Value;
+        var described = await DescribeAsync(connection, request.Settings.Engine, request.Schema, request.Table, cancellationToken);
+        if (described.IsFailure)
+            return described.Error;
+
+        var table = described.Value;
+        if (request.Mapping is not null && ImportMapping.Refusal(request.Mapping, request.SourceColumns.Count, table.Columns) is { } refusal)
+            return new ImportPreviewFailure(EImportPreviewFailure.MappingInvalid, refusal.Message, Field: refusal.Field);
+
+        var mapping = request.Mapping ?? ImportMapping.Suggest(request.SourceColumns, byName: true, table.Columns);
+        _logger.Information("Prévia da cópia lida: {Columns} colunas da origem, {Mapped} mapeadas.", request.SourceColumns.Count, mapping.Count);
+
+        return new CopyPreview(table, mapping);
+    }
+
+    /// <summary>
+    /// RN-IMPORT-009 e 024: a tabela de destino, numa conexão à parte, com o prazo de trava: a que não existe e a que não é tabela, nos termos da edição
+    /// (a visão, a materializada, a estrangeira, e "não é uma tabela comum").
+    /// </summary>
+    private static async Task<Result<ImportTargetTable, ImportPreviewFailure>> DescribeAsync(IDatabaseConnection connection, EDatabaseEngine engine, string schema, string table, CancellationToken cancellationToken)
+    {
+        var limited = await connection.LimitLockWaitAsync(cancellationToken);
+        if (limited.IsFailure)
+            return new ImportPreviewFailure(EImportPreviewFailure.Database, limited.Error.Message, Database: limited.Error);
+
+        var described = await connection.DescribeImportTargetAsync(schema, table, cancellationToken);
+        if (described.IsFailure)
+            return new ImportPreviewFailure(EImportPreviewFailure.Database, described.Error.Message, Database: described.Error);
+
+        var name = $"{schema}.{table}";
+        if (described.Value is not { } catalog)
+            return new ImportPreviewFailure(EImportPreviewFailure.TableNotFound, $"A tabela {name} não existe mais.");
+
+        if (ImportTargets.NotATableReason(engine, catalog.Table.Kind) is { } kind)
+            return new ImportPreviewFailure(EImportPreviewFailure.NotATable, $"Só uma tabela recebe linhas: {name} {kind}.");
+
+        return ImportTargets.TableOf(engine, catalog);
+    }
+
     /// <summary>
     /// O arquivo aberto, o leitor e as primeiras 20 linhas de dados. A leitura é síncrona (o arquivo é local, e a codificação automática e as chaves do JSON
     /// o percorrem inteiro): roda fora da thread da requisição, que a interrompe pelo token; o leitor fecha o arquivo em qualquer saída.
@@ -129,7 +183,7 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
         {
             var started = ImportReader.Open(format, options, opened.Value, _logger, cancellationToken);
             if (started.IsFailure)
-                return Result.Failure<(ImportReadInfo, IReadOnlyList<ImportRecord>, ImportValueRules), ImportPreviewFailure>(Unreadable(started.Error));
+                return Result.Failure<(ImportReadInfo, IReadOnlyList<ImportRecord>, ImportValueRules), ImportPreviewFailure>(Unreadable(started.Error, cancellationToken));
 
             using var reader = started.Value;
             var records = new List<ImportRecord>(ImportPreviews.Rows);
@@ -137,7 +191,7 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
             {
                 var next = reader.Next(cancellationToken);
                 if (next.IsFailure)
-                    return Unreadable(next.Error);
+                    return Unreadable(next.Error, cancellationToken);
 
                 if (next.Value is not { } record)
                     break;
@@ -160,34 +214,17 @@ internal sealed class ImportPreviewService(IEnumerable<IDatabaseClient> clients,
             _ => true
         };
 
-    /// <summary>
-    /// RN-IMPORT-009, nos termos da edição (RN-EDIT-002): o que não é uma tabela comum. A tabela particionada do PostgreSQL é uma tabela; o apelido do Db2,
-    /// a tabela temporária global, a tabela tipada e a tabela externa do Informix "não são uma tabela comum".
-    /// </summary>
-    private static string? NotATableReason(EDatabaseEngine engine, string kind)
-        => kind switch
-        {
-            "table" => null,
-            "view" => "é uma visão",
-            "materializedView" => "é uma visão materializada",
-            "foreign" when engine == EDatabaseEngine.PostgreSql => "é uma tabela estrangeira",
-            _ => "não é uma tabela comum"
-        };
-
-    /// <summary>RN-IMPORT-009 e 012: a tabela como a prévia a mostra: as colunas com a classe de cada uma e as chaves de outras tabelas que apontam para ela.</summary>
-    private static ImportTargetTable Table(EDatabaseEngine engine, ImportCatalog catalog)
-    {
-        var columns = catalog.Table.Columns.OrderBy(column => column.Position).Select(column => ImportColumns.Of(engine, column, catalog.BaseTypes.GetValueOrDefault(column.Name))).ToList();
-        var references = catalog.ReferencedBy
-            .Where(reference => !(reference.ReferencingSchema == catalog.Table.Schema && reference.ReferencingTable == catalog.Table.Name))
-            .Select(reference => new ImportReference(reference.ReferencingSchema, reference.ReferencingTable, reference.OnDelete ?? ForeignKeyRule.NoAction))
-            .ToList();
-
-        return new ImportTargetTable(catalog.Table.Schema, catalog.Table.Name, catalog.Table.OneAtATime, columns, references);
-    }
-
     private static ImportPreviewFailure Unreadable(ImportReadFailure failure)
         => new(EImportPreviewFailure.Unreadable, failure.Message, Read: failure);
+
+    /// <summary>A leitura que o cancelamento da requisição interrompeu não é uma recusa do arquivo: o cancelamento sobe, como sempre subiu.</summary>
+    private static ImportPreviewFailure Unreadable(ImportReadFailure failure, CancellationToken cancellationToken)
+    {
+        if (failure.Canceled)
+            cancellationToken.ThrowIfCancellationRequested();
+
+        return Unreadable(failure);
+    }
 
     private static ImportPreviewFailure FileFailure(ImportFileRefusal refusal)
         => refusal.Kind switch

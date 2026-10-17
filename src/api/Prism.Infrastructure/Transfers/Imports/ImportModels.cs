@@ -107,7 +107,13 @@ public enum EImportValueSource
     Json,
 
     /// <summary>O nulo do arquivo: o `null` do JSON, a célula vazia do XLSX, o valor que falta na linha com menos valores que o cabeçalho.</summary>
-    Null
+    Null,
+
+    /// <summary>
+    /// RN-IMPORT-026: o texto de um valor da origem da cópia (o do servidor PostgreSQL, ou o que o Prism escreve do valor do driver da IBM), já na forma
+    /// canônica: o nulo é só o da origem, e o texto do nulo, o vazio, a proteção contra fórmula e as pontas não valem.
+    /// </summary>
+    Copied
 }
 
 /// <summary>Um valor do arquivo, como o leitor o entrega, antes de qualquer conversão. Leva dado da pessoa: o `ToString()` não o imprime (RN-LOG-001).</summary>
@@ -150,10 +156,13 @@ public enum EImportReadReason
 /// <summary>
 /// RN-IMPORT-004 a 008 e 016: a leitura que não segue, com a frase da regra (sem caminho) e a linha quando se sabe. `ValueTooLarge` é o valor acima de 64
 /// MiB ou a linha acima de 256 MiB (`IMPORT_VALUE_TOO_LARGE` no trabalho; nas prévias, `IMPORT_FILE_UNREADABLE` com o motivo `limits`), com a coluna do
-/// arquivo quando é de um valor.
+/// arquivo quando é de um valor. `Canceled` é a leitura interrompida pelo cancelamento pedido, que não é uma recusa do arquivo: quem lê decide o que
+/// ela é (a prévia devolve o cancelamento da requisição; o trabalho da importação fica `canceled`).
 /// </summary>
 public sealed record ImportReadFailure(EImportReadReason Reason, string Message, long? Line = null, bool ValueTooLarge = false, string? Column = null)
 {
+    public bool Canceled { get; init; }
+
     public override string ToString()
         => nameof(ImportReadFailure);
 }
