@@ -13,8 +13,9 @@ const [LF, CR, TAB] = [chars(10), chars(13), chars(9)];
 
 /**
  * Lê um literal como o servidor o leria, só para provar que o texto montado diz o valor de volta: `'...'` com a aspa dobrada; `E'...'` (PostgreSQL) com a
- * barra invertida como escape (`\\` é uma barra); no Db2, no Informix e no PostgreSQL sem `E` a barra é um caractere comum (RN-TABELA-007); `CHR(n)` é o
- * caractere de código n; `||` junta. Qualquer outra forma é um erro, para o teste não ler o que o servidor recusaria.
+ * barra invertida como escape (`\\` é uma barra, `\r` é o retorno de carro, RN-EXPORT-011); no Db2, no Informix e no PostgreSQL sem `E` a barra é um
+ * caractere comum (RN-TABELA-007); `CHR(n)` é o caractere de código n; `||` junta. Qualquer outra forma é um erro, para o teste não ler o que o servidor
+ * recusaria.
  */
 function decode(engine: Engine, literal: string): string {
   let rest = literal;
@@ -39,8 +40,9 @@ function decode(engine: Engine, literal: string): string {
           value += "'";
           index += 2;
         } else if (char === "\\" && escapes) {
-          if (rest[index + 1] !== "\\") throw new Error(`escape que o servidor leria de outro jeito: ${literal}`);
-          value += "\\";
+          const escaped = rest[index + 1];
+          if (escaped !== "\\" && escaped !== "r") throw new Error(`escape que o servidor leria de outro jeito: ${literal}`);
+          value += escaped === "r" ? CR : "\\";
           index += 2;
         } else {
           value += char;
@@ -80,7 +82,7 @@ describe("scriptLiteral: sem quebra de linha, retorno de carro nem tabulação, 
   });
 });
 
-describe("scriptLiteral: PostgreSQL e Db2 levam a quebra de linha e a tabulação dentro das aspas, e o retorno de carro por CHR(13)", () => {
+describe("scriptLiteral: PostgreSQL e Db2 levam a quebra de linha e a tabulação dentro das aspas; o retorno de carro, como \\r num E'...' no PostgreSQL e por CHR(13) no Db2", () => {
   it.each([1, 2] as const)("banco %i: a quebra de linha e a tabulação vão como estão, entre as aspas", (engine) => {
     expect(scriptLiteral(engine, `a${LF}b`, "text")).toBe(`'a${LF}b'`);
     expect(scriptLiteral(engine, `a${TAB}b`, "text")).toBe(`'a${TAB}b'`);
@@ -90,16 +92,36 @@ describe("scriptLiteral: PostgreSQL e Db2 levam a quebra de linha e a tabulaçã
     expect(scriptLiteral(engine, `${TAB}${LF}${TAB}`, "text")).toBe(`'${TAB}${LF}${TAB}'`);
   });
 
-  it.each([1, 2] as const)("banco %i: o retorno de carro sai como ' || CHR(13) || ' (o editor da aba de consulta troca \\r e \\r\\n por \\n), sem pedaço vazio solto", (engine) => {
-    expect(scriptLiteral(engine, `a${CR}b`, "text")).toBe("'a' || CHR(13) || 'b'");
-    expect(scriptLiteral(engine, `a${CR}${LF}b`, "text")).toBe(`'a' || CHR(13) || '${LF}b'`);
-    expect(scriptLiteral(engine, `a${LF}${CR}b${TAB}`, "text")).toBe(`'a${LF}' || CHR(13) || 'b${TAB}'`);
-    expect(scriptLiteral(engine, `${CR}a`, "text")).toBe("CHR(13) || 'a'");
-    expect(scriptLiteral(engine, `a${CR}`, "text")).toBe("'a' || CHR(13)");
-    expect(scriptLiteral(engine, `a${CR}${CR}b`, "text")).toBe("'a' || CHR(13) || CHR(13) || 'b'");
-    expect(scriptLiteral(engine, CR, "text")).toBe("CHR(13)");
-    expect(scriptLiteral(engine, `${CR}${LF}`, "text")).toBe(`CHR(13) || '${LF}'`);
-    expect(scriptLiteral(engine, `${LF}${CR}`, "text")).toBe(`'${LF}' || CHR(13)`);
+  it("Db2: o retorno de carro sai como ' || CHR(13) || ' (o editor da aba de consulta troca \\r e \\r\\n por \\n), sem pedaço vazio solto", () => {
+    expect(scriptLiteral(2, `a${CR}b`, "text")).toBe("'a' || CHR(13) || 'b'");
+    expect(scriptLiteral(2, `a${CR}${LF}b`, "text")).toBe(`'a' || CHR(13) || '${LF}b'`);
+    expect(scriptLiteral(2, `a${LF}${CR}b${TAB}`, "text")).toBe(`'a${LF}' || CHR(13) || 'b${TAB}'`);
+    expect(scriptLiteral(2, `${CR}a`, "text")).toBe("CHR(13) || 'a'");
+    expect(scriptLiteral(2, `a${CR}`, "text")).toBe("'a' || CHR(13)");
+    expect(scriptLiteral(2, `a${CR}${CR}b`, "text")).toBe("'a' || CHR(13) || CHR(13) || 'b'");
+    expect(scriptLiteral(2, CR, "text")).toBe("CHR(13)");
+    expect(scriptLiteral(2, `${CR}${LF}`, "text")).toBe(`CHR(13) || '${LF}'`);
+    expect(scriptLiteral(2, `${LF}${CR}`, "text")).toBe(`'${LF}' || CHR(13)`);
+  });
+
+  it("PostgreSQL: o retorno de carro sai como \\r num E'...', um literal só e sem tipo, que vale numa coluna json, xml ou de lista (RN-EXPORT-011)", () => {
+    expect(scriptLiteral(1, `a${CR}b`, "text")).toBe("E'a\\rb'");
+    expect(scriptLiteral(1, `a${CR}${LF}b`, "text")).toBe(`E'a\\r${LF}b'`);
+    expect(scriptLiteral(1, `a${LF}${CR}b${TAB}`, "text")).toBe(`E'a${LF}\\rb${TAB}'`);
+    expect(scriptLiteral(1, `${CR}a`, "text")).toBe("E'\\ra'");
+    expect(scriptLiteral(1, `a${CR}`, "text")).toBe("E'a\\r'");
+    expect(scriptLiteral(1, `a${CR}${CR}b`, "text")).toBe("E'a\\r\\rb'");
+    expect(scriptLiteral(1, CR, "text")).toBe("E'\\r'");
+    expect(scriptLiteral(1, `{"a":${CR}${LF}1}`, "text")).toBe(`E'{"a":\\r${LF}1}'`);
+    expect(scriptLiteral(1, `{"x${CR}y",z}`, "text")).toBe(`E'{"x\\ry",z}'`);
+    expect(scriptLiteral(1, `12${CR}`, "number")).toBe("E'12\\r'");
+  });
+
+  it("PostgreSQL: com o retorno de carro, a aspa é dobrada e a barra invertida também, antes do \\r, e um \\r já escrito no dado continua dois caracteres", () => {
+    expect(scriptLiteral(1, `O'Brien${CR}`, "text")).toBe("E'O''Brien\\r'");
+    expect(scriptLiteral(1, `c:\\dir${CR}`, "text")).toBe("E'c:\\\\dir\\r'");
+    expect(scriptLiteral(1, `x\\r${CR}y`, "text")).toBe("E'x\\\\r\\ry'");
+    expect(decode(1, scriptLiteral(1, `x\\r${CR}y`, "text") ?? "")).toBe(`x\\r${CR}y`);
   });
 
   it.each([1, 2] as const)("banco %i: o script gerado não tem retorno de carro algum, e passa pelo editor da aba de consulta (CodeMirror) sem mudar", (engine) => {
@@ -120,8 +142,8 @@ describe("scriptLiteral: PostgreSQL e Db2 levam a quebra de linha e a tabulaçã
   it("PostgreSQL: com barra invertida o literal é E'...' com a barra dobrada, também com a quebra de linha, nas partes antes e depois dela", () => {
     expect(scriptLiteral(1, `a\\b${LF}c`, "text")).toBe(`E'a\\\\b${LF}c'`);
     expect(scriptLiteral(1, `a${LF}b\\c`, "text")).toBe(`E'a${LF}b\\\\c'`);
-    expect(scriptLiteral(1, `a${LF}b${TAB}c\\d${CR}e`, "text")).toBe(`E'a${LF}b${TAB}c\\\\d' || CHR(13) || 'e'`);
-    expect(scriptLiteral(1, `a${CR}b\\${LF}`, "text")).toBe(`'a' || CHR(13) || E'b\\\\${LF}'`);
+    expect(scriptLiteral(1, `a${LF}b${TAB}c\\d${CR}e`, "text")).toBe(`E'a${LF}b${TAB}c\\\\d\\re'`);
+    expect(scriptLiteral(1, `a${CR}b\\${LF}`, "text")).toBe(`E'a\\rb\\\\${LF}'`);
     expect(scriptLiteral(1, `\\${LF}`, "text")).toBe(`E'\\\\${LF}'`);
   });
 
