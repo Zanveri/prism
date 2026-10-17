@@ -96,4 +96,31 @@ public sealed class SqlExportWriterTests
         Assert.DoesNotContain("DROP", text, StringComparison.Ordinal);
         Assert.Equal(1, counts.SkippedRows);
     }
+
+    [Trait("ExportFormats", "Create")]
+    [Theory(DisplayName = "OK cada formato da lista tem o seu escritor")]
+    [InlineData(ExportFormats.Csv, typeof(CsvExportWriter))]
+    [InlineData(ExportFormats.SourceCode, typeof(SourceCodeExportWriter))]
+    [InlineData(ExportFormats.DbUnit, typeof(DbUnitExportWriter))]
+    [InlineData(ExportFormats.Html, typeof(HtmlExportWriter))]
+    [InlineData(ExportFormats.Json, typeof(JsonExportWriter))]
+    [InlineData(ExportFormats.Markdown, typeof(MarkdownExportWriter))]
+    [InlineData(ExportFormats.Sql, typeof(SqlExportWriter))]
+    [InlineData(ExportFormats.Txt, typeof(TxtExportWriter))]
+    [InlineData(ExportFormats.Xlsx, typeof(XlsxExportWriter))]
+    [InlineData(ExportFormats.Xml, typeof(XmlExportWriter))]
+    public void Create_EachFormat_HasItsWriter(string format, Type writer)
+    {
+        //Arrange
+        var (options, errors) = ExportOptionsReader.Read(format, null, "pedido");
+        using var stream = new MemoryStream();
+
+        //Act
+        var created = ExportFormats.Create(format, new ExportWriterContext([new ExportColumn("id", "int4", "number")], "pedido", EDatabaseEngine.PostgreSql, options!), stream);
+
+        //Assert
+        Assert.Empty(errors);
+        Assert.IsType(writer, created);
+        Assert.Equal(ExportFormats.All.Count, ExportFormats.All.Distinct().Count());
+    }
 }

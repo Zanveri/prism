@@ -9,9 +9,11 @@ namespace Prism.UnitTesting.Transfers;
 
 /// <summary>
 /// RN-EXPORT-024: as fixtures de ouro de `src/test-fixtures/export/`, escritas à mão, com as entradas e a saída esperada de cada caso. As do campo do
-/// CSV, do texto do HTML, da célula do Markdown e do valor e da chave do JSON são lidas também pelo teste da tela, e os dois lados escrevem o mesmo
-/// texto; as outras (TXT, PHP, data em ISO 8601, "Em todos os textos" do CSV) são só da API, prontas para quando a tela as escrever. Cada arquivo é
-/// conferido por inteiro: mudar uma regra é mudar a fixture, e nunca regerá-la a partir do código.
+/// CSV, do texto do HTML, da célula do Markdown, do valor e da chave do JSON, do literal do SQL, do texto e do atributo do XML e da planilha (o texto, o
+/// número, o nome e o corte da célula) são lidas também pelo teste da tela (`export-fixtures.test.ts`), e os dois lados escrevem o mesmo texto; as
+/// outras (TXT, PHP, data em ISO 8601, "Em todos os textos" do CSV, o literal do binário, o `INSERT` de várias linhas, o nome do XML e o DbUnit) são só
+/// da API, prontas para quando a tela as escrever. Cada arquivo é conferido por inteiro: mudar uma regra é mudar a fixture, e nunca regerá-la a partir
+/// do código.
 /// </summary>
 public sealed class ExportFixturesTests
 {
@@ -162,6 +164,34 @@ public sealed class ExportFixturesTests
             var (text, counts) = ExportWriting.Write(ExportFormats.DbUnit, columns, Rows(test.GetProperty("rows")), options);
 
             return ($"{text}|{counts.RemovedCharacters}", $"{test.GetProperty("expected").GetString()}|{test.GetProperty("removed").GetInt64()}");
+        });
+
+    [Trait("ExportText", "XlsxText")]
+    [Fact(DisplayName = "OK o texto da planilha é o da fixture")]
+    public void XlsxText_ShouldMatchTheFixture()
+        => AssertAll("xlsx-text.json", test => (ExportText.XlsxText(Text(test.GetProperty("value"))!), Text(test.GetProperty("expected"))));
+
+    [Trait("ExportText", "SpreadsheetNumber")]
+    [Fact(DisplayName = "OK o número da planilha é o da fixture")]
+    public void SpreadsheetNumber_ShouldMatchTheFixture()
+        => AssertAll("xlsx-number.json", test => (ExportText.SpreadsheetNumber(test.GetProperty("value").GetString()!), Text(test.GetProperty("expected"))));
+
+    [Trait("ExportText", "SheetNameOf")]
+    [Fact(DisplayName = "OK o nome da planilha é o da fixture")]
+    public void SheetNameOf_ShouldMatchTheFixture()
+        => AssertAll("xlsx-sheet-name.json", test => (ExportText.SheetNameOf(Text(test.GetProperty("value"))!), Text(test.GetProperty("expected"))));
+
+    [Trait("ExportText", "WithinCell")]
+    [Fact(DisplayName = "OK o corte no limite da célula é o da fixture")]
+    public void WithinCell_ShouldMatchTheFixture()
+        => AssertAll("xlsx-cell.json", test =>
+        {
+            var fill = new string('a', test.GetProperty("fill").GetInt32());
+            var value = fill + Text(test.GetProperty("tail"));
+            var kept = ExportText.WithinCell(value);
+
+            // Os 32 mil "a" iguais não dizem nada na falha: ela mostra só o que vem depois deles.
+            return ($"{(kept.StartsWith(fill, StringComparison.Ordinal) ? kept[fill.Length..] : kept)}|{kept.Length < value.Length}", $"{Text(test.GetProperty("expectedTail"))}|{test.GetProperty("cut").GetBoolean()}");
         });
 
     /// <summary>Confere cada caso e junta as diferenças numa falha só, com o nome de cada caso: a fixture inteira é a regra.</summary>

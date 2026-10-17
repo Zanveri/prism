@@ -1,0 +1,133 @@
+{
+  "rule": "RN-EXPORT-013 e 024: o texto de uma célula da planilha, dentro de <t>. Na tela, xlsxText (to-xlsx.ts); na API, ExportText.XlsxText.",
+  "notes": [
+    "value é texto ou { codePoints: [...] }; expected é o texto como vai no XML da planilha."
+  ],
+  "cases": [
+    {
+      "name": "texto simples",
+      "value": "Ana",
+      "expected": "Ana"
+    },
+    {
+      "name": "a fórmula é texto",
+      "value": "=1+1",
+      "expected": "=1+1"
+    },
+    {
+      "name": "marcação",
+      "value": "<b>&</b>",
+      "expected": "&lt;b&gt;&amp;&lt;/b&gt;"
+    },
+    {
+      "name": "retorno de carro vira escape",
+      "value": "a\rb",
+      "expected": "a_x000D_b"
+    },
+    {
+      "name": "CRLF: só o retorno de carro",
+      "value": "a\r\nb",
+      "expected": "a_x000D_\nb"
+    },
+    {
+      "name": "tabulação e quebra de linha ficam",
+      "value": "a\tb\nc",
+      "expected": "a\tb\nc"
+    },
+    {
+      "name": "controles viram escape",
+      "value": "a\u0000b\u0001c\u001f",
+      "expected": "a_x0000_b_x0001_c_x001F_"
+    },
+    {
+      "name": "DEL e C1 ficam",
+      "value": "\u007f\u0085",
+      "expected": "\u007f\u0085"
+    },
+    {
+      "name": "U+FFFE e U+FFFF viram escape",
+      "value": "x\ufffey\uffff",
+      "expected": "x_xFFFE_y_xFFFF_"
+    },
+    {
+      "name": "par substituto solto vira escape",
+      "value": {
+        "codePoints": [
+          120,
+          55357,
+          121
+        ]
+      },
+      "expected": "x_xD83D_y"
+    },
+    {
+      "name": "o baixo solto também",
+      "value": {
+        "codePoints": [
+          56320
+        ]
+      },
+      "expected": "_xDC00_"
+    },
+    {
+      "name": "um escape já escrito ganha o do sublinhado",
+      "value": "_x0041_",
+      "expected": "_x005F_x0041_"
+    },
+    {
+      "name": "sem o sublinhado do fim também",
+      "value": "_x0041",
+      "expected": "_x005F_x0041"
+    },
+    {
+      "name": "dígitos hexadecimais em minúsculas também",
+      "value": "_xabcd",
+      "expected": "_x005F_xabcd"
+    },
+    {
+      "name": "X maiúsculo não é escape",
+      "value": "_X0041_",
+      "expected": "_X0041_"
+    },
+    {
+      "name": "o que não é hexadecimal não é escape",
+      "value": "_xGHIJ_",
+      "expected": "_xGHIJ_"
+    },
+    {
+      "name": "três dígitos não é escape",
+      "value": "_x004_",
+      "expected": "_x004_"
+    },
+    {
+      "name": "o escape que o retorno de carro fecharia",
+      "value": "linha_x0041\r",
+      "expected": "linha_x005F_x0041_x000D_"
+    },
+    {
+      "name": "dois sublinhados",
+      "value": "__x0041_",
+      "expected": "__x005F_x0041_"
+    },
+    {
+      "name": "o escape do sublinhado já escrito",
+      "value": "_x005F_",
+      "expected": "_x005F_x005F_"
+    },
+    {
+      "name": "emoji e ideograma ficam",
+      "value": "🙂漢",
+      "expected": "🙂漢"
+    },
+    {
+      "name": "U+FEFF e U+202E ficam",
+      "value": "\ufeff\u202e",
+      "expected": "\ufeff\u202e"
+    },
+    {
+      "name": "marcação, aspas e barra invertida",
+      "value": "<script>alert(\"x\")</script> ]]> 'a' \\",
+      "expected": "&lt;script&gt;alert(\"x\")&lt;/script&gt; ]]&gt; 'a' \\"
+    }
+  ]
+}
