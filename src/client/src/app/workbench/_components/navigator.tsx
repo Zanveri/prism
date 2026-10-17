@@ -25,6 +25,7 @@ import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
 import { credentialsMissingField } from "../_lib/credentials-missing";
 import { openExportWizard } from "../_lib/data-export/data-exports";
+import { openImportWizard } from "../_lib/data-import/data-imports";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
@@ -104,6 +105,7 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   generateSelect: <DocumentIcon />,
   // RN-EXPORT-001: a seta de baixar que o app já tem (a do "Exportar CSV").
   exportData: <DownloadIcon />,
+  importData: <UploadIcon />,
   newFolder: <FolderPlusIcon />,
   renameFolder: <PencilIcon />,
   editFolder: <PencilIcon />,
@@ -452,7 +454,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   /** O que o menu precisa saber da conexão da linha; as demais linhas não usam o estado. */
   function menuStateOf(node: NavNode) {
     const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
-    return { status: (connectionId === null ? undefined : statuses.get(connectionId)) ?? "disconnected", busy: connectionId !== null && disconnecting === connectionId } as const;
+    // RN-IMPORT-001: na tabela, a conexão dela somente leitura desabilita o "Importar dados…".
+    const owner = node.kind === "table" ? ownerConnectionId(node) : null;
+    return { status: (connectionId === null ? undefined : statuses.get(connectionId)) ?? "disconnected", busy: connectionId !== null && disconnecting === connectionId, readOnly: owner !== null && readOnlyHints.has(owner) } as const;
   }
 
   /**
@@ -544,6 +548,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       // RN-EXPORT-001: o assistente "Exportar dados", com a tabela (ou a visão) inteira como origem; as colunas ele lê do catálogo ao abrir a Extração.
       case "exportData":
         if (target !== null) openExportWizard({ connectionId: target.connectionId, ...inDatabase(target.database), origin: { kind: "table", view: node.kind === "view", schema: target.schema, name: target.name }, columns: null, unsavedEdits: 0 });
+        return;
+      // RN-IMPORT-001: o assistente "Importar dados", com a tabela de destino já escolhida.
+      case "importData":
+        if (target !== null) openImportWizard({ connectionId: target.connectionId, ...inDatabase(target.database), schema: target.schema, name: target.name });
         return;
       case "copy":
         void copyText(action.text);
