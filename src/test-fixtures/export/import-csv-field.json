@@ -1,0 +1,281 @@
+{
+  "rule": "RN-IMPORT-004 e 028: a leitura do campo do CSV. Só da API (o leitor do CSV), pronta para quando a tela a tiver: o texto do arquivo inteiro, sem cabeçalho e sem pular linhas, e os registros esperados, com a linha física em que cada um começa e se cada campo veio entre aspas.",
+  "notes": [
+    "delimiter ausente é ;, e quote ausente é double.",
+    "Os caracteres invisíveis vão escritos como \\uXXXX, para quem revê os enxergar."
+  ],
+  "cases": [
+    {
+      "name": "aspas dobradas dentro do campo",
+      "text": "\"diz \"\"oi\"\"\";b\r\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "diz \"oi\"",
+            "b"
+          ],
+          "quoted": [
+            true,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a aspa no meio de um campo sem aspas é um caractere comum",
+      "text": "5\";b\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "5\"",
+            "b"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o texto depois da aspa que fecha é juntado ao valor",
+      "text": "\"abc\"def;g\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "abcdef",
+            "g"
+          ],
+          "quoted": [
+            true,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o separador e as três quebras de linha dentro das aspas são texto",
+      "text": "\"a;b\r\nc\nd\re\";f\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "a;b\r\nc\nd\re",
+            "f"
+          ],
+          "quoted": [
+            true,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha do registro seguinte conta as quebras de dentro das aspas",
+      "text": "\"a\nb\nc\";1\nx;2\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "a\nb\nc",
+            "1"
+          ],
+          "quoted": [
+            true,
+            false
+          ]
+        },
+        {
+          "line": 4,
+          "values": [
+            "x",
+            "2"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CRLF, LF e CR sozinho, misturados, e a última sem quebra",
+      "text": "a;1\r\nb;2\nc;3\rd;4",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "a",
+            "1"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        },
+        {
+          "line": 2,
+          "values": [
+            "b",
+            "2"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        },
+        {
+          "line": 3,
+          "values": [
+            "c",
+            "3"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        },
+        {
+          "line": 4,
+          "values": [
+            "d",
+            "4"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o BOM do UTF-8 no começo é pulado",
+      "text": "﻿a;b\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "a",
+            "b"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o campo vazio entre aspas e o sem aspas",
+      "text": "\"\";;x\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "",
+            "",
+            "x"
+          ],
+          "quoted": [
+            true,
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o apóstrofo da proteção chega no valor (quem o tira é a conversão)",
+      "text": "'=1+1;\"'=1;2\"\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "'=1+1",
+            "'=1;2"
+          ],
+          "quoted": [
+            false,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "espaço antes da aspa: o campo não começou por ela",
+      "text": " \"a\";b\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            " \"a\"",
+            "b"
+          ],
+          "quoted": [
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sem aspas, a aspa é sempre um caractere comum",
+      "quote": "none",
+      "text": "\"a;b\";c\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "\"a",
+            "b\"",
+            "c"
+          ],
+          "quoted": [
+            false,
+            false,
+            false
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o separador vírgula",
+      "delimiter": ",",
+      "text": "a,\"b,c\"\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "a",
+            "b,c"
+          ],
+          "quoted": [
+            false,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a tabulação do TSV",
+      "delimiter": "\t",
+      "text": "a\t\"b\tc\"\n",
+      "records": [
+        {
+          "line": 1,
+          "values": [
+            "a",
+            "b\tc"
+          ],
+          "quoted": [
+            false,
+            true
+          ]
+        }
+      ]
+    }
+  ]
+}
