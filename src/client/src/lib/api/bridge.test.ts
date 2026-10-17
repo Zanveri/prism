@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { chooseExportDestination, claimVerification, copyExport, currentAppZoom, deliverExport, finishVerification, onAppZoomChanged, onVerificationPeer, onWindowCloseRequested, readDataFolder, releaseExportDestination, requestAppZoom, revealExport, transfersAvailable } from "./bridge";
+import { chooseExportDestination, chooseImportSource, claimVerification, copyExport, currentAppZoom, deliverExport, finishVerification, importSourceStatus, onAppZoomChanged, onVerificationPeer, onWindowCloseRequested, readDataFolder, releaseExportDestination, releaseImportSource, requestAppZoom, revealExport, transfersAvailable } from "./bridge";
 
 /** A ponte com só o que a pasta de dados usa: o resto não importa aqui. */
 const bridgeAnswering = (reply: () => Promise<unknown>) => vi.stubGlobal("window", { prism: { getDataFolder: reply } });
@@ -228,5 +228,46 @@ describe("o destino e a entrega das exportações de dados (RN-EXPORT-019 e 020)
     vi.stubGlobal("window", {});
     expect(() => revealExport("e1")).not.toThrow();
     await expect(releaseExportDestination("d1")).resolves.toBeUndefined();
+  });
+});
+
+describe("o arquivo das importações de dados (RN-IMPORT-018), do lado da tela", () => {
+  const fileId = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const transfersWith = (transfers: Record<string, unknown>) => vi.stubGlobal("window", { prism: { transfers: { available: true, ...transfers } } });
+
+  it("a escolha é conferida com o schema: o escolhido traz o identificador, o nome e o tamanho; o caminho a mais é jogado fora, e o que não confere é `error`", async () => {
+    transfersWith({ chooseSource: async () => ({ status: "chosen", fileId, fileName: "pedidos.csv", size: 120, path: "/home/<nome>/pedidos.csv" }) });
+    expect(await chooseImportSource()).toEqual({ status: "chosen", fileId, fileName: "pedidos.csv", size: 120 });
+
+    transfersWith({ chooseSource: async () => ({ status: "noSpace", needed: 10 }) });
+    expect(await chooseImportSource()).toEqual({ status: "noSpace", needed: 10 });
+
+    for (const reply of [{ status: "chosen", fileId: "../cofre", fileName: "a", size: 1 }, { status: "outro" }, null]) {
+      transfersWith({ chooseSource: async () => reply });
+      expect(await chooseImportSource()).toEqual({ status: "error" });
+    }
+    vi.stubGlobal("window", {});
+    expect(await chooseImportSource()).toEqual({ status: "error" });
+  });
+
+  it("a consulta da cópia: a resposta conferida; a ponte que falha, ou a resposta fora da forma, vale `missing`", async () => {
+    const asked: unknown[] = [];
+    transfersWith({ sourceStatus: async (request: unknown) => (asked.push(request), { status: "copying", copied: 5, size: 10 }) });
+    expect(await importSourceStatus(fileId)).toEqual({ status: "copying", copied: 5, size: 10 });
+    expect(asked).toEqual([{ fileId }]);
+
+    transfersWith({ sourceStatus: async () => ({ status: "failed", reason: "estranho", message: "x" }) });
+    expect(await importSourceStatus(fileId)).toEqual({ status: "missing" });
+    transfersWith({ sourceStatus: async () => Promise.reject(new Error("boom")) });
+    expect(await importSourceStatus(fileId)).toEqual({ status: "missing" });
+  });
+
+  it("soltar o arquivo espera a resposta e nunca lança, também sem ponte", async () => {
+    const calls: unknown[] = [];
+    transfersWith({ releaseSource: async (request: unknown) => void calls.push(request) });
+    await releaseImportSource(fileId);
+    expect(calls).toEqual([{ fileId }]);
+    vi.stubGlobal("window", {});
+    await expect(releaseImportSource(fileId)).resolves.toBeUndefined();
   });
 });

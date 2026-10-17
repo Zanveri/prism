@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
-import type { CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest } from "./transfer-messages";
+import type { CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
 import type { PeerEvent, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
@@ -12,7 +12,7 @@ import type { WorkspaceReport } from "./workspace-messages";
  * da API, o aviso de que ela saiu, o pedido para reiniciá-la, a versão do app (RN-VERSAO-004) e a
  * pasta de dados em uso (só leitura). É tudo o que a tela recebe do processo principal, mais as
  * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`), as abas que voltam na próxima entrada
- * (`workspace`), o zoom do programa (`zoom`) e o destino e a entrega das exportações de dados (`transfers`).
+ * (`workspace`), o zoom do programa (`zoom`), o destino e a entrega das exportações de dados e o arquivo das importações (`transfers`).
  */
 export type PrismBridge = {
   getApiConfig(): Promise<{ baseUrl: string; token: string }>;
@@ -53,6 +53,15 @@ export type PrismTransfers = {
   reveal(request: RevealRequest): Promise<void>;
   /** Solta o destino; a entrega em andamento para. */
   release(request: ReleaseRequest): Promise<void>;
+  /**
+   * RN-IMPORT-018: abre o diálogo de abrir do sistema (o título, os filtros e a pasta são do processo principal: nada vai da tela), confere o arquivo e começa
+   * a cópia para a pasta `transfers` (`sourceReplySchema`: o identificador da cópia, o nome sem a pasta e o tamanho, ou o motivo da recusa).
+   */
+  chooseSource(): Promise<unknown>;
+  /** Como está a cópia do arquivo (`sourceStatusSchema`); só a janela que o escolheu o vê. */
+  sourceStatus(request: SourceRequest): Promise<unknown>;
+  /** Solta o arquivo: a cópia em andamento para, e a cópia que a API ainda não tomou é apagada. */
+  releaseSource(request: SourceRequest): Promise<void>;
 };
 
 /**
@@ -257,6 +266,9 @@ const bridge: PrismBridge = {
     copy: (request) => ipcRenderer.invoke("prism:transfer-copy", request),
     reveal: (request) => ipcRenderer.invoke("prism:transfer-reveal", request),
     release: (request) => ipcRenderer.invoke("prism:transfer-release", request),
+    chooseSource: () => ipcRenderer.invoke("prism:transfer-source"),
+    sourceStatus: (request) => ipcRenderer.invoke("prism:transfer-source-status", request),
+    releaseSource: (request) => ipcRenderer.invoke("prism:transfer-source-release", request),
   },
   verification: {
     claim: (claim) => ipcRenderer.invoke("prism:verification-claim", claim),

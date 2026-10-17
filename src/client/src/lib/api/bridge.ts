@@ -5,11 +5,15 @@ import {
   copyReplySchema,
   deliverReplySchema,
   destinationReplySchema,
+  sourceReplySchema,
+  sourceStatusSchema,
   type CopyReply,
   type DeliverReply,
   type DeliverRequest,
   type DestinationReply,
   type DestinationRequest,
+  type SourceReply,
+  type SourceStatus,
 } from "../../../electron/transfer-messages";
 import {
   peerEventSchema,
@@ -119,6 +123,7 @@ function devWorkspaceBridge(api: { baseUrl: string; token: string }): PrismWorks
 }
 
 const outsideElectron = "Exportar só funciona no app do Prism.";
+const importOutsideElectron = "Importar só funciona no app do Prism.";
 
 /**
  * A ponte com o processo principal. Só em desenvolvimento, com a tela aberta num navegador comum
@@ -183,6 +188,11 @@ export function getBridge(): PrismBridge {
         copy: () => Promise.reject(new Error(outsideElectron)),
         reveal: async () => {},
         release: async () => {},
+        // RN-IMPORT-001 e 018: fora do Electron não há o diálogo de abrir nem quem copie o arquivo: "Escolher arquivo…" diz que importar só funciona no app,
+        // sem pedir nada. A consulta não acha arquivo nenhum, e soltar não tem o que soltar.
+        chooseSource: () => Promise.reject(new Error(importOutsideElectron)),
+        sourceStatus: async () => ({ status: "missing" }),
+        releaseSource: async () => {},
       },
     };
   }
@@ -442,5 +452,39 @@ export async function releaseExportDestination(destinationId: string): Promise<v
     await getBridge().transfers.release({ destinationId });
   } catch {
     // Sem a ponte, ou o destino já não existe: não há o que soltar.
+  }
+}
+
+/**
+ * O arquivo de uma importação de dados (RN-IMPORT-018), do lado da tela. Cada resposta do processo principal é conferida com o schema que ele também usa;
+ * nada aqui lança, e nenhum caminho chega à tela: só o identificador da cópia, o nome do arquivo sem a pasta e o tamanho.
+ */
+
+/** O diálogo de abrir do sistema e a cópia que começa. `error`: a ponte recusou o pedido ou respondeu fora do formato. */
+export async function chooseImportSource(): Promise<SourceReply | { status: "error" }> {
+  try {
+    const parsed = sourceReplySchema.safeParse(await getBridge().transfers.chooseSource());
+    return parsed.success ? parsed.data : { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/** Como está a cópia. A ponte que falha, ou a resposta fora do formato, vale `missing`: a tela pede o arquivo de novo. */
+export async function importSourceStatus(fileId: string): Promise<SourceStatus> {
+  try {
+    const parsed = sourceStatusSchema.safeParse(await getBridge().transfers.sourceStatus({ fileId }));
+    return parsed.success ? parsed.data : { status: "missing" };
+  } catch {
+    return { status: "missing" };
+  }
+}
+
+/** Solta o arquivo (a cópia em andamento para, e a cópia que a API não tomou é apagada). Espera a resposta. Nunca lança. */
+export async function releaseImportSource(fileId: string): Promise<void> {
+  try {
+    await getBridge().transfers.releaseSource({ fileId });
+  } catch {
+    // Sem a ponte, ou o arquivo já foi solto: não há o que soltar.
   }
 }

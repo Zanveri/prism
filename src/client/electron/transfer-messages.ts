@@ -75,3 +75,47 @@ export type ReleaseRequest = z.infer<typeof releaseRequestSchema>;
 
 /** O limite da área de transferência (RN-EXPORT-014): 10 MiB de texto em UTF-8. */
 export const clipboardLimitBytes = 10 * 1024 * 1024;
+
+/**
+ * O arquivo de uma importação de dados (RN-IMPORT-018), com o mesmo schema dos dois lados. `prism:transfer-source` não recebe nada: o título, os filtros e
+ * a pasta inicial do diálogo de abrir são do processo principal. A resposta leva só o identificador da cópia (`fileId`, a forma de um identificador da API,
+ * conferida antes de virar nome de arquivo), o nome do arquivo sem a pasta, para a tela mostrar, e o tamanho em bytes. **Nenhuma resposta devolve um
+ * caminho**, e os pedidos seguintes levam só o `fileId`.
+ */
+
+/** O maior arquivo que se importa (RN-IMPORT-008): 2 GiB, que a tela escreve "2 GB", como o Windows. */
+export const maxImportBytes = 2 * 1024 * 1024 * 1024;
+
+const byteCount = z.number().int().min(0);
+
+export const sourceReplySchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("chosen"), fileId: transferIdSchema, fileName: z.string().min(1).max(1000), size: byteCount }),
+  z.object({ status: z.literal("canceled") }),
+  z.object({ status: z.literal("notAFile") }),
+  z.object({ status: z.literal("tooLarge"), size: byteCount }),
+  z.object({ status: z.literal("notWritable") }),
+  z.object({ status: z.literal("noSpace"), needed: byteCount }),
+  /** `message`: a frase do motivo, escolhida pelo código do sistema ("o sistema não dá permissão para ler o arquivo"), nunca o texto dele, que traz o caminho. */
+  z.object({ status: z.literal("unreadable"), message: z.string().max(1000) }),
+]);
+
+export type SourceReply = z.infer<typeof sourceReplySchema>;
+
+/** `prism:transfer-source-status` e `prism:transfer-source-release`: o arquivo, pelo identificador que o processo principal deu. */
+export const sourceRequestSchema = z.object({ fileId: transferIdSchema }).strict();
+
+export type SourceRequest = z.infer<typeof sourceRequestSchema>;
+
+/** Por que a cópia falhou (RN-IMPORT-018); a mensagem é a frase inteira da tela, sem caminho. */
+export const sourceFailureReasons = ["diskFull", "tooLarge", "unreadable", "other"] as const;
+
+export type SourceFailureReason = (typeof sourceFailureReasons)[number];
+
+export const sourceStatusSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("copying"), copied: byteCount, size: byteCount }),
+  z.object({ status: z.literal("ready") }),
+  z.object({ status: z.literal("failed"), reason: z.enum(sourceFailureReasons), message: z.string().max(1000) }),
+  z.object({ status: z.literal("missing") }),
+]);
+
+export type SourceStatus = z.infer<typeof sourceStatusSchema>;
