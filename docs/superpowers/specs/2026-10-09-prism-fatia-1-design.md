@@ -273,7 +273,8 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   executar" ("Não", o padrão, "Só comandos irreversíveis" ou "Todos os comandos", RN-PROT-001) e
   "Somente leitura" (desmarcada por padrão, RN-PROT-002); e a sessão da conexão, "Verificar a cada N
   segundos" (ligada, 30 segundos, de 5 a 3.600) e a consulta de verificação (opcional, até 1.000
-  caracteres, RN-VERIF-001). O host tem até 255 caracteres, o banco de dados até 128, o usuário
+  caracteres, sem caractere de controle, fora a tabulação e as quebras de linha, nem de direção do
+  texto, RN-VERIF-001). O host tem até 255 caracteres, o banco de dados até 128, o usuário
   até 128 (os três contados em unidades UTF-16 depois de aparados, que é o que se grava) e a senha
   até 1.024 (contada como veio: ela não é aparada); o nome, o host, o banco de dados, o usuário e o
   nome do ambiente não têm caractere de controle nem de direção do texto (os da RN-PASTA-001),
@@ -286,7 +287,8 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   proteções e a sessão da conexão. Alterada a pedido do dono em 2026-10-16 (seção 34): a conexão
   importada pode vir sem usuário e senha; e entraram os tetos do host, do banco de dados, do usuário
   e da senha e a recusa dos caracteres de controle e de direção do texto, para o arquivo que o Prism
-  exporta voltar pela importação dele.*
+  exporta voltar pela importação dele. Alterada a pedido do dono em 2026-10-17: a consulta de verificação
+  também recusa esses caracteres, menos a tabulação, a quebra de linha e o retorno de carro (RN-VERIF-001).*
 - **RN-CONN-011.** Nome único dentro da mesma pasta: 409 `CONNECTION_ALREADY_EXISTS`.
 - **RN-CONN-012.** Portas sugeridas no formulário: PostgreSQL 5432, Db2 50000, Informix 9089.
 - **RN-CONN-013.** "Testar conexão" abre, executa a consulta de verificação do banco e fecha,
@@ -3173,16 +3175,25 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   verificação", opcional, com a consulta do banco como dica do campo (a da RN-CONN-013: PostgreSQL
   `SELECT 1`; Db2 `SELECT 1 FROM SYSIBM.SYSDUMMY1`; Informix `SELECT 1 FROM systables WHERE tabid =
   1`). Em branco, vale a do banco.
-  - A consulta própria tem até 1.000 caracteres e é uma leitura só, pela regra da RN-PROT-005 no
-    banco da conexão: um comando só (o `;` do fim não conta). A API recusa o resto com 422
-    `CONNECTION_INVALID` no campo `verificationQuery`, com o motivo ("A consulta de verificação tem
-    de ser uma leitura só: um UPDATE não é leitura."). Ela é lida até o fim a cada verificação: a
+  - A consulta própria tem até 1.000 caracteres, não tem caractere de controle nem de direção do texto
+    (os da RN-PASTA-001, menos a tabulação, a quebra de linha e o retorno de carro, que uma consulta de
+    várias linhas tem), contados e conferidos depois de aparada, e é uma leitura só, pela regra da
+    RN-PROT-005 no banco da conexão: um comando só (o `;` do fim não conta). A API recusa o resto com
+    422 `CONNECTION_INVALID` no campo `verificationQuery`, a primeira recusa nesta ordem: "A consulta de
+    verificação pode ter no máximo 1.000 caracteres.", "A consulta de verificação não pode ter caractere
+    de controle nem de direção do texto." e o motivo da leitura ("A consulta de verificação tem de ser
+    uma leitura só: um UPDATE não é leitura."). O formulário confere o tamanho e os caracteres antes de
+    mandar, com as mesmas frases; a leitura, só a API. Ela é lida até o fim a cada verificação: a
     que devolve muitas linhas custa isso a cada intervalo, e o texto de ajuda do campo pede uma que
     devolva uma linha. No PostgreSQL ela roda numa transação só de leitura: nem uma função chamada
     por ela grava.
   - "Testar conexão" (RN-CONN-013) usa a consulta do formulário, quando há uma.
   - O intervalo e a consulta são da conexão; a pasta não os tem, e a cópia da conexão (RN-CONN-016)
     os leva.
+  - *Alterada a pedido do dono em 2026-10-17: a consulta passou a recusar o caractere de controle e o de
+    direção do texto, como os outros campos da conexão desde a seção 34 (RN-CONN-010), no formulário, no
+    "Testar conexão" e na importação (RN-TRANSF-014): o Prism a executa sozinho, e um U+202E faria a
+    consulta que a prévia da importação manda conferir (RN-TRANSF-011) parecer outra.*
 - **RN-VERIF-002.** Enquanto a conexão está conectada (a sessão da árvore ou a de alguma aba, a
   mesma conta da lista do botão da conexão da aba, RN-ARVORE-008), a tela pede a verificação a cada
   intervalo, `POST api/user/connections/{id}/verification`, um pedido por vez: o intervalo conta do
@@ -4264,8 +4275,10 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
       executa esta consulta no "Testar conexão", e sozinho, a cada 30 segundos, se a verificação for
       ligada: …"). No PostgreSQL, em que a consulta roda numa transação só de leitura (RN-VERIF-001), a
       frase do meio não aparece; no Db2 e no Informix só o texto a segura (RN-PROT-005). O intervalo é o
-      do arquivo, e a consulta aparece inteira, como texto puro: ela tem até 1.000 caracteres, ou o item
-      não seria importável, e cortá-la esconderia justamente o que é para conferir;
+      do arquivo, e a consulta aparece inteira, como texto puro: ela tem até 1.000 caracteres e nenhum
+      caractere de controle (fora a tabulação e as quebras de linha) nem de direção do texto, ou o item
+      não seria importável (RN-TRANSF-014); cortá-la esconderia justamente o que é para conferir, e um
+      caractere de direção do texto a faria parecer outra;
     - o que não pode ser importado: a caixa desmarcada e desabilitada, e "não pode ser importada", com o
       motivo (RN-TRANSF-014).
   - Desmarcar não refaz a prévia (cada pedido deriva a senha de novo): as marcas da prévia são as de tudo
@@ -4291,6 +4304,9 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     limites dos campos, RN-PASTA-001 e RN-CONN-010, e é o que se confere); do item que não pode ser
     importado, cada texto, e o que o motivo cita dele ("Este Prism não conhece o banco …"), vem cortado
     em 200 caracteres.
+  - *Alterada a pedido do dono em 2026-10-17: a consulta de verificação que a prévia mostra inteira não
+    tem mais caractere de controle (fora a tabulação e as quebras de linha) nem de direção do texto, que
+    deixam a conexão não importável (RN-VERIF-001 e RN-TRANSF-014).*
 
 - **RN-TRANSF-012.** Onde fica, e os conflitos.
   - O que está na raiz do arquivo vai para o lugar escolhido em "Onde colocar" (a raiz do navegador ou
@@ -4341,15 +4357,18 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     ou nome de ambiente com caractere de controle ou de direção do texto (RN-PASTA-001 e RN-CONN-010: um
     U+202E faria o host que a prévia manda conferir parecer outro); a porta, de 1 a 65.535; o ambiente
     (o nome até 30, a cor `#RRGGBB`) e a cor da pasta; a confirmação, uma das três; o intervalo da
-    verificação, de 5 a 3.600; e a consulta de verificação, até 1.000 caracteres e uma leitura só no
-    banco da conexão (RN-VERIF-001), porque ela roda sozinha a cada intervalo depois de conectar, com as
-    credenciais da conexão. O usuário e a senha podem faltar (RN-TRANSF-015). Com a caixa desmarcada (o
-    padrão), a conexão de consulta própria entra com a consulta do banco (RN-TRANSF-011). O banco sem
+    verificação, de 5 a 3.600; e a consulta de verificação, até 1.000 caracteres, sem caractere de
+    controle (fora a tabulação, a quebra de linha e o retorno de carro) nem de direção do texto, e uma
+    leitura só no banco da conexão (RN-VERIF-001), porque ela roda sozinha a cada intervalo depois de
+    conectar, com as credenciais da conexão, e a prévia a mostra para ser conferida (RN-TRANSF-011). O
+    usuário e a senha podem faltar (RN-TRANSF-015). Com a caixa desmarcada (o padrão), a conexão de
+    consulta própria entra com a consulta do banco (RN-TRANSF-011). O banco sem
     driver instalado não impede: a conexão se grava como pelo formulário, e conectar pede o driver
     (RN-NAV-005).
   - O item que não passa não é importado, e a prévia diz por quê, com a frase da regra ("A consulta de
-    verificação tem de ser uma leitura só: um UPDATE não é leitura.", "Informe uma porta de 1 a 65535.",
-    "Este Prism não conhece o banco MySql."). A pasta que não passa leva junto o que está dentro dela ("A
+    verificação tem de ser uma leitura só: um UPDATE não é leitura.", "A consulta de verificação não pode
+    ter caractere de controle nem de direção do texto.", "Informe uma porta de 1 a 65535.", "Este Prism
+    não conhece o banco MySql."). A pasta que não passa leva junto o que está dentro dela ("A
     pasta Production PRD não pode ser importada."). Um item assim nunca fica marcado, e a chave dele, se
     vier, é ignorada. O resto do arquivo continua importável: um arquivo de uma versão mais nova do
     Prism, num formato que esta lê, pode trazer um banco ou um valor que esta não conhece.
@@ -4394,6 +4413,9 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     deixadas de fora, não importáveis, com a proteção ou o ambiente gravados, com a consulta de
     verificação própria mantida ou trocada pela do banco) e os IDs criados, nunca o
     arquivo, nomes, hosts, usuários, senhas ou a senha de exportação (RN-LOG-001).
+  - *Alterada a pedido do dono em 2026-10-17: a consulta de verificação do arquivo também é conferida quanto
+    ao caractere de controle (fora a tabulação, a quebra de linha e o retorno de carro) e ao de direção do
+    texto, com a regra e a frase da RN-VERIF-001.*
 
 ### Conexão sem usuário e senha
 
@@ -4516,6 +4538,9 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   sem eles; o host, o banco de dados, o usuário e a senha ganham teto, e os textos da conexão recusam o
   caractere de controle e o de direção do texto, no formulário, no teste e na importação.
 - **RN-CONN-013**: o teste da conexão gravada sem senha é recusado com `CONNECTION_CREDENTIALS_MISSING`.
+- **RN-VERIF-001**: a consulta de verificação também recusa o caractere de controle (fora a tabulação, a
+  quebra de linha e o retorno de carro) e o de direção do texto, no formulário, no teste e na importação
+  (alterada a pedido do dono em 2026-10-17).
 - **RN-SESSAO-003**: a conexão sem usuário ou sem senha não chega ao driver.
 - **RN-ARVORE-005**: essa recusa não aparece no nó; ela abre o "Editar conexão".
 - **RN-TX-008**: o quinto erro de senha ao exportar com senhas de banco também fecha o cofre, e o
