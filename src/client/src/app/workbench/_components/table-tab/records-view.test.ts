@@ -23,6 +23,9 @@ const rt = await vi.hoisted(async () => {
     ...createHookRuntime(),
     /** O catálogo das chaves estrangeiras: o que a consulta devolve (`undefined` enquanto não chegou) e o que a vista pediu a `useQuery` em cada renderização. */
     catalog: { data: undefined as ForeignKey[] | undefined, asked: [] as { queryKey: readonly unknown[]; enabled?: boolean }[] },
+    /** RN-IMPORT-001: as listas que a vista lê do cache pela chave (as conexões, as pastas e os grupos da árvore); as outras consultas recebem o catálogo. */
+    lists: new Map<string, unknown>(),
+    openImport: vi.fn(),
     queryClient: { getQueryData: () => undefined },
     // A conferência do catálogo da edição: o resultado é só leitura (o menu da célula abre com o motivo, sem rota de verdade).
     service: { editTargetOrRefuse: vi.fn(async () => ({ ok: false, error: { code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: "teste", extensions: {} } })), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
@@ -36,6 +39,8 @@ vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof im
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQuery: (options: { queryKey: readonly unknown[]; enabled?: boolean }) => {
+    const listed = JSON.stringify(options.queryKey);
+    if (rt.lists.has(listed)) return { data: rt.lists.get(listed) };
     rt.catalog.asked.push(options);
     return { data: rt.catalog.data };
   },
@@ -47,6 +52,7 @@ vi.mock("../../_lib/save-file", () => ({ saveText: rt.saveText }));
 vi.mock("../../_lib/full-values.service", () => rt.cells);
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
 vi.mock("../../_lib/record-edits.service", () => rt.service);
+vi.mock("../../_lib/data-import/data-imports", async (importOriginal) => ({ ...(await importOriginal<typeof import("../../_lib/data-import/data-imports")>()), openImportWizard: rt.openImport }));
 
 import { elementsOf } from "@/lib/testing/react-tree";
 
@@ -73,6 +79,9 @@ import { CustomFilterField } from "../custom-filter-field";
 import { ValueFilterDialog } from "../value-filter-dialog";
 import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
 import { autoRefreshCopy } from "../../_lib/auto-refresh.copy";
+import { markImported } from "../../_lib/data-import/data-imports";
+import { treeKey } from "../../_lib/database-sessions.service";
+import { unprotected } from "@/app/connections/_lib/connections.schema";
 
 /** PostgreSQL, como a API numera os bancos. */
 const pg: Engine = 1;
@@ -172,6 +181,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   rt.catalog.data = undefined;
   rt.catalog.asked.length = 0;
+  rt.lists.clear();
   // A memória das abas e a passagem do filtro são de módulo: cada teste começa sem nada lembrado e sem pedido nenhum.
   forgetExcept(new Set());
   filterHandoff.forgetExcept([]);
@@ -1795,5 +1805,48 @@ describe("RecordsView: a barra de edição (RN-EDIT-013 e 014)", () => {
     expect(view.show().panel.editing!.rows).toEqual([["10", "4"], ["20", "5"], ["40", null]]);
     expect(view.show().panel.editing!.active).toEqual({ row: 2, column: 0 });
     expect(bannerOf(view).pending).toBe(1);
+  });
+});
+
+describe("RecordsView: \"Importar…\" e a nota das linhas importadas (RN-IMPORT-001 e 020)", () => {
+  const groupKey = (objects: "tables" | "views") => JSON.stringify(treeKey({ type: "objects", connectionId: "c1", schema: "loja", objects }));
+  const bannerOf = (panel: ComponentProps<typeof ResultPanel>) => (panel.banner as { props: ComponentProps<typeof EditsBanner> }).props;
+
+  it("habilitado na tabela, também desconectada e ocupada; abre o assistente com a tabela da aba", () => {
+    const view = mount(fakeRunner({ status: "running", cancelling: false, previous: null }), { disconnected: true });
+    const { panel } = view.show();
+
+    expect(panel.importer?.blocker).toBeNull();
+    panel.importer?.onImport();
+    expect(rt.openImport).toHaveBeenCalledWith({ connectionId: "c1", schema: "loja", name: "pedidos" });
+  });
+
+  it("desabilitado, com o motivo, na conexão somente leitura e na visão que a árvore já mostrou", () => {
+    rt.lists.set(JSON.stringify(["connections"]), [{ id: "c1", protections: { ...unprotected, readOnly: true } }]);
+    rt.lists.set(JSON.stringify(["folders"]), []);
+    expect(mount(fakeRunner(rowsState())).show().panel.importer?.blocker).toBe("A conexão é somente leitura: importar grava na tabela.");
+
+    rt.lists.clear();
+    rt.lists.set(groupKey("views"), [{ key: "k", kind: "view", label: "pedidos", depth: 0, hasChildren: false }]);
+    expect(mount(fakeRunner(rowsState())).show().panel.importer?.blocker).toBe("Só uma tabela recebe linhas importadas: esta é uma visão.");
+  });
+
+  it("a importação nesta tabela depois da leitura acende a nota com o \"Atualizar\" da aba; a aba que lê de novo a apaga; a de outra tabela não", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    expect(bannerOf(view.show().panel).onImportedRefresh).toBeNull();
+
+    markImported({ connectionId: "c1", schema: "loja", name: "clientes" });
+    markImported({ connectionId: "c2", schema: "loja", name: "pedidos" });
+    expect(bannerOf(view.show().panel).onImportedRefresh).toBeNull();
+
+    markImported({ connectionId: "c1", schema: "loja", name: "pedidos" });
+    const lit = view.show();
+    expect(bannerOf(lit.panel).onImportedRefresh).toBe(lit.records.onRefresh);
+
+    lit.records.onRefresh();
+    expect(bannerOf(view.show().panel).onImportedRefresh).toBe(lit.records.onRefresh);
+    runner.state = rowsState({ id: 2 });
+    expect(bannerOf(view.show().panel).onImportedRefresh).toBeNull();
   });
 });

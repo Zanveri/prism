@@ -14,7 +14,9 @@ namespace Prism.Infrastructure.Transfers.Services;
 /// <summary>
 /// RN-EXPORT-016 a 018: o registro das transferências. Cada trabalho roda numa tarefa própria (`Task.Run`), numa conexão à parte que só ele usa, e
 /// escreve o arquivo temporário pelo client da pasta `transfers`, que tem o único `try` do disco; a conexão tem o dela. Nada aqui lança: o que falha é o
-/// fim do trabalho (`failed`, com o código e a mensagem), e o estado de cada um muda só sob a trava do registro.
+/// fim do trabalho (`failed`, com o código e a mensagem), e o estado de cada um muda só sob a trava do registro. RN-IMPORT-014 e 027: a importação de dados
+/// (<see cref="ImportRun"/>) e a cópia para outro banco (<see cref="CopyRun"/>) entram no mesmo registro, com o mesmo limite, gravando pelo mesmo
+/// carregador (<see cref="TableLoader"/>).
 ///
 /// O relógio (`TimeProvider`) decide o abandono (5 minutos sem consulta) e a falta de progresso (2 horas sem uma linha escrita nem uma fase nova), por um
 /// temporizador que confere o registro de tempos em tempos; o mesmo relógio mede o prazo do cancelamento.
@@ -26,11 +28,14 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
     private const string ColumnsChangedMessage = "As colunas do resultado mudaram desde a grade. Execute o comando de novo e exporte outra vez.";
     private const string StalledMessage = "O banco ficou 2 horas sem responder, e a exportação foi encerrada.";
+    private const string ImportStalledMessage = "O banco ficou 2 horas sem responder, e a importação foi encerrada.";
+    private const string CopyStalledMessage = "O banco ficou 2 horas sem responder, e a cópia foi encerrada.";
     private const string ClipboardTooLargeMessage = "O texto passou de 10 MiB, o limite da área de transferência. Exporte para um arquivo.";
     private const string DiskFullMessage = "Não há espaço em disco para o arquivo temporário da exportação, na pasta de dados do Prism.";
 
     private readonly Dictionary<EDatabaseEngine, IDatabaseClient> _clients;
     private readonly ITransferFileClient _files;
+    private readonly IImportFileClient _importFiles;
     private readonly IVaultService _vault;
     private readonly TransferSettings _settings;
     private readonly TimeProvider _timeProvider;
@@ -42,10 +47,11 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
     private readonly Dictionary<Guid, Transfer> _transfers = [];
 
-    public TransferService(IEnumerable<IDatabaseClient> clients, ITransferFileClient files, IVaultService vault, TransferSettings settings, TimeProvider timeProvider, ILogger logger)
+    public TransferService(IEnumerable<IDatabaseClient> clients, ITransferFileClient files, IImportFileClient importFiles, IVaultService vault, TransferSettings settings, TimeProvider timeProvider, ILogger logger)
     {
         _clients = clients.ToDictionary(client => client.Engine);
         _files = files;
+        _importFiles = importFiles;
         _vault = vault;
         _settings = settings;
         _timeProvider = timeProvider;
@@ -81,6 +87,90 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         _logger.Information("Exportação {TransferID} começou; conexão {ConnectionID}, formato {Format}, contagem {Count}.", transfer.ID, job.ConnectionID, job.Format, job.Count);
 
         return transfer.ID;
+    }
+
+    public Result<Guid, ETransferStartFailure> StartImport(ImportJob job)
+    {
+        var now = _timeProvider.GetTimestamp();
+        Transfer transfer;
+
+        lock (_gate)
+        {
+            if (Refusal(job.VaultGeneration, job.Settings, job.Schema, job.Table) is { } refusal)
+                return refusal;
+
+            transfer = new Transfer(Guid.CreateVersion7(), ETransferKind.Import, job.ConnectionID, job.WindowID, job.VaultGeneration, _timeProvider.GetUtcNow(), now)
+            {
+                TargetConnectionID = job.ConnectionID,
+                Target = (job.Settings, job.Schema, job.Table),
+                Committed = 0
+            };
+
+            // RN-IMPORT-014: a API toma o arquivo; dali em diante ele é do trabalho. O que sumiu antes da troca (o processo principal o soltou) é 404, e o
+            // arquivo que o sistema não deixa renomear também não é do trabalho: a resposta é a mesma, e a tela pede o arquivo de novo.
+            if (_importFiles.Take(job.FileID, transfer.ID) is not null)
+                return ETransferStartFailure.FileMissing;
+
+            // O cofre não muda sob esta trava (o aviso de fechamento a espera), mas a geração é lida de novo depois da troca: se mudou, nada fica.
+            if (_vault.Generation != job.VaultGeneration)
+            {
+                _files.Delete(transfer.ID);
+
+                return ETransferStartFailure.VaultChanged;
+            }
+
+            _transfers[transfer.ID] = transfer;
+            transfer.Task = Task.Run(() => RunImportAsync(transfer, job));
+        }
+
+        _logger.Information("Importação {TransferID} começou; conexão {ConnectionID}, formato {Format}, arquivo {FileID}.", transfer.ID, job.ConnectionID, job.Format, job.FileID);
+
+        return transfer.ID;
+    }
+
+    public Result<Guid, ETransferStartFailure> StartCopy(CopyJob job)
+    {
+        var now = _timeProvider.GetTimestamp();
+        Transfer transfer;
+
+        lock (_gate)
+        {
+            if (Refusal(job.VaultGeneration, job.TargetSettings, job.Schema, job.Table) is { } refusal)
+                return refusal;
+
+            transfer = new Transfer(Guid.CreateVersion7(), ETransferKind.Copy, job.SourceConnectionID, job.WindowID, job.VaultGeneration, _timeProvider.GetUtcNow(), now)
+            {
+                TargetConnectionID = job.TargetConnectionID,
+                Target = (job.TargetSettings, job.Schema, job.Table),
+                Committed = 0
+            };
+
+            _transfers[transfer.ID] = transfer;
+            transfer.Task = Task.Run(() => RunCopyAsync(transfer, job));
+        }
+
+        _logger.Information("Cópia {TransferID} começou; origem {SourceConnectionID}, destino {TargetConnectionID}, contagem {Count}.", transfer.ID, job.SourceConnectionID, job.TargetConnectionID, job.Count || job.ForcedCount);
+
+        return transfer.ID;
+    }
+
+    /// <summary>
+    /// Com a trava tomada. RN-EXPORT-016 e RN-IMPORT-014: o cofre que mudou, o limite (as que terminaram não contam, nem a cancelada que ainda está
+    /// parando em segundo plano) e a tabela ocupada por outra importação ou cópia em andamento, pela regra da própria origem (RN-IMPORT-023).
+    /// </summary>
+    private ETransferStartFailure? Refusal(long vaultGeneration, ConnectionSettings settings, string schema, string table)
+    {
+        if (_vault.Generation != vaultGeneration)
+            return ETransferStartFailure.VaultChanged;
+
+        var running = _transfers.Values.Where(transfer => transfer.State == ETransferState.Running).ToList();
+        if (running.Count >= _settings.Limit)
+            return ETransferStartFailure.LimitReached;
+
+        if (running.FirstOrDefault(transfer => transfer.Target is { } busy && TablePlaces.SameTable(busy.Settings, busy.Schema, busy.Table, settings, schema, table)) is { } occupied)
+            return occupied.Kind == ETransferKind.Copy ? ETransferStartFailure.CopyBusy : ETransferStartFailure.ImportBusy;
+
+        return null;
     }
 
     public TransferInfo? Get(Guid id)
@@ -141,8 +231,9 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         {
             // O trabalho que terminou apesar do cancelamento (o último lote chegou antes dele) fica `done`, mas a tela já o deu por cancelado e não o
             // consulta mais: esquece, e o arquivo pronto sai, para ele não contar como pronto e não entregue até o abandono.
+            // A importação e a cópia que terminaram assim ficam: a tela lê o fim delas (a confirmação final já tinha terminado) e as esquece depois.
             lock (_gate)
-                closed = transfer.State == ETransferState.Done && !transfer.Removed && Forget(transfer);
+                closed = transfer.Kind == ETransferKind.Export && transfer.State == ETransferState.Done && !transfer.Removed && Forget(transfer);
 
             if (closed)
             {
@@ -155,10 +246,14 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
         // A conexão meio aberta, que não responde nem ao cancelamento: o trabalho fica cancelado e deixa de contar para o limite, e a conexão é abandonada
         // em segundo plano; o arquivo sai quando ela enfim parar, ou na partida seguinte.
+        // RN-IMPORT-014: abandonada no meio de uma confirmação (ou, no Informix sem log, de um comando), o banco ainda pode concluí-la: o fim leva a dúvida.
         lock (_gate)
         {
             if (transfer.State == ETransferState.Running)
+            {
+                transfer.Uncertain = transfer.InDoubt;
                 End(transfer, ETransferState.Canceled, null, null);
+            }
         }
 
         _logger.Warning("Transferência {TransferID}: o trabalho não parou em {Seconds} s, e a conexão foi abandonada em segundo plano.", id, _settings.CancelWait.TotalSeconds);
@@ -172,7 +267,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
         lock (_gate)
         {
-            canceled = [.. _transfers.Values.Where(transfer => transfer.ConnectionID == connectionID && transfer.State == ETransferState.Running)];
+            canceled = [.. _transfers.Values.Where(transfer => (transfer.ConnectionID == connectionID || transfer.TargetConnectionID == connectionID) && transfer.State == ETransferState.Running)];
             foreach (var transfer in canceled)
                 transfer.CancelReason ??= ETransferCancelReason.ConnectionDeleted;
         }
@@ -265,7 +360,8 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
                 }
                 else if (transfer.State == ETransferState.Running && _timeProvider.GetElapsedTime(transfer.LastProgress) >= _settings.StallAfter)
                 {
-                    End(transfer, ETransferState.Failed, new TransferFailure(ETransferError.Stalled, StalledMessage), null);
+                    transfer.Uncertain = transfer.InDoubt;
+                    End(transfer, ETransferState.Failed, StalledFailure(transfer.Kind), null);
                     stalled.Add(transfer);
                 }
             }
@@ -281,8 +377,17 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
             _logger.Information("Transferência {TransferID} abandonada: ninguém a consultou por {Minutes} minutos.", transfer.ID, _settings.AbandonAfter.TotalMinutes);
 
         foreach (var transfer in stalled)
-            _logger.Warning("Transferência {TransferID} encerrada: {Hours} horas sem progresso ({Error}).", transfer.ID, _settings.StallAfter.TotalHours, ETransferError.Stalled);
+            _logger.Warning("Transferência {TransferID} encerrada: {Hours} horas sem progresso ({Error}).", transfer.ID, _settings.StallAfter.TotalHours, transfer.Error?.Code);
     }
+
+    /// <summary>RN-EXPORT-016 e RN-IMPORT-014: a falta de progresso, com o código e a frase de cada tipo de trabalho.</summary>
+    private static TransferFailure StalledFailure(ETransferKind kind)
+        => kind switch
+        {
+            ETransferKind.Export => new TransferFailure(ETransferError.Stalled, StalledMessage),
+            ETransferKind.Import => new TransferFailure(ETransferError.ImportStalled, ImportStalledMessage) { Side = ETransferSide.Target },
+            _ => new TransferFailure(ETransferError.ImportStalled, CopyStalledMessage)
+        };
 
     /// <summary>
     /// RN-EXPORT-017 e 018: conectar, preparar a sessão, contar (quando pedido), abrir a leitura, conferir as colunas, escrever o arquivo lote a lote e
@@ -320,7 +425,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         if (job.Count)
         {
             Advance(transfer, ETransferPhase.Counting);
-            var counted = await connection.CountExportAsync(job.Sql, token);
+            var counted = await connection.CountExportAsync(job.Sql, required: false, token);
             if (counted.IsFailure)
                 return (null, DatabaseFailureOf(counted.Error), null);
 
@@ -393,6 +498,108 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         return (new TransferSummary(rows, completed.Value, counts.Sheets, counts.CutValues, counts.RemovedCharacters, counts.SkippedRows), null, file);
     }
 
+    /// <summary>RN-IMPORT-012 a 016: a importação, pelo <see cref="ImportRun"/>, e o fim dela.</summary>
+    private async Task RunImportAsync(Transfer transfer, ImportJob job)
+    {
+        var run = new ImportRun(transfer.ID, job, ConnectAsync, _importFiles, new TransferProgress(transfer, _gate, _timeProvider), _logger, transfer.Cancellation.Token);
+        var end = await SafelyAsync(transfer, run.RunAsync, "a importação");
+        var state = FinishLoad(transfer, end);
+        var (elapsedMs, rows, committed, bytes, error) = LoadLog(transfer);
+
+        // RN-LOG-001 e RN-IMPORT-014: os identificadores, o formato, as linhas lidas, gravadas e confirmadas, os bytes, a duração e a classe do erro com o
+        // SQLSTATE; nunca o nome do arquivo, um caminho, os nomes da tabela e das colunas, os valores, a linha com o erro nem a mensagem do banco.
+        if (error is null)
+            _logger.Information("Importação {TransferID} terminou ({State}) em {ElapsedMs} ms; conexão {ConnectionID}, formato {Format}, {ReadRows} linhas lidas, {Rows} gravadas, {Committed} confirmadas, {Bytes} bytes.", transfer.ID, state, elapsedMs, job.ConnectionID, job.Format, run.ReadRows, rows, committed, bytes);
+        else
+            _logger.Information("Importação {TransferID} terminou ({State}) em {ElapsedMs} ms; conexão {ConnectionID}, formato {Format}, {ReadRows} linhas lidas, {Rows} gravadas, {Committed} confirmadas, {Bytes} bytes ({Error}, SQLSTATE {SqlState}).", transfer.ID, state, elapsedMs, job.ConnectionID, job.Format, run.ReadRows, rows, committed, bytes, error.Code, error.SqlState);
+    }
+
+    /// <summary>RN-IMPORT-022 a 027: a cópia para outro banco, pelo <see cref="CopyRun"/>, e o fim dela.</summary>
+    private async Task RunCopyAsync(Transfer transfer, CopyJob job)
+    {
+        var run = new CopyRun(job, ConnectAsync, new TransferProgress(transfer, _gate, _timeProvider), transfer.Cancellation.Token);
+        var end = await SafelyAsync(transfer, run.RunAsync, "a cópia");
+        var state = FinishLoad(transfer, end);
+        var (elapsedMs, rows, committed, _, error) = LoadLog(transfer);
+
+        // RN-LOG-001 e RN-IMPORT-027: o da importação, com as duas conexões e sem o comando da origem.
+        if (error is null)
+            _logger.Information("Cópia {TransferID} terminou ({State}) em {ElapsedMs} ms; origem {SourceConnectionID}, destino {TargetConnectionID}, {ReadRows} linhas lidas, {Rows} gravadas, {Committed} confirmadas.", transfer.ID, state, elapsedMs, job.SourceConnectionID, job.TargetConnectionID, run.ReadRows, rows, committed);
+        else
+            _logger.Information("Cópia {TransferID} terminou ({State}) em {ElapsedMs} ms; origem {SourceConnectionID}, destino {TargetConnectionID}, {ReadRows} linhas lidas, {Rows} gravadas, {Committed} confirmadas ({Error}, SQLSTATE {SqlState}, lado {Side}).", transfer.ID, state, elapsedMs, job.SourceConnectionID, job.TargetConnectionID, run.ReadRows, rows, committed, error.Code, error.SqlState, error.Side);
+    }
+
+    /// <summary>
+    /// A rede de segurança da importação e da cópia, que não deviam lançar (o que falha é o fim delas): a exceção que escapa mesmo assim, um defeito do
+    /// Prism, termina o trabalho como `failed`, com `INTERNAL_SERVER_ERROR` e uma frase fixa, e não o deixa `Running` para sempre, com o arquivo no disco,
+    /// a tabela ocupada e a vaga do limite tomada. O log recebe a classe e a pilha, nunca a mensagem, que pode trazer um valor do arquivo (RN-LOG-001).
+    /// </summary>
+    private async Task<LoadEnd> SafelyAsync(Transfer transfer, Func<Task<LoadEnd>> run, string what)
+    {
+        try
+        {
+            return await run();
+        }
+        catch (Exception exception)
+        {
+            _logger.Error("O trabalho {TransferID} parou por um defeito ({ExceptionType}).{NewLine}{StackTrace}", transfer.ID, exception.GetType().Name, Environment.NewLine, exception.StackTrace);
+
+            return LoadEnd.Of(LoadSteps.Prism(ETransferError.Unexpected, $"Um erro inesperado do Prism parou {what}."));
+        }
+    }
+
+    /// <summary>
+    /// RN-IMPORT-014 e 016: o fim de uma importação ou de uma cópia. O resumo é `done`, mesmo com um cancelamento a caminho (a confirmação final já tinha
+    /// terminado); a conexão que passou a ser somente leitura é `canceled` com `readOnly`; o cancelamento pedido é `canceled` com o motivo dele; o resto é
+    /// `failed`, com as linhas confirmadas até ali e a dúvida da última confirmação. O estado só muda se ninguém o mudou antes (o `DELETE` que desistiu de
+    /// esperar, a falta de progresso). O arquivo da importação sai em todo fim (RN-IMPORT-017), pela mesma regra do <see cref="Transfer.Closed"/>.
+    /// </summary>
+    private ETransferState FinishLoad(Transfer transfer, LoadEnd end)
+    {
+        ETransferState state;
+        lock (_gate)
+        {
+            if (transfer.State == ETransferState.Running)
+            {
+                var failure = end.Stop?.Failure;
+                if (end.Summary is not null)
+                {
+                    End(transfer, ETransferState.Done, null, end.Summary);
+                }
+                else if (end.Stop?.Reason is { } reason)
+                {
+                    transfer.CancelReason = reason;
+                    End(transfer, ETransferState.Canceled, null, null);
+                }
+                else if (failure is null || transfer.Cancellation.IsCancellationRequested)
+                {
+                    transfer.Uncertain = failure?.Uncertain == true;
+                    End(transfer, ETransferState.Canceled, null, null);
+                }
+                else
+                {
+                    transfer.Uncertain = failure.Uncertain == true;
+                    End(transfer, ETransferState.Failed, failure, null);
+                }
+            }
+
+            state = transfer.State;
+            transfer.Closed = true;
+        }
+
+        if (transfer.Kind == ETransferKind.Import)
+            _files.Delete(transfer.ID);
+
+        return state;
+    }
+
+    /// <summary>O que o log do fim de uma importação ou de uma cópia leva: a duração, as contagens e o erro (só a classe e o SQLSTATE vão ao log).</summary>
+    private (long ElapsedMs, long Rows, long? Committed, long Bytes, TransferFailure? Error) LoadLog(Transfer transfer)
+    {
+        lock (_gate)
+            return ((long)_timeProvider.GetElapsedTime(transfer.StartedTimestamp).TotalMilliseconds, transfer.Rows, transfer.Committed, transfer.Bytes, transfer.Error);
+    }
+
     /// <summary>
     /// O fim do trabalho. O que terminou é `done`, mesmo com um cancelamento a caminho; o cancelado é `canceled`, com o motivo; o resto é `failed`. O
     /// estado só muda se ninguém o mudou antes (o `DELETE` que desistiu de esperar, a falta de progresso). Na falha, no cancelamento e no trabalho que
@@ -459,6 +666,10 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
     /// <summary>Com a trava tomada.</summary>
     private void End(Transfer transfer, ETransferState state, TransferFailure? failure, TransferSummary? summary)
     {
+        // RN-IMPORT-016: o erro da importação e da cópia diz as linhas confirmadas até ele e a dúvida da última confirmação.
+        if (failure is not null && transfer.Kind != ETransferKind.Export)
+            failure = failure with { Committed = transfer.Committed ?? 0, Uncertain = transfer.Uncertain, Side = failure.Side ?? ETransferSide.Target };
+
         transfer.State = state;
         transfer.Error = failure;
         transfer.Summary = summary;
@@ -469,6 +680,8 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         {
             transfer.Rows = summary.Rows;
             transfer.Bytes = summary.Bytes;
+            if (transfer.Kind != ETransferKind.Export)
+                transfer.Committed = summary.Committed;
         }
     }
 
@@ -516,61 +729,5 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
 
     /// <summary>Com a trava tomada.</summary>
     private static TransferInfo Snapshot(Transfer transfer)
-        => new(transfer.ID, transfer.Kind, transfer.ConnectionID, null, transfer.WindowID, transfer.State, transfer.Phase, transfer.Rows, null, transfer.Total, transfer.Bytes, null, false, transfer.Summary, transfer.Error, transfer.Reason, transfer.StartedAt, transfer.FinishedAt);
-
-    /// <summary>Um trabalho no registro. Os campos mudam só com a trava do registro tomada. Não é um record: nada aqui se imprime.</summary>
-    private sealed class Transfer(Guid id, ETransferKind kind, Guid connectionID, long windowID, long vaultGeneration, DateTimeOffset startedAt, long startedTimestamp)
-    {
-        public Guid ID => id;
-
-        public ETransferKind Kind => kind;
-
-        public Guid ConnectionID => connectionID;
-
-        public long WindowID => windowID;
-
-        /// <summary>A geração do cofre aberto quando o trabalho começou: o cofre seguinte não o vê.</summary>
-        public long VaultGeneration => vaultGeneration;
-
-        public DateTimeOffset StartedAt => startedAt;
-
-        public long StartedTimestamp { get; } = startedTimestamp;
-
-        public ETransferState State { get; set; } = ETransferState.Running;
-
-        public ETransferPhase Phase { get; set; } = ETransferPhase.Connecting;
-
-        public long Rows { get; set; }
-
-        public long? Total { get; set; }
-
-        public long Bytes { get; set; }
-
-        public TransferSummary? Summary { get; set; }
-
-        public TransferFailure? Error { get; set; }
-
-        public ETransferCancelReason? Reason { get; set; }
-
-        public DateTimeOffset? FinishedAt { get; set; }
-
-        /// <summary>O motivo do cancelamento pedido, que vale se o trabalho parar por ele.</summary>
-        public ETransferCancelReason? CancelReason { get; set; }
-
-        /// <summary>O trabalho saiu do registro (esquecido, abandonado, do cofre que fechou, a API encerrando): o arquivo dele sai também, mesmo pronto.</summary>
-        public bool Removed { get; set; }
-
-        /// <summary>O <see cref="Finish"/> fechou o arquivo do trabalho: daqui em diante, quem tira o trabalho do registro apaga o arquivo.</summary>
-        public bool Closed { get; set; }
-
-        /// <summary>A última consulta (`GET` do trabalho), pelo relógio do registro; começa no início.</summary>
-        public long LastPolled { get; set; } = startedTimestamp;
-
-        /// <summary>O último progresso (uma fase nova, um lote escrito), pelo relógio do registro; começa no início.</summary>
-        public long LastProgress { get; set; } = startedTimestamp;
-
-        public CancellationTokenSource Cancellation { get; } = new();
-
-        public Task Task { get; set; } = Task.CompletedTask;
-    }
+        => new(transfer.ID, transfer.Kind, transfer.ConnectionID, transfer.TargetConnectionID, transfer.WindowID, transfer.State, transfer.Phase, transfer.Rows, transfer.Committed, transfer.Total, transfer.Bytes, transfer.Size, transfer.Uncertain, transfer.Summary, transfer.Error, transfer.Reason, transfer.StartedAt, transfer.FinishedAt);
 }

@@ -39,7 +39,10 @@ internal interface ITransferFileClient
     /// <summary>Fecha o arquivo de um trabalho que não terminou, sem completá-lo. Não falha.</summary>
     void Close(ExportFile file);
 
-    /// <summary>Apaga o `.part` e o `.ready` do trabalho. O que não se apaga na hora (no Windows, o que o processo principal está copiando) fica para a partida seguinte. Não falha.</summary>
+    /// <summary>
+    /// Apaga o `.part` e o `.ready` do trabalho e, na importação, o `.in` que ele tomou (RN-IMPORT-017). O que não se apaga na hora (no Windows, o que o
+    /// processo principal está copiando) fica para a partida seguinte. Não falha.
+    /// </summary>
     void Delete(Guid id);
 }
 
@@ -183,7 +186,7 @@ internal sealed class TransferFileClient(TransferSettings settings, ILogger logg
 
     public void Delete(Guid id)
     {
-        foreach (var extension in new[] { "part", "ready" })
+        foreach (var extension in new[] { "part", "ready", "in" })
             _ = Send(nameof(Delete), id, () =>
             {
                 File.Delete(PathOf(id, extension));

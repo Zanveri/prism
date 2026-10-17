@@ -21,6 +21,7 @@ import {
   refusalsOf,
   stepOfField,
   stepProblem,
+  stepsOf,
   usesClipboard,
   type WizardChoices,
   type WizardContext,
@@ -47,6 +48,17 @@ describe("as etapas do assistente (RN-EXPORT-003)", () => {
     expect(canVisit("format", "output")).toBe(true);
     expect(canVisit("confirmation", "output")).toBe(false);
     expect(canVisit("output", "output")).toBe(false);
+  });
+
+  it("com \"Banco de dados\", seis (RN-IMPORT-022): \"Formatação\" e \"Saída\" saem, e a volta para um formato de arquivo devolve as cinco", () => {
+    expect(stepsOf(true)).toEqual(["format", "extraction", "target", "mapping", "load", "confirmation"]);
+    expect(stepsOf(false)).toEqual(["format", "extraction", "formatting", "output", "confirmation"]);
+    const steps = stepsOf(true);
+    expect(nextStep("extraction", steps)).toBe("target");
+    expect(nextStep("load", steps)).toBe("confirmation");
+    expect(previousStep("target", steps)).toBe("extraction");
+    expect(canVisit("mapping", "load", steps)).toBe(true);
+    expect(canVisit("confirmation", "load", steps)).toBe(false);
   });
 
   it("a Extração não avança sem nenhuma coluna marcada, nem antes de as colunas chegarem", () => {
@@ -105,6 +117,11 @@ describe("as colunas que vão no arquivo (RN-EXPORT-002 e 011)", () => {
     sql.options.sql.includeGenerated = true;
     expect(chosenColumns(sql, context()).map((column) => column.name)).toEqual(["id", "total", "cliente"]);
     expect(droppedGenerated(sql, context())).toEqual([]);
+  });
+
+  it("na cópia (RN-IMPORT-024) vão todas as marcadas: a opção do SQL lembrada não tira a coluna que o banco de origem calcula", () => {
+    const sql = choices({ format: "sql", database: true });
+    expect(chosenColumns(sql, context()).map((column) => column.name)).toEqual(["id", "total", "cliente"]);
   });
 
   it("no resultado de uma consulta a opção não existe, e vão as colunas marcadas", () => {

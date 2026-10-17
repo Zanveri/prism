@@ -34,6 +34,20 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private const string ReleaseCountSavepointSql = "RELEASE SAVEPOINT prism_count";
     private const string RollbackToCountSavepointSql = "ROLLBACK TO SAVEPOINT prism_count";
 
+    /// <summary>RN-IMPORT-011: o ponto de salvamento de cada linha da conferência da conversão, dentro da transação só de leitura dela (no PostgreSQL).</summary>
+    private const string ImportSavepointSql = "SAVEPOINT prism_import";
+    private const string ReleaseImportSavepointSql = "RELEASE SAVEPOINT prism_import";
+    private const string RollbackToImportSavepointSql = "ROLLBACK TO SAVEPOINT prism_import";
+
+    /// <summary>RN-IMPORT-011: as conversões de um `SELECT` da conferência, no máximo (o PostgreSQL aceita até 1.664 colunas num resultado).</summary>
+    private const int ImportCastsPerSelect = 1000;
+
+    /// <summary>RN-IMPORT-015: as linhas de um comando (ou de um lote) da carga, no máximo.</summary>
+    protected const int MaxLoadRows = 500;
+
+    /// <summary>RN-IMPORT-015: os parâmetros de um `INSERT … VALUES` de várias linhas, no máximo (no Db2: com 40 colunas mapeadas, 250 linhas).</summary>
+    private const int MaxLoadParameters = 10000;
+
     /// <summary>O SQLSTATE com que o PostgreSQL e o Db2 dizem que interromperam o comando a pedido ("query canceled").</summary>
     private const string QueryCanceledSqlState = "57014";
 
@@ -138,6 +152,15 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>RN-PROT-002: o cursor aberto é de um comando de uma conexão somente leitura. A recusa por gravar no "carregar mais" é a resposta, como veio.</summary>
     private bool _cursorReadOnly;
+
+    /// <summary>
+    /// RN-IMPORT-015: o comando da carga preparado no banco, que serve às linhas seguintes enquanto o texto é o mesmo (no Informix, uma linha por comando,
+    /// preparado uma vez e executado a cada linha; no Db2, os `INSERT` de várias linhas do mesmo tamanho). Sai com a conexão.
+    /// </summary>
+    private DbCommand? _loadCommand;
+
+    /// <summary>RN-IMPORT-016: o lote da carga em andamento (PostgreSQL), para o <see cref="Send{T}"/> dizer qual comando dele o banco recusou.</summary>
+    private DbBatch? _loadBatch;
 
     public string ServerVersion { get; private set; } = string.Empty;
 
@@ -296,15 +319,16 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// <summary>
     /// RN-EXPORT-017: uma célula da exportação, inteira, no texto em que a grade a escreve (ou os bytes do binário), com o tamanho dela (o texto em bytes
     /// de UTF-8, o binário em bytes). O valor acima de `limit` não é guardado: volta nulo, com o tamanho que passou do teto. Por padrão o driver entrega o
-    /// valor inteiro (<see cref="ReadCell"/>), e o teto vale logo depois dele; o banco cujo driver lê em pedaços para ao passar dele, sem montar o valor.
+    /// valor inteiro (<see cref="ReadCell"/>), e o teto vale logo depois dele; o banco cujo driver lê em pedaços para ao passar dele, sem montar o valor. Na
+    /// cópia (`copy`, RN-IMPORT-026), a data e hora vai com as 7 casas de fração do driver.
     /// </summary>
-    protected virtual ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, CancellationToken cancellationToken)
+    protected virtual ValueTask<ExportCellRead> ReadExportCellAsync(DbDataReader reader, int ordinal, string kind, long limit, bool copy, CancellationToken cancellationToken)
     {
         var value = ReadCell(reader, ordinal, kind);
         if (value is null or DBNull)
             return ValueTask.FromResult(new ExportCellRead(ExportCell.Null, 0));
 
-        var cell = CellFormatter.ForExport(value);
+        var cell = copy ? CellFormatter.ForCopy(value) : CellFormatter.ForExport(value);
         var bytes = cell.Bytes?.LongLength ?? Encoding.UTF8.GetByteCount(cell.Text!);
 
         return ValueTask.FromResult(bytes > limit ? new ExportCellRead(ExportCell.Null, bytes) : new ExportCellRead(cell, bytes));
@@ -325,6 +349,43 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         parameter.Value = value.Value ?? DBNull.Value;
     }
+
+    /// <summary>
+    /// RN-IMPORT-010 e 015: um valor da importação no parâmetro: o convertido pelo Prism, com o tipo quando ele vem (Db2 e Informix), como no "Salvar". O
+    /// banco que converte o texto (o PostgreSQL) manda o texto sem tipo e os bytes do binário no tipo binário dele.
+    /// </summary>
+    protected virtual void BindImportParameter(DbParameter parameter, EditParameter value)
+        => BindEditParameter(parameter, value);
+
+    /// <summary>
+    /// RN-IMPORT-011: a conversão de um parâmetro (`$1`, a partir de 1) para o tipo de uma coluna, como o catálogo o escreve, na conferência da prévia. Nula,
+    /// por padrão: no banco em que o Prism converte (Db2 e Informix), a conferência não vai ao banco.
+    /// </summary>
+    protected virtual string? ImportCastSql(string type, int parameter)
+        => null;
+
+    /// <summary>
+    /// RN-IMPORT-010: no banco que tem domínios (o PostgreSQL), a consulta do tipo-base de cada coluna da tabela que é de um domínio. Parâmetros: esquema e
+    /// tabela. Colunas: o nome da coluna e o tipo-base, sem modificadores. Nula, por padrão.
+    /// </summary>
+    protected virtual string? DomainBaseTypesSql => null;
+
+    /// <summary>
+    /// RN-IMPORT-015: quantas linhas vão num comando da carga com `columns` colunas. Por padrão (o Db2), um `INSERT … VALUES` de várias linhas, até 500 e
+    /// até 10.000 parâmetros; o banco que não aceita várias linhas num `INSERT` (o Informix) responde 1.
+    /// </summary>
+    protected virtual int RowsPerLoadCommand(int columns)
+        => Math.Clamp(MaxLoadParameters / Math.Max(1, columns), 1, MaxLoadRows);
+
+    /// <summary>
+    /// RN-IMPORT-015: o banco manda as linhas da carga num lote de comandos de uma linha numa ida só (o `NpgsqlBatch` do PostgreSQL), e não num `INSERT`
+    /// de várias linhas. O lote diz qual comando o banco recusou, e assim qual linha, sem uma segunda passada.
+    /// </summary>
+    protected virtual bool LoadsInBatches => false;
+
+    /// <summary>O marcador do parâmetro de posição dada (a partir de 1) num comando da carga: `?` por padrão, `$1` no PostgreSQL.</summary>
+    protected virtual string LoadParameter(int position)
+        => "?";
 
     /// <summary>
     /// Parâmetro: esquema. Colunas: nome, tipo (`table`, `view`, `procedure` ou `function`), a estimativa de linhas das estatísticas (nula
@@ -768,6 +829,92 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         }, cancellationToken);
 
     /// <summary>
+    /// RN-IMPORT-009, 012 e 015: a tabela pela consulta da edição (`EditRelationQuery`, com o esquema e o nome como estão no catálogo; no PostgreSQL, entre
+    /// aspas para o `to_regclass`), as chaves que apontam para ela e, no PostgreSQL, o tipo-base das colunas de um domínio. Na transação da carga (a
+    /// leitura da primeira transação, RN-IMPORT-015), roda dentro dela, sem desfazê-la antes.
+    /// </summary>
+    public Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken)
+        => RunAsync(nameof(DescribeImportTargetAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var written = $"{QuotedName(schema)}.{QuotedName(table)}";
+            if (await DescribeCoreAsync(EditRelationQuery(new EditTableName(schema, table, written)), token) is not { } described)
+                return (ImportCatalog?)null;
+
+            var references = await ReadAllAsync(ReferencedBySql, [described.Schema, described.Name], ReadForeignKeyRow, token);
+            var baseTypes = DomainBaseTypesSql is { } sql ? await ReadAllAsync(sql, [described.Schema, described.Name], reader => (Column: Text(reader, 0), Type: Text(reader, 1)), token) : [];
+            var referencedBy = references.GroupBy(row => (row.Name, row.ReferencingSchema, row.ReferencingTable)).Select(foreignKey => new ReferencingForeignKeyInfo(foreignKey.Key.Name, foreignKey.Key.ReferencingSchema, foreignKey.Key.ReferencingTable, [.. foreignKey.Select(row => row.Column)], [.. foreignKey.Select(row => row.ReferencedColumn)], foreignKey.First().OnDelete, foreignKey.First().OnUpdate)).ToList();
+
+            return new ImportCatalog(described, referencedBy, baseTypes.GroupBy(row => row.Column, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First().Type, StringComparer.Ordinal));
+        }, cancellationToken, continuesTheCursor: _editTransaction is not null);
+
+    /// <summary>
+    /// RN-IMPORT-011. Tudo numa transação só de leitura, desfeita no fim: cada linha num ponto de salvamento, com um `SELECT` das conversões dela (em
+    /// partes de até 1.000); na que o banco recusa, a volta ao ponto de salvamento e um `SELECT` por célula, até achar quais recusam, com a mensagem do
+    /// banco em cada uma. A recusa é a resposta procurada, e passa pelo próprio `Send`, como a da contagem; a conexão que cai e o cancelamento são a falha
+    /// da operação. No banco sem a conversão do banco (<see cref="ImportCastSql"/> nula), nada vai a ele.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IReadOnlyList<string?>> none = [.. values.Select(row => (IReadOnlyList<string?>)new string?[row.Count])];
+        if (ImportCastSql("text", 1) is null || values.All(row => row.All(value => value is null)))
+            return Result.Success<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(none);
+
+        var result = await RunAsync(nameof(CheckImportCastsAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            await BeginReadOnlyAsync(token);
+            var problems = new List<IReadOnlyList<string?>>(values.Count);
+            foreach (var row in values)
+            {
+                var cells = new string?[row.Count];
+                foreach (var part in Enumerable.Range(0, row.Count).Where(index => row[index] is not null).Chunk(ImportCastsPerSelect))
+                {
+                    await NonQueryAsync(ImportSavepointSql, token);
+                    var tried = await CastRefusalAsync([.. part.Select(index => (types[index], row[index]))], token);
+                    if (tried.IsFailure)
+                        return Result.Failure<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(tried.Error);
+
+                    if (tried.Value is not null)
+                    {
+                        await NonQueryAsync(RollbackToImportSavepointSql, token);
+                        foreach (var index in part)
+                        {
+                            var cell = await CastRefusalAsync([(types[index], row[index])], token);
+                            if (cell.IsFailure)
+                                return Result.Failure<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(cell.Error);
+
+                            if (cell.Value is { } refusal)
+                            {
+                                cells[index] = refusal;
+                                await NonQueryAsync(RollbackToImportSavepointSql, token);
+                            }
+                        }
+                    }
+
+                    await NonQueryAsync(ReleaseImportSavepointSql, token);
+                }
+
+                problems.Add(cells);
+            }
+
+            // Nada foi gravado, e nada fica: a transação só de leitura é desfeita.
+            await NonQueryAsync(RollbackSql, CancellationToken.None);
+            _inTransaction = false;
+
+            return Result.Success<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(problems);
+        }, cancellationToken);
+
+        if (result.IsFailure)
+            return result.Error;
+
+        if (result.Value.IsSuccess)
+            return result.Value;
+
+        await DisposeCursorAsync();
+
+        return result.Value.Error;
+    }
+
+    /// <summary>
     /// RN-EDIT-005 e 012. Com transação, ela é do driver e abre antes da consulta ao catálogo, que roda dentro dela; cada comando tem de
     /// afetar exatamente uma linha, e a recusa (do banco, da contagem de linhas ou do plano) desfaz tudo pelo mesmo fim do cursor
     /// abandonado. A transação sai do campo antes do `COMMIT`: se ele falha, o banco já a encerrou (no PostgreSQL, a recusa de uma
@@ -825,6 +972,105 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return result.Value.Error with { Applied = written };
     }
 
+    public async Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken)
+        => await RunAsync(nameof(BeginLoadAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            await NonQueryAsync(LockTimeoutSql, token);
+
+            return true;
+        }, cancellationToken);
+
+    public int LoadRowsPerCommand(int columns)
+        => RowsPerLoadCommand(columns);
+
+    /// <summary>
+    /// RN-IMPORT-015. A transação é do driver, como a do "Salvar" (no Db2 é ela que tira a conexão do auto-commit), e todo comando entra nela até a
+    /// confirmação; o comando que falha a desfaz pelo fim do cursor abandonado.
+    /// </summary>
+    public async Task<UnitResult<DatabaseFailure>> BeginLoadTransactionAsync(CancellationToken cancellationToken)
+        => await RunAsync(nameof(BeginLoadTransactionAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            _editTransaction ??= await _connection!.BeginTransactionAsync(token);
+
+            return true;
+        }, cancellationToken, continuesTheCursor: true);
+
+    public async Task<UnitResult<DatabaseFailure>> EmptyTableAsync(string schema, string table, CancellationToken cancellationToken)
+        => await RunAsync(nameof(EmptyTableAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            // Se ele lança, quem o descarta é o fim do cursor abandonado, como no "Salvar".
+            var command = _connection!.CreateCommand();
+            command.CommandText = $"DELETE FROM {QuotedName(schema)}.{QuotedName(table)}";
+            command.CommandTimeout = 0;
+            command.Transaction = _editTransaction;
+            await ExecuteLoadCommandAsync(command, token);
+            await command.DisposeAsync();
+
+            return true;
+        }, cancellationToken, continuesTheCursor: true);
+
+    /// <summary>
+    /// RN-IMPORT-015 e 016. A recusa do banco é a resposta procurada (passa pelo próprio `Send`, como a da conferência da prévia), e só então a transação é
+    /// desfeita: no Db2 o comando recusado foi desfeito sozinho (RN-TX-009), e a volta linha por linha precisa da transação para achar a linha recusada.
+    /// Essa volta só acontece na recusa, nunca no caminho normal.
+    /// </summary>
+    public async Task<UnitResult<DatabaseFailure>> InsertRowsAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken)
+    {
+        var result = await RunAsync(nameof(InsertRowsAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var sent = await TryLoadAsync(target, rows, token);
+
+            // O comando de uma linha só (no Informix, todos; no Db2, o último antes de uma confirmação ou o fechado pelos 16 MiB): a falha é dela.
+            if (sent.IsFailure && rows.Count == 1)
+                return UnitResult.Failure(sent.Error with { Change = 0 });
+
+            if (sent.IsSuccess || LoadsInBatches || !IsOpen || token.IsCancellationRequested || !IsDataOrConstraintRefusal(sent.Error))
+                return sent;
+
+            for (var index = 0; index < rows.Count; index++)
+            {
+                var one = await TryLoadAsync(target, [rows[index]], token);
+                if (one.IsFailure)
+                    return UnitResult.Failure(one.Error with { Change = index });
+            }
+
+            return UnitResult.Success<DatabaseFailure>();
+        }, cancellationToken, continuesTheCursor: true);
+
+        if (result.IsFailure)
+            return result.Error;
+
+        if (result.Value.IsSuccess)
+            return result.Value;
+
+        // A recusa do banco: a transação da carga é desfeita aqui, pelo mesmo fim do cursor abandonado.
+        await DisposeCursorAsync();
+
+        return result.Value;
+    }
+
+    /// <summary>
+    /// RN-IMPORT-014. A transação sai do campo antes do `COMMIT`: se ele falha, o banco já a encerrou (no PostgreSQL, a recusa de uma restrição adiada
+    /// desfaz a transação), e o fim do cursor não tem o que desfazer. A confirmação conta como executada até o fim desde o começo: o cancelamento que
+    /// chegar no meio não a transforma em cancelada (no driver da IBM, que não lança, é o que o `RunAsync` faria).
+    /// </summary>
+    public async Task<UnitResult<DatabaseFailure>> CommitLoadAsync()
+    {
+        if (_editTransaction is null)
+            return UnitResult.Success<DatabaseFailure>();
+
+        return await RunAsync(nameof(CommitLoadAsync), EDatabaseFailure.ExecutionFailed, async _ =>
+        {
+            var transaction = _editTransaction!;
+            _editTransaction = null;
+            _executed = true;
+            await transaction.CommitAsync(CancellationToken.None);
+            await transaction.DisposeAsync();
+
+            return true;
+        }, CancellationToken.None, continuesTheCursor: true);
+    }
+
     /// <summary>
     /// RN-EXPORT-017. Os comandos da sessão vão antes da transação (dentro dela seriam desfeitos com ela). A marca da transação sobe antes do envio, como
     /// na leitura paginada: o `BEGIN` que o banco executou e cuja resposta se perdeu é desfeito pelo fim de sempre.
@@ -848,14 +1094,15 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// RN-EXPORT-017. A contagem passa pelo próprio `Send`, dentro do comando: a recusa do banco é a resposta procurada (sem total), e não a falha do
     /// comando, que desfaria a transação da leitura. Dentro da transação ela tem um ponto de salvamento só dela, desfeito quando o banco a recusa. O que
     /// falha depois disso (o ponto de salvamento que não volta, a conexão que caiu) é a falha da operação, e a transação é desfeita pelo fim de sempre.
-    /// Sem transação só de leitura, só a leitura só é contada (<see cref="MayBeCounted"/>), como no "Contar total".
+    /// Sem transação só de leitura, só a leitura só é contada (<see cref="MayBeCounted"/>), como no "Contar total". Com `required`, a recusa (e o comando
+    /// que não pode ser contado) é a falha.
     /// </summary>
-    public async Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken)
+    public async Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
     {
         if (!MayBeCounted(sql))
-            return Result.Success<long?, DatabaseFailure>(null);
+            return required ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, NotCountableMessage) : Result.Success<long?, DatabaseFailure>(null);
 
-        return await RunAsync(nameof(CountExportAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        var result = await RunAsync(nameof(CountExportAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
             var savepoint = _inTransaction;
             if (savepoint)
@@ -873,8 +1120,14 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             if (savepoint)
                 await NonQueryAsync(counted.IsSuccess ? ReleaseCountSavepointSql : RollbackToCountSavepointSql, token);
 
-            return counted.IsSuccess ? counted.Value : (long?)null;
+            if (counted.IsSuccess)
+                return Result.Success<long?, DatabaseFailure>(counted.Value);
+
+            // A posição seria a do comando embrulhado, e não a do que o usuário escreveu.
+            return required ? Result.Failure<long?, DatabaseFailure>(counted.Error with { Position = null }) : Result.Success<long?, DatabaseFailure>(null);
         }, cancellationToken, continuesTheCursor: true);
+
+        return result.IsFailure ? result.Error : result.Value;
     }
 
     public async Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
@@ -919,7 +1172,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                     if (plan.Skipped.Contains(ordinal))
                         continue;
 
-                    var read = await ReadExportCellAsync(reader, ordinal, _columns[ordinal].Kind, Math.Min(plan.MaxValueBytes, plan.MaxRowBytes - rowBytes), token);
+                    var read = await ReadExportCellAsync(reader, ordinal, _columns[ordinal].Kind, Math.Min(plan.MaxValueBytes, plan.MaxRowBytes - rowBytes), plan.Copy, token);
                     if (read.Bytes > plan.MaxValueBytes)
                         return new ExportBatch(rows, Finished: false, new ExportOversize(index, WholeRow: false));
 
@@ -950,6 +1203,17 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     {
         if (!_running)
             await DisposeCursorAsync();
+
+        if (!_running && _loadCommand is { } loadCommand)
+        {
+            _loadCommand = null;
+            await Send(nameof(DisposeAsync), EDatabaseFailure.ExecutionFailed, async () =>
+            {
+                await loadCommand.DisposeAsync();
+
+                return true;
+            });
+        }
 
         await Send(nameof(DisposeAsync), EDatabaseFailure.ExecutionFailed, async () =>
         {
@@ -1151,6 +1415,208 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         await command.DisposeAsync();
 
         return affected;
+    }
+
+    /// <summary>
+    /// RN-IMPORT-011: um `SELECT` das conversões pedidas, pelo próprio `Send`: a recusa do banco é a resposta (a mensagem dele), e nula quando todas
+    /// convertem. A conexão que caiu e o cancelamento são a falha da conferência inteira, e não a recusa de um valor.
+    /// </summary>
+    private async Task<Result<string?, DatabaseFailure>> CastRefusalAsync(IReadOnlyList<(string Type, object? Value)> cells, CancellationToken cancellationToken)
+    {
+        var tried = await Send(nameof(CheckImportCastsAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            var command = _connection!.CreateCommand();
+            command.CommandText = $"SELECT {string.Join(", ", cells.Select((cell, index) => ImportCastSql(cell.Type, index + 1)))}";
+            ConfigureUserCommand(command);
+            foreach (var (_, value) in cells)
+            {
+                var parameter = command.CreateParameter();
+                BindImportParameter(parameter, new EditParameter(value));
+                command.Parameters.Add(parameter);
+            }
+
+            _command = command;
+            await using (var reader = await ExecuteReaderAsync(command, cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                }
+            }
+
+            _command = null;
+            await command.DisposeAsync();
+
+            return true;
+        }, refusalIsTheAnswer: true);
+
+        // O comando recusado ficou no campo, para o `Cancel`: sai daqui, descartado.
+        if (_command is { } refused)
+        {
+            _command = null;
+            await refused.DisposeAsync();
+        }
+
+        if (tried.IsSuccess)
+            return Result.Success<string?, DatabaseFailure>(null);
+
+        return !IsOpen || cancellationToken.IsCancellationRequested ? tried.Error : Result.Success<string?, DatabaseFailure>(tried.Error.Message);
+    }
+
+    /// <summary>RN-TABELA-002: o nome entre aspas duplas, com a aspa de dentro dobrada.</summary>
+    private static string QuotedName(string name)
+        => $"\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    /// <summary>RN-IMPORT-016: a recusa de um dado (classe 22) ou de uma restrição (classe 23), que o Db2 desfaz só no comando recusado.</summary>
+    private static bool IsDataOrConstraintRefusal(DatabaseFailure failure)
+        => failure.SqlState is { Length: 5 } state && (state.StartsWith("22", StringComparison.Ordinal) || state.StartsWith("23", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Um comando da carga, pelo próprio `Send`: a recusa do banco é a resposta (com a linha recusada do lote, quando ele diz), e o comando recusado sai do
+    /// campo descartado. A conexão que caiu e o cancelamento também voltam por aqui: quem chama decide pelo estado da conexão e pelo pedido.
+    /// </summary>
+    private async Task<UnitResult<DatabaseFailure>> TryLoadAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken)
+    {
+        var sent = await Send(nameof(InsertRowsAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            if (LoadsInBatches)
+                await SendLoadBatchAsync(target, rows, cancellationToken);
+            else
+                await SendLoadCommandAsync(target, rows, cancellationToken);
+
+            return true;
+        }, refusalIsTheAnswer: true);
+
+        if (_loadBatch is { } batch)
+        {
+            _loadBatch = null;
+            await batch.DisposeAsync();
+        }
+
+        if (sent.IsSuccess)
+            return UnitResult.Success<DatabaseFailure>();
+
+        // O comando recusado ficou no campo, para o `Cancel`: sai daqui, descartado, e não serve mais às linhas seguintes.
+        if (_command is { } refused)
+        {
+            _command = null;
+            if (ReferenceEquals(refused, _loadCommand))
+                _loadCommand = null;
+
+            await refused.DisposeAsync();
+        }
+
+        return sent.Error;
+    }
+
+    /// <summary>
+    /// RN-IMPORT-015, no PostgreSQL: um `INSERT` de uma linha por comando do lote, numa ida só ao banco, com os valores em parâmetros (o texto sem tipo, o
+    /// binário em `bytea`, <see cref="BindImportParameter"/>).
+    /// </summary>
+    private async Task SendLoadBatchAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken)
+    {
+        var sql = InsertSql(target, 1);
+        var batch = _loadBatch = _connection!.CreateBatch();
+        batch.Transaction = _editTransaction;
+        batch.Timeout = 0;
+        foreach (var row in rows)
+        {
+            var command = batch.CreateBatchCommand();
+            command.CommandText = sql;
+            foreach (var value in row)
+            {
+                var parameter = command.CreateParameter();
+                BindImportParameter(parameter, value);
+                command.Parameters.Add(parameter);
+            }
+
+            batch.BatchCommands.Add(command);
+        }
+
+        await batch.ExecuteNonQueryAsync(cancellationToken);
+        _executed = true;
+    }
+
+    /// <summary>
+    /// RN-IMPORT-015, no Db2 e no Informix: um `INSERT … VALUES` com as linhas do comando, preparado uma vez e executado de novo enquanto o texto é o mesmo
+    /// (no Informix, uma linha por comando). Os parâmetros do comando reaproveitado recebem os valores da linha nova, com o tipo dela.
+    /// </summary>
+    private async Task SendLoadCommandAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken)
+    {
+        var sql = InsertSql(target, rows.Count);
+        var command = _loadCommand;
+        var prepared = command is not null && command.CommandText == sql;
+        if (!prepared)
+        {
+            if (command is not null)
+            {
+                _loadCommand = null;
+                await command.DisposeAsync();
+            }
+
+            command = _connection!.CreateCommand();
+            command.CommandText = sql;
+            command.CommandTimeout = 0;
+        }
+
+        command!.Transaction = _editTransaction;
+        var position = 0;
+        foreach (var row in rows)
+        {
+            foreach (var value in row)
+            {
+                DbParameter parameter;
+                if (prepared)
+                {
+                    parameter = command.Parameters[position];
+                    parameter.ResetDbType();
+                }
+                else
+                {
+                    parameter = command.CreateParameter();
+                    command.Parameters.Add(parameter);
+                }
+
+                BindImportParameter(parameter, value);
+                position++;
+            }
+        }
+
+        _command = command;
+        if (!prepared)
+        {
+            await command.PrepareAsync(cancellationToken);
+            _loadCommand = command;
+        }
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        _executed = true;
+        _command = null;
+    }
+
+    /// <summary>RN-IMPORT-015: o `INSERT` da carga, com os nomes do catálogo entre aspas e `rows` linhas de marcadores de parâmetro.</summary>
+    private string InsertSql(LoadTarget target, int rows)
+    {
+        var text = new StringBuilder($"INSERT INTO {QuotedName(target.Schema)}.{QuotedName(target.Table)} ({string.Join(", ", target.Columns.Select(QuotedName))}) VALUES ");
+        var position = 0;
+        for (var row = 0; row < rows; row++)
+        {
+            text.Append(row == 0 ? "(" : ", (");
+            for (var column = 0; column < target.Columns.Count; column++)
+                text.Append(column == 0 ? string.Empty : ", ").Append(LoadParameter(++position));
+
+            text.Append(')');
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>RN-IMPORT-012 e 015: um comando da carga sem parâmetro (o esvaziamento), ao alcance do `Cancel` enquanto roda.</summary>
+    private async Task ExecuteLoadCommandAsync(DbCommand command, CancellationToken cancellationToken)
+    {
+        _command = command;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        _executed = true;
+        _command = null;
     }
 
     /// <summary>
@@ -1542,6 +2008,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                 exception = wrapped.InnerExceptions[0];
 
             var failure = ToFailure(kind, exception);
+
+            // RN-IMPORT-016: o lote da carga diz qual dos comandos dele o banco recusou, e assim qual linha.
+            if (exception is DbException { BatchCommand: { } failedCommand } && _loadBatch is { } batch && batch.BatchCommands.IndexOf(failedCommand) is >= 0 and var failedRow)
+                failure = failure with { Change = failedRow };
 
             // RN-SQL-010: o banco disse que interrompeu o comando, e o desfez. Quem decide se isso vira o desfecho da resposta é o
             // `RunAsync`, que sabe se houve pedido de cancelamento (`WithTheCancelOutcome`).

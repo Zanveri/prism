@@ -1,22 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { dataExportCopy } from "./data-export.copy";
-import { createExportExits, windowCloseStep } from "./export-exits";
+import { createTransferExits, windowCloseStep } from "./export-exits";
 import type { Transfer } from "./transfers.schema";
 
 const transfer = (id: string): Transfer => ({ id }) as Transfer;
 
-function exitsWith({ open = true, listed = [transfer("a"), transfer("b")], mine = ["a"] }: { open?: boolean; listed?: Transfer[]; mine?: string[] } = {}) {
+function exitsWith({ open = true, listed = [transfer("a"), transfer("b")], mine = ["a"], loads = [] as string[] }: { open?: boolean; listed?: Transfer[]; mine?: string[]; loads?: string[] } = {}) {
+  const exportsHere = { has: (id: string) => mine.includes(id), cancelAll: vi.fn(async () => {}) };
+  const loadsHere = { has: (id: string) => loads.includes(id), cancelAll: vi.fn(async () => {}) };
   const deps = {
     open: () => open,
     list: vi.fn(async () => listed),
     forget: vi.fn(async () => {}),
-    tracker: { has: (id: string) => mine.includes(id), cancelAll: vi.fn(async () => {}) },
+    trackers: [exportsHere, loadsHere],
   };
-  return { deps, exits: createExportExits(deps) };
+  return { deps, exportsHere, loadsHere, exits: createTransferExits(deps) };
 }
 
-describe("as saídas que perguntam pelas exportações (RN-EXPORT-023)", () => {
+describe("as saídas que perguntam pelas transferências (RN-EXPORT-023 e RN-IMPORT-021)", () => {
   it("a conta é a da lista da API, de todas as janelas, ou só a de uma conexão", async () => {
     const { deps, exits } = exitsWith();
 
@@ -32,23 +34,24 @@ describe("as saídas que perguntam pelas exportações (RN-EXPORT-023)", () => {
     expect(deps.list).not.toHaveBeenCalled();
   });
 
-  it("confirmada a saída, a lista é lida de novo; as das outras janelas vão pelo DELETE, e as desta pelo acompanhamento, que solta os destinos", async () => {
-    const { deps, exits } = exitsWith({ listed: [transfer("a"), transfer("b"), transfer("nova")] });
+  it("confirmada a saída, a lista é lida de novo; as das outras janelas vão pelo DELETE, e as desta pelos acompanhamentos (o das exportações solta os destinos)", async () => {
+    const { deps, exits, exportsHere, loadsHere } = exitsWith({ listed: [transfer("a"), transfer("b"), transfer("nova"), transfer("imp")], loads: ["imp"] });
 
     await exits.cancelForExit();
     expect(deps.list).toHaveBeenCalledTimes(1);
     expect(deps.forget).toHaveBeenCalledWith([transfer("b"), transfer("nova")]);
-    expect(deps.tracker.cancelAll).toHaveBeenCalledTimes(1);
+    expect(exportsHere.cancelAll).toHaveBeenCalledTimes(1);
+    expect(loadsHere.cancelAll).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("fechar a janela (RN-ABAS-004 e RN-EXPORT-023)", () => {
-  it("a pergunta das exportações vem antes das abas; sem exportação e sem aba, fecha; bloqueado, fecha sem perguntar", () => {
-    expect(windowCloseStep({ locked: false, exports: 2, tabs: 3 })).toBe("askExports");
-    expect(windowCloseStep({ locked: false, exports: 1, tabs: 0 })).toBe("askExports");
-    expect(windowCloseStep({ locked: false, exports: 0, tabs: 3 })).toBe("closeTabs");
-    expect(windowCloseStep({ locked: false, exports: 0, tabs: 0 })).toBe("finish");
-    expect(windowCloseStep({ locked: true, exports: 2, tabs: 3 })).toBe("finish");
+describe("fechar a janela (RN-ABAS-004, RN-EXPORT-023 e RN-IMPORT-021)", () => {
+  it("a pergunta das transferências vem antes das abas; sem transferência e sem aba, fecha; bloqueado, fecha sem perguntar", () => {
+    expect(windowCloseStep({ locked: false, transfers: 2, tabs: 3 })).toBe("askTransfers");
+    expect(windowCloseStep({ locked: false, transfers: 1, tabs: 0 })).toBe("askTransfers");
+    expect(windowCloseStep({ locked: false, transfers: 0, tabs: 3 })).toBe("closeTabs");
+    expect(windowCloseStep({ locked: false, transfers: 0, tabs: 0 })).toBe("finish");
+    expect(windowCloseStep({ locked: true, transfers: 2, tabs: 3 })).toBe("finish");
   });
 });
 

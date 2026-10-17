@@ -7,8 +7,8 @@ import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import { SettingsIcon } from "@/app/settings/_components/settings-icon";
 import { settingsCopy } from "@/app/settings/_lib/settings.copy";
 import { sessionQuery, signOut } from "@/app/sign-in/_lib/sign-in.service";
-import { dataExportCopy } from "@/app/workbench/_lib/data-export/data-export.copy";
-import { exportExits } from "@/app/workbench/_lib/data-export/data-exports";
+import { transferExits } from "@/app/workbench/_lib/data-import/data-imports";
+import { countsOf, exitQuestion, type ExitQuestion } from "@/app/workbench/_lib/data-import/transfer-exits";
 import { ConfirmDialog, LockOpenIcon, RefreshIcon, WorkbenchIcon } from "@/components/ui";
 import { CheckUpdatesButton } from "@/components/update/check-updates-button";
 import { updateCopy } from "@/components/update/update.copy";
@@ -27,16 +27,15 @@ import { PrismMark } from "./prism-mark";
  */
 const itemClassName = "flex h-9 flex-none items-center gap-2 rounded-md px-3 no-underline transition-colors max-[1100px]:px-2";
 
-const exits = dataExportCopy.exits;
-
 /**
  * A barra superior das telas de dentro do cofre (RN-NAV-001): a marca com a versão e "Verificar atualizações", o caminho de volta à área
  * de trabalho, o lembrete de reinício pendente de driver, as Configurações, o usuário do cofre aberto e "Sair". Conexões e Drivers não
  * moram mais aqui: as pastas e as conexões são do navegador, e os drivers, de Configurações › Drivers. Sair fecha o cofre (RN-COFRE-008) e
  * leva ao login; o que estava em cache era dele.
  *
- * RN-EXPORT-023: com exportações em andamento em qualquer janela (a lista da API), "Sair" pergunta antes, com "Continuar exportando" no foco e no Esc;
- * confirmado, as exportações são canceladas (o `DELETE` de cada uma) e os destinos soltos, e só então o cofre fecha.
+ * RN-EXPORT-023 e RN-IMPORT-021: com transferências em andamento em qualquer janela (a lista da API: exportações, importações e cópias para outro banco),
+ * "Sair" pergunta antes, com "Continuar exportando" (ou importando, copiando, transferindo) no foco e no Esc; confirmado, elas são canceladas (o `DELETE`
+ * de cada uma) e os destinos das exportações soltos, e só então o cofre fecha.
  *
  * `leading` vai logo depois da marca: é onde a área de trabalho põe o botão de mostrar e esconder o navegador (RN-NAV-008), como no canvas.
  */
@@ -53,15 +52,15 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
   // de outra tela) só fica sem a versão.
   const version = typeof window === "undefined" ? "" : (window.prism?.version ?? "");
 
-  // RN-EXPORT-023: a pergunta das exportações em andamento, com quantas eram ao clicar.
-  const [asking, setAsking] = useState<number | null>(null);
+  // RN-EXPORT-023 e RN-IMPORT-021: a pergunta das transferências em andamento, com quantas eram de cada tipo ao clicar.
+  const [asking, setAsking] = useState<ExitQuestion | null>(null);
   const [checking, setChecking] = useState(false);
 
   const leave = useMutation({
     // RN-ABAS-006: as abas de todas as janelas são gravadas antes de o cofre fechar (com prazo, e a falha não impede a saída). As exportações, quando a
-    // pessoa confirmou sair com elas, são canceladas antes, e os destinos soltos.
-    mutationFn: async (cancelExports: boolean) => {
-      if (cancelExports) await exportExits.cancelForExit();
+    // pessoa confirmou sair com elas, são canceladas antes, com as importações e as cópias, e os destinos soltos.
+    mutationFn: async (cancelTransfers: boolean) => {
+      if (cancelTransfers) await transferExits.cancelForExit();
       await workspaceSync.flush();
       return unwrap(await signOut());
     },
@@ -74,12 +73,12 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
     },
   });
 
-  /** "Sair": sem exportação em andamento, sai; com alguma, pergunta antes (a resposta lenta da API não segura o botão para sempre: o pedido tem prazo). */
+  /** "Sair": sem transferência em andamento, sai; com alguma, pergunta antes (a resposta lenta da API não segura o botão para sempre: o pedido tem prazo). */
   async function requestLeave() {
     setChecking(true);
-    const ahead = await exportExits.ahead().finally(() => setChecking(false));
+    const ahead = await transferExits.ahead().finally(() => setChecking(false));
     if (ahead.length === 0) leave.mutate(false);
-    else setAsking(ahead.length);
+    else setAsking(exitQuestion(countsOf(ahead), "signOut"));
   }
 
   return (
@@ -137,11 +136,11 @@ export function TopBar({ leading }: { leading?: ReactNode }) {
       <ConfirmDialog
         open={asking !== null}
         tone="danger"
-        title={exits.signOutTitle}
-        description={asking === null ? undefined : exits.signOut(asking)}
-        confirmLabel={exits.signOutConfirm(asking ?? 1)}
-        cancelLabel={exits.keepExporting}
-        pendingLabel={exits.cancelling}
+        title={asking?.title ?? ""}
+        description={asking?.description}
+        confirmLabel={asking?.confirm ?? ""}
+        cancelLabel={asking?.keep}
+        pendingLabel={asking?.pending}
         pending={leave.isPending}
         onConfirm={() => leave.mutate(true)}
         onCancel={() => setAsking(null)}

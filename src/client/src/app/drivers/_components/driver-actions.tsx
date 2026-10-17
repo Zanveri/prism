@@ -2,8 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useApiRestart } from "@/app/_components/api-gate";
-import { dataExportCopy } from "@/app/workbench/_lib/data-export/data-export.copy";
-import { exportExits, useExportsAhead } from "@/app/workbench/_lib/data-export/data-exports";
+import { transferExits, useTransfersAhead } from "@/app/workbench/_lib/data-import/data-imports";
+import { canceledAheadNote } from "@/app/workbench/_lib/data-import/transfer-exits";
 import { ConfirmDialog, useToast } from "@/components/ui";
 import { allowRefusal, unwrap } from "@/lib/api/prism-api";
 
@@ -51,11 +51,10 @@ export function useDriverActions(): DriverActions {
   const [installTarget, setInstallTarget] = useState<Driver | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Driver | null>(null);
   const [restartKind, setRestartKind] = useState<"installed" | "removed" | null>(null);
-  // RN-EXPORT-023: só com um aviso de reinício na tela (o diálogo, ou a faixa do reinício pendente) a conta das exportações é lida.
+  // RN-EXPORT-023 e RN-IMPORT-021: só com um aviso de reinício na tela (o diálogo, ou a faixa do reinício pendente) a conta das transferências é lida.
   const drivers = useQuery({ ...driversQuery, enabled: false });
   const restartPending = drivers.data?.some((driver) => driver.restartRequired) ?? false;
-  const exportsAhead = useExportsAhead(restartKind !== null || restartPending);
-  const exportsNote = exportsAhead === 0 ? null : dataExportCopy.exits.canceledAhead(exportsAhead);
+  const exportsNote = canceledAheadNote(useTransfersAhead(restartKind !== null || restartPending));
 
   useEffect(() => resumePolling(), []);
 
@@ -98,8 +97,8 @@ export function useDriverActions(): DriverActions {
     },
   });
 
-  // RN-EXPORT-023: o reinício confirmado cancela as exportações (o `DELETE` de cada uma) e solta os destinos, e só então reinicia.
-  const restart = () => void exportExits.cancelForExit().then(() => restartApi());
+  // RN-EXPORT-023 e RN-IMPORT-021: o reinício confirmado cancela as transferências (o `DELETE` de cada uma) e solta os destinos, e só então reinicia.
+  const restart = () => void transferExits.cancelForExit().then(() => restartApi());
 
   const dialogs = (
     <>

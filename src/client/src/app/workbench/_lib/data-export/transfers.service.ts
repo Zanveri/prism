@@ -53,17 +53,18 @@ export function forgetTransfer(id: string): Promise<ApiResult<void>> {
 export const isGone = (result: ApiResult<unknown>): boolean => !result.ok && result.error.code === "TRANSFER_NOT_FOUND";
 
 /**
- * As exportações em andamento no cofre aberto, de todas as janelas (RN-EXPORT-023): as que rodam e as prontas que ainda não foram entregues. É a conta das
- * saídas que perguntam ("Sair", o reinício do serviço, a instalação de uma atualização) e do diálogo de excluir a conexão (RN-CONN-014, pela conexão).
- * Sem resposta da API (com o prazo das ações da pessoa: quem espera é o "Sair"), nenhuma: a saída segue como antes.
+ * As transferências em andamento no cofre aberto, de todas as janelas (RN-EXPORT-023 e RN-IMPORT-021): as exportações que rodam e as prontas que ainda não
+ * foram entregues, e as importações e as cópias para outro banco que rodam. É a conta das saídas que perguntam ("Sair", o reinício do serviço, a instalação
+ * de uma atualização) e do diálogo de excluir a conexão (RN-CONN-014, pela conexão: a da origem ou a do destino, `targetConnectionID`). Sem resposta da API
+ * (com o prazo das ações da pessoa: quem espera é o "Sair"), nenhuma: a saída segue como antes.
  */
-export async function exportsInProgress(connectionId?: string): Promise<Transfer[]> {
+export async function transfersInProgress(connectionId?: string): Promise<Transfer[]> {
   const result = await listTransfers(AbortSignal.timeout(userActionDeadlineMs));
   if (!result.ok) return [];
-  return result.data.filter((transfer) => (transfer.kind ?? "export") === "export" && inProgress(transfer) && (connectionId === undefined || transfer.connectionID === connectionId));
+  return result.data.filter((transfer) => inProgress(transfer) && (connectionId === undefined || transfer.connectionID === connectionId || transfer.targetConnectionID === connectionId));
 }
 
-/** Cancela as exportações dadas (o `DELETE` de cada uma, juntas) e espera as respostas. Nunca lança. */
-export async function cancelExports(transfers: readonly Pick<Transfer, "id">[]): Promise<void> {
+/** Cancela as transferências dadas (o `DELETE` de cada uma, juntas) e espera as respostas. Nunca lança. */
+export async function cancelTransfers(transfers: readonly Pick<Transfer, "id">[]): Promise<void> {
   await Promise.all(transfers.map((transfer) => forgetTransfer(transfer.id).catch(() => undefined)));
 }

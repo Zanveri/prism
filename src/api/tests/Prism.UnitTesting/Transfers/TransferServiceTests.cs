@@ -20,7 +20,7 @@ namespace Prism.UnitTesting.Transfers;
 /// temporária e o relógio na mão do teste (o abandono, a falta de progresso e o prazo do cancelamento). Esperar o fim de um trabalho é consultar o
 /// registro em laço, e nunca um tempo chutado.
 /// </summary>
-public sealed class TransferServiceTests : IAsyncDisposable
+public sealed partial class TransferServiceTests : IAsyncDisposable
 {
     private static readonly CsvExportOptions Csv = new(";", true, ECsvQuoting.Auto, true, "\n", string.Empty, EExportBinary.Hex);
 
@@ -50,7 +50,7 @@ public sealed class TransferServiceTests : IAsyncDisposable
     private TransferService CreateService(IDatabaseClient client, ILogger logger)
     {
         var settings = TransferSettings.For(_data);
-        var service = new TransferService([client], new TransferFileClient(settings, logger), _vault.Object, settings, _clock, logger);
+        var service = new TransferService([client], new TransferFileClient(settings, logger), new ImportFileClient(settings, logger), _vault.Object, settings, _clock, logger);
         _services.Add(service);
 
         return service;
@@ -731,7 +731,7 @@ public sealed class TransferServiceTests : IAsyncDisposable
             return Task.FromResult(UnitResult.Success<DatabaseFailure>());
         }
 
-        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken)
+        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
         {
             Calls.Add("COUNT");
 
@@ -785,5 +785,13 @@ public sealed class TransferServiceTests : IAsyncDisposable
         public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public int LoadRowsPerCommand(int columns) => throw new NotSupportedException();
+        public Task<UnitResult<DatabaseFailure>> BeginLoadTransactionAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<UnitResult<DatabaseFailure>> EmptyTableAsync(string schema, string table, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<UnitResult<DatabaseFailure>> InsertRowsAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<UnitResult<DatabaseFailure>> CommitLoadAsync() => throw new NotSupportedException();
     }
 }

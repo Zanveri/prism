@@ -124,11 +124,28 @@ describe("menuFor: esquema, banco e grupo", () => {
 });
 
 describe("menuFor: tabela e visão (RN-MENU-001 e RN-TABELA-001)", () => {
-  it.each([
-    ["tabela", table, "pedido"],
-    ["visão", view, "v_pedido"],
-  ])("%s: as três vistas, Gerar SELECT, Exportar dados… (RN-EXPORT-001, num grupo próprio) e as duas cópias", (_name, node, name) => {
-    const groups = menuFor(node, idle);
+  it("tabela: as três vistas, Gerar SELECT, Exportar dados… e Importar dados… (RN-EXPORT-001 e RN-IMPORT-001, num grupo próprio) e as duas cópias", () => {
+    const groups = menuFor(table, idle);
+
+    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["exportData", "importData"], ["copyName", "copyQualifiedName"]]);
+    expect(flat(groups).map((item) => item.action)).toEqual([
+      { type: "openTable", view: "data" },
+      { type: "openTable", view: "structure" },
+      { type: "openTable", view: "diagram" },
+      { type: "generateSelect" },
+      { type: "exportData" },
+      { type: "importData" },
+      { type: "copy", text: "pedido" },
+      { type: "copy", text: '"vendas"."pedido"' },
+    ]);
+    expect(flat(groups).some((item) => item.disabled)).toBe(false);
+    expect(byId(groups, "exportData")?.label).toBe("Exportar dados…");
+    expect(byId(groups, "importData")?.label).toBe("Importar dados…");
+    expect(byId(groups, "importData")?.hint).toBeUndefined();
+  });
+
+  it("visão: o mesmo menu, sem Importar dados… (RN-IMPORT-001: só uma tabela recebe linhas)", () => {
+    const groups = menuFor(view, idle);
 
     expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["exportData"], ["copyName", "copyQualifiedName"]]);
     expect(flat(groups).map((item) => item.action)).toEqual([
@@ -137,11 +154,22 @@ describe("menuFor: tabela e visão (RN-MENU-001 e RN-TABELA-001)", () => {
       { type: "openTable", view: "diagram" },
       { type: "generateSelect" },
       { type: "exportData" },
-      { type: "copy", text: name },
-      { type: "copy", text: `"vendas"."${name}"` },
+      { type: "copy", text: "v_pedido" },
+      { type: "copy", text: '"vendas"."v_pedido"' },
     ]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
-    expect(byId(groups, "exportData")?.label).toBe("Exportar dados…");
+  });
+
+  it("tabela de uma conexão somente leitura: Importar dados… desabilitado, com o motivo embaixo do rótulo; o resto, inclusive Exportar dados…, continua", () => {
+    const groups = menuFor(table, { ...idle, readOnly: true });
+
+    expect(flat(groups).filter((item) => item.disabled).map((item) => item.id)).toEqual(["importData"]);
+    expect(byId(groups, "importData")?.hint).toBe("A conexão é somente leitura: importar grava na tabela.");
+    expect(byId(menuFor(view, { ...idle, readOnly: true }), "exportData")?.disabled).toBeFalsy();
+  });
+
+  it("a conexão desconectada não desabilita Importar dados…: a importação tem conexão própria (RN-IMPORT-015)", () => {
+    for (const status of ["disconnected", "failed", "connecting"] as const) expect(byId(menuFor(table, { ...idle, status }), "importData")?.disabled).toBe(false);
   });
 
   it("só mostram atalho as teclas que a árvore já trata (nenhum atalho de mentira): o Enter de Abrir registros e o F2 de Renomear", () => {
@@ -188,16 +216,18 @@ describe("menuFor: tabela e visão (RN-MENU-001 e RN-TABELA-001)", () => {
 
 describe("menuFor: tabela ou visão que o menu não sabe localizar", () => {
   const wrongKey = navKey({ type: "connection", connectionId: "c1" });
-  const ids6 = ["openRecords", "openStructure", "openDiagram", "generateSelect", "exportData", "copyQualifiedName"];
+  const views = ["openRecords", "openStructure", "openDiagram", "generateSelect"];
 
   it.each([
-    ["tabela", { ...table, key: wrongKey }],
-    ["visão", { ...view, key: `${wrongKey}#view:0` }],
-  ])("%s: as ações aparecem desabilitadas, em vez de sumirem, e só o nome cru continua habilitado", (_kind, node) => {
-    const groups = menuFor(node, idle);
+    ["tabela", { ...table, key: wrongKey }, ["exportData", "importData"]],
+    ["visão", { ...view, key: `${wrongKey}#view:0` }, ["exportData"]],
+  ])("%s: as ações aparecem desabilitadas, em vez de sumirem, e só o nome cru continua habilitado", (_kind, node, transfers) => {
+    const groups = menuFor(node, { ...idle, readOnly: true });
 
-    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], ["exportData"], ["copyName", "copyQualifiedName"]]);
-    expect(flat(groups).filter((item) => item.disabled).map((item) => item.id)).toEqual(ids6);
+    expect(ids(groups)).toEqual([["openRecords", "openStructure", "openDiagram"], ["generateSelect"], transfers, ["copyName", "copyQualifiedName"]]);
+    expect(flat(groups).filter((item) => item.disabled).map((item) => item.id)).toEqual([...views, ...transfers, "copyQualifiedName"]);
+    // O motivo do somente leitura não aparece onde o item já não vale por outro motivo (a tela não sabe onde a tabela está).
+    expect(flat(groups).some((item) => item.hint !== undefined)).toBe(false);
     expect(byId(groups, "copyName")?.disabled).toBeFalsy();
     expect(byId(groups, "copyName")?.action).toEqual({ type: "copy", text: node.label });
   });

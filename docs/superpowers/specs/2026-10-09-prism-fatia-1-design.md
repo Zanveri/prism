@@ -634,7 +634,12 @@ somente leitura.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
-e vai inteira para o log.
+e vai inteira para o log. Dentro de um trabalho de importação ou de cópia (seção 36), que já
+respondeu o 202, ela termina o trabalho como `failed`, com o mesmo `INTERNAL_SERVER_ERROR` no
+`code` do `error` dele e uma frase fixa ("Um erro inesperado do Prism parou a importação." ou
+"… a cópia."), e o log leva só a classe e a pilha, sem a mensagem, que pode trazer um valor
+(RN-IMPORT-014). *Alterada em 2026-10-17, decisão de projeto: entrou a exceção dentro do
+trabalho.*
 
 ## 7. Falhas que a tela trata
 
@@ -4934,9 +4939,12 @@ e 13. O canvas não desenha nada disto (seção 9).
     - o nulo, `NULL`.
   - O binário, que o "Gerar SQL" não escreve, tem literal aqui. No PostgreSQL é `decode('DEADBEEF', 'hex')`, que
     vale qualquer que seja o `standard_conforming_strings` (o `'\x…'::bytea` dependeria dele, como a barra
-    invertida do texto, que por isso já vai como `E'…'`). No Db2 é `X'DEADBEEF'`, e `BLOB(X'…')` quando a
-    coluna é `BLOB`, em pedaços de até 16.336 bytes (o teto da constante hexadecimal do Db2, 32.672 dígitos)
-    unidos por `||`. No Informix não há literal de binário.
+    invertida do texto, que por isso já vai como `E'…'`). No Db2 ele depende do tipo da coluna: `BX'DEADBEEF'`, a
+    constante binária, no `BINARY` e no `VARBINARY`; `BLOB(X'…')` no `BLOB`; e `X'DEADBEEF'`, a constante
+    hexadecimal, no texto binário (`CHAR` e `VARCHAR FOR BIT DATA`). A constante hexadecimal é um texto, e o Db2
+    não a aceita numa coluna `BINARY` ou `VARBINARY`: só o texto `FOR BIT DATA` é compatível com o binário. Os
+    três vão em pedaços de até 16.336 bytes (o teto das duas constantes do Db2, 32.672 dígitos) unidos por `||`.
+    No Informix não há literal de binário.
   - A linha com um valor sem literal não sai: o binário no Informix (com "Literal do banco"); o texto com outro
     caractere de controle, que não é quebra de linha, retorno de carro nem tabulação; no Informix, a data e hora
     com mais de cinco casas de segundo que não são zeros. O comando em andamento fecha com `;` antes dela, e no
@@ -4959,6 +4967,10 @@ e 13. O canvas não desenha nada disto (seção 9).
     o `INSERT` com ele numa coluna `json`, `xml` ou de lista falhava ao voltar para o banco, porque a expressão
     unida por `||` é `text`, que essas colunas não aceitam sem conversão. Passou a `\r` num `E'…'`, também no
     "Gerar SQL" (RN-GRADE-006), que escreve os mesmos literais; o Db2 e o Informix continuam como eram.*
+  - *Alterada em 2026-10-17, correção: no Db2, o binário de uma coluna `BINARY` ou `VARBINARY` saía como
+    `X'…'`, que é um texto, e o `INSERT` falhava ao voltar para o banco (SQL0408N, o valor não é compatível com
+    a coluna). Passou à constante binária, `BX'…'`; o `BLOB` continua em `BLOB(X'…')`, e o texto `FOR BIT DATA`,
+    em `X'…'`.*
 
 - **RN-EXPORT-012.** XML e DbUnit.
   - **XML**: o formato do DBeaver, com um elemento por linha e um por coluna:
@@ -5861,8 +5873,11 @@ desenha nada disto (seção 9).
       texto no Prism, e volta a ser protegido na próxima exportação em CSV (RN-EXPORT-007). Do XLSX, a importação
       nunca lê nem calcula uma fórmula (RN-IMPORT-006).
   - As linhas terminam em CRLF, LF ou CR sozinho, misturados, e a última pode não terminar. A linha do arquivo, nas
-    mensagens, é a linha física em que o registro começa, contando a do cabeçalho como 1: um valor entre aspas com
-    quebras de linha faz o registro seguinte começar algumas linhas depois.
+    mensagens que apontam uma linha só, é a linha física em que o registro começa, contando a do cabeçalho como 1:
+    um valor entre aspas com quebras de linha faz o registro seguinte começar algumas linhas depois. Os intervalos
+    ("nas linhas 1.201 a 1.700 do arquivo") contam os registros, e não as linhas físicas (RN-IMPORT-016). *Alterada
+    em 2026-10-17, decisão de projeto: a linha física vale para a linha de um erro só, e os intervalos contam os
+    registros.*
   - A linha com menos valores que o cabeçalho (ou que a primeira linha, sem cabeçalho) tem nulo nos que faltam, como
     alguns programas escrevem a linha com as últimas células vazias. Como ela também é o sinal de um arquivo estragado
     (a quebra de linha sem aspas no meio de um texto parte um registro em dois), ela não passa calada: a prévia do
@@ -6004,10 +6019,17 @@ desenha nada disto (seção 9).
       teto: o `workbook.xml`, as relações e o `[Content_Types].xml`, 16 MiB cada; o `styles.xml`, 64 MiB; o
       `sharedStrings.xml`, 1 GiB; a planilha, 16 GiB. O tamanho declarado acima do teto recusa antes de
       descompactar;
-    - os textos compartilhados ficam na memória, até 256 MiB (o tamanho deles em UTF-16, como o .NET os guarda):
-      "Os textos da planilha passam de 256 MiB, o que o Prism lê de uma planilha. No Excel, salve a planilha como
-      CSV e importe o CSV.";
+    - os textos compartilhados ficam na memória, até 256 MiB (o tamanho deles em UTF-16, como o .NET os guarda,
+      mais 32 bytes por texto, o que cada um ocupa além dos caracteres, para os milhões de textos minúsculos ou
+      vazios também pararem no teto): "Os textos da planilha passam de 256 MiB, o que o Prism lê de uma planilha. No
+      Excel, salve a planilha como CSV e importe o CSV." *Alterada em 2026-10-17, decisão de projeto: entraram os
+      32 bytes por texto, sem os quais 10 milhões de textos vazios contavam zero e ocupavam mais de 500 MiB.*
     - o XML é lido sem DTD (`DtdProcessing.Prohibit`), sem resolver nada de fora e sem entidades;
+    - o XML de cada parte tem até 64 níveis de elementos, contando o de fora como o primeiro: o `XmlReader` guarda
+      um nó por nível aberto, e alguns MiB de `.zip` com milhões de níveis virariam gigabytes na memória; o que o
+      Excel grava não passa de uns 10 níveis. O elemento que abriria o 65º é recusado: "A planilha tem elementos
+      aninhados demais (mais de 64 níveis)." *Alterada em 2026-10-17, decisão de projeto: o teto dos níveis, que a
+      leitura já tinha com a frase dos limites, passou a ter frase própria.*
     - a referência de célula além de XFD1048576 recusa: "A planilha tem uma célula fora dos limites do Excel.".
 
     O número de entradas e os tetos das entradas têm uma frase só: "A planilha passa dos limites que o Prism lê de
@@ -6165,7 +6187,18 @@ desenha nada disto (seção 9).
        `YEAR TO SECOND`) são recusados quando as casas a mais não são zero, porque o banco as cortaria ou arredondaria
        sem dizer nada: "«1.999» tem mais casas decimais que as 2 da coluna total." e "«2024-01-15 10:30:00.123456» tem
        mais casas de fração que as 5 da coluna criado." As casas a mais que são zero saem (`1.500` vai como `1.50`), e
-       as casas contam no valor com o expoente aplicado (`1.5E-3` tem 4).
+       as casas contam no valor com o expoente aplicado (`1.5E-3` tem 4). No Informix, o `DATETIME` que começa em
+       `YEAR` e para antes dos segundos (`YEAR TO DAY`, `YEAR TO HOUR` e `YEAR TO MINUTE`) recusa, pela mesma razão,
+       o valor com um campo depois do último dele que não é zero, com as frases da data com hora numa coluna de data:
+       no `YEAR TO DAY`, a hora, os minutos, os segundos ou a fração que não são zero, "«2024-01-15 10:30» tem hora,
+       e a coluna criado é só data."; no `YEAR TO HOUR`, o primeiro campo a mais que não é zero, "«2024-01-15 10:30»
+       tem minutos, e a coluna criado guarda só até a hora." ("… tem segundos, …", "… tem casas de fração, …"); no
+       `YEAR TO MINUTE`, "«2024-01-15 10:30:45» tem segundos, e a coluna criado guarda só até os minutos." ("… tem
+       casas de fração, …"). Os campos a mais que são zero saem, e a prévia mostra o valor até o último campo da
+       coluna (`2024-01-15 10:00:00` vai a um `YEAR TO HOUR` como `2024-01-15 10`); a data sem hora é a meia-noite,
+       como nas outras colunas de data e hora. O `YEAR TO SECOND` é o das casas de fração, acima. *Alterada em
+       2026-10-17, decisão de projeto: entraram os campos depois do último do `DATETIME` do Informix, que o banco
+       cortaria em silêncio.*
   - O texto que vai a uma coluna de texto não muda. O tamanho dele contra o da coluna (`varchar(80)`) quem confere é o
     banco, na carga (RN-IMPORT-016).
   - O valor com um par substituto solto (um `\ud83d` do JSON, um UTF-16 quebrado) é recusado nos três bancos, porque
@@ -6369,6 +6402,13 @@ desenha nada disto (seção 9).
   - **Sem progresso**: a importação que fica 2 horas sem avançar (sem gravar uma linha, sem a conferência ler um
     bloco do arquivo e sem mudar de fase) termina como `failed`, com `IMPORT_STALLED`: "O banco ficou 2 horas sem
     responder, e a importação foi encerrada."
+  - **O erro inesperado**: a exceção que o Prism não previu no meio do trabalho (um defeito dele, e não o arquivo
+    nem o banco) termina a importação como `failed`, com `INTERNAL_SERVER_ERROR`, o código das exceções não
+    previstas da seção 6, e a frase "Um erro inesperado do Prism parou a importação.", sem linha e sem coluna. É o
+    fim de qualquer falha: a conexão fecha, o banco desfaz a transação em andamento, o que já foi confirmado fica
+    (`committed`), o arquivo é apagado, e a tabela e a vaga do limite ficam livres. O log leva a classe da exceção
+    e a pilha, nunca a mensagem dela, que pode trazer um valor do arquivo (RN-LOG-001). *Alterada em 2026-10-17,
+    decisão de projeto: entrou o fim pelo erro inesperado, que deixaria o trabalho rodando para sempre.*
   - **A proteção que muda** (RN-PROT-006): antes de cada comando, o trabalho lê as proteções da conexão no cofre,
     como a sessão faz a cada comando. A conexão que passou a ser somente leitura (a própria, uma pasta acima, a
     conexão movida para dentro de uma pasta somente leitura) para a importação antes do comando seguinte: a
@@ -6459,7 +6499,19 @@ desenha nada disto (seção 9).
       nulo, `committed` fica o da confirmação anterior, e a mensagem diz o intervalo da transação desfeita: "nas
       linhas 20.001 a 30.000 do arquivo";
     - **o arquivo**, no meio da leitura (a codificação inválida, a aspa que não fecha, o limite do `.zip`):
-      `IMPORT_FILE_UNREADABLE`, com a linha.
+      `IMPORT_FILE_UNREADABLE`, com a linha;
+    - **um defeito do Prism**, a exceção que ele não previu (RN-IMPORT-014): `INTERNAL_SERVER_ERROR`, com "Um erro
+      inesperado do Prism parou a importação.", sem linha e sem coluna. *Alterada em 2026-10-17, decisão de projeto:
+      entrou o erro inesperado.*
+  - **Os intervalos** das mensagens ("nas linhas 1.201 a 1.700 do arquivo", "a confirmação das linhas 20.001 a
+    30.000") contam os registros do arquivo, e não as linhas físicas: os registros de dados na ordem em que a
+    importação os grava, a partir de 1, sem o cabeçalho e sem as linhas vazias que a leitura pula. O registro do CSV
+    com uma quebra de linha entre aspas ocupa várias linhas físicas e conta como um. A tela os compõe de `committed`
+    e `rows`, as mesmas contagens da barra de status e do que ficou (RN-IMPORT-020); na cópia, são as linhas lidas da
+    origem ("nas linhas 1.201 a 1.700 da origem"). A linha de um erro só (`line`, "Linha 1.234 do arquivo", "a
+    gravação da linha 1.234") é a do leitor (RN-IMPORT-004 a 006: no CSV, a linha física em que o registro começa).
+    *Alterada em 2026-10-17, decisão de projeto: os intervalos contam os registros do arquivo, como os exemplos já
+    faziam.*
   - **A conexão que cai** no meio (a rede, o servidor) é a falha da importação, com a mensagem como veio
     (`DATABASE_CONNECTION_FAILED` ou `SQL_EXECUTION_FAILED`), e o banco desfaz a transação em andamento. A que cai
     durante uma confirmação deixa a dúvida, que o Prism diz, sem adivinhar: o erro leva `uncertain: true`,
@@ -6818,9 +6870,11 @@ desenha nada disto (seção 9).
     (o do servidor), sem o fuso: é a única exceção à recusa do fuso da RN-IMPORT-010, porque na cópia a hora vem
     de uma coluna, e não de um texto que a pessoa escreveu.
   - Nos quatro casos valem as recusas por classe da RN-IMPORT-010 que a conversão do banco não faria: a data e
-    hora com hora que não é zero numa coluna só de data e, no Db2 e no Informix de destino, as casas a mais que
-    não são zero. O número de ponto flutuante da origem conta as casas do texto mais curto que volta a ele (o
-    `0.1` do `double` tem uma casa).
+    hora com hora que não é zero numa coluna só de data; no Db2 e no Informix de destino, as casas a mais que
+    não são zero; e, no Informix de destino, os campos depois do último do `DATETIME YEAR TO DAY`, `YEAR TO HOUR` e
+    `YEAR TO MINUTE` que não são zero. O número de ponto flutuante da origem conta as casas do texto mais curto que
+    volta a ele (o `0.1` do `double` tem uma casa). *Alterada em 2026-10-17, decisão de projeto: entraram os campos
+    depois do último do `DATETIME` do Informix (RN-IMPORT-010).*
   - O `money` do PostgreSQL sai no formato do `lc_monetary` do servidor de origem (`R$ 1.234,56`): para uma
     coluna `money` de outro PostgreSQL ele vai como texto, e o destino o lê pelo `lc_monetary` dele (com os dois
     iguais, o valor é o mesmo); para o Db2 e o Informix ele não é um número, e a cópia o recusa na linha dele. Quem
@@ -6854,10 +6908,12 @@ desenha nada disto (seção 9).
     destino:", porque as duas mensagens são de bancos diferentes. A linha é o número da linha na leitura da origem,
     a partir de 1 ("linha 1.234 da origem").
   - O cancelamento, o abandono, a falta de progresso (`IMPORT_STALLED`, "O banco ficou 2 horas sem responder, e a
-    cópia foi encerrada."), a proteção que muda no destino, o cofre que fecha e a exclusão de qualquer das duas
-    conexões seguem a importação (RN-IMPORT-014), com "cópia" nos textos, e o "Cancelar" da barra de status
-    pergunta nas mesmas condições (RN-IMPORT-019): "Cancelar a cópia de pedido para pedido_hist?", com "Cancelar a
-    cópia" e "Continuar copiando".
+    cópia foi encerrada."), o erro inesperado (`INTERNAL_SERVER_ERROR`, "Um erro inesperado do Prism parou a
+    cópia.", com as duas conexões fechadas), a proteção que muda no destino, o cofre que fecha e a exclusão de
+    qualquer das duas conexões seguem a importação (RN-IMPORT-014), com "cópia" nos textos, e o "Cancelar" da barra
+    de status pergunta nas mesmas condições (RN-IMPORT-019): "Cancelar a cópia de pedido para pedido_hist?", com
+    "Cancelar a cópia" e "Continuar copiando". *Alterada em 2026-10-17, decisão de projeto: entrou o erro
+    inesperado.*
   - A barra de status: "Copiando pedido para pedido_hist… conectando" ("… contando as linhas", "… esvaziando a
     tabela", "… 45%" com o total, ou "… 12.345 linhas" sem ele, "… confirmando"), com a dica "5.678 de 12.345
     linhas · 5.000 confirmadas"; a porcentagem é a das linhas gravadas sobre o total, como na exportação
@@ -6972,8 +7028,10 @@ Notas:
   presentes, nulos quando não se aplicam. O `code` do erro de uma importação ou cópia é `DATABASE_CONNECTION_FAILED`,
   `SQL_EXECUTION_FAILED`, `IMPORT_VALUE_INVALID`, `IMPORT_VALUE_TOO_LARGE`, `IMPORT_FILE_UNREADABLE`,
   `IMPORT_TABLE_NOT_FOUND`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_TABLE_CHANGED`, `IMPORT_MAPPING_INVALID` (a posição
-  além das colunas do arquivo, RN-IMPORT-009) ou `IMPORT_STALLED`, e, na leitura da cópia, `EXPORT_COLUMNS_CHANGED`,
-  `EXPORT_VALUE_TOO_LARGE` ou `IMPORT_SOURCE_GROWING` (RN-IMPORT-023).
+  além das colunas do arquivo, RN-IMPORT-009), `IMPORT_STALLED` ou `INTERNAL_SERVER_ERROR` (a exceção não prevista,
+  com a frase fixa da RN-IMPORT-014 e 027), e, na leitura da cópia, `EXPORT_COLUMNS_CHANGED`,
+  `EXPORT_VALUE_TOO_LARGE` ou `IMPORT_SOURCE_GROWING` (RN-IMPORT-023). *Alterada em 2026-10-17, decisão de projeto:
+  entrou o `INTERNAL_SERVER_ERROR` do erro inesperado.*
 - Os `IMPORT_*` da seção 34 (`IMPORT_EMPTY`, `IMPORT_INVALID`, `IMPORT_FILE_INVALID`, `IMPORT_FILE_NEWER`,
   `IMPORT_PASSPHRASE_*` e `IMPORT_LIMITS_EXCEEDED`) são os da importação de conexões, numa rota só dela; os desta
   seção são os da importação de dados e da cópia, e nenhum nome se repete. A tela os lê sempre junto da rota que os

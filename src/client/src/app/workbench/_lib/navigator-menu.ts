@@ -1,6 +1,7 @@
 import { transferCopy } from "@/app/connections/_lib/transfer.copy";
 
 import { dataExportCopy } from "./data-export/data-export.copy";
+import { dataImportCopy } from "./data-import/data-import.copy";
 import { tableTargetOf, type NavNode } from "./navigator-model";
 import { quoteIdentifier } from "./table-sql";
 import { navigatorCopy } from "./navigator.copy";
@@ -32,6 +33,8 @@ export type MenuAction =
   | { type: "generateSelect" }
   /** RN-EXPORT-001: o assistente "Exportar dados", com a tabela (ou a visão) inteira como origem. */
   | { type: "exportData" }
+  /** RN-IMPORT-001: o assistente "Importar dados", com a tabela de destino já escolhida (só na tabela). */
+  | { type: "importData" }
   | { type: "copy"; text: string }
   | { type: "newFolder" }
   | { type: "renameFolder" }
@@ -43,11 +46,17 @@ export type MenuAction =
   | { type: "exportConnections" }
   | { type: "importConnections" };
 
-/** `hint` diz por que a ação desabilitada não se aplica, embaixo do rótulo ("Não há pastas nem conexões para exportar."). */
+/**
+ * `hint` diz por que a ação desabilitada não se aplica, embaixo do rótulo: "Não há pastas nem conexões para exportar.", ou o "Importar dados…" numa
+ * conexão somente leitura.
+ */
 export type MenuItem = { id: string; label: string; action: MenuAction; shortcut?: string; disabled?: boolean; hint?: string };
 
-/** O que o menu precisa saber além da linha: o estado da conexão (só conta na linha da conexão) e se ela está sendo desconectada. */
-export type MenuState = { status: "connected" | "connecting" | "disconnected" | "failed"; busy: boolean };
+/**
+ * O que o menu precisa saber além da linha: o estado da conexão (só conta na linha da conexão), se ela está sendo desconectada e, na tabela, se a conexão
+ * dela é somente leitura (pela opção dela ou de uma pasta acima): importar grava na tabela (RN-IMPORT-001).
+ */
+export type MenuState = { status: "connected" | "connecting" | "disconnected" | "failed"; busy: boolean; readOnly?: boolean };
 
 const item = (id: string, label: string, action: MenuAction, extra: Partial<Pick<MenuItem, "shortcut" | "disabled" | "hint">> = {}): MenuItem => ({ id, label, action, ...extra });
 
@@ -167,8 +176,14 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
           item("openDiagram", copy.openDiagram, { type: "openTable", view: "diagram" }, { disabled }),
         ],
         [item("generateSelect", copy.generateSelect, { type: "generateSelect" }, { disabled })],
-        // RN-EXPORT-001: num grupo próprio, depois de "Gerar SELECT" e antes de "Copiar nome".
-        [item("exportData", dataExportCopy.entry.menu, { type: "exportData" }, { disabled })],
+        // RN-EXPORT-001: num grupo próprio, depois de "Gerar SELECT" e antes de "Copiar nome". RN-IMPORT-001: "Importar dados…" logo depois, só na tabela; na
+        // conexão somente leitura, desabilitado com o motivo.
+        node.kind === "table"
+          ? [
+              item("exportData", dataExportCopy.entry.menu, { type: "exportData" }, { disabled }),
+              item("importData", dataImportCopy.entry.menu, { type: "importData" }, { disabled: disabled || state.readOnly === true, ...(!disabled && state.readOnly === true ? { hint: dataImportCopy.entry.readOnly } : {}) }),
+            ]
+          : [item("exportData", dataExportCopy.entry.menu, { type: "exportData" }, { disabled })],
         [copyName, item("copyQualifiedName", copy.copyQualifiedName, { type: "copy", text: qualified }, { disabled })],
       ];
     }

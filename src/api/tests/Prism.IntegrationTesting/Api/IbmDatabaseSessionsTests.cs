@@ -199,7 +199,9 @@ public abstract class IbmDatabaseSessionsTests
     /// <summary>
     /// RN-EXPORT-011: o arquivo SQL volta para o banco. Os `INSERT` exportados de uma tabela com os valores difíceis para um literal (os literais do texto
     /// com `CHR`, os números, as datas, o binário do Db2), executados um a um numa cópia vazia, dão as mesmas linhas: a exportação em CSV das duas tabelas é
-    /// a mesma, byte a byte. Ainda não foi executado contra os servidores (o relatório da parte 3 diz isso).
+    /// a mesma, byte a byte. Na primeira execução (a pipeline de develop, 2026-10-17) passou no Informix; no Db2 a própria carga falhou com SQL0408N, pelo
+    /// `X'…'` na coluna `VARBINARY`, o mesmo literal que o arquivo escrevia nela, e os dois passaram à constante binária, `BX'…'`, com que o teste passa na
+    /// imagem do Db2 da pipeline (12.1.5.0).
     /// </summary>
     [Test]
     public async Task Export_Sql_RunsBackIntoACopyOfTheTable()
@@ -267,14 +269,17 @@ public sealed class Db2DatabaseSessionsTests : IbmDatabaseSessionsTests
     protected override Task<ConnectionSettings> StartDatabaseAsync()
         => Db2Singleton.GetSettingsAsync();
 
-    /// <summary>O binário no `BLOB` (que sai em `BLOB(X'…')`) e no `VARBINARY` (`X'…'`), o lógico, o decimal de 31 dígitos e o real.</summary>
+    /// <summary>
+    /// O binário no `BLOB` (que sai em `BLOB(X'…')`), no `VARBINARY` e no `BINARY` (`BX'…'`, a constante binária: a hexadecimal, `X'…'`, é um texto, que o
+    /// Db2 recusa nessas colunas com SQL0408N) e no `VARCHAR FOR BIT DATA` (`X'…'`), também o `VARBINARY` vazio; o lógico, o decimal de 31 dígitos e o real.
+    /// </summary>
     protected override string ExportTableShape
-        => "(id INTEGER NOT NULL PRIMARY KEY, texto VARCHAR(200), dado BLOB(1M), hash VARBINARY(32), valor DECIMAL(31, 10), fracao DOUBLE, ativo BOOLEAN, momento TIMESTAMP(6), dia DATE)";
+        => "(id INTEGER NOT NULL PRIMARY KEY, texto VARCHAR(200), dado BLOB(1M), hash VARBINARY(32), marca BINARY(2), bits VARCHAR(8) FOR BIT DATA, valor DECIMAL(31, 10), fracao DOUBLE, ativo BOOLEAN, momento TIMESTAMP(6), dia DATE)";
 
-    protected override string[] ExportTableColumns => ["id", "texto", "dado", "hash", "valor", "fracao", "ativo", "momento", "dia"];
+    protected override string[] ExportTableColumns => ["id", "texto", "dado", "hash", "marca", "bits", "valor", "fracao", "ativo", "momento", "dia"];
 
     protected override IEnumerable<string> ExportTableRows(string table)
-        => [$"INSERT INTO {table} VALUES (1, 'O''Brien \\ a' || CHR(10) || 'b' || CHR(13) || 'c' || CHR(9) || 'd ação', BLOB(X'00FF10'), X'CAFE', 123456789012345678901.0123456789, 0.1, TRUE, '2024-01-15 10:30:00.123456', '2024-01-15'), (2, '', BLOB(X'01'), X'02', -0.5, 1e300, FALSE, NULL, NULL), (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"];
+        => [$"INSERT INTO {table} VALUES (1, 'O''Brien \\ a' || CHR(10) || 'b' || CHR(13) || 'c' || CHR(9) || 'd ação', BLOB(X'00FF10'), BX'CAFE', BX'ABCD', X'00FF', 123456789012345678901.0123456789, 0.1, TRUE, '2024-01-15 10:30:00.123456', '2024-01-15'), (2, '', BLOB(X'01'), BX'', BX'0102', X'02', -0.5, 1e300, FALSE, NULL, NULL), (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"];
 }
 
 [TestFixture]

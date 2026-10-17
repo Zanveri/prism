@@ -129,10 +129,12 @@ internal static partial class ExportText
 
     /// <summary>
     /// RN-EXPORT-011: o literal do binário, que o "Gerar SQL" não escreve. No PostgreSQL, `decode('DEADBEEF', 'hex')`, que vale qualquer que seja o
-    /// `standard_conforming_strings`. No Db2, `X'DEADBEEF'`, e `BLOB(X'…')` quando a coluna é `BLOB`, em pedaços de até 16.336 bytes unidos por `||`
-    /// (a constante hexadecimal do Db2 tem até 32.672 dígitos). No Informix não há: nulo.
+    /// `standard_conforming_strings`. No Db2, pelo tipo da coluna: `BINARY` e `VARBINARY` com a constante binária, `BX'DEADBEEF'`; `BLOB` com
+    /// `BLOB(X'…')`; o texto binário (`CHAR () FOR BIT DATA`, `VARCHAR () FOR BIT DATA`) e o resto com a hexadecimal, `X'DEADBEEF'`. A hexadecimal é
+    /// um texto, e o Db2 não a atribui a uma coluna `BINARY` ou `VARBINARY` (SQL0408N): só o texto `FOR BIT DATA` é compatível com o binário. Em
+    /// pedaços de até 16.336 bytes unidos por `||` (as duas constantes têm até 32.672 dígitos). No Informix não há: nulo.
     /// </summary>
-    /// <param name="type">O tipo da coluna como o banco o diz (`BLOB`, `VARBINARY`...).</param>
+    /// <param name="type">O tipo da coluna como o driver o diz (`GetDataTypeName`: `BLOB`, `BINARY`, `VARBINARY`, `VARCHAR () FOR BIT DATA`...).</param>
     public static string? BinaryLiteral(EDatabaseEngine engine, byte[] bytes, string type)
     {
         if (engine == EDatabaseEngine.PostgreSql)
@@ -141,13 +143,15 @@ internal static partial class ExportText
         if (engine != EDatabaseEngine.Db2)
             return null;
 
-        var blob = string.Equals(type.Trim(), "BLOB", StringComparison.OrdinalIgnoreCase);
+        var name = type.Trim();
+        var blob = string.Equals(name, "BLOB", StringComparison.OrdinalIgnoreCase);
+        var constant = string.Equals(name, "BINARY", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "VARBINARY", StringComparison.OrdinalIgnoreCase) ? "BX" : "X";
         var pieces = new List<string>();
         var offset = 0;
         do
         {
             var length = Math.Min(Db2HexPieceBytes, bytes.Length - offset);
-            var piece = $"X'{Convert.ToHexString(bytes, offset, length)}'";
+            var piece = $"{constant}'{Convert.ToHexString(bytes, offset, length)}'";
             pieces.Add(blob ? $"BLOB({piece})" : piece);
             offset += length;
         }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, DownloadIcon, RefreshIcon, StopIcon } from "@/components/ui";
+import { Button, DownloadIcon, RefreshIcon, StopIcon, UploadIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import type { GridZoom } from "@/app/settings/_lib/preferences";
@@ -11,6 +11,7 @@ import type { ColumnLink } from "../_lib/foreign-key-links";
 import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
 import { dataExportCopy } from "../_lib/data-export/data-export.copy";
+import { dataImportCopy } from "../_lib/data-import/data-import.copy";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
@@ -75,12 +76,12 @@ export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsSt
 }
 
 /**
- * RN-EXPORT-001: "Exportar…", que abre o assistente "Exportar dados" com a origem desta área. Está sempre lá, também sem resultado: o que não se aplica fica
- * desabilitado sem sair do caminho do Tab (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela.
+ * Um botão de entrada de assistente do rodapé ou da barra: está sempre lá, e o que não se aplica fica desabilitado sem sair do caminho do Tab
+ * (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela.
  */
-export function ExportButton({ exporter, hint }: { exporter: ExportEntry; hint: string }) {
+function EntryButton({ icon, label, blocker, hint, onOpen }: { icon: ReactNode; label: string; blocker: string | null; hint: string; onOpen: () => void }) {
   const reasonId = useId();
-  const blocked = exporter.blocker !== null;
+  const blocked = blocker !== null;
   return (
     <>
       <Button
@@ -89,21 +90,34 @@ export function ExportButton({ exporter, hint }: { exporter: ExportEntry; hint: 
         size="compact"
         aria-disabled={blocked || undefined}
         aria-describedby={reasonId}
-        title={exporter.blocker ?? hint}
+        title={blocker ?? hint}
         onClick={() => {
-          if (!blocked) exporter.onExport();
+          if (!blocked) onOpen();
         }}
         className="h-7 px-2.5 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
       >
-        <DownloadIcon />
-        {dataExportCopy.entry.button}
+        {icon}
+        {label}
       </Button>
       <span id={reasonId} className="sr-only">
-        {exporter.blocker ?? hint}
+        {blocker ?? hint}
       </span>
     </>
   );
 }
+
+/** RN-EXPORT-001: "Exportar…", que abre o assistente "Exportar dados" com a origem desta área. Está sempre lá, também sem resultado. */
+export function ExportButton({ exporter, hint }: { exporter: ExportEntry; hint: string }) {
+  return <EntryButton icon={<DownloadIcon />} label={dataExportCopy.entry.button} blocker={exporter.blocker} hint={hint} onOpen={exporter.onExport} />;
+}
+
+/** RN-IMPORT-001: "Importar…", nos Registros de uma tabela, logo depois de "Exportar…": abre o assistente "Importar dados" com a tabela da aba. */
+export function ImportButton({ importer }: { importer: ImportEntry }) {
+  return <EntryButton icon={<UploadIcon />} label={dataImportCopy.entry.button} blocker={importer.blocker} hint={dataImportCopy.entry.recordsHint} onOpen={importer.onImport} />;
+}
+
+/** O "Importar…" dos Registros (RN-IMPORT-001): o motivo de não valer (a conexão somente leitura, a visão; nulo quando vale) e o que abre o assistente. */
+export type ImportEntry = { blocker: string | null; onImport: () => void };
 
 /** O "Exportar…" da área (RN-EXPORT-001): o motivo de não valer agora (nulo quando vale) e o que abre o assistente. */
 export type ExportEntry = { blocker: string | null; onExport: () => void };
@@ -227,6 +241,8 @@ type ResultPanelProps = {
    * área recolhida), depois do zoom da grade e antes de recolher e maximizar.
    */
   exporter?: ExportEntry;
+  /** RN-IMPORT-001: "Importar…", só nos Registros, no rodapé, logo depois de "Exportar…". */
+  importer?: ImportEntry;
 };
 
 /**
@@ -234,7 +250,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -500,7 +516,10 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
             )}
             {/* RN-EXPORT-001: todas as linhas, com o filtro e a ordem da aba, pelo assistente; sempre lá, também sem resultado. */}
             {exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.recordsHint} />}
-            {/* RN-EDIT-013: nos Registros, a barra de edição logo depois de "Exportar CSV" e "Exportar…", antes das linhas carregadas e do "Carregar mais". */}
+            {/* RN-IMPORT-001: logo depois de "Exportar…", no mesmo desenho, com a seta para cima. */}
+            {importer === undefined ? null : <ImportButton importer={importer} />}
+            {/* RN-EDIT-013: nos Registros, a barra de edição logo depois de "Exportar CSV", "Exportar…" e "Importar…", antes das linhas carregadas e do
+                "Carregar mais". */}
             {editBar}
             {rows === null || running ? null : rows.cursorClosed ? (
               <span className="flex items-baseline gap-2 text-ink">

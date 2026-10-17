@@ -18,6 +18,16 @@ public interface ITransferService
     Result<Guid, ETransferStartFailure> StartExport(ExportJob job);
 
     /// <summary>
+    /// RN-IMPORT-014: começa a importação e volta antes de falar com o banco. Sob a mesma trava com que o trabalho entra no registro: a geração do cofre, o
+    /// limite, a tabela ocupada (outra importação ou cópia para a mesma tabela em andamento) e a troca de nome do arquivo (`&lt;fileId&gt;.in` passa a
+    /// `&lt;id&gt;.in`, e daí em diante é do trabalho; o que sumiu antes da troca é `FileMissing`). O cofre que muda depois da troca apaga o arquivo tomado.
+    /// </summary>
+    Result<Guid, ETransferStartFailure> StartImport(ImportJob job);
+
+    /// <summary>RN-IMPORT-027: começa a cópia para outro banco, com as mesmas conferências da importação sob a trava, menos o arquivo.</summary>
+    Result<Guid, ETransferStartFailure> StartCopy(CopyJob job);
+
+    /// <summary>
     /// Como o trabalho está, ou nulo quando ele não existe (esquecido, abandonado, de outro cofre). A consulta é o que o mantém vivo: o que ninguém
     /// consulta por 5 minutos, em qualquer estado, é dado como abandonado.
     /// </summary>
@@ -30,11 +40,15 @@ public interface ITransferService
     /// O `DELETE`: cancela o trabalho que roda (interrompe o comando no banco, fecha a conexão à parte, apaga o arquivo) e só volta quando ele parou, ou
     /// passado o prazo de 10 segundos (aí o trabalho fica `canceled` assim mesmo, deixa de contar para o limite, e a conexão é abandonada em segundo
     /// plano); o cancelado continua no registro até ser esquecido. O que termina `done` apesar do cancelamento (o último lote chegou antes dele) é
-    /// esquecido na hora, com o arquivo pronto: quem pediu o cancelamento não o consulta mais. Esquece o que terminou, apagando o arquivo que sobrou.
-    /// Falso quando o trabalho não existe.
+    /// esquecido na hora, com o arquivo pronto: quem pediu o cancelamento não o consulta mais; a importação e a cópia que terminam `done` assim ficam no
+    /// registro, para a tela ler o fim delas (RN-IMPORT-019). Abandonada a importação ou a cópia no meio de uma confirmação (ou, no Informix sem log, de um
+    /// comando), o fim leva `uncertain`. Esquece o que terminou, apagando o arquivo que sobrou. Falso quando o trabalho não existe.
     /// </summary>
     Task<bool> DeleteAsync(Guid id);
 
-    /// <summary>RN-CONN-014: a conexão foi excluída: as exportações dela em andamento são canceladas, com o motivo `connectionDeleted`.</summary>
+    /// <summary>
+    /// RN-CONN-014: a conexão foi excluída: as transferências que leem dela ou gravam nela (a origem e o destino da cópia) em andamento são canceladas, com
+    /// o motivo `connectionDeleted`.
+    /// </summary>
     void CancelByConnection(Guid connectionID);
 }

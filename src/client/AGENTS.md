@@ -106,16 +106,18 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
   Os três (o `before-quit`, o `stopApi` e o "Reiniciar") soltam antes os destinos das exportações de dados (`transferDesk.releaseAll`), o que interrompe a
-  entrega em andamento e apaga a cópia pela metade (RN-EXPORT-023).
+  entrega em andamento e apaga a cópia pela metade (RN-EXPORT-023), e os arquivos das importações de dados (`transferSource.releaseAll`), o que interrompe a
+  cópia do arquivo e apaga o que a API ainda não tomou (RN-IMPORT-018).
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
   `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
   periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
   próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
-  exportações de dados, abaixo). Os canais da API são
+  exportações de dados e o arquivo das importações, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
   os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
-  `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`; os do arquivo das importações de dados, `prism:transfer-source`,
+  `prism:transfer-source-status` e `prism:transfer-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -154,6 +156,22 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   entrega; `prism:transfer-release` solta um destino. A janela que recarrega, cai ou fecha solta os dela (`releaseWindow`, `windowClosed`), e o diálogo
   de salvar que ela tinha aberto, quando volta, responde `canceled` sem registrar o destino. O log leva só ids e tamanhos. A ponte de desenvolvimento tem
   `transfers.available: false`, e as chamadas que gravam recusam com "Exportar só funciona no app do Prism." (RN-EXPORT-019).
+- **O arquivo das importações de dados** (RN-IMPORT-017 e 018; `electron/transfer-source.ts`, sem Electron, com teste em pastas temporárias de verdade; as
+  mensagens em `electron/transfer-messages.ts`, `zod` dos dois lados). **O processo principal é o dono do caminho, como no destino das exportações.**
+  `prism:transfer-source` não recebe nada: abre o diálogo de abrir sobre a janela que pediu, com o título "Importar dados", os filtros escritos aqui
+  (`sourceDialogFilters`) e a pasta da última importação desta abertura do app (na primeira, Downloads); confere o arquivo (comum, seguindo o atalho: um FIFO
+  prenderia a cópia; até 2 GiB; legível, aberto e fechado; a pasta `transfers` criada com 0700 quando falta e aceitando gravação, pela prova de nome
+  aleatório; o espaço livre para o arquivo e mais 64 MiB, pelo `statfs`) e responde `chosen` com um `fileId` novo (a forma de um id da API), o nome sem a
+  pasta e o tamanho, ou `canceled`, `notAFile`, `tooLarge`, `notWritable`, `noSpace` e `unreadable` (a frase pelo código do sistema, `unreadableReason`,
+  nunca pelo texto dele, que traz o caminho). Então copia em segundo plano para `transfers/<fileId>.in.part` (`wx`, 0600), em fluxo com um `AbortSignal`,
+  parando ao passar de 2 GiB (o teto é um parâmetro do `defaultCopy`, e o teste o baixa para 1 MiB para a parada correr na cópia de verdade), e, no
+  fim, `fsync` e renomeia para `<fileId>.in`. `prism:transfer-source-status` (`{ fileId }`, que a tela consulta a cada
+  250 ms) responde `copying`, `ready`, `failed` (`diskFull`, `tooLarge`, `unreadable`, `other`, com a frase, sem caminho) ou `missing`;
+  `prism:transfer-source-release` interrompe a cópia e apaga o `.part` e o `.in` que a API ainda não tomou (ela os renomeia ao começar a importação, e aí
+  o processo principal não os acha mais, e não precisa). O arquivo é da janela que o escolheu: a consulta e o soltar de outra janela, ou com um id
+  desconhecido, respondem `missing`. A janela que recarrega, cai ou fecha solta os dela; a saída e o reinício, todos. O log leva só o `fileId`, o
+  tamanho e a duração. A tela confere cada resposta com o mesmo schema (`chooseImportSource`, `importSourceStatus`, `releaseImportSource`, em
+  `lib/api/bridge.ts`), e a ponte de desenvolvimento responde que importar só funciona no app.
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -2166,8 +2184,8 @@ processo principal leva o arquivo pronto ao destino que a pessoa escolheu (ver "
   (`rowOperations`), e em branco quando não (o campo é obrigatório). As alterações não salvas da grade vão com a origem, para o aviso da Confirmação.
 - **O assistente** (`_components/data-export/export-wizard.tsx` e `export-wizard-steps.tsx`; as decisões em `_lib/data-export/export-wizard.ts`,
   `export-options.ts`, `export-file-name.ts` e `export-request.ts`, puras e com teste). Um por janela (`openExportWizard`, em `data-exports.ts`,
-  montado por `ExportWizardHost` em `page.tsx`). As cinco etapas, as voltas só para trás, e os números dos campos como texto até o pedido. **"Banco
-  de dados" aparece desabilitado com "Em breve"**: a cópia para outro banco é da seção 36, que esta frente não implementa. As escolhas lembradas
+  montado por `ExportWizardHost` em `page.tsx`). As cinco etapas, as voltas só para trás, e os números dos campos como texto até o pedido. Com o
+  destino **"Banco de dados"**, as etapas são seis (ver "Importar dados e copiar para outro banco"). As escolhas lembradas
   (`export-choices.ts`) ficam no `localStorage`, por usuário (`prism:data-export:<usuário>`), lidas campo a campo com o padrão no lugar do que não
   confere (o que não é um objeto, também uma lista, vale o padrão inteiro); a tabela de destino e as colunas não se lembram. **O motivo que segura uma
   etapa fica no campo**, porque o "Avançar" desabilitado não recebe o foco e a dica dele não chega ao leitor de tela: "Marque ao menos uma coluna." na
@@ -2196,18 +2214,90 @@ processo principal leva o arquivo pronto ao destino que a pessoa escolheu (ver "
   e "Cancelar" com o nome no `aria-label`; com mais de uma, "+N exportações" abre a lista (Esc fecha e devolve o foco ao botão, também com o foco ainda
   nele: `closeListOnEscape` está no grupo da barra, e não na lista, que não toma o foco ao abrir). A barra de progresso tem `aria-valuetext` com as
   linhas e o tamanho; sem o total, não tem medida.
-- **As saídas** (RN-EXPORT-023; `export-exits.ts` e `exportExits`, em `data-exports.ts`). A conta é da lista da API, de todas as janelas (`ahead`: as
-  que rodam e as prontas não entregues), e só com a área de trabalho montada e o cofre aberto: fora disso, nenhuma, sem pedir (o pedido com o cofre
-  bloqueado esperaria o desbloqueio). "Sair" (`top-bar.tsx`) pergunta antes, com "Continuar exportando" no foco e no Esc; o reinício do serviço (o
-  diálogo e a faixa, `useDriverActions`) e a instalação que encerra o Prism (só o instalador do Windows, `update-dialog.tsx`) põem a frase no aviso que já
-  existe (`useExportsAhead`, que relê a conta a cada 3 s enquanto o aviso está na tela). Confirmada a saída, `cancelForExit` lê a lista de novo, cancela
-  as das outras janelas pelo `DELETE` e as desta pelo acompanhamento (que solta os destinos), e só então a saída segue. **Fechar a janela**
-  (`workbench-tabs.tsx`, `windowCloseStep`) pergunta pelas exportações começadas nela antes das perguntas das abas, com o texto de fechar o Prism quando
-  ela é a última; nada é cancelado antes da última resposta (o cancelamento fica em `finishWindow`). O diálogo de excluir a conexão diz quantas
-  exportações dela serão canceladas (quem cancela é a API). O "Bloquear" do menu do usuário ainda não existe.
+- **As saídas** (RN-EXPORT-023 e RN-IMPORT-021; `createTransferExits`, em `export-exits.ts`, e a instância `transferExits` com `useTransfersAhead`, em
+  `data-import/data-imports.ts`, que vê os dois acompanhamentos; os textos em `data-import/transfer-exits.ts`). A conta é da lista da API, de todas as
+  janelas e de todos os tipos (`transfersInProgress`: as exportações que rodam e as prontas não entregues, e as importações e as cópias que rodam; pela
+  conexão, as em que ela é a da origem ou a do destino), e só com a área de trabalho montada e o cofre aberto: fora disso, nenhuma, sem pedir (o pedido com
+  o cofre bloqueado esperaria o desbloqueio). "Sair" (`top-bar.tsx`) pergunta antes, com "Continuar exportando" (ou importando, copiando, transferindo) no
+  foco e no Esc; o reinício do serviço (o diálogo e a faixa, `useDriverActions`) e a instalação que encerra o Prism (só o instalador do Windows,
+  `update-dialog.tsx`) põem a frase no aviso que já existe (`canceledAheadNote`, com a conta de `useTransfersAhead`, relida a cada 3 s enquanto o aviso está
+  na tela). Com só exportações, os textos são os de antes (`exitQuestion` cai nos de `dataExportCopy.exits`). Confirmada a saída, `cancelForExit` lê a
+  lista de novo, cancela as das outras janelas pelo `DELETE` e as desta pelos acompanhamentos (o das exportações solta os destinos), e só então a saída
+  segue. **Fechar a janela** (`workbench-tabs.tsx`, `windowCloseStep` e `windowTransfers`) pergunta pelas transferências começadas nela antes das perguntas
+  das abas, com o texto de fechar o Prism quando ela é a última; nada é cancelado antes da última resposta (o cancelamento fica em `finishWindow`). O
+  diálogo de excluir a conexão diz quantas serão canceladas (`connectionDeleteNote`; quem cancela é a API). O "Bloquear" do menu do usuário ainda não existe.
 - **O que não tem teste**: o assistente montado com as consultas de verdade (as etapas e as decisões têm), o diálogo de salvar do sistema, a entrega
   numa unidade de rede, e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato da seção 6 e da seção 35, com a
   API simulada nos testes.
+
+## Importar dados e copiar para outro banco (seção 36, RN-IMPORT-001 a 028)
+
+A seção 36 da especificação manda; o que segue diz onde ficam as peças e o que não é óbvio. A importação lê um arquivo CSV, TSV, JSON ou XLSX e grava as
+linhas numa tabela que já existe; a cópia ("Banco de dados", no "Exportar dados") lê as linhas de uma origem da exportação e grava numa tabela que já existe,
+nesta ou em outra conexão. As duas são trabalhos da API no registro das transferências (`api/user/transfers`, `kind` `import` e `copy`), numa conexão à
+parte, com o mesmo carregador; quem lê e interpreta o arquivo é a API, e quem o escolhe e o copia para a pasta `transfers` é o processo principal (ver "O
+arquivo das importações de dados", em "Processo principal"). Tudo em `_lib/data-import/` (sem React, com teste) e `_components/data-import/`.
+
+- **As entradas** (RN-IMPORT-001). O "Importar dados…" do menu da tabela no navegador (`navigator-menu.ts`, no grupo de "Exportar dados…", logo depois
+  dele; a visão não tem o item) e o "Importar…" do rodapé dos Registros de uma tabela (`ImportButton`, em `result-panel.tsx`, logo depois de "Exportar…").
+  Os dois abrem o assistente com a tabela de destino já escolhida (`openImportWizard`). O motivo de não valer vem de `importBlockerOf` (`import-entry.ts`): a
+  conexão somente leitura (`readOnlyHintOf`, também pela pasta) e, nos Registros, a visão que as listas do navegador já mostraram (`objectKindOf`, só o
+  cache, como a Estrutura). No menu, o motivo vai na linha embaixo do rótulo (`hint` do `MenuItem`); no botão, no `title` e num `sr-only`
+  (`aria-disabled`, sem sair do Tab). A conexão desconectada, as alterações não salvas e a aba ocupada não desabilitam.
+- **O assistente "Importar dados"** (RN-IMPORT-002 a 013; `_components/data-import/import-wizard.tsx` e `import-wizard-steps.tsx`). O estado e os pedidos
+  são do `createImportFlow` (`import-flow.ts`, fora do React, criado a cada abertura por `data-imports.ts`): o arquivo e a cópia dele (a consulta a cada
+  250 ms), a leitura (`imports/read`), a prévia convertida (`imports/preview`) e o "Importar" (`imports`). A leitura e a prévia vão **um pedido de cada vez**
+  (`serial`): a mudança durante um espera e refaz uma vez, com as últimas escolhas, e a resposta de um arquivo (ou de uma leitura) de antes não muda nada
+  (as gerações `fileGeneration` e `readGeneration`). Os corpos são montados só em `import-request.ts`: a leitura manda as escolhas (`auto` inclusive, e a
+  codificação já achada neste arquivo, que é a única que percorre o arquivo inteiro); a prévia e o começo mandam o que a leitura achou (a codificação, o
+  separador, as chaves do JSON, a planilha). O mapeamento é uma escolha por coluna do arquivo (`import-mapping.ts`: o automático pelo nome ou pela
+  posição, a escolha à mão que tira a coluna de quem a tinha, o que fica com o padrão, os avisos, o comando do aviso de confirmação), e a carga é de
+  `import-load.ts` (os avisos das chaves que apontam para a tabela, o N do commit, a linha "Carga" da Confirmação). As escolhas lembradas
+  (`import-choices.ts`, `prism:data-import:<usuário>`) são lidas campo a campo; o arquivo, o formato, a planilha, o mapeamento e "Esvaziar" não se
+  lembram. "Tirar o apóstrofo da proteção contra fórmula" vem ligado, como a RN-IMPORT-004 diz ("a confirmar com o dono"). Fechar o assistente sem
+  importar (Cancelar, Esc, o X, o bloqueio, o "Sair", o desmonte da área de trabalho) solta o arquivo; aceito o 202, o arquivo é do trabalho e não é solto.
+  Com o diálogo do sistema aberto, o arquivo de antes continua do assistente: o estado é `{ status: "choosing", before }` (`heldSource`), o fechamento
+  nesse meio solta o `before`, desistir do diálogo o devolve, e o campo continua desenhando o de antes, com o mesmo botão em `aria-disabled` (o foco não
+  cai); quando o diálogo fecha e o botão sai da página (a cópia começou), o foco vai ao botão do campo. O que segura o "Avançar" no Arquivo fica à vista
+  no campo ("Escolha o arquivo a importar.", "Espere a cópia do arquivo terminar."). A prévia convertida que falha sem recusa (o 500, a rede) vira a
+  recusa da etapa com "Tentar de novo" ("Não foi possível ler as colunas de …", ou "… atualizar a prévia." com a lista na tela), e "Avançar" de novo a
+  pede. No Mapeamento, o que a etapa espera ("Lendo as colunas…", "Atualizando a prévia…", `mappingProgress`) vai à linha de estado; embaixo da lista
+  fica só a recusa do mapeamento. A lista tem os títulos das colunas, monta as opções da escolha uma vez por tabela (na cópia, uma por coluna da
+  origem), desenha cada linha num `MappingRow` com `memo` (a escolha numa linha não redesenha as outras) e com `content-visibility: auto` por linha; os
+  botões e as escolhas ocupados ficam em `aria-disabled` (o `Select` aceita `aria-disabled`: a lista não abre, e o foco fica).
+  "Importar" pergunta antes pelas proteções da conexão de destino (`loadQuestion`, em `command-confirmation.ts`: em "Só comandos irreversíveis", só com o
+  esvaziamento), com o `DELETE` e o `INSERT` como a API os escreve.
+- **O destino "Banco de dados"** (RN-IMPORT-022 a 025), no próprio "Exportar dados": `choices.database` troca as etapas (`stepsOf`, `copySteps`, em
+  `export-wizard.ts`) e guarda o formato de arquivo de antes, para a volta; a Extração é a da exportação, com "Contar as linhas antes" travada no Db2 e no
+  Informix com a origem e o destino no mesmo servidor, porta e banco (`countForcedReason`). As decisões ficam em `copy-wizard.ts` (a lista das conexões na
+  ordem do navegador, a própria origem, as classes da origem pelo tipo e pelo `kind` da coluna, os pares desabilitados e as notas da conversão, os
+  pedidos, as recusas e o comando que lê a tabela de destino); o estado, em `useCopyWizard` (`_components/data-import/use-copy-wizard.ts`): as listas da
+  "Tabela de destino" são as da árvore, nas mesmas consultas e no mesmo cache (`databaseSessionQuery` e `treeQuery`, caladas no aviso central: a falha
+  aparece na etapa), e **escolher uma conexão desconectada a conecta, como expandi-la**, e o navegador passa a mostrá-la conectada; o esquema e a tabela de
+  mesmo nome que a origem vêm escolhidos uma vez, quando a lista chega. A prévia da cópia (`copies/preview`) é pedida ao entrar no Mapeamento e vai **sem
+  o mapeamento**: a API devolve a tabela e o sugerido, e as escolhas de antes seguem pelo nome quando a tabela é a mesma (`carryTargets`), sem nunca
+  esbarrar numa recusa do mapeamento velho. O mapeamento, a carga e a Confirmação desenham com as peças da importação (`MappingStep`, `LoadStep`,
+  `ConfirmationStep`). "Copiar linhas" pergunta pelas proteções da conexão de **destino**; a origem só é lida. A cópia funciona fora do Electron (sem
+  processo principal), com o número de janela 1 quando a ponte não dá um.
+- **O acompanhamento** (RN-IMPORT-019 a 021; `load-tracker.ts`, um objeto fora do React como o das exportações, e `loadTracker`, o desta janela, em
+  `data-imports.ts`). A consulta a cada segundo; o fim lido diz o que ficou (`stayedText`, pelo `committed`, pelo `uncertain`, pela fase e pela carga),
+  avisa com "Abrir registros" (a aba da tabela nesta janela, `connectLoads` a liga ao `openTableTab` do `WorkbenchProvider`) e esquece o trabalho; a falha
+  deixa a entrada "Ver o erro" na barra, só da tela. O "Cancelar" pergunta quando algo já ficaria na tabela (`cancelQuestionOf`). A ordem das
+  transferências da janela é uma só para os dois acompanhamentos (`nextTransferSeq`, em `data-exports.ts`). Ao montar a área de trabalho, os trabalhos da
+  página de antes desta janela, de todos os tipos, são cancelados (`connectExports`, que não leva os que esta página já começou).
+- **A barra de status** (`transfer-status.tsx`, com `load-status.tsx` e as peças comuns em `transfer-progress.tsx`). As exportações, as importações e as
+  cópias numa lista só, pela ordem em que começaram (`barEntries`, em `transfer-bar.ts`); aparece a que pede ação (a entrega que falhou, a importação que
+  parou), ou a mais antiga, e o botão das outras diz o tipo ("+2 importações", "+2 transferências"). A pergunta do "Cancelar" e o diálogo "Importação
+  interrompida" moram na `TransferStatus`, e não na entrada (ela aparece duas vezes com a lista aberta), e fecham sozinhos quando a entrada some.
+- **Os Registros abertos da tabela** (RN-IMPORT-020): `markImported` sobe um número por tabela (a conexão, o banco, o esquema e o nome) quando o fim pode
+  ter deixado linhas; a vista guarda o número do começo da leitura que está na tela (`imported-note.ts`, pelo executor da aba, que sobrevive à troca para
+  a Estrutura) e mostra a nota com "Atualizar" (o da aba, que pergunta pelas alterações não salvas) até ler de novo.
+- **As fixtures da importação** (RN-IMPORT-028): a tela confere a proteção contra fórmula (`csvFieldOf`) contra `src/test-fixtures/export/import-unguard.json`
+  (`grid-export/import-fixtures.test.ts`), escrita à mão com a API, que confere a volta com os mesmos casos; sem o arquivo o teste falha, e não fica de
+  fora. As outras fixtures da importação (o campo do CSV, os números e as datas, a ordem do nulo, o `_xHHHH_` lido) são só da API.
+- **O que não tem teste**: os assistentes montados com as consultas de verdade (as decisões, as etapas e o gancho da cópia têm), o diálogo de abrir do
+  sistema, a cópia de um arquivo de 2 GiB e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato das seções 6 e
+  36, com a API simulada nos testes. A aba em Commit manual (o aviso da transação aberta da RN-IMPORT-013) não existe ainda na tela, e o aviso não sai.
 
 ## Configurações (`src/app/settings`)
 
@@ -2376,7 +2466,9 @@ inicial; "Sair" encerra de verdade.
   `WorkbenchProvider`), e segura também as outras janelas. A entrega que falhou e espera o "Salvar como…" não segura: o aviso de antes do bloqueio diz
   quantas serão descartadas (`discardedExports` do `VaultLock`; o `IdleAnnouncer` diz o mesmo ao leitor de tela, junto da frase fixa, porque o desenho do
   aviso é `aria-hidden`), e o bloqueio as descarta (`exportTracker.vaultClosed()`, que solta os destinos)
-  (RN-EXPORT-023).
+  (RN-EXPORT-023). **A importação de dados e a cópia para outro banco também** (RN-IMPORT-021), do começo ao fim lido (`loadTracker.holdsLock()`); a
+  entrada da falha ("Ver o erro") não segura, e o bloqueio a descarta sem perguntar (`loadTracker.vaultClosed()`). O assistente "Importar dados" aberto
+  fecha no bloqueio, como os outros diálogos, e solta o arquivo copiado.
 - **A verificação periódica das conexões** (RN-VERIF-002) não é atividade nem comando em andamento: ela não passa pelos executores das abas nem pelos
   eventos da janela, e bloqueado nada dela sai (ver "Verificação periódica e Só as conectadas").
 - **A barreira.** Bloqueado, `apiRequest` espera o desbloqueio (não falha e não avisa); só passa o pedido com `whileLocked` (`signIn` e

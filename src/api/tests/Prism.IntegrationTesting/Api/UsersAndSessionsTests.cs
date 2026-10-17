@@ -97,7 +97,11 @@ public sealed class UsersAndSessionsTests
         Assert.That(Directory.GetFiles(Path.Combine(host.DataDirectory, "vaults"), "*.vault.json"), Has.Length.EqualTo(1));
     }
 
-    /// <summary>RN-COFRE-001: nenhum nome com caminho grava fora de `vaults/`; a pasta de dados só tem `vaults/` e `logs/`.</summary>
+    /// <summary>
+    /// RN-COFRE-001: nenhum nome com caminho grava fora de `vaults/`. A pasta de dados só tem `vaults/`, `logs/` e `transfers/`, a dos arquivos
+    /// temporários das transferências, que a API cria (e esvazia) na partida, antes de chegar um nome (RN-EXPORT-018); `vaults/` e `transfers/`
+    /// ficam vazias.
+    /// </summary>
     [Test]
     public async Task CreateUser_PathLikeName_Returns422AndCreatesNoFileOutsideVaults()
     {
@@ -112,10 +116,9 @@ public sealed class UsersAndSessionsTests
         }
 
         var created = Directory.GetFileSystemEntries(host.DataDirectory).Select(Path.GetFileName).ToList();
-        Assert.That(created, Is.SubsetOf(new[] { "vaults", "logs" }));
-        var vaults = Path.Combine(host.DataDirectory, "vaults");
-        if (Directory.Exists(vaults))
-            Assert.That(Directory.GetFileSystemEntries(vaults, "*", SearchOption.AllDirectories), Is.Empty);
+        Assert.That(created, Is.SubsetOf(new[] { "vaults", "logs", "transfers" }));
+        foreach (var folder in new[] { "vaults", "transfers" }.Select(name => Path.Combine(host.DataDirectory, name)).Where(Directory.Exists))
+            Assert.That(Directory.GetFileSystemEntries(folder, "*", SearchOption.AllDirectories), Is.Empty, folder);
         Assert.That(File.Exists(outside), Is.False);
         await AssertSessionAsync(host, unlocked: false, userName: null);
     }

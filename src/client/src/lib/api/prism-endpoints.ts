@@ -47,6 +47,11 @@ export const prismEndpoints = {
   // RN-EXPORT-016: os trabalhos em segundo plano (a exportação de dados), um registro só para todas as janelas.
   userTransfers: "api/user/transfers",
   userTransferExports: "api/user/transfers/exports",
+  userTransferImportsRead: "api/user/transfers/imports/read",
+  userTransferImportsPreview: "api/user/transfers/imports/preview",
+  userTransferImports: "api/user/transfers/imports",
+  userTransferCopiesPreview: "api/user/transfers/copies/preview",
+  userTransferCopies: "api/user/transfers/copies",
   userTransfer: (id: string) => `api/user/transfers/${encodeURIComponent(id)}`,
 } as const;
 

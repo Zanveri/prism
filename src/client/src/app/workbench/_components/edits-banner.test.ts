@@ -34,3 +34,17 @@ describe("o recado da faixa da edição", () => {
     expect(render({ readOnly: "Somente leitura: DISTINCT.", noticeTone: "warning" })).toContain(lock);
   });
 });
+
+describe("a nota das linhas importadas (RN-IMPORT-020)", () => {
+  it("\"Linhas foram importadas nesta tabela depois da leitura.\" com \"Atualizar\", também sem alteração nenhuma; sem a nota, a faixa não aparece", () => {
+    const markup = render({ onImportedRefresh: noop });
+
+    expect(markup).toContain('<span role="status" class="text-ink">Linhas foram importadas nesta tabela depois da leitura.</span>');
+    expect(markup).toMatch(/<button[^>]*>Atualizar<\/button>/);
+    expect(render()).toBe("");
+  });
+
+  it("o \"Atualizar\" da nota espera o Salvar em andamento", () => {
+    expect(render({ onImportedRefresh: noop, pending: 2, saving: true })).toMatch(/<button[^>]*disabled=""[^>]*>Atualizar<\/button>/);
+  });
+});

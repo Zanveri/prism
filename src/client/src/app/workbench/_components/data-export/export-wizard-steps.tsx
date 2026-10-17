@@ -21,15 +21,39 @@ import { DatabaseTargetIcon, DataFormatIcon } from "./format-icons";
 const f = dataExportCopy.formatting;
 
 /** O id da opção de um formato na lista, para o foco andar com as setas. */
-export const formatOptionId = (prefix: string, format: DataFormat) => `${prefix}-${format}`;
+export const formatOptionId = (prefix: string, format: DataFormat | "database") => `${prefix}-${format}`;
 
-/** RN-EXPORT-004: a lista de escolha única dos formatos. As setas, Home e End andam e escolhem; Enter e o duplo clique escolhem e avançam. */
-export function FormatStep({ format, idPrefix, onChoose, onAdvance }: { format: DataFormat; idPrefix: string; onChoose: (format: DataFormat) => void; onAdvance: () => void }) {
+/** A lista inteira, na ordem das setas: os formatos de arquivo e, depois da linha, o destino "Banco de dados" (RN-IMPORT-022). */
+const destinations = [...dataFormats, "database"] as const;
+
+type Destination = (typeof destinations)[number];
+
+/**
+ * RN-EXPORT-004 e RN-IMPORT-022: a lista de escolha única dos formatos e, separado por uma linha, o destino "Banco de dados". As setas, Home e End andam e
+ * escolhem (também entre os formatos e o banco de dados); Enter e o duplo clique escolhem e avançam.
+ */
+export function FormatStep({
+  format,
+  database = false,
+  idPrefix,
+  onChoose,
+  onDatabase = () => {},
+  onAdvance,
+}: {
+  format: DataFormat;
+  database?: boolean;
+  idPrefix: string;
+  onChoose: (format: DataFormat) => void;
+  onDatabase?: () => void;
+  onAdvance: () => void;
+}) {
   const copy = dataExportCopy.formats;
+  const current: Destination = database ? "database" : format;
+  const choose = (next: Destination) => (next === "database" ? onDatabase() : onChoose(next));
 
   function move(event: KeyboardEvent<HTMLElement>) {
-    const index = dataFormats.indexOf(format);
-    const target = event.key === "ArrowDown" ? Math.min(index + 1, dataFormats.length - 1) : event.key === "ArrowUp" ? Math.max(index - 1, 0) : event.key === "Home" ? 0 : event.key === "End" ? dataFormats.length - 1 : null;
+    const index = destinations.indexOf(current);
+    const target = event.key === "ArrowDown" ? Math.min(index + 1, destinations.length - 1) : event.key === "ArrowUp" ? Math.max(index - 1, 0) : event.key === "Home" ? 0 : event.key === "End" ? destinations.length - 1 : null;
     if (event.key === "Enter") {
       event.preventDefault();
       onAdvance();
@@ -37,49 +61,43 @@ export function FormatStep({ format, idPrefix, onChoose, onAdvance }: { format: 
     }
     if (target === null) return;
     event.preventDefault();
-    const next = dataFormats[target];
-    onChoose(next);
+    const next = destinations[target];
+    choose(next);
     document.getElementById(formatOptionId(idPrefix, next))?.focus();
   }
 
-  return (
-    <div role="listbox" aria-label={copy.label} className="flex flex-col gap-1">
-      {dataFormats.map((candidate) => {
-        const selected = candidate === format;
-        return (
-          <div
-            key={candidate}
-            id={formatOptionId(idPrefix, candidate)}
-            role="option"
-            aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
-            onClick={() => onChoose(candidate)}
-            onDoubleClick={() => {
-              onChoose(candidate);
-              onAdvance();
-            }}
-            onKeyDown={move}
-            className={cn("flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 outline-none focus-visible:ring-1 focus-visible:ring-accent", selected ? "border-accent bg-selected" : "border-transparent hover:bg-selected")}
-          >
-            <DataFormatIcon format={candidate} className="mt-0.5" />
-            <span className="flex min-w-0 flex-col">
-              <span className="font-medium text-ink">{copy.names[candidate]}</span>
-              <span className="text-sm text-muted">{copy.descriptions[candidate]}</span>
-            </span>
-          </div>
-        );
-      })}
-      {/* Separado dos outros por uma linha: o destino "Banco de dados" é da seção 36, e aqui aparece em breve. */}
-      <div role="separator" className="my-1 border-t border-border" />
-      <div role="option" aria-selected={false} aria-disabled="true" className="flex cursor-not-allowed items-start gap-3 rounded-md px-3 py-2 opacity-60">
-        <DatabaseTargetIcon className="mt-0.5" />
+  const option = (candidate: Destination, icon: ReactNode, name: string, description: string) => {
+    const selected = candidate === current;
+    return (
+      <div
+        key={candidate}
+        id={formatOptionId(idPrefix, candidate)}
+        role="option"
+        aria-selected={selected}
+        tabIndex={selected ? 0 : -1}
+        onClick={() => choose(candidate)}
+        onDoubleClick={() => {
+          choose(candidate);
+          onAdvance();
+        }}
+        onKeyDown={move}
+        className={cn("flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 outline-none focus-visible:ring-1 focus-visible:ring-accent", selected ? "border-accent bg-selected" : "border-transparent hover:bg-selected")}
+      >
+        {icon}
         <span className="flex min-w-0 flex-col">
-          <span className="font-medium text-ink">
-            {copy.database} <span className="ml-1 rounded border border-border-strong px-1 text-xs text-muted">{copy.soon}</span>
-          </span>
-          <span className="text-sm text-muted">{copy.databaseDescription}</span>
+          <span className="font-medium text-ink">{name}</span>
+          <span className="text-sm text-muted">{description}</span>
         </span>
       </div>
+    );
+  };
+
+  return (
+    <div role="listbox" aria-label={copy.label} className="flex flex-col gap-1">
+      {dataFormats.map((candidate) => option(candidate, <DataFormatIcon format={candidate} className="mt-0.5" />, copy.names[candidate], copy.descriptions[candidate]))}
+      {/* Separado dos outros por uma linha: o destino "Banco de dados" copia as linhas para uma tabela, sem arquivo (RN-IMPORT-022). */}
+      <div role="separator" className="my-1 border-t border-border" />
+      {option("database", <DatabaseTargetIcon className="mt-0.5" />, copy.database, copy.databaseDescription)}
     </div>
   );
 }
@@ -144,6 +162,7 @@ export function ExtractionStep({
   onAll,
   count,
   onCount,
+  countLocked = null,
   problem,
 }: {
   origin: ExportOrigin;
@@ -155,6 +174,8 @@ export function ExtractionStep({
   onAll: (checked: boolean) => void;
   count: boolean;
   onCount: (count: boolean) => void;
+  /** RN-IMPORT-023: na cópia de Db2 ou de Informix no mesmo banco, a contagem fica ligada e travada, com o motivo (nulo quando a escolha é livre). */
+  countLocked?: string | null;
   problem: string | null;
 }) {
   const e = dataExportCopy.extraction;
@@ -210,7 +231,7 @@ export function ExtractionStep({
         <FieldError id={problemId}>{problem ?? undefined}</FieldError>
       </section>
 
-      <CheckboxRow label={e.count} checked={count} onChange={onCount} hint={e.countHint} />
+      <CheckboxRow label={e.count} checked={count || countLocked !== null} disabled={countLocked !== null} onChange={onCount} hint={countLocked ?? e.countHint} />
 
       <section className="flex flex-col gap-1.5">
         <h3 className="font-medium">{e.origin}</h3>
@@ -254,7 +275,7 @@ function OriginText({ origin }: { origin: ExportOrigin }) {
 }
 
 /** Um campo de escolha com rótulo visível (o `Select` do app). */
-function ChoiceField<T extends string>({ label, value, options, onChange, disabled = false, hint }: { label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; hint?: string }) {
+export function ChoiceField<T extends string>({ label, value, options, onChange, disabled = false, hint }: { label: string; value: T; options: readonly { value: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; hint?: string }) {
   const id = useId();
   const hintId = `${id}-hint`;
   return (
@@ -273,7 +294,7 @@ function ChoiceField<T extends string>({ label, value, options, onChange, disabl
 }
 
 /** Um campo de texto (ou de número escrito) com a recusa no lugar. */
-function TextOption({ label, value, onChange, error, hint, disabled = false, inputMode, className }: { label: string; value: string; onChange: (value: string) => void; error?: string; hint?: string; disabled?: boolean; inputMode?: "numeric"; className?: string }) {
+export function TextOption({ label, value, onChange, error, hint, disabled = false, inputMode, className }: { label: string; value: string; onChange: (value: string) => void; error?: string; hint?: string; disabled?: boolean; inputMode?: "numeric"; className?: string }) {
   const id = useId();
   const aria = fieldAria(id, error);
   return (
@@ -511,8 +532,11 @@ export function ExportConnection({ engine, name, database, environment, readOnly
 
 export type SummaryLine = { label: string; value: ReactNode; hint?: string };
 
-/** RN-EXPORT-015: as recusas no alto, o resumo em linhas de rótulo e valor, e os avisos no tom de atenção. */
-export function ConfirmationStep({ refusals, lines, warnings }: { refusals: readonly WizardRefusal[]; lines: readonly SummaryLine[]; warnings: readonly string[] }) {
+/**
+ * RN-EXPORT-015: as recusas no alto, o resumo em linhas de rótulo e valor, e os avisos no tom de atenção. `after` vem embaixo dos avisos: a caixa "Entendo que
+ * as linhas atuais … serão apagadas." da importação e da cópia (RN-IMPORT-013 e 025).
+ */
+export function ConfirmationStep({ refusals, lines, warnings, after }: { refusals: readonly WizardRefusal[]; lines: readonly SummaryLine[]; warnings: readonly string[]; after?: ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
       {refusals.length === 0 ? null : (
@@ -545,6 +569,7 @@ export function ConfirmationStep({ refusals, lines, warnings }: { refusals: read
           ))}
         </ul>
       )}
+      {after ?? null}
     </div>
   );
 }

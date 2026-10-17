@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cancelExports, exportsInProgress, forgetTransfer, getTransfer, isGone, listTransfers, startExport } from "./transfers.service";
+import { cancelTransfers, forgetTransfer, getTransfer, isGone, listTransfers, startExport, transfersInProgress } from "./transfers.service";
 
 const base = "http://127.0.0.1:51234";
 const bridge = { getApiConfig: async () => ({ baseUrl: base, token: "token-de-teste" }), onApiExit: () => () => {}, restartApi: async () => {} };
@@ -72,20 +72,35 @@ describe("as rotas dos trabalhos (RN-EXPORT-016, seção 6)", () => {
     expect(fake.mock.calls[0][1].method).toBe("DELETE");
   });
 
-  it("as em andamento para as saídas: as exportações que rodam e as prontas não entregues, de uma conexão quando pedida; sem resposta, nenhuma", async () => {
-    answering(json([item(), item({ id: "b", state: "done", connectionID: "c2" }), item({ id: "c", state: "failed" }), item({ id: "d", kind: "import" })]));
-    expect((await exportsInProgress()).map((transfer) => transfer.id)).toEqual([id, "b"]);
-
-    answering(json([item(), item({ id: "b", state: "done", connectionID: "c2" })]));
-    expect((await exportsInProgress("c2")).map((transfer) => transfer.id)).toEqual(["b"]);
+  it("as em andamento para as saídas: as exportações que rodam e as prontas não entregues, e as importações e as cópias que rodam; sem resposta, nenhuma", async () => {
+    answering(
+      json([
+        item(),
+        item({ id: "b", state: "done", connectionID: "c2" }),
+        item({ id: "c", state: "failed" }),
+        item({ id: "d", kind: "import", phase: "loading", targetConnectionID: "c1" }),
+        item({ id: "e", kind: "import", state: "done" }),
+        item({ id: "f", kind: "copy", state: "canceled" }),
+        item({ id: "g", kind: "copy", phase: "loading", connectionID: "c2", targetConnectionID: "c3" }),
+      ]),
+    );
+    expect((await transfersInProgress()).map((transfer) => transfer.id)).toEqual([id, "b", "d", "g"]);
 
     answering(refusal(500, "INTERNAL_SERVER_ERROR"));
-    expect(await exportsInProgress()).toEqual([]);
+    expect(await transfersInProgress()).toEqual([]);
+  });
+
+  it("de uma conexão: os trabalhos em que ela é a da origem ou a do destino (RN-CONN-014)", async () => {
+    const listed = () => json([item(), item({ id: "b", state: "done", connectionID: "c2" }), item({ id: "g", kind: "copy", phase: "loading", connectionID: "c2", targetConnectionID: "c3" })]);
+    answering(listed());
+    expect((await transfersInProgress("c2")).map((transfer) => transfer.id)).toEqual(["b", "g"]);
+    answering(listed());
+    expect((await transfersInProgress("c3")).map((transfer) => transfer.id)).toEqual(["g"]);
   });
 
   it("cancelar várias manda um DELETE por trabalho e espera todos", async () => {
     const fake = answering(new Response(null, { status: 204 }), refusal(404, "TRANSFER_NOT_FOUND"));
-    await cancelExports([{ id: "a" }, { id: "b" }]);
+    await cancelTransfers([{ id: "a" }, { id: "b" }]);
     expect(fake.mock.calls.map(([url, init]) => `${init.method} ${url}`).sort()).toEqual([`DELETE ${base}/api/user/transfers/a`, `DELETE ${base}/api/user/transfers/b`]);
   });
 });

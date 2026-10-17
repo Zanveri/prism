@@ -86,3 +86,26 @@ describe("Select: o foco depois da escolha", () => {
     expect(frame).not.toHaveBeenCalled();
   });
 });
+
+describe("Select: a opção desabilitada", () => {
+  it("fica na lista com `aria-disabled` e o motivo embaixo; escolhê-la (o clique, o Enter) não muda nada e deixa a lista aberta", () => {
+    const onChange = vi.fn();
+    const list = openList({
+      value: "",
+      onChange,
+      options: [
+        { value: "", label: "Não importar" },
+        { value: "soma", label: "soma", disabled: true, hint: "O banco calcula esta coluna e não aceita valor." },
+        { value: "total", label: "total", hint: "numeric(10,2)" },
+      ],
+    });
+    const [, computed, total] = list.options();
+    expect(computed.props["aria-disabled"]).toBe(true);
+    expect(total.props["aria-disabled"]).toBeUndefined();
+    (computed.props.onClick as () => void)();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(list.options()).toHaveLength(3);
+    (list.options()[2].props.onClick as () => void)();
+    expect(onChange).toHaveBeenCalledWith("total");
+  });
+});

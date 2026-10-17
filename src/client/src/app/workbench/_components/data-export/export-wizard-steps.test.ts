@@ -19,10 +19,16 @@ describe("a etapa Formato (RN-EXPORT-004)", () => {
     expect(html).toMatch(/id="fmt-csv" role="option" aria-selected="false" tabindex="-1"/);
   });
 
-  it("\"Banco de dados\" vem separado, desabilitado, com \"Em breve\" (a cópia para outro banco é da seção 36)", () => {
+  it("\"Banco de dados\" vem separado por uma linha e se escolhe como os outros (RN-IMPORT-022); escolhido, ele é o único no Tab", () => {
     expect(html).toContain('role="separator"');
-    expect(html).toMatch(/role="option" aria-selected="false" aria-disabled="true"/);
-    expect(html).toContain("Em breve");
+    expect(html).toMatch(/id="fmt-database" role="option" aria-selected="false" tabindex="-1"/);
+    expect(html).not.toContain("Em breve");
+    expect(html).not.toContain("aria-disabled");
+
+    const database = markup(createElement(FormatStep, { format: "json", database: true, idPrefix: "fmt", onChoose: noop, onAdvance: noop }));
+    expect(database).toMatch(/id="fmt-database" role="option" aria-selected="true" tabindex="0"/);
+    expect(database).toMatch(/id="fmt-json" role="option" aria-selected="false" tabindex="-1"/);
+    expect(database).toContain("Copiar as linhas para uma tabela que já existe, nesta ou em outra conexão.");
   });
 });
 
@@ -50,6 +56,17 @@ describe("a etapa Extração (RN-EXPORT-005)", () => {
     expect(html).toContain("Filtro e ordem da aba:");
     expect(html).toContain("id &gt; 1");
     expect(html).toContain("A origem é lida duas vezes: uma para contar, outra para exportar.");
+  });
+
+  it("na cópia de Db2 ou de Informix no mesmo banco (RN-IMPORT-023), \"Contar as linhas antes\" fica ligada e travada, com o motivo no lugar da dica", () => {
+    const base = { origin: { kind: "table" as const, view: false, schema: "estoque", name: "pedido" }, columns: [{ name: "id", type: "INTEGER" }], loadError: null, checked: [true], onRetry: noop, onToggle: noop, onAll: noop, onCount: noop, problem: null };
+    const locked = markup(createElement(ExtractionStep, { ...base, count: false, countLocked: "A origem e o destino estão no mesmo banco: a contagem é obrigatória." }));
+    expect(locked).toMatch(/<input type="checkbox" disabled=""[^>]*checked=""\/><span>Contar as linhas antes/);
+    expect(locked).toContain("A origem e o destino estão no mesmo banco: a contagem é obrigatória.");
+    expect(locked).not.toContain("A origem é lida duas vezes");
+
+    const free = markup(createElement(ExtractionStep, { ...base, count: false }));
+    expect(free).not.toContain('disabled=""');
   });
 
   it("na tabela pelo navegador: lendo as colunas, e a falha com a mensagem do banco e \"Tentar de novo\"", () => {

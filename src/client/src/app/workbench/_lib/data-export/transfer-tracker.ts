@@ -5,7 +5,7 @@ import type { ExportExtension } from "../../../../../electron/file-name";
 import type { CopyReply, DeliverReply, DeliverRequest, DestinationReply, DestinationRequest } from "../../../../../electron/transfer-messages";
 import { dataExportCopy } from "./data-export.copy";
 import type { DataFormat } from "./export-options";
-import type { Transfer, TransferPhase, TransferSummary } from "./transfers.schema";
+import { isExportPhase, type ExportPhase, type Transfer, type TransferSummary } from "./transfers.schema";
 
 /**
  * As exportações desta janela, do 202 até a entrega (RN-EXPORT-020 a 022): a consulta a cada segundo, a entrega pelo processo principal quando o arquivo
@@ -39,7 +39,7 @@ export type TrackedExport = {
   /** O que o "Salvar como…" pede de novo ao diálogo de salvar. */
   suggested: { suggestedName: string; extension: ExportExtension } | null;
   stage: ExportStage;
-  phase: TransferPhase | null;
+  phase: ExportPhase | null;
   rows: number;
   total: number | null;
   bytes: number;
@@ -68,6 +68,8 @@ export type TrackerDeps = {
   notify: TrackerNotify;
   /** O relógio da consulta: chama `run` daqui a `ms`, e devolve como desmarcar. */
   schedule(run: () => void, ms: number): () => void;
+  /** A ordem entre as transferências da janela (as importações e as cópias também); sem ela, a ordem é só entre as exportações. */
+  sequence?: () => number;
 };
 
 /** A consulta a cada segundo, como a instalação de um driver (RN-EXPORT-021). */
@@ -268,7 +270,7 @@ export function createTransferTracker(deps: TrackerDeps) {
     if (entry.stage !== "running") return;
     switch (transfer.state) {
       case "running":
-        patch(id, { phase: transfer.phase ?? entry.phase, rows: transfer.rows, total: transfer.total ?? null, bytes: transfer.bytes });
+        patch(id, { phase: isExportPhase(transfer.phase) ? transfer.phase : entry.phase, rows: transfer.rows, total: transfer.total ?? null, bytes: transfer.bytes });
         return;
       case "done":
         done.set(id, transfer);
@@ -437,7 +439,7 @@ export function createTransferTracker(deps: TrackerDeps) {
     snapshot: () => entries,
     /** Uma exportação aceita pela API (o 202): entra na barra, e a consulta começa. */
     start(added: NewExport) {
-      publish([...entries, { ...added, seq: ++seq, stage: "running", phase: null, rows: 0, total: null, bytes: 0, failure: null, busy: false }]);
+      publish([...entries, { ...added, seq: deps.sequence?.() ?? ++seq, stage: "running", phase: null, rows: 0, total: null, bytes: 0, failure: null, busy: false }]);
     },
     cancel,
     saveAs,
