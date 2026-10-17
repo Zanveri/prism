@@ -1,0 +1,1422 @@
+{
+  "rule": "RN-EXPORT-006 a 012, RN-GRADE-016 e RN-EXPORT-024: o documento inteiro de cada formato de texto, para as mesmas colunas, linhas e opções, lido pelos dois lados: a exportação da API (o escritor de cada formato) e o \"Copiar como\" da tela (documents.ts).",
+  "notes": [
+    "format é o da rota (csv, sourceCode, dbUnit, html, json, markdown, sql, txt, xml); engine, o banco da origem (postgresql, db2, informix); sourceName, o nome da origem.",
+    "columns: name, type (o tipo do banco) e kind (o da grade). Cada valor de rows é texto, null, { codePoints: [...] } ou { bytes: \"HEX\" }, o binário: a API o recebe em bytes, e a tela como a grade o escreve (0x e os dígitos).",
+    "options são as da rota, como a tela as manda (requestOptions) e a API as lê (ExportOptionsReader); com binary null, a API não lê o valor binário, e ele chega nulo.",
+    "Na tela, cada linha tem o número da posição, a partir de 1, sem célula cortada nem gerada pelo banco: as que só a tela escreve estão em copy-as.json.",
+    "expected é o texto em UTF-8 (o par solto já como U+FFFD); summary, o que não saiu inteiro: cutValues (a largura máxima do TXT), removedCharacters (os caracteres tirados) e skippedRows (as linhas comentadas do SQL)."
+  ],
+  "cases": [
+    {
+      "name": "CSV: os padrões, com o cabeçalho, o separador dentro do valor e o nulo vazio",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "criado",
+          "type": "timestamp",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "Ana",
+          "2024-01-15 10:30:00.000000"
+        ],
+        [
+          "2",
+          "Bia; Lima",
+          null
+        ]
+      ],
+      "options": {
+        "delimiter": ";",
+        "header": true,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "crlf",
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": "id;cliente;criado\r\n1;Ana;2024-01-15 10:30:00.000000\r\n2;\"Bia; Lima\";\r\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "CSV: em todos os textos, com vírgula, LF, a proteção contra fórmula e o nulo escrito",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "valor",
+          "type": "numeric",
+          "kind": "number"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "kind": "boolean"
+        }
+      ],
+      "rows": [
+        [
+          "-12.5",
+          "=1+1",
+          "true"
+        ],
+        [
+          null,
+          "O\"Brien",
+          null
+        ]
+      ],
+      "options": {
+        "delimiter": ",",
+        "header": true,
+        "quoting": "text",
+        "formulaGuard": true,
+        "lineBreak": "lf",
+        "nullText": "NULL",
+        "binary": "hex"
+      },
+      "expected": "\"valor\",\"nome\",\"ativo\"\n-12.5,\"'=1+1\",\"true\"\nNULL,\"O\"\"Brien\",NULL\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "CSV: em todos os valores, com a tabulação, e o nome de coluna que parece fórmula",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "@total",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "x",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "7",
+          "a\tb"
+        ]
+      ],
+      "options": {
+        "delimiter": "\t",
+        "header": true,
+        "quoting": "all",
+        "formulaGuard": true,
+        "lineBreak": "crlf",
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": "\"'@total\"\t\"x\"\r\n\"7\"\t\"a\tb\"\r\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "CSV: o binário em hexadecimal, inteiro e vazio",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "DEADBEEF"
+          }
+        ],
+        [
+          "2",
+          {
+            "bytes": ""
+          }
+        ],
+        [
+          "3",
+          null
+        ]
+      ],
+      "options": {
+        "delimiter": ";",
+        "header": true,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "crlf",
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": "id;foto\r\n1;0xDEADBEEF\r\n2;0x\r\n3;\r\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "CSV: o binário deixado vazio é o nulo do formato",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "DEADBEEF"
+          }
+        ]
+      ],
+      "options": {
+        "delimiter": ";",
+        "header": true,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "crlf",
+        "nullText": "-",
+        "binary": "null"
+      },
+      "expected": "id;foto\r\n1;-\r\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "CSV: sem cabeçalho e sem linhas, vazio",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [],
+      "options": {
+        "delimiter": ";",
+        "header": false,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "crlf",
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": "",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "CSV: o par substituto solto sai como U+FFFD",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "c",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "codePoints": [
+              120,
+              55357,
+              121
+            ]
+          }
+        ]
+      ],
+      "options": {
+        "delimiter": ";",
+        "header": true,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "crlf",
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": {
+        "codePoints": [
+          99,
+          13,
+          10,
+          120,
+          65533,
+          121,
+          13,
+          10
+        ]
+      },
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "TXT: o binário em hexadecimal e o nulo vazio, com os padrões",
+      "format": "txt",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "CAFE"
+          }
+        ],
+        [
+          "22",
+          null
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "crlf",
+        "binary": "hex"
+      },
+      "expected": "|id |foto  |\r\n|---|------|\r\n|1  |0xCAFE|\r\n|22 |      |\r\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "TXT: o binário deixado vazio, com Mostrar NULL",
+      "format": "txt",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "CAFE"
+          }
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": true,
+        "lineBreak": "lf",
+        "binary": "null"
+      },
+      "expected": "|id |foto|\n|---|----|\n|1  |NULL|\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "TXT: a largura máxima corta e conta, e o par solto sai como U+FFFD",
+      "format": "txt",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "Bruna Lima"
+        ],
+        [
+          {
+            "codePoints": [
+              55296,
+              97
+            ]
+          }
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 4,
+        "showNull": false,
+        "lineBreak": "lf",
+        "binary": "hex"
+      },
+      "expected": {
+        "codePoints": [
+          124,
+          110,
+          111,
+          109,
+          101,
+          124,
+          10,
+          124,
+          45,
+          45,
+          45,
+          45,
+          124,
+          10,
+          124,
+          66,
+          114,
+          117,
+          110,
+          124,
+          10,
+          124,
+          65533,
+          97,
+          32,
+          32,
+          124,
+          10
+        ]
+      },
+      "summary": {
+        "cutValues": 1,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "HTML: o título e a legenda com o nome da origem escapado, o número à direita e o nulo",
+      "format": "html",
+      "engine": "postgresql",
+      "sourceName": "pedido <1>",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "a & b"
+        ],
+        [
+          "2",
+          null
+        ]
+      ],
+      "options": {
+        "title": true,
+        "columnNames": true,
+        "binary": "hex"
+      },
+      "expected": "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\n<title>pedido &lt;1&gt;</title>\n<style>\ntable{border-collapse:collapse;font:14px/1.4 system-ui,sans-serif}\nth,td{border:1px solid #c8ccd4;padding:4px 8px;vertical-align:top;white-space:pre-wrap}\nth{background:#f1f3f6;text-align:left}\n.num{text-align:right}\ntd.null::after{content:\"NULL\";color:#8a909c;font-style:italic}\n</style>\n</head>\n<body>\n<table>\n<caption>pedido &lt;1&gt;</caption>\n<thead>\n<tr><th scope=\"col\" class=\"num\">id</th><th scope=\"col\">nota</th></tr>\n</thead>\n<tbody>\n<tr><td class=\"num\">1</td><td>a &amp; b</td></tr>\n<tr><td class=\"num\">2</td><td class=\"null\"></td></tr>\n</tbody>\n</table>\n</body>\n</html>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "HTML: sem título e sem os nomes das colunas; o que o documento não aceita sai e conta",
+      "format": "html",
+      "engine": "postgresql",
+      "sourceName": "x\u0001y",
+      "columns": [
+        {
+          "name": "c\u0007",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "codePoints": [
+              120,
+              0,
+              121,
+              65534,
+              122,
+              55296
+            ]
+          }
+        ]
+      ],
+      "options": {
+        "title": false,
+        "columnNames": false,
+        "binary": "hex"
+      },
+      "expected": "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\n<title>Resultado</title>\n<style>\ntable{border-collapse:collapse;font:14px/1.4 system-ui,sans-serif}\nth,td{border:1px solid #c8ccd4;padding:4px 8px;vertical-align:top;white-space:pre-wrap}\nth{background:#f1f3f6;text-align:left}\n.num{text-align:right}\ntd.null::after{content:\"NULL\";color:#8a909c;font-style:italic}\n</style>\n</head>\n<body>\n<table>\n<thead>\n</thead>\n<tbody>\n<tr><td>xyz</td></tr>\n</tbody>\n</table>\n</body>\n</html>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 3,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "HTML: o nome da origem e o das colunas contam uma vez o que tiram, e o binário vazio é a célula nula",
+      "format": "html",
+      "engine": "postgresql",
+      "sourceName": "p\u0000q",
+      "columns": [
+        {
+          "name": "a\u0001b",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "00"
+          }
+        ],
+        [
+          "2",
+          {
+            "bytes": "FF"
+          }
+        ]
+      ],
+      "options": {
+        "title": true,
+        "columnNames": true,
+        "binary": "null"
+      },
+      "expected": "<!DOCTYPE html>\n<html lang=\"pt-BR\">\n<head>\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">\n<title>pq</title>\n<style>\ntable{border-collapse:collapse;font:14px/1.4 system-ui,sans-serif}\nth,td{border:1px solid #c8ccd4;padding:4px 8px;vertical-align:top;white-space:pre-wrap}\nth{background:#f1f3f6;text-align:left}\n.num{text-align:right}\ntd.null::after{content:\"NULL\";color:#8a909c;font-style:italic}\n</style>\n</head>\n<body>\n<table>\n<caption>pq</caption>\n<thead>\n<tr><th scope=\"col\">ab</th><th scope=\"col\">foto</th></tr>\n</thead>\n<tbody>\n<tr><td>1</td><td class=\"null\"></td></tr>\n<tr><td>2</td><td class=\"null\"></td></tr>\n</tbody>\n</table>\n</body>\n</html>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 2,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Markdown: os padrões, o número à direita, o escape e o nulo vazio",
+      "format": "markdown",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "a|b"
+        ],
+        [
+          "2",
+          null
+        ]
+      ],
+      "options": {
+        "alignmentLine": true,
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": "| id | nota |\n| ---: | --- |\n| 1 | a\\|b |\n| 2 |  |\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Markdown: sem a linha de alinhamento, com o nulo escrito e escapado",
+      "format": "markdown",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "c",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          null
+        ],
+        [
+          "x\r\ny"
+        ]
+      ],
+      "options": {
+        "alignmentLine": false,
+        "nullText": "<nulo>",
+        "binary": "hex"
+      },
+      "expected": "| c |\n| &lt;nulo> |\n| x<br>y |\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Markdown: o binário em hexadecimal",
+      "format": "markdown",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "bytes": "ABCD"
+          }
+        ]
+      ],
+      "options": {
+        "alignmentLine": true,
+        "nullText": "",
+        "binary": "hex"
+      },
+      "expected": "| foto |\n| --- |\n| 0xABCD |\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: com o nome da origem, as datas em ISO 8601, o número, o lógico e a chave repetida",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "criado",
+          "type": "timestamptz",
+          "kind": "datetime"
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "kind": "boolean"
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "2",
+          "2024-01-15 10:30:00+00",
+          "true",
+          "linha\n\"dois\""
+        ]
+      ],
+      "options": {
+        "wrap": true,
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "{\n  \"pedido\": [\n    {\n      \"id\": 1,\n      \"id_2\": 2,\n      \"criado\": \"2024-01-15T10:30:00+00:00\",\n      \"ativo\": true,\n      \"nota\": \"linha\\n\\\"dois\\\"\"\n    }\n  ]\n}\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: sem o nome da origem e sem as datas em ISO, duas linhas",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "n",
+          "type": "varchar",
+          "kind": "number"
+        },
+        {
+          "name": "d",
+          "type": "timestamp",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [
+        [
+          "007",
+          "2024-01-15 10:30:00"
+        ],
+        [
+          null,
+          null
+        ]
+      ],
+      "options": {
+        "wrap": false,
+        "isoDates": false,
+        "binary": "hex"
+      },
+      "expected": "[\n  {\n    \"n\": \"007\",\n    \"d\": \"2024-01-15 10:30:00\"\n  },\n  {\n    \"n\": null,\n    \"d\": null\n  }\n]\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: sem linhas, com o nome da origem",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [],
+      "options": {
+        "wrap": true,
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "{\n  \"pedido\": []\n}\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: sem linhas, sem o nome da origem",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [],
+      "options": {
+        "wrap": false,
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "[]\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: o binário em hexadecimal e deixado vazio",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "bytes": "00FF"
+          }
+        ]
+      ],
+      "options": {
+        "wrap": false,
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "[\n  {\n    \"foto\": \"0x00FF\"\n  }\n]\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: o binário deixado vazio é null",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "bytes": "00FF"
+          }
+        ]
+      ],
+      "options": {
+        "wrap": false,
+        "isoDates": true,
+        "binary": "null"
+      },
+      "expected": "[\n  {\n    \"foto\": null\n  }\n]\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "JSON: o nome da origem e o par substituto solto escapados",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "a\"b",
+      "columns": [
+        {
+          "name": "c",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "codePoints": [
+              97,
+              56320,
+              98
+            ]
+          }
+        ]
+      ],
+      "options": {
+        "wrap": true,
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "{\n  \"a\\\"b\": [\n    {\n      \"c\": \"a\\udc00b\"\n    }\n  ]\n}\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Código fonte: os padrões, aspas duplas com o cifrão, a aspa e o caractere de direção em bytes",
+      "format": "sourceCode",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "criado",
+          "type": "timestamp",
+          "kind": "datetime"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "$x \"y\"\u202e",
+          "2024-01-15 10:30:00"
+        ]
+      ],
+      "options": {
+        "php": "legacy",
+        "quote": "double",
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "<?php\n$pedido = array(\n\tarray(\n\t\t\"id\" => 1,\n\t\t\"nota\" => \"\\$x \\\"y\\\"\\xE2\\x80\\xAE\",\n\t\t\"criado\" => \"2024-01-15T10:30:00\",\n\t),\n);\n?>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Código fonte: PHP 5.4, aspas simples, a variável que começa por dígito e a chave repetida; a direção sai e conta",
+      "format": "sourceCode",
+      "engine": "postgresql",
+      "sourceName": "1 pedido\u202e",
+      "columns": [
+        {
+          "name": "it's",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "it's",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "a\\b",
+          "x\u202ey"
+        ]
+      ],
+      "options": {
+        "php": "short",
+        "quote": "single",
+        "isoDates": false,
+        "binary": "hex"
+      },
+      "expected": "<?php\n$_1_pedido = [\n\t[\n\t\t'it\\'s' => 'a\\\\b',\n\t\t'it\\'s_2' => 'xy',\n\t],\n];\n?>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 2,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Código fonte: duas linhas, o lógico, o nulo e o número que não é da gramática do JSON",
+      "format": "sourceCode",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "ok",
+          "type": "bool",
+          "kind": "boolean"
+        },
+        {
+          "name": "n",
+          "type": "numeric",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        [
+          "false",
+          "1.5"
+        ],
+        [
+          null,
+          ".5"
+        ]
+      ],
+      "options": {
+        "php": "legacy",
+        "quote": "double",
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "<?php\n$pedido = array(\n\tarray(\n\t\t\"ok\" => false,\n\t\t\"n\" => 1.5,\n\t),\n\tarray(\n\t\t\"ok\" => null,\n\t\t\"n\" => \".5\",\n\t),\n);\n?>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Código fonte: sem linhas",
+      "format": "sourceCode",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [],
+      "options": {
+        "php": "legacy",
+        "quote": "double",
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "<?php\n$pedido = array();\n?>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "Código fonte: sem linhas, PHP 5.4, com o nome da origem trocado",
+      "format": "sourceCode",
+      "engine": "postgresql",
+      "sourceName": "nota-fiscal",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [],
+      "options": {
+        "php": "short",
+        "quote": "double",
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "<?php\n$nota_fiscal = [];\n?>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "XML: o formato do DBeaver, com o nulo e o texto vazio como elemento vazio e o escape do texto",
+      "format": "xml",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          "Ana & <Bia>\r"
+        ],
+        [
+          "2",
+          null
+        ],
+        [
+          "3",
+          ""
+        ]
+      ],
+      "options": {
+        "doctype": false,
+        "binary": "hex"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<pedido>\n  <DATA_RECORD>\n    <id>1</id>\n    <cliente>Ana &amp; &lt;Bia&gt;&#13;</cliente>\n  </DATA_RECORD>\n  <DATA_RECORD>\n    <id>2</id>\n    <cliente/>\n  </DATA_RECORD>\n  <DATA_RECORD>\n    <id>3</id>\n    <cliente/>\n  </DATA_RECORD>\n</pedido>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "XML: o DOCTYPE do DBeaver, com os nomes pela regra do .NET e cada um declarado uma vez",
+      "format": "xml",
+      "engine": "postgresql",
+      "sourceName": "nota fiscal",
+      "columns": [
+        {
+          "name": "1x",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "1x",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "DATA_RECORD",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        [
+          "a",
+          "b",
+          "c"
+        ]
+      ],
+      "options": {
+        "doctype": true,
+        "binary": "hex"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nota_x0020_fiscal [\n  <!ELEMENT nota_x0020_fiscal (DATA_RECORD*)>\n  <!ELEMENT DATA_RECORD (_x0031_x?,_x0031_x?,DATA_RECORD?)+>\n  <!ELEMENT _x0031_x (#PCDATA)>\n]>\n<nota_x0020_fiscal>\n  <DATA_RECORD>\n    <_x0031_x>a</_x0031_x>\n    <_x0031_x>b</_x0031_x>\n    <DATA_RECORD>c</DATA_RECORD>\n  </DATA_RECORD>\n</nota_x0020_fiscal>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "XML: sem linhas, a raiz vazia",
+      "format": "xml",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [],
+      "options": {
+        "doctype": false,
+        "binary": "hex"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<pedido/>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "XML: o que o XML 1.0 não aceita sai e conta, e o binário vai em hexadecimal",
+      "format": "xml",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "c",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "codePoints": [
+              97,
+              1,
+              98,
+              65535,
+              99
+            ]
+          },
+          {
+            "bytes": "BEEF"
+          }
+        ]
+      ],
+      "options": {
+        "doctype": false,
+        "binary": "hex"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<pedido>\n  <DATA_RECORD>\n    <c>abc</c>\n    <foto>0xBEEF</foto>\n  </DATA_RECORD>\n</pedido>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 2,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "DbUnit: o binário em hexadecimal e o nulo omitido",
+      "format": "dbUnit",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "CAFE"
+          }
+        ],
+        [
+          "2",
+          null
+        ]
+      ],
+      "options": {
+        "table": "pedido",
+        "upperCase": true,
+        "nulls": "omit",
+        "binary": "hex"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <PEDIDO ID=\"1\" FOTO=\"0xCAFE\"/>\n    <PEDIDO ID=\"2\"/>\n</dataset>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "DbUnit: o binário deixado vazio, com o nulo escrito",
+      "format": "dbUnit",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "CAFE"
+          }
+        ]
+      ],
+      "options": {
+        "table": "pedido",
+        "upperCase": true,
+        "nulls": "mark",
+        "binary": "null"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <PEDIDO ID=\"1\" FOTO=\"[NULL]\"/>\n</dataset>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "SQL: o binário como NULL",
+      "format": "sql",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "DEAD"
+          }
+        ]
+      ],
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10,
+        "binary": "null"
+      },
+      "expected": "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"foto\") VALUES\n  (1, NULL);\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    },
+    {
+      "name": "SQL: Informix, o binário como NULL tem literal, e a linha sai",
+      "format": "sql",
+      "engine": "informix",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "BYTE",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        [
+          "1",
+          {
+            "bytes": "DEAD"
+          }
+        ]
+      ],
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 1,
+        "binary": "null"
+      },
+      "expected": "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"foto\") VALUES (1, NULL);\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-011: o literal do binário, que o Gerar SQL da tela não escreve. Só da API (ExportText.BinaryLiteral), pronta para quando a tela o escrever. No Db2 a forma vem do tipo da coluna: BX'…' no BINARY e no VARBINARY (o X'…' é um texto, que o Db2 recusa nessas colunas com SQL0408N), BLOB(X'…') no BLOB e X'…' no texto FOR BIT DATA.",
+  "rule": "RN-EXPORT-011: o literal do binário. Na tela, binaryLiteral (to-sql.ts); na API, ExportText.BinaryLiteral. No Db2 a forma vem do tipo da coluna: BX'…' no BINARY e no VARBINARY (o X'…' é um texto, que o Db2 recusa nessas colunas com SQL0408N), BLOB(X'…') no BLOB e X'…' no texto FOR BIT DATA.",
   "notes": [
     "bytes são os dígitos hexadecimais do valor; type é o tipo da coluna como o driver o diz (GetDataTypeName; o driver da IBM chama o texto binário de \"VARCHAR () FOR BIT DATA\" e \"CHAR () FOR BIT DATA\"). O corte em pedaços de 16.336 bytes do Db2 está nos testes do escritor.",
     "expected null é: o banco não tem literal para binário, e a linha sai como comentário."

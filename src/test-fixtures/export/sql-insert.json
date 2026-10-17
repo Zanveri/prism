@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-011: o arquivo SQL inteiro, com várias linhas por comando e as linhas sem literal. Só da API (SqlExportWriter), pronta para quando a tela o escrever.",
+  "rule": "RN-EXPORT-011: o arquivo SQL inteiro, com várias linhas por comando e as linhas sem literal. Na tela, sqlWriter (to-sql.ts), com o número da posição em cada linha; na API, SqlExportWriter.",
   "notes": [
     "options: schema (null é sem esquema), table, omitSchema e rowsPerStatement; o binário é sempre o literal do banco.",
     "columns: name, type (o tipo do banco) e kind (o da grade). Cada valor de rows é texto, null, { codePoints: [...] } ou { bytes: \"HEX\" }.",

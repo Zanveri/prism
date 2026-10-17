@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-010, 'Datas em ISO 8601' do JSON e do Código fonte. Só da API (ExportText.IsoDateTime), pronta para quando a tela a escrever.",
+  "rule": "RN-EXPORT-010, 'Datas em ISO 8601' do JSON e do Código fonte. Na tela, isoDateTime (to-json.ts); na API, ExportText.IsoDateTime.",
   "cases": [
     {
       "name": "com microssegundos",

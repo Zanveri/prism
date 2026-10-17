@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-007: 'Em todos os textos' (quoting: text), só da API (ExportText.CsvField): todo valor de coluna que não é de número, e os nomes das colunas (kind text), entre aspas; o número só quando precisa; o nulo nunca, a não ser que o texto dele precise.",
+  "rule": "RN-EXPORT-007: 'Em todos os textos' (quoting: text). Na tela, csvField (to-csv.ts); na API, ExportText.CsvField: todo valor de coluna que não é de número, e os nomes das colunas (kind text), entre aspas; o número só quando precisa; o nulo nunca, a não ser que o texto dele precise.",
   "cases": [
     {
       "name": "texto entre aspas",

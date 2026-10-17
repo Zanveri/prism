@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-008: a tabela de texto do DBeaver, para um lote só (até 200 linhas). Só da API (TxtExportWriter), pronta para quando a tela a escrever. cutValues é quantos valores foram cortados na largura máxima.",
+  "rule": "RN-EXPORT-008: a tabela de texto do DBeaver, para um lote só (até 200 linhas). Na tela, txtWriter (to-txt.ts); na API, TxtExportWriter. cutValues é quantos valores foram cortados na largura máxima.",
   "notes": [
     "columns são os nomes; rows são texto ou null; options são as da rota (lineBreak crlf ou lf)."
   ],

@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-010, Código fonte: o texto como literal do PHP, nas aspas duplas (double) ou simples (single). Só da API (ExportText.PhpString). removed é quantos caracteres de direção saíram (só nas aspas simples).",
+  "rule": "RN-EXPORT-010, Código fonte: o texto como literal do PHP, nas aspas duplas (double) ou simples (single). Na tela, phpString (to-source-code.ts); na API, ExportText.PhpString. removed é quantos caracteres de direção saíram (só nas aspas simples).",
   "notes": [
     "value e expected são texto ou { codePoints: [...] }."
   ],
