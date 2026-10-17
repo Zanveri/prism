@@ -232,6 +232,8 @@ public sealed class ImportAnalysisTests
     [InlineData("intervalo-texto", "A verificação deve ser feita a cada 5 a 3.600 segundos.")]
     [InlineData("consulta-que-grava", "A consulta de verificação tem de ser uma leitura só: um UPDATE não é leitura.")]
     [InlineData("consulta-de-1001", "A consulta de verificação pode ter no máximo 1.000 caracteres.")]
+    [InlineData("consulta-invertida", "A consulta de verificação não pode ter caractere de controle nem de direção do texto.")]
+    [InlineData("consulta-com-nulo", "A consulta de verificação não pode ter caractere de controle nem de direção do texto.")]
     [InlineData("effective-texto", "O que valia na conexão não está no formato que este Prism lê.")]
     [InlineData("effective-readOnly-numero", "O que valia na conexão não está no formato que este Prism lê.")]
     public void Analyze_ShouldBeOK_InvalidConnectionWithTheReason(string change, string reason)
@@ -267,6 +269,8 @@ public sealed class ImportAnalysisTests
             case "intervalo-texto": connection["verificationInterval"] = "30"; break;
             case "consulta-que-grava": connection["verificationQuery"] = "UPDATE systables SET tabname = 'x'"; break;
             case "consulta-de-1001": connection["verificationQuery"] = "SELECT 1 " + new string(' ', 980) + "FROM systables x"; break;
+            case "consulta-invertida": connection["verificationQuery"] = "SELECT 1 FROM systables WHERE tabid = 1 /* \u202E1 = dibat */"; break;
+            case "consulta-com-nulo": connection["verificationQuery"] = "SELECT 1 FROM systables\u0000 WHERE tabid = 1"; break;
             case "effective-texto": connection["effective"] = "somente leitura"; break;
             case "effective-readOnly-numero": connection["effective"]!["readOnly"] = 1; break;
         }
