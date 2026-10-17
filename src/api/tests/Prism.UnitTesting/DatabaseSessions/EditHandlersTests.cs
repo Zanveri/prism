@@ -34,7 +34,7 @@ public sealed class EditHandlersTests
         //Arrange
         var cancellationToken = new CancellationToken();
         var (sessionID, resultID, treeID) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
-        var target = new EditTarget([new EditTable("loja", "pedido", [0], true, null)], [new EditColumn(0, "id", true, null, false, null, "integer"), new EditColumn(null, null, false, "coluna calculada", true, null, null)], true, false);
+        var target = new EditTarget([new EditTable("loja", "pedido", [0], true, null, EditTableKind.Table, ["id"])], [new EditColumn(0, "id", true, null, false, null, "integer"), new EditColumn(null, null, false, "coluna calculada", true, null, null)], true, false);
         _databaseSessionService.Setup(s => s.GetEditTargetAsync(sessionID, resultID, treeID, cancellationToken)).ReturnsAsync(Result.Success<EditTarget, DatabaseFailure>(target));
 
         //Act

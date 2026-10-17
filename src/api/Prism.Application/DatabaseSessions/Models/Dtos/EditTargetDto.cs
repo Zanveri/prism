@@ -4,7 +4,9 @@ namespace Prism.Application.DatabaseSessions.Models.Dtos;
 public sealed record EditTargetDto(IReadOnlyList<EditTableDto> Tables, IReadOnlyList<EditColumnDto> Columns, bool RowOperations, bool OneAtATime);
 
 /// <param name="Key">As colunas da chave, pela posição no resultado.</param>
-public sealed record EditTableDto(string Schema, string Name, IReadOnlyList<int> Key, bool Editable, string? Reason);
+/// <param name="Kind">RN-GRADE-020: `table`, `view`, `materializedView`, `foreign`, `other` ou `elsewhere`.</param>
+/// <param name="KeyColumns">RN-GRADE-020: os nomes, na tabela, das colunas da chave da edição, ou da primeira candidata; vazia sem chave ou fora de uma tabela.</param>
+public sealed record EditTableDto(string Schema, string Name, IReadOnlyList<int> Key, bool Editable, string? Reason, string Kind, IReadOnlyList<string> KeyColumns);
 
 /// <param name="Table">A posição da tabela em `tables`; nulo na coluna calculada.</param>
 public sealed record EditColumnDto(int? Table, string? BaseColumn, bool Editable, string? Reason, bool Nullable, string? Generated);

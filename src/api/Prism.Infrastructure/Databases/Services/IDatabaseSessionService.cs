@@ -149,6 +149,14 @@ public interface IDatabaseSessionService
     /// </summary>
     Task<Result<EditTarget, DatabaseFailure>> GetEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// RN-GRADE-020 e RN-PROT-002: o alvo do "Gerar SQL" (e do "Copiar como" do SQL e do DbUnit) numa conexão somente leitura. É resolvido como o da edição
+    /// (<see cref="GetEditTargetAsync"/>, com as mesmas recusas), e volta com tudo só leitura pelo motivo `reason` (as tabelas, as colunas e as operações de
+    /// linha). Ele NÃO fica guardado com o resultado: o "Salvar" continua recusado nessa conexão e, quando ela deixa de ser somente leitura, o `edit-target`
+    /// da edição pergunta de novo. O alvo que a edição já tinha guardado serve, também só leitura.
+    /// </summary>
+    Task<Result<EditTarget, DatabaseFailure>> GetReadOnlyEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, string reason, CancellationToken cancellationToken);
+
     /// <summary>RN-EDIT-008: os comandos que o "Salvar" executaria, com os valores como literais, sem executar nada. O resultado é o atual ou um guardado, como no `edit-target`.</summary>
     Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 

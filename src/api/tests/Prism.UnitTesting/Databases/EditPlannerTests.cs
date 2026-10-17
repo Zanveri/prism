@@ -14,7 +14,7 @@ public sealed class EditPlannerTests
     private static readonly QueryColumn[] Result = [new("id", "integer", "number"), new("status", "text", "text"), new("total", "numeric", "number"), new("dobro", "integer", "number")];
 
     private static readonly EditTarget Target = new(
-        [new EditTable("loja", "pedido", [0], true, null)],
+        [new EditTable("loja", "pedido", [0], true, null, EditTableKind.Table, ["id"])],
         [new EditColumn(0, "id", true, null, false, null, "integer"), new EditColumn(0, "status", true, null, true, null, "text"), new EditColumn(0, "total", false, "gerada pelo banco", false, ColumnGeneration.Always, "numeric"), new EditColumn(null, null, false, "coluna calculada", true, null, null)],
         RowOperations: true,
         OneAtATime: false);
@@ -53,7 +53,7 @@ public sealed class EditPlannerTests
     {
         //Arrange
         var target = new EditTarget(
-            [new EditTable("LOJA", "PE\"DIDO", [0], true, null)],
+            [new EditTable("LOJA", "PE\"DIDO", [0], true, null, EditTableKind.Table, ["ID"])],
             [new EditColumn(0, "ID", true, null, false, null, "INTEGER"), new EditColumn(0, "VALOR", true, null, true, null, "DECIMAL(12,2)")],
             true,
             false);
@@ -118,7 +118,7 @@ public sealed class EditPlannerTests
     public void Plan_ShouldRefuseTextThatDoesNotConvertOnTheCell()
     {
         //Arrange
-        var target = new EditTarget([new EditTable("LOJA", "PEDIDO", [0], true, null)], [new EditColumn(0, "ID", true, null, false, null, "INTEGER"), new EditColumn(0, "DIA", true, null, true, null, "DATE")], true, false);
+        var target = new EditTarget([new EditTable("LOJA", "PEDIDO", [0], true, null, EditTableKind.Table, ["ID"])], [new EditColumn(0, "ID", true, null, false, null, "INTEGER"), new EditColumn(0, "DIA", true, null, true, null, "DATE")], true, false);
         QueryColumn[] result = [new("ID", "INTEGER", "number"), new("DIA", "DATE", "datetime")];
 
         //Act
@@ -137,7 +137,7 @@ public sealed class EditPlannerTests
     {
         //Arrange
         var target = new EditTarget(
-            [new EditTable("loja", "pedido", [0], true, null), new EditTable("loja", "cliente", [2], true, null)],
+            [new EditTable("loja", "pedido", [0], true, null, EditTableKind.Table, ["id"]), new EditTable("loja", "cliente", [2], true, null, EditTableKind.Table, ["id"])],
             [new EditColumn(0, "id", false, "coluna da chave numa junção", false, null, "integer"), new EditColumn(0, "status", true, null, true, null, "text"), new EditColumn(1, "id", false, "coluna da chave numa junção", false, null, "integer"), new EditColumn(1, "nome", true, null, true, null, "text")],
             RowOperations: false,
             OneAtATime: false);
