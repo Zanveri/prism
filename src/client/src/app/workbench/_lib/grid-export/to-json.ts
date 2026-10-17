@@ -1,10 +1,10 @@
-import { truncatedIn, type GridSlice } from "./grid-slice";
+import { emptyCounts, type DocumentContext, type DocumentWriter } from "./document";
 import { strictNumber } from "./number-text";
 
 /**
  * As chaves do objeto de cada linha: o nome da coluna. O primeiro nome fica como está; um nome que já foi usado ganha `_2`, `_3`… (o primeiro
  * número livre). Uma coluna que já se chama `id_2` não colide com o sufixo: quem chega depois com o nome tomado também ganha um (`id`, `id`, `id_2`,
- * `id` viram `id`, `id_2`, `id_2_2`, `id_3`). As chaves saem sempre distintas.
+ * `id` viram `id`, `id_2`, `id_2_2`, `id_3`). As chaves saem sempre distintas. É também a regra do atributo repetido do DbUnit (RN-EXPORT-012).
  */
 export function jsonKeys(names: readonly string[]): string[] {
   const used = new Set<string>();
@@ -26,24 +26,55 @@ export function jsonKeys(names: readonly string[]): string[] {
  */
 export function jsonValue(kind: string, value: string | null, cut: boolean): string {
   if (value === null) return "null";
-  if (!cut && kind === "number" && strictNumber.test(value)) return value;
-  if (!cut && kind === "boolean" && (value === "true" || value === "false")) return value;
+  if (isBareJsonValue(kind, value, cut)) return value;
 
   return JSON.stringify(value);
 }
 
-/**
- * O recorte como uma lista de objetos, uma chave por coluna (`jsonKeys`), com recuo de 2 espaços (o do `JSON.stringify`). O texto é escrito à mão e
- * não por um objeto do JavaScript: ele poria as chaves numéricas (`"2"`, `"10"`) antes das outras e trataria `__proto__` como protótipo, e as colunas
- * saem na ordem em que estão. `boolean` é `true` ou `false` só quando o texto é exatamente o que a API manda; o nulo é `null`.
- */
-export function toJson(slice: GridSlice): string {
-  const keys = jsonKeys(slice.columns.map((column) => column.name)).map((key) => JSON.stringify(key));
-  const cut = truncatedIn(slice);
-  const objects = slice.rows.map((row, rowIndex) => {
-    const members = row.map((value, index) => `    ${keys[index]}: ${jsonValue(slice.columns[index].kind, value, cut(rowIndex, index))}`);
-    return members.length === 0 ? "  {}" : `  {\n${members.join(",\n")}\n  }`;
-  });
+/** O valor que o JSON e o Código fonte escrevem sem aspas (o `IsBareJsonValue` da API): o número na gramática do JSON numa coluna de número e o lógico numa lógica, nunca o cortado. */
+export function isBareJsonValue(kind: string, value: string, cut: boolean): boolean {
+  return !cut && ((kind === "number" && strictNumber.test(value)) || (kind === "boolean" && (value === "true" || value === "false")));
+}
 
-  return objects.length === 0 ? "[]" : `[\n${objects.join(",\n")}\n]`;
+/** A data e hora no formato da grade (`aaaa-mm-dd hh:mm:ss[.f…]`, com ou sem o fuso `±hh` ou `±hh:mm`), em partes. */
+const gridDateTime = /^([0-9]{4}-[0-9]{2}-[0-9]{2}) ([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?)([+-][0-9]{2}(?::[0-9]{2})?)?$/;
+
+/**
+ * RN-EXPORT-010, "Datas em ISO 8601" (o `ExportText.IsoDateTime` da API, conferido pela fixture `iso-datetime.json`): a data e hora da grade ganha o `T` no
+ * lugar do espaço, e o fuso `±hh` vira `±hh:00`. A data sem hora, a hora sem data e o texto em outro formato saem como estão.
+ */
+export function isoDateTime(text: string): string {
+  const match = gridDateTime.exec(text);
+  if (match === null) return text;
+
+  const [, date, time, zone = ""] = match;
+  return `${date}T${time}${zone.length === 3 ? `${zone}:00` : zone}`;
+}
+
+/**
+ * RN-EXPORT-010: a lista de objetos, o `JsonExportWriter` da API: um objeto por linha, uma chave por coluna (`jsonKeys`), na ordem do resultado. O texto é
+ * escrito à mão, e não por um objeto do JavaScript: ele poria as chaves numéricas (`"2"`, `"10"`) antes das outras e trataria `__proto__` como protótipo.
+ * Recuo de 2 espaços e LF, com uma quebra de linha no fim. Com "Pôr o nome da origem", a lista vai um nível para dentro, como o valor da chave com o nome
+ * da origem: `{ "pedido": [ … ] }`. Sem linhas, `[]` (ou `{ "pedido": [] }`). Com "Datas em ISO 8601", a data e hora da coluna de data ganha o `T`.
+ */
+export function jsonWriter({ columns, sourceName, options }: DocumentContext): DocumentWriter {
+  const o = options.json;
+  const keys = jsonKeys(columns.map((column) => column.name)).map((key) => JSON.stringify(key));
+  const indent = o.wrap ? "    " : "  ";
+  let rows = 0;
+
+  return {
+    counts: emptyCounts(),
+    begin: () => (o.wrap ? `{\n  ${JSON.stringify(sourceName)}: [` : "["),
+    write: (row) => {
+      const cut = row.cut ?? [];
+      const members = row.values.map((value, index) => {
+        const kind = columns[index].kind;
+        const shown = value !== null && o.isoDates && kind === "datetime" ? isoDateTime(value) : value;
+        return `${indent}  ${keys[index]}: ${jsonValue(kind, shown, cut.includes(index))}${index < row.values.length - 1 ? ",\n" : "\n"}`;
+      });
+      return `${rows++ === 0 ? "\n" : ",\n"}${indent}{\n${members.join("")}${indent}}`;
+    },
+    end: () => `${rows === 0 ? "]" : o.wrap ? "\n  ]" : "\n]"}${o.wrap ? "\n}\n" : "\n"}`,
+  };
 }
