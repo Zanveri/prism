@@ -288,6 +288,44 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     }
 
     /// <summary>
+    /// RN-IMPORT-010 e 015: o texto canônico vai num parâmetro sem tipo, e o banco o converte pelo tipo da coluna, como na edição; o binário vai em bytes,
+    /// num parâmetro `bytea`.
+    /// </summary>
+    protected override void BindImportParameter(DbParameter parameter, EditParameter value)
+    {
+        ((NpgsqlParameter)parameter).NpgsqlDbType = value.Value is byte[] ? NpgsqlDbType.Bytea : NpgsqlDbType.Unknown;
+        parameter.Value = value.Value ?? DBNull.Value;
+    }
+
+    /// <summary>RN-IMPORT-011: o tipo vem do catálogo (`format_type`, que já põe as aspas), e nunca do pedido.</summary>
+    protected override string? ImportCastSql(string type, int parameter)
+        => $"CAST(${parameter} AS {type})";
+
+    /// <summary>
+    /// RN-IMPORT-010: o tipo-base de cada coluna da tabela que é de um domínio, seguindo o domínio de um domínio até o tipo de verdade, sem os modificadores
+    /// (`format_type` com o modificador nulo).
+    /// </summary>
+    protected override string DomainBaseTypesSql => @"WITH RECURSIVE domains (column_name, type_id, depth) AS (
+                                                          SELECT pg_attribute.attname, pg_attribute.atttypid, 0
+                                                            FROM pg_catalog.pg_attribute
+                                                            JOIN pg_catalog.pg_class ON pg_class.oid = pg_attribute.attrelid
+                                                            JOIN pg_catalog.pg_namespace ON pg_namespace.oid = pg_class.relnamespace
+                                                           WHERE pg_namespace.nspname = $1
+                                                             AND pg_class.relname = $2
+                                                             AND pg_attribute.attnum > 0
+                                                             AND NOT pg_attribute.attisdropped
+                                                          UNION ALL
+                                                          SELECT domains.column_name, pg_type.typbasetype, domains.depth + 1
+                                                            FROM domains
+                                                            JOIN pg_catalog.pg_type ON pg_type.oid = domains.type_id
+                                                           WHERE pg_type.typtype = 'd'
+                                                             AND domains.depth < 32)
+                                                      SELECT DISTINCT ON (domains.column_name) domains.column_name::text, pg_catalog.format_type(domains.type_id, NULL)
+                                                        FROM domains
+                                                       WHERE domains.depth > 0
+                                                       ORDER BY domains.column_name, domains.depth DESC";
+
+    /// <summary>
     /// RN-EDIT-003: a tabela pelo nome entre aspas, como o banco o resolve (`to_regclass`, que usa o caminho de busca quando não há
     /// esquema). A tabela comum e a particionada se editam; a visão, a materializada e a estrangeira, não.
     /// </summary>

@@ -120,6 +120,21 @@ public interface IDatabaseConnection : IAsyncDisposable
     Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-IMPORT-009, 012 e 015: a tabela de destino de uma importação, pelo esquema e pelo nome como estão no catálogo, numa conexão à parte: o que a
+    /// edição lê dela (a consulta de `edit-target`, RN-EDIT-010), as chaves estrangeiras que apontam para ela e, no PostgreSQL, o tipo-base das colunas de
+    /// um domínio. Nulo quando o catálogo não a acha como tabela nem como visão.
+    /// </summary>
+    Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-IMPORT-011: no PostgreSQL, quem diz se um valor converte é o banco. Numa transação só de leitura, um `SELECT` por linha com um `CAST($n AS tipo)`
+    /// para cada coluna (o tipo como o catálogo o escreve) e, na linha em que ele falha, um `SELECT` por célula, num ponto de salvamento, para achar qual.
+    /// Nada é gravado. `values` tem, por linha, o valor de cada coluna (o texto canônico ou os bytes) ou nulo, que não é conferido. Devolve, por linha, a
+    /// recusa do banco em cada célula, ou nula. No banco em que o Prism converte (Db2 e Informix), não vai ao banco e não recusa nada.
+    /// </summary>
+    Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken);
+
+    /// <summary>
     /// RN-EXPORT-017, o começo da leitura da exportação, numa conexão à parte que só ela usa: o prazo de espera de trava (RN-EDIT-010) e, no
     /// PostgreSQL, a forma do texto que o servidor escreve (`DateStyle`, `extra_float_digits`, `bytea_output`) e a transação `REPEATABLE READ READ ONLY`
     /// em que a contagem e a leitura veem o mesmo instante do banco. No Db2 e no Informix não há transação: a leitura é a de uma sessão nova.

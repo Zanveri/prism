@@ -34,6 +34,14 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private const string ReleaseCountSavepointSql = "RELEASE SAVEPOINT prism_count";
     private const string RollbackToCountSavepointSql = "ROLLBACK TO SAVEPOINT prism_count";
 
+    /// <summary>RN-IMPORT-011: o ponto de salvamento de cada linha da conferência da conversão, dentro da transação só de leitura dela (no PostgreSQL).</summary>
+    private const string ImportSavepointSql = "SAVEPOINT prism_import";
+    private const string ReleaseImportSavepointSql = "RELEASE SAVEPOINT prism_import";
+    private const string RollbackToImportSavepointSql = "ROLLBACK TO SAVEPOINT prism_import";
+
+    /// <summary>RN-IMPORT-011: as conversões de um `SELECT` da conferência, no máximo (o PostgreSQL aceita até 1.664 colunas num resultado).</summary>
+    private const int ImportCastsPerSelect = 1000;
+
     /// <summary>O SQLSTATE com que o PostgreSQL e o Db2 dizem que interromperam o comando a pedido ("query canceled").</summary>
     private const string QueryCanceledSqlState = "57014";
 
@@ -325,6 +333,26 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         parameter.Value = value.Value ?? DBNull.Value;
     }
+
+    /// <summary>
+    /// RN-IMPORT-010 e 015: um valor da importação no parâmetro: o convertido pelo Prism, com o tipo quando ele vem (Db2 e Informix), como no "Salvar". O
+    /// banco que converte o texto (o PostgreSQL) manda o texto sem tipo e os bytes do binário no tipo binário dele.
+    /// </summary>
+    protected virtual void BindImportParameter(DbParameter parameter, EditParameter value)
+        => BindEditParameter(parameter, value);
+
+    /// <summary>
+    /// RN-IMPORT-011: a conversão de um parâmetro (`$1`, a partir de 1) para o tipo de uma coluna, como o catálogo o escreve, na conferência da prévia. Nula,
+    /// por padrão: no banco em que o Prism converte (Db2 e Informix), a conferência não vai ao banco.
+    /// </summary>
+    protected virtual string? ImportCastSql(string type, int parameter)
+        => null;
+
+    /// <summary>
+    /// RN-IMPORT-010: no banco que tem domínios (o PostgreSQL), a consulta do tipo-base de cada coluna da tabela que é de um domínio. Parâmetros: esquema e
+    /// tabela. Colunas: o nome da coluna e o tipo-base, sem modificadores. Nula, por padrão.
+    /// </summary>
+    protected virtual string? DomainBaseTypesSql => null;
 
     /// <summary>
     /// Parâmetro: esquema. Colunas: nome, tipo (`table`, `view`, `procedure` ou `function`), a estimativa de linhas das estatísticas (nula
@@ -768,6 +796,91 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         }, cancellationToken);
 
     /// <summary>
+    /// RN-IMPORT-009, 012 e 015: a tabela pela consulta da edição (`EditRelationQuery`, com o esquema e o nome como estão no catálogo; no PostgreSQL, entre
+    /// aspas para o `to_regclass`), as chaves que apontam para ela e, no PostgreSQL, o tipo-base das colunas de um domínio.
+    /// </summary>
+    public Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken)
+        => RunAsync(nameof(DescribeImportTargetAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var written = $"{QuotedName(schema)}.{QuotedName(table)}";
+            if (await DescribeCoreAsync(EditRelationQuery(new EditTableName(schema, table, written)), token) is not { } described)
+                return (ImportCatalog?)null;
+
+            var references = await ReadAllAsync(ReferencedBySql, [described.Schema, described.Name], ReadForeignKeyRow, token);
+            var baseTypes = DomainBaseTypesSql is { } sql ? await ReadAllAsync(sql, [described.Schema, described.Name], reader => (Column: Text(reader, 0), Type: Text(reader, 1)), token) : [];
+            var referencedBy = references.GroupBy(row => (row.Name, row.ReferencingSchema, row.ReferencingTable)).Select(foreignKey => new ReferencingForeignKeyInfo(foreignKey.Key.Name, foreignKey.Key.ReferencingSchema, foreignKey.Key.ReferencingTable, [.. foreignKey.Select(row => row.Column)], [.. foreignKey.Select(row => row.ReferencedColumn)], foreignKey.First().OnDelete, foreignKey.First().OnUpdate)).ToList();
+
+            return new ImportCatalog(described, referencedBy, baseTypes.GroupBy(row => row.Column, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First().Type, StringComparer.Ordinal));
+        }, cancellationToken);
+
+    /// <summary>
+    /// RN-IMPORT-011. Tudo numa transação só de leitura, desfeita no fim: cada linha num ponto de salvamento, com um `SELECT` das conversões dela (em
+    /// partes de até 1.000); na que o banco recusa, a volta ao ponto de salvamento e um `SELECT` por célula, até achar quais recusam, com a mensagem do
+    /// banco em cada uma. A recusa é a resposta procurada, e passa pelo próprio `Send`, como a da contagem; a conexão que cai e o cancelamento são a falha
+    /// da operação. No banco sem a conversão do banco (<see cref="ImportCastSql"/> nula), nada vai a ele.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IReadOnlyList<string?>> none = [.. values.Select(row => (IReadOnlyList<string?>)new string?[row.Count])];
+        if (ImportCastSql("text", 1) is null || values.All(row => row.All(value => value is null)))
+            return Result.Success<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(none);
+
+        var result = await RunAsync(nameof(CheckImportCastsAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            await BeginReadOnlyAsync(token);
+            var problems = new List<IReadOnlyList<string?>>(values.Count);
+            foreach (var row in values)
+            {
+                var cells = new string?[row.Count];
+                foreach (var part in Enumerable.Range(0, row.Count).Where(index => row[index] is not null).Chunk(ImportCastsPerSelect))
+                {
+                    await NonQueryAsync(ImportSavepointSql, token);
+                    var tried = await CastRefusalAsync([.. part.Select(index => (types[index], row[index]))], token);
+                    if (tried.IsFailure)
+                        return Result.Failure<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(tried.Error);
+
+                    if (tried.Value is not null)
+                    {
+                        await NonQueryAsync(RollbackToImportSavepointSql, token);
+                        foreach (var index in part)
+                        {
+                            var cell = await CastRefusalAsync([(types[index], row[index])], token);
+                            if (cell.IsFailure)
+                                return Result.Failure<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(cell.Error);
+
+                            if (cell.Value is { } refusal)
+                            {
+                                cells[index] = refusal;
+                                await NonQueryAsync(RollbackToImportSavepointSql, token);
+                            }
+                        }
+                    }
+
+                    await NonQueryAsync(ReleaseImportSavepointSql, token);
+                }
+
+                problems.Add(cells);
+            }
+
+            // Nada foi gravado, e nada fica: a transação só de leitura é desfeita.
+            await NonQueryAsync(RollbackSql, CancellationToken.None);
+            _inTransaction = false;
+
+            return Result.Success<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>(problems);
+        }, cancellationToken);
+
+        if (result.IsFailure)
+            return result.Error;
+
+        if (result.Value.IsSuccess)
+            return result.Value;
+
+        await DisposeCursorAsync();
+
+        return result.Value.Error;
+    }
+
+    /// <summary>
     /// RN-EDIT-005 e 012. Com transação, ela é do driver e abre antes da consulta ao catálogo, que roda dentro dela; cada comando tem de
     /// afetar exatamente uma linha, e a recusa (do banco, da contagem de linhas ou do plano) desfaz tudo pelo mesmo fim do cursor
     /// abandonado. A transação sai do campo antes do `COMMIT`: se ele falha, o banco já a encerrou (no PostgreSQL, a recusa de uma
@@ -1152,6 +1265,55 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         return affected;
     }
+
+    /// <summary>
+    /// RN-IMPORT-011: um `SELECT` das conversões pedidas, pelo próprio `Send`: a recusa do banco é a resposta (a mensagem dele), e nula quando todas
+    /// convertem. A conexão que caiu e o cancelamento são a falha da conferência inteira, e não a recusa de um valor.
+    /// </summary>
+    private async Task<Result<string?, DatabaseFailure>> CastRefusalAsync(IReadOnlyList<(string Type, object? Value)> cells, CancellationToken cancellationToken)
+    {
+        var tried = await Send(nameof(CheckImportCastsAsync), EDatabaseFailure.ExecutionFailed, async () =>
+        {
+            var command = _connection!.CreateCommand();
+            command.CommandText = $"SELECT {string.Join(", ", cells.Select((cell, index) => ImportCastSql(cell.Type, index + 1)))}";
+            ConfigureUserCommand(command);
+            foreach (var (_, value) in cells)
+            {
+                var parameter = command.CreateParameter();
+                BindImportParameter(parameter, new EditParameter(value));
+                command.Parameters.Add(parameter);
+            }
+
+            _command = command;
+            await using (var reader = await ExecuteReaderAsync(command, cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                }
+            }
+
+            _command = null;
+            await command.DisposeAsync();
+
+            return true;
+        }, refusalIsTheAnswer: true);
+
+        // O comando recusado ficou no campo, para o `Cancel`: sai daqui, descartado.
+        if (_command is { } refused)
+        {
+            _command = null;
+            await refused.DisposeAsync();
+        }
+
+        if (tried.IsSuccess)
+            return Result.Success<string?, DatabaseFailure>(null);
+
+        return !IsOpen || cancellationToken.IsCancellationRequested ? tried.Error : Result.Success<string?, DatabaseFailure>(tried.Error.Message);
+    }
+
+    /// <summary>RN-TABELA-002: o nome entre aspas duplas, com a aspa de dentro dobrada.</summary>
+    private static string QuotedName(string name)
+        => $"\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
     /// <summary>
     /// Um comando em andamento, do começo ao fim: é o intervalo em que o `Cancel` vale. Um comando que falha no meio deixa o leitor num
