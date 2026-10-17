@@ -98,6 +98,10 @@ describe("a barra de status da importação (RN-IMPORT-019)", () => {
     expect(loadEntryView(entry({ stage: "cancelling" }))).toMatchObject({ text: "Cancelando…", busy: true });
     expect(loadEntryView(entry({ stage: "lost" })).text).toBe("Não foi possível saber como está a importação.");
     expect(loadEntryView(entry({ stage: "failed" })).text).toBe("A importação para pedido parou.");
+    // Os nomes que o texto traz, na ordem, para a barra os isolar: a falha da importação só diz a tabela, e "Cancelando…" não diz nenhum.
+    expect(loadEntryView(entry({ phase: "loading" })).names).toEqual(["pedidos.csv", "pedido"]);
+    expect(loadEntryView(entry({ stage: "failed" })).names).toEqual(["pedido"]);
+    expect(loadEntryView(entry({ stage: "cancelling" })).names).toEqual([]);
   });
 
   it("a cópia: contando, a porcentagem das linhas sobre o total, e sem total as linhas", () => {

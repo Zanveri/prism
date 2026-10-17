@@ -224,7 +224,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   // RN-EXPORT-016 e 021: as exportações desta janela avisam pelos avisos do app; as da página de antes (que caiu ou recarregou) são canceladas; e sair do
   // cofre (o provedor desmonta) as esquece e solta os destinos.
-  useEffect(() => connectExports(toast), [toast]);
+  useEffect(() => connectExports(toast, [loadTracker]), [toast]);
   // RN-IMPORT-019 e 020: as importações e as cópias desta janela avisam pelos avisos do app, e o "Abrir registros" abre a aba da tabela aqui; sair do cofre
   // fecha o assistente (solta o arquivo) e as esquece.
   const openRecordsRef = useRef<(table: { connectionId: string; database?: string; schema: string; name: string }) => void>(() => {});

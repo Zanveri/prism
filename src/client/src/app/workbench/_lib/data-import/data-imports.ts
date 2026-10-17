@@ -109,6 +109,11 @@ export function useTrackedLoads(): readonly TrackedLoad[] {
   return useSyncExternalStore(loadTracker.subscribe, loadTracker.snapshot, loadTracker.snapshot);
 }
 
+/** "Abrir registros" do diálogo "Importação interrompida" (RN-IMPORT-020): o mesmo do aviso, a aba dos Registros da tabela nesta janela. */
+export function openLoadRecords(table: LoadTable): void {
+  openRecords(table);
+}
+
 /** O assistente "Importar dados" aberto nesta janela: a tabela de destino, o estado dele (`flow`) e um número que muda a cada abertura. */
 export type ImportWizardRequest = { key: number; place: LoadTable; flow: ImportFlow };
 

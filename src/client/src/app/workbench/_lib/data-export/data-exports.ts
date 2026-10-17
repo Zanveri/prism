@@ -120,18 +120,20 @@ export function useTrackedExports(): readonly TrackedExport[] {
 }
 
 /**
- * A área de trabalho montou (o cofre abriu): os avisos das exportações passam a sair, e os trabalhos da lista com o número desta janela, que são da página de
- * antes (que caiu ou recarregou) e que ninguém mais mostra, são cancelados (RN-EXPORT-016): não ocupam o limite nem entram na conta do "Sair" até o abandono.
+ * A área de trabalho montou (o cofre abriu): os avisos das exportações passam a sair, e os trabalhos da lista com o número desta janela, de todos os tipos,
+ * que são da página de antes (que caiu ou recarregou) e que ninguém mais mostra, são cancelados (RN-EXPORT-016): não ocupam o limite nem entram na conta do
+ * "Sair" até o abandono.
  * Devolve o que fazer ao desmontar (o cofre fechou): os avisos se calam, o assistente fecha e as exportações são esquecidas (os destinos, soltos).
  */
-export function connectExports(toast: TrackerNotify): () => void {
+export function connectExports(toast: TrackerNotify, others: readonly { has: (id: string) => boolean }[] = []): () => void {
   notices = toast;
   vaultOpen = true;
   const windowId = currentWindowId();
   if (windowId !== null) {
+    // As importações e as cópias da página de antes também (`others`: o acompanhamento delas, para não levar uma que esta página já começou).
     void listTransfers().then((result) => {
       if (!result.ok) return;
-      for (const transfer of result.data) if (transfer.windowID === windowId && !exportTracker.has(transfer.id)) void forgetTransfer(transfer.id);
+      for (const transfer of result.data) if (transfer.windowID === windowId && !exportTracker.has(transfer.id) && !others.some((tracker) => tracker.has(transfer.id))) void forgetTransfer(transfer.id);
     });
   }
   return () => {

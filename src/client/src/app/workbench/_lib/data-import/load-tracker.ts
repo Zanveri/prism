@@ -77,8 +77,11 @@ const st = dataImportCopy.status;
 const t = dataImportCopy.toasts;
 const q = dataImportCopy.cancelQuestion;
 
-/** O texto e a dica da entrada da barra (RN-IMPORT-019 e 027); `percent` nulo é a barra sem medida. */
-export type LoadEntryView = { text: string; hint: string; percent: number | null; busy: boolean };
+/**
+ * O texto e a dica da entrada da barra (RN-IMPORT-019 e 027); `percent` nulo é a barra sem medida. `names`: os nomes que o texto traz, na ordem em que
+ * aparecem (o do arquivo ou da origem, e o da tabela), para a barra os isolar (`<bdi>`) sem procurá-los noutro lugar do texto.
+ */
+export type LoadEntryView = { text: string; hint: string; percent: number | null; busy: boolean; names: readonly string[] };
 
 /** O nome da tabela nos textos: sem o esquema (RN-IMPORT-019). */
 const tableName = (entry: Pick<TrackedLoad, "table">) => entry.table.name;
@@ -86,15 +89,16 @@ const tableName = (entry: Pick<TrackedLoad, "table">) => entry.table.name;
 /** O texto da entrada pela fase: conectando, conferindo, esvaziando, a porcentagem (no máximo 99% até o fim), confirmando. */
 export function loadEntryView(entry: TrackedLoad): LoadEntryView {
   const busy = entry.stage === "cancelling";
-  const plain = (text: string): LoadEntryView => ({ text, hint: text, percent: null, busy });
+  const names = [entry.sourceName, tableName(entry)];
+  const plain = (text: string, shown: readonly string[] = names): LoadEntryView => ({ text, hint: text, percent: null, busy, names: shown });
   const copy = entry.kind === "copy";
   switch (entry.stage) {
     case "cancelling":
-      return plain(st.cancelling);
+      return plain(st.cancelling, []);
     case "lost":
-      return plain(copy ? st.lostCopy : st.lostImport);
+      return plain(copy ? st.lostCopy : st.lostImport, []);
     case "failed":
-      return plain(copy ? st.failedCopy(entry.sourceName, tableName(entry)) : st.failedImport(tableName(entry)));
+      return copy ? plain(st.failedCopy(entry.sourceName, tableName(entry))) : plain(st.failedImport(tableName(entry)), [tableName(entry)]);
     case "running":
       break;
   }
@@ -113,19 +117,19 @@ export function loadEntryView(entry: TrackedLoad): LoadEntryView {
       return plain(`${prefix} ${st.committing}`);
     case "checking": {
       const text = filePercent === null ? `${prefix} ${st.checking(0)}` : `${prefix} ${st.checking(filePercent)}`;
-      return { text, hint: st.checkingHint(read(entry.bytes), read(entry.size ?? 0)), percent: filePercent, busy };
+      return { text, hint: st.checkingHint(read(entry.bytes), read(entry.size ?? 0)), percent: filePercent, busy, names };
     }
     case "loading": {
       if (copy) {
         const committed = entry.committed ?? 0;
         if (entry.total !== null && entry.total > 0 && entry.rows <= entry.total) {
           const percent = Math.min(99, Math.floor((entry.rows / entry.total) * 100));
-          return { text: `${prefix} ${st.percent(percent)}`, hint: st.copiedHint(entry.rows, entry.total, committed), percent, busy };
+          return { text: `${prefix} ${st.percent(percent)}`, hint: st.copiedHint(entry.rows, entry.total, committed), percent, busy, names };
         }
-        return { text: `${prefix} ${st.rows(entry.rows)}`, hint: st.copiedHint(entry.rows, null, committed), percent: null, busy };
+        return { text: `${prefix} ${st.rows(entry.rows)}`, hint: st.copiedHint(entry.rows, null, committed), percent: null, busy, names };
       }
       const hint = st.loadedHint(entry.rows, entry.oneAtATime ? null : (entry.committed ?? 0), entry.size === null ? null : read(entry.bytes), entry.size === null ? null : read(entry.size));
-      return { text: filePercent === null ? `${prefix} ${st.rows(entry.rows)}` : `${prefix} ${st.percent(filePercent)}`, hint, percent: filePercent, busy };
+      return { text: filePercent === null ? `${prefix} ${st.rows(entry.rows)}` : `${prefix} ${st.percent(filePercent)}`, hint, percent: filePercent, busy, names };
     }
   }
 }
