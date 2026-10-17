@@ -155,6 +155,21 @@ internal static partial class ImportRequestRules
     public static IReadOnlyList<(string Field, string Message)> WindowRefusals(long windowID)
         => windowID <= 0 ? [("windowID", "O número da janela é um inteiro positivo.")] : [];
 
+    /// <summary>
+    /// RN-IMPORT-009 e 027: a posição do mapeamento além das colunas pedidas (as do arquivo que a prévia leu, ou as da origem em `columns`, na cópia):
+    /// `IMPORT_MAPPING_INVALID` no campo `mapping[3].source`. Nula quando todas existem.
+    /// </summary>
+    public static (string Field, string Message)? SourceRefusal(IReadOnlyList<ImportMappingDto?>? mapping, int columns)
+    {
+        for (var index = 0; index < (mapping?.Count ?? 0); index++)
+        {
+            if (mapping![index] is { } entry && entry.Source >= columns)
+                return ($"mapping[{index}].source", $"A coluna {ImportText.Thousands(entry.Source + 1L)} da origem não existe: foram pedidas {ImportText.Thousands(columns)} {(columns == 1 ? "coluna" : "colunas")}.");
+        }
+
+        return null;
+    }
+
     /// <summary>O mapeamento do pedido já conferido.</summary>
     public static IReadOnlyList<ImportMappingEntry> MappingOf(IReadOnlyList<ImportMappingDto?> mapping)
         => [.. mapping.Select(entry => new ImportMappingEntry(entry!.Source, entry.Target!))];

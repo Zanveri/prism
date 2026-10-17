@@ -1,4 +1,6 @@
 using FluentValidation.TestHelper;
+using Prism.Application.Transfers.Features.PreviewCopy;
+using Prism.Application.Transfers.Features.StartCopy;
 using Prism.Application.Transfers.Features.StartImport;
 using Prism.Application.Transfers.Models;
 using Prism.Application.Transfers.Models.Dtos;
@@ -8,8 +10,8 @@ using System.Text.Json;
 namespace Prism.UnitTesting.Transfers.Imports;
 
 /// <summary>
-/// As notas da seção 36: a forma do começo da importação, recusada de uma vez com `IMPORT_OPTIONS_INVALID` no campo: a carga (`load`), lida à mão, com o
-/// padrão do Prism no que não vem (e a conferência, que a cópia não tem); o mapeamento obrigatório; e o número da janela.
+/// As notas da seção 36: a forma do começo da importação e da cópia, recusada de uma vez com `IMPORT_OPTIONS_INVALID` no campo: a carga (`load`), lida à
+/// mão, com o padrão do Prism no que não vem; o mapeamento obrigatório; a origem e as colunas da cópia nas regras da exportação; e o número da janela.
 /// </summary>
 public sealed class LoadRequestTests
 {
@@ -28,6 +30,17 @@ public sealed class LoadRequestTests
             Mapping = mapping ?? [new ImportMappingDto { Source = 0, Target = "id" }],
             Load = load is null ? null : Json(load),
             WindowID = windowID
+        };
+
+    private static StartCopyCommand Copy(string load = "{}", ExportSourceDto? source = null, IReadOnlyList<ExportColumnDto>? columns = null)
+        => new()
+        {
+            Source = source ?? new ExportSourceDto { Kind = "table", ConnectionID = Guid.CreateVersion7(), Schema = "loja", Table = "pedido" },
+            Columns = columns ?? [new ExportColumnDto { Position = 0, Name = "id" }],
+            Target = new ImportTargetDto { ConnectionID = Guid.CreateVersion7(), Schema = "dw", Table = "pedido_hist" },
+            Mapping = [new ImportMappingDto { Source = 0, Target = "id" }],
+            Load = Json(load),
+            WindowID = 1
         };
 
     [Trait("ImportRequestRules", "Load")]
@@ -83,4 +96,43 @@ public sealed class LoadRequestTests
     [Fact(DisplayName = "OK o começo da importação com a forma certa passa")]
     public void StartImport_Valid_ShouldPass()
         => new StartImportValidator().TestValidate(Import()).ShouldNotHaveAnyValidationErrors();
+
+    [Trait("StartCopyValidator", "StartCopyCommand")]
+    [Fact(DisplayName = "Erro a cópia recusa a conferência do arquivo, a origem sem tabela e as colunas sem posição, no campo")]
+    public void StartCopy_Invalid_ShouldBeRefused()
+    {
+        //Act
+        var result = new StartCopyValidator().TestValidate(Copy("""{"check": true}""", new ExportSourceDto { Kind = "table", ConnectionID = Guid.CreateVersion7(), Schema = "loja" }, [new ExportColumnDto { Position = -1, Name = "id" }]));
+
+        //Assert
+        result.ShouldHaveValidationErrorFor("load.check").WithErrorCode(OptionsInvalid);
+        result.ShouldHaveValidationErrorFor("source.table").WithErrorCode(OptionsInvalid);
+        result.ShouldHaveValidationErrorFor("columns").WithErrorCode(OptionsInvalid);
+    }
+
+    [Trait("StartCopyValidator", "StartCopyCommand")]
+    [Fact(DisplayName = "OK a cópia com a forma certa passa")]
+    public void StartCopy_Valid_ShouldPass()
+        => new StartCopyValidator().TestValidate(Copy("""{"empty": true, "commitEvery": null}""")).ShouldNotHaveAnyValidationErrors();
+
+    [Trait("PreviewCopyValidator", "PreviewCopyCommand")]
+    [Fact(DisplayName = "OK a prévia da cópia sem mapeamento passa, e o destino sem tabela é recusado")]
+    public void PreviewCopy_ShouldCheckTheShape()
+    {
+        //Arrange
+        var command = new PreviewCopyCommand
+        {
+            Source = new ExportSourceDto { Kind = "query", ConnectionID = Guid.CreateVersion7(), Sql = "SELECT 1" },
+            Columns = [new ExportColumnDto { Position = 0, Name = "x" }],
+            Target = new ImportTargetDto { ConnectionID = Guid.CreateVersion7(), Schema = "dw", Table = "pedido_hist" }
+        };
+
+        //Act
+        var valid = new PreviewCopyValidator().TestValidate(command);
+        var invalid = new PreviewCopyValidator().TestValidate(command with { Target = new ImportTargetDto { ConnectionID = Guid.CreateVersion7(), Schema = "dw" } });
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        invalid.ShouldHaveValidationErrorFor("target.table").WithErrorCode(OptionsInvalid);
+    }
 }

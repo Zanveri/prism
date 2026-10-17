@@ -29,39 +29,10 @@ internal static class ExportRequestRules
     {
         var refusals = new List<(string, string)>();
         var source = request.Source;
-
-        if (source is null)
-            refusals.Add(("source", "Informe a origem da exportação."));
-        else if (source.Kind == "table")
-        {
-            if (!IsName(source.Schema))
-                refusals.Add(("source.schema", NameMessage("O esquema")));
-
-            if (!IsName(source.Table))
-                refusals.Add(("source.table", NameMessage("A tabela")));
-        }
-        else if (source.Kind == "query")
-        {
-            if (string.IsNullOrWhiteSpace(source.Sql))
-                refusals.Add(("source.sql", "Informe o comando da origem."));
-            else if (!ScriptRules.FitsTheLimit(source.Sql))
-                refusals.Add(("source.sql", "O comando pode ter até 1 MB."));
-
-            if (source.Name is not null && !IsName(source.Name))
-                refusals.Add(("source.name", NameMessage("O nome da origem")));
-        }
-        else
-        {
-            refusals.Add(("source.kind", "A origem deve ser table ou query."));
-        }
+        refusals.AddRange(SourceRefusals(source));
 
         var columns = request.Columns;
-        if (columns is null || columns.Count is 0 or > MaxColumns)
-            refusals.Add(("columns", "Marque de 1 a 32.767 colunas."));
-        else if (columns.Any(column => column is null || column.Position < 0) || columns.Select(column => column.Position).Distinct().Count() != columns.Count)
-            refusals.Add(("columns", "Cada coluna tem uma posição a partir de 0, sem repetir."));
-        else if (columns.Any(column => !IsName(column.Name)))
-            refusals.Add(("columns", NameMessage("O nome de cada coluna")));
+        refusals.AddRange(ColumnsRefusals(columns));
 
         var format = request.Format;
         if (!ExportFormats.Exists(format))
@@ -102,6 +73,53 @@ internal static class ExportRequestRules
             refusals.Add(("windowID", "O número da janela é um inteiro positivo."));
 
         return refusals;
+    }
+
+    /// <summary>
+    /// RN-EXPORT-002 e seção 6: a origem (a tabela pelo navegador, ou o comando dos Registros e do resultado), a mesma na exportação e na cópia para outro
+    /// banco (RN-IMPORT-027), que a recusa com o código dela.
+    /// </summary>
+    public static IReadOnlyList<(string Field, string Message)> SourceRefusals(ExportSourceDto? source)
+    {
+        var refusals = new List<(string, string)>();
+        if (source is null)
+            refusals.Add(("source", "Informe a origem da exportação."));
+        else if (source.Kind == "table")
+        {
+            if (!IsName(source.Schema))
+                refusals.Add(("source.schema", NameMessage("O esquema")));
+
+            if (!IsName(source.Table))
+                refusals.Add(("source.table", NameMessage("A tabela")));
+        }
+        else if (source.Kind == "query")
+        {
+            if (string.IsNullOrWhiteSpace(source.Sql))
+                refusals.Add(("source.sql", "Informe o comando da origem."));
+            else if (!ScriptRules.FitsTheLimit(source.Sql))
+                refusals.Add(("source.sql", "O comando pode ter até 1 MB."));
+
+            if (source.Name is not null && !IsName(source.Name))
+                refusals.Add(("source.name", NameMessage("O nome da origem")));
+        }
+        else
+        {
+            refusals.Add(("source.kind", "A origem deve ser table ou query."));
+        }
+
+        return refusals;
+    }
+
+    /// <summary>RN-EXPORT-005 e seção 6: as colunas marcadas na Extração, de 1 a 32.767, cada uma com a posição a partir de 0, sem repetir, e o nome.</summary>
+    public static IReadOnlyList<(string Field, string Message)> ColumnsRefusals(IReadOnlyList<ExportColumnDto>? columns)
+    {
+        if (columns is null || columns.Count is 0 or > MaxColumns)
+            return [("columns", "Marque de 1 a 32.767 colunas.")];
+
+        if (columns.Any(column => column is null || column.Position < 0) || columns.Select(column => column.Position).Distinct().Count() != columns.Count)
+            return [("columns", "Cada coluna tem uma posição a partir de 0, sem repetir.")];
+
+        return columns.Any(column => !IsName(column.Name)) ? [("columns", NameMessage("O nome de cada coluna"))] : [];
     }
 
     /// <summary>

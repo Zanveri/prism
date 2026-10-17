@@ -99,6 +99,13 @@ public sealed record ImportPreviewRowDto(long Line, string? Problem, bool Short,
         => nameof(ImportPreviewRowDto);
 }
 
+/// <summary>RN-IMPORT-024, a resposta de `copies/preview`: a tabela de destino e o mapeamento (o mandado, ou o sugerido pelo nome). A origem não é lida.</summary>
+public sealed record CopyPreviewDto(ImportTableDto Table, IReadOnlyList<ImportMappingDto> Mapping)
+{
+    public override string ToString()
+        => nameof(CopyPreviewDto);
+}
+
 /// <summary>RN-IMPORT-009 a 011, a resposta de `imports/preview`: a tabela, as colunas do arquivo, o mapeamento (o mandado, ou o sugerido), `shownColumns` e as linhas.</summary>
 public sealed record ImportPreviewDto(ImportTableDto Table, IReadOnlyList<string> Columns, IReadOnlyList<ImportMappingDto> Mapping, int ShownColumns, IReadOnlyList<ImportPreviewRowDto> Rows)
 {

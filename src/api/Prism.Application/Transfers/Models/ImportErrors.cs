@@ -55,6 +55,21 @@ internal static class ImportErrors
     public static ApiErrorDto TargetBusy(bool copy, string schema, string table)
         => ApiErrorDto.CreateConflict("Tabela ocupada.", "IMPORT_TARGET_BUSY", $"Já há uma {(copy ? "cópia" : "importação")} para {schema}.{table} em andamento. Espere ela terminar, ou cancele-a na barra de status.");
 
+    /// <summary>RN-IMPORT-023: a tabela de destino da cópia é a própria origem: a leitura veria as linhas que a cópia grava.</summary>
+    public static ApiErrorDto TargetIsSource()
+        => ApiErrorDto.CreateUnprocessableEntity("O destino é a própria origem.", "IMPORT_TARGET_IS_SOURCE", "A tabela de destino é a própria origem. Escolha outra tabela.");
+
+    /// <summary>RN-IMPORT-025: a conexão de origem ou de destino da cópia sem usuário ou sem senha, no campo dela (`source.userName`, `target.password`).</summary>
+    public static ApiErrorDto CopyCredentialsMissing(bool source, bool userNameMissing)
+    {
+        var side = source ? "source" : "target";
+        var connection = source ? "A conexão de origem" : "A conexão de destino";
+
+        return userNameMissing
+            ? ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", $"{side}.userName", $"{connection} não tem usuário gravado. Preencha-o em Editar conexão e copie de novo.")
+            : ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", $"{side}.password", $"{connection} não tem senha gravada. Preencha-a em Editar conexão e copie de novo.");
+    }
+
     /// <summary>RN-IMPORT-013 e RN-EXPORT-015: a conexão sem usuário ou sem senha, no campo que falta, com "importe de novo".</summary>
     public static ApiErrorDto CredentialsMissing(bool userNameMissing)
         => userNameMissing
