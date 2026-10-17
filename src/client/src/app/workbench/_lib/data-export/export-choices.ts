@@ -86,37 +86,53 @@ const choicesSchema = z.object({
     .catch({ commit: "every" as const, commitEvery: "10000" }),
 });
 
-/**
- * As escolhas lembradas, com a tabela de destino do SQL e do DbUnit da origem (`target`). O que está gravado pode ser qualquer coisa (editado à mão, de uma
- * versão anterior, cortado): nunca lança, e o campo que não vale volta ao padrão dele.
- */
-export function parseExportChoices(raw: string | null, target: { schema: string; table: string }): ExportChoices {
+/** O texto gravado como objeto: o JSON que não se lê, e o que não é um objeto (uma lista também é `object` no JavaScript), valem "nada gravado". */
+export function storedObject(raw: string | null): object {
   let value: unknown;
   try {
     value = raw === null ? {} : JSON.parse(raw);
   } catch {
     value = {};
   }
-  // Uma lista também é `object` no JavaScript, e o `z.object` a recusa: só o objeto de verdade é lido, e o que ainda assim não passar vale o padrão.
-  const record = typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
-  const result = choicesSchema.safeParse(record);
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
+}
+
+/** A tabela de destino do SQL e do DbUnit, que é da origem, posta nas opções lidas. */
+const withTarget = (options: z.infer<typeof optionsSchema>, target: { schema: string; table: string }): FormatOptions => ({
+  ...options,
+  sql: { ...options.sql, schema: target.schema, table: target.table },
+  dbUnit: { ...options.dbUnit, table: target.table },
+});
+
+/**
+ * As opções de cada formato lidas de um valor gravado qualquer, campo a campo, com o padrão no que não confere, e a tabela de destino da origem
+ * (`target`). Também as do "Copiar como", que se lembram à parte com a mesma forma (RN-GRADE-017).
+ */
+export function parseFormatOptions(value: unknown, target: { schema: string; table: string }): FormatOptions {
+  const result = optionsSchema.safeParse(value);
+  return withTarget(result.success ? result.data : optionsSchema.parse({}), target);
+}
+
+/** As opções como se gravam: tudo menos a tabela de destino do SQL e do DbUnit, que é da origem. */
+export function rememberedFormatOptions(options: FormatOptions): object {
+  const { omitSchema, rowsPerStatement, includeGenerated, binary: sqlBinary } = options.sql;
+  const { upperCase, nulls, binary: dbUnitBinary } = options.dbUnit;
+  return { ...options, sql: { omitSchema, rowsPerStatement, includeGenerated, binary: sqlBinary }, dbUnit: { upperCase, nulls, binary: dbUnitBinary } };
+}
+
+/**
+ * As escolhas lembradas, com a tabela de destino do SQL e do DbUnit da origem (`target`). O que está gravado pode ser qualquer coisa (editado à mão, de uma
+ * versão anterior, cortado): nunca lança, e o campo que não vale volta ao padrão dele.
+ */
+export function parseExportChoices(raw: string | null, target: { schema: string; table: string }): ExportChoices {
+  const result = choicesSchema.safeParse(storedObject(raw));
   const parsed = result.success ? result.data : choicesSchema.parse({});
-  const options = parsed.options;
-  return {
-    ...parsed,
-    options: {
-      ...options,
-      sql: { ...options.sql, schema: target.schema, table: target.table },
-      dbUnit: { ...options.dbUnit, table: target.table },
-    },
-  };
+  return { ...parsed, options: withTarget(parsed.options, target) };
 }
 
 /** O que se grava: tudo menos a tabela de destino, que é da origem. */
 export function serializeExportChoices(choices: ExportChoices): string {
-  const { omitSchema, rowsPerStatement, includeGenerated, binary: sqlBinary } = choices.options.sql;
-  const { upperCase, nulls, binary: dbUnitBinary } = choices.options.dbUnit;
-  return JSON.stringify({ ...choices, options: { ...choices.options, sql: { omitSchema, rowsPerStatement, includeGenerated, binary: sqlBinary }, dbUnit: { upperCase, nulls, binary: dbUnitBinary } } });
+  return JSON.stringify({ ...choices, options: rememberedFormatOptions(choices.options) });
 }
 
 type ChoicesStorage = Pick<Storage, "getItem" | "setItem">;
