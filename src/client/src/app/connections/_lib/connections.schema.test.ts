@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema } from "./connections.schema";
+import { connectionSchema, createConnectionSchema, createFolderSchema, editConnectionSchema, editWithoutPasswordSchema, engineOptions, folderSchema, moveFolderSchema, editFolderSchema, renameFolderSchema, withoutControl } from "./connections.schema";
 
 const form = {
   engine: "1",
@@ -184,6 +184,68 @@ describe("editConnectionSchema (RN-CONN-004)", () => {
     const result = editConnectionSchema.safeParse({ ...form, password: "outra" });
 
     expect(result.success && result.data.password).toBe("outra");
+  });
+});
+
+describe("os tetos e os caracteres de controle e de direção do texto (RN-CONN-010 e RN-PASTA-001, seção 34)", () => {
+  // Os de controle (U+0000 a U+001F, U+007F a U+009F) e os de direção do texto (U+200E, U+200F, U+202A a U+202E, U+2066 a U+2069): um U+202E faria o host
+  // que a prévia da importação manda conferir parecer outro.
+  const refused = ["\u0000", "\u001B", "\u007F", "\u009F", "\u200E", "\u200F", "\u202A", "\u202E", "\u2066", "\u2069"];
+
+  it.each(refused)("o nome, o host, o banco de dados, o usuário e o ambiente recusam U+%s, cada um com o nome do campo", (character) => {
+    const errors = fieldErrors(createConnectionSchema, { ...form, name: `ERP${character}`, host: `srv${character}.exemplo.invalid`, database: `erp${character}`, userName: `u${character}`, environmentName: `Prod${character}` });
+
+    expect(errors).toEqual({
+      name: ["O nome da conexão não pode ter caractere de controle nem de direção do texto."],
+      host: ["O host não pode ter caractere de controle nem de direção do texto."],
+      database: ["O banco de dados não pode ter caractere de controle nem de direção do texto."],
+      userName: ["O usuário do banco não pode ter caractere de controle nem de direção do texto."],
+      environmentName: ["O nome do ambiente não pode ter caractere de controle nem de direção do texto."],
+    });
+    expect(fieldErrors(createFolderSchema, { name: `Fábrica${character}`, parentID: "", color: "", environmentName: "", environmentColor: "", confirmCommands: "none", readOnly: "false" })).toEqual({
+      name: ["O nome da pasta não pode ter caractere de controle nem de direção do texto."],
+    });
+  });
+
+  it("no nome, a tabulação e a quebra de linha viram espaço na normalização (a da API), e não são recusadas; no host, são", () => {
+    expect(withoutControl("Fábrica\tNorte", true)).toBe(true);
+    expect(withoutControl("Fábrica\nNorte", true)).toBe(true);
+    expect(withoutControl("Fábrica\u0085Norte", true)).toBe(true);
+    expect(withoutControl("srv\tdb")).toBe(false);
+    expect(fieldErrors(createConnectionSchema, { ...form, name: "ERP\tNorte", host: "srv\tdb" })).toEqual({ host: ["O host não pode ter caractere de controle nem de direção do texto."] });
+  });
+
+  it("o caractere comum, o acento e o emoji passam", () => {
+    expect(createConnectionSchema.safeParse({ ...form, name: "Produção 🚀", host: "informix-prd.exemplo.invalid", userName: "joão" }).success).toBe(true);
+  });
+
+  it("o host tem até 255 caracteres, o banco de dados e o usuário até 128, contados depois de aparados", () => {
+    expect(createConnectionSchema.safeParse({ ...form, host: ` ${"h".repeat(255)} `, database: "d".repeat(128), userName: "u".repeat(128) }).success).toBe(true);
+    expect(fieldErrors(createConnectionSchema, { ...form, host: "h".repeat(256), database: "d".repeat(129), userName: "u".repeat(129) })).toEqual({
+      host: ["O host pode ter até 255 caracteres."],
+      database: ["O banco de dados pode ter até 128 caracteres."],
+      userName: ["O usuário do banco pode ter até 128 caracteres."],
+    });
+  });
+
+  it("a senha tem até 1.024 caracteres, contados como veio (ela não é aparada), na criação e na edição", () => {
+    for (const schema of [createConnectionSchema, editConnectionSchema, editWithoutPasswordSchema]) {
+      expect(schema.safeParse({ ...form, password: " ".repeat(1024) }).success).toBe(true);
+      expect(fieldErrors(schema, { ...form, password: `${"s".repeat(1024)} ` })).toEqual({ password: ["A senha do banco pode ter até 1.024 caracteres."] });
+    }
+  });
+});
+
+describe("editWithoutPasswordSchema: a edição da conexão sem senha gravada (RN-TRANSF-015)", () => {
+  it("exige a senha: não há o que manter, e vazio é “Informe a senha do banco.”", () => {
+    expect(fieldErrors(editWithoutPasswordSchema, { ...form, password: "" })).toEqual({ password: ["Informe a senha do banco."] });
+    const ok = editWithoutPasswordSchema.safeParse({ ...form, password: "nova" });
+    expect(ok.success && ok.data.password).toBe("nova");
+  });
+
+  it("o usuário continua obrigatório no formulário: tirá-lo é recusado no campo", () => {
+    expect(fieldErrors(editWithoutPasswordSchema, { ...form, userName: "" })).toEqual({ userName: ["Informe o usuário do banco."] });
+    expect(fieldErrors(editConnectionSchema, { ...form, userName: " " })).toEqual({ userName: ["Informe o usuário do banco."] });
   });
 });
 

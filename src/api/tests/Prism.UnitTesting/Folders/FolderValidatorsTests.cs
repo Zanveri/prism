@@ -302,4 +302,45 @@ public sealed class FolderValidatorsTests
         valid.ShouldNotHaveAnyValidationErrors();
         AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(confirmCommands: "Irreversible"), nameof(UpdateFolderCommand.ConfirmCommands));
     }
+
+    /// <summary>
+    /// RN-PASTA-001 (seção 34): o nome e o ambiente da pasta não têm caractere de controle nem de direção do texto, conferido depois da normalização (que
+    /// troca a tabulação e a quebra de linha por um espaço), na criação e na alteração, com a frase de cada um: a pasta exportada com um nome desses não
+    /// voltaria pela importação.
+    /// </summary>
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Theory(DisplayName = "Erro caractere de controle ou de direção do texto no nome ou no ambiente da pasta")]
+    [InlineData("\u202E")]
+    [InlineData("\u0007")]
+    [InlineData("\u0085X\u0080")]
+    [InlineData("\u2068")]
+    [InlineData("\u200F")]
+    public void Folder_ShouldBeError_ControlOrDirectionCharacter(string escaped)
+    {
+        //Arrange
+        var character = System.Text.RegularExpressions.Regex.Unescape(escaped);
+        var create = new CreateFolderValidator();
+        var update = new UpdateFolderValidator();
+
+        //Act
+        var createdName = create.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(name: $"Produ{character}ção"));
+        var updatedName = update.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(name: $"Produ{character}ção"));
+        var createdEnvironment = create.TestValidate(FolderFakers.ReturnCreateFolderCommandValid() with { EnvironmentName = $"Prod{character}uction" });
+
+        //Assert
+        createdName.ShouldHaveValidationErrorFor(command => command.Name).WithErrorCode("FOLDER_NAME_INVALID").WithErrorMessage("O nome da pasta não pode ter caractere de controle nem de direção do texto.");
+        updatedName.ShouldHaveValidationErrorFor(command => command.Name).WithErrorCode("FOLDER_NAME_INVALID").WithErrorMessage("O nome da pasta não pode ter caractere de controle nem de direção do texto.");
+        createdEnvironment.ShouldHaveValidationErrorFor(command => command.EnvironmentName).WithErrorCode("FOLDER_NAME_INVALID").WithErrorMessage("O ambiente não pode ter caractere de controle nem de direção do texto.");
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK tabulação e quebra de linha no nome da pasta viram espaço, e passam")]
+    public void CreateFolder_ShouldBeOK_TabAndNewLineAreNormalized()
+    {
+        //Act
+        var result = new CreateFolderValidator().TestValidate(FolderFakers.ReturnCreateFolderCommandValid(name: "Estoque\tProduction\nPRD"));
+
+        //Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
 }

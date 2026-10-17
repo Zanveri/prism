@@ -1,3 +1,5 @@
+import { transferCopy } from "@/app/connections/_lib/transfer.copy";
+
 import { tableTargetOf, type NavNode } from "./navigator-model";
 import { quoteIdentifier } from "./table-sql";
 import { navigatorCopy } from "./navigator.copy";
@@ -7,6 +9,8 @@ import { workbenchCopy } from "./workbench.copy";
 const copy = workbenchCopy.navigator.menu;
 /** Os itens que vieram da tela de Conexões quando ela passou para o navegador (RN-NAV-003). */
 const moved = navigatorCopy.menu;
+/** Exportar e importar conexões (RN-TRANSF-001). */
+const transfer = transferCopy.menu;
 
 /**
  * O que um item do menu faz. O modelo só descreve; quem executa é a tela (`navigator.tsx`), que tem a conexão, a aba e o cache. Por
@@ -30,14 +34,19 @@ export type MenuAction =
   | { type: "renameFolder" }
   | { type: "editFolder" }
   | { type: "moveFolder" }
-  | { type: "deleteFolder" };
+  | { type: "deleteFolder" }
+  // RN-TRANSF-001: o "Exportar conexões" com a linha (a conexão, ou a pasta com tudo dentro) marcada, ou nada no espaço vazio; o "Importar conexões" com a
+  // pasta da linha como o lugar, ou a raiz no espaço vazio.
+  | { type: "exportConnections" }
+  | { type: "importConnections" };
 
-export type MenuItem = { id: string; label: string; action: MenuAction; shortcut?: string; disabled?: boolean };
+/** `hint` diz por que a ação desabilitada não se aplica, embaixo do rótulo ("Não há pastas nem conexões para exportar."). */
+export type MenuItem = { id: string; label: string; action: MenuAction; shortcut?: string; disabled?: boolean; hint?: string };
 
 /** O que o menu precisa saber além da linha: o estado da conexão (só conta na linha da conexão) e se ela está sendo desconectada. */
 export type MenuState = { status: "connected" | "connecting" | "disconnected" | "failed"; busy: boolean };
 
-const item = (id: string, label: string, action: MenuAction, extra: Partial<Pick<MenuItem, "shortcut" | "disabled">> = {}): MenuItem => ({ id, label, action, ...extra });
+const item = (id: string, label: string, action: MenuAction, extra: Partial<Pick<MenuItem, "shortcut" | "disabled" | "hint">> = {}): MenuItem => ({ id, label, action, ...extra });
 
 /** RN-NAV-009: a tecla do "Renomear", na pasta e na conexão. O menu a mostra, e a árvore a trata pelo `keyActionFor`. */
 const renameShortcut = "F2";
@@ -59,10 +68,18 @@ export function keyActionFor(node: NavNode, press: KeyPress): MenuAction | null 
 
 /**
  * O menu do botão direito no espaço vazio do navegador (RN-NAV-003, pedido do dono): "Nova conexão" e "Nova pasta", que criam na raiz, sempre
- * habilitadas (RN-NAV-002). É o mesmo `ContextMenu` das linhas, nas mesmas regras de teclado e de foco.
+ * habilitadas (RN-NAV-002), e, num grupo depois delas, "Exportar conexões…" (nada marcado) e "Importar conexões…" (na raiz) (RN-TRANSF-001). Sem nenhuma
+ * pasta e nenhuma conexão no cofre (`hasItems` falso) não há o que exportar: o item fica desabilitado, com o motivo. É o mesmo `ContextMenu` das linhas, nas
+ * mesmas regras de teclado e de foco.
  */
-export function backgroundMenu(): MenuItem[][] {
-  return [[item("newConnection", moved.newConnection, { type: "newConnection" }), item("newFolder", moved.newFolder, { type: "newFolder" })]];
+export function backgroundMenu(hasItems = true): MenuItem[][] {
+  return [
+    [item("newConnection", moved.newConnection, { type: "newConnection" }), item("newFolder", moved.newFolder, { type: "newFolder" })],
+    [
+      item("exportConnections", transfer.exportConnections, { type: "exportConnections" }, hasItems ? {} : { disabled: true, hint: transfer.nothingToExport }),
+      item("importConnections", transfer.importConnections, { type: "importConnections" }),
+    ],
+  ];
 }
 
 /**
@@ -106,7 +123,8 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
 
       // Mover e Excluir eram da tela de Conexões (RN-NAV-003): lá, mover era trocar a pasta no formulário, e excluir, o botão dele. Valem em qualquer
       // estado: excluir uma conexão conectada encerra as sessões dela (RN-CONN-014). Renomear (RN-NAV-009) e Duplicar (RN-CONN-016) também: renomear não
-      // mexe na sessão, e a cópia nasce desconectada.
+      // mexe na sessão, e a cópia nasce desconectada. Exportar (RN-TRANSF-001), num grupo próprio antes de "Copiar nome", também: não mexe em sessão, em
+      // proteção nem no cofre.
       return [
         [connectOrDisconnect, newQuery],
         [refresh(!connected), item("editConnection", copy.editConnection, { type: "editConnection" })],
@@ -116,6 +134,7 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
           item("moveConnection", moved.moveConnection, { type: "moveConnection" }),
           item("deleteConnection", moved.deleteConnection, { type: "deleteConnection" }),
         ],
+        [item("exportConnection", transfer.exportConnection, { type: "exportConnections" })],
         [copyName],
       ];
     }
@@ -151,6 +170,8 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
 
     // As ações que a tela de Conexões tinha para a pasta, e "Nova conexão" e "Nova pasta" dentro dela, como a barra de ações (RN-NAV-002 e 003). O
     // "Renomear" (F2, RN-NAV-009) muda só o nome, como o da conexão; o "Editar pasta…" (RN-PASTA-006) abre o diálogo inteiro: o nome, a cor e o ambiente.
+    // Exportar as conexões dela (com tudo o que está dentro, a qualquer profundidade) e importar conexões nela, num grupo próprio antes de "Copiar nome"
+    // (RN-TRANSF-001).
     case "folder":
       return [
         [item("newConnection", moved.newConnection, { type: "newConnection" }), item("newFolder", moved.newFolder, { type: "newFolder" })],
@@ -160,6 +181,7 @@ export function menuFor(node: NavNode, state: MenuState): MenuItem[][] {
           item("moveFolder", copy.moveFolder, { type: "moveFolder" }),
           item("deleteFolder", copy.deleteFolder, { type: "deleteFolder" }),
         ],
+        [item("exportConnections", transfer.exportConnections, { type: "exportConnections" }), item("importHere", transfer.importHere, { type: "importConnections" })],
         [copyName],
       ];
 

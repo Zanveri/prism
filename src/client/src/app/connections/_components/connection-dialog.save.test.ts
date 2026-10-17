@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // mutação é de mentira: `mutate` roda a `mutationFn` e entrega a resposta à `onSuccess` dela, com o que recebeu. Os campos são lidos pelo esquema de verdade,
 // com o que o teste põe neles (`parseForm` lê o `FormData`, que aqui não há), os escondidos das Proteções inclusive.
 const rt = await vi.hoisted(async () => (await import("@/lib/testing/react-hooks")).createHookRuntime());
-const mocks = vi.hoisted(() => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }, create: vi.fn(), update: vi.fn(), test: vi.fn(), invalidate: vi.fn(async () => {}), fields: {} as Record<string, string> }));
+const mocks = vi.hoisted(() => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }, create: vi.fn(), update: vi.fn(), test: vi.fn(), invalidate: vi.fn(async () => {}), fields: {} as Record<string, string>, schemas: [] as unknown[] }));
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
@@ -19,7 +19,13 @@ vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal
 vi.mock("@/app/drivers/_components/driver-actions", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/app/drivers/_components/driver-actions")>()), useDriverActions: () => ({ install: vi.fn() }) }));
 vi.mock("@/lib/utils/form", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/utils/form")>();
-  return { ...original, parseForm: (_form: unknown, schema: { safeParse: (data: unknown) => { success: boolean; data?: unknown } }) => ({ ok: true, data: schema.safeParse(mocks.fields).data }) };
+  return {
+    ...original,
+    parseForm: (_form: unknown, schema: { safeParse: (data: unknown) => { success: boolean; data?: unknown } }) => {
+      mocks.schemas.push(schema);
+      return { ok: true, data: schema.safeParse(mocks.fields).data };
+    },
+  };
 });
 vi.mock("../_lib/connections.service", async (importOriginal) => ({ ...(await importOriginal<typeof import("../_lib/connections.service")>()), createConnection: mocks.create, updateConnection: mocks.update, runConnectionTest: mocks.test, invalidateLists: mocks.invalidate }));
 
@@ -27,7 +33,7 @@ import type { ApiResult } from "@/lib/api/prism-api";
 import { buttonLabeled, elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import { newVerification, unprotected, type Connection, type Folder } from "../_lib/connections.schema";
+import { editConnectionSchema, editWithoutPasswordSchema, newVerification, unprotected, type Connection, type Folder } from "../_lib/connections.schema";
 import { ConnectionDialog, type ConnectionDialogRequest } from "./connection-dialog";
 import { ConnectionFields } from "./connection-fields";
 import { UserPasswordDialog } from "./user-password-dialog";
@@ -97,6 +103,7 @@ const editing: ConnectionDialogRequest = { mode: "edit", connection: mes };
 beforeEach(() => {
   rt.unmount();
   for (const mock of [mocks.toast.success, mocks.toast.error, mocks.create, mocks.update, mocks.test]) mock.mockReset();
+  mocks.schemas = [];
 });
 
 describe("o que o formulário da conexão grava (RN-CONN-010, RN-PROT-001 a 003, RN-VERIF-001)", () => {
@@ -192,6 +199,28 @@ describe("Testar conexão (RN-CONN-013)", () => {
     // O campo existe no formulário: nada vai ao aviso central, e o foco vai a ele.
     expect(mocks.toast.error).not.toHaveBeenCalled();
     expect(focused).toEqual(["verificationQuery"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("a conexão sem senha gravada (RN-TRANSF-015): salvar exige a senha (não há o que manter); testar não, e a API diz que ela falta, no campo dela", async () => {
+    const noPassword: ConnectionDialogRequest = { mode: "edit", connection: { ...mes, hasPassword: false } };
+    mocks.update.mockResolvedValue({ ok: true, data: mes });
+    await save(noPassword, { ...fields, password: "nova" });
+    expect(mocks.schemas).toEqual([editWithoutPasswordSchema]);
+
+    const missing = "Esta conexão não tem senha gravada. Informe a senha do banco para testar.";
+    mocks.test.mockResolvedValue({ ok: false, error: { status: 422, code: "CONNECTION_CREDENTIALS_MISSING", title: "Falta a senha da conexão.", detail: null, errors: { password: [missing] }, extensions: {} } });
+    vi.stubGlobal("HTMLElement", class {});
+    const before = drawn(noPassword, vi.fn());
+    (before.form.props.ref as { current: unknown }).current = { elements: { namedItem: () => null } };
+    mocks.fields = fields;
+    (before.test!.props.onClick as () => void)();
+    await settle();
+
+    expect(mocks.schemas.at(-1)).toBe(editConnectionSchema);
+    const after = elementsOf(rt.render(() => ConnectionDialog({ request: noPassword, folders: [fabrica], openTabs: () => 0, onClose: vi.fn(), onSaved: vi.fn() })));
+    expect((after.find((element) => element.type === ConnectionFields)?.props.errors as Record<string, string>).password).toBe(missing);
+    expect(mocks.toast.error).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 });

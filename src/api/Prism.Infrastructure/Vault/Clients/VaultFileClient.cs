@@ -12,19 +12,6 @@ namespace Prism.Infrastructure.Vault.Clients;
 internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger logger) : IVaultFileClient
 {
     /// <summary>
-    /// Tetos para os parâmetros de derivação do cabeçalho: 256 MiB, 8 passadas e paralelismo 8, com o
-    /// padrão da RN-COFRE-002 (64 MiB, 3, 4) folgado dentro deles. O arquivo é editável por quem tem
-    /// acesso ao disco, e sem teto um `memoryKiB` absurdo faria a derivação tentar alocar terabytes
-    /// antes de qualquer conferência. Valem na leitura e na gravação: um cofre nunca nasce com um
-    /// cabeçalho que a leitura recusaria. Quem subir o padrão além deles sobe o teto na mesma mudança.
-    /// O piso de memória é o do Argon2: 8 KiB por linha de paralelismo.
-    /// </summary>
-    private const int MaxMemoryKiB = 256 * 1024;
-    private const int MaxIterations = 8;
-    private const int MaxParallelism = 8;
-    private const int MinMemoryKiBPerLane = 8;
-
-    /// <summary>
     /// RN-COFRE-013: a espera antes de cada nova tentativa de uma gravação, quando outro programa (antivírus, cópia de segurança) segura o arquivo: até
     /// cinco tentativas, com 50, 100, 200 e 400 ms entre elas (750 ms no total, menos de um segundo, que é quanto uma gravação pode segurar o semáforo do cofre a mais).
     /// </summary>
@@ -245,18 +232,14 @@ internal sealed class VaultFileClient(IOptions<VaultOptions> options, ILogger lo
 
     /// <summary>
     /// O System.Text.Json não recusa campo faltando (entrega nulo) nem confere tamanho: é aqui que
-    /// "campo faltando" e "parâmetro absurdo" viram arquivo corrompido, antes de qualquer derivação. O
-    /// formato atual e os anteriores que ainda se leem (RN-VERSAO-005): o cabeçalho é o mesmo nos dois, e o
-    /// anterior é migrado em `VaultService.Unlock`, ao abrir. A gravação só aceita o atual (`Write`).
+    /// "campo faltando" e "parâmetro absurdo" viram arquivo corrompido, antes de qualquer derivação. Os tetos dos
+    /// parâmetros e os tamanhos do sal, do nonce e da tag moram no <see cref="VaultHeaderLimits"/>, com os do arquivo
+    /// da exportação de conexões (RN-TRANSF-010): valem na leitura e na gravação. O formato atual e os anteriores que
+    /// ainda se leem (RN-VERSAO-005): o cabeçalho é o mesmo nos dois, e o anterior é migrado em `VaultService.Unlock`,
+    /// ao abrir. A gravação só aceita o atual (`Write`).
     /// </summary>
     private static bool IsWellFormed([NotNullWhen(true)] VaultFile? file)
-        => file is { Version: >= VaultCrypto.OldestVersion and <= VaultCrypto.Version } && IsWellFormed(file.Kdf) && IsSealedBox(file.WrappedKey) && file.WrappedKey.Ciphertext.Length == VaultCrypto.KeySize && IsSealedBox(file.Payload);
-
-    private static bool IsWellFormed(VaultKdf? kdf)
-        => kdf is { Algorithm: VaultCrypto.Algorithm, MemoryKiB: <= MaxMemoryKiB, Iterations: >= 1 and <= MaxIterations, Parallelism: >= 1 and <= MaxParallelism, Salt.Length: VaultCrypto.SaltSize } && kdf.MemoryKiB >= MinMemoryKiBPerLane * kdf.Parallelism;
-
-    private static bool IsSealedBox(VaultSealedBox? box)
-        => box is { Nonce.Length: VaultCrypto.NonceSize, Ciphertext: not null, Tag.Length: VaultCrypto.TagSize };
+        => file is { Version: >= VaultCrypto.OldestVersion and <= VaultCrypto.Version } && VaultHeaderLimits.IsWellFormed(file.Kdf) && VaultHeaderLimits.IsSealedBox(file.WrappedKey) && file.WrappedKey.Ciphertext.Length == VaultCrypto.KeySize && VaultHeaderLimits.IsSealedBox(file.Payload);
 
     /// <summary>De onde vieram os bytes do cofre: do arquivo principal ou, na falta dele, do `.bak`.</summary>
     private sealed record VaultSource(byte[] Bytes, bool FromBackup);

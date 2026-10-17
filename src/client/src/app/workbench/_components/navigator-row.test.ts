@@ -196,6 +196,13 @@ describe("a dica da linha da conexão (o que a lista da tela de Conexões mostra
   it("o endereço entra como texto, como veio", () => {
     expect(render(node, { connection: { ...connection, host: '"srv"<b>' }, status: "disconnected" })).toContain('title="MES Produção\nInformix · &quot;srv&quot;&lt;b&gt;:9089 / mes"');
   });
+
+  it("a conexão que chegou sem usuário e senha diz isso no fim do endereço, sem marca na linha (RN-TRANSF-015)", () => {
+    const bare = render(node, { connection: { ...connection, userName: "", hasPassword: false }, status: "disconnected" });
+    expect(bare).toContain('title="MES Produção\nInformix · srv-ifx:9089 / mes · sem usuário e senha"');
+    expect(bare.replace(/title="[^"]*"/g, "")).not.toContain("sem usuário");
+    expect(render(node, { connection: { ...connection, hasPassword: false }, status: "disconnected" })).toContain('title="MES Produção\nInformix · srv-ifx:9089 / mes · sem senha"');
+  });
 });
 
 describe("a etiqueta do ambiente na árvore (RN-CONN-015 e RN-PASTA-005)", () => {

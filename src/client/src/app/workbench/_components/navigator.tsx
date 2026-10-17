@@ -3,6 +3,8 @@ import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult 
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { DeleteConnectionDialog } from "@/app/connections/_components/delete-connection-dialog";
+import { ExportConnectionsDialog } from "@/app/connections/_components/export-connections-dialog";
+import { ImportConnectionsDialog } from "@/app/connections/_components/import-connections-dialog";
 import { MoveConnectionDialog } from "@/app/connections/_components/move-connection-dialog";
 import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
@@ -10,15 +12,18 @@ import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
+import type { ExportOrigin } from "@/app/connections/_lib/export-model";
 import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
+import { vaultLock } from "@/lib/api/vault-lock";
 
 import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
+import { credentialsMissingField } from "../_lib/credentials-missing";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
@@ -26,7 +31,7 @@ import { filterConnected } from "../_lib/navigator-connected";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
-import { revealOf } from "../_lib/navigator-reveal";
+import { importArrived, importRevealOf, revealOf, type ImportedItems } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { refreshKey } from "../_lib/grid-editing";
@@ -64,7 +69,16 @@ function levelOf<T>(result: UseQueryResult<T>, children: (data: T) => NavNode[])
 function statusOf(treeSession: UseQueryResult, connected: boolean): ConnectionStatus {
   if (treeSession.isFetching && treeSession.data === undefined) return "connecting";
   if (connected) return "connected";
-  return treeSession.isError ? "failed" : "disconnected";
+  // RN-TRANSF-016: a conexão sem usuário ou sem senha nem chegou ao driver; ela continua desconectada, e o "Editar conexão" abre.
+  return treeSession.isError && !lacksCredentials(treeSession) ? "failed" : "disconnected";
+}
+
+/**
+ * A sessão da árvore recusada por faltar o usuário ou a senha (RN-TRANSF-016): o nó fica como estava, fechado e sem a linha de erro (RN-ARVORE-005), e quem
+ * abre o "Editar conexão" é a página, pelo cache (`watchCredentialsMissing`).
+ */
+function lacksCredentials(treeSession: UseQueryResult): boolean {
+  return treeSession.isError && !treeSession.isFetching && credentialsMissingField(treeSession.error) !== null;
 }
 
 const isFetched = (path: NavPath): path is FetchedPath => path.type === "connection" || path.type === "database" || path.type === "objects" || path.type === "tableLevel";
@@ -92,6 +106,11 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   editFolder: <PencilIcon />,
   moveFolder: <FolderMoveIcon />,
   deleteFolder: <TrashIcon />,
+  // RN-TRANSF-001 e seção 9: exportar usa a seta de baixar que o app já tem; importar, a seta para cima, no mesmo traço.
+  exportConnection: <DownloadIcon />,
+  exportConnections: <DownloadIcon />,
+  importHere: <UploadIcon />,
+  importConnections: <UploadIcon />,
 };
 
 /**
@@ -105,6 +124,12 @@ type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connec
 
 /** O diálogo de cada ação de conexão do menu que tem diálogo. */
 const connectionActionTypes = { renameConnection: "rename", moveConnection: "move", deleteConnection: "delete" } as const;
+
+/**
+ * O "Exportar conexões" ou o "Importar conexões" aberto (RN-TRANSF-001), um de cada por janela, com a época do bloqueio em que abriu: o bloqueio, o "Sair" e
+ * o quinto erro de senha os fecham, e o que estava neles (as marcas, as senhas digitadas, o arquivo lido, a prévia) não sobrevive.
+ */
+type TransferDialog = { type: "export"; origin: ExportOrigin; epoch: number } | { type: "import"; targetFolderID: string | null; epoch: number };
 
 type NavigatorProps = {
   /** "Nova conexão" (RN-NAV-002 e 003): na pasta dada, ou na raiz (`null`). */
@@ -157,6 +182,15 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null);
   const [connectionAction, setConnectionAction] = useState<ConnectionAction | null>(null);
+  // RN-TRANSF-001: o diálogo de exportar ou de importar, que some quando o cofre fecha (a época do bloqueio mudou), com o que tinha.
+  const lockEpoch = useSyncExternalStore(vaultLock.subscribe, vaultLock.epoch, vaultLock.epoch);
+  const [transfer, setTransfer] = useState<TransferDialog | null>(null);
+  if (transfer !== null && transfer.epoch !== lockEpoch) setTransfer(null);
+  // RN-TRANSF-014: o que a importação acabou de criar, à espera de as listas o trazerem para a árvore mostrá-lo.
+  const [imported, setImported] = useState<ImportedItems | null>(null);
+  // A linha a trazer à vista e a receber o foco (a conexão salva ou duplicada, RN-NAV-004; a primeira importada, RN-TRANSF-014), uma vez por pedido.
+  const [rowFocus, setRowFocus] = useState<{ key: string; seq: number } | null>(null);
+  const focusRow = (key: string) => setRowFocus((current) => ({ key, seq: (current?.seq ?? 0) + 1 }));
   // O item escolhido na árvore. Mora aqui, e não na lista, porque a barra de ações age sobre ele (RN-NAV-002).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // A busca (RN-BUSCA-001): o texto, e o que a pessoa recolheu na tela filtrada, que vale só para aquele texto. Nada disto toca nos nós abertos.
@@ -215,7 +249,14 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const shown = useMemo(() => filterConnected(inEnvironment.folders, inEnvironment.connections, connectedKey === null ? null : new Set(connectedKey.split(" "))), [inEnvironment, connectedKey]);
   const tree = useMemo(() => treeNodes(buildConnectionTree(shown.folders, shown.connections)), [shown]);
 
-  const open = new Set([...expanded, ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
+  // RN-TRANSF-016: a conexão que a API recusou por faltar o usuário ou a senha fica fechada, como estava antes do clique; um efeito a fecha de vez.
+  const lackingCredentials = connectionList.filter((connection) => {
+    const session = sessionById.get(connection.id);
+    return session !== undefined && lacksCredentials(session);
+  });
+  const lackingKey = lackingCredentials.map((connection) => connection.id).join(" ");
+  const lackingKeys = new Set(lackingCredentials.map((connection) => navKey({ type: "connection", connectionId: connection.id })));
+  const open = new Set([...[...expanded].filter((key) => !lackingKeys.has(key)), ...tree.folderKeys.filter((key) => !collapsedFolders.has(key))]);
 
   const paths = [...expanded].map(parseNavKey);
   const fetchedPaths = paths.filter(isFetched);
@@ -257,6 +298,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     const plan = revealOf(revealTarget, folders.data ?? []);
     setReveal({ key: plan.key, seq: revealRequest.seq });
     setSelectedKey(plan.key);
+    focusRow(plan.key);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     if (search !== null && !search.rows.some((row) => row.key === plan.key)) setQuery("");
     // Os filtros que a escondem também saem (RN-NAV-010 e 013): a conexão salva ou duplicada sem o ambiente escolhido, ou desconectada, tem de aparecer.
@@ -265,6 +307,29 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       setOnlyConnected(false);
     }
   }
+
+  // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, as pastas até ele abrem e a primeira linha importada, na ordem da árvore, é
+  // escolhida e recebe o foco. Os filtros ficam como estavam: se um deles a esconde, o foco vai à pasta de destino, ou, quando o destino é a raiz ou também
+  // está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da conexão salva.
+  if (imported !== null && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(imported, folders.data, connections.data)) {
+    const plan = importRevealOf(imported, folders.data, connections.data);
+    setImported(null);
+    setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
+    const shownKeys = new Set([...shown.folders.map((folder) => navKey({ type: "folder", id: folder.id })), ...shown.connections.map((connection) => navKey({ type: "connection", connectionId: connection.id }))]);
+    const onView = (key: string | null): key is string => key !== null && shownKeys.has(key) && (search === null || search.rows.some((row) => row.key === key));
+    const key = onView(plan.first) ? plan.first : onView(plan.target) ? plan.target : (rows[0]?.key ?? null);
+    if (key !== null) {
+      setSelectedKey(key);
+      focusRow(key);
+    }
+  }
+
+  useEffect(() => {
+    for (const connectionId of lackingKey.split(" ").filter((id) => id !== "")) {
+      setNodeOpen(navKey({ type: "connection", connectionId }), false);
+      setNodeOpen(navKey({ type: "database", connectionId }), false);
+    }
+  }, [lackingKey, setNodeOpen]);
 
   const announcedReveal = useRef(0);
   useEffect(() => {
@@ -400,8 +465,8 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     openMenu(null, { x: event.clientX, y: event.clientY }, "menu");
   }
 
-  /** Os itens do menu: os da linha, ou os do espaço vazio do navegador (`null`). */
-  const menuGroupsOf = (node: NavNode | null) => (node === null ? backgroundMenu() : menuFor(node, menuStateOf(node)));
+  /** Os itens do menu: os da linha, ou os do espaço vazio do navegador (`null`), que sem nada no cofre não tem o que exportar (RN-TRANSF-001). */
+  const menuGroupsOf = (node: NavNode | null) => (node === null ? backgroundMenu((folders.data ?? []).length + connectionList.length > 0) : menuFor(node, menuStateOf(node)));
 
   /** Abre o menu da linha (RN-MENU-001), ou o do espaço vazio (`null`); a linha sem itens (Carregando…, erro) não tem menu. */
   function openMenu(node: NavNode | null, point: OpenMenu["point"], initialFocus: OpenMenu["initialFocus"]): boolean {
@@ -422,10 +487,12 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
 
   /** Executa o item escolhido. O menu só descreve a ação (`navigator-menu.ts`); aqui estão a conexão, as abas e o cache. */
   function runMenuAction(node: NavNode | null, action: MenuAction) {
-    // O espaço vazio do navegador: "Nova conexão" e "Nova pasta", na raiz.
+    // O espaço vazio do navegador: "Nova conexão" e "Nova pasta", na raiz; exportar com nada marcado, e importar na raiz (RN-TRANSF-001).
     if (node === null) {
       if (action.type === "newConnection") onNewConnection(null);
       else if (action.type === "newFolder") setFolderAction({ type: "create", parentID: null });
+      else if (action.type === "exportConnections") setTransfer({ type: "export", origin: { type: "all" }, epoch: lockEpoch });
+      else if (action.type === "importConnections") setTransfer({ type: "import", targetFolderID: null, epoch: lockEpoch });
       return;
     }
 
@@ -474,6 +541,18 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       case "copy":
         void copyText(action.text);
         return;
+      // RN-TRANSF-001: exportar a conexão (só ela marcada) ou a pasta (ela e tudo o que está dentro), e importar na pasta.
+      case "exportConnections": {
+        const folderId = folderIdOf(node);
+        if (connectionId !== null && node.kind === "connection") setTransfer({ type: "export", origin: { type: "connection", id: connectionId }, epoch: lockEpoch });
+        else if (folderId !== null) setTransfer({ type: "export", origin: { type: "folder", id: folderId }, epoch: lockEpoch });
+        return;
+      }
+      case "importConnections": {
+        const folderId = folderIdOf(node);
+        if (folderId !== null) setTransfer({ type: "import", targetFolderID: folderId, epoch: lockEpoch });
+        return;
+      }
       case "newConnection":
       case "newFolder":
       case "renameFolder":
@@ -551,7 +630,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   }
 
   const menuItems = (menu === null ? [] : menuGroupsOf(menu.node)).map((group) =>
-    group.map((item): ContextMenuItem => ({ id: item.id, label: item.label, shortcut: item.shortcut, disabled: item.disabled, icon: menuIcons[item.id], onSelect: () => menu && runMenuAction(menu.node, item.action) })),
+    group.map((item): ContextMenuItem => ({ id: item.id, label: item.label, shortcut: item.shortcut, disabled: item.disabled, hint: item.hint, icon: menuIcons[item.id], onSelect: () => menu && runMenuAction(menu.node, item.action) })),
   );
 
   /** O que há abaixo da barra de ações: a falha das listas, a espera por elas, o estado vazio, ou a busca e a árvore. */
@@ -625,7 +704,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
           scrollResetKey={searchText}
           selectedKey={selectedKey}
           onSelect={setSelectedKey}
-          reveal={reveal}
+          reveal={rowFocus}
           connectionById={connectionById}
           environments={environments}
           folderColors={folderColors}
@@ -681,6 +760,16 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       {failure?.kind === "failed" && failureConnection !== undefined ? <CheckFailureDialog connection={failureConnection.name} state={failure} onClose={() => setCheckFailure(null)} /> : null}
       {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
       {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
+      {transfer?.type === "export" ? <ExportConnectionsDialog origin={transfer.origin} onClose={() => setTransfer(null)} /> : null}
+      {transfer?.type === "import" ? (
+        <ImportConnectionsDialog
+          targetFolderID={transfer.targetFolderID}
+          onImported={(result, targetFolderID) => {
+            if (result.folderIDs.length + result.connectionIDs.length > 0) setImported({ folderIDs: result.folderIDs, connectionIDs: result.connectionIDs, targetFolderID });
+          }}
+          onClose={() => setTransfer(null)}
+        />
+      ) : null}
       {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog

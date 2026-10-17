@@ -14,6 +14,10 @@ export const prismEndpoints = {
   userConnectionDuplicate: (id: string) => `api/user/connections/${encodeURIComponent(id)}/duplicate`,
   userConnectionsTest: "api/user/connections/test",
   userConnectionVerification: (id: string) => `api/user/connections/${encodeURIComponent(id)}/verification`,
+  // Seção 34: exportar e importar conexões com as pastas (RN-TRANSF-008, 011 e 014).
+  userConnectionsExport: "api/user/connections/export",
+  userConnectionsImportPreview: "api/user/connections/import/preview",
+  userConnectionsImport: "api/user/connections/import",
   userDatabaseSessions: "api/user/database-sessions",
   userDatabaseSession: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}`,
   userDatabaseSessionDatabases: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/databases`,

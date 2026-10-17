@@ -923,4 +923,60 @@ public sealed class ConnectionRepositoryTests
         Assert.Equal(new EffectiveProtections(true, null, "all", null), result.Value.Protections);
         VerifySavedOnce(CancellationToken.None);
     }
+
+    /// <summary>
+    /// RN-TRANSF-015: o `PATCH` aceita o usuário vazio quando a conexão gravada já está sem usuário (o "Renomear" e o "Mover" de uma conexão importada sem
+    /// ele mandam o que ela tem), e a senha ausente mantém a gravada, que é a vazia. Decidido contra o documento que a função recebe.
+    /// </summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "OK renomear a conexão gravada sem usuário e senha, sem preencher nada")]
+    public async Task Update_ShouldBeOK_WhenTheStoredConnectionHasNoUser()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateConnection(folderID: null, name: "DATA FIX") with { UserName = string.Empty, Password = string.Empty };
+        var repository = CreateRepository(Document(connections: [target]));
+        var renamed = ConnectionFakers.Create(iD: target.ID, folderID: null, name: "DATA FIX PRD", host: target.Host, port: target.Port, userName: string.Empty, password: string.Empty, createdAt: target.CreatedAt);
+
+        //Act
+        var result = await repository.Update(renamed, null, null, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        var saved = Assert.Single(_saved!.Connections);
+        Assert.Equal("DATA FIX PRD", saved.Name);
+        Assert.Equal(string.Empty, saved.UserName);
+        Assert.Equal(string.Empty, saved.Password);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
+    }
+
+    /// <summary>
+    /// RN-TRANSF-015: tirar o usuário de uma conexão que tem um continua sendo a recusa do formulário, 422 `CONNECTION_INVALID` no campo do usuário, contra o
+    /// documento mais recente (o handler pode ter lido a conexão antes de outra janela gravar o usuário). Nada é regravado.
+    /// </summary>
+    [Trait("ConnectionRepository", "Update")]
+    [Theory(DisplayName = "Erro tirar o usuário de uma conexão que tem um")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Update_ShouldBeError_WhenRemovingTheUserOfAConnectionThatHasOne(string userName)
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var target = VaultFakers.CreateConnection(folderID: null, name: "NOMINAL", userName: "nominal");
+        var current = Document(connections: [target]);
+        var repository = CreateRepository(current);
+        var changed = ConnectionFakers.Create(iD: target.ID, folderID: null, name: "NOMINAL", host: target.Host, port: target.Port, userName: userName, createdAt: target.CreatedAt);
+
+        //Act
+        var result = await repository.Update(changed, null, null, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("CONNECTION_INVALID", result.Error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
+        Assert.Equal(["Informe o usuário do banco."], ((Dictionary<string, string[]>)result.Error.Extensions["errors"]!)["UserName"]);
+        Assert.Same(current, _saved);
+        VerifySavedWithPasswordOnce(null, cancellationToken);
+    }
 }
+

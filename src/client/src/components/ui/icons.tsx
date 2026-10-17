@@ -243,6 +243,15 @@ export function DownloadIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** A seta para cima do "Importar conexões…" (seção 9 da especificação): a de baixar, invertida, no mesmo traço. */
+export function UploadIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 9.5v-7M5 5.2l3-3 3 3M3 12.5h10" />
+    </Icon>
+  );
+}
+
 export function PowerIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

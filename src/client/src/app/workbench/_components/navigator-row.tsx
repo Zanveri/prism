@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils/cn";
 
 import { checkView, type CheckState } from "../_lib/connection-checks";
 import { connectionChecksCopy } from "../_lib/connection-checks.copy";
+import { credentialsHint } from "../_lib/credentials-missing";
 import { actionsWidth as actionsWidthOf, navigatorMetrics, rowIndent } from "../_lib/navigator-density";
 import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
 import type { MatchRange } from "../_lib/navigator-search";
@@ -175,7 +176,8 @@ export function NavigatorRow({ node, density = "comfortable", index, open, tabba
   const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : null;
   // A conexão mostra na dica o que a lista da tela de Conexões trazia embaixo do nome e a árvore não mostra: o banco e o endereço (RN-NAV-003), e a última
   // verificação (RN-VERIF-003).
-  const tip = isConnection && connection ? `${name}\n${navigatorCopy.row.connectionHint(engineOption(connection.engine).label, connection.host, connection.port, connection.database)}${view === null ? "" : `\n${view.tip}`}` : node.detail ? `${name} — ${node.detail}` : name;
+  // RN-TRANSF-015: a conexão que chegou sem usuário e senha diz isso no fim da linha do endereço, sem marca na árvore.
+  const tip = isConnection && connection ? `${name}\n${navigatorCopy.row.connectionHint(engineOption(connection.engine).label, connection.host, connection.port, connection.database)}${credentialsHint(connection)}${view === null ? "" : `\n${view.tip}`}` : node.detail ? `${name} — ${node.detail}` : name;
 
   return (
     <div

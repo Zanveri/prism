@@ -241,4 +241,36 @@ public sealed class OpenDatabaseSessionHandlerTests
         _databaseSessionService.VerifyNoOtherCalls();
         _vaultService.VerifyNoOtherCalls();
     }
+
+    /// <summary>
+    /// RN-TRANSF-016 e RN-SESSAO-003: a conexão que a importação trouxe sem usuário, ou com o usuário e sem a senha (RN-TRANSF-015), nem chega ao registro de
+    /// sessões (nem ao driver, nem à recusa do driver não instalado, que é dele): 422 `CONNECTION_CREDENTIALS_MISSING` na forma do erro de campo, no campo que
+    /// falta. Vale também para outro banco do servidor (RN-ARVORE-006), que usa as mesmas credenciais.
+    /// </summary>
+    [Trait("OpenDatabaseSessionHandler", "OpenDatabaseSessionCommand")]
+    [Theory(DisplayName = "Erro conexão sem usuário ou sem senha é recusada antes do driver, no campo que falta")]
+    [InlineData("", "", null, "UserName")]
+    [InlineData("  ", "senha", null, "UserName")]
+    [InlineData("datafix", "", null, "Password")]
+    [InlineData("datafix", "", "sysmaster", "Password")]
+    [InlineData("", "", "sysmaster", "UserName")]
+    public async Task Handle_ShouldBeError_CredentialsMissing(string userName, string password, string? database, string field)
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var record = VaultFakers.CreateConnection(engine: EDatabaseEngine.Informix) with { UserName = userName, Password = password };
+        _vaultService.SetupGet(v => v.Generation).Returns(Generation);
+        _connectionQueries.Setup(q => q.GetRecordByID(record.ID, cancellationToken)).ReturnsAsync(Result.Success<VaultConnectionRecord?, EVaultError>(record));
+
+        //Act
+        var result = await CreateHandler().Handle(new OpenDatabaseSessionCommand { ConnectionID = record.ID, Database = database }, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsFailure);
+        Assert.Equal("CONNECTION_CREDENTIALS_MISSING", result.Error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, result.Error.StatusCode);
+        Assert.Equal(["CONNECTION_CREDENTIALS_MISSING"], ((Dictionary<string, string[]>)result.Error.Extensions["errorCodes"]!)[field]);
+        Assert.Single((Dictionary<string, string[]>)result.Error.Extensions["errors"]!);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
 }

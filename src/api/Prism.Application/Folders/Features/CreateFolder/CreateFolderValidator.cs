@@ -1,7 +1,8 @@
 using FluentValidation;
 using Prism.Application.Common.Environments;
 using Prism.Application.Common.Protections;
-using Prism.Core.Extensions;
+using Prism.Application.Common.Texts;
+using Prism.Application.Folders.Models;
 
 namespace Prism.Application.Folders.Features.CreateFolder;
 
@@ -9,11 +10,13 @@ public sealed class CreateFolderValidator : AbstractValidator<CreateFolderComman
 {
     public CreateFolderValidator()
     {
-        // RN-PASTA-001: de 1 a 60 caracteres, medidos sobre o nome normalizado, que é o que o handler grava.
+        // RN-PASTA-001: de 1 a 60 caracteres, medidos sobre o nome normalizado, que é o que o handler grava, e sem caractere de controle nem de direção do
+        // texto (`FolderRules`, a regra que a importação de conexões também aplica).
         // O `NormalizeName` aceita nulo (um corpo sem o campo chega vazio, e o `null` explícito o MVC já recusa).
-        RuleFor(request => request.Name).Must(name => name.NormalizeName().Length is >= 1 and <= 60).WithMessage("O nome da pasta deve ter de 1 a 60 caracteres.").WithErrorCode("FOLDER_NAME_INVALID");
+        RuleFor(request => request.Name).MustPass(FolderRules.NameRefusal).WithErrorCode("FOLDER_NAME_INVALID");
 
-        // RN-PASTA-005: o ambiente tem as regras do ambiente da conexão, e a recusa vai no código das pastas, no campo de cada um.
+        // RN-PASTA-005: o ambiente tem as regras do ambiente da conexão (também sem caractere de controle nem de direção do texto, RN-PASTA-001), e a
+        // recusa vai no código das pastas, no campo de cada um.
         RuleFor(request => request.EnvironmentName).MustBeAnEnvironmentName().WithErrorCode("FOLDER_NAME_INVALID");
         RuleFor(request => request.EnvironmentColor).MustBeAnEnvironmentColor().WithErrorCode("FOLDER_NAME_INVALID");
 

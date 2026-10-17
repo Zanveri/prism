@@ -73,11 +73,11 @@ export function testConnection(input: ConnectionInput, id?: string): Promise<Api
 
 /**
  * "Testar conexão" como o formulário a usa: as recusas que ele mostra no lugar voltam como valor — o 422 de campos, a
- * falha do banco (que leva a mensagem dele) e o driver não instalado (RN-DRIVER-006, com "Instalar driver") — e as demais
- * lançam, para o aviso central.
+ * falha do banco (que leva a mensagem dele), o driver não instalado (RN-DRIVER-006, com "Instalar driver") e a conexão sem
+ * senha gravada testada com a senha em branco (RN-TRANSF-016, no campo da senha) — e as demais lançam, para o aviso central.
  */
 export async function runConnectionTest(input: ConnectionInput, id?: string): Promise<ApiResult<void>> {
-  return allowRefusal(await testConnection(input, id), "CONNECTION_INVALID", "DATABASE_CONNECTION_FAILED", driverNotInstalledCode);
+  return allowRefusal(await testConnection(input, id), "CONNECTION_INVALID", "DATABASE_CONNECTION_FAILED", driverNotInstalledCode, "CONNECTION_CREDENTIALS_MISSING");
 }
 
 /**

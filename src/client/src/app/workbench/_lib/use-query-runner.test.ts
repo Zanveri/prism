@@ -7,6 +7,7 @@ import { platformScriptShortcut } from "./script-run";
 import { scriptsCopy } from "./scripts.copy";
 import { countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { createQueryRunner, isBusyState, type RunnerState } from "./use-query-runner";
+import { credentialsRequests } from "./credentials-missing";
 import { workbenchCopy } from "./workbench.copy";
 
 // As rotas de verdade, embrulhadas: os testes da rede de segurança fazem uma delas lançar um erro qualquer.
@@ -470,6 +471,35 @@ describe("falhas que não são do comando", () => {
     expect(runner.getState()).toEqual({ ...databaseError('FATAL: password authentication failed for user "mes"', null, null), source: "connection" });
     expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de DATABASE_CONNECTION_FAILED", 'FATAL: password authentication failed for user "mes"');
     expect(onSession).not.toHaveBeenCalled();
+  });
+
+  it("a conexão sem usuário ou sem senha (RN-TRANSF-016): a aba fica como estava, sem aviso, e pede o “Editar conexão” dela", async () => {
+    const { api, toast, onSession, runner } = setup();
+    credentialsRequests.clear();
+    api.on(`POST ${sessions}`, problem(422, "CONNECTION_CREDENTIALS_MISSING", { errors: { userName: ["Esta conexão não tem usuário gravado."] } }));
+
+    await runner.run({ sql: "select 1", offset: 0 });
+
+    expect(runner.getState()).toEqual({ status: "idle" });
+    expect([toast.error, toast.warning, toast.success].flatMap((mock) => mock.mock.calls)).toEqual([]);
+    expect(onSession).not.toHaveBeenCalled();
+    expect(credentialsRequests.pending()).toMatchObject({ connectionId: "c1" });
+    credentialsRequests.clear();
+  });
+
+  it("com linhas na tela, a recusa por faltar a senha as deixa como estavam, e o comando não sai", async () => {
+    // A aba que já tinha linhas e perdeu a sessão (o bloqueio, por exemplo): a próxima execução abre outra.
+    const { api, result } = await withResult();
+    credentialsRequests.clear();
+    const next = createQueryRunner({ connectionId: "c1", queryClient: createQueryClient({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }), toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }, onSession: vi.fn(), initial: { state: result, sessionId: null } });
+    api.on(`POST ${sessions}`, problem(422, "CONNECTION_CREDENTIALS_MISSING", { errors: { password: ["Esta conexão não tem senha gravada."] } }));
+
+    await next.run({ sql: "select 2", offset: 0 });
+
+    expect(next.getState()).toMatchObject({ status: "rows", id: result.id });
+    expect(api.routes().filter((route) => route.endsWith("/queries"))).toHaveLength(1);
+    expect(credentialsRequests.pending()).toMatchObject({ connectionId: "c1" });
+    credentialsRequests.clear();
   });
 
   it("driver do banco não instalado ao abrir a sessão: a frase da API na área de resultado, pronta para 'Instalar driver', e o aviso central (RN-DRIVER-006)", async () => {

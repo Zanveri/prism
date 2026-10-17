@@ -54,6 +54,11 @@ internal sealed class TestConnectionHandler(IConnectionQueries connectionQueries
             if (read.Value is not { } record)
                 return UnitResult.Failure(ConnectionErrors.NotFound(id));
 
+            // RN-TRANSF-016: a conexão que a importação trouxe sem a senha (RN-TRANSF-015) não é testada com a senha vazia: a recusa diz, no campo da
+            // senha, que é preciso informá-la. Vem antes da do servidor: sem senha gravada não há o que a RN-CONN-004 proteger, e a resposta que resolve é a mesma.
+            if (string.IsNullOrEmpty(record.Password))
+                return UnitResult.Failure(ConnectionErrors.CredentialsMissingToTest());
+
             // RN-CONN-013 com a RN-CONN-004: a senha gravada só vai ao servidor para o qual foi gravada. A recusa vem antes de qualquer conexão.
             if (!ConnectionRules.SameServer(record.Host, record.Port, request.Host, request.Port))
                 return UnitResult.Failure(ConnectionErrors.PasswordRequiredToTestOtherServer());

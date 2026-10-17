@@ -52,3 +52,14 @@ export function parseForm<T extends Record<string, unknown>>(form: HTMLFormEleme
 export function fieldAria(id: string, error: string | undefined) {
   return { "aria-invalid": error ? true : undefined, "aria-describedby": error ? `${id}-error` : undefined };
 }
+
+/**
+ * O Enter num `<input>` de um formulário: o navegador o transforma em envio do formulário (a submissão implícita), inclusive numa caixa de marcar, num rádio
+ * e numa busca, e também quando o botão de enviar está fora dele, ligado pelo atributo `form`. Devolve o `id` do campo, para quem chama decidir se ali o
+ * Enter envia; `null` para outra tecla, e para o Enter num botão ou numa lista, que fazem o que é deles (o clique, a escolha).
+ */
+export function enterInputID(event: { key: string; target: unknown }): string | null {
+  if (event.key !== "Enter") return null;
+  const target = event.target as { tagName?: unknown; id?: unknown } | null;
+  return target !== null && typeof target === "object" && target.tagName === "INPUT" ? String(target.id ?? "") : null;
+}
