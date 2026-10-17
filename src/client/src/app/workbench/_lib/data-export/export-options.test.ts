@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dataFormats, defaultBom, defaultOptions, extensionOf, formatSentence, formattingProblems, isTextFormat, type FormatOptions } from "./export-options";
+import { dataFormats, defaultBom, defaultOptions, duplicateOf, extensionOf, formatSentence, formattingProblems, isTextFormat, type FormatOptions } from "./export-options";
 
 const options = (change: (base: FormatOptions) => void = () => {}): FormatOptions => {
   const base = defaultOptions({ schema: "estoque", table: "pedido" });
@@ -60,6 +60,12 @@ describe("as recusas da Formatação, no campo, pelo caminho da API", () => {
 
   it("SQL: duas colunas com o mesmo nome fariam um INSERT que o banco recusa", () => {
     expect(formattingProblems("sql", options(), { ...context, columns: ["id", "nome", "id"] })).toEqual({ columns: "O resultado tem duas colunas chamadas id: deixe uma de fora na Extração." });
+  });
+
+  it("SQL: com mais de um nome repetido, a frase diz o que aparece primeiro, como a API", () => {
+    expect(duplicateOf(["a", "b", "b", "a"])).toBe("a");
+    expect(duplicateOf(["b", "a", "a"])).toBe("a");
+    expect(duplicateOf(["id", "ID"])).toBeNull();
   });
 
   it("DbUnit: a tabela obrigatória no resultado, como a do SQL", () => {

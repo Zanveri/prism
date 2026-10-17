@@ -128,13 +128,14 @@ function nameProblem(text: string, required: boolean): string | undefined {
   return undefined;
 }
 
-/** O primeiro nome que aparece duas vezes entre as colunas que vão no arquivo. */
-function duplicateOf(columns: readonly string[]): string | null {
-  const seen = new Set<string>();
-  for (const name of columns) {
-    if (seen.has(name)) return name;
-    seen.add(name);
-  }
+/**
+ * O nome repetido entre as colunas que vão no arquivo (também no "Copiar como SQL", RN-GRADE-016): na ordem em que cada nome aparece primeiro, como o
+ * `GroupBy` da API (`ExportRequestRules`), para que a frase seja a mesma dos dois lados quando mais de um nome se repete.
+ */
+export function duplicateOf(columns: readonly string[]): string | null {
+  const counts = new Map<string, number>();
+  for (const name of columns) counts.set(name, (counts.get(name) ?? 0) + 1);
+  for (const [name, count] of counts) if (count > 1) return name;
   return null;
 }
 
