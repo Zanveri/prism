@@ -1,9 +1,10 @@
-import { pushToast, type ToastItem, type ToastTone } from "./toast-queue";
+import { pushToast, type ToastAction, type ToastItem, type ToastTone } from "./toast-queue";
 
+/** `action`: o botão do aviso (RN-AVISO-006); com ele o aviso fica 8 segundos. */
 export type ToastApi = {
-  success(title: string, description?: string): void;
-  warning(title: string, description?: string): void;
-  error(title: string, description?: string): void;
+  success(title: string, description?: string, action?: ToastAction): void;
+  warning(title: string, description?: string, action?: ToastAction): void;
+  error(title: string, description?: string, action?: ToastAction): void;
 };
 
 /**
@@ -13,11 +14,11 @@ export type ToastApi = {
  * Quem entrega o aviso, qualquer que seja a tela, não precisa saber do bloqueio.
  */
 export function createToastApi(setQueue: (update: (queue: ToastItem[]) => ToastItem[]) => void, isBlocked: () => boolean, newId: () => string = () => crypto.randomUUID()): ToastApi {
-  const push = (tone: ToastTone) => (title: string, description?: string) => {
+  const push = (tone: ToastTone) => (title: string, description?: string, action?: ToastAction) => {
     if (isBlocked()) return;
 
     const id = newId();
-    setQueue((current) => pushToast(current, { tone, title, description }, id));
+    setQueue((current) => pushToast(current, { tone, title, description, ...(action === undefined ? {} : { action }) }, id));
   };
 
   return { success: push("success"), warning: push("warning"), error: push("error") };

@@ -201,6 +201,16 @@ describe("o menu de contexto da célula", () => {
     expect(cellMenu(state()).flat().some((item) => item.id === "autoRefresh")).toBe(false);
   });
 
+  it("\"Exportar dados…\" (RN-EXPORT-001) vem num grupo próprio, depois do da vista e antes dos itens da linha; o que não se aplica vem desabilitado com o motivo", () => {
+    const groups = cellMenu(state({ refresh: { editable: true }, exportData: { editable: true } }));
+
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([["copy", "paste", "edit", "setNull", "undo"], ["refresh"], ["exportData"], ["newRow", "duplicateRow", "deleteRow"]]);
+    expect(shown([groups[2]])).toEqual([[["Exportar dados…", false, null]]]);
+    expect(shown([cellMenu(state({ exportData: { editable: false, reason: "Não há resultado para exportar." } }))[1]])).toEqual([[["Exportar dados…", true, "Não há resultado para exportar."]]]);
+    // A grade sem a entrada (quem não a passa) não tem o item.
+    expect(cellMenu(state()).flat().some((item) => item.id === "exportData")).toBe(false);
+  });
+
   it("os atalhos que a grade trata vão à direita: F2 edita, Alt+Insert adiciona a linha, Alt+Delete a exclui (RN-EDIT-015)", () => {
     const items = cellMenu(state()).flat();
 

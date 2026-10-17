@@ -44,6 +44,10 @@ export const prismEndpoints = {
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
   userDriverInstall: (id: string) => `api/user/drivers/${encodeURIComponent(id)}/install`,
+  // RN-EXPORT-016: os trabalhos em segundo plano (a exportação de dados), um registro só para todas as janelas.
+  userTransfers: "api/user/transfers",
+  userTransferExports: "api/user/transfers/exports",
+  userTransfer: (id: string) => `api/user/transfers/${encodeURIComponent(id)}`,
 } as const;
 
 function tablePath(id: string, schema: string, table: string) {

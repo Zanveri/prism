@@ -375,3 +375,34 @@ describe("a execução da atualização automática na área de resultado (RN-GR
     }
   });
 });
+
+describe("o \"Exportar…\" da área de resultado (RN-EXPORT-001)", () => {
+  const records = { name: "estoque.pedido", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+  const enabled = { blocker: null, onExport: noop };
+  const panel = (props: Partial<Parameters<typeof ResultPanel>[0]>) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { ...rowsState, read: true }, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop, ...props })));
+
+  it("nos Registros, no rodapé, logo depois de \"Exportar CSV\", com a dica dos Registros", () => {
+    const markup = panel({ records, exporter: enabled });
+
+    expect(markup.indexOf("Exportar CSV")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Exportar…")).toBeGreaterThan(markup.indexOf("Exportar CSV"));
+    expect(markup).toContain('title="Exportar todas as linhas da tabela, com o filtro e a ordem da aba, em CSV ou outro formato"');
+  });
+
+  it("no resultado de um comando, na barra da área, antes de recolher e maximizar, também com a área recolhida", () => {
+    const actions = createElement(ResultActions, { mode: "split", onAction: noop });
+    const markup = panel({ exporter: enabled, actions });
+    expect(markup).toContain('title="Exportar todas as linhas deste resultado, em CSV ou outro formato"');
+    expect(markup.indexOf("Exportar…")).toBeLessThan(markup.indexOf("Recolher"));
+
+    expect(panel({ exporter: enabled, actions, collapsed: true })).toContain("Exportar…");
+  });
+
+  it("sem resultado continua lá, desabilitado sem sair do Tab (`aria-disabled`), com o motivo na dica e para o leitor de tela", () => {
+    const markup = panel({ state: { status: "idle" }, exporter: { blocker: "Não há resultado para exportar.", onExport: noop } });
+
+    expect(markup).toMatch(/<button[^>]*aria-disabled="true"[^>]*title="Não há resultado para exportar."/);
+    expect(markup).toMatch(/<span id="[^"]+" class="sr-only">Não há resultado para exportar.<\/span>/);
+  });
+});

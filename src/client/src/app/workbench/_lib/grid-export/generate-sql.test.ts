@@ -218,8 +218,12 @@ describe("generateSql: texto com quebra de linha, retorno de carro ou tabulaçã
   );
   const insertInto = (values: string[]) => values.map((value) => `INSERT INTO "public"."orders" ("id", "note") VALUES (${value});`).join("\n");
 
-  it.each([1, 2] as const)("banco %i: a quebra de linha e a tabulação vão dentro das aspas, como estão; o retorno de carro por CHR(13); nenhuma linha fica de fora", (engine) => {
-    expect(generateSql("insert", notes, target(["id"], engine))).toBe(insertInto([`1, 'linha1${LF}linha2'`, `2, 'a' || CHR(13) || '${LF}b${TAB}c'`, "3, NULL", "4, 'simples'"]));
+  it("Db2: a quebra de linha e a tabulação vão dentro das aspas, como estão; o retorno de carro por CHR(13); nenhuma linha fica de fora", () => {
+    expect(generateSql("insert", notes, target(["id"], 2))).toBe(insertInto([`1, 'linha1${LF}linha2'`, `2, 'a' || CHR(13) || '${LF}b${TAB}c'`, "3, NULL", "4, 'simples'"]));
+  });
+
+  it("PostgreSQL: a quebra de linha e a tabulação vão dentro das aspas, como estão; o retorno de carro como \\r num E'...', um literal só (RN-EXPORT-011); nenhuma linha fica de fora", () => {
+    expect(generateSql("insert", notes, target(["id"], 1))).toBe(insertInto([`1, 'linha1${LF}linha2'`, `2, E'a\\r${LF}b${TAB}c'`, "3, NULL", "4, 'simples'"]));
   });
 
   it.each(engines)("banco %i: o script de cada tipo de comando atravessa o editor da aba de consulta (CodeMirror) sem mudar, e o valor com CR, CRLF e CR no fim é lido de volta (RN-GRADE-006)", (engine) => {

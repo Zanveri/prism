@@ -1,0 +1,139 @@
+{
+  "rule": "RN-EXPORT-013 e 024: o nome da planilha. Na tela, sheetNameOf (to-xlsx.ts); na API, ExportText.SheetNameOf.",
+  "notes": [
+    "value é o nome da origem, texto ou { codePoints: [...] }; expected, o nome da planilha. Os 31 caracteres são unidades UTF-16, como o Excel conta."
+  ],
+  "cases": [
+    {
+      "name": "nome comum",
+      "value": "pedido",
+      "expected": "pedido"
+    },
+    {
+      "name": "os proibidos viram _",
+      "value": "a[b]c:d*e?f/g\\h",
+      "expected": "a_b_c_d_e_f_g_h"
+    },
+    {
+      "name": "espaço e apóstrofo nas pontas saem",
+      "value": "  'nome'  ",
+      "expected": "nome"
+    },
+    {
+      "name": "só apóstrofos é o padrão",
+      "value": "''",
+      "expected": "Resultado"
+    },
+    {
+      "name": "vazio é o padrão",
+      "value": "",
+      "expected": "Resultado"
+    },
+    {
+      "name": "History é reservado",
+      "value": "History",
+      "expected": "History_"
+    },
+    {
+      "name": "HISTORY também",
+      "value": "HISTORY",
+      "expected": "HISTORY_"
+    },
+    {
+      "name": "history também",
+      "value": "history",
+      "expected": "history_"
+    },
+    {
+      "name": "History com espaço nas pontas",
+      "value": " History ",
+      "expected": "History_"
+    },
+    {
+      "name": "Histórico não é reservado",
+      "value": "Histórico",
+      "expected": "Histórico"
+    },
+    {
+      "name": "32 caracteres viram 31",
+      "value": "abcdefghijklmnopqrstuvwxyz012345",
+      "expected": "abcdefghijklmnopqrstuvwxyz01234"
+    },
+    {
+      "name": "o corte não parte um par",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa🙂",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "o emoji que cabe fica",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa🙂",
+      "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa🙂"
+    },
+    {
+      "name": "o espaço no fim do corte sai",
+      "value": "abcdefghijklmnopqrstuvwxyz0123 x",
+      "expected": "abcdefghijklmnopqrstuvwxyz0123"
+    },
+    {
+      "name": "os controles saem",
+      "value": "a\tb\nc\u0000d\u007fe\u0085f",
+      "expected": "abcdef"
+    },
+    {
+      "name": "o par substituto solto sai",
+      "value": {
+        "codePoints": [
+          97,
+          55357,
+          98
+        ]
+      },
+      "expected": "ab"
+    },
+    {
+      "name": "U+FFFE sai",
+      "value": "a\ufffeb",
+      "expected": "ab"
+    },
+    {
+      "name": "U+FEFF nas pontas sai",
+      "value": "\ufeffnome\ufeff",
+      "expected": "nome"
+    },
+    {
+      "name": "espaço sem quebra nas pontas sai",
+      "value": "\u00a0nome\u3000",
+      "expected": "nome"
+    },
+    {
+      "name": "U+202E no meio fica",
+      "value": "a\u202eb",
+      "expected": "a\u202eb"
+    },
+    {
+      "name": "o resultado de uma consulta",
+      "value": "resultado",
+      "expected": "resultado"
+    },
+    {
+      "name": "marcação fica, e o XML a escapa no workbook",
+      "value": "<script>",
+      "expected": "<script>"
+    },
+    {
+      "name": "o fim de CDATA perde os colchetes",
+      "value": "]]>",
+      "expected": "__>"
+    },
+    {
+      "name": "um escape já escrito fica",
+      "value": "_x0041_",
+      "expected": "_x0041_"
+    },
+    {
+      "name": "aspas ficam",
+      "value": "O\"Brien",
+      "expected": "O\"Brien"
+    }
+  ]
+}

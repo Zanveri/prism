@@ -118,4 +118,27 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// anteriores ficam gravadas (`Applied`). O cursor aberto fecha antes, como antes de qualquer comando. Devolve quantas foram gravadas.
     /// </summary>
     Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EXPORT-017, o começo da leitura da exportação, numa conexão à parte que só ela usa: o prazo de espera de trava (RN-EDIT-010) e, no
+    /// PostgreSQL, a forma do texto que o servidor escreve (`DateStyle`, `extra_float_digits`, `bytea_output`) e a transação `REPEATABLE READ READ ONLY`
+    /// em que a contagem e a leitura veem o mesmo instante do banco. No Db2 e no Informix não há transação: a leitura é a de uma sessão nova.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EXPORT-017: o `SELECT COUNT(*)` sobre o comando, como no "Contar total", depois do <see cref="BeginExportAsync"/> e antes da leitura; no
+    /// PostgreSQL, num ponto de salvamento só dele, para a recusa dele não estragar a transação. A recusa do banco é um sucesso sem total (nulo): a
+    /// exportação segue sem ele. A falha é a da conexão que não serve mais.
+    /// </summary>
+    Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken);
+
+    /// <summary>RN-EXPORT-017: envia o comando da exportação e devolve as colunas do resultado, com o leitor aberto para o <see cref="ReadExportRowsAsync"/>.</summary>
+    Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EXPORT-017: o lote seguinte de linhas da exportação, do leitor aberto pelo <see cref="StartExportReadAsync"/>, cada valor inteiro (sem o corte da
+    /// grade), lido em pedaços onde o driver deixa, e com os tetos do plano. No fim do resultado o leitor fecha, e a transação do PostgreSQL é confirmada.
+    /// </summary>
+    Task<Result<ExportBatch, DatabaseFailure>> ReadExportRowsAsync(ExportReadPlan plan, CancellationToken cancellationToken);
 }

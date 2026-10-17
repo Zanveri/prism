@@ -186,7 +186,12 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 - **RN-COFRE-007.** Um cofre aberto por vez. Entrar com outro usuário fecha o anterior.
 - **RN-COFRE-008.** Fechar o cofre (botão Sair, ou o app fechando) encerra todas as sessões
   com bancos e zera a chave na memória. No "Sair" e no fechamento do app, antes de encerrar
-  sessões com transação aberta, vale a RN-TX-006.
+  sessões com transação aberta, vale a RN-TX-006. Fechar o cofre também cancela as exportações de
+  dados em andamento e apaga os arquivos delas (RN-EXPORT-016), e cancela as importações e as cópias
+  para outro banco, que desfazem a transação em andamento e deixam nas tabelas o que já confirmaram
+  (RN-IMPORT-014); o "Sair" e o fechamento do app perguntam antes, quando há alguma (RN-EXPORT-023 e
+  RN-IMPORT-021). *Alterada a pedido do dono em 2026-10-16 (seção 35): entraram as exportações de
+  dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias.*
 - **RN-COFRE-009.** Senha esquecida não tem recuperação: o cofre daquele usuário fica ilegível.
   A tela de login avisa isso, como no canvas.
 - **RN-COFRE-010.** Nome de usuário: 3 a 32 caracteres, `a-z`, `0-9`, `.`, `_`, `-`, gravado em
@@ -227,8 +232,17 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   registra senha, string de conexão, texto de SQL nem dados de resultado. Registra sessão,
   duração, quantidade de linhas e a classe do erro. Também não registra a senha de exportação, o
   arquivo da exportação nem a prévia da importação: da exportação e da importação, só as contagens,
-  os IDs e a classe da recusa (RN-TRANSF-008, 010 e 014). *Alterada a pedido do dono em 2026-10-16
-  (seção 34): entraram a exportação e a importação.*
+  os IDs e a classe da recusa (RN-TRANSF-008, 010 e 014). Da exportação de dados, só o identificador
+  do trabalho, o da conexão, o formato, as contagens, a duração e a classe do erro: nunca o comando,
+  os nomes, os valores, o nome do arquivo nem um caminho, também no log do processo principal
+  (RN-EXPORT-016 e 020). Da importação de dados e da cópia para outro banco, só os identificadores (do
+  trabalho, das conexões e do arquivo copiado), o formato, as contagens (linhas lidas, gravadas e
+  confirmadas, bytes), a duração e a classe do erro com o SQLSTATE: nunca o nome nem o caminho do
+  arquivo, os nomes da tabela e das colunas, os valores, a linha com o erro, a mensagem do banco (que
+  pode trazer um valor) nem o comando da origem, também no log do processo principal (RN-IMPORT-014,
+  018 e 027). *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram a exportação e
+  a importação. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados.
+  Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a cópia.*
 
 ## 5. Regras de negócio
 
@@ -259,7 +273,8 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   executar" ("Não", o padrão, "Só comandos irreversíveis" ou "Todos os comandos", RN-PROT-001) e
   "Somente leitura" (desmarcada por padrão, RN-PROT-002); e a sessão da conexão, "Verificar a cada N
   segundos" (ligada, 30 segundos, de 5 a 3.600) e a consulta de verificação (opcional, até 1.000
-  caracteres, RN-VERIF-001). O host tem até 255 caracteres, o banco de dados até 128, o usuário
+  caracteres, sem caractere de controle, fora a tabulação e as quebras de linha, nem de direção do
+  texto, RN-VERIF-001). O host tem até 255 caracteres, o banco de dados até 128, o usuário
   até 128 (os três contados em unidades UTF-16 depois de aparados, que é o que se grava) e a senha
   até 1.024 (contada como veio: ela não é aparada); o nome, o host, o banco de dados, o usuário e o
   nome do ambiente não têm caractere de controle nem de direção do texto (os da RN-PASTA-001),
@@ -272,7 +287,8 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   proteções e a sessão da conexão. Alterada a pedido do dono em 2026-10-16 (seção 34): a conexão
   importada pode vir sem usuário e senha; e entraram os tetos do host, do banco de dados, do usuário
   e da senha e a recusa dos caracteres de controle e de direção do texto, para o arquivo que o Prism
-  exporta voltar pela importação dele.*
+  exporta voltar pela importação dele. Alterada a pedido do dono em 2026-10-17: a consulta de verificação
+  também recusa esses caracteres, menos a tabulação, a quebra de linha e o retorno de carro (RN-VERIF-001).*
 - **RN-CONN-011.** Nome único dentro da mesma pasta: 409 `CONNECTION_ALREADY_EXISTS`.
 - **RN-CONN-012.** Portas sugeridas no formulário: PostgreSQL 5432, Db2 50000, Informix 9089.
 - **RN-CONN-013.** "Testar conexão" abre, executa a consulta de verificação do banco e fecha,
@@ -287,8 +303,16 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   campo da senha, sem conectar (RN-TRANSF-016). *Alterada a pedido do dono em 2026-10-15 (seção 32):
   antes valia só a consulta do banco. Alterada a pedido do dono em 2026-10-16 (seção 34): entrou a
   conexão sem senha gravada.*
-- **RN-CONN-014.** Excluir uma conexão encerra as sessões abertas dela. Antes de encerrar
-  sessões com transação aberta, vale a RN-TX-006.
+- **RN-CONN-014.** Excluir uma conexão encerra as sessões abertas dela. Antes de encerrar sessões com transação
+  aberta, vale a RN-TX-006. Excluir também cancela as transferências que leem dela ou gravam nela: as exportações
+  de dados (RN-EXPORT-016), as importações e as cópias para outro banco, que deixam nas tabelas o que já
+  confirmaram (RN-IMPORT-014 e 027). O diálogo de excluir diz, com alguma, "As 2 exportações em andamento desta
+  conexão serão canceladas."; com importações ou cópias, "As 3 transferências em andamento desta conexão serão
+  canceladas. As importações e as cópias deixam nas tabelas só as linhas que já confirmaram." ("A importação em
+  andamento desta conexão será cancelada, e fica na tabela só o que ela já confirmou."). A conta vem da lista da
+  API, pelos trabalhos em que a conexão é a da origem ou a do destino. *Alterada a pedido do dono em 2026-10-16
+  (seção 35): entraram as exportações de dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as
+  importações e as cópias.*
 - **RN-CONN-015.** O ambiente aparece como etiqueta colorida ao lado do nome da conexão, na
   lista, na árvore, na aba e na barra de status.
 
@@ -464,9 +488,15 @@ acontecem durante o uso.
   campo de formulário, que aparece no campo.
 - **RN-AVISO-005.** O toast avisa do acontecimento; o detalhe que precisa ficar na tela até ser
   resolvido (erro de SQL com SQLSTATE, erro no nó da árvore, erro de campo) continua na tela.
-- **RN-AVISO-006.** Sucesso some em 4 segundos; atenção e erro, em 8. Todos têm botão de
-  fechar. No máximo 4 ficam visíveis, e um aviso igual ao último visível não empilha. O de erro
-  é anunciado a leitor de tela como alerta.
+- **RN-AVISO-006.** Sucesso some em 4 segundos; atenção e erro, em 8. Todos têm botão de fechar. No máximo 4 ficam
+  visíveis, e um aviso igual ao último visível não empilha. O de erro é anunciado a leitor de tela como alerta. O
+  aviso pode ter um botão de ação (o "Mostrar na pasta" da exportação de dados, RN-EXPORT-022; o "Abrir registros"
+  da importação de dados e da cópia para outro banco, RN-IMPORT-020), e o que tem fica 8 segundos, também no tom de
+  sucesso. O aviso com ação pausa o relógio ao receber o foco, como no hover; a ação dele nunca é o único caminho:
+  quem usa só o teclado tem um que não expira (na exportação, a opção "Mostrar na pasta ao terminar",
+  RN-EXPORT-014; na importação e na cópia, o "Abrir registros" do navegador). *Alterada a pedido do dono em
+  2026-10-16 (seção 35): entrou o botão de ação. Alterada a pedido do dono em 2026-10-16 (seção 36): entrou o
+  "Abrir registros".*
 
 ### 5.7 Marca e inicialização
 
@@ -551,6 +581,15 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `POST .../queries/edit-target` `{ resultID, catalogSessionID? }` (`resultID`: o do resultado atual ou o de um guardado, RN-SQL-024) | 200 `{ tables, columns, rowOperations, oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
 | `POST .../queries/edits` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`), `SQL_EXECUTION_FAILED` (com `change`), `CONNECTION_READ_ONLY` (RN-PROT-002) |
 | `POST .../queries/edits/preview` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ statements: [{ sql, values }], oneAtATime }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID`, `CONNECTION_READ_ONLY` (RN-PROT-002) |
+| `POST api/user/transfers/exports` `{ source, columns, count, format, options, output, windowID }` (a exportação de dados, RN-EXPORT-016, seção 35) | 202 `{ id }`, o trabalho em segundo plano | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED` (3 em andamento); 422 `EXPORT_OPTIONS_INVALID` (no campo), `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING` (no campo `userName` ou `password`), `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
+| `GET api/user/transfers` | 200 lista dos trabalhos do cofre aberto | |
+| `GET api/user/transfers/{id}` | 200 `{ id, kind, connectionID, targetConnectionID, windowID, state, phase, rows, committed, total, bytes, size, uncertain, summary, error, reason, startedAt, finishedAt }` (`kind`: `export`, `import` ou `copy`, seção 36) | 404 `TRANSFER_NOT_FOUND` |
+| `DELETE api/user/transfers/{id}` | 204 (cancela o trabalho que roda, em até 10 segundos, ou esquece o que terminou, e apaga o arquivo dele) | 404 `TRANSFER_NOT_FOUND` |
+| `POST api/user/transfers/imports/read` `{ fileID, format, reader }` (a leitura do arquivo da importação de dados, RN-IMPORT-007, seção 36) | 200 `{ encoding, delimiter, listKey, sheets, sheet, columns, shownColumns, rows }` | 404 `IMPORT_FILE_MISSING`; 422 `IMPORT_OPTIONS_INVALID` (no campo), `IMPORT_FILE_UNREADABLE`, `IMPORT_FILE_TOO_LARGE` |
+| `POST api/user/transfers/imports/preview` `{ fileID, format, reader, values, target, mapping? }` (o mapeamento e a prévia convertida, RN-IMPORT-009 a 011) | 200 `{ table, columns, mapping, shownColumns, rows }` | 404 `IMPORT_FILE_MISSING`, `CONNECTION_NOT_FOUND`, `IMPORT_TABLE_NOT_FOUND`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_FILE_UNREADABLE`, `IMPORT_FILE_TOO_LARGE`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_MAPPING_INVALID`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`, `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED` |
+| `POST api/user/transfers/imports` `{ fileID, format, reader, values, target, mapping, load, windowID }` (RN-IMPORT-014) | 202 `{ id }` | 404 `IMPORT_FILE_MISSING`, `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_FILE_TOO_LARGE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
+| `POST api/user/transfers/copies/preview` `{ source, columns, target, mapping? }` (o "Banco de dados", RN-IMPORT-024) | 200 `{ table, mapping }` | 404 `CONNECTION_NOT_FOUND`, `IMPORT_TABLE_NOT_FOUND`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_TARGET_IS_SOURCE`, `IMPORT_MAPPING_INVALID`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`, `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED` |
+| `POST api/user/transfers/copies` `{ source, columns, count, target, mapping, load, windowID }` (RN-IMPORT-027) | 202 `{ id }` | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_MAPPING_INVALID`, `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `IMPORT_TARGET_IS_SOURCE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
 
 Página de resultado: `{ columns: [{ name, type, kind }], rows: string|null [][], hasMore,
 elapsedMs, truncatedCells: [linha, coluna][], totalRows }`, com `kind` em `text`, `number`,
@@ -559,8 +598,9 @@ no caso da RN-SQL-013 (o comando foi executado até o fim e esse é o total de l
 devolveu); nos demais é nulo. Comando sem linhas: `{ rowsAffected, elapsedMs }`. O resultado
 (página ou linhas afetadas) leva também `transaction`, o estado da transação depois do comando
 (`{ mode, isolationLevel, open, failed, commands, openedAt }`), e `transactionUndone`; a página
-leva `resultID` (muda a cada execução da sessão) e `editable`. Os campos das rotas de transação
-e de edição estão nas notas da seção 22.
+leva `resultID` (muda a cada execução da sessão), `editable` e `read` (o comando executado, com o
+filtro, é uma leitura pela RN-PROT-005 e não gravou: o que habilita exportar o resultado inteiro,
+RN-EXPORT-002, seção 35). Os campos das rotas de transação e de edição estão nas notas da seção 22.
 
 Extensões do corpo de erro das sessões: `SQL_EXECUTION_FAILED` leva `sqlState` e `position`
 quando o driver os informa, e `outcome` (`canceled`, `unknown` ou `partial`) quando o comando
@@ -581,7 +621,16 @@ um `SET`, `CALL` ou `EXECUTE` (no Informix, também `DATABASE`); e `SCRIPT_FOLDE
 exportação e da importação das conexões, com os campos e as recusas nas notas dela; e
 `CONNECTION_CREDENTIALS_MISSING` (422), a recusa, antes do driver, de abrir uma sessão com a conexão
 sem usuário ou sem senha e de testá-la sem senha gravada, vem na forma do erro de campo (`errors` e
-`errorCodes`), no campo que falta (`userName` ou `password`).
+`errorCodes`), no campo que falta (`userName` ou `password`). Com a seção 35: as rotas dos trabalhos de
+exportação de dados (`api/user/transfers`), com os campos e as recusas nas notas dela;
+`EXPORT_OPTIONS_INVALID` vem na forma do erro de campo, com o caminho do campo; o trabalho que falha diz
+o erro no `GET` dele (`error`, com `code`, `message` e `sqlState`), e não numa resposta de erro; e a
+página do resultado ganha `read`. Com a seção 36: as rotas da importação de dados e da cópia para outro
+banco (`api/user/transfers/imports` e `api/user/transfers/copies`), com os campos e as recusas nas notas
+dela; o trabalho ganha `kind` `import` e `copy`, `targetConnectionID`, `committed` e `size`, e o erro dele
+ganha `line`, `column`, `side`, `committed` e `uncertain`; o `DELETE` do trabalho que roda o deixa como
+`canceled` até ser esquecido; e `CONNECTION_READ_ONLY` é também a recusa de gravar linhas numa conexão
+somente leitura.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -673,9 +722,9 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   (RN-SQL-019 e 020, seção 31). O canvas não desenha o script.
 - A grade ganha a barra de edição ("Editar célula", "Adicionar linha", "Duplicar linha" e "Excluir
   linha", RN-EDIT-013, seção 33), que o canvas não tem: nos Registros ela entra no rodapé de
-  `TabelaDados`, depois de "Exportar CSV"; no resultado da aba de consulta e em cada aba de resultado
-  do script, numa linha abaixo da grade. O lápis e as duas folhas não estão entre os ícones do canvas
-  e seguem o traço deles (16 px, traço 1,5); o mais e o X são os do canvas. O conjunto de ícones do
+  `TabelaDados`, depois de "Exportar CSV" e "Exportar…" (seção 35); no resultado da aba de consulta e em
+  cada aba de resultado do script, numa linha abaixo da grade. O lápis e as duas folhas não estão entre
+  os ícones do canvas e seguem o traço deles (16 px, traço 1,5); o mais e o X são os do canvas. O conjunto de ícones do
   app já tem o lápis e as duas folhas (os do menu do navegador): só o X no tom de erro é novo.
   "Salvar", "Descartar" e "Ver SQL" continuam na faixa sobre a grade (RN-EDIT-004), e não nessa
   barra.
@@ -686,6 +735,19 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   de baixar que o app já tem, e "Importar…" ganha a seta para cima, no mesmo traço (16 px, traço
   1,5). A frase da conexão sem usuário e senha no topo do "Editar conexão" (RN-TRANSF-016) também
   não está no `Conexoes` do canvas.
+- O canvas não desenha a exportação de dados (RN-EXPORT-001 a 024, seção 35). O assistente "Exportar
+  dados" segue o desenho dos diálogos que ele tem (o `PastaAmbiente`, para as seções e os campos), com a
+  lista das etapas à esquerda, que é nova. Os botões "Exportar…" dos Registros e da barra do resultado
+  seguem o "Exportar CSV" de `TabelaDados` (28 px, com a seta de baixar do canvas). A entrada da
+  exportação na barra de status, com a barra de progresso e "Cancelar", é nova, no texto de 12 px da
+  barra. Os ícones dos formatos são novos, no traço dos do canvas (16 px, traço 1,5).
+- O canvas não desenha a importação de dados nem a cópia para outro banco (RN-IMPORT-001 a 028, seção 36). O
+  assistente "Importar dados" segue o do "Exportar dados", com a lista das etapas à esquerda; o mapeamento é uma
+  lista de linhas com a escolha da coluna, no desenho dos campos do `PastaAmbiente`; e as prévias seguem a grade
+  de `TabelaDados`, só de leitura. O "Importar…" dos Registros segue o "Exportar CSV" de `TabelaDados`, com a seta
+  para cima do "Importar conexões". As entradas da importação e da cópia na barra de status seguem a da
+  exportação, e a da importação que parou, com "Ver o erro" e "Descartar", e o diálogo "Importação interrompida"
+  são novos.
 
 ## 10. Riscos e sondas
 
@@ -756,6 +818,10 @@ próprio app, que entrou pela seção 17.)
 executar (que vale para o comando irreversível e, se a pessoa quiser, para todos), a verificação
 periódica e as proteções herdadas da pasta. O ambiente por pasta já tinha entrado pela RN-PASTA-005.
 Da lista abaixo, continua fora o encerramento por ociosidade.)
+
+(O "exportar CSV" da lista abaixo, das linhas carregadas, entrou pela RN-TABELA-006. Em 2026-10-16 entrou
+pela seção 35, pedido do dono, a exportação de todas as linhas de uma tabela ou de um resultado, em dez
+formatos.)
 
 Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama ER, somente
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
@@ -840,15 +906,18 @@ com as fontes, está em os registros internos do projeto.
 - **RN-VERSAO-001.** A versão do Prism segue o SemVer 2.0.0. A primeira versão é `0.1.0`. A tag
   de uma versão é `vX.Y.Z`; pré-lançamento é `vX.Y.Z-beta.N` (o formato `-rc.N` é aceito, mas não
   é usado nesta entrega). Não há ramo por versão (RN-VERSAO-008).
-- **RN-VERSAO-002.** O contrato que o número protege, já que um aplicativo não tem API pública:
-  o formato do cofre e a estrutura da pasta de dados, os arquivos de configuração quando
-  existirem, o arquivo da exportação das conexões (com o número de formato próprio, RN-TRANSF-007),
-  e os atalhos e comandos documentados. A API HTTP local e a
-  aparência ficam fora. Enquanto a versão for `0.x`, uma mudança que quebra esse contrato sobe
-  o segundo número; a partir da `1.0.0`, sobe o primeiro. Funcionalidade nova sobe o segundo
-  número e correção sobe o terceiro, antes e depois da `1.0.0`. A `1.0.0` sai quando o contrato
-  estiver estável e o Prism estiver em uso no dia a dia. *Alterada a pedido do dono em 2026-10-16
-  (seção 34): o arquivo da exportação passou a existir.*
+- **RN-VERSAO-002.** O contrato que o número protege, já que um aplicativo não tem API pública: o formato do cofre
+  e a estrutura da pasta de dados, os arquivos de configuração quando existirem, o arquivo da exportação das
+  conexões (com o número de formato próprio, RN-TRANSF-007), o que cada formato da exportação de dados escreve com
+  as mesmas escolhas (seção 35: uma opção nova, que começa com o comportamento de antes, não quebra), o que a
+  importação de dados lê com as mesmas escolhas (seção 36: o arquivo que uma versão importa, a seguinte importa com
+  os mesmos valores), e os atalhos e comandos documentados. A API HTTP local e a aparência ficam fora. Enquanto a
+  versão for `0.x`, uma mudança que quebra esse contrato sobe o segundo número; a partir da `1.0.0`, sobe o
+  primeiro. Funcionalidade nova sobe o segundo número e correção sobe o terceiro, antes e depois da `1.0.0`. A
+  `1.0.0` sai quando o contrato estiver estável e o Prism estiver em uso no dia a dia. *Alterada a pedido do dono
+  em 2026-10-16 (seção 34): o arquivo da exportação passou a existir. Alterada a pedido do dono em 2026-10-16
+  (seção 35): entraram os formatos da exportação de dados. Alterada a pedido do dono em 2026-10-16 (seção 36):
+  entrou o que a importação de dados lê.*
 - **RN-VERSAO-003.** A versão mora em um lugar só: o campo `version` de
   `src/client/package.json`. A API recebe o mesmo número na publicação (`-p:Version=`), e
   nenhum `.csproj` declara versão. A tag de uma versão é sempre `v` + esse número, criada pelo lançamento (RN-VERSAO-008); a
@@ -948,17 +1017,18 @@ licença é mostrada e o aceite é exigido; o SQLite é o primeiro da fila dos p
   extraído): a tela mostra o
   progresso e permite cancelar. Só uma instalação por driver de cada vez. Falha de rede deixa o
   estado em `failed` com `DRIVER_DOWNLOAD_FAILED` e a causa, e o usuário pode tentar de novo.
-- **RN-DRIVER-005.** Um driver instalado pela primeira vez passa a valer na hora, sem reiniciar
-  nada: como o driver só é carregado quando é usado (RN-DRIVER-010), nada dele estava em
-  memória. O reinício da API só é preciso quando o driver já tinha sido carregado nesta
-  execução — reinstalar por cima de um que estava em uso ou que falhou ao carregar, e remover
-  um que foi usado —, e `restartRequired` diz quando é o caso. Só nesse caso a tela avisa,
-  antes, que o serviço vai reiniciar, que o Prism vai pedir a senha de novo e que as abas de
-  SQL abertas serão fechadas; terminada a operação, oferece reiniciar agora ou depois, e
-  enquanto o reinício não acontece um lembrete fica à vista. Antes de reiniciar o serviço, vale
-  a RN-TX-006. (Até 2026-10-12 toda instalação
-  pedia o reinício; com o driver do PostgreSQL também sob demanda, a primeira conexão de quem
-  acabou de instalar o Prism não pode custar um reinício.)
+- **RN-DRIVER-005.** Um driver instalado pela primeira vez passa a valer na hora, sem reiniciar nada: como o driver
+  só é carregado quando é usado (RN-DRIVER-010), nada dele estava em memória. O reinício da API só é preciso quando
+  o driver já tinha sido carregado nesta execução — reinstalar por cima de um que estava em uso ou que falhou ao
+  carregar, e remover um que foi usado —, e `restartRequired` diz quando é o caso. Só nesse caso a tela avisa,
+  antes, que o serviço vai reiniciar, que o Prism vai pedir a senha de novo e que as abas de SQL abertas serão
+  fechadas (e, com transferências em andamento, que elas serão canceladas: as exportações de dados, RN-EXPORT-023,
+  e as importações e as cópias para outro banco, com a frase da RN-IMPORT-021); terminada a operação, oferece
+  reiniciar agora ou depois, e enquanto o reinício não acontece um lembrete fica à vista. Antes de reiniciar o
+  serviço, vale a RN-TX-006. (Até 2026-10-12 toda instalação pedia o reinício; com o driver do PostgreSQL também
+  sob demanda, a primeira conexão de quem acabou de instalar o Prism não pode custar um reinício.) *Alterada a
+  pedido do dono em 2026-10-16 (seção 35): o aviso de antes do reinício diz das exportações de dados. Alterada a
+  pedido do dono em 2026-10-16 (seção 36): e das importações e das cópias.*
 - **RN-DRIVER-006.** Abrir sessão ou testar conexão de um banco cujo driver não está instalado
   responde 422 `DRIVER_NOT_INSTALLED`, e a tela oferece "Instalar driver", que leva à tela de
   drivers. Em plataforma sem driver, a resposta é 422 `DATABASE_CONNECTION_FAILED` com a
@@ -1073,8 +1143,13 @@ dia.
   pede senha de administrador ou assinatura, e no Windows quando o Prism roda da cópia portátil
   (`.zip`, sem instalação), o Prism confere o pacote e, com um clique do usuário, o deixa na
   pasta de downloads e a mostra, dizendo o que fazer. O app só se encerra para instalar depois
-  de a API ter terminado. Antes de instalar a atualização, vale a RN-TX-006. No Linux o pacote
-  baixado é o do mesmo formato da instalação em uso (AppImage, `deb`, `rpm` ou `tar.gz`).
+  de a API ter terminado. Antes de instalar a atualização, vale a RN-TX-006. A instalação que encerra
+  o Prism, com transferências em andamento (exportações de dados, importações, cópias para outro banco),
+  pergunta antes por elas, e o aviso de antes do instalador diz "As 2 exportações em andamento serão
+  canceladas." (RN-EXPORT-023), ou, com importações ou cópias, a frase da RN-IMPORT-021. No Linux o pacote
+  baixado é o do mesmo formato da instalação em uso (AppImage, `deb`, `rpm` ou `tar.gz`). *Alterada a
+  pedido do dono em 2026-10-16 (seção 35): a instalação pergunta pelas exportações de dados em
+  andamento. Alterada a pedido do dono em 2026-10-16 (seção 36): e pelas importações e cópias.*
 - **RN-ATUALIZA-007.** As preferências de atualização (não verificar ao abrir, versão pulada, a
   hora da última consulta) ficam num arquivo da pasta de dados, fora do cofre: valem para a
   instalação, não para um usuário.
@@ -1115,16 +1190,17 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   visões, rotinas, colunas); o que casa aparece com os ancestrais abertos, e o trecho que casou
   fica destacado. Limpar o campo devolve a árvore como estava. A busca não abre conexão nem
   carrega nível que o usuário não abriu.
-- **RN-MENU-001.** O botão direito (e Shift+F10, e a tecla de menu) sobre um item do navegador
-  abre um menu de contexto com o tema do app, com as ações daquele tipo de item. Conexão: conectar
-  ou desconectar, nova consulta, atualizar, editar conexão, exportar conexão, copiar nome. Esquema:
-  nova consulta, atualizar, copiar nome. Tabela e visão: abrir registros, ver estrutura, ver
-  diagrama, gerar `SELECT` numa consulta nova, copiar nome e copiar nome qualificado. Rotina, coluna,
-  índice e chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela, e exportar
-  as conexões dela e importar conexões nela (RN-TRANSF-001). O menu tem papel de menu, anda pelas
-  setas, executa com Enter, fecha com Esc e com clique fora, e devolve o foco ao item. Ação que não se
-  aplica no estado atual aparece desabilitada, não some. *Alterada a pedido do dono em 2026-10-16
-  (seção 34): entraram exportar e importar conexões.*
+- **RN-MENU-001.** O botão direito (e Shift+F10, e a tecla de menu) sobre um item do navegador abre um menu de
+  contexto com o tema do app, com as ações daquele tipo de item. Conexão: conectar ou desconectar, nova consulta,
+  atualizar, editar conexão, exportar conexão, copiar nome. Esquema: nova consulta, atualizar, copiar nome. Tabela
+  e visão: abrir registros, ver estrutura, ver diagrama, gerar `SELECT` numa consulta nova, exportar dados
+  (RN-EXPORT-001), importar dados (só na tabela, RN-IMPORT-001), copiar nome e copiar nome qualificado. Rotina,
+  coluna, índice e chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela, e exportar as
+  conexões dela e importar conexões nela (RN-TRANSF-001). O menu tem papel de menu, anda pelas setas, executa com
+  Enter, fecha com Esc e com clique fora, e devolve o foco ao item. Ação que não se aplica no estado atual aparece
+  desabilitada, não some. *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram exportar e importar
+  conexões. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou exportar dados, na tabela e na visão.
+  Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar dados, na tabela.*
 - **RN-TABELA-001.** Duplo clique (ou Enter) numa tabela ou visão do navegador abre a aba dela,
   uma por tabela: abrir de novo volta para a aba que já existe. A aba tem a sessão dela, como uma
   aba de consulta (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama.
@@ -1187,29 +1263,32 @@ Só da tela:
   para se o usuário cancelar; com a atualização automática do resultado ligada, RN-GRADE-014, a
   página seguinte espera o botão "Carregar mais", pelo pedido do dono em 2026-10-15, issue #11).
   "Linhas por busca" depende da API (RN-SQL-016).
-- **RN-SEG-001.** Bloqueio por inatividade, ligado por padrão em 10 minutos (de 1 a 240, e pode
-  ser desligado). Sem tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em
-  nenhuma aba (o tempo conta a partir do fim do último; a execução da atualização automática,
-  RN-GRADE-014, não conta como comando em andamento nem como atividade, pedido do dono em
-  2026-10-15, issue #11; o script conta enquanto roda, e não enquanto espera a resposta da
-  pergunta de erro, RN-SQL-021; a verificação periódica das conexões, RN-VERIF-002, não conta como
-  comando em andamento nem como atividade, e não roda com o cofre bloqueado), o Prism avisa 60
-  segundos antes (30, quando o tempo configurado é de 1 minuto) e então bloqueia: a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela
-  mostra o bloqueio, que pede a senha do MESMO usuário. Desbloquear devolve a área de trabalho
-  com as abas e o texto de SQL como estavam; os resultados que estavam na tela são descartados
-  no bloqueio. O aviso antes do bloqueio diz quantas transações serão desfeitas e quantas
-  alterações não salvas serão descartadas, e, ao desbloquear, cada aba diz o que perdeu
-  (RN-TX-007). Ao desbloquear, a árvore reabre a sessão das conexões que estavam abertas nela, e
-  cada aba só volta a falar com o banco quando é vista ou executada (a aba de tabela à vista
-  recarrega os registros; as escondidas esperam ser abertas). As outras telas de dentro do cofre
-  (Conexões, Configurações, Drivers) voltam ao estado inicial: um formulário aberto, uma senha
-  de conexão revelada ou digitada e não gravada não sobrevivem ao bloqueio. "Sair" na tela de bloqueio encerra de
-  verdade (tudo é descartado). Enquanto bloqueado, nada do que estava aberto fica visível nem
-  alcançável pelo teclado. Se o serviço não confirmar que fechou o cofre, a tela bloqueia do
-  mesmo jeito e tenta de novo com espera crescente (cada tentativa com prazo); enquanto tenta,
-  "Desbloquear" espera, e a tela diz o que está acontecendo. Se desistir, avisa que o cofre pode
-  continuar aberto no serviço, e o desbloqueio continua conferindo a senha lá.
-  *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a verificação periódica.*
+- **RN-SEG-001.** Bloqueio por inatividade, ligado por padrão em 10 minutos (de 1 a 240, e pode ser desligado). Sem
+  tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em nenhuma aba (o tempo conta a partir do
+  fim do último; a execução da atualização automática, RN-GRADE-014, não conta como comando em andamento nem como
+  atividade, pedido do dono em 2026-10-15, issue #11; o script conta enquanto roda, e não enquanto espera a
+  resposta da pergunta de erro, RN-SQL-021; a verificação periódica das conexões, RN-VERIF-002, não conta como
+  comando em andamento nem como atividade, e não roda com o cofre bloqueado; a exportação de dados conta como
+  comando em andamento da janela que a começou, do começo até o arquivo entregue, e a entrega que falhou e espera
+  outro destino não conta, RN-EXPORT-023; a importação de dados e a cópia para outro banco contam do começo ao fim,
+  RN-IMPORT-021), o Prism avisa 60 segundos antes (30, quando o tempo configurado é de 1 minuto) e então bloqueia:
+  a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela mostra o bloqueio, que pede a
+  senha do MESMO usuário. Desbloquear devolve a área de trabalho com as abas e o texto de SQL como estavam; os
+  resultados que estavam na tela são descartados no bloqueio. O aviso antes do bloqueio diz quantas transações
+  serão desfeitas, quantas alterações não salvas serão descartadas e quantas exportações com a entrega que falhou
+  serão descartadas (RN-EXPORT-023), e, ao desbloquear, cada aba diz o que perdeu (RN-TX-007). Ao desbloquear, a
+  árvore reabre a sessão das conexões que estavam abertas nela, e cada aba só volta a falar com o banco quando é
+  vista ou executada (a aba de tabela à vista recarrega os registros; as escondidas esperam ser abertas). As outras
+  telas de dentro do cofre (Conexões, Configurações, Drivers) voltam ao estado inicial: um formulário aberto, uma
+  senha de conexão revelada ou digitada e não gravada não sobrevivem ao bloqueio. "Sair" na tela de bloqueio
+  encerra de verdade (tudo é descartado). Enquanto bloqueado, nada do que estava aberto fica visível nem alcançável
+  pelo teclado. Se o serviço não confirmar que fechou o cofre, a tela bloqueia do mesmo jeito e tenta de novo com
+  espera crescente (cada tentativa com prazo); enquanto tenta, "Desbloquear" espera, e a tela diz o que está
+  acontecendo. Se desistir, avisa que o cofre pode continuar aberto no serviço, e o desbloqueio continua conferindo
+  a senha lá. *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a verificação periódica. Alterada a
+  pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados, e o aviso antes do bloqueio diz das
+  entregas que falharam. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a
+  cópia para outro banco.*
 - **RN-TABELA-005.** Registros: um campo de filtro recebe a condição (`WHERE`) que o usuário
   escreve, e clicar no cabeçalho de uma coluna ordena por ela (crescente, decrescente, sem
   ordem). A tela monta o `SELECT` com a condição e a ordem e mostra o comando que executou. A
@@ -1221,7 +1300,10 @@ Só da tela:
   de quantas são e de que as não carregadas não entram), em UTF-8 com BOM, separador `;`,
   aspas dobradas, e valor cujo primeiro caractere depois de espaços, tabulação ou retorno de
   carro é `=`, `+`, `-` ou `@` precedido de apóstrofo (para uma planilha não o executar); um
-  número simples, inclusive negativo, sai como está. Exportar o total fica para a tarefa da API.
+  número simples, inclusive negativo, sai como está. Exportar todas as linhas, em CSV ou em outro
+  formato, é o "Exportar…" ao lado dele (RN-EXPORT-001), que, com os padrões do CSV, escreve o mesmo
+  texto (RN-EXPORT-007). *Alterada a pedido do dono em 2026-10-16 (seção 35): entrou o "Exportar…", e o
+  "Exportar CSV" continua com as linhas carregadas.*
 - **RN-TABELA-007.** Chave estrangeira: na grade de registros, o valor de uma coluna que é chave
   estrangeira leva à tabela referenciada, já filtrada por aquele valor (o filtro aparece no
   campo da RN-TABELA-005). O valor entra no filtro como literal do banco: número só se for
@@ -1398,12 +1480,14 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   Markdown, HTML ou comandos `INSERT`. As escolhas são lembradas por usuário.
 - **RN-GRADE-004.** Menu de contexto da grade (botão direito, Shift+F10, tecla de menu), nas
   mesmas regras do menu do navegador (RN-MENU-001): Copiar, Copiar com cabeçalho, Copiar
-  avançado, Copiar nome da coluna, Filtrar, Ordenar, Gerar SQL, Exportar e, numa chave
+  avançado, Copiar nome da coluna, Filtrar, Ordenar, Gerar SQL, Exportar dados… (o assistente da
+  seção 35, com a origem da grade, RN-EXPORT-001) e, numa chave
   estrangeira, Ir para o registro referenciado. O clique direito numa célula fora da seleção a
   escolhe antes. O menu ganha também os itens da edição de célula (RN-EDIT-001): Editar célula,
   Definir como nulo, Desfazer alteração, Adicionar linha, Duplicar linha e Excluir linha. *Alterada a
   pedido do dono em 2026-10-16 (seção 33): "Linha nova" passou a se chamar "Adicionar linha", e entrou
-  "Duplicar linha" (RN-EDIT-016).*
+  "Duplicar linha" (RN-EDIT-016). Alterada a pedido do dono em 2026-10-16 (seção 35): o "Exportar" é o
+  "Exportar dados…", que abre o assistente.*
 - **RN-GRADE-005.** Filtrar pelo valor (Registros), como no DBeaver: sobre uma célula, o menu
   oferece igual ao valor (`=`), diferente (`<>`), maior (`>`), menor (`<`), contém (`LIKE`, em
   colunas de texto), "É nulo", "Não é nulo" e "Remover filtro". A condição escolhida entra no
@@ -1423,19 +1507,26 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
   executado. Nomes entre aspas (RN-TABELA-002) e valores como literais do banco; linha com
   célula cortada ou binária numa coluna necessária não é gerada, e um comentário diz quais
   ficaram de fora.
-- **RN-GRADE-007.** Exportar: um diálogo escolhe o que exportar (a seleção ou as linhas
-  carregadas; o aviso de que as não carregadas não entram continua) e o formato: CSV, TSV, JSON,
-  XLSX, HTML, Markdown, XML ou comandos `INSERT`. CSV e TSV seguem a RN-TABELA-006, inclusive o
-  apóstrofo contra fórmula. JSON: uma lista de objetos, com número e booleano como tais quando
-  o valor é representável sem perda, e nulo como `null`. XLSX: uma planilha com o cabeçalho,
-  número como número quando cabe sem perder precisão (senão texto), data como texto, e texto
-  sempre como texto — nunca fórmula. HTML, Markdown e XML escapam o que o formato exige. O
-  último formato usado é lembrado por usuário.
-- **RN-GRADE-008.** Exportar o resultado inteiro (todas as linhas, e não só as carregadas),
-  executando o comando de novo numa sessão própria e gravando à medida que as linhas chegam,
-  com progresso e cancelamento, é a tarefa seguinte a esta. No Commit manual, exportar o
-  resultado inteiro avisa que o arquivo não terá o que a aba ainda não confirmou, porque a
-  exportação roda em sessão própria.
+- **RN-GRADE-007.** Exportar a seleção ou as linhas carregadas (o aviso de que as não carregadas
+  não entram continua) será uma origem do assistente "Exportar dados" da seção 35, com os formatos e
+  as opções dele (RN-EXPORT-004 a 014), quando a grade tiver a seleção de várias células
+  (RN-GRADE-001); até lá, as linhas carregadas saem pelo "Exportar CSV" dos Registros
+  (RN-TABELA-006). Os valores (o literal do SQL, o campo do CSV, o escape de cada formato) são os
+  mesmos nos dois caminhos, conferidos pelas fixtures de ouro (RN-EXPORT-024). A estrutura do XML
+  (RN-EXPORT-012, a do DBeaver) e o JSON com o nome da origem (RN-EXPORT-010) são os do assistente:
+  o `to-xml.ts` e o `to-json.ts` de hoje, que escrevem `<result><row><column name="…">` e a lista
+  sem o nome, passam a escrevê-los quando a seleção entrar. O último formato usado é lembrado por
+  usuário. *Alterada a pedido do dono em 2026-10-16 (seção 35): o diálogo de oito formatos deu lugar
+  ao assistente "Exportar dados", de dez, a exportação da seleção e das linhas carregadas espera a
+  seleção de várias células, e as regras de cada formato são as da seção 35 (RN-EXPORT-006 a 013),
+  que substituem as frases de antes sobre o JSON, o XLSX, o HTML, o Markdown e o XML.*
+- **RN-GRADE-008.** Exportar o resultado inteiro (todas as linhas, e não só as carregadas) é o
+  "Exportar…" da seção 35 (RN-EXPORT-001 e 002): o comando é executado de novo numa conexão à parte,
+  e a API escreve o arquivo à medida que as linhas chegam, num trabalho em segundo plano, com
+  progresso e cancelamento na barra de status. Só se exporta o comando que é uma leitura. No Commit
+  manual, exportar o resultado inteiro avisa que o arquivo não terá o que a aba ainda não confirmou,
+  porque a exportação roda numa conexão à parte (RN-EXPORT-015). *Alterada a pedido do dono em
+  2026-10-16 (seção 35): era "a tarefa seguinte", e a "sessão própria" é a conexão à parte.*
 - **RN-GRADE-009.** Largura das colunas: a divisa à direita do cabeçalho de cada coluna pode ser
   arrastada para alargar ou estreitar a coluna, e o duplo clique nela ajusta a coluna ao maior
   valor entre as linhas carregadas (até um teto). Pelo teclado, a divisa recebe foco e as setas
@@ -1650,15 +1741,21 @@ até lá, o que depende delas está a provar.
   ainda não foi feito fica como estava. "Cancelar" não faz nada. A transação em que tudo foi leitura não pergunta: é desfeita
   ao sair, porque não há o que confirmar; no PostgreSQL quem diz que nada foi gravado é o banco, e no Db2 e no Informix o
   Prism, pelo texto dos comandos — qualquer comando que não seja uma leitura simples, inclusive chamar uma rotina, conta como
-  gravação. Alterações não salvas (RN-EDIT-007) são tratadas primeiro. O app que morre sem passar por aqui nunca confirma: o
-  banco desfaz a transação ao perder a conexão. Ao fechar uma sessão com transação aberta por qualquer caminho, o Prism manda
-  Rollback antes de fechar a conexão.
+  gravação. Nas saídas que também cancelam transferências em andamento (as exportações de dados, as importações e as cópias
+  para outro banco: "Sair", fechar a janela ou o app, reiniciar o serviço, instalar uma atualização), a pergunta delas
+  (RN-EXPORT-023 e RN-IMPORT-021) vem antes de tudo, porque ela não faz nada sozinha; depois, as alterações não salvas
+  (RN-EDIT-007); por fim, as transações. O app que morre sem passar por aqui nunca confirma: o banco desfaz a transação ao
+  perder a conexão. Ao fechar uma sessão com transação aberta por qualquer caminho, o Prism manda Rollback antes de fechar a
+  conexão. *Alterada a pedido do dono em 2026-10-16 (seção 35): a pergunta das exportações de dados vem antes das outras.
+  Alterada a pedido do dono em 2026-10-16 (seção 36): a pergunta é de todas as transferências, com as importações e as cópias.*
 - **RN-TX-007.** O bloqueio por inatividade **desfaz** as transações abertas: o cofre fecha e as sessões caem (RN-COFRE-008). O
-  aviso de 60 segundos diz quantas transações serão desfeitas e quantas alterações não salvas serão descartadas. Transação
+  aviso de 60 segundos diz quantas transações serão desfeitas, quantas alterações não salvas serão descartadas e quantas
+  exportações de dados com a entrega que falhou, à espera do "Salvar como…", serão descartadas (RN-EXPORT-023). Transação
   aberta sem comando em andamento não segura a contagem do bloqueio. Ao desbloquear, cada aba atingida diz, em tom de atenção,
   que a transação foi desfeita e quantos comandos não foram confirmados. No raro caso em que o serviço não responde ao bloqueio
   (RN-SEG-001: a tela desiste depois de um minuto), as transações ficam abertas no banco até o serviço fechar o cofre ou
-  encerrar, e a tela de bloqueio diz isso.
+  encerrar, e a tela de bloqueio diz isso. *Alterada a pedido do dono em 2026-10-16 (seção 35): o aviso diz também das
+  entregas de exportação que falharam.*
 - **RN-TX-008.** **Transação perdida sem pedido.** Quando a sessão cai (rede, banco reiniciado, servidor que encerra sessão
   parada em transação, serviço do Prism que caiu ou reiniciou) ou o cofre fecha por qualquer motivo (bloqueio, quinto erro
   seguido de senha ao revelar a de uma conexão, ao trocar a própria, ao mudar o somente leitura ou ao exportar conexões com
@@ -1875,10 +1972,14 @@ até lá, o que depende delas está a provar.
   quem converte é o banco, como converteria um literal escrito na sessão (com o formato de data e o fuso dela): todo tipo que o
   banco escreve em texto e lê de volta é editável. No Db2 e no Informix quem converte é o Prism, do mesmo formato em que ele
   escreveu a célula, nunca dependendo do `DBDATE` nem da localidade do servidor: número com ponto; data `aaaa-mm-dd`; data e
-  hora com as casas de fração que a coluna tem (de 0 a 12 no Db2; seis no `DATETIME` do Informix); hora sem fração; booleano
-  do Informix como `0` ou `1`. Só os tipos que a sonda S-IBM-4 provar são editáveis: texto, inteiros, decimais, ponto
-  flutuante, data, data e hora, hora e booleano. Os demais (intervalo, objetos grandes, coleções, tipos do usuário, XML) são só
-  leitura. Texto que não converte é recusado antes de qualquer comando ir ao banco, apontando a célula.
+  hora com as casas de fração que a coluna tem (de 0 a 12 no Db2; seis no `DATETIME` do Informix); hora sem fração; booleano do
+  Informix como `0` ou `1`. Só os tipos que a sonda S-IBM-4 provar são editáveis: texto, inteiros, decimais, ponto flutuante,
+  data, data e hora, hora e booleano. Os demais (intervalo, objetos grandes, coleções, tipos do usuário, XML) são só leitura.
+  Texto que não converte é recusado antes de qualquer comando ir ao banco, apontando a célula. A importação de dados e a cópia
+  para outro banco (seção 36) usam esta conversão, com o que vem a mais de um arquivo: os formatos que a pessoa escolhe no
+  assistente (o separador decimal, a ordem da data), e, no Db2 e no Informix, o texto longo e o binário, que a importação grava
+  porque o valor vem inteiro do arquivo, e não cortado da grade (RN-IMPORT-010). *Alterada a pedido do dono em 2026-10-16
+  (seção 36): entraram a importação e a cópia para outro banco.*
 - **RN-EDIT-007.** **Com alterações pendentes**, executar outro comando na aba, executar de novo ou "Atualizar", filtrar,
   ordenar (pelo cabeçalho, pelo menu ou pelo campo de filtro), filtrar pelo valor, chegar à aba por uma chave estrangeira
   (RN-TABELA-007, que filtra a aba de destino), trocar o modo ou o nível, Commit, Rollback, fechar a aba, trocar de aba de
@@ -2068,10 +2169,13 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 - **RN-ABAS-003.** Uma aba passa de uma janela para outra arrastando-a até a barra de abas da outra,
   ou por "Mover para a janela…" no menu da aba, que lista as outras janelas abertas. A janela que
   fica sem abas continua aberta.
-- **RN-ABAS-004.** Todas as janelas usam a mesma API, o mesmo cofre e as mesmas preferências: o
-  bloqueio por inatividade e o "Sair" valem para todas, e o login libera todas. Fechar uma janela
-  fecha as abas dela, com as mesmas perguntas de fechar cada aba; fechar a última encerra o app,
-  como hoje.
+- **RN-ABAS-004.** Todas as janelas usam a mesma API, o mesmo cofre e as mesmas preferências: o bloqueio por
+  inatividade e o "Sair" valem para todas, e o login libera todas. Fechar uma janela fecha as abas dela, com as
+  mesmas perguntas de fechar cada aba; fechar a última encerra o app, como hoje. Com transferências começadas nela
+  e ainda em andamento (as exportações de dados ainda não entregues, as importações e as cópias para outro banco),
+  fechar a janela pergunta antes, porque as cancela (RN-EXPORT-023 e RN-IMPORT-021). *Alterada a pedido do dono em
+  2026-10-16 (seção 35): entraram as exportações de dados. Alterada a pedido do dono em 2026-10-16 (seção 36):
+  entraram as importações e as cópias.*
 - **RN-ABAS-005.** Só o processo principal cria janelas e passa abas entre elas; a tela pede pelo
   preload, por canais com o conteúdo validado (RN-SHELL-001), e nenhuma janela fala com outra
   diretamente.
@@ -2219,10 +2323,13 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   - Fechar uma aba a tira do que volta.
 
 - **RN-ABAS-007.** Fechar o app (a última janela) pergunta só pelo que não volta: as alterações
-  não salvas da grade (RN-EDIT-007). O texto das abas de consulta e os scripts com mudança não
+  não salvas da grade (RN-EDIT-007) e as transferências em andamento: as exportações de dados
+  (RN-EXPORT-023), as importações e as cópias para outro banco (RN-IMPORT-021). O texto das
+  abas de consulta e os scripts com mudança não
   salva voltam na próxima entrada (RN-ABAS-006), então não há pergunta por eles. Fechar uma aba,
   várias abas ou uma janela que não é a última pergunta como antes, porque o que fecha não volta,
-  e a pergunta diz isso.
+  e a pergunta diz isso. *Alterada a pedido do dono em 2026-10-16 (seção 35): entraram as exportações
+  de dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias.*
 
 | Rota | Sucesso | Erros |
 | --- | --- | --- |
@@ -2270,6 +2377,12 @@ inteiro.
     sessão fecha.
   - Copiar ou exportar uma célula sem valor completo leva o valor cortado e avisa quantas foram.
   - O texto vai inteiro. O binário vai como a grade o escreve (hexadecimal), inteiro.
+  - O "exportar" daqui é o das linhas que estão na tela (o "Exportar CSV", RN-TABELA-006, e a seleção, quando
+    vier, RN-GRADE-007). A exportação de todas as linhas (seção 35) não passa por estes valores guardados nem
+    pelo teto de 256 MB: ela lê de novo, direto do banco e sem corte (RN-EXPORT-002 e 017), e o arquivo
+    temporário dela, na pasta de dados, é o único lugar em que a API grava dados de um banco no disco
+    (RN-EXPORT-018). *Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a exportação de todas as
+    linhas.*
 
 | Rota | Sucesso | Erros |
 | --- | --- | --- |
@@ -2906,11 +3019,18 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
       (RN-GRADE-012), aplicar o filtro e ordenar pela coluna (RN-GRADE-011), que perguntam pelo
       comando que vai ao banco, como qualquer execução;
     - a atualização automática (RN-GRADE-014), que só pergunta ao ser ligada, uma vez, e nunca a
-      cada intervalo.
+      cada intervalo;
+    - a importação de dados e a cópia para outro banco (seção 36), pela conexão de destino, uma vez, antes de
+      começar: em "Todos os comandos", sempre; em "Só comandos irreversíveis", quando esvaziam a tabela antes, que
+      é um `DELETE` sem `WHERE` (os `INSERT` não são irreversíveis). O aviso mostra os comandos, com "Importar
+      mesmo assim" ou "Copiar mesmo assim" (RN-IMPORT-013 e 025). A origem da cópia só é lida, e não pergunta.
+      *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação e a cópia.*
   - Não perguntam: o que o Prism monta sozinho para mostrar o que a pessoa abriu (a árvore e o
     catálogo, os Registros de uma tabela, com o filtro e a ordem do campo deles, a Estrutura, os
-    diagramas, a aba do banco), "Carregar mais", "Contar total" e a verificação periódica
-    (RN-VERIF-002).
+    diagramas, a aba do banco), "Carregar mais", "Contar total", a verificação periódica
+    (RN-VERIF-002) e a exportação de dados (seção 35), que só executa de novo uma leitura e já tem a
+    etapa Confirmação, com o comando à vista (RN-EXPORT-002 e 015). *Alterada a pedido do dono em
+    2026-10-16 (seção 35): entrou a exportação de dados.*
   - Numa conexão somente leitura (RN-PROT-002), "Só comandos irreversíveis" não pergunta nada: todo
     comando irreversível é recusado pela API antes de chegar ao banco. "Todos os comandos" continua
     perguntando.
@@ -2927,15 +3047,21 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
     anterior da aba, como a recusa do controle de transação sem `executed` (RN-SESSAO-005), e não
     conta como leitura: o cursor aberto fecha aos 5 minutos da última leitura, como fecharia sem ela
     (RN-SQL-007).
-  - Vale em toda rota que executa um comando na conexão: `queries`, em que, com o filtro do
-    resultado, é o comando montado que se confere (RN-GRADE-011), e por ela cada comando do script
-    (RN-SQL-019), em que a recusa é o erro daquele comando (RN-SQL-021); e as da edição,
-    `queries/edit-target`, `queries/edits` e `queries/edits/preview`: a edição de registros não
-    existe numa conexão somente leitura, e a página do resultado já vem com `editable: { known:
-    true, reason: "a conexão é somente leitura" }`, o motivo que a grade mostra (RN-EDIT-002).
-    "Carregar mais", "Contar total", "Cancelar", o valor completo das células, o catálogo, abrir a
-    sessão e "Testar conexão" continuam valendo: leem o que a pessoa já executou ou o catálogo, e a
-    contagem só executa de novo uma leitura (RN-SQL-006).
+  - Vale em toda rota que executa um comando na conexão: `queries`, em que, com o filtro do resultado, é o comando
+    montado que se confere (RN-GRADE-011), e por ela cada comando do script (RN-SQL-019), em que a recusa é o erro
+    daquele comando (RN-SQL-021); e as da edição, `queries/edit-target`, `queries/edits` e `queries/edits/preview`:
+    a edição de registros não existe numa conexão somente leitura, e a página do resultado já vem com `editable: {
+    known: true, reason: "a conexão é somente leitura" }`, o motivo que a grade mostra (RN-EDIT-002). "Carregar
+    mais", "Contar total", "Cancelar", o valor completo das células, o catálogo, abrir a sessão e "Testar conexão"
+    continuam valendo: leem o que a pessoa já executou ou o catálogo, e a contagem só executa de novo uma leitura
+    (RN-SQL-006). A exportação de dados (seção 35) também vale: ela só executa leitura, em qualquer conexão, pela
+    mesma regra da RN-PROT-005, e recusa o resto com `EXPORT_SOURCE_NOT_READ` (RN-EXPORT-002). *Alterada a pedido
+    do dono em 2026-10-16 (seção 35): entrou a exportação de dados.* A importação de dados e a cópia para outro
+    banco (seção 36) gravam linhas, e por isso não valem numa conexão somente leitura de destino: a API recusa a
+    prévia e o começo delas com 422 `CONNECTION_READ_ONLY` ("A conexão é somente leitura, e a importação grava na
+    tabela. Nada foi enviado ao banco."), e as entradas e a escolha da conexão de destino ficam desabilitadas com o
+    motivo (RN-IMPORT-001 e 023). A origem da cópia pode ser somente leitura: ela só é lida, como na exportação.
+    *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação e a cópia.*
   - No PostgreSQL o banco também recusa. Toda leitura de uma conexão somente leitura roda na
     transação só de leitura da RN-SQL-013, e o que o banco recusa ali por gravar (uma função que
     grava chamada pelo `SELECT`, um `nextval`) é a resposta, como erro do banco (422
@@ -3023,14 +3149,16 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   - Na dúvida, não é leitura: uma coluna chamada `update` sem aspas faz a leitura ser recusada (com
     aspas, ela passa). E o `SET` é recusado também quando só muda o esquema ou o caminho de busca da
     sessão: para ler outro esquema, escreva o nome dele no comando (`esquema.tabela`).
-- **RN-PROT-006.** As sessões abertas. Mudar as proteções (na conexão, numa pasta acima, ou movendo
-  uma das duas) não fecha nenhuma sessão: o comando seguinte de cada sessão já segue a regra nova,
-  porque a API lê as proteções do cofre a cada comando. O cursor aberto continua sendo lido
-  ("Carregar mais"): ele é de uma leitura que já rodou. O resultado que já está na grade fica com a
-  edição que tinha quando foi executado: a recusa da edição (RN-PROT-002) vem da proteção do momento
-  do pedido, e o resultado novo, executado depois da mudança, já sai com ela. A sessão de uma conexão
-  que acabou de ser excluída, e que ainda não fechou (RN-CONN-014), responde como a sessão que não
-  existe (404 `DATABASE_SESSION_NOT_FOUND`).
+- **RN-PROT-006.** As sessões abertas. Mudar as proteções (na conexão, numa pasta acima, ou movendo uma das duas)
+  não fecha nenhuma sessão: o comando seguinte de cada sessão já segue a regra nova, porque a API lê as proteções
+  do cofre a cada comando. O cursor aberto continua sendo lido ("Carregar mais"): ele é de uma leitura que já
+  rodou. O resultado que já está na grade fica com a edição que tinha quando foi executado: a recusa da edição
+  (RN-PROT-002) vem da proteção do momento do pedido, e o resultado novo, executado depois da mudança, já sai com
+  ela. A sessão de uma conexão que acabou de ser excluída, e que ainda não fechou (RN-CONN-014), responde como a
+  sessão que não existe (404 `DATABASE_SESSION_NOT_FOUND`). A importação e a cópia para outro banco (seção 36), que
+  gravam numa conexão à parte, também leem as proteções do cofre antes de cada comando, e param, com a transação em
+  andamento desfeita, quando o destino passa a ser somente leitura (RN-IMPORT-014). *Alterada a pedido do dono em
+  2026-10-16 (seção 36): entraram a importação e a cópia.*
   - No PostgreSQL, antes de cada comando da pessoa e de cada "Salvar", a sessão é posta no modo da
     conexão daquele momento: `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` quando ela é
     somente leitura, e `... READ WRITE` quando deixa de ser. O `SET` só vai ao banco quando o modo
@@ -3047,16 +3175,25 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
   verificação", opcional, com a consulta do banco como dica do campo (a da RN-CONN-013: PostgreSQL
   `SELECT 1`; Db2 `SELECT 1 FROM SYSIBM.SYSDUMMY1`; Informix `SELECT 1 FROM systables WHERE tabid =
   1`). Em branco, vale a do banco.
-  - A consulta própria tem até 1.000 caracteres e é uma leitura só, pela regra da RN-PROT-005 no
-    banco da conexão: um comando só (o `;` do fim não conta). A API recusa o resto com 422
-    `CONNECTION_INVALID` no campo `verificationQuery`, com o motivo ("A consulta de verificação tem
-    de ser uma leitura só: um UPDATE não é leitura."). Ela é lida até o fim a cada verificação: a
+  - A consulta própria tem até 1.000 caracteres, não tem caractere de controle nem de direção do texto
+    (os da RN-PASTA-001, menos a tabulação, a quebra de linha e o retorno de carro, que uma consulta de
+    várias linhas tem), contados e conferidos depois de aparada, e é uma leitura só, pela regra da
+    RN-PROT-005 no banco da conexão: um comando só (o `;` do fim não conta). A API recusa o resto com
+    422 `CONNECTION_INVALID` no campo `verificationQuery`, a primeira recusa nesta ordem: "A consulta de
+    verificação pode ter no máximo 1.000 caracteres.", "A consulta de verificação não pode ter caractere
+    de controle nem de direção do texto." e o motivo da leitura ("A consulta de verificação tem de ser
+    uma leitura só: um UPDATE não é leitura."). O formulário confere o tamanho e os caracteres antes de
+    mandar, com as mesmas frases; a leitura, só a API. Ela é lida até o fim a cada verificação: a
     que devolve muitas linhas custa isso a cada intervalo, e o texto de ajuda do campo pede uma que
     devolva uma linha. No PostgreSQL ela roda numa transação só de leitura: nem uma função chamada
     por ela grava.
   - "Testar conexão" (RN-CONN-013) usa a consulta do formulário, quando há uma.
   - O intervalo e a consulta são da conexão; a pasta não os tem, e a cópia da conexão (RN-CONN-016)
     os leva.
+  - *Alterada a pedido do dono em 2026-10-17: a consulta passou a recusar o caractere de controle e o de
+    direção do texto, como os outros campos da conexão desde a seção 34 (RN-CONN-010), no formulário, no
+    "Testar conexão" e na importação (RN-TRANSF-014): o Prism a executa sozinho, e um U+202E faria a
+    consulta que a prévia da importação manda conferir (RN-TRANSF-011) parecer outra.*
 - **RN-VERIF-002.** Enquanto a conexão está conectada (a sessão da árvore ou a de alguma aba, a
   mesma conta da lista do botão da conexão da aba, RN-ARVORE-008), a tela pede a verificação a cada
   intervalo, `POST api/user/connections/{id}/verification`, um pedido por vez: o intervalo conta do
@@ -3215,8 +3352,9 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
 
 - **RN-EDIT-013.** A barra de edição, como a de baixo do resultado do DBeaver.
   - Onde:
-    - nos Registros de uma tabela, no rodapé que já existe, logo depois de "Exportar CSV" (antes da
-      contagem das linhas carregadas e do "Carregar mais");
+    - nos Registros de uma tabela, no rodapé que já existe, logo depois de "Exportar CSV", "Exportar…"
+      (RN-EXPORT-001) e "Importar…" (RN-IMPORT-001), antes da contagem das linhas carregadas e do
+      "Carregar mais";
     - no resultado da aba de consulta e em cada aba de resultado do "Executar script" (RN-SQL-020),
       numa linha própria dentro da área de resultado, alinhada à esquerda, entre a grade e os rodapés
       dela ("Carregar mais"; "O cursor foi fechado" com "Executar de novo"; a nota da aba de um resultado
@@ -3248,6 +3386,8 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     na faixa de pendências sobre a grade, que não muda.
   - Com o campo de edição de uma célula aberto, clicar num botão confirma antes o que foi digitado (o
     campo confirma ao perder o foco, como hoje), e só então o botão age.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 35): nos Registros, o "Exportar…" entrou antes da
+    barra. Alterada a pedido do dono em 2026-10-16 (seção 36): o "Importar…" também.*
 - **RN-EDIT-014.** Quando cada botão vale, e o que acontece depois dele.
   - Cada botão faz o que o item de mesmo nome do menu da célula faz sobre a célula ativa
     (RN-GRADE-001), e só sobre ela: "Editar célula" abre o campo de edição nela, com o valor, como o
@@ -4135,8 +4275,10 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
       executa esta consulta no "Testar conexão", e sozinho, a cada 30 segundos, se a verificação for
       ligada: …"). No PostgreSQL, em que a consulta roda numa transação só de leitura (RN-VERIF-001), a
       frase do meio não aparece; no Db2 e no Informix só o texto a segura (RN-PROT-005). O intervalo é o
-      do arquivo, e a consulta aparece inteira, como texto puro: ela tem até 1.000 caracteres, ou o item
-      não seria importável, e cortá-la esconderia justamente o que é para conferir;
+      do arquivo, e a consulta aparece inteira, como texto puro: ela tem até 1.000 caracteres e nenhum
+      caractere de controle (fora a tabulação e as quebras de linha) nem de direção do texto, ou o item
+      não seria importável (RN-TRANSF-014); cortá-la esconderia justamente o que é para conferir, e um
+      caractere de direção do texto a faria parecer outra;
     - o que não pode ser importado: a caixa desmarcada e desabilitada, e "não pode ser importada", com o
       motivo (RN-TRANSF-014).
   - Desmarcar não refaz a prévia (cada pedido deriva a senha de novo): as marcas da prévia são as de tudo
@@ -4162,6 +4304,9 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     limites dos campos, RN-PASTA-001 e RN-CONN-010, e é o que se confere); do item que não pode ser
     importado, cada texto, e o que o motivo cita dele ("Este Prism não conhece o banco …"), vem cortado
     em 200 caracteres.
+  - *Alterada a pedido do dono em 2026-10-17: a consulta de verificação que a prévia mostra inteira não
+    tem mais caractere de controle (fora a tabulação e as quebras de linha) nem de direção do texto, que
+    deixam a conexão não importável (RN-VERIF-001 e RN-TRANSF-014).*
 
 - **RN-TRANSF-012.** Onde fica, e os conflitos.
   - O que está na raiz do arquivo vai para o lugar escolhido em "Onde colocar" (a raiz do navegador ou
@@ -4212,15 +4357,18 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     ou nome de ambiente com caractere de controle ou de direção do texto (RN-PASTA-001 e RN-CONN-010: um
     U+202E faria o host que a prévia manda conferir parecer outro); a porta, de 1 a 65.535; o ambiente
     (o nome até 30, a cor `#RRGGBB`) e a cor da pasta; a confirmação, uma das três; o intervalo da
-    verificação, de 5 a 3.600; e a consulta de verificação, até 1.000 caracteres e uma leitura só no
-    banco da conexão (RN-VERIF-001), porque ela roda sozinha a cada intervalo depois de conectar, com as
-    credenciais da conexão. O usuário e a senha podem faltar (RN-TRANSF-015). Com a caixa desmarcada (o
-    padrão), a conexão de consulta própria entra com a consulta do banco (RN-TRANSF-011). O banco sem
+    verificação, de 5 a 3.600; e a consulta de verificação, até 1.000 caracteres, sem caractere de
+    controle (fora a tabulação, a quebra de linha e o retorno de carro) nem de direção do texto, e uma
+    leitura só no banco da conexão (RN-VERIF-001), porque ela roda sozinha a cada intervalo depois de
+    conectar, com as credenciais da conexão, e a prévia a mostra para ser conferida (RN-TRANSF-011). O
+    usuário e a senha podem faltar (RN-TRANSF-015). Com a caixa desmarcada (o padrão), a conexão de
+    consulta própria entra com a consulta do banco (RN-TRANSF-011). O banco sem
     driver instalado não impede: a conexão se grava como pelo formulário, e conectar pede o driver
     (RN-NAV-005).
   - O item que não passa não é importado, e a prévia diz por quê, com a frase da regra ("A consulta de
-    verificação tem de ser uma leitura só: um UPDATE não é leitura.", "Informe uma porta de 1 a 65535.",
-    "Este Prism não conhece o banco MySql."). A pasta que não passa leva junto o que está dentro dela ("A
+    verificação tem de ser uma leitura só: um UPDATE não é leitura.", "A consulta de verificação não pode
+    ter caractere de controle nem de direção do texto.", "Informe uma porta de 1 a 65535.", "Este Prism
+    não conhece o banco MySql."). A pasta que não passa leva junto o que está dentro dela ("A
     pasta Production PRD não pode ser importada."). Um item assim nunca fica marcado, e a chave dele, se
     vier, é ignorada. O resto do arquivo continua importável: um arquivo de uma versão mais nova do
     Prism, num formato que esta lê, pode trazer um banco ou um valor que esta não conhece.
@@ -4265,6 +4413,9 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     deixadas de fora, não importáveis, com a proteção ou o ambiente gravados, com a consulta de
     verificação própria mantida ou trocada pela do banco) e os IDs criados, nunca o
     arquivo, nomes, hosts, usuários, senhas ou a senha de exportação (RN-LOG-001).
+  - *Alterada a pedido do dono em 2026-10-17: a consulta de verificação do arquivo também é conferida quanto
+    ao caractere de controle (fora a tabulação, a quebra de linha e o retorno de carro) e ao de direção do
+    texto, com a regra e a frase da RN-VERIF-001.*
 
 ### Conexão sem usuário e senha
 
@@ -4313,6 +4464,11 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     o 422 `CONNECTION_INVALID` de sempre ("Informe o usuário do banco.").
   - A verificação periódica (RN-VERIF-002) não muda: ela nunca abre sessão, e uma conexão assim nunca
     teve uma.
+  - A exportação de dados (RN-EXPORT-015 e 016) recebe a mesma recusa, no mesmo campo, ao começar, e é a
+    exceção à abertura do "Editar conexão": a tela mostra a frase da RN-EXPORT-015 ("Esta conexão não tem
+    usuário gravado." ou "Esta conexão não tem senha gravada.", com "Preencha… em Editar conexão e exporte de
+    novo.") no alto da Confirmação do assistente, que fica aberto, sem abrir outro diálogo por cima dele. *Alterada a pedido do dono em 2026-10-16 (seção 35):
+    entrou a exportação de dados.*
 
 ### Rotas e respostas
 
@@ -4382,6 +4538,9 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
   sem eles; o host, o banco de dados, o usuário e a senha ganham teto, e os textos da conexão recusam o
   caractere de controle e o de direção do texto, no formulário, no teste e na importação.
 - **RN-CONN-013**: o teste da conexão gravada sem senha é recusado com `CONNECTION_CREDENTIALS_MISSING`.
+- **RN-VERIF-001**: a consulta de verificação também recusa o caractere de controle (fora a tabulação, a
+  quebra de linha e o retorno de carro) e o de direção do texto, no formulário, no teste e na importação
+  (alterada a pedido do dono em 2026-10-17).
 - **RN-SESSAO-003**: a conexão sem usuário ou sem senha não chega ao driver.
 - **RN-ARVORE-005**: essa recusa não aparece no nó; ela abre o "Editar conexão".
 - **RN-TX-008**: o quinto erro de senha ao exportar com senhas de banco também fecha o cofre, e o
@@ -4409,3 +4568,2505 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Importar as conexões e as pastas do DBeaver (o `data-sources.json` dele).
 - Escolher, na importação, outro lugar para cada pasta do arquivo, ou trazer o conteúdo de uma pasta do
   arquivo sem ela.
+
+## 35. Complemento de 2026-10-16, versão 0.4.0: exportar dados em vários formatos, como o DBeaver
+
+Pedido do dono em 2026-10-16: "as exportações de dados (em diferentes tipos, assim como o print a seguir do
+dbeaver)". O print é o assistente "Transferência de dados" do DBeaver, na página "Destino da exportação": a
+origem (a tabela) e a lista de formatos (CSV, Código fonte, DbUnit, HTML, JSON, Markdown, SQL, TXT, XML e
+Banco de dados), com as etapas à esquerda ("Destino da exportação", "Configurações de extração",
+"Configurações de formatação", "Saída" e "Confirmação") e os botões "Voltar", "Avançar", "Continuar" e
+"Fechar". É a terceira parte do que o dono pediu naquele dia (a primeira é a seção 33; a segunda, a 34).
+
+Esta seção é a exportação para arquivo (e para a área de transferência). O destino "Banco de dados" (copiar as
+linhas para uma tabela que já existe em outra conexão) e a importação de um arquivo para uma tabela vêm no
+complemento seguinte, juntos, porque os dois gravam linhas numa tabela pelo mesmo carregador; aqui "Banco de
+dados" aparece na lista como "Em breve". Exportar a seleção da grade, e só as linhas carregadas, com estes
+formatos espera a seleção de várias células (RN-GRADE-001).
+
+Até aqui só existia o "Exportar CSV" dos Registros, das linhas carregadas, montado na tela (RN-TABELA-006); a
+exportação do resultado inteiro era "a tarefa seguinte" (RN-GRADE-008). Ela chega agora. A API lê de novo, numa
+conexão à parte, e escreve o arquivo inteiro num trabalho em segundo plano, linha a linha e sem o corte da
+grade. O processo principal do Electron é o dono do destino, que a pessoa escolhe no diálogo de salvar do
+sistema, e entrega o arquivo pronto. São os primeiros canais do Electron que tocam arquivo: o download da página
+(o `saveText` do "Exportar CSV" e da exportação das conexões, RN-TRANSF-007) monta o arquivo inteiro na memória
+da janela, sem progresso nem cancelamento, e não serve para milhões de linhas; e a API, que escreve, nunca
+recebe um caminho da tela: a tela tomada por um conteúdo hostil não grava arquivo nenhum fora da pasta de dados
+(RN-SHELL-001). Muda a RN-TABELA-006, a RN-GRADE-004, 007 e 008, a RN-SQL-017, a RN-EDIT-013, a RN-MENU-001, a
+RN-PROT-001 e 002, a RN-SEG-001, a RN-TX-006 e 007, a RN-CONN-014, a RN-COFRE-008, a RN-ABAS-004 e 007, a
+RN-AVISO-006, a RN-DRIVER-005, a RN-ATUALIZA-006, a RN-TRANSF-016, a RN-LOG-001, a RN-VERSAO-002 e as seções 6, 9
+e 13. O canvas não desenha nada disto (seção 9).
+
+### Onde se exporta
+
+- **RN-EXPORT-001.** As entradas. Todas abrem o assistente "Exportar dados" (RN-EXPORT-003) com a origem já
+  escolhida.
+  - No navegador, no menu da tabela e no da visão (RN-MENU-001): "Exportar dados…", num grupo próprio depois
+    de "Gerar SELECT" e antes de "Copiar nome", com a seta de baixar que o app já tem. A origem é a tabela (ou
+    a visão) inteira. Fica desabilitado, como os outros itens dela, quando a tela não sabe onde a tabela está.
+  - Nos Registros de uma tabela, no rodapé: "Exportar…", logo depois de "Exportar CSV" (que continua exportando
+    só as linhas carregadas, RN-TABELA-006), no mesmo desenho e com a mesma seta, e a dica "Exportar todas as
+    linhas da tabela, com o filtro e a ordem da aba, em CSV ou outro formato". A origem é o comando dos
+    Registros que a grade mostra.
+  - No resultado da aba de consulta: "Exportar…" na barra da área de resultado, que fica à vista também com a
+    área recolhida (RN-PAINEL-001), depois do zoom da grade e antes de recolher e maximizar, com a dica
+    "Exportar todas as linhas deste resultado, em CSV ou outro formato". Depois de um script (RN-SQL-020), ele
+    age sobre a aba de resultado que está à frente; com as Estatísticas à frente, fica desabilitado com
+    "Escolha a aba de um resultado para exportar.".
+  - No menu da célula da grade (RN-GRADE-004), nos Registros e nos resultados: "Exportar dados…", num grupo
+    próprio, logo depois de "Gerar SQL" e antes de "Ir para o registro referenciado" e dos itens da edição, com
+    a origem daquela grade.
+  - O botão e os itens estão sempre lá, também sem resultado. O que não se aplica fica desabilitado sem sair do
+    caminho do Tab (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela:
+    - sem resultado na tela (antes da primeira execução, nas linhas afetadas, no erro): "Não há resultado para
+      exportar.";
+    - o resultado de um comando que não é só de leitura (RN-EXPORT-002), também o que gravou e devolveu
+      linhas (RN-SQL-013): "Exportar executaria o comando de novo, e ele não é só de leitura.";
+    - a aba ocupada (um comando, o "Salvar", o script rodando ou parado na pergunta de erro): "Há um comando
+      em andamento na aba.". A execução da atualização automática (RN-GRADE-014) não desabilita: ela executa
+      o mesmo comando.
+  - A conexão desconectada não desabilita nada: a exportação não usa a sessão da aba. Fora do Electron também
+    não: o assistente abre, e o "Exportar" dele diz "Exportar só funciona no app do Prism." (RN-EXPORT-019).
+  - Não há entrada na seção Scripts, no menu do esquema nem no da conexão: várias tabelas de uma vez ficam para
+    depois.
+
+- **RN-EXPORT-002.** O que cada origem exporta.
+  - **A tabela pelo navegador**: todas as linhas, pelo `SELECT` que a API monta com as colunas marcadas na
+    Extração e os nomes entre aspas duplas, como nos Registros (RN-TABELA-002): `SELECT "id", "cliente" FROM
+    "estoque"."pedido"`, sem filtro nem ordem.
+  - **Os Registros**: o comando dos Registros que a grade mostra, com o filtro e a ordem aplicados (RN-TABELA-005
+    e 010), e não os que estão só digitados no campo. Ele é executado de novo do começo: saem todas as linhas, e
+    não só as carregadas.
+  - **O resultado da aba de consulta, e cada aba de resultado do script**: o comando que gerou aquele resultado,
+    como foi executado, com o filtro do resultado quando há (RN-GRADE-011, que a API junta ao comando como no
+    `queries`), executado de novo do começo. Na aba do script, é o comando daquele resultado (RN-SQL-020), e não
+    o texto do editor.
+  - **Só leitura.** Exportar executa o comando de novo, e por isso só se exporta o comando que é uma leitura pela
+    regra do somente leitura (RN-PROT-005), em qualquer conexão, somente leitura ou não, e que não gravou: o
+    resultado que veio pelo caminho da RN-SQL-013 não se exporta. A página do resultado já diz isso (`read`,
+    seção 6), e a tela desabilita a entrada com o motivo antes do clique. A API confere de novo ao começar, no
+    comando montado (com o filtro), e recusa com 422 `EXPORT_SOURCE_NOT_READ`, com o motivo da RN-PROT-005 no
+    detalhe ("um DELETE não é leitura"). Na dúvida, não é leitura: o `SELECT` com uma coluna `update` sem aspas
+    também não se exporta.
+  - **Numa conexão à parte**, como a contagem e o catálogo da edição (RN-SQL-006 e RN-EDIT-010), e nunca na
+    sessão da aba: a exportação não ocupa a aba, não fecha o cursor dela, não troca o resultado e não toma a
+    vez da sessão (RN-SESSAO-002). A conexão à parte usa a conexão gravada no cofre, lida quando a exportação
+    começa (host, porta, usuário e senha, como na abertura de uma sessão), e o banco de dados da origem
+    (RN-ARVORE-006 e 007). O que a sessão da aba mudou nela mesma (um `SET` do esquema, uma tabela temporária,
+    o nível de isolamento da aba) não vale na conexão à parte: o comando lê o que leria numa sessão nova, como
+    na contagem.
+  - O arquivo traz o que o banco tem quando a exportação lê, e não o que a grade mostra: as linhas que outra
+    sessão gravou depois da leitura da grade entram, e as alterações não salvas da grade (RN-EDIT-004) e o que a
+    aba fez sem commit (Commit manual, RN-TX-002) não entram. A Confirmação avisa os dois (RN-EXPORT-015).
+  - **Valores completos**: a exportação lê direto do banco, sem o corte de 10.000 caracteres do texto nem o de
+    32 bytes do binário da grade (RN-SQL-011), e sem o teto de 256 MB do valor completo guardado na sessão
+    (RN-SQL-017). Cada valor sai inteiro, no texto em que a grade o escreve: o número sem perder precisão e com
+    ponto; a data e a hora `aaaa-mm-dd hh:mm:ss.ffffff` no Db2 e no Informix, e o texto do servidor no
+    PostgreSQL; o booleano `true` ou `false`; o binário como `0x` e os dígitos hexadecimais em maiúsculas. As
+    exceções são as dos formatos (RN-EXPORT-006 a 013) e a do valor grande (RN-EXPORT-017).
+  - **As colunas**: as marcadas na Extração (RN-EXPORT-005), na ordem do resultado. Na tabela pelo navegador o
+    `SELECT` leva só elas; nos Registros e no resultado a API não reescreve o comando: executa-o como está e não
+    escreve as desmarcadas.
+
+### O assistente "Exportar dados"
+
+- **RN-EXPORT-003.** O diálogo.
+  - O título é "Exportar dados", e embaixo dele vem a origem: "Tabela estoque.pedido" (do navegador; numa
+    visão, "Visão estoque.v_pedido"); "Tabela estoque.pedido, com o filtro e a ordem da aba" (dos Registros com
+    filtro ou ordem; sem eles, "Tabela estoque.pedido"); ou "Resultado de consulta-1.sql" (da aba de consulta,
+    com o nome da aba; numa aba do script, "Resultado 3 de consulta-1.sql", com o número do comando no
+    script). Ao lado vêm a etiqueta do banco, a conexão e o banco de dados, com o ambiente e o cadeado do
+    somente leitura dela (RN-PASTA-005, RN-PROT-002). É o diálogo grande (760 px), como o "Exportar conexões".
+  - À esquerda ficam as cinco etapas, numa lista: "Formato", "Extração", "Formatação", "Saída" e "Confirmação".
+    Com o formato "Banco de dados" (seção 36), são seis: "Formato", "Extração", "Tabela de destino",
+    "Mapeamento", "Carga" e "Confirmação" (RN-IMPORT-022). A atual fica destacada (`aria-current="step"`); as
+    anteriores são clicáveis e levam de volta a elas; as seguintes, não. À direita fica o conteúdo da etapa.
+  - No rodapé: "Cancelar" à esquerda; "Voltar" (desabilitado na primeira etapa) e "Avançar" à direita. Na
+    última etapa, "Avançar" vira "Exportar" (ou "Copiar", com a área de transferência, RN-EXPORT-014; ou
+    "Copiar linhas", com "Banco de dados", RN-IMPORT-022).
+    "Avançar" fica desabilitado enquanto a etapa tem um campo recusado, que mostra o motivo no próprio campo.
+  - Cancelar, Esc e o X fecham sem perguntar: nada foi feito. Durante "Exportando…", do clique em "Exportar"
+    até a resposta da API (o diálogo de salvar do sistema e o pedido, RN-EXPORT-015), o diálogo não fecha, como
+    em toda gravação.
+  - Há um assistente por vez em cada janela (o diálogo cobre a janela). O bloqueio por inatividade, o "Sair" e o
+    quinto erro de senha o fecham (RN-SEG-001), como os outros diálogos.
+  - As escolhas da última exportação ficam lembradas por usuário, nas preferências desta instalação
+    (RN-CONFIG-001, no `localStorage` da janela, como o último formato da RN-GRADE-007): o formato, as opções
+    de cada formato (com o "Incluir BOM" de cada um), "Contar as linhas antes", o padrão do nome, "Compactar em
+    .zip", "Mostrar na pasta ao terminar" e a área de transferência. As colunas e a tabela de destino do SQL e
+    do DbUnit são da origem e não se lembram. A escolha lembrada que não vale mais (um formato que não existe, um
+    valor fora da faixa) volta ao padrão, sem erro. Com "Banco de dados", lembram-se as escolhas da Carga, e não a
+    conexão nem a tabela de destino (RN-IMPORT-022).
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as etapas e o botão do destino "Banco de dados".*
+
+- **RN-EXPORT-004.** Formato.
+  - É uma lista de escolha única (`listbox`) com o ícone (16 px, traço 1,5), o nome e uma frase de cada formato,
+    nesta ordem:
+    - CSV: "Texto separado por ponto e vírgula, para planilhas e outros programas.";
+    - Código fonte: "Um array do PHP com as linhas.";
+    - DbUnit: "Um conjunto de dados em XML, para testes com o DbUnit.";
+    - HTML: "Uma página com a tabela, para abrir no navegador.";
+    - JSON: "Uma lista de objetos, um por linha.";
+    - Markdown: "Uma tabela no estilo do GitHub, para documentação.";
+    - SQL: "Comandos INSERT, para levar as linhas a outra tabela.";
+    - TXT: "Uma tabela de texto, com as colunas alinhadas.";
+    - XLSX: "Uma planilha do Excel.";
+    - XML: "Um documento XML, no formato do DBeaver.";
+    - e, separado dos outros por uma linha, "Banco de dados": "Copiar as linhas para uma tabela que já existe,
+      nesta ou em outra conexão." (RN-IMPORT-022 a 027). Até a seção 36 ele aparecia desabilitado, com "Em
+      breve", porque o print do dono o mostra, e um item que some e depois aparece confundiria mais que um "Em
+      breve".
+  - Vem escolhido o último formato usado (RN-EXPORT-003); na primeira vez, o CSV.
+  - As setas, Home e End andam pela lista e escolhem; Enter e o duplo clique escolhem e avançam.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): "Banco de dados" deixou de ser "Em breve".*
+
+- **RN-EXPORT-005.** Extração.
+  - "Colunas": a lista das colunas da origem, na ordem do resultado, cada uma com a caixa de marcar, o nome e o
+    tipo (como o cabeçalho da grade os mostra), todas marcadas ao abrir, com "Marcar todas" e "Desmarcar
+    todas".
+    - Nos Registros e no resultado, as colunas são as do resultado na tela. Na tabela pelo navegador, são as do
+      catálogo (`GET …/columns` na sessão da árvore, RN-CAT-001), lidas ao abrir a etapa ("Lendo as
+      colunas…"); a falha aparece na etapa, com a mensagem do banco e "Tentar de novo".
+    - Sem nenhuma marcada, "Avançar" fica desabilitado, com "Marque ao menos uma coluna.".
+    - O nome repetido (uma junção com dois `id`) aparece repetido, cada um com a sua caixa.
+    - A lista rola, e o Tab anda pelas caixas; com milhares de colunas, ela responde sem travar.
+  - "Contar as linhas antes, para mostrar o progresso", ligado, com a dica "A origem é lida duas vezes: uma para
+    contar, outra para exportar." Desligado, o progresso diz só quantas linhas já foram escritas
+    (RN-EXPORT-021).
+  - "Origem", só para ver:
+    - na tabela pelo navegador, "Todas as linhas de estoque.pedido.";
+    - nos Registros, "Filtro e ordem da aba:" com o texto aplicado, em código; sem filtro nem ordem, "Sem filtro
+      nem ordem: todas as linhas da tabela.";
+    - no resultado, "Comando:" com o texto dele, em código, numa caixa que rola, e, com filtro, "Filtro do
+      resultado:" com o texto dele.
+
+    Aqui não se edita: para mudar a origem, a pessoa muda a aba e exporta de novo.
+
+- **RN-EXPORT-006.** Formatação: o que vale em todos os formatos.
+  - A etapa mostra as opções do formato escolhido (RN-EXPORT-007 a 013), cada uma com o padrão do Prism (o do
+    DBeaver, onde o Prism não tinha um), e, no fim, "Voltar aos padrões", que põe nelas os padrões do formato.
+  - "Binário", em todos os formatos menos o SQL, que tem literal próprio (RN-EXPORT-011): "Hexadecimal (0x…)",
+    o padrão, como a grade escreve, inteiro; ou "Deixar vazio", que escreve o binário como o nulo do formato:
+    a API não pede o valor ao leitor (ele não vira texto nem conta para o limite do valor grande, RN-EXPORT-017),
+    ainda que o driver o traga pela rede junto da linha. Deixar vazio é o jeito de exportar uma tabela de imagens
+    sem levar as imagens.
+  - A data e a hora saem como a grade as escreve (RN-EXPORT-002); só o JSON e o Código fonte têm "Datas em ISO
+    8601" (RN-EXPORT-010).
+  - "O nome da origem", que alguns formatos usam (o título do HTML, a chave do JSON, a variável do PHP, a raiz
+    do XML, a planilha do XLSX), é o nome da tabela ou da visão, sem o esquema, na tabela e nos Registros; e
+    `resultado` no resultado de uma consulta.
+  - Os nomes (o da origem e os das colunas) são texto do banco. Cada formato os escreve com o escape dele, nunca
+    como marcação nem como código (RN-SHELL-002). Um nome com qualquer caractere Unicode (acento, ideograma,
+    emoji, marca de direção) sai inteiro onde o formato o aceita, e com a troca que o formato pede onde não
+    aceita (o nome de elemento do XML, a variável do PHP, o nome da planilha), cada uma descrita no formato. No
+    Código fonte, que é código, a marca de direção não sai crua (RN-EXPORT-010).
+  - O par substituto solto, que o UTF-8 não escreve, sai como U+FFFD nos formatos que não o tiram nem o escapam
+    (CSV, TXT, Markdown, SQL e Código fonte). O HTML, o XML e o DbUnit o tiram e o contam; o JSON e o XLSX o
+    escrevem com o escape deles.
+  - O resultado sem linhas não é erro, e o aviso do fim diz "0 linhas":
+    - CSV, TXT, HTML, Markdown e XLSX trazem só o cabeçalho (sem cabeçalho, o arquivo fica vazio; com o BOM, só
+      ele);
+    - JSON, `[]`, e, com o nome da origem, `{ "pedido": [] }`;
+    - XML, a declaração e a raiz vazia, `<pedido/>`; DbUnit, `<dataset/>` (RN-EXPORT-012);
+    - Código fonte, `$pedido = array();` (`$pedido = [];` no PHP 5.4), entre `<?php` e `?>`;
+    - SQL, um arquivo vazio.
+
+- **RN-EXPORT-007.** CSV.
+  - "Separador": "Ponto e vírgula (;)", o padrão, que é o que o Excel em português espera; "Vírgula (,)";
+    "Tabulação"; ou "Barra vertical (|)". Com a tabulação a extensão é `.tsv` (o TSV da RN-GRADE-007); com os
+    outros, `.csv`.
+  - "Cabeçalho": "Na primeira linha", o padrão, ou "Sem cabeçalho".
+  - "Aspas", sempre `"`, dobrada dentro do valor:
+    - "Só quando precisa", o padrão: o valor que tem o separador, a aspa, a quebra de linha ou o retorno de
+      carro;
+    - "Em todos os textos": todo valor de coluna que não é número, e os nomes das colunas;
+    - "Em todos os valores".
+
+    O nulo nunca vai entre aspas (`""` seria um texto vazio), a não ser que o texto dele tenha o separador, a
+    aspa ou uma quebra. O número nunca vai entre aspas em "Em todos os textos".
+  - "Proteção contra fórmula", ligada: o apóstrofo da RN-TABELA-006 antes do valor, e do nome de coluna, cujo
+    primeiro caractere depois de espaços, tabulação ou retorno de carro é `=`, `+`, `-` ou `@`, menos o número
+    simples, inclusive o negativo. Desligada, a dica avisa: "Uma planilha pode executar como fórmula o valor que
+    começa com =, +, - ou @.".
+  - "Quebra de linha": "CRLF (Windows)", o padrão, ou "LF". Toda linha termina nela, também a última.
+  - "Nulo como": um texto, vazio por padrão, de até 100 caracteres e sem caractere de controle ("O texto do nulo
+    não pode ter caractere de controle.").
+  - Com os padrões e o BOM (RN-EXPORT-014), a saída é a mesma do "Exportar CSV" (RN-TABELA-006) para as mesmas
+    linhas, byte a byte, e as fixtures de ouro conferem isso (RN-EXPORT-024).
+
+- **RN-EXPORT-008.** TXT, a tabela de texto do DBeaver.
+  - As opções e os padrões:
+    - "Cabeçalho", ligado;
+    - "Linha sob o cabeçalho", ligada: os traços `-` na largura de cada coluna;
+    - "Barra nas pontas", ligada: a linha começa e termina em `|`;
+    - "Largura mínima": 3, de 1 a 1.000;
+    - "Largura máxima": 0, que é sem limite, de 0 a 100.000; com valor, ela não pode ser menor que a mínima ("A
+      largura máxima não pode ser menor que a mínima.");
+    - "Mostrar NULL", desligado: o nulo fica vazio; ligado, sai `NULL`;
+    - "Quebra de linha": CRLF, o padrão, ou LF.
+  - Com os padrões:
+
+    ```
+    |id |nome |criado    |
+    |---|-----|----------|
+    |1  |Bruna|2024-01-15|
+    |2  |Ana  |2024-02-20|
+    ```
+
+  - As colunas são separadas por `|`, sem espaço em volta, e cada valor fica alinhado à esquerda e completado
+    com espaços até a largura da coluna. A largura é a maior entre a mínima, o nome da coluna e os valores do
+    lote, contada em caracteres (pontos de código, sem a largura de exibição: um ideograma conta um), e cortada
+    na máxima, quando há. O valor maior que a máxima é cortado nela, e o aviso do fim conta quantos
+    (RN-EXPORT-022).
+  - As larguras são calculadas a cada lote de 200 linhas, como no DBeaver: cada lote é lido, medido e escrito, e
+    um lote com valores maiores alarga as colunas dele, sem mudar as linhas já escritas. O lote fecha antes das
+    200 linhas quando os valores dele passam de 16 MiB, para um lote de linhas largas não encher a memória. O
+    cabeçalho sai uma vez, no alto, com as larguras do primeiro lote.
+  - A quebra de linha, o retorno de carro, a tabulação e os outros caracteres de controle dentro do valor viram
+    um espaço: cada linha da origem é uma linha do arquivo.
+
+- **RN-EXPORT-009.** HTML e Markdown.
+  - **HTML**: o documento da RN-GRADE-007 (`to-html.ts`): `<!DOCTYPE html>`, a política de conteúdo do próprio
+    documento, que proíbe script, a folha de estilo constante e uma `<table>`, com o nome da coluna em `<th>`, o
+    número alinhado à direita, o nulo na célula vazia com o `NULL` apagado desenhado pela folha de estilo, e uma
+    linha `<tr>` por linha da origem.
+    - "Título com o nome da origem", ligado: o `<title>` e uma `<caption>` com o nome da origem. Desligado, o
+      `<title>` é "Resultado", e não há `<caption>`.
+    - "Nomes das colunas", ligado: a linha do `<thead>`.
+    - Todo texto do dado é escapado (`&`, `<`, `>` e as duas aspas). O caractere que um documento HTML não aceita
+      (controle, DEL, os de C1, não-caractere, par substituto solto) é tirado, e o aviso do fim conta quantos
+      (RN-EXPORT-022).
+  - **Markdown**: a tabela no estilo do GitHub da RN-GRADE-007 (`to-markdown.ts`): `| a | b |`, a linha de
+    alinhamento (`---:` à direita na coluna de número) e uma linha por registro. A barra invertida, a barra
+    vertical e a formatação (`*`, `_`, crase, til, colchete) são escapadas, `<` e `&` viram entidade, e a quebra
+    de linha vira `<br>`. O arquivo termina em LF.
+    - "Linha de alinhamento", ligada. Desligada, o arquivo deixa de ser uma tabela do GitHub, como no DBeaver.
+    - "Nulo como": vazio, nas regras do CSV.
+
+- **RN-EXPORT-010.** JSON e Código fonte.
+  - **JSON**: a lista de objetos da RN-GRADE-007 (`to-json.ts`), um por linha, com uma chave por coluna, na
+    ordem do resultado (o nome repetido ganha `_2`, `_3`…, `jsonKeys`). O número e o booleano saem como tais
+    quando o texto é um número na gramática do JSON, ou `true`/`false`, numa coluna desse tipo; o nulo é `null`;
+    o resto é texto. Recuo de 2 espaços, e LF.
+    - O texto é escrito como o `JSON.stringify` o escreve: só a aspa, a barra invertida e os controles (U+0000 a
+      U+001F) são escapados (`\b`, `\f`, `\n`, `\r` e `\t` na forma curta, os outros como `\u00XX`, em
+      minúsculas), o par substituto solto vira `\uXXXX`, e o resto vai em UTF-8, como está. O `Utf8JsonWriter`
+      do .NET, que escapa os acentos, não serve como está.
+    - "Pôr o nome da origem", ligado, como o DBeaver: `{ "pedido": [ … ] }`, com a lista um nível para dentro.
+      Desligado, só a lista, como na RN-GRADE-007.
+    - "Datas em ISO 8601", ligado: o valor de data e hora no formato da grade (`aaaa-mm-dd hh:mm:ss[.f…]`, com
+      ou sem o fuso `±hh` ou `±hh:mm`) ganha o `T` no lugar do espaço, e o fuso `±hh` vira `±hh:00`:
+      `2024-01-15 10:30:00.000000` sai `2024-01-15T10:30:00.000000`, e `2024-01-15 10:30:00+00` sai
+      `2024-01-15T10:30:00+00:00`. A data sem hora, a hora sem data e o texto em outro formato saem como estão
+      (o PostgreSQL escreve sempre em ISO na exportação, RN-EXPORT-017). Desligado, sai como a grade.
+  - **Código fonte**: um array do PHP, como o DBeaver: `<?php`, `$pedido = array(`, um `array(` por linha com
+    `"id" => 1,` por coluna, `);` e `?>`, com tabulação de recuo e LF. O resultado sem linhas é `$pedido =
+    array();`.
+    - "Versão do PHP": "Anterior ao PHP 5.4", o padrão, com `array(...)`; ou "PHP 5.4 ou mais novo", com
+      `[...]`.
+    - "Aspas": duplas, o padrão, ou simples.
+    - "Datas em ISO 8601", ligado, como no JSON.
+    - O número e o booleano, nas regras do JSON, saem sem aspas, e o nulo é `null`.
+    - Nas aspas duplas são escapados a barra invertida, a aspa e o cifrão (`\$`, que o PHP leria como uma
+      variável); a quebra de linha, o retorno de carro, a tabulação, a tabulação vertical e o avanço de página
+      saem como `\n`, `\r`, `\t`, `\v` e `\f`, e os outros controles como `\xHH`. Nas aspas simples, só a barra
+      invertida e o apóstrofo são escapados, e a quebra de linha fica dentro do texto.
+    - O caractere de direção (U+202A a U+202E, U+2066 a U+2069, U+200E, U+200F e U+061C), que faria o código
+      ser lido numa ordem e executado noutra, nunca sai cru: nas aspas duplas, sai como `\xHH` por byte do UTF-8
+      (U+202E é `\xE2\x80\xAE`); nas aspas simples, que não têm escape, e no nome da variável, é tirado, e o
+      aviso do fim conta quantos (RN-EXPORT-022).
+    - O nome da variável é o nome da origem sem os caracteres de direção e com o que o PHP não aceita num nome
+      (o que não é letra ou dígito do ASCII, `_` ou um caractere fora do ASCII) trocado por `_`, e com um `_` na
+      frente quando começa por dígito; vazio, `$resultado`. As chaves são os nomes das colunas, como texto do
+      PHP com o mesmo escape, e o nome repetido ganha `_2`, como no JSON.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): saiu o exemplo do `DateStyle` de outro servidor, que a
+    leitura da exportação passou a fixar (RN-EXPORT-017).*
+
+- **RN-EXPORT-011.** SQL.
+  - São comandos `INSERT`, com os nomes entre aspas duplas (RN-TABELA-002), os valores como literais do banco da
+    origem e as palavras-chave em maiúsculas:
+
+    ```
+    INSERT INTO "estoque"."pedido" ("id", "cliente", "criado") VALUES
+      (1, 'Ana', '2024-01-15 10:30:00.000000'),
+      (2, 'Bia', NULL);
+    ```
+
+    Com uma linha por comando, cada `INSERT` fica numa linha só, como no "Gerar SQL" (RN-GRADE-006):
+    `INSERT INTO "estoque"."pedido" ("id", "cliente", "criado") VALUES (1, 'Ana', '2024-01-15
+    10:30:00.000000');`. Os comandos terminam em `;`, e o arquivo, em LF. No Informix, o arquivo só roda com os
+    identificadores delimitados ligados, como o Prism abre a sessão (RN-TABELA-002); noutra ferramenta, com
+    `DELIMIDENT=y` (sem isso, `"pedido"` é um texto, e o `INSERT` falha).
+  - As opções:
+    - "Tabela de destino": dois campos, "Esquema" e "Tabela", com os nomes como estão no banco (sem aspas: o
+      Prism as põe). Na tabela e nos Registros, vêm com os da origem. No resultado, vêm vazios, e a tabela é
+      obrigatória ("Informe a tabela de destino."), menos quando o alvo da edição do resultado já disse que ele
+      é de uma tabela só (RN-EDIT-002, `rowOperations`), que os preenche sem perguntar ao banco. Cada nome tem
+      até 128 caracteres, sem caractere de controle ("O nome não pode ter caractere de controle."). Com o
+      esquema vazio, sai só a tabela. Na API, a tabela ausente ou vazia é a da origem (`source.table`, ou
+      `source.name` nos Registros); sem nenhuma das duas, é `EXPORT_OPTIONS_INVALID` em `options.table`.
+    - "Omitir o esquema", desligado: ligado, sai só `"pedido"`, para levar as linhas ao esquema padrão da sessão
+      de destino.
+    - "Linhas por comando": de 1 a 1.000, o padrão é 10, como no DBeaver; 1 é um `INSERT` por linha. No
+      Informix, que não aceita várias linhas num `INSERT … VALUES`, é sempre 1, e o campo fica desabilitado com
+      "O Informix não aceita várias linhas num INSERT.".
+    - "Incluir as colunas que o banco calcula", desligado, como no DBeaver. Só aparece na tabela e nos Registros,
+      onde o catálogo diz quais são (RN-CAT-001). Desligado, a coluna que o banco calcula sempre (`generated:
+      always`: a identidade "sempre", a coluna calculada) não entra no `INSERT`, mesmo marcada na Extração,
+      porque o banco recusaria um valor para ela: a tela a tira das colunas que manda. A identidade "por padrão"
+      e o `serial` entram, porque são a chave das linhas. No resultado a opção não aparece, e vão as colunas
+      marcadas.
+    - "Binário": "Literal do banco", o padrão, ou "NULL".
+  - Duas colunas marcadas com o mesmo nome fariam um `INSERT` que o banco recusa: a etapa diz "O resultado tem
+    duas colunas chamadas id: deixe uma de fora na Extração." e não avança.
+  - Os literais são os do "Gerar SQL" (`sqlLiteral` e `scriptLiteral`, RN-GRADE-006 e RN-TABELA-007), escritos
+    pela API em C# com o mesmo texto, que as fixtures de ouro conferem (RN-EXPORT-024):
+    - o número sem aspas só numa coluna de número, e quando ele é um número simples;
+    - o resto entre aspas simples, com a aspa dobrada; no PostgreSQL, o texto com barra invertida como `E'…'`,
+      com a barra dobrada;
+    - no Informix, o lógico como `'t'` ou `'f'`, e a data e hora com fração como `DATETIME (…) YEAR TO
+      FRACTION(5)`;
+    - no PostgreSQL e no Db2, a quebra de linha e a tabulação dentro das aspas; o retorno de carro, no
+      PostgreSQL, como `\r` num `E'…'`: o literal inteiro passa a `E'…'`, com a barra invertida e a aspa
+      dobradas dentro dele (`a`, o retorno de carro e `b` saem como `E'a\rb'`; `O'Brien` com um retorno de carro
+      no fim, como `E'O''Brien\r'`), e continua um literal só, sem tipo, que entra numa coluna `json`, `xml` ou de
+      lista; no Db2, como `' || CHR(13) || '`; no Informix, as três por `||` e `CHR(10)`, `CHR(13)` e `CHR(9)`;
+    - o nulo, `NULL`.
+  - O binário, que o "Gerar SQL" não escreve, tem literal aqui. No PostgreSQL é `decode('DEADBEEF', 'hex')`, que
+    vale qualquer que seja o `standard_conforming_strings` (o `'\x…'::bytea` dependeria dele, como a barra
+    invertida do texto, que por isso já vai como `E'…'`). No Db2 é `X'DEADBEEF'`, e `BLOB(X'…')` quando a
+    coluna é `BLOB`, em pedaços de até 16.336 bytes (o teto da constante hexadecimal do Db2, 32.672 dígitos)
+    unidos por `||`. No Informix não há literal de binário.
+  - A linha com um valor sem literal não sai: o binário no Informix (com "Literal do banco"); o texto com outro
+    caractere de controle, que não é quebra de linha, retorno de carro nem tabulação; no Informix, a data e hora
+    com mais de cinco casas de segundo que não são zeros. O comando em andamento fecha com `;` antes dela, e no
+    lugar dela vai um comentário de uma frase fixa, sem nenhum dado do banco (um nome ou um valor com quebra de
+    linha encerraria o comentário, e o resto viraria código):
+    - `-- Linha 1234 não exportada: o Informix não tem literal para binário.`
+    - `-- Linha 1234 não exportada: um valor tem caractere de controle que não vira literal.`
+    - `-- Linha 1234 não exportada: no Informix, a data e hora tem mais de cinco casas de segundo.`
+
+    O número é o da linha na ordem da origem, a partir de 1. As linhas seguintes começam outro `INSERT`, e o
+    aviso do fim conta as que ficaram de fora (RN-EXPORT-022).
+  - O arquivo não confere cada comando contra o tamanho que o banco de destino aceita num comando só (no Db2, 2 MB
+    de texto): com valores grandes, um `INSERT` de 10 linhas pode passar dele. A dica de "Linhas por comando" diz:
+    "Com valores grandes, use 1: cada banco tem um tamanho máximo de comando."
+  - Os literais do Db2 e do Informix de hoje só foram conferidos em testes de função pura (o `AGENTS.md` da tela
+    diz isso). Os novos (o binário dos três bancos, o `INSERT` de várias linhas no PostgreSQL e no Db2, e o retorno
+    de carro do PostgreSQL numa coluna `json` e numa lista `text[]`) também são provados contra os três
+    servidores, nos contêineres dos testes de integração; até lá, o relatório diz que não foram exercitados.
+  - *Alterada a pedido do dono em 2026-10-17: no PostgreSQL, o retorno de carro saía como `' || CHR(13) || '`, e
+    o `INSERT` com ele numa coluna `json`, `xml` ou de lista falhava ao voltar para o banco, porque a expressão
+    unida por `||` é `text`, que essas colunas não aceitam sem conversão. Passou a `\r` num `E'…'`, também no
+    "Gerar SQL" (RN-GRADE-006), que escreve os mesmos literais; o Db2 e o Informix continuam como eram.*
+
+- **RN-EXPORT-012.** XML e DbUnit.
+  - **XML**: o formato do DBeaver, com um elemento por linha e um por coluna:
+
+    ```
+    <?xml version="1.0" encoding="UTF-8"?>
+    <pedido>
+      <DATA_RECORD>
+        <id>1</id>
+        <cliente>Ana</cliente>
+      </DATA_RECORD>
+    </pedido>
+    ```
+
+    - A raiz é o nome da origem, e cada coluna é um elemento com o nome dela. O nome que não pode ser nome de
+      elemento é escrito pela regra do .NET para isso (`XmlConvert.EncodeLocalName`): cada caractere que não
+      pode estar ali vira `_xHHHH_` (o espaço, `_x0020_`; o `1` do começo, `_x0031_`), e a volta é exata.
+    - O nulo e o texto vazio são o elemento vazio, como no DBeaver: quem precisa distinguir os dois usa o JSON ou
+      o DbUnit.
+    - O texto escapa `&`, `<`, `>` e o retorno de carro (`&#13;`, que o leitor trocaria por uma quebra de linha).
+      O caractere que o XML 1.0 não aceita (controle fora da tabulação, da quebra de linha e do retorno de carro,
+      U+FFFE, U+FFFF e o par substituto solto) é tirado, e o aviso do fim conta quantos.
+    - Recuo de 2 espaços, e LF.
+    - "Declaração DOCTYPE", desligada. Ligada, sai o `<!DOCTYPE>` do DBeaver antes da raiz, com os elementos da
+      raiz, do `DATA_RECORD` e de cada coluna (o nome repetido é declarado uma vez).
+  - **DbUnit**: o `<dataset>` do DbUnit, com um elemento vazio por linha, de nome igual ao da tabela, e um
+    atributo por coluna:
+
+    ```
+    <?xml version="1.0" encoding="UTF-8"?>
+    <dataset>
+        <PEDIDO ID="1" CLIENTE="Ana"/>
+    </dataset>
+    ```
+
+    - Recuo de 4 espaços, como no DbUnit e no DBeaver, e LF. O resultado sem linhas é `<dataset/>`.
+    - "Tabela": o nome do elemento. Na tabela e nos Registros, vem com o dela; no resultado, é obrigatória, com
+      as regras da tabela de destino do SQL.
+    - "Nomes em maiúsculas", ligado: o da tabela e os das colunas, em maiúsculas sem cultura (`ToUpperInvariant`),
+      antes da regra do nome do XML (assim o `_x0020_` não vira `_X0020_`).
+    - "Nulo": "Omitir o atributo", o padrão, ou "Escrever [NULL]" (o `ReplacementDataSet` do DbUnit o troca de
+      volta). A dica da opção diz: "O DbUnit lê as colunas da primeira linha: a coluna nula nela fica de fora, a
+      não ser que o conjunto seja carregado com columnSensing. "Escrever [NULL]" não tem esse limite."
+    - Os nomes seguem a regra de nome do XML acima, e o atributo repetido ganha `_2`, `_3`…, como a chave do
+      JSON. O valor do atributo escapa também a aspa, a tabulação e a quebra de linha (`&quot;`, `&#9;`,
+      `&#10;`), como a RN-GRADE-007 escapa um atributo, e o caractere que o XML 1.0 não aceita é tirado e
+      contado.
+
+- **RN-EXPORT-013.** XLSX.
+  - Uma pasta de trabalho do Excel, com as regras da RN-GRADE-007 (`to-xlsx.ts`): a planilha tem o nome da
+    origem, pelas regras do nome de planilha (sem `[ ] : * ? / \`, até 31 caracteres, nunca `History`); o
+    cabeçalho tem os nomes das colunas, em negrito e congelado; o número sai como número só quando cabe no Excel
+    sem perder precisão (até 15 dígitos significativos; senão, texto); a data, a hora, o booleano e o binário
+    saem como texto; e o texto é sempre texto, nunca fórmula: `=1+1` chega como o texto `=1+1`. O nulo é a
+    célula vazia. O texto leva o escape `_xHHHH_` do formato.
+  - Sem o corte de 10.000 caracteres, vale o limite da célula do Excel: o texto acima de 32.767 caracteres é
+    cortado nele, sem partir um par substituto, e o aviso do fim conta quantos valores (RN-EXPORT-022).
+  - O limite de uma planilha é 1.048.576 linhas, com o cabeçalho. Passando dele, as linhas continuam numa
+    planilha nova, "pedido (2)", "pedido (3)"… (o nome cortado para o sufixo caber nos 31 caracteres), cada uma
+    com o cabeçalho. O aviso do fim diz quantas planilhas.
+  - O limite de colunas é 16.384: com mais colunas marcadas, a etapa diz "Uma planilha do Excel tem no máximo
+    16.384 colunas: deixe 216 de fora na Extração, ou escolha outro formato." e não avança.
+  - A API escreve a pasta de trabalho em fluxo, compactada (deflate), linha a linha, sem guardar a planilha na
+    memória. O `to-xlsx.ts` da tela, que monta o arquivo inteiro sem compressão, continua servindo à exportação
+    da seleção, quando ela vier.
+  - O XLSX não tem outra opção nesta versão, além do binário.
+
+- **RN-EXPORT-014.** Saída.
+  - "Nome do arquivo": um padrão com variáveis, que vem com `${tabela}_${data}_${hora}`, como o
+    `${table}_${timestamp}` do DBeaver:
+    - `${tabela}`: o nome da origem (RN-EXPORT-006);
+    - `${esquema}`: o esquema da tabela (vazio no resultado);
+    - `${conexao}`: o nome da conexão;
+    - `${data}`: a data, `aaaa-mm-dd`, e `${hora}`: a hora, `hhmmss`, do relógio da máquina na hora do
+      "Exportar".
+
+    Embaixo do campo aparece o nome que sairia agora, atualizado a cada tecla ("pedido_2026-10-16_143005.csv").
+    As recusas ficam no campo: vazio ("Informe o nome do arquivo."), mais de 200 caracteres ("O nome do arquivo
+    pode ter até 200 caracteres.") e variável que não existe ("A variável ${tabelas} não existe. Use ${tabela},
+    ${esquema}, ${conexao}, ${data} ou ${hora}.").
+  - O nome pronto passa pelas regras de nome do "Exportar CSV" (RN-TABELA-006, `csvFileName`, pelo
+    `exportFileName` de `formats.ts`): saem os caracteres de controle, os de direção do texto e os invisíveis; o
+    que o Windows não aceita (`\ / : * ? " < > |`) vira `_`, também a barra, então o padrão não cria pasta; o
+    nome de dispositivo do Windows ganha um `_` na frente; não sobra ponto nem espaço no fim; tem até 120
+    caracteres, contados em pontos de código, e o corte não parte um par substituto (o `csvFileName`, que hoje
+    corta em unidades UTF-16 com `slice`, passa a cortar assim, com um caso a mais no teste); e, sobrando nada,
+    é `registros`, como hoje. Depois vem a extensão do formato, fora dos 120: `.csv` (`.tsv` com a tabulação),
+    `.php`, `.xml` (no XML e no DbUnit), `.html`, `.json`, `.md`, `.sql`, `.txt` ou `.xlsx`.
+  - "Codificação": UTF-8, a única nesta versão (o campo mostra, sem escolha).
+  - "Incluir BOM" (o caractere U+FEFF no começo, que faz o Excel ler o CSV em UTF-8): ligado no CSV e no TXT, como
+    hoje, e desligado nos outros; desabilitado no XLSX, que não é texto.
+  - "Compactar em .zip", desligado: ligado, o arquivo vai dentro de um `.zip` com o nome dele
+    (`pedido_2026-10-16_143005.csv` dentro de `pedido_2026-10-16_143005.zip`), compactado (deflate), e o `.zip`
+    é o que se salva. Fica desabilitado no XLSX, que já é compactado ("O XLSX já é um arquivo compactado.").
+  - "Mostrar na pasta ao terminar", desligado: ligado, depois da entrega o gerenciador de arquivos do sistema
+    abre a pasta com o arquivo escolhido (RN-EXPORT-020).
+  - "Copiar para a área de transferência em vez de salvar", desligado: ligado, o texto vai para a área de
+    transferência, e não para um arquivo.
+    - Só nos formatos de texto: fica desabilitado no XLSX ("O XLSX não é texto: não vai para a área de
+      transferência."). Marcado, ficam desabilitados o nome, o BOM, o .zip e o "Mostrar na pasta", e o texto
+      nunca leva BOM.
+    - O limite é de 10 MiB de texto (10.485.760 bytes em UTF-8), o que um editor e uma planilha colam sem
+      travar. A exportação que passa dele para ali e falha com "O texto passou de 10 MiB, o limite da área de
+      transferência. Exporte para um arquivo." (`EXPORT_CLIPBOARD_TOO_LARGE`), e a área de transferência fica
+      como estava. O limite é do texto, e não das linhas: cem mil linhas curtas cabem, e mil linhas de JSON longo
+      talvez não.
+
+- **RN-EXPORT-015.** Confirmação, e o "Exportar".
+  - Um resumo, em linhas de rótulo e valor:
+    - "Origem": "Todas as linhas de estoque.pedido"; "estoque.pedido, com o filtro e a ordem da aba", com o texto
+      deles; ou "Resultado de consulta-1.sql", com o começo do comando (o texto inteiro na dica);
+    - "Conexão": a etiqueta do banco, o nome da conexão e o banco de dados, com o ambiente e o cadeado;
+    - "Colunas": "Todas as 15 colunas" ou "12 de 15 colunas", com os nomes na dica; e "Conta as linhas antes" ou
+      "Sem contar as linhas";
+    - "Formato": o nome e as opções, numa frase ("CSV · ponto e vírgula · cabeçalho · aspas só quando precisa ·
+      proteção contra fórmula · CRLF");
+    - "Saída": o nome que sairia, "UTF-8 com BOM" ou "UTF-8", e "compactado em .zip" e "mostra na pasta ao
+      terminar" quando marcados; ou "Copiar para a área de transferência".
+  - Os avisos, no tom de atenção, quando valem:
+    - sempre: "As linhas são lidas de novo, numa conexão à parte: o arquivo traz o que o banco tem agora, e não
+      o que a grade mostra.";
+    - com alterações não salvas na grade (a RN-EDIT-007 já diz que exportar avisa, e não pergunta): "A grade tem
+      3 alterações não salvas. A exportação lê o que está gravado no banco e não leva essas alterações." ("1
+      alteração não salva", "e não leva essa alteração");
+    - com transação aberta na aba, no Commit manual (RN-TX-002 e RN-GRADE-008): "Esta aba tem uma transação
+      aberta. A exportação roda numa conexão à parte e não vê o que a aba ainda não confirmou.";
+    - no SQL, com colunas que o banco calcula deixadas de fora: "2 colunas que o banco calcula ficam fora dos
+      INSERT: total, criado_em." ("1 coluna … fica fora");
+    - no SQL do Informix, com uma coluna binária marcada e "Literal do banco": "O Informix não tem literal para
+      binário: as linhas com binário saem como comentário.".
+  - "Exportar" ("Copiar", com a área de transferência). Do clique até a resposta da API, o botão diz
+    "Exportando…" ("Copiando…") e fica desabilitado, e o diálogo não fecha:
+    1. sem a área de transferência, o processo principal abre o diálogo de salvar do sistema com o nome que
+       sairia (RN-EXPORT-019); desistir dele deixa o assistente como estava, com o botão de volta;
+    2. a tela confere o tamanho do corpo (até 8 MiB, as notas das rotas) e pede o começo à API (`POST
+       api/user/transfers/exports`);
+    3. aceito o pedido (202), o assistente fecha, e a exportação aparece na barra de status (RN-EXPORT-021).
+       Não há aviso de começo.
+  - As recusas do pedido aparecem no assistente, que fica aberto, e o destino escolhido é solto (RN-EXPORT-019):
+    - a de campo (422 `EXPORT_OPTIONS_INVALID`, com o caminho do campo), na etapa e no campo a que se refere;
+    - as outras, no alto da Confirmação: `EXPORT_SOURCE_NOT_READ` com o motivo; `FILTER_INVALID`,
+      `MULTIPLE_STATEMENTS_NOT_SUPPORTED` e `DATABASE_NAME_INVALID`, que a tela já evita e que só chegam de um
+      pedido montado errado, com a mensagem da API; 409 `TRANSFER_LIMIT_REACHED`, "Já há 3 transferências
+      em andamento (exportações, importações ou cópias para outro banco). Espere uma terminar, ou cancele uma
+      na barra de status."; 404
+      `CONNECTION_NOT_FOUND`, "A conexão não existe mais."; `DRIVER_NOT_INSTALLED`, com "Instalar driver"
+      (RN-DRIVER-006); e `CONNECTION_CREDENTIALS_MISSING`, no campo `userName` "Esta conexão não tem usuário
+      gravado. Preencha-o em Editar conexão e exporte de novo.", e no campo `password` "Esta conexão não tem
+      senha gravada. Preencha-a em Editar conexão e exporte de novo.". A tela mostra essa recusa no alto da
+      Confirmação, sem abrir o "Editar conexão" por cima do assistente: é a exceção à RN-TRANSF-016;
+    - o corpo do pedido acima de 8 MiB, que a tela confere antes de mandar e não manda: "O pedido passa de 8 MiB,
+      por causa do comando e dos nomes das colunas. Deixe colunas de fora na Extração.".
+    - O 401 `VAULT_LOCKED` leva à entrada, como sempre.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): o limite é de todas as transferências, e a recusa diz
+    isso.*
+
+### O trabalho na API
+
+- **RN-EXPORT-016.** O trabalho em segundo plano.
+  - `POST api/user/transfers/exports` confere o pedido, lê a conexão no cofre, começa o trabalho e responde 202,
+    com o `id` dele, antes de falar com o banco: conectar, contar e ler acontecem no trabalho, e a falha de cada
+    um é o fim dele (RN-EXPORT-017). Antes do 202 vêm, nesta ordem, e sem tocar no banco:
+    1. a forma do pedido e as faixas que não dependem do banco (422 `EXPORT_OPTIONS_INVALID`, no campo), com o
+       comando vazio ou de mais de 1 MB em UTF-8, o teto do SQL de um script (RN-SCRIPT-004), no campo
+       `source.sql`;
+    2. a conexão (404 `CONNECTION_NOT_FOUND`), o banco de dados pedido (422 `DATABASE_NAME_INVALID`), o usuário e
+       a senha (422 `CONNECTION_CREDENTIALS_MISSING`) e o driver (422 `DRIVER_NOT_INSTALLED`), como na abertura
+       de uma sessão. É a conexão que diz o banco (PostgreSQL, Db2 ou Informix), de que o passo seguinte depende;
+    3. o que depende do banco da conexão: o comando, com mais de um comando 422
+       `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, o filtro 422 `FILTER_INVALID` e a leitura 422
+       `EXPORT_SOURCE_NOT_READ` (as três pela divisão e pela classificação do dialeto daquele banco,
+       RN-PROT-005); e as opções que mudam por banco (`rowsPerStatement` acima de 1 no Informix,
+       `EXPORT_OPTIONS_INVALID`);
+    4. o limite (409 `TRANSFER_LIMIT_REACHED`).
+  - O registro dos trabalhos é um só na API (`Singleton`, como o das sessões, decisão 3 da seção 8), e roda até
+    3 transferências ao mesmo tempo, de todas as janelas e de todos os tipos (as exportações, e as importações e
+    as cópias para outro banco da seção 36, que usam o mesmo registro, RN-IMPORT-014 e 027): a quarta é recusada
+    com 409. Três conexões à parte de uma
+    vez é o que um servidor de produção aguenta sem quem está nele perceber, e é o que cabe na barra de status.
+    As que terminaram não contam.
+  - `GET api/user/transfers/{id}` diz como o trabalho está:
+    - `state`: `running`, `done`, `failed` ou `canceled`;
+    - `phase`, enquanto roda: `connecting`, `counting`, `reading` ou `finishing`;
+    - `rows`: as linhas já escritas; `total`: o que a contagem deu, ou nulo; `bytes`: o tamanho do arquivo
+      temporário até ali;
+    - no fim: `summary` (em `done`), `error` (em `failed`: `{ code, message, sqlState }`) ou `reason` (em
+      `canceled`: `person` ou `connectionDeleted`).
+
+    `GET api/user/transfers` lista os trabalhos do cofre aberto, de todas as janelas, cada um com o número da
+    janela que o começou (`windowID`, que a tela manda no `POST`, o mesmo número da janela que o preload já
+    lhe dá), e serve para o "Sair" contar os que estão em andamento (RN-EXPORT-023). A página que monta a área
+    de trabalho (depois do login, ou da janela que recarregou) cancela, com o `DELETE`, os trabalhos da lista
+    com o número da janela dela: são da página de antes, que caiu ou recarregou, e ninguém mais os mostra. Assim
+    eles não ocupam o limite nem entram na conta do "Sair" até o abandono.
+  - `DELETE api/user/transfers/{id}` cancela o trabalho que roda e esquece o que terminou, com 204 nos dois
+    casos. Cancelar interrompe o comando no banco, como o "Cancelar" de uma aba (RN-SQL-010), fecha a conexão à
+    parte e apaga o arquivo temporário, e a resposta só vem quando o trabalho parou, ou em 10 segundos: passado
+    o prazo (a conexão meio aberta, que não responde nem ao cancelamento), a API responde 204, o trabalho fica
+    `canceled` e deixa de contar para o limite, e a conexão à parte é abandonada em segundo plano; o arquivo
+    temporário é apagado quando ela enfim para, ou na partida seguinte. Esquecer apaga o arquivo pronto que
+    ainda estiver lá. O cancelamento que chega depois do fim não muda o fim: esquece. Quando o trabalho não
+    existe (esquecido, abandonado, de outro cofre), a resposta é 404 `TRANSFER_NOT_FOUND`.
+  - **Abandono**: o trabalho que ninguém consulta (`GET api/user/transfers/{id}`), em nenhum estado, por 5
+    minutos, o tempo do cursor parado (RN-SQL-007), é dado como abandonado: a API o cancela, apaga o arquivo e o
+    esquece. É o que limpa o trabalho da janela que caiu sem cancelá-lo. A janela viva consulta a cada segundo
+    até esquecer o trabalho, também durante a entrega (RN-EXPORT-021), e 5 minutos cobrem a janela minimizada,
+    cujos temporizadores o Chromium espaça.
+  - **Sem progresso**: a exportação que fica 2 horas sem escrever uma linha nem mudar de fase (a conexão meio
+    aberta, o banco que não responde) termina como `failed`, com `EXPORT_STALLED`: "O banco ficou 2 horas sem
+    responder, e a exportação foi encerrada." Assim ela não segura para sempre o bloqueio por inatividade
+    (RN-EXPORT-023). Quem conta milhões de linhas por mais de 2 horas desliga "Contar as linhas antes".
+  - **O cofre**: o trabalho é do cofre aberto quando começou (a geração do cofre, lida antes da conexão, como na
+    abertura de uma sessão). Fechar o cofre (o bloqueio, o "Sair", o quinto erro de senha, outro usuário que
+    entra, RN-COFRE-007 e 008) cancela os trabalhos dele, apaga os arquivos e os tira do registro: o cofre
+    seguinte não os vê. O pedido que chega depois de o cofre mudar é 401 `VAULT_LOCKED`, e o trabalho não fica.
+  - **A conexão excluída** (RN-CONN-014) cancela as exportações dela, que ficam como `canceled`, com `reason:
+    connectionDeleted`. O diálogo de excluir a conexão diz, com alguma, "As 2 exportações em andamento desta
+    conexão serão canceladas." ("A exportação em andamento desta conexão será cancelada."), pela lista da API
+    (`connectionID`). Editar a conexão (outra senha, outro servidor) não mexe na exportação que já lê: ela segue
+    com o que leu do cofre ao começar, como uma sessão aberta. Desconectar a conexão (RN-SESSAO-004) fecha as
+    sessões dela, e não a exportação, que tem conexão própria e está na barra de status para quem quiser
+    cancelar.
+  - **A API que encerra** (o app que fecha, o serviço que reinicia) cancela os trabalhos; o que sobrar no disco,
+    a partida seguinte apaga (RN-EXPORT-018).
+  - O log registra o começo e o fim de cada exportação, com o `id`, o ID da conexão, o formato, as linhas, os
+    bytes, a duração e, na falha, a classe do erro e o SQLSTATE; nunca o comando, os nomes, os valores, o nome do
+    arquivo nem um caminho (RN-LOG-001). Os pedidos que levam o comando escrevem só o nome do tipo no
+    `ToString()`.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): o registro e o limite são também das importações e das
+    cópias, e o número da janela passou a se chamar `windowID`, na forma dos identificadores da API.*
+
+- **RN-EXPORT-017.** A leitura.
+  - O trabalho conecta com a conexão gravada (RN-EXPORT-002), com o prazo de espera de trava da conexão à parte
+    (RN-EDIT-010), de 5 segundos, para a exportação não esperar para sempre por uma linha travada. No Informix, com
+    o modo de trava padrão, a linha travada seria recusada na hora ("record is locked"); com o prazo, a
+    exportação espera até 5 segundos por ela e, passado isso, falha com a mensagem do banco. A trava da própria
+    aba do Prism, com transação aberta, também conta.
+  - **No PostgreSQL**, a leitura roda numa transação `REPEATABLE READ READ ONLY`: a contagem e a leitura veem o
+    mesmo instante do banco, e o arquivo é o retrato do começo da exportação. Como na leitura paginada
+    (RN-SQL-013), o que o banco recusa ali por gravar (uma função que grava chamada pelo `SELECT`, um `nextval`)
+    é a falha da exportação, com a mensagem dele (SQLSTATE 25006), e nunca é executado de novo fora da
+    transação. As células chegam no texto do servidor, como na grade (`AllResultTypesAreUnknown`). Para esse texto
+    ser o mesmo em qualquer servidor, e o arquivo voltar igual pela importação (RN-IMPORT-028), a conexão recebe,
+    logo depois de conectar, `SET DateStyle = 'ISO, YMD'`, `SET extra_float_digits = 3` e `SET bytea_output =
+    'hex'`, como a leitura da cópia (RN-IMPORT-026): são só a forma do texto que o servidor escreve, e não mudam
+    nada no banco. Num servidor com os padrões, o texto é o mesmo da grade; num configurado de outro jeito (as
+    datas em `dd/mm/aaaa`), a grade mostra o dele, e o arquivo, o ISO.
+  - **No Db2 e no Informix**, que não têm transação só de leitura, a leitura é a de uma sessão nova, no nível
+    padrão do banco: a contagem e a leitura podem ver linhas diferentes, e o arquivo traz cada linha como estava
+    quando foi lida. No Informix sem log não há transação nenhuma (RN-TX-013), e a leitura pode trazer o que
+    outra sessão ainda está gravando.
+  - **A contagem**, quando pedida, é o `SELECT COUNT(*)` sobre o comando, como subconsulta, o mesmo do "Contar
+    total" (RN-SQL-006), na mesma conexão e antes da leitura; no PostgreSQL, dentro da transação, num ponto de
+    salvamento só dela, para a falha dela não estragar a transação. A falha da contagem (o banco que recusa a
+    subconsulta) não para a exportação: o progresso segue sem o total.
+  - **A leitura** é um `DbDataReader` só, lido do começo ao fim, uma linha por vez, e cada linha é escrita no
+    arquivo assim que é lida. A memória da API fica a de uma linha, no máximo 256 MiB de valores (no TXT, a de
+    um lote, RN-EXPORT-008), qualquer que seja o número de linhas.
+  - **As colunas**: na tabela pelo navegador, o `SELECT` leva as marcadas pelo nome, e a que não existe mais é a
+    falha do banco. Nos Registros e no resultado, a API confere, ao abrir a leitura, que cada coluna marcada está
+    na posição e com o nome que a tela mandou. Se o resultado mudou (a tabela ganhou ou perdeu uma coluna desde a
+    grade), a exportação falha com `EXPORT_COLUMNS_CHANGED`: "As colunas do resultado mudaram desde a grade.
+    Execute o comando de novo e exporte outra vez." Nada é escrito com a coluna errada.
+  - **O valor grande**: cada valor é lido inteiro, como o driver o entrega. Um valor acima de 64 MiB (o texto em
+    bytes UTF-8, o binário em bytes) termina a exportação com `EXPORT_VALUE_TOO_LARGE`: "Um valor da coluna foto,
+    na linha 1.234, passa de 64 MiB, e o Prism não o exporta. Deixe a coluna de fora na Extração, ou o binário
+    vazio na Formatação." O binário com "Deixar vazio" não é pedido ao leitor e não conta. O limite segura a
+    memória da API: um texto desse tamanho ocupa o dobro na memória, e o binário em hexadecimal, o quádruplo.
+  - **A linha grande**: cada linha tem também um teto de 256 MiB de valores somados (o texto em bytes UTF-8, o
+    binário em bytes, antes do hexadecimal; o binário com "Deixar vazio" não conta). Acima disso a exportação
+    termina com `EXPORT_VALUE_TOO_LARGE`: "A linha 1.234 passa de 256 MiB de valores, e o Prism não a exporta.
+    Deixe colunas de fora na Extração, ou o binário vazio na Formatação." Sem o teto, dez colunas de 60 MiB numa
+    linha, vezes três exportações, encheriam a memória.
+  - Onde o driver lê o valor em pedaços (a leitura sequencial do `DbDataReader`, com `GetChars` e `GetBytes`),
+    a API o lê assim e para ao passar de um dos dois limites, sem montar o valor inteiro; onde ele só entrega o
+    valor inteiro, os limites valem logo depois de cada valor.
+  - **As falhas** terminam o trabalho como `failed`, com `error`:
+    - a do banco ou do driver ao conectar (`DATABASE_CONNECTION_FAILED`) e ao contar ou ler
+      (`SQL_EXECUTION_FAILED`, com o SQLSTATE), com a mensagem como veio (decisão 4 da seção 8). A conexão que cai
+      no meio, pela rede ou pelo servidor, é uma delas: ela não é reaberta, e a exportação não continua de onde
+      parou;
+    - `EXPORT_COLUMNS_CHANGED`, `EXPORT_VALUE_TOO_LARGE` (o valor ou a linha), `EXPORT_STALLED` (RN-EXPORT-016)
+      e o limite da área de transferência, `EXPORT_CLIPBOARD_TOO_LARGE` (RN-EXPORT-014);
+    - a do disco, `EXPORT_WRITE_FAILED` (RN-EXPORT-018).
+
+    Na falha, nada do que foi escrito chega ao destino: o arquivo pela metade é apagado.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): a leitura do PostgreSQL fixa a forma do texto
+    (`DateStyle`, `extra_float_digits` e `bytea_output`), para o arquivo voltar igual pela importação.*
+
+- **RN-EXPORT-018.** O arquivo temporário.
+  - A API escreve só dentro da pasta de dados do Prism, na pasta `transfers` (`<PRISM_DATA_DIR>/transfers`, criada na
+    partida quando falta, e de novo antes de um trabalho, se alguém a apagou), num arquivo com o nome tirado só do
+    `id` do trabalho: `<id>.part` enquanto escreve, e `<id>.ready` depois de o arquivo estar completo, fechado e
+    gravado no disco. O estado `done` só aparece depois da troca de nome: o `.ready` é sempre um arquivo inteiro.
+    Nenhum caminho, nome ou pedaço de nome vem da tela, e a tela nem sabe onde a pasta fica.
+  - A API apaga o arquivo do trabalho quando ele falha, é cancelado, é esquecido (`DELETE`) ou é abandonado, e
+    quando o cofre fecha. A cada partida, ela apaga tudo o que encontra na pasta `transfers`: é o que sobrou de
+    uma execução que caiu, e nenhum trabalho atravessa uma partida. O arquivo que ela não consegue apagar na hora
+    (no Windows, o que o processo principal está copiando para o destino) fica para a partida seguinte, e o
+    trabalho sai do registro do mesmo jeito.
+  - O disco cheio na pasta de dados termina o trabalho com `EXPORT_WRITE_FAILED`: "Não há espaço em disco para o
+    arquivo temporário da exportação, na pasta de dados do Prism." Outra falha do disco: "Não foi possível gravar
+    o arquivo temporário da exportação: <o motivo do sistema, sem o caminho>." O caminho nunca vai à tela.
+  - O arquivo temporário leva os dados do banco em claro, como o arquivo que a pessoa pediu, na pasta de dados do
+    usuário do sistema, e vive só até a entrega. Por isso a API cria a pasta `transfers` e cada arquivo dela só
+    para o dono: no Linux e no macOS, com o modo 0700 na pasta e 0600 no arquivo, dados na criação (o `umask`
+    não os afrouxa; hoje nada na API dá modo a um arquivo); no Windows, com a lista de acesso herdada da pasta
+    de dados no perfil do usuário. A pasta que já existe com um modo mais aberto volta a 0700 na partida.
+  - A pasta `transfers` recebe também o arquivo de uma importação de dados (seção 36), que o processo principal
+    copia para ela (`<id>.in`, e `<id>.in.part` enquanto copia), com o nome tirado só do identificador e o mesmo
+    modo só para o dono (RN-IMPORT-017 e 018). É o único arquivo da pasta que a API não escreve, e a limpeza da
+    partida o apaga como os outros. O processo principal também cria a pasta quando ela falta na hora de copiar.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entrou o arquivo da importação, e a pasta passou a ser
+    criada na partida da API e pelo processo principal.*
+
+### O destino e a entrega
+
+- **RN-EXPORT-019.** Escolher o destino.
+  - Quem abre o diálogo de salvar do sistema é o processo principal (`prism:transfer-destination`). Ele recebe o
+    nome proposto, sem a extensão (`suggestedName`, de 1 a 200 caracteres), e a extensão, à parte, da lista
+    fixa (`csv`, `tsv`, `php`, `xml`, `html`, `json`, `md`, `sql`, `txt`, `xlsx` e `zip`); confere o nome de
+    novo com as mesmas regras de nome (RN-EXPORT-014, `exportFileName(suggestedName, extension)`, a mesma
+    função da tela), e abre o diálogo na pasta da última exportação desta abertura do app (na primeira, a pasta
+    de Downloads do sistema), com o filtro daquela extensão, que ele mesmo escreve ("CSV (*.csv)"; com o .zip,
+    "ZIP (*.zip)"), e "Todos os arquivos". Nenhum texto da tela vai ao diálogo além do nome conferido. O sistema
+    pergunta, como sempre, antes de substituir um arquivo que existe.
+  - O caminho escolhido fica só no processo principal: a tela recebe um identificador do destino e o nome do
+    arquivo, sem a pasta, que ela mostra no aviso. O nome escolhido sem extensão nenhuma ganha a do formato.
+  - Antes de responder, o processo principal confere que a pasta aceita gravação, criando e apagando nela um
+    arquivo vazio de nome aleatório. Se ela não aceita, a resposta é `notWritable`, e o assistente diz "Não é
+    possível gravar na pasta escolhida. Escolha outra pasta." Sem isso, a pessoa só saberia no fim de uma
+    exportação longa. O destino dentro da pasta de dados do Prism (onde estão os cofres, as preferências e a
+    pasta `transfers`) é recusado do mesmo jeito (`notWritable`), para a exportação nunca gravar por cima de um
+    cofre.
+  - O destino que já é de outra exportação ainda não entregue, de qualquer janela, é recusado (`inUse`): "Outra
+    exportação em andamento vai gravar neste arquivo. Escolha outro nome." Duas exportações da mesma tabela ao
+    mesmo tempo valem, cada uma no seu arquivo. Os destinos se comparam pelo caminho resolvido (a pasta pelo
+    `realpath`, que desfaz os atalhos simbólicos, mais o nome), sem diferenciar maiúsculas no Windows e no
+    macOS.
+  - O destino de uma entrega que falhou continua reservado à exportação dela até a tela o soltar. O "Salvar
+    como…" (RN-EXPORT-020) solta esse destino (`prism:transfer-release`) antes de pedir o novo; assim a pessoa
+    pode escolher o mesmo arquivo de novo, o caso de quem fechou a planilha no Excel. Se ela desiste do diálogo,
+    a entrada fica como estava, com "Salvar como…" e "Descartar".
+  - O destino é da janela que o pediu e vale para uma entrega só. A tela o solta (`prism:transfer-release`)
+    quando a exportação falha, é cancelada ou é recusada ao começar. O processo principal solta os destinos da
+    janela que fecha, cai ou recarrega, e todos quando o app sai ou o serviço reinicia.
+  - Fora do Electron (a tela num navegador, só em desenvolvimento), não há destino nem área de transferência: o
+    "Exportar" diz "Exportar só funciona no app do Prism." e não pede nada à API. O destino "Banco de dados" (seção
+    36), que não grava arquivo, funciona também ali. *Alterada a pedido do dono em 2026-10-16 (seção 36): entrou o
+    "Banco de dados".*
+
+- **RN-EXPORT-020.** Entregar.
+  - Quando o trabalho termina (`done`), a tela pede a entrega ao processo principal (`prism:transfer-deliver`),
+    com o `id` do trabalho e o destino. Ele confere que o destino é daquela janela e ainda não foi usado, que o
+    `id` tem a forma de um identificador da API, e que `<id>.ready` existe na pasta `transfers`. Então move o
+    arquivo para o destino:
+    - na mesma unidade, renomeando, na hora;
+    - em outra unidade, ou numa pasta da rede, copiando para um arquivo ao lado do destino, de nome começado por
+      ponto (`.<nome>.<oito primeiros caracteres do id>.part`, escondido no Linux e no macOS), e renomeando a
+      cópia no fim, para um arquivo pela metade nunca ter o nome final. A cópia é em fluxo (`stream.pipeline`
+      com um `AbortSignal`), e não `fs.copyFile`, que não se interrompe: é o que deixa o cancelamento e a saída
+      pararem a cópia no meio.
+
+    Depois a tela esquece o trabalho na API (`DELETE`), que apaga o que sobrou. Um `DELETE` que volta 404
+    `TRANSFER_NOT_FOUND` depois da entrega não é erro para a tela: o arquivo já está no destino.
+  - O arquivo de destino que não existia quando a pessoa o escolheu, e passou a existir até a entrega, não é
+    substituído: o arquivo vai como `nome (2).ext`, `nome (3).ext`… (o primeiro livre), e o aviso diz o nome que
+    ficou. O que já existia ao escolher, a pessoa mandou substituir no diálogo do sistema.
+  - **A entrega que falha** não perde a exportação: o disco de destino cheio, a pasta sem permissão ou que
+    sumiu, o arquivo aberto em outro programa (uma planilha aberta no Excel). O arquivo pronto fica na pasta
+    `transfers`, a cópia pela metade é apagada, e a barra de status mostra "pedido_2026-10-16_143005.csv não foi
+    gravado: <motivo>." com "Salvar como…", que solta o destino que falhou, abre o diálogo de salvar de novo e
+    entrega no novo destino (RN-EXPORT-019), e "Descartar", que esquece a exportação. Os motivos, sem caminho,
+    são: "não há espaço no disco de destino", "sem permissão para gravar na pasta escolhida", "a pasta escolhida
+    não existe mais", "o arquivo está aberto em outro programa" e, no resto, "o sistema recusou a gravação
+    (<código do sistema>)". Enquanto a entrada está na barra, a tela continua consultando o trabalho, que não é
+    dado como abandonado, e as saídas perguntam por ela como por uma exportação em andamento (RN-EXPORT-023).
+  - **Cancelar durante a entrega**: na mesma unidade a entrega é instantânea, e o cancelamento chega tarde: o
+    arquivo fica, e o aviso de sucesso sai. Numa cópia entre unidades, o processo principal para a cópia e apaga
+    o que ela tinha escrito, e a exportação fica como cancelada, sem nada no destino. O mesmo vale quando a
+    cópia é parada pelo `prism:transfer-release`, pelo fechamento da janela ou pelo `before-quit`: a resposta da
+    entrega é `canceled`, a cópia escondida foi apagada e o destino foi solto, e a tela não mostra o aviso de
+    falha.
+  - **A área de transferência**: com ela (RN-EXPORT-014), a tela pede `prism:transfer-copy`, com o `id`. O
+    processo principal confere o `id` e que `<id>.ready` existe e tem até 10 MiB, lê o texto em UTF-8, põe-no
+    na área de transferência do sistema, como texto, e a tela esquece o trabalho na API.
+  - **Mostrar na pasta**: com "Mostrar na pasta ao terminar", o processo principal abre o gerenciador de arquivos
+    do sistema com o arquivo escolhido, logo depois da entrega. O aviso de sucesso tem o botão "Mostrar na
+    pasta", que faz o mesmo (`prism:transfer-reveal`, com o identificador da entrega, que o processo principal
+    guarda enquanto o app está aberto e que só vale na janela que pediu a entrega: ele confere a janela). Ele só
+    mostra o arquivo que ele mesmo gravou; se o arquivo foi movido ou apagado depois, o sistema abre o que achar,
+    e nada falha.
+  - O log do processo principal registra a entrega com o identificador e o tamanho, nunca o caminho nem o nome
+    do arquivo (RN-LOG-001).
+
+### Progresso, fim e saída
+
+- **RN-EXPORT-021.** A barra de status.
+  - Cada exportação começada na janela aparece na barra de status dela, entre o modo de transação e o cofre,
+    até terminar: uma entrada com a seta de baixar, o texto, uma barra de progresso pequena e "Cancelar". As
+    importações e as cópias para outro banco (seção 36) aparecem do mesmo jeito, com os textos delas
+    (RN-IMPORT-019 e 027).
+    - A barra de status não passa de uma linha de 28 px (a pilha de avisos, `bottom-20`, conta com essa altura).
+      A entrada tem largura limitada: o nome fica em reticências, e o texto inteiro, na dica.
+    - Com mais de uma transferência na janela, a barra mostra uma só e, ao lado, o botão "+2 exportações" ("+1
+      exportação"; "+2 importações" e "+2 cópias" quando as outras são todas desse tipo, e "+2 transferências" com
+      tipos misturados), que abre a lista delas acima da barra, uma linha por transferência, cada uma com o texto, a
+      barra de progresso e "Cancelar" (ou, na entrega que falhou, "Salvar como…" e "Descartar"). Esc fecha a lista
+      e devolve o foco ao botão. A que aparece na barra é a que pede ação (a entrega que falhou, a mais antiga
+      delas); sem nenhuma, a mais antiga em andamento.
+
+    O texto muda com a fase:
+    - conectando: "Exportando pedido… conectando";
+    - contando: "Exportando pedido… contando as linhas";
+    - lendo, com o total: "Exportando pedido… 45%", com a dica "5.678 de 12.345 linhas · 3,4 MB"; sem o total,
+      "Exportando pedido… 12.345 linhas · 3,4 MB", com a barra de progresso sem medida (indeterminada). A
+      porcentagem é a das linhas escritas sobre o total, arredondada para baixo, e no máximo 99% até o fim; com
+      mais linhas que o total (outra sessão inseriu no meio, no Db2 e no Informix), o texto passa ao de sem
+      total;
+    - terminando (o .zip, a planilha, o arquivo indo para o disco): "Exportando pedido… terminando";
+    - entregando, numa cópia entre unidades: "Gravando pedido_2026-10-16_143005.csv…";
+    - a entrega que falhou: a entrada da RN-EXPORT-020.
+
+    O nome é o da origem (no resultado, "resultado de consulta-1.sql"), isolado do texto em volta (`<bdi>`),
+    porque um nome do banco pode ter marca de direção. O tamanho é escrito como o do arquivo no "Importar
+    conexões" (RN-TRANSF-009).
+  - A barra tem papel de barra de progresso (`role="progressbar"`, com `aria-valuenow` quando há total e o texto
+    em `aria-valuetext`), e "Cancelar" tem o nome acessível "Cancelar a exportação de pedido". O progresso não é
+    anunciado a cada passo: o aviso do fim é.
+  - A tela consulta cada exportação da janela a cada segundo (`GET api/user/transfers/{id}`), como a instalação
+    de um driver, até a entrega acabar e ela esquecer o trabalho (`DELETE`), também durante a cópia entre
+    unidades e enquanto a entrega que falhou espera: o trabalho consultado não é abandonado (RN-EXPORT-016). A
+    consulta e a entrega são da área de trabalho, e não da barra: seguem com Configurações à frente, quando a
+    barra não está à vista, e os avisos aparecem do mesmo jeito. Três falhas seguidas da consulta (a API fora do
+    ar, a rede) param a consulta, e a entrada diz "Não foi possível saber como está a exportação." com
+    "Cancelar", que tenta o `DELETE`.
+  - "Cancelar" cancela sem perguntar: a tela pede o `DELETE` e solta o destino. Enquanto o `DELETE` não
+    responde (até 10 segundos, RN-EXPORT-016), a entrada diz "Cancelando…", e o botão fica desabilitado; com a
+    resposta, a entrada sai com o aviso de atenção "Exportação de pedido cancelada. Nenhum arquivo foi
+    gravado.".
+  - A exportação é da janela, e não da aba: fechar a aba de onde ela saiu, trocar a conexão ou o banco da aba,
+    executar outro comando nela ou levá-la para outra janela não a mudam.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): a barra mostra também as importações e as cópias, e o
+    botão da lista diz o tipo.*
+
+- **RN-EXPORT-022.** Os avisos do fim.
+  - O de sucesso tem o botão "Mostrar na pasta" e, por isso, fica 8 segundos (RN-AVISO-006): "Tabela pedido
+    exportada: 12.345 linhas em pedido_2026-10-16_143005.csv." ("1 linha"; numa visão, "Visão v_pedido
+    exportada"; no resultado, "Resultado de consulta-1.sql exportado"; com o .zip, o nome do .zip). Na área de
+    transferência não há botão: "Tabela pedido copiada: 120 linhas em CSV." ("Resultado de consulta-1.sql
+    copiado").
+  - O aviso com ação pausa o relógio ao receber o foco, como no hover (`toast.tsx` já faz os dois), mas nada
+    leva o foco até ele, e 8 segundos não bastam para chegar lá pelo Tab. Quem usa só o teclado tem o caminho
+    que não expira: a opção "Mostrar na pasta ao terminar" (RN-EXPORT-014).
+  - O resumo vai no mesmo aviso, depois do ponto, e o aviso passa ao tom de atenção quando algo do dado não saiu
+    inteiro:
+    - no XLSX em mais de uma planilha, sem mudar o tom: "Em 3 planilhas: o Excel tem até 1.048.576 linhas por
+      planilha.";
+    - "4 valores cortados no limite da célula do Excel (32.767 caracteres)." ou "4 valores cortados na largura
+      máxima do TXT." ("1 valor cortado…");
+    - "12 caracteres que o formato não aceita foram tirados." ("1 caractere que o formato não aceita foi
+      tirado."), no XML, no DbUnit, no HTML e no Código fonte (RN-EXPORT-010);
+    - "3 linhas não exportadas, comentadas no arquivo: um valor delas não tem literal no banco." ("1 linha não
+      exportada, comentada no arquivo: um valor dela não tem literal no banco."), no SQL.
+  - O de erro é "A exportação de pedido falhou.", com a mensagem na descrição: a do banco como veio, com o
+    SQLSTATE, ou a frase da RN-EXPORT-017 e da 018. A tela decide pelo `code`, nunca pelo texto da mensagem.
+  - O de atenção sai na exportação cancelada (RN-EXPORT-021) e na cancelada pela exclusão da conexão: "A
+    exportação de pedido foi cancelada: a conexão foi excluída.".
+  - O arquivo pronto que sumiu antes da entrega (`missing`, RN-EXPORT-020: o trabalho abandonado, a API que
+    reiniciou) tira a entrada da barra com o aviso de erro "A exportação de pedido se perdeu antes de ser gravada.
+    Exporte de novo.". Não há aviso quando o motivo já foi dito: o cofre que fechou (a tela vai à entrada) e o
+    cancelamento pela pessoa.
+  - O aviso sai quando o arquivo foi entregue (ou copiado), e não quando a API terminou de escrever.
+
+- **RN-EXPORT-023.** O bloqueio, o "Sair", fechar a janela e fechar o app.
+  - **O bloqueio por inatividade** (RN-SEG-001): a exportação em andamento é comando em andamento da janela que a
+    começou, do começo até a entrega, e, como todo comando em andamento, segura também a contagem das outras
+    janelas: o Prism não bloqueia no meio dela. A entrega que falhou e espera o "Salvar como…" não segura:
+    passado o prazo, o Prism bloqueia, e o bloqueio a descarta; o aviso de antes do bloqueio diz quantas serão
+    descartadas (RN-SEG-001). A exportação que não avança deixa de segurar quando termina por `EXPORT_STALLED`
+    (RN-EXPORT-016).
+  - **O "Sair", o "Bloquear" (o do menu do usuário, RN-NAV-001, quando existir), o reinício do serviço**
+    (RN-DRIVER-005) **e a instalação de uma atualização que encerra o Prism** (RN-ATUALIZA-006), com exportações
+    em andamento em qualquer janela (a tela as conta pela lista da API: as que rodam e as prontas que ainda não
+    foram entregues), perguntam antes:
+    - "Há 2 exportações em andamento. Sair cancela as exportações, e os arquivos delas não são gravados.", com
+      "Sair e cancelar as exportações" e "Continuar exportando" (com o foco, e o Esc). No singular, "Há 1
+      exportação em andamento. Sair cancela a exportação, e o arquivo dela não é gravado.";
+    - no "Bloquear", "Há 2 exportações em andamento. Bloquear cancela as exportações, e os arquivos delas não são
+      gravados.", com "Bloquear e cancelar as exportações" e "Continuar exportando";
+    - no reinício e na atualização, a frase entra no aviso de antes deles: "As 2 exportações em andamento serão
+      canceladas." ("A exportação em andamento será cancelada.").
+  - **Fechar uma janela** com exportações começadas nela pergunta, junto com as perguntas de fechar as abas
+    (RN-ABAS-004): "2 exportações começadas nesta janela ainda não terminaram. Fechar a janela cancela as
+    exportações.", com "Fechar e cancelar as exportações" e "Continuar exportando". **Fechar o app** (a última
+    janela) pergunta o mesmo, com "Fechar o Prism cancela as exportações." e "Fechar o Prism e cancelar as
+    exportações" (RN-ABAS-007: as exportações não voltam na próxima entrada). No singular, "1 exportação
+    começada nesta janela ainda não terminou. Fechar a janela cancela a exportação.".
+  - **A ordem das perguntas**: em todas essas saídas, a pergunta das exportações vem antes das outras (as
+    alterações não salvas, RN-EDIT-007, e as transações, RN-TX-006). Ela não faz nada sozinha; o Commit, o
+    Rollback e o descarte, sim, e responder "Continuar exportando" depois deles deixaria o app aberto com o
+    trabalho já perdido. Nada é cancelado antes da última resposta: os `DELETE` das exportações saem só quando
+    a saída é confirmada.
+  - Confirmada a saída, a tela cancela as exportações (o `DELETE` de cada uma) e solta os destinos, e só então
+    segue.
+  - O que sai sem perguntar não entrega nada: o quinto erro de senha (RN-CONN-003), o cofre fechado por outra
+    janela, o Cmd+Q do macOS e o item de encerrar do menu do app nele (`appMenu`, que vai direto ao
+    `before-quit`, e que hoje também não pergunta pelas alterações não salvas), a janela que cai ou recarrega, o
+    app morto, o sistema desligando. A API cancela os trabalhos quando o cofre fecha e quando encerra
+    (RN-EXPORT-016); a tela que vê o cofre fechado (e vai à entrada) solta os destinos das exportações dela, o
+    que interrompe a entrega em andamento; o processo principal interrompe a entrega em andamento no
+    `before-quit` e solta os destinos da janela que cai ou recarrega, apagando a cópia pela metade; e o que
+    sobrar na pasta `transfers`, a partida seguinte da API apaga. Só a cópia escondida ao lado do destino
+    (`.….part`), numa entrega entre unidades com o processo morto no meio, pode ficar.
+  - As importações de dados e as cópias para outro banco (seção 36) entram nas mesmas perguntas, contadas junto
+    com as exportações e na mesma ordem, com os textos da RN-IMPORT-021, que valem quando há alguma delas; com só
+    exportações, valem os textos de cima.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias.*
+
+### Os mesmos textos nos dois lados
+
+- **RN-EXPORT-024.** As fixtures de ouro.
+  - A tela (TypeScript: `grid-export`, `csv.ts` e `table-sql.ts`) e a API (C#) escrevem os mesmos valores, com
+    os mesmos escapes: a tela, no copiar avançado, no "Gerar SQL", no "Exportar CSV" e, quando vier, na
+    exportação da seleção; a API, nesta exportação. A estrutura do documento pode diferir enquanto a seleção não
+    entra no assistente (o XML e o JSON de hoje da tela, RN-GRADE-007). Para os dois lados não divergirem, as
+    regras que existem nos dois têm fixtures de ouro compartilhadas: arquivos JSON em `src/test-fixtures/export/`,
+    fora das pastas da tela e da API, com as entradas e a saída esperada de cada caso, que o teste de cada lado lê
+    e confere por inteiro. Os casos são escritos à mão, revistos, e nunca regerados a partir do código: mudar uma
+    regra é mudar a fixture, e os dois lados falham até seguirem a regra nova.
+  - A pasta é nova na raiz do código: o `AGENTS.md` da raiz ganha a linha dela na tabela "Onde está o quê", o
+    teste da tela a lê pelo caminho relativo à raiz do repositório, e o projeto de teste da API a copia para a
+    saída (`Content` com `CopyToOutputDirectory`).
+  - Têm fixture as regras:
+    - o literal do SQL (`sqlLiteral` e `scriptLiteral`): o banco (os três), o tipo da coluna e o valor, com o
+      literal esperado ou nenhum. Os casos cobrem aspas, barra invertida, quebra de linha, retorno de carro,
+      tabulação, outros controles, Unicode fora do plano básico, o número simples e o que não é, o lógico do
+      Informix e a data e hora do Informix com 0 a 6 casas;
+    - o campo do CSV (`csvFieldOf` e `toDelimited`): o valor e as opções (separador, aspas, proteção, nulo), com
+      os casos da fórmula (`=`, `+`, `-`, `@`, também depois de espaço, tabulação e retorno de carro; o número
+      negativo; `-1+1`) e os da aspa. As aspas dos dois lados são "Só quando precisa" (`auto`) e "Em todos os
+      valores" (`all` na API, `always` na tela); "Em todos os textos" é só da API, e o "nunca" da tela, só dela;
+    - o texto e o atributo do XML, e a limpeza do XML 1.0 (`escapeXmlText`, `escapeXmlAttribute`, `isXmlChar`);
+    - o texto do HTML e a limpeza dele (`escapeHtml`, `isHtmlChar`);
+    - a célula do Markdown;
+    - o valor e a chave do JSON (`jsonValue`, que passa a ser exportado por `to-json.ts`, `jsonKeys`, e o escape
+      do `JSON.stringify`);
+    - a planilha: o texto com `_xHHHH_` (`xlsxText`), o número (`spreadsheetNumber`), o nome da planilha
+      (`sheetNameOf`) e o corte nos 32.767 caracteres.
+  - O que só a API escreve (o TXT, o DbUnit, o nome de elemento do XML, o PHP, o literal do binário, a data em
+    ISO 8601, o `INSERT` de várias linhas) tem fixtures só dela, no mesmo lugar e na mesma forma, prontas para
+    quando a tela os escrever.
+  - Os casos levam nomes e valores hostis: aspas, barra invertida, `]]>`, `<script>`, a quebra de linha nas três
+    formas, U+0000, U+202E, U+FEFF, U+FFFE, o par substituto solto, emoji e ideogramas, e um `_x0041_` já escrito
+    no dado.
+  - O texto que a cadeia do JSON não guarda de um jeito que os dois lados leiam (o par substituto solto: o
+    `JSON.parse` aceita `"\ud83d"`, e o `GetString` do `System.Text.Json` recusa, com
+    `InvalidOperationException`) vai na fixture como lista de pontos de código, `{ "codePoints": [55357, 97] }`,
+    e os dois lados montam o texto a partir dela. A saída esperada que teria o par solto vai do mesmo jeito.
+  - A importação de dados (seção 36) acrescenta as dela, na mesma pasta e na mesma forma (RN-IMPORT-028): a volta
+    da proteção contra fórmula, a leitura do campo do CSV, o `_xHHHH_` do XLSX nos dois sentidos e os números e as
+    datas de cada formato.
+  - *Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as fixtures da importação.*
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `POST api/user/transfers/exports` `{ source, columns, count, format, options, output, windowID }` | 202 `{ id }` | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`; 422 `EXPORT_OPTIONS_INVALID` (no campo), `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING` (no campo `userName` ou `password`), `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
+| `GET api/user/transfers` | 200 lista dos trabalhos do cofre aberto, cada um como no `GET` de um | |
+| `GET api/user/transfers/{id}` | 200 `{ id, kind, connectionID, windowID, state, phase, rows, total, bytes, summary, error, reason, startedAt, finishedAt }` | 404 `TRANSFER_NOT_FOUND` |
+| `DELETE api/user/transfers/{id}` | 204 (cancela o que roda, em até 10 segundos; esquece o que terminou) | 404 `TRANSFER_NOT_FOUND` |
+| `POST .../queries` e `POST .../queries/next` | como antes; a página ganha `read` | as de antes |
+
+Notas:
+
+- `source`: `{ kind: "table", connectionID, database?, schema, table }`, a tabela ou a visão pelo navegador; ou
+  `{ kind: "query", connectionID, database?, sql, filter?, name? }`, os Registros e o resultado. `schema`,
+  `table` e `name` têm de 1 a 256 caracteres, sem U+0000. `sql` tem até 1 MB em UTF-8 e um comando só. `filter`
+  é o do resultado (RN-GRADE-011). `name` é o nome da origem nos Registros (a tabela); ausente, é `resultado`.
+  `name` só dá o nome da origem (RN-EXPORT-006, e a tabela padrão do SQL e do DbUnit); o esquema e a tabela de
+  destino do SQL e do DbUnit vêm de `options`. `database` segue a regra da abertura de uma sessão
+  (RN-ARVORE-006).
+- `columns`: de 1 a 32.767 entradas `{ position, name }`, com `position` a partir de 0, sem repetir, e `name` de 1
+  a 256 caracteres, sem U+0000. Na tabela, vale o nome; nos Registros e no resultado, vale a posição, conferida
+  com o nome (RN-EXPORT-017). O arquivo traz as colunas na ordem de `position` (a do resultado, ou a do catálogo
+  na tabela), e não na ordem da lista.
+- `count`: booleano, "Contar as linhas antes".
+- `format`: `csv`, `sourceCode`, `dbUnit`, `html`, `json`, `markdown`, `sql`, `txt`, `xlsx` ou `xml`.
+- `options`, as do formato, com as faixas da RN-EXPORT-007 a 013; a opção ausente é a do padrão:
+  - `csv`: `delimiter` (`";"`, `","`, `"\t"`, a tabulação, ou `"|"`), `header`, `quoting` (`auto`, `text` ou
+    `all`), `formulaGuard`, `lineBreak` (`crlf` ou `lf`) e `nullText`;
+  - `txt`: `header`, `headerLine`, `edgeDelimiters`, `minWidth`, `maxWidth`, `showNull` e `lineBreak`;
+  - `html`: `title` e `columnNames`; `markdown`: `alignmentLine` e `nullText`;
+  - `json`: `wrap` e `isoDates`; `sourceCode`: `php` (`legacy` ou `short`), `quote` (`double` ou `single`) e
+    `isoDates`;
+  - `sql`: `schema`, `table`, `omitSchema`, `rowsPerStatement` e `binary` (`literal` ou `null`);
+  - `xml`: `doctype`; `dbUnit`: `table`, `upperCase` e `nulls` (`omit` ou `mark`); `xlsx`: nenhuma;
+  - todos menos o SQL: `binary` (`hex` ou `null`).
+
+  `rowsPerStatement` acima de 1 no Informix, `bom`, `zip` ou `clipboard` no XLSX, e `bom` ou `zip` com
+  `clipboard` são `EXPORT_OPTIONS_INVALID`, como o valor fora da lista ou da faixa.
+- `output`: `{ bom, zip, entryName?, clipboard }`. `entryName` é o nome do arquivo dentro do .zip, só com `zip`,
+  com as regras do nome (RN-EXPORT-014): de 1 a 128 caracteres, sem `/` nem `\`, sem caractere de controle nem
+  marca de direção, e diferente de `.` e `..`.
+- `windowID`: o número da janela que começa a exportação, inteiro positivo (RN-EXPORT-016). A API só o guarda e o
+  devolve; não confere janela nenhuma.
+- O item do trabalho: `kind` é `export` (a importação e a cópia para outro banco, do complemento seguinte, usam o
+  mesmo registro); `connectionID` é o da origem, para o diálogo de excluir a conexão contar as exportações dela;
+  `summary` é `{ rows, bytes, sheets, cutValues, removedCharacters, skippedRows }`; `error` é
+  `{ code, message, sqlState }`, com `code` em `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED`,
+  `EXPORT_COLUMNS_CHANGED`, `EXPORT_VALUE_TOO_LARGE`, `EXPORT_STALLED`, `EXPORT_CLIPBOARD_TOO_LARGE` ou
+  `EXPORT_WRITE_FAILED`; `reason` é `person` ou `connectionDeleted`; `startedAt` e `finishedAt` estão em UTC.
+  Toda chave vem sempre, nula quando não se aplica.
+- Os `EXPORT_*` da seção 34 (`EXPORT_EMPTY`, `EXPORT_INVALID`, `EXPORT_PASSPHRASE_INVALID` e
+  `EXPORT_LIMITS_EXCEEDED`) são os da exportação de conexões, numa rota só dela; os desta seção são os da
+  exportação de dados. A tela os lê sempre junto da rota que os devolveu.
+- `read`, na página do resultado: o comando executado, com o filtro, é uma leitura pela RN-PROT-005 e não veio
+  pelo caminho da RN-SQL-013. É o que habilita o "Exportar…" (RN-EXPORT-001).
+- `EXPORT_OPTIONS_INVALID` vem na forma do erro de campo (`errors` e `errorCodes`), com o caminho do campo
+  (`options.rowsPerStatement`, `columns`, `output.entryName`). `CONNECTION_CREDENTIALS_MISSING` vem na mesma
+  forma, no campo `userName` ou `password`, como na abertura de uma sessão (RN-TRANSF-016), embora o pedido não
+  tenha esses campos: é o campo que diz à tela qual falta (RN-EXPORT-015).
+- O `POST` aceita um corpo de até 8 MiB (`RequestSizeLimit`), por causa do comando e dos nomes das colunas (1 MB
+  de comando com caracteres de controle escapados como `\u00XX` já passa de 6 MB). A tela confere o tamanho do
+  corpo antes de mandar e não manda o que passa de 8 MiB (RN-EXPORT-015): acima disso a API responde 500 hoje,
+  e não 413 (o defeito conhecido de toda rota que lê corpo, seção 34). Todas exigem o cofre aberto (401
+  `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais).
+
+Os canais novos entre a tela e o processo principal, todos pedidos (`ipcRenderer.invoke`):
+
+| Canal | Pedido | Resposta |
+| --- | --- | --- |
+| `prism:transfer-destination` | `{ suggestedName, extension }` | `{ status: "chosen", destinationId, fileName }`, `{ status: "canceled" }`, `{ status: "notWritable" }` ou `{ status: "inUse" }` |
+| `prism:transfer-deliver` | `{ transferId, destinationId, reveal }` | `{ status: "delivered", deliveryId, fileName }`, `{ status: "canceled" }`, `{ status: "missing" }` ou `{ status: "failed", reason, message }` |
+| `prism:transfer-copy` | `{ transferId }` | `{ status: "copied" }`, `{ status: "missing" }`, `{ status: "tooLarge" }` ou `{ status: "failed", message }` (sem caminho) |
+| `prism:transfer-reveal` | `{ deliveryId }` | nada; confere que a entrega é da janela que pede |
+| `prism:transfer-release` | `{ destinationId }` | nada; interrompe a entrega em andamento daquele destino |
+
+Notas:
+
+- Os cinco seguem a regra do canal novo do `AGENTS.md` da tela, com as cinco peças: o `ipcMain.handle` que começa
+  por `assertFromApp`, o `ipcRenderer.invoke` do preload, o tipo em `PrismBridge` (o grupo `transfers`), o ramo de
+  desenvolvimento de `getBridge` e a validação da resposta na tela. O pedido é conferido por um schema no
+  processo principal (como o de `window-messages.ts`), e a resposta, de novo na tela. Os nomes não têm dígito, e
+  o `channels.test.ts` ganha a conferência deles, como tem a das janelas.
+- Nenhum canal recebe um caminho, uma pasta ou um nome de arquivo para abrir: `suggestedName` é só o nome
+  proposto no diálogo, sem a extensão, de 1 a 200 caracteres, conferido de novo com `exportFileName`, e
+  `extension` é uma da lista fixa (RN-EXPORT-019); e nenhum canal devolve um caminho à tela. O preload continua
+  sem `fs.` e sem `shell.`, e a conferência de que nenhum canal das janelas e da sessão abre arquivo continua
+  valendo.
+- `transferId` tem a forma do identificador da API (36 caracteres, em minúsculas, com os hifens), conferida antes
+  de virar nome de arquivo. `destinationId` e `deliveryId` são do processo principal, aleatórios.
+- `canceled`, na entrega: o `prism:transfer-release`, o fechamento da janela ou o `before-quit` interromperam a
+  cópia; a cópia escondida foi apagada e o destino foi solto. A tela não mostra o aviso de falha (RN-EXPORT-020).
+- `missing`: o arquivo pronto não está mais lá (o trabalho foi esquecido ou abandonado, a API reiniciou, o cofre
+  fechou). A entrada sai da barra com o aviso de erro da RN-EXPORT-022, salvo quando o cofre fechou ou a pessoa
+  cancelou. `reason` da entrega que falhou: `diskFull`, `notWritable`, `folderMissing`, `inUse` ou `other`, com
+  `message` sem caminho (RN-EXPORT-020).
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-TABELA-006**: "Exportar CSV" continua com as linhas carregadas, e todas as linhas saem pelo "Exportar…" ao
+  lado.
+- **RN-GRADE-004**: o "Exportar" do menu da grade abre o assistente "Exportar dados".
+- **RN-GRADE-007**: o diálogo de oito formatos deu lugar ao assistente de dez, exportar a seleção e as linhas
+  carregadas espera a seleção de várias células, e o que é igual nos dois caminhos são os valores e os escapes; a
+  estrutura do XML e do JSON passa a ser a do assistente.
+- **RN-GRADE-008**: o resultado inteiro se exporta pelo "Exportar…", numa conexão à parte, num trabalho da API.
+- **RN-SQL-017**: a exportação de todas as linhas não usa os valores completos guardados na sessão: lê de novo, sem
+  corte, e o arquivo temporário dela é o único dado de banco que a API grava no disco.
+- **RN-EDIT-013**: nos Registros, a barra de edição vem depois de "Exportar CSV" e "Exportar…".
+- **RN-MENU-001**: o menu da tabela e o da visão ganham "Exportar dados…".
+- **RN-PROT-001**: a exportação de dados não pergunta.
+- **RN-PROT-002**: a exportação de dados só executa leitura, e vale na conexão somente leitura.
+- **RN-SEG-001**: a exportação em andamento é comando em andamento da janela que a começou, e o aviso antes do
+  bloqueio diz quantas entregas que falharam serão descartadas.
+- **RN-TX-006**: a pergunta das exportações em andamento vem antes da das transações e da das alterações não
+  salvas.
+- **RN-TX-007**: o aviso de 60 segundos diz também das entregas que falharam e serão descartadas.
+- **RN-CONN-014**: excluir a conexão cancela as exportações dela, e o diálogo de excluir diz quantas.
+- **RN-COFRE-008**: fechar o cofre cancela as exportações, e o "Sair" e o fechamento do app perguntam antes.
+- **RN-ABAS-004**: fechar a janela com exportações começadas nela pergunta antes.
+- **RN-ABAS-007**: fechar o app pergunta também pelas exportações em andamento.
+- **RN-AVISO-006**: o aviso pode ter um botão de ação, e o que tem fica 8 segundos e pausa ao receber o foco.
+- **RN-DRIVER-005**: o aviso de antes do reinício diz das exportações que serão canceladas.
+- **RN-ATUALIZA-006**: a instalação da atualização que encerra o Prism pergunta pelas exportações em andamento.
+- **RN-TRANSF-016**: a exportação de dados mostra a recusa da conexão sem usuário ou sem senha no assistente, sem
+  abrir o "Editar conexão".
+- **RN-LOG-001**: da exportação de dados, só os IDs, o formato, as contagens, a duração e a classe do erro.
+- **RN-VERSAO-002**: o que cada formato da exportação escreve é contrato.
+- **Seção 6**: as rotas dos trabalhos de exportação e o `read` da página.
+- **Seção 9**: o assistente, os botões "Exportar…" e a barra de status da exportação não estão no canvas, e a barra
+  de edição dos Registros vem depois de "Exportar…".
+- **Seção 13**: o "exportar CSV" da lista entrou pela RN-TABELA-006, e a exportação de todas as linhas, por esta
+  seção.
+
+### Fica para depois
+
+- O destino "Banco de dados" (copiar as linhas para uma tabela de outra conexão) e a importação de um arquivo para
+  uma tabela: entraram pela seção 36.
+- Exportar a seleção da grade e só as linhas carregadas pelo assistente (RN-GRADE-007), com a seleção de várias
+  células (RN-GRADE-001).
+- Várias tabelas numa exportação só, um esquema inteiro, e um arquivo só para várias origens.
+- Dividir a saída em vários arquivos por tamanho.
+- Outras codificações além do UTF-8.
+- Salvar a exportação como tarefa, para repetir, e executar um programa ao terminar.
+- Gravar os binários (imagens) em arquivos separados, como o "Salvar em arquivos" do DBeaver.
+- Lembrar a pasta da última exportação de uma abertura do app para a outra.
+- Exportar dentro da transação da aba, vendo o que ela ainda não confirmou.
+- As opções do XLSX do DBeaver (bordas, formato de data, número da linha), a tabela do Confluence no Markdown, o
+  upsert no SQL (`ON CONFLICT`, `MERGE`), outras linguagens no Código fonte e a largura de exibição dos caracteres
+  largos no TXT.
+- Continuar uma exportação interrompida de onde parou, e mostrar o progresso da cópia na entrega entre unidades.
+- Escolher o nível de isolamento da leitura da exportação (hoje, o padrão do banco no Db2 e no Informix, em que
+  uma tabela muito disputada falha depois dos 5 segundos de espera de trava; a leitura sem trava, `UR` ou `DIRTY
+  READ`, fica para essa escolha).
+- Perguntar no Cmd+Q do macOS, que vai direto ao `before-quit` e hoje sai sem perguntar pelas alterações não
+  salvas nem pelas exportações.
+
+## 36. Complemento de 2026-10-16, versão 0.4.0: importar dados para uma tabela e copiar para outro banco
+
+Pedido do dono em 2026-10-16: "importações de dados em tabelas"; e, no print do assistente "Transferência de dados"
+do DBeaver (seção 35), o destino "Banco de dados", que até aqui aparecia como "Em breve" (RN-EXPORT-004). É a
+quarta e última parte do que o dono pediu naquele dia (as outras são as seções 33, 34 e 35).
+
+Perguntado, o dono escolheu que a importação lê CSV, TSV, JSON e XLSX (o DBeaver de código aberto lê só o CSV, e o
+XLSX é da versão paga dele), e que o "Banco de dados" copia as linhas para uma tabela que **já existe**, em qualquer
+conexão do cofre (PostgreSQL, Db2 ou Informix, o mesmo banco da origem ou outro), com o mapeamento das colunas, sem
+criar tabela. Criar a tabela no destino fica para depois.
+
+Os dois gravam linhas numa tabela pelo mesmo carregador da API: comandos com parâmetros, em lotes, confirmados a
+cada N linhas ou numa transação só, com a tabela esvaziada antes quando a pessoa pede, as proteções da conexão de
+destino, progresso e cancelamento. E os dois rodam como trabalho em segundo plano no registro de transferências da
+seção 35 (o `POST` que responde 202, o `GET` do progresso, o `DELETE` que cancela, a barra de status, o bloqueio e
+as saídas que perguntam). O arquivo da importação, quem escolhe é a pessoa, no diálogo de abrir do sistema; quem o
+lê do disco é o processo principal do Electron, que o copia para a pasta `transfers` da API com um nome tirado só
+de um identificador; e quem o interpreta é a API, em C#, em fluxo. A API nunca recebe um caminho da tela
+(RN-SHELL-001, RN-EXPORT-019).
+
+Muda a RN-EDIT-006 e 013, a RN-MENU-001, a RN-PROT-001, 002 e 006, a RN-SEG-001, a RN-TX-006, a RN-CONN-014, a
+RN-COFRE-008, a RN-ABAS-004 e 007, a RN-AVISO-006, a RN-DRIVER-005, a RN-ATUALIZA-006, a RN-LOG-001, a
+RN-VERSAO-002, a RN-EXPORT-003, 004, 010, 015, 016, 017, 018, 019, 021, 023 e 024, e as seções 6, 9 e 35. O canvas não
+desenha nada disto (seção 9).
+
+### Onde se importa
+
+- **RN-IMPORT-001.** As entradas. As duas abrem o assistente "Importar dados" (RN-IMPORT-002) com a tabela de
+  destino já escolhida: não há importação sem uma tabela.
+  - No navegador, no menu da tabela (RN-MENU-001): "Importar dados…", no grupo de "Exportar dados…", logo depois
+    dele, com a seta para cima que o app ganhou com o "Importar conexões" (seção 9). O menu da visão não tem o
+    item.
+  - Nos Registros de uma tabela, no rodapé: "Importar…", logo depois de "Exportar…" (RN-EXPORT-001), no mesmo
+    desenho, com a seta para cima, e a dica "Importar linhas de um arquivo CSV, TSV, JSON ou XLSX para esta
+    tabela".
+  - O que não se aplica fica desabilitado sem sair do caminho do Tab (`aria-disabled`), com o motivo na dica e para
+    o leitor de tela:
+    - a conexão somente leitura, pela opção dela ou de uma pasta acima (RN-PROT-002 e 004): "A conexão é somente
+      leitura: importar grava na tabela.";
+    - os Registros de uma visão (a aba sabe que é uma visão pelas listas do navegador, como a Estrutura): "Só uma
+      tabela recebe linhas importadas: esta é uma visão.";
+    - a tela que não sabe onde a tabela está, como os outros itens dela.
+
+    A tabela estrangeira do PostgreSQL, o apelido (`nickname`) do Db2 e a tabela externa do Informix aparecem no
+    navegador entre as tabelas, e a tela não os distingue delas: a entrada fica habilitada, e a recusa vem no
+    Mapeamento (RN-IMPORT-009).
+  - A conexão desconectada não desabilita nada: a importação tem conexão própria e não usa a sessão da aba
+    (RN-IMPORT-015). As alterações não salvas dos Registros e a aba ocupada também não desabilitam: a Confirmação
+    avisa (RN-IMPORT-013).
+  - Fora do Electron (a tela num navegador, só em desenvolvimento), o assistente abre, e "Escolher arquivo…" diz
+    "Importar só funciona no app do Prism.", sem pedir nada.
+  - Não há entrada no resultado da aba de consulta (que não diz uma tabela de destino), nos Scripts, nem no menu do
+    esquema ou da conexão (várias tabelas de uma vez ficam para depois), e arrastar um arquivo para a janela não
+    importa (fica para depois; a janela continua sem navegar para ele, RN-SHELL-001).
+  - Gravar numa tabela as linhas lidas de outro banco é o destino "Banco de dados" do "Exportar dados"
+    (RN-IMPORT-022).
+
+### O assistente "Importar dados"
+
+- **RN-IMPORT-002.** O diálogo.
+  - O título é "Importar dados", e embaixo dele vem o destino: "Para a tabela estoque.pedido", com a etiqueta do
+    banco, a conexão e o banco de dados, e o ambiente que vale na conexão (RN-PASTA-005), no desenho da origem do
+    "Exportar dados" (RN-EXPORT-003). É o diálogo grande (760 px).
+  - À esquerda, as quatro etapas: "Arquivo", "Mapeamento", "Carga" e "Confirmação", nas regras da lista do
+    "Exportar dados": a atual destacada (`aria-current="step"`), as anteriores clicáveis, as seguintes não.
+  - No rodapé: "Cancelar" à esquerda; "Voltar" (desabilitado na primeira etapa) e "Avançar" à direita. Na
+    Confirmação, "Avançar" vira "Importar" ("Importando…"). "Avançar" fica desabilitado enquanto a etapa tem um
+    campo recusado ou espera uma resposta, com o motivo à vista.
+  - Cancelar, Esc e o X fecham sem perguntar: nada foi gravado. Ao fechar, a tela interrompe a cópia do arquivo que
+    estiver em andamento e solta o arquivo copiado, que o processo principal apaga (RN-IMPORT-018). De "Importar"
+    até a resposta da API, com a pergunta da RN-PROT-001 no meio, o diálogo não fecha, como em toda gravação.
+  - Há um assistente por vez em cada janela. O bloqueio por inatividade, o "Sair" e o quinto erro de senha o fecham
+    (RN-SEG-001), e o arquivo copiado é solto.
+  - Ficam lembradas por usuário, nas preferências desta instalação, como as do "Exportar dados" (RN-EXPORT-003): as
+    opções do leitor de cada formato, os formatos dos valores (o separador decimal, com "Aceitar o ponto como
+    separador de milhar", e o formato das datas) e, na Carga, a escolha de "Commit" ("A cada N linhas", com o N, ou
+    "Tudo numa transação só") e "Conferir o arquivo inteiro antes de gravar". Não se lembram o arquivo, o formato (vem
+    da extensão), a planilha, o mapeamento e "Esvaziar a tabela antes de importar", que começa sempre desligado:
+    apagar a tabela é uma decisão de cada importação. O valor lembrado que não vale mais volta ao padrão, sem erro.
+
+- **RN-IMPORT-003.** Arquivo: escolher e reconhecer.
+  - "Arquivo": "Escolher arquivo…" pede ao processo principal o diálogo de abrir do sistema (RN-IMPORT-018).
+    Escolhido o arquivo, o processo principal o copia para a pasta do Prism, e o campo mostra "Copiando
+    pedidos.csv… 45%", com a barra de progresso (`role="progressbar"`) e "Cancelar"; terminada a cópia,
+    "pedidos.csv · 1,2 MB" e "Trocar arquivo…". O nome vem isolado do texto em volta (`<bdi>`), porque pode ter
+    marca de direção, e o tamanho é escrito como o do arquivo no "Importar conexões" (RN-TRANSF-009).
+  - "Cancelar" a cópia, "Trocar arquivo…" e o fechamento do diálogo soltam o arquivo de antes. Trocar o arquivo
+    descarta a leitura e o mapeamento: o assistente recomeça do Arquivo.
+  - As recusas aparecem no próprio campo, sem aviso de erro:
+    - acima de 2 GiB (RN-IMPORT-008): "O arquivo tem 2,4 GB, e o Prism importa até 2 GB.";
+    - sem espaço para a cópia: "Não há espaço na pasta de dados do Prism para copiar o arquivo: são precisos 1,2
+      GB.";
+    - a pasta de dados que não aceita gravação: "Não é possível gravar na pasta de dados do Prism.";
+    - o que o sistema não deixa ler: "Não foi possível ler o arquivo: o sistema não dá permissão para ler o
+      arquivo." (a frase do motivo vem do código do sistema, nunca do texto dele, que traz o caminho,
+      RN-IMPORT-018);
+    - o que não é um arquivo comum (pelo atalho que aponta para uma pasta, um dispositivo): "Escolha um arquivo, e
+      não uma pasta ou um dispositivo.";
+    - a cópia que falha no meio, com a frase do motivo (RN-IMPORT-018).
+  - "Formato": "CSV", "TSV", "JSON" ou "XLSX", numa escolha de uma, com o que a extensão diz: `.csv` e `.txt` são
+    CSV; `.tsv` e `.tab`, TSV; `.json`, JSON; `.xlsx` e `.xlsm`, XLSX (as macros do `.xlsm` não são lidas nem
+    executadas); outra extensão, CSV. A pessoa pode trocar.
+  - O `.xls` (o Excel antigo) e a planilha com senha não são um `.xlsx` por dentro (começam pelos bytes `D0 CF 11
+    E0`), e a leitura os recusa: "Este arquivo não é um .xlsx que o Prism lê: é uma planilha do Excel antigo (.xls)
+    ou uma planilha com senha. No Excel, salve-a como .xlsx, sem senha." O `.ods` não é lido (fica para depois).
+  - Abaixo vêm as opções do formato (RN-IMPORT-004 a 006), os formatos dos valores e a prévia do arquivo
+    (RN-IMPORT-007).
+  - "Avançar" fica desabilitado enquanto a cópia não termina ("Espere a cópia do arquivo terminar.") e enquanto a
+    prévia do arquivo não chega sem recusa.
+
+- **RN-IMPORT-004.** CSV e TSV.
+  - O TSV é o CSV com a tabulação como separador: as mesmas opções, sem a do separador.
+  - "Codificação": "Automática" (o padrão), "UTF-8", "UTF-16 LE", "UTF-16 BE", "Windows-1252" ou "ISO-8859-1".
+    - A automática: a do BOM, quando o arquivo começa por um (UTF-8, UTF-16 LE ou UTF-16 BE); sem BOM, UTF-8 quando
+      o arquivo inteiro é UTF-8 válido e não tem o byte zero (o que é só ASCII também); senão, Windows-1252, a do
+      Excel em português ("CSV (separado por vírgulas)"). A API confere o arquivo inteiro, em blocos, sem guardá-lo
+      (alguns segundos num arquivo de 2 GB, com "Lendo o arquivo…"), para a escolha valer até o fim, e não só no
+      começo; ao lado do campo, a tela mostra o que achou: "Detectada: UTF-8 com BOM", "Detectada: Windows-1252". O
+      UTF-16 sem BOM (que tem o byte zero a cada letra do ASCII) não é adivinhado: a prévia mostra o texto
+      estragado, e a pessoa o escolhe na lista.
+    - Escolhida pela pessoa, a codificação vale como está, e o BOM dela no começo do arquivo é pulado. Em UTF-8 e
+      UTF-16, a sequência inválida é recusada na linha em que aparece: "O arquivo não é UTF-8 válido na linha
+      5.678. Escolha a codificação dele." Windows-1252 e ISO-8859-1 leem qualquer byte.
+  - "Separador": "Automático" (o padrão), "Ponto e vírgula (;)", "Vírgula (,)", "Tabulação" ou "Barra vertical
+    (|)". O automático conta os quatro fora das aspas nas primeiras 100 linhas (até 1 MiB), e escolhe o que aparece
+    o mesmo número de vezes, mais de zero, no maior número de linhas; no empate, o primeiro na ordem `;`, `,`,
+    tabulação e `|` (o `;` é o do Prism e o do Excel em português). Sem nenhum deles, o arquivo tem uma coluna só.
+    A tela mostra o que achou: "Detectado: ponto e vírgula".
+  - "Primeira linha é o cabeçalho", ligado: os valores dela são os nomes das colunas do arquivo, sem os espaços das
+    pontas; o nome vazio vira "Coluna 3" (a posição, a partir de 1), e o repetido ganha " (2)", " (3)"…. Desligado,
+    as colunas se chamam "Coluna 1", "Coluna 2"…, e a primeira linha é dado.
+  - "Aspas": "Aspas duplas", o padrão, ou "Nenhuma".
+    - Com aspas duplas, como na RFC 4180 e no Excel: o campo que começa por `"` vai até a próxima `"` que não está
+      dobrada; dentro dele, `""` é uma aspa, e o separador e as quebras de linha são texto. O que vem depois da
+      aspa que fecha, até o separador, é juntado ao valor, como o Excel faz (`"abc"def` é `abcdef`); a aspa no meio
+      de um campo que não começou por ela é um caractere comum (`5"` é `5"`). A aspa que abre e não fecha até o fim
+      do arquivo recusa a leitura: "A aspa aberta na linha 12 não fecha até o fim do arquivo."
+    - Com "Nenhuma", a aspa é sempre um caractere comum, e nenhum valor pode ter o separador nem quebra de linha.
+  - "Texto do nulo": vazio por padrão (nenhum texto é nulo, além do campo vazio, abaixo), de até 100 caracteres e sem
+    caractere de controle ("O texto do nulo não pode ter caractere de controle."). O campo sem aspas igual a ele,
+    letra por letra, é nulo em qualquer coluna; entre aspas, é o texto (como no `COPY … CSV` do PostgreSQL), para o
+    texto `NULL` de verdade, que o Exportar escreve entre aspas com as aspas "Em todos os textos" ou "Em todos os
+    valores", voltar como texto. A exceção é o texto do nulo que tem o separador ou a aspa, que o Exportar sempre põe
+    entre aspas (RN-EXPORT-007): esse é nulo também entre aspas. É a volta do "Nulo como" do Exportar.
+  - "Campo vazio vira nulo", desligado. O campo vazio (`;;` ou `;"";`) é sempre nulo numa coluna que não é de texto
+    (RN-IMPORT-010); numa de texto, é o texto vazio, e, com a opção ligada, nulo. O Exportar CSV escreve o nulo e o
+    texto vazio do mesmo jeito, como o campo vazio: quem precisa distinguir os dois exporta com um "Nulo como" e
+    importa com o mesmo "Texto do nulo".
+  - "Tirar os espaços das pontas", desligado: tira os espaços (U+0020) e as tabulações do começo e do fim de cada
+    valor, também do que veio entre aspas, antes de comparar com o texto do nulo. Fora das colunas de texto eles
+    saem sempre (RN-IMPORT-010).
+  - "Pular linhas vazias", ligado: a linha sem nenhum caractere, ou só com separadores, espaços e tabulações (a
+    sobra que uma planilha deixa embaixo dos dados), não vira linha da tabela. Desligado, a linha sem nenhum
+    caractere é pulada mesmo assim quando o arquivo tem mais de uma coluna (ela seria uma linha com um valor só);
+    no arquivo de uma coluna só, ela é um campo vazio, nas regras do campo vazio (acima). O aviso do fim conta as
+    linhas puladas (RN-IMPORT-020).
+  - "Tirar o apóstrofo da proteção contra fórmula", ligado, com a dica "O Exportar CSV do Prism põe um apóstrofo
+    antes do texto que começa com =, +, - ou @, para a planilha não o executar. Ligado, a importação o tira, e o
+    texto volta como era."
+    - É a volta exata da proteção da RN-TABELA-006 e da RN-EXPORT-007: o valor (e o nome no cabeçalho) que começa
+      por `'` e cujo resto a proteção protegeria (o primeiro caractere depois de espaços, tabulações e retornos de
+      carro é `=`, `+`, `-` ou `@`, e o resto não é um número simples) perde o apóstrofo: `'=SOMA(A1)` volta a ser
+      `=SOMA(A1)`, `'+55 11 99999-0000`, `+55 11 99999-0000`, e `'+5`, `+5`. O resto fica como está: `'abc`, `'-1`
+      e `''=x` não mudam, porque a proteção não os escreveria assim. As duas condições são as do `csvFieldOf` da
+      tela, com as mesmas expressões, conferidas sobre o resto inteiro, sem tirar nada dele: começa como fórmula,
+      `^[ \t\r]*[=+\-@]`; é um número simples, `^-?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:[eE][+-]?\d+)?$`.
+    - O aviso do fim conta os valores que perderam o apóstrofo (RN-IMPORT-020), para a pessoa ver que a opção
+      mexeu no arquivo.
+    - Ligado por padrão (decisão de projeto de 2026-10-16, a confirmar com o dono): o arquivo que mais volta ao Prism
+      é o que ele mesmo exportou, e sem isso todo telefone com `+`, todo texto começado por `-` e todo `@usuario`
+      voltaria ao banco com um apóstrofo a mais, sem ninguém ver. O arquivo salvo pelo Excel não traz esse apóstrofo
+      (no Excel ele só marca a célula como texto e não vai para o CSV), e a opção não o muda.
+    - O que se perde com ela ligada: o texto que de fato começa por um apóstrofo seguido de `=`, `+`, `-` ou `@`
+      (que a exportação escreve sem mexer) chega sem o apóstrofo. A dica do campo diz isso; para esse arquivo,
+      desliga-se a opção.
+    - Só o CSV e o TSV têm a opção: o XLSX e o JSON da exportação não põem apóstrofo (RN-EXPORT-010 e 013).
+    - A proteção é da saída para uma planilha, e não do banco: o texto que chega à tabela começando por `=` é só
+      texto no Prism, e volta a ser protegido na próxima exportação em CSV (RN-EXPORT-007). Do XLSX, a importação
+      nunca lê nem calcula uma fórmula (RN-IMPORT-006).
+  - As linhas terminam em CRLF, LF ou CR sozinho, misturados, e a última pode não terminar. A linha do arquivo, nas
+    mensagens, é a linha física em que o registro começa, contando a do cabeçalho como 1: um valor entre aspas com
+    quebras de linha faz o registro seguinte começar algumas linhas depois.
+  - A linha com menos valores que o cabeçalho (ou que a primeira linha, sem cabeçalho) tem nulo nos que faltam, como
+    alguns programas escrevem a linha com as últimas células vazias. Como ela também é o sinal de um arquivo estragado
+    (a quebra de linha sem aspas no meio de um texto parte um registro em dois), ela não passa calada: a prévia do
+    arquivo a marca, no tom de atenção, com "A linha 12 tem 3 valores, e o cabeçalho tem 5: os que faltam vão como
+    nulo.", e o aviso do fim conta quantas foram completadas (RN-IMPORT-020). A linha com mais valores é aceita quando
+    os que sobram estão vazios (os separadores a mais no fim); senão, é um problema da linha (RN-IMPORT-011 e 016): "A
+    linha 12 tem 7 valores, e o cabeçalho tem 5."
+
+- **RN-IMPORT-005.** JSON.
+  - Não há opção do leitor. O arquivo é UTF-8, com ou sem BOM, como pede a RFC 8259; o resto é recusado: "O JSON
+    não é UTF-8 válido: erro na linha 3 do arquivo."
+  - O arquivo tem uma de duas formas, as que o Prism e o DBeaver exportam (RN-EXPORT-010):
+    - uma lista de objetos: `[ { "id": 1, … }, … ]`;
+    - um objeto com uma chave só, cujo valor é uma lista de objetos: `{ "pedido": [ … ] }`. O nome da chave não
+      importa, e a prévia o mostra ("Lista em pedido").
+
+    Outra forma é recusada: "O JSON não é uma lista de objetos, nem um objeto com uma lista de objetos dentro." O JSON
+    mal formado: "O arquivo não é um JSON válido: erro na linha 5.678, byte 12 da linha." (a linha e a posição que o
+    leitor do .NET dá, somadas de 1: o `LineNumber` e o `BytePositionInLine` da `JsonException` contam a partir de 0,
+    e a posição é em bytes, e não em caracteres). Até 64 níveis de objetos e listas, o padrão do `Utf8JsonReader`;
+    mais fundo é o JSON mal formado. O JSON de um objeto por linha (JSON Lines) fica para depois.
+  - Cada objeto da lista é uma linha da tabela. O item que não é objeto é um problema da linha: "O item 12 da lista
+    não é um objeto."
+  - As colunas do arquivo são todas as chaves do arquivo inteiro, na ordem em que aparecem pela primeira vez: a
+    leitura (`imports/read`) percorre o JSON todo em fluxo, sem guardá-lo ("Lendo o arquivo…", alguns segundos num
+    arquivo de 2 GB, como a codificação automática do CSV), e junta as chaves, até 16.384 (RN-IMPORT-008); a prévia
+    mostra os 20 primeiros objetos. A tela manda a lista de volta nos pedidos seguintes (`reader.keys`), para a API
+    não percorrer o arquivo de novo, e a posição de uma coluna do arquivo no mapeamento é a posição nessa lista. A
+    chave que não está nela (o pedido montado à mão) é um problema da linha: "O item 12 da lista tem a chave obs, que
+    não estava no arquivo quando ele foi lido." A chave que falta num objeto é nulo naquela linha: toda coluna mapeada
+    vai em todo `INSERT`, e quem quer o padrão da tabela deixa a coluna sem coluna do arquivo. A chave repetida no
+    mesmo objeto é um problema da linha: "O item 12 da lista tem a chave id duas vezes."
+  - Os valores: o texto, com os escapes do JSON desfeitos; o número, o texto dele como está no arquivo
+    (`12345678901234567890.5` não passa por um número de ponto flutuante); `true` e `false`, os textos `true` e
+    `false`; `null`, nulo; o objeto e a lista dentro de um valor, o texto JSON deles como está no arquivo, para uma
+    coluna `json` ou `jsonb`. O número, o `true` e o `false` já vêm na forma canônica e não passam pelo separador
+    decimal nem pelo formato das datas (RN-IMPORT-007): `1.5` é um e meio também com "Vírgula". Esses formatos
+    valem só para o texto (string) do JSON.
+  - A linha, nas mensagens, é o número do item na lista, a partir de 1: "item 1.234 da lista".
+
+- **RN-IMPORT-006.** XLSX.
+  - "Planilha": as planilhas da pasta de trabalho, na ordem dela, cada nome isolado (`<bdi>`), com " (oculta)" nas
+    ocultas. Vem escolhida a primeira que não é oculta.
+  - "Primeira linha é o cabeçalho", ligado, e "Pular linhas vazias", ligado, nas regras do CSV. A primeira linha é
+    a primeira da planilha com alguma célula preenchida (a planilha que começa na linha 3 tem o cabeçalho na 3). As
+    colunas vão da primeira à última com valor no cabeçalho; sem cabeçalho, da primeira à última com valor nas
+    linhas que a leitura da prévia percorre (até 1.000). O valor numa coluna fora delas é um problema da linha: "A
+    linha 12 da planilha tem valor na coluna H, fora das colunas do cabeçalho (B a E)."
+  - O valor de cada célula, pelo tipo dela no arquivo:
+    - o texto (o compartilhado, o em linha, o resultado de texto de uma fórmula), com as partes do texto formatado
+      juntadas e sem a leitura fonética; o escape `_xHHHH_` do formato é desfeito (`_x000D_` é o retorno de carro,
+      e `_x005F_x0041_` é o texto `_x0041_`), a volta exata do que o XLSX da exportação escreve (RN-EXPORT-013);
+    - o número, no texto mais curto que volta ao mesmo número (`0.1`, `12`, `1E+20`), com ponto, qualquer que seja
+      o formato da célula, a não ser o de data;
+    - o número com formato de data ou hora vira data e hora: o formato embutido de data e hora (os números 14 a 22, 27
+      a 36, 45, 47 e 50 a 58) ou o próprio cujo código, sem o que está entre aspas, depois de `\` e entre colchetes,
+      tem `d`, `m`, `y`, `h` ou `s`, em maiúscula ou minúscula (há programas que escrevem `YYYY-MM-DD`). Antes de
+      tirar os colchetes, a leitura olha o que está dentro deles: o código com `[h]`, `[hh]`, `[m]`, `[mm]`, `[s]` ou
+      `[ss]` é de tempo decorrido e é lido como número (abaixo), e os outros colchetes (a cor, como `[Red]`, e a
+      localidade, como `[$-416]`) saem sem contar. O número é o dia contado do sistema de datas da pasta: no de 1900,
+      o padrão, do 1 ao 59 o dia é contado de 31/12/1899 (o 1 é 01/01/1900), o 60 é o 29/02/1900 que o Excel inventa e
+      é recusado ("A data 29/02/1900 do Excel não existe."), e do 61 em diante o dia é contado de 30/12/1899 (o 61 é
+      01/03/1900); no de 1904 (`date1904`), o 0 é 01/01/1904. A parte inteira menor que 1 numa data é recusada. A
+      fração do dia é a hora, arredondada ao milissegundo; se o arredondamento chega a `24:00:00.000`, a data avança
+      um dia e a hora é `00:00:00`. Sai `aaaa-mm-dd` quando o formato não tem hora; `aaaa-mm-dd hh:mm:ss`, com `.fff`
+      quando há milissegundos, quando tem; e `hh:mm:ss` quando o formato só tem hora e o número é menor que 1. O
+      formato de tempo decorrido (`[h]:mm`, o embutido 46, `[h]:mm:ss`) é lido como número. O número negativo com
+      formato de data é recusado;
+    - a célula de data (`t="d"`, que alguns programas escrevem no lugar do número) vale a data ISO 8601 dela,
+      escrita como `aaaa-mm-dd`, `aaaa-mm-dd hh:mm:ss` (com a fração, quando vem) ou `hh:mm:ss`, com o fuso no fim
+      quando ela o tem, nas regras do fuso (RN-IMPORT-010); a que não é ISO 8601 é um problema da linha: "A célula
+      C12 tem uma data que o Prism não lê.";
+    - o lógico, `true` ou `false`;
+    - o erro do Excel (`#N/D`, `#DIV/0!`) é um problema da linha: "A célula C12 tem o erro #N/D do Excel.";
+    - a célula com fórmula vale o resultado que o Excel guardou com ela; a fórmula nunca é lida nem calculada. A
+      fórmula sem resultado guardado (um arquivo gerado por um programa que não calcula) chega vazia, e o aviso do
+      fim conta quantas (RN-IMPORT-020);
+    - a célula mesclada tem o valor só na primeira, como o arquivo guarda; as outras são vazias;
+    - a célula vazia, ou que falta na linha, é nula.
+  - Os formatos dos valores (RN-IMPORT-007) valem só para o texto: o número, a data e o lógico de uma célula já vêm
+    na forma canônica.
+  - A linha, nas mensagens, é o número da linha da planilha, como o Excel mostra: "linha 1.234 da planilha
+    Pedidos".
+  - A pasta de trabalho no formato "Strict" do Office Open XML, que o Excel só grava quando se pede, é recusada: "A
+    planilha está no formato Strict do Office Open XML, que o Prism não lê. No Excel, salve-a como Pasta de
+    Trabalho do Excel (.xlsx)."
+
+- **RN-IMPORT-007.** Os formatos dos valores e a prévia do arquivo.
+  - "Separador decimal": "Ponto (1234.56)", o padrão, ou "Vírgula (1234,56)". Com "Vírgula" aparece "Aceitar o
+    ponto como separador de milhar", desligado, com a dica "1.500 vira mil e quinhentos. Ligue só se o arquivo
+    escreve os milhares com ponto." As regras do número estão na RN-IMPORT-010.
+  - "Formato das datas": "aaaa-mm-dd", o padrão, ou "dd/mm/aaaa". Vale para a data e para a data e hora.
+  - Os dois valem para o texto que vai a uma coluna de número, de data, de data e hora ou de hora; no CSV, no TSV,
+    no texto (string) do JSON e no texto de uma célula do XLSX. O número, o lógico e a data que o JSON e o XLSX
+    trazem como tais já vêm na forma canônica (RN-IMPORT-005 e 006).
+  - "Prévia do arquivo": as primeiras 20 linhas de dados, como foram lidas, antes de qualquer conversão, numa tabela
+    só de leitura com os nomes das colunas do arquivo e, à esquerda, a linha do arquivo. Em cima, o que a leitura
+    achou, numa linha: "UTF-8 com BOM · ponto e vírgula · 15 colunas" (no XLSX, "Planilha Pedidos · 15 colunas"; no
+    JSON, "Lista em pedido · 15 colunas"). Os valores aparecem como texto, com o nulo como o nulo da grade, e cortados
+    nos 1.000 caracteres, com "…" (RN-IMPORT-008). É nela que a pessoa vê a codificação errada (`SÃ£o Paulo`) e o
+    separador errado (uma coluna só).
+  - A leitura é refeita a cada mudança de uma opção, um pedido de cada vez (a mudança feita durante "Lendo o
+    arquivo…" espera o fim dele e refaz uma vez, com as últimas escolhas, como a RN-TRANSF-009). A recusa da
+    leitura aparece no lugar da prévia, com a frase dela, e "Avançar" fica desabilitado.
+  - O arquivo sem nenhuma linha de dados (só o cabeçalho, a lista vazia, a planilha vazia) não é recusa, mas não
+    avança: "O arquivo não tem linhas para importar."
+
+- **RN-IMPORT-008.** Os limites da leitura. O que passa deles é recusado com `IMPORT_FILE_UNREADABLE` (o motivo
+  `limits`), na leitura da prévia ou no meio da importação, com a linha quando se sabe.
+  - O arquivo tem até 2 GiB (2.147.483.648 bytes), que a tela escreve "2 GB", como o Windows: os tamanhos da
+    importação contam 1.024 bytes por KB. O processo principal confere antes e durante a cópia, e a API, de novo,
+    ao abri-lo (422 `IMPORT_FILE_TOO_LARGE`). É o que cabe duas vezes no disco de quem importa (o original e a
+    cópia) e o que um arquivo de planilha ou de texto que se importa à mão costuma ter.
+  - Até 16.384 colunas no arquivo (o máximo do Excel): "O arquivo tem mais de 16.384 colunas."
+  - O nome de uma coluna do arquivo (o do cabeçalho, a chave do JSON) tem até 256 caracteres, como o nome da
+    coluna da tabela no pedido: "O nome da coluna 3 do arquivo passa de 256 caracteres." Sem cabeçalho, a primeira
+    linha é dado, e o limite não vale para ela.
+  - As respostas das prévias (`imports/read` e `imports/preview`) têm um teto, para 20 linhas de 16.384 colunas não
+    virarem gigabytes: os nomes das colunas vão todos; as células vão cortadas nos 1.000 caracteres (o binário,
+    nos primeiros 32 bytes, RN-IMPORT-011); e as linhas trazem só as primeiras colunas que cabem em 8 MiB de
+    células (`shownColumns` diz quantas). A prévia mostra essas e diz, embaixo: "As outras 15.000 colunas não
+    aparecem na prévia." O resumo das conversões (RN-IMPORT-011) conta todas as colunas mapeadas, também as que
+    não aparecem.
+  - Cada valor tem até 64 MiB (o texto em bytes UTF-8; o binário, em bytes depois do hexadecimal), e cada linha,
+    até 256 MiB de valores somados, os mesmos limites da exportação (RN-EXPORT-017): "Um valor da linha 1.234 do
+    arquivo, coluna obs, passa de 64 MiB, e o Prism não o importa." e "A linha 1.234 do arquivo passa de 256 MiB de
+    valores, e o Prism não a importa." (`IMPORT_VALUE_TOO_LARGE`). O leitor para ao passar deles, sem montar o
+    valor inteiro.
+  - O XLSX é um `.zip`, e a leitura se protege da bomba de zip (o arquivo pequeno que descompacta em terabytes):
+    - até 10.000 entradas no `.zip`, conferidas antes de abrir o `ZipArchive`, que monta o diretório central
+      inteiro na memória ao procurar a primeira entrada: a API lê o registro de fim do diretório central (e o do
+      ZIP64, quando há) e recusa o `.zip` que declara mais de 10.000 entradas, um diretório central de mais de 4
+      MiB ou um diretório que não cabe no arquivo; depois percorre ela mesma os cabeçalhos do diretório, dentro
+      desses 4 MiB, sem ler os dados, contando as entradas (o número declarado pode mentir) e recusando o nome de
+      entrada repetido, que deixaria a dúvida sobre qual das duas é a planilha. Só então abre o `ZipArchive`;
+    - só são abertas as entradas que a leitura usa (`[Content_Types].xml`, `xl/workbook.xml`,
+      as relações dele, `xl/styles.xml`, `xl/sharedStrings.xml` e a planilha escolhida);
+    - o tamanho descompactado é contado enquanto se lê, sem confiar no que o `.zip` declara, e cada entrada tem um
+      teto: o `workbook.xml`, as relações e o `[Content_Types].xml`, 16 MiB cada; o `styles.xml`, 64 MiB; o
+      `sharedStrings.xml`, 1 GiB; a planilha, 16 GiB. O tamanho declarado acima do teto recusa antes de
+      descompactar;
+    - os textos compartilhados ficam na memória, até 256 MiB (o tamanho deles em UTF-16, como o .NET os guarda):
+      "Os textos da planilha passam de 256 MiB, o que o Prism lê de uma planilha. No Excel, salve a planilha como
+      CSV e importe o CSV.";
+    - o XML é lido sem DTD (`DtdProcessing.Prohibit`), sem resolver nada de fora e sem entidades;
+    - a referência de célula além de XFD1048576 recusa: "A planilha tem uma célula fora dos limites do Excel.".
+
+    O número de entradas e os tetos das entradas têm uma frase só: "A planilha passa dos limites que o Prism lê de
+    um .xlsx."
+
+### Mapeamento
+
+- **RN-IMPORT-009.** A tabela e o mapeamento.
+  - Ao entrar na etapa, a tela pede a prévia convertida (RN-IMPORT-011), que lê o catálogo da tabela numa conexão à
+    parte: "Lendo as colunas de estoque.pedido…". A falha (o banco fora do ar, a senha que não confere) aparece na
+    etapa, com a mensagem do banco e "Tentar de novo". As recusas da tabela também aparecem ali, e "Avançar" fica
+    desabilitado:
+    - a tabela que não existe mais (404 `IMPORT_TABLE_NOT_FOUND`): "A tabela estoque.pedido não existe mais.";
+    - o que não é uma tabela comum (422 `IMPORT_TARGET_NOT_TABLE`), com o motivo, nos termos da edição
+      (RN-EDIT-002): "Só uma tabela recebe linhas: estoque.v_pedido é uma visão." ("é uma visão materializada", "é
+      uma tabela estrangeira"; o apelido do Db2, a tabela temporária global, a tabela tipada e a tabela externa do
+      Informix: "não é uma tabela comum"). A tabela particionada do PostgreSQL é uma tabela;
+    - a conexão que passou a ser somente leitura (422 `CONNECTION_READ_ONLY`): "A conexão é somente leitura, e a
+      importação grava na tabela. Nada foi enviado ao banco."
+  - O mapeamento é uma lista com uma linha por coluna do arquivo, na ordem do arquivo: o nome dela (com o valor da
+    primeira linha embaixo, apagado, para reconhecer a coluna sem cabeçalho), a escolha "Coluna da tabela" e o tipo
+    da coluna escolhida. A escolha tem "Não importar" e as colunas da tabela, na ordem do catálogo, cada uma com o
+    tipo e a marca que vale: "obrigatória" (não aceita nulo, não tem padrão e o banco não a preenche), "preenchida
+    pelo banco" (a identidade "por padrão", o `SERIAL`, `SERIAL8` e `BIGSERIAL` do Informix e, no PostgreSQL, a
+    coluna de padrão `nextval(...)`, que a prévia diz `byDefault` como o `edit-target`, RN-EDIT-016) ou "calculada
+    pelo banco" (`generated: always`). O nome acessível de cada escolha é "Coluna da tabela para <nome da coluna do
+    arquivo>".
+  - Ficam desabilitadas na escolha, com o motivo: a calculada pelo banco ("O banco calcula esta coluna e não aceita
+    valor.") e, no Db2 e no Informix, a de um tipo que o Prism não importa ("O Prism ainda não importa este tipo
+    neste banco.", RN-IMPORT-010).
+  - O mapeamento automático, quando a etapa abre pela primeira vez com aquela leitura, e de novo no botão "Mapear
+    pelo nome":
+    - com cabeçalho, e no JSON, cada coluna do arquivo vai para a coluna da tabela de mesmo nome: primeiro a igual,
+      letra por letra; sem ela, a igual sem diferenciar maiúsculas nem acentos, como a busca (RN-BUSCA-001), e com
+      o espaço, o hífen e o sublinhado contando como iguais ("Data de criação" casa com `data_de_criacao`). Quando
+      duas colunas da tabela casam do segundo jeito (`Nome` e `nome`, no PostgreSQL com aspas) e nenhuma do
+      primeiro, a coluna do arquivo fica em "Não importar", com a dica "Mais de uma coluna da tabela casa com este
+      nome." Duas colunas do arquivo que casam com a mesma da tabela: a primeira fica com ela, e a outra, em "Não
+      importar";
+    - sem cabeçalho, pela posição: a coluna N do arquivo vai para a coluna N da tabela, na ordem do catálogo; a que
+      cairia numa coluna desabilitada fica em "Não importar";
+    - a coluna desabilitada nunca é escolhida.
+  - Escolher à mão uma coluna da tabela que já recebe outra coluna do arquivo a tira da outra, que passa a "Não
+    importar", e a lista diz, com papel de estado: "total deixou de receber Total (R$)." Ao lado de "Mapear pelo
+    nome", "Não importar nenhuma".
+  - Embaixo da lista, "Ficam com o padrão da tabela:" e as colunas da tabela que não recebem coluna do arquivo,
+    cada uma com o padrão (o texto do catálogo, como `now()`), "preenchida pelo banco", "calculada pelo banco" ou
+    "nulo". Elas ficam fora do `INSERT`, e o banco põe nelas o que poria num `INSERT` sem elas.
+  - Os avisos, no tom de atenção, que não impedem de avançar e voltam na Confirmação:
+    - a obrigatória que não recebe valor: "cliente_id é obrigatória (não aceita nulo e não tem padrão) e não recebe
+      valor: o banco vai recusar as linhas, a não ser que um gatilho da tabela a preencha." Com mais de uma, "As
+      colunas cliente_id e loja_id são obrigatórias …, e não recebem valor: …";
+    - a preenchida pelo banco que recebe valor do arquivo: "id é preenchida pelo banco quando fica sem valor. Com
+      os valores do arquivo, o contador do banco não anda, e as linhas criadas depois sem id podem repetir um valor
+      importado." No Informix o aviso não sai: o `SERIAL` que recebe um valor maior que o atual passa a contar
+      dele, e o 0 pede um valor novo;
+    - a coluna que não aceita nulo, tem padrão, não é preenchida pelo banco e recebe uma coluna do arquivo: "qtd
+      não aceita nulo e tem padrão (0): um valor vazio ou ausente do arquivo vai como nulo, e não como o padrão, e o
+      banco recusa a linha." (na cópia, "um nulo da origem vai como nulo, …"). O `INSERT` leva a coluna em todas as
+      linhas, e o padrão só vale para a coluna que fica fora dele.
+  - Sem nenhuma coluna mapeada, "Avançar" fica desabilitado: "Escolha ao menos uma coluna da tabela para receber
+    valores."
+  - Na API, a posição de uma coluna do arquivo que não existe na leitura (além da última coluna do arquivo) é
+    `IMPORT_MAPPING_INVALID`, no campo `mapping[3].source`: na prévia, como recusa do pedido; no trabalho, que só
+    lê o arquivo depois do 202, como o fim dele antes de gravar a primeira linha. A tela só manda posições que a
+    leitura deu, e a recusa só aparece com um pedido montado à mão.
+  - Com milhares de colunas, a lista rola sem travar, e o Tab anda pelas escolhas, como na Extração
+    (RN-EXPORT-005).
+
+- **RN-IMPORT-010.** A conversão dos valores, a mesma na prévia e na carga.
+  - Cada coluna da tabela tem uma classe, pelo tipo que o catálogo dá (RN-CAT-001):
+    - **texto**: no PostgreSQL, `text`, `character varying`, `character`, `"char"`, `name` e `citext`; no Db2, `CHAR`,
+      `VARCHAR`, `GRAPHIC`, `VARGRAPHIC`, `LONG VARCHAR`, `CLOB` e `DBCLOB`; no Informix, `CHAR`, `VARCHAR`, `NCHAR`,
+      `NVARCHAR`, `LVARCHAR`, `CLOB` e `TEXT`;
+    - **número**: no PostgreSQL, `smallint`, `integer`, `bigint`, `numeric`, `real` e `double precision`; no Db2, os
+      inteiros, `DECIMAL`, `DECFLOAT`, `REAL` e `DOUBLE`; no Informix, os inteiros (com `INT8` e os seriais),
+      `DECIMAL`, `MONEY`, `SMALLFLOAT` e `FLOAT`;
+    - **data**: `date` no PostgreSQL e `DATE` no Db2 e no Informix;
+    - **data e hora**: `timestamp` e `timestamp with time zone` no PostgreSQL; `TIMESTAMP` no Db2; no Informix, o
+      `DATETIME` que começa em `YEAR`;
+    - **hora**: `time` e `time with time zone` no PostgreSQL; `TIME` no Db2; no Informix, o `DATETIME HOUR TO SECOND`;
+    - **lógico**: `boolean` nos três;
+    - **binário**: `bytea` no PostgreSQL; `BINARY`, `VARBINARY` e `BLOB` no Db2; `BYTE` e `BLOB` no Informix;
+    - **outra**: o resto. No PostgreSQL ela recebe o texto como está, e o banco converte (`json`, `jsonb`, `uuid`,
+      `interval`, os enumerados, as listas, os intervalos de valores, `inet`, `xml`…). O `money` do PostgreSQL é dela,
+      e não do número: o banco o lê pelo `lc_monetary` do servidor, e não pelo separador decimal da etapa Arquivo (com
+      o `lc_monetary` em português, `1234.56` é lido como 123.456,00), e o que a exportação escreve dele (`R$
+      1.234,56`) volta igual; a escolha dela no mapeamento diz "O banco lê este valor no formato de moeda do
+      servidor." No Db2 e no Informix a outra não se importa (o intervalo, o XML, as coleções, os tipos do usuário):
+      fica desabilitada no mapeamento.
+
+    O domínio do PostgreSQL tem a classe do tipo-base dele (o catálogo da prévia o lê junto). No Db2 e no Informix, o
+    texto longo (`CLOB`, `DBCLOB`, `LONG VARCHAR` e `TEXT`) e o binário, que a edição não grava porque a grade os
+    corta (RN-EDIT-006), a importação grava: o valor vem inteiro do arquivo. Os testes de integração os provam contra
+    os três servidores, nos contêineres; o tipo que não passar fica de fora, desabilitado no mapeamento com o motivo,
+    e até lá o relatório diz que não foram exercitados.
+  - Cada valor do arquivo passa, nesta ordem:
+    1. **o nulo**: o campo sem aspas igual ao "Texto do nulo" (CSV e TSV, RN-IMPORT-004), a célula vazia do XLSX e o
+       `null` do JSON são nulos; o valor vazio é nulo fora das colunas de texto e, numa de texto, só com "Campo vazio
+       vira nulo". Onde as pontas saem (o passo 3), a comparação com o texto do nulo e o teste do vazio já olham o
+       valor sem os espaços e as tabulações das pontas: ` NULL ` numa coluna de número é nulo;
+    2. **a proteção contra fórmula** (CSV e TSV, com "Tirar o apóstrofo da proteção contra fórmula", RN-IMPORT-004),
+       sobre o valor como veio no campo, sem as aspas. Vem depois do nulo porque o Exportar escreve o texto do nulo
+       sem o apóstrofo e o texto de verdade com ele: com o nulo `-`, o campo `-` é nulo, e o campo `'-` é o texto `-`;
+       e vem antes das pontas porque o apóstrofo vem antes dos espaços que o valor tinha (`' =x` é ` =x`);
+    3. **as pontas**: fora das colunas de texto, os espaços e as tabulações das pontas saem sempre (` 12 ` é `12`); na
+       coluna de texto o valor vai como veio, a não ser com "Tirar os espaços das pontas";
+    4. **a forma canônica**, pelos formatos da etapa Arquivo, escrita pelo Prism nos três bancos:
+       - o número com ponto e sem separador de milhar:
+         - com "Ponto", o sinal opcional na frente, os dígitos, um ponto opcional e o expoente opcional (`-1234.56`,
+           `1.5E3`), e nenhum separador de milhar: `1,5` e `1,234.56` são recusados com "«1,5» não é um número com
+           ponto decimal. Se o arquivo usa vírgula, escolha Vírgula em Separador decimal.";
+         - com "Vírgula", a vírgula é o separador decimal (`-1234,56`, `1,5E3`), e o ponto é recusado: "«1.500» tem
+           ponto, e o separador decimal escolhido é a vírgula. Se o arquivo usa ponto decimal, escolha Ponto em
+           Separador decimal; se escreve os milhares com ponto, ligue Aceitar o ponto como separador de milhar." Sem
+           isso, um arquivo com ponto decimal e três casas (`1.500`, `12.345`) viraria mil vezes maior em silêncio,
+           com a escolha lembrada de uma importação anterior;
+         - com "Vírgula" e "Aceitar o ponto como separador de milhar", o ponto vale só como milhar, e só na parte
+           inteira escrita como um primeiro grupo de 1 a 3 dígitos que não começa por 0 seguido de grupos de 3
+           (`1.234.567,89` e `1.500`, que o Excel em português escreve com o formato de milhar); `1.5`, `0.125` e
+           `1.23,4` são recusados: "«1.5» não é um número com vírgula decimal e ponto de milhar.";
+         - nas colunas `real`, `double precision` e `numeric` do PostgreSQL, `NaN`, `Infinity` e `-Infinity`, sem
+           diferenciar maiúsculas, que a exportação do PostgreSQL escreve, vão como estão, e o banco os lê. No Db2 e
+           no Informix eles são recusados, como na edição;
+       - a data `aaaa-mm-dd`. Com "aaaa-mm-dd", a data vem como `2024-01-15`, com dois dígitos no dia e no mês. Com
+         "dd/mm/aaaa", como `15/01/2024`, com um ou dois dígitos no dia e no mês e quatro no ano ("O ano tem de ter 4
+         dígitos: «15/01/24»."). A data que não existe é recusada: "«31/02/2024» não é uma data válida." A data com
+         hora numa coluna de data passa quando a hora é zero (sai só a data), e é recusada quando não é, nos três
+         bancos (o PostgreSQL cortaria a hora em silêncio): "«2024-01-15 10:30» tem hora, e a coluna criado é só
+         data.";
+       - a data e hora `aaaa-mm-dd hh:mm:ss`, com a fração quando vem: a data no formato escolhido, um espaço (ou um
+         `T`, com "aaaa-mm-dd", o que o JSON da exportação escreve com "Datas em ISO 8601") e a hora como `10:30`,
+         `10:30:00` ou `10:30:00.123456`. A data sem hora (`2024-01-15`) é a meia-noite (`2024-01-15 00:00:00`) nos
+         três bancos; a hora sem data é recusada: "«10:30» não é uma data e hora.";
+       - a hora `hh:mm:ss`, de `10:30` ou `10:30:00`, com a fração quando vem;
+       - o fuso no fim da data e hora e da hora (`Z`, `+00`, `-03:00`) vai como está só para a coluna que guarda fuso
+         (`timestamp with time zone` e `time with time zone`, no PostgreSQL). Nas outras, nos três bancos, ele é
+         recusado: "«2024-01-15 10:30:00-03» tem fuso, e a coluna não guarda fuso." (o PostgreSQL o ignoraria em
+         silêncio numa coluna sem fuso);
+       - o lógico `true` ou `false`. O Prism troca `verdadeiro` e `falso`, os do Excel em português, sem diferenciar
+         maiúsculas; o resto vai como veio;
+       - o binário em bytes, de `0x` seguido dos dígitos hexadecimais (maiúsculos ou minúsculos, em número par), o que
+         a exportação escreve (RN-EXPORT-002); no PostgreSQL também de `\x` seguido deles, o texto do próprio banco. O
+         resto é recusado: "Um binário vem como 0x seguido dos dígitos hexadecimais." No JSON e no XLSX o binário vem
+         como texto, numa dessas formas;
+    5. **a conversão do banco**: no PostgreSQL, o texto canônico vai num parâmetro sem tipo, e o banco o converte como
+       na edição (RN-EDIT-006), com as regras dele: o que ele aceita a mais (`yes` num lógico) passa, a recusa dele é
+       a dele, e o número e a hora com mais casas que a coluna (`numeric(10,2)`, `timestamp(3)`) ele arredonda. O
+       binário vai num parâmetro `bytea`. No Db2 e no Informix, o Prism converte o texto canônico para o tipo da
+       coluna com a conversão da RN-EDIT-006 (a faixa do inteiro, o decimal de até 28 dígitos ou o texto, o lógico
+       `1`/`0`, `t`/`f` e `true`/`false`), e o valor que não converte é recusado antes de ir ao banco. As casas
+       também: o decimal com mais casas decimais que a escala da coluna (`DECIMAL(10,2)`, `MONEY(8,2)`; o `DECIMAL(p)`
+       do Informix, sem escala, e o `DECFLOAT` do Db2 não têm casas fixas) e a data e hora ou a hora com mais casas de
+       fração que a coluna guarda (`TIMESTAMP(6)` no Db2, de 0 a 12; `FRACTION(5)` no Informix, até 5, e nenhuma no
+       `YEAR TO SECOND`) são recusados quando as casas a mais não são zero, porque o banco as cortaria ou arredondaria
+       sem dizer nada: "«1.999» tem mais casas decimais que as 2 da coluna total." e "«2024-01-15 10:30:00.123456» tem
+       mais casas de fração que as 5 da coluna criado." As casas a mais que são zero saem (`1.500` vai como `1.50`), e
+       as casas contam no valor com o expoente aplicado (`1.5E-3` tem 4).
+  - O texto que vai a uma coluna de texto não muda. O tamanho dele contra o da coluna (`varchar(80)`) quem confere é o
+    banco, na carga (RN-IMPORT-016).
+  - O valor com um par substituto solto (um `\ud83d` do JSON, um UTF-16 quebrado) é recusado nos três bancos, porque
+    nenhum o grava em UTF-8: "O valor tem um caractere inválido (U+D83D sozinho)." O valor com o caractere nulo
+    (U+0000) que vai a uma coluna que não é binária também, nos três, como o PostgreSQL faz com o texto: "O valor tem
+    o caractere nulo (U+0000), que o Prism não grava num texto."
+  - As recusas do Prism citam o valor entre aspas angulares, como as da edição, com até 200 caracteres e "…" depois do
+    corte: "«12a» não é um número inteiro.", "«70000» está fora da faixa da coluna.", "«abc» não é um valor lógico:
+    use true ou false." (no Informix, "use 1 ou 0", a frase da edição de cada banco).
+
+- **RN-IMPORT-011.** A prévia convertida.
+  - Embaixo do mapeamento, "Prévia, já convertida": as 20 linhas da prévia do arquivo, com uma coluna para cada
+    coluna da tabela que recebe valor, com o nome dela, e, à esquerda, a linha do arquivo. Cada célula mostra o
+    valor como ele vai ao banco: o texto canônico (RN-IMPORT-010: `1234.56`, `2024-01-15`), o nulo como o nulo da
+    grade, o binário como `0x` e os primeiros 32 bytes, e o texto cortado nos 1.000 caracteres, com "…"
+    (RN-IMPORT-008).
+  - O valor que não converte fica marcado no tom de erro, com o motivo na dica e para o leitor de tela: a recusa do
+    Prism (RN-IMPORT-010) ou, no PostgreSQL, a do banco. A linha com um problema dela (valores a mais, o item que
+    não é objeto, a chave repetida, o erro do Excel) fica marcada inteira, com o motivo. A linha completada com
+    nulo (a que tem menos valores que o cabeçalho, RN-IMPORT-004) fica marcada no tom de atenção, com a frase
+    dela, e converte como as outras.
+  - No PostgreSQL, quem diz se o valor converte é o banco. A prévia executa, numa transação só de leitura na
+    conexão dela, um `SELECT` por linha com um `CAST($n AS <tipo da coluna>)` para cada coluna (o tipo como o
+    catálogo o escreve, pelo `format_type`, que já põe as aspas), e, na linha em que ele falha, um `SELECT` por
+    célula, cada um num ponto de salvamento, para achar qual. Nada é gravado, e a conversão é a mesma que a carga
+    pediria. O `CAST` não confere o que só a gravação confere: o texto maior que a coluna (que o `CAST` corta sem
+    erro), as restrições, a chave repetida e a chave estrangeira. Esses aparecem na carga (RN-IMPORT-016), e a
+    prévia diz isso numa linha: "A prévia confere a conversão dos valores. O tamanho, as restrições e as chaves, o
+    banco confere ao gravar, e o número ou a hora com mais casas que a coluna, ele arredonda." (no Db2 e no
+    Informix, sem a parte das casas, que o Prism recusa, RN-IMPORT-010).
+  - Em cima, o resumo, com papel de estado: "As 20 primeiras linhas convertem." ou "3 valores das 20 primeiras
+    linhas não convertem: a importação vai parar na linha 5 do arquivo." O problema não impede de avançar, e a
+    Confirmação o repete.
+  - A prévia é refeita a cada mudança do mapeamento, um pedido de cada vez (a mudança feita durante "Atualizando a
+    prévia…" espera o fim dele e refaz uma vez, com o último mapeamento). Voltar ao Arquivo e mudar uma opção do
+    leitor ou dos valores refaz a leitura e a prévia; o mapeamento continua nas colunas do arquivo que continuam lá
+    (pelo nome, com cabeçalho; pela posição, sem), e as que sumiram saem dele.
+
+### Carga e confirmação
+
+- **RN-IMPORT-012.** Carga.
+  - "Esvaziar a tabela antes de importar", desligado, com a dica "Apaga todas as linhas de estoque.pedido antes da
+    primeira linha do arquivo, com um DELETE sem WHERE. Os gatilhos de exclusão disparam, e as chaves estrangeiras com
+    exclusão em cascata apagam também linhas de outras tabelas." Ligado, a etapa diz, no tom de atenção: "Todas as
+    linhas de estoque.pedido serão apagadas antes da importação."
+    - O esvaziamento é `DELETE FROM "estoque"."pedido"`, na primeira transação da carga, e não um `TRUNCATE`: o
+      `DELETE` é desfeito com a transação nos três bancos (o `TRUNCATE` do Db2 só roda como o primeiro comando de uma
+      transação e não se desfaz), respeita as chaves estrangeiras que apontam para a tabela (o `TRUNCATE` do
+      PostgreSQL recusa a tabela referenciada) e não pede um privilégio a mais. O custo é o tempo e o log de apagar
+      linha a linha numa tabela grande; o `TRUNCATE` fica para depois.
+    - O `DELETE` faz o que as chaves estrangeiras que apontam para a tabela mandam, e a etapa o diz, com "Esvaziar"
+      ligado, pela regra de exclusão de cada uma: a prévia lê no catálogo as chaves de outras tabelas que apontam para
+      esta (`table.referencedBy`, com o esquema, a tabela e a regra; a RN-CAT-002 lê as que saem da tabela, e esta
+      leitura, as que chegam), e a etapa as agrupa, no tom de atenção, sem a própria tabela:
+      - em cascata (`CASCADE`): "A exclusão em cascata apaga também linhas de item_pedido e nota_item (e mais 2)." A
+        lista é a das tabelas que apontam para esta; a cascata pode seguir delas para outras;
+      - pondo nulo ou o padrão (`SET NULL` e `SET DEFAULT`): "A exclusão também altera linhas de cliente_log: as
+        colunas delas que apontam para pedido ficam nulas (ou com o padrão).";
+      - sem cascata (`RESTRICT` e `NO ACTION`): "As linhas de devolucao que apontam para pedido impedem o
+        esvaziamento: se houver alguma, o banco recusa o DELETE, e a importação para sem gravar nada."
+
+      Com mais de cinco tabelas num grupo, as cinco primeiras e "e mais 3". No Informix sem log, o `DELETE` que o
+      banco recusa no meio pode já ter apagado parte das linhas (RN-IMPORT-020).
+  - "Commit": uma escolha de duas, com o nome que o app já usa para a confirmação de uma transação (o "Commit manual"
+    da aba).
+    - "A cada [10.000] linhas", o padrão, como o DBeaver, de 1 a 1.000.000 ("Use de 1 a 1.000.000 linhas."), com a
+      dica "Se a importação parar, as linhas já confirmadas ficam na tabela, e as da transação em andamento são
+      desfeitas.";
+    - "Tudo numa transação só", com a dica "Se a importação parar, nada fica, e a tabela volta a ser o que era. A
+      transação longa segura as travas da tabela até o fim e, com muitas linhas, pode encher o log do banco (no
+      Informix, o próprio banco desfaz a transação longa)."
+  - Com "Esvaziar" e "A cada N linhas", a etapa diz: "O esvaziamento é confirmado junto com as primeiras 10.000
+    linhas. Se a importação parar depois disso, as linhas antigas não voltam: a tabela fica só com as importadas até
+    ali. Para tudo ou nada, escolha Tudo numa transação só."
+  - "Conferir o arquivo inteiro antes de gravar", ligado, com a dica "Lê o arquivo todo antes de gravar a primeira
+    linha e para no primeiro valor que o Prism recusa, sem tocar na tabela. O que só o banco confere (o tamanho do
+    texto, as restrições, as chaves e, no PostgreSQL, a conversão) aparece ao gravar. Num arquivo grande, a leitura a
+    mais leva alguns minutos."
+    - Ligada, a importação lê o arquivo do começo ao fim antes de esvaziar ou gravar (a fase `checking`, com o
+      progresso em bytes, RN-IMPORT-014), e aplica tudo o que é do Prism: os problemas das linhas (os valores a mais,
+      o item que não é objeto, a chave repetida, o erro do Excel, o valor fora das colunas do cabeçalho), a aspa que
+      não fecha, a codificação inválida, os limites (RN-IMPORT-008) e os passos 1 a 4 da conversão (RN-IMPORT-010),
+      com o passo 5 no Db2 e no Informix, em que é do Prism. A primeira recusa termina a importação com o mesmo erro e
+      a mesma linha que ela teria na carga, e nada foi gravado. A conferência não guarda nada do que leu: a carga lê o
+      arquivo de novo.
+    - Desligada, as recusas do Prism aparecem na carga, na linha em que estão, com o que já foi confirmado na tabela
+      (RN-IMPORT-016).
+  - "Se uma linha falhar", um texto, sem escolha: "A importação para na primeira linha que falhar: a transação em
+    andamento é desfeita, e as linhas já confirmadas ficam. A linha que repete uma chave da tabela também para a
+    importação." Pular as linhas com erro e substituir ou ignorar a linha repetida ficam para depois.
+  - No Informix sem log (a prévia diz `oneAtATime`, como na edição, RN-EDIT-012), a escolha de "Commit" fica
+    desabilitada, e a etapa diz: "Este banco não tem log de transação: cada linha é gravada sozinha, na hora. Se a
+    importação parar, as linhas anteriores já estão gravadas, e o esvaziamento não volta atrás."
+  - No Informix, com log ou sem, a etapa diz também: "No Informix cada linha vai num comando: muitas linhas levam mais
+    tempo que nos outros bancos." (RN-IMPORT-015).
+
+- **RN-IMPORT-013.** Confirmação, e o "Importar".
+  - Um resumo, em linhas de rótulo e valor:
+    - "Arquivo": "pedidos.csv · 1,2 MB · CSV · UTF-8 com BOM · ponto e vírgula · com cabeçalho" (no XLSX, "· planilha
+      Pedidos"; no JSON, "· lista em pedido");
+    - "Valores": "decimal com vírgula e ponto de milhar · datas dd/mm/aaaa" (sem a opção, "decimal com vírgula");
+    - "Destino": a etiqueta do banco, a conexão, o banco de dados e "estoque.pedido", com o ambiente;
+    - "Colunas": "8 de 10 colunas do arquivo, em 8 das 12 colunas da tabela", com os pares na dica ("Nome → nome");
+    - "Carga": "Esvazia a tabela antes · confere o arquivo antes · commit a cada 10.000 linhas", "… · numa transação
+      só" ou, no Informix sem log, "… · cada linha gravada sozinha", com cada parte só quando vale (sem a
+      conferência, "· sem conferir o arquivo antes" no lugar da segunda).
+  - Os avisos, no tom de atenção, quando valem:
+    - os do Mapeamento (a obrigatória sem valor, a preenchida pelo banco que recebe valor, a que não aceita nulo e tem
+      padrão);
+    - o da prévia: "Nas 20 primeiras linhas, 3 valores não convertem: a importação vai parar na linha 5 do arquivo.";
+    - com "Esvaziar", os das chaves que apontam para a tabela, e, com "A cada N linhas", o da Carga;
+    - no Informix sem log, o da Carga;
+    - com a aba de Registros desta tabela aberta nesta janela com alterações não salvas: "A aba de registros de pedido
+      tem 3 alterações não salvas. A importação não as leva, e elas continuam pendentes." Com "Esvaziar": "… tem 3
+      alterações não salvas: depois de esvaziar a tabela, elas não acham mais as linhas.";
+    - com uma aba desta conexão, nesta janela, em Commit manual e com transação aberta (RN-TX-002): "Uma aba desta
+      conexão tem uma transação aberta. Se ela travou linhas de pedido, a importação espera até 5 segundos por elas e
+      para."
+  - Com "Esvaziar" ligado, embaixo dos avisos vem a caixa "Entendo que as linhas atuais de estoque.pedido serão
+    apagadas.", desmarcada cada vez que a etapa abre, e "Importar" fica desabilitado até marcá-la ("Marque que entende
+    que a tabela será esvaziada."), qualquer que seja a proteção da conexão: apagar a tabela é a decisão desta
+    importação, e o "Esvaziar" não se lembra (RN-IMPORT-002). A pergunta da RN-PROT-001 vem depois, quando vale.
+  - "Importar". Do clique até a resposta da API, o botão diz "Importando…" e fica desabilitado, e o diálogo não fecha:
+    1. com "Confirmar antes de executar" na conexão de destino (RN-PROT-001), o aviso dela: em "Todos os comandos",
+       sempre; em "Só comandos irreversíveis", só com "Esvaziar" ligado (o `DELETE` sem `WHERE` é irreversível; os
+       `INSERT`, não). O aviso é o da RN-PROT-001, com o ambiente e a conexão no topo; o título "Esvaziar a tabela e
+       importar?" ou "Importar dados?"; o que faz, "Apaga todas as linhas de estoque.pedido e grava as de
+       pedidos.csv." ou "Grava as linhas de pedidos.csv em estoque.pedido."; os comandos, em código, `DELETE FROM
+       "estoque"."pedido"` (com o esvaziamento) e `INSERT INTO "estoque"."pedido" ("id", "cliente") VALUES (…)`, com
+       as colunas mapeadas; por que o aviso aparece; e "Importar mesmo assim" e "Cancelar", com o foco. Cancelar volta
+       à Confirmação como estava;
+    2. a tela confere o tamanho do corpo (até 8 MiB, como o da exportação) e pede o começo à API (`POST
+       api/user/transfers/imports`);
+    3. aceito o pedido (202), o assistente fecha, sem soltar o arquivo, que agora é do trabalho (RN-IMPORT-017), e a
+       importação aparece na barra de status (RN-IMPORT-019). Não há aviso de começo.
+  - As recusas do pedido aparecem no assistente, que fica aberto: a de campo (`IMPORT_OPTIONS_INVALID`) na etapa e no
+    campo a que se refere; as outras no alto da Confirmação, com a frase de cada uma (RN-IMPORT-014, e as da
+    RN-EXPORT-015 para o limite, a conexão que não existe mais, o driver e a conexão sem usuário ou sem senha, com
+    "importe de novo" no lugar de "exporte de novo"). O arquivo que sumiu (`IMPORT_FILE_MISSING`, a API que reiniciou)
+    leva de volta ao Arquivo: "O arquivo escolhido não está mais com o Prism. Escolha o arquivo de novo." O 401
+    `VAULT_LOCKED` leva à entrada, como sempre.
+
+### O trabalho na API
+
+- **RN-IMPORT-014.** O trabalho em segundo plano.
+  - `POST api/user/transfers/imports` confere o pedido, toma o arquivo, começa o trabalho e responde 202 com o `id`
+    dele, antes de falar com o banco. Antes do 202 vêm, nesta ordem, e sem tocar no banco:
+    1. a forma do pedido e as faixas (422 `IMPORT_OPTIONS_INVALID`, no campo);
+    2. o arquivo, `<fileId>.in` na pasta `transfers`, com o `fileID` do pedido (404 `IMPORT_FILE_MISSING`), com até
+       2 GiB (422 `IMPORT_FILE_TOO_LARGE`);
+    3. a conexão (404 `CONNECTION_NOT_FOUND`), o banco de dados pedido (422 `DATABASE_NAME_INVALID`), o usuário e a
+       senha (422 `CONNECTION_CREDENTIALS_MISSING`, no campo `userName` ou `password`, como na RN-EXPORT-015), o
+       driver (422 `DRIVER_NOT_INSTALLED`) e o somente leitura, pelas proteções que valem no cofre naquele instante
+       (422 `CONNECTION_READ_ONLY`, com "A conexão é somente leitura, e a importação grava na tabela. Nada foi
+       enviado ao banco.");
+    4. o limite de transferências (409 `TRANSFER_LIMIT_REACHED`, RN-EXPORT-016) e a tabela ocupada (409
+       `IMPORT_TARGET_BUSY`).
+
+    Passou, a API toma o arquivo: renomeia `<fileId>.in` para `<id do trabalho>.in`, e dali em diante ele é do
+    trabalho. A conferência do limite, a da tabela ocupada, a troca de nome e a entrada do trabalho no registro são
+    uma operação só, sob a trava do registro, para dois pedidos ao mesmo tempo não passarem os dois. Se a troca de
+    nome falha porque o arquivo sumiu (o processo principal o soltou entre a conferência e a troca, RN-IMPORT-018),
+    a resposta é 404 `IMPORT_FILE_MISSING`. Se o cofre muda depois da troca e antes de o trabalho entrar no
+    registro, a API apaga `<id do trabalho>.in` antes de responder 401 `VAULT_LOCKED` (RN-EXPORT-016), e nada fica.
+    Conectar, ler o catálogo, conferir o arquivo e gravar acontecem no trabalho, e a falha de cada um é o fim
+    dele.
+  - O registro é o da exportação (RN-EXPORT-016), com `kind: import`: o mesmo limite de 3 transferências ao mesmo
+    tempo, de todas as janelas e de todos os tipos; o abandono depois de 5 minutos sem consulta; o cancelamento em
+    até 10 segundos; o trabalho que é do cofre aberto quando começou; e a API que encerra e cancela.
+  - **A tabela ocupada**: duas importações (ou uma importação e uma cópia, RN-IMPORT-027) para a mesma tabela ao
+    mesmo tempo misturariam as linhas, e o esvaziamento de uma esperaria pelas travas da outra. Por isso a segunda
+    é recusada: "Já há uma importação para estoque.pedido em andamento. Espere ela terminar, ou cancele-a na barra
+    de status." ("Já há uma cópia para …"). A tabela é a mesma pela regra da própria origem (RN-IMPORT-023): a mesma
+    conexão e o mesmo banco de dados, ou outra conexão que aponta para o mesmo servidor (sem diferenciar
+    maiúsculas), porta e banco de dados; e o mesmo esquema e o mesmo nome, letra por letra. O Prism não resolve
+    nomes: duas conexões ao mesmo servidor por nomes diferentes (`localhost` e `127.0.0.1`) não são reconhecidas.
+    Exportar a tabela enquanto ela recebe linhas vale: a exportação lê o que já foi confirmado.
+  - O `GET` do trabalho (RN-EXPORT-016) diz, na importação:
+    - `phase`: `connecting` (conectar e ler o catálogo), `checking` (a conferência do arquivo inteiro,
+      RN-IMPORT-012), `emptying` (o esvaziamento), `loading` (ler e gravar) e `committing` (a confirmação final).
+      No fim, `phase` fica a da fase em que o trabalho parou, que a tela usa para dizer o que ficou (RN-IMPORT-020);
+    - `rows`: as linhas gravadas, na transação em andamento ou já confirmadas; `committed`: as já confirmadas (no
+      Informix sem log, todas as gravadas); `bytes`: o que já foi lido do arquivo (na conferência, o que ela leu; a
+      conta volta a zero quando a carga começa); `size`: o tamanho dele (no XLSX, o tamanho descompactado que o
+      `.zip` declara para a planilha); `total`: nulo;
+    - no fim, `summary` (em `done`), `error` (em `failed`, RN-IMPORT-016), `reason` (em `canceled`: `person`,
+      `connectionDeleted` ou `readOnly`) e `uncertain`, verdadeiro quando o Prism não sabe o que a última
+      confirmação deixou (abaixo e RN-IMPORT-016).
+  - **Cancelar** (`DELETE`) interrompe o comando no banco (RN-SQL-010), desfaz a transação em andamento, fecha a
+    conexão e apaga o arquivo. O que já foi confirmado fica na tabela; no Informix sem log, todas as linhas
+    gravadas até ali ficam. O trabalho cancelado continua no registro, como `canceled` e com `committed`, até ser
+    esquecido (um segundo `DELETE`), e a tela o lê para dizer o que ficou. O cancelamento que chega durante uma
+    confirmação não a interrompe: ela termina, e as linhas dela contam como confirmadas; na confirmação final, o
+    trabalho fica `done` (ou `failed`, se o banco a recusar), e a tela diz que ela já tinha terminado
+    (RN-IMPORT-020). Passados os 10 segundos sem o banco responder ao cancelamento, a conexão é abandonada em
+    segundo plano, e o banco desfaz a transação em andamento quando a conexão fecha. O abandono no meio de uma
+    confirmação (ou, no Informix sem log, no meio de um comando, que grava sozinho ao terminar) deixa a dúvida: o
+    banco pode ainda concluí-la. Aí o trabalho fica `canceled` com `uncertain: true`, e `committed` é o da última
+    confirmação que o banco respondeu. Fora disso, o abandono não deixa dúvida: o que não foi confirmado não fica.
+    Cancelar na conferência do arquivo não deixa nada, porque nada foi gravado.
+  - **Sem progresso**: a importação que fica 2 horas sem avançar (sem gravar uma linha, sem a conferência ler um
+    bloco do arquivo e sem mudar de fase) termina como `failed`, com `IMPORT_STALLED`: "O banco ficou 2 horas sem
+    responder, e a importação foi encerrada."
+  - **A proteção que muda** (RN-PROT-006): antes de cada comando, o trabalho lê as proteções da conexão no cofre,
+    como a sessão faz a cada comando. A conexão que passou a ser somente leitura (a própria, uma pasta acima, a
+    conexão movida para dentro de uma pasta somente leitura) para a importação antes do comando seguinte: a
+    transação em andamento é desfeita, e o trabalho fica `canceled`, com `reason: readOnly`. Mudar a confirmação no
+    meio não muda nada: ela já foi perguntada.
+  - **A conexão excluída** cancela a importação, com `reason: connectionDeleted`, e o que já foi confirmado fica.
+    Editar a conexão no meio não mexe na importação, que segue com o que leu do cofre ao começar; desconectar fecha
+    as sessões dela, e não a importação.
+  - **O cofre que fecha** cancela a importação, como a exportação (RN-EXPORT-016): a transação em andamento é
+    desfeita, e o que já foi confirmado fica.
+  - O log registra o começo e o fim de cada importação com o `id`, o ID da conexão, o formato, as linhas lidas,
+    gravadas e confirmadas, os bytes, a duração e, na falha, a classe do erro e o SQLSTATE; nunca o nome do
+    arquivo, um caminho, o nome da tabela ou das colunas, os valores, a linha do arquivo com o erro nem a mensagem
+    do banco, que pode trazer um valor (RN-LOG-001). Os pedidos escrevem só o nome do tipo no `ToString()`.
+
+- **RN-IMPORT-015.** O carregador, o mesmo da importação e da cópia (RN-IMPORT-027).
+  - **A conexão**: à parte, nunca a sessão de uma aba, aberta com a conexão gravada no cofre, lida quando o
+    trabalho começa, e com o banco de dados pedido, como a da exportação (RN-EXPORT-002). Logo depois de conectar,
+    o prazo de espera de trava da conexão à parte (RN-EDIT-010): `SET lock_timeout = '5s'` no PostgreSQL, `SET
+    CURRENT LOCK TIMEOUT 5` no Db2 e `SET LOCK MODE TO WAIT 5` no Informix. A carga espera até 5 segundos por uma
+    linha ou uma tabela travada (também pela aba do próprio Prism em Commit manual) e, passado isso, para com a
+    mensagem do banco.
+  - **O modo só de leitura**: a conexão é nova, e o modo que a RN-PROT-006 põe nas sessões das abas não está nela;
+    o Prism não manda nada sobre o modo, como no primeiro comando de uma sessão que nunca foi somente leitura. Se o
+    servidor ou o usuário do banco começam as sessões só de leitura (o `default_transaction_read_only` do
+    PostgreSQL), a recusa do banco (SQLSTATE 25006) é a resposta: o Prism não passa por cima do que o administrador
+    do banco configurou.
+  - **O catálogo de novo**: na primeira transação, antes de gravar, a tabela é descrita outra vez, pela mesma
+    consulta da edição (a de `edit-target`, RN-EDIT-010), e as conversões usam os tipos dessa leitura, e não os da
+    prévia. A tabela que sumiu é `IMPORT_TABLE_NOT_FOUND`; a que deixou de ser tabela, `IMPORT_TARGET_NOT_TABLE`; a
+    coluna mapeada que sumiu, passou a ser calculada pelo banco ou mudou para um tipo que não se importa,
+    `IMPORT_TABLE_CHANGED`: "As colunas de estoque.pedido mudaram desde a prévia. Abra a importação de novo." Com a
+    conferência do arquivo (RN-IMPORT-012), o trabalho lê o catálogo uma vez antes dela, ao conectar, e confere o
+    arquivo com esses tipos; a leitura da primeira transação é a de sempre, e a coluna mapeada cujo tipo mudou
+    entre as duas também é `IMPORT_TABLE_CHANGED`. Durante a conferência a conexão fica aberta, sem transação.
+  - **As transações**:
+    - com "A cada N linhas": a transação abre, recebe o esvaziamento (só a primeira) e as N linhas seguintes, e é
+      confirmada; a seguinte abre logo depois. A última é confirmada com o que sobrar;
+    - com "Tudo numa transação só": uma transação, com o esvaziamento e todas as linhas, confirmada no fim;
+    - no Informix sem log, nenhuma: o esvaziamento e cada `INSERT` ficam gravados quando terminam, como na
+      RN-EDIT-012.
+  - **Os comandos**, com os nomes do catálogo entre aspas duplas e a aspa de dentro dobrada (RN-TABELA-002), em
+    qualquer caractere Unicode, e só as colunas mapeadas, na ordem do mapeamento (as outras ficam com o padrão):
+    - **PostgreSQL**: um `INSERT INTO "estoque"."pedido" ("id", "cliente") VALUES ($1, $2)` por linha, mandados em
+      lotes de até 500 numa ida só ao banco (`NpgsqlBatch`), com os valores em parâmetros sem tipo (RN-IMPORT-010)
+      e o binário em `bytea`. O lote diz qual comando falhou (o `BatchCommand` do erro), e assim qual linha, sem
+      uma segunda passada;
+    - **Db2**: um `INSERT INTO … VALUES (?, ?), (?, ?), …` com até 500 linhas e até 10.000 parâmetros por comando
+      (com 40 colunas mapeadas, 250 linhas), com os valores já convertidos pelo Prism. Os testes de integração
+      provam, no contêiner do Db2, o comando de várias linhas com parâmetros, também com texto longo e binário; o
+      que não passar volta a uma linha por comando;
+    - **Informix**: uma linha por comando, `INSERT INTO … VALUES (?, ?)`, preparado uma vez e executado a cada
+      linha, porque o Informix não aceita várias linhas num `INSERT … VALUES` (RN-EXPORT-011). Cada linha é uma ida
+      ao banco, e por isso a carga é mais lenta que nos outros dois (a etapa Carga diz isso).
+    - Nos três, o comando (ou o lote) fecha antes do número de linhas quando os valores dele passam de 16 MiB, e
+      nunca atravessa uma confirmação: o último antes dela leva só as linhas que faltam. A memória do trabalho fica
+      a de um comando e de uma linha, qualquer que seja o tamanho do arquivo.
+  - **Por que não o `COPY` nem a cópia em massa**: o `COPY` do PostgreSQL em texto diria a linha do erro só no
+    texto do contexto da mensagem, que muda com o idioma do servidor, e o `COPY` binário pediria ao Prism o formato
+    binário de cada tipo, tirando do banco a conversão da RN-EDIT-006. A cópia em massa do driver da IBM
+    (`DB2BulkCopy`, que está no pacote) não roda dentro de uma transação, e não está provada contra o Informix. Os
+    dois ficam para depois, se a medida mostrar que a carga em lotes perde do DBeaver nas mesmas linhas.
+  - **Fim**: a última confirmação e `done`. O Prism não mexe nas sequências nem nas estatísticas da tabela.
+
+- **RN-IMPORT-016.** O erro numa linha, e o que fica gravado.
+  - A importação para na primeira linha que falha. Ao parar, desfaz a transação em andamento (nos bancos com log),
+    fecha a conexão e apaga o arquivo; o que já foi confirmado fica. Ela nunca tenta de novo nem continua de onde
+    parou.
+  - Quem recusa, e o que a mensagem diz:
+    - **o Prism**, antes de mandar a linha: o problema da linha na leitura (os valores a mais, o item que não é
+      objeto, a chave repetida, o erro do Excel, o valor fora das colunas do cabeçalho), a conversão
+      (RN-IMPORT-010) e os limites do valor e da linha (RN-IMPORT-008). O erro é `IMPORT_VALUE_INVALID` (ou
+      `IMPORT_VALUE_TOO_LARGE`), com a linha e, quando é de um valor, a coluna do arquivo;
+    - **o banco**: `SQL_EXECUTION_FAILED`, com a mensagem como veio (decisão 4 da seção 8) e o SQLSTATE, e a linha:
+      - no PostgreSQL, a do comando do lote que falhou;
+      - no Informix, a do comando, que tem uma linha só;
+      - no Db2, o comando de várias linhas que falha com um erro de dado ou de restrição (SQLSTATE das classes 22 e
+        23) é executado de novo, linha por linha, na mesma transação, até a linha que falha, e a mensagem é a dessa
+        linha. O Db2 desfaz só o comando que falhou (RN-TX-009), e as linhas que passaram na segunda vez são
+        desfeitas com o resto da transação em andamento. Essa volta só acontece na falha, nunca no caminho normal.
+        Com outra classe (a 40, da transação que o próprio banco desfez por impasse ou pelo prazo de trava; a 57,
+        de recurso; a 08, da conexão), não há volta, e a mensagem diz o intervalo: "nas linhas 1.201 a 1.700 do
+        arquivo".
+
+      A coluna vem quando o banco a diz (no PostgreSQL, o campo `column` do erro, que vem na recusa do nulo); no
+      resto, a mensagem do banco diz o que ele disser. A recusa que vem na própria confirmação (a restrição adiada
+      do PostgreSQL, `DEFERRABLE INITIALLY DEFERRED`, que o banco só confere no `COMMIT`) não tem linha: `line` é
+      nulo, `committed` fica o da confirmação anterior, e a mensagem diz o intervalo da transação desfeita: "nas
+      linhas 20.001 a 30.000 do arquivo";
+    - **o arquivo**, no meio da leitura (a codificação inválida, a aspa que não fecha, o limite do `.zip`):
+      `IMPORT_FILE_UNREADABLE`, com a linha.
+  - **A conexão que cai** no meio (a rede, o servidor) é a falha da importação, com a mensagem como veio
+    (`DATABASE_CONNECTION_FAILED` ou `SQL_EXECUTION_FAILED`), e o banco desfaz a transação em andamento. A que cai
+    durante uma confirmação deixa a dúvida, que o Prism diz, sem adivinhar: o erro leva `uncertain: true`,
+    `committed` é o da confirmação anterior, e a tela mostra "A conexão caiu durante a confirmação das linhas
+    20.001 a 30.000: o Prism não sabe se elas foram gravadas. Confira a tabela." Quando a confirmação levava também
+    o esvaziamento (a primeira, com "A cada N linhas", ou a única, com "Tudo numa transação só"): "A conexão caiu
+    durante a confirmação do esvaziamento e das linhas 1 a 10.000: o Prism não sabe se a tabela foi esvaziada nem
+    se as linhas foram gravadas. Confira a tabela." No Informix sem log, a conexão que cai no meio de um comando
+    deixa a dúvida só sobre aquela linha (ou sobre o esvaziamento): "A conexão caiu durante a gravação da linha
+    1.234: o Prism não sabe se ela foi gravada. Confira a tabela."
+  - **O que fica**: `committed` diz quantas linhas ficaram confirmadas. Com "Esvaziar" e a falha antes da primeira
+    confirmação, a tabela volta a ter as linhas de antes; depois dela, fica com as importadas até a última
+    confirmação. Com "Tudo numa transação só", nada fica. No Informix sem log, ficam todas as linhas anteriores à
+    que falhou, e o esvaziamento; e o `DELETE` do esvaziamento que falha ou é cancelado no meio (a linha que uma
+    chave estrangeira segura, a conexão que cai) pode já ter apagado parte das linhas, porque sem log o banco não
+    desfaz o comando: a tabela pode ter sido esvaziada em parte, e nenhuma linha do arquivo foi gravada.
+  - O `error` do trabalho é `{ code, message, sqlState, line, column, side, committed, uncertain }`: `line` é a
+    linha do arquivo (a da planilha, o item da lista; na cópia, o número da linha na leitura da origem), ou nulo;
+    `column` é o nome da coluna do arquivo (ou da origem), ou nulo; `side` é `target`, na importação (na cópia,
+    `source` quando a falha é da leitura, RN-IMPORT-027); `message` é a frase do Prism ou a mensagem do banco, sem
+    a linha, que a tela compõe (RN-IMPORT-020).
+
+- **RN-IMPORT-017.** O arquivo na pasta `transfers`, e a leitura em fluxo.
+  - A cópia que o processo principal faz é `<fileId>.in` (`<fileId>.in.part` enquanto copia), na pasta `transfers` da
+    pasta de dados (RN-EXPORT-018), com o modo 0600 no Linux e no macOS (a pasta, 0700) e, no Windows, a lista de
+    acesso herdada da pasta de dados no perfil do usuário. A API cria a pasta na partida, quando falta (com a limpeza
+    da RN-EXPORT-018), e o processo principal a cria também quando ela falta na hora de copiar (alguém a apagou com o
+    app aberto), antes de conferir se a pasta aceita gravação (RN-IMPORT-018): `mkdir` com o modo 0700, que o `umask`
+    só pode apertar, e nunca afrouxar. A pasta que já existe com outro modo, quem a acerta é a partida da API. O nome
+    vem só do identificador (36 caracteres, em minúsculas, com os hifens); nenhum nome nem pedaço de caminho do
+    arquivo da pessoa chega à pasta nem à API.
+  - As leituras da prévia (`imports/read` e `imports/preview`) abrem o `.in` só para leitura, leem o que precisam (até
+    1.000 linhas de dados para as colunas; 20 para mostrar; o arquivo inteiro, só para a codificação automática e para
+    as chaves do JSON) e o fecham. Nunca o mudam, e não o tomam. A API abre o `.in` deixando que ele seja renomeado e
+    apagado enquanto está aberto (`FileShare.Delete`, no Windows): a leitura de uma prévia atrasada não impede o
+    começo da importação nem a limpeza.
+  - O começo da importação toma o arquivo (RN-IMPORT-014): ele passa a se chamar `<id do trabalho>.in`, e a API o
+    apaga quando o trabalho termina, falha, é cancelado, esquecido ou abandonado, e quando o cofre fecha. O
+    processo principal, que ainda o tem na lista da janela, não o acha mais para apagar, e não precisa.
+  - O `.in` que não foi tomado é apagado pelo processo principal (RN-IMPORT-018). O que sobrar de uma execução que
+    caiu, a partida seguinte da API apaga, com o resto da pasta `transfers` (RN-EXPORT-018).
+  - A API lê em fluxo: o CSV e o TSV em blocos, pelo decodificador da codificação; o JSON pelo `Utf8JsonReader`,
+    sobre um espaço que só cresce até o tamanho de um valor; o XLSX pelo `ZipArchive` e pelo `XmlReader`, sem
+    descompactar nada para o disco. A memória de uma leitura é a de uma linha (até 256 MiB) e, no XLSX, a dos
+    textos compartilhados (até 256 MiB) e dos estilos.
+  - O `.in` leva os dados da pessoa em claro, como o arquivo temporário da exportação, na pasta de dados do usuário
+    do sistema, e vive só até a importação acabar ou o assistente fechar.
+
+### O arquivo e o processo principal
+
+- **RN-IMPORT-018.** Escolher e copiar.
+  - Quem abre o diálogo de abrir do sistema é o processo principal (`prism:transfer-source`), sem nada da tela: um
+    arquivo só, nada de pasta, o título "Importar dados", os filtros que ele mesmo escreve ("Arquivos de dados
+    (*.csv, *.tsv, *.tab, *.txt, *.json, *.xlsx, *.xlsm)", "CSV e TSV (*.csv, *.tsv, *.tab, *.txt)", "JSON
+    (*.json)", "Excel (*.xlsx, *.xlsm)" e "Todos os arquivos") e a pasta da última importação desta abertura do app
+    (na primeira, a pasta de Downloads do sistema). Desistir do diálogo responde `canceled`.
+  - Escolhido o arquivo, antes de responder, o processo principal confere:
+    - que é um arquivo comum, seguindo o atalho (não uma pasta, um FIFO, um dispositivo): senão, `notAFile`. Um
+      FIFO prenderia a cópia para sempre;
+    - que tem até 2 GiB: senão, `tooLarge`, com o tamanho;
+    - que o sistema deixa ler o arquivo, abrindo-o só para leitura (e fechando-o de novo): senão, `unreadable`,
+      com a frase do motivo escolhida pelo código do sistema, nunca pelo texto dele, que traz o caminho: `EACCES`
+      e `EPERM`, "o sistema não dá permissão para ler o arquivo"; `EBUSY`, "o arquivo está em uso por outro
+      programa"; `ENOENT`, "o arquivo não existe mais"; `EIO`, "o disco deu erro de leitura"; outro, "erro
+      <código>". A mesma frase vale para a falha `unreadable` da cópia (abaixo);
+    - que a pasta de dados aceita gravação: o processo principal cria a pasta `transfers` quando falta
+      (RN-IMPORT-017) e cria e apaga nela um arquivo vazio de nome aleatório, como na RN-EXPORT-019: senão,
+      `notWritable`;
+    - que há espaço livre nela para o arquivo e mais 64 MiB: senão, `noSpace`, com o tamanho preciso.
+  - Então responde `chosen`, com um `fileId` novo (um identificador aleatório, 36 caracteres em minúsculas com os
+    hifens), o nome do arquivo, sem a pasta, e o tamanho; e começa a cópia, em segundo plano: abre o arquivo só
+    para leitura, cria `<fileId>.in.part` com `open(…, "wx", 0o600)`, copia em fluxo (`stream.pipeline` com um
+    `AbortSignal`, como a entrega da exportação, RN-EXPORT-020), contando os bytes, para ao passar de 2 GiB (o
+    arquivo que cresceu no meio), e, no fim, grava no disco (`fsync`) e renomeia para `<fileId>.in`. A cópia é o
+    retrato do arquivo naquele momento: o que a pessoa mudar no original depois não entra, e ela pode movê-lo ou
+    apagá-lo.
+  - `prism:transfer-source-status`, que a tela consulta a cada 250 ms enquanto a cópia anda, responde `copying`,
+    com `copied` e `size`; `ready`; `failed`, com `reason` e `message`, sem caminho; ou `missing`. Os motivos da
+    falha: `diskFull` ("Não há espaço na pasta de dados do Prism para copiar o arquivo."), `tooLarge` ("O arquivo
+    passou de 2 GB durante a cópia."), `unreadable` ("Não foi possível ler o arquivo: <o motivo>.", com a frase do
+    código do sistema, acima) e `other` ("Não foi possível copiar o arquivo (<código do sistema>)."). Na falha, a
+    cópia pela metade é apagada.
+  - `prism:transfer-source-release` interrompe a cópia, apaga o `.in.part` e o `.in` que ainda estiverem lá e
+    esquece o arquivo. A tela o pede ao fechar o assistente sem importar, ao trocar de arquivo, no bloqueio e nas
+    saídas; o processo principal faz o mesmo com os arquivos de uma janela que fecha, cai ou recarrega, e com todos
+    no `before-quit`. Cancelar durante a troca de nome do fim não deixa nada: ou a troca não aconteceu e o `.part`
+    é apagado, ou aconteceu e o `.in` é apagado.
+  - O arquivo é da janela que o escolheu: o `prism:transfer-source-status` e o `prism:transfer-source-release` de
+    outra janela, ou com um `fileId` que ele não conhece, respondem `missing` e não fazem nada. A API não confere a
+    janela: a tela que sabe o `fileId` lê o arquivo pelas rotas, como lê qualquer coisa do cofre aberto (a
+    fronteira de confiança é o preload, decisão 5 da seção 8).
+  - Nenhum caminho nem pasta volta à tela, e nenhum canal recebe um caminho, uma pasta ou um nome de arquivo para
+    abrir. O preload continua sem `fs.` e sem `shell.`.
+  - O log do processo principal registra a cópia com o `fileId`, o tamanho e a duração, nunca o nome nem o caminho
+    do arquivo (RN-LOG-001).
+  - Fora do Electron não há o canal, e o assistente diz "Importar só funciona no app do Prism." (RN-IMPORT-001).
+
+### Progresso, fim e saída
+
+- **RN-IMPORT-019.** A barra de status.
+  - Cada importação e cada cópia (RN-IMPORT-027) começada na janela aparece na barra de status dela, nas regras da
+    entrada da exportação (RN-EXPORT-021): o ícone (a seta para cima na importação; o do banco de dados na cópia),
+    o texto, a barra de progresso pequena e "Cancelar", na mesma largura, com o texto inteiro na dica, e a mesma
+    lista quando há mais de uma transferência na janela.
+  - O texto da importação muda com a fase:
+    - conectando: "Importando pedidos.csv para pedido… conectando";
+    - conferindo: "Importando pedidos.csv para pedido… conferindo o arquivo, 45%", com a dica "Conferindo o arquivo
+      antes de gravar: nada foi gravado ainda · 120 MB de 260 MB lidos";
+    - esvaziando: "Importando pedidos.csv para pedido… esvaziando a tabela";
+    - lendo e gravando: "Importando pedidos.csv para pedido… 45%", com a dica "12.345 linhas gravadas, 10.000
+      confirmadas · 120 MB de 260 MB lidos" (no Informix sem log, "12.345 linhas gravadas · …"). A porcentagem é a
+      dos bytes lidos sobre o tamanho, arredondada para baixo, e no máximo 99% até o fim;
+    - confirmando, no fim: "Importando pedidos.csv para pedido… confirmando".
+
+    Os nomes (o do arquivo e o da tabela, sem o esquema) vêm isolados (`<bdi>`). "Cancelar" tem o nome acessível
+    "Cancelar a importação de pedidos.csv".
+  - A tela consulta cada importação da janela a cada segundo (`GET api/user/transfers/{id}`), como a exportação,
+    até o fim, e então lê o estado final e esquece o trabalho (`DELETE`). Três falhas seguidas da consulta param a
+    consulta, e a entrada diz "Não foi possível saber como está a importação." com "Cancelar", que tenta o
+    `DELETE`.
+  - "Cancelar" cancela sem perguntar quando nada ficaria na tabela: na conexão, na conferência, com "Tudo numa
+    transação só" e, com "A cada N linhas", antes da primeira confirmação (`committed` zero no último progresso
+    lido). Quando algo já ficou (`committed` acima de zero; no Informix sem log, uma linha gravada ou o
+    esvaziamento começado), ele pergunta, porque cancelar no meio deixa a tabela pela metade: "Cancelar a
+    importação para pedido?", com "As 30.000 linhas já confirmadas ficam na tabela, e as da transação em andamento
+    são desfeitas." (com o esvaziamento já confirmado, "… ficam na tabela, e as linhas antigas, apagadas pelo
+    esvaziamento, não voltam."; no Informix sem log, "As 1.234 linhas já gravadas ficam na tabela."), e os botões
+    "Cancelar a importação" e "Continuar importando", com o foco e o Esc no segundo. Sem o progresso (a entrada que
+    não consegue saber como está a importação), ele pergunta sempre, com "As linhas já confirmadas ficam na
+    tabela." Enquanto o `DELETE` não responde (até 10 segundos), a entrada diz "Cancelando…", e o botão fica
+    desabilitado; com a resposta, a tela lê o trabalho, diz o que ficou (RN-IMPORT-020) e o esquece.
+  - A importação é da janela, e não da aba: fechar os Registros de onde ela saiu, ou a aba de uma tabela, não a
+    muda.
+
+- **RN-IMPORT-020.** O fim.
+  - **Sucesso**, no aviso com ação da RN-AVISO-006 (8 segundos, "Abrir registros"): "12.345 linhas importadas em
+    pedido." ("1 linha importada"; com o esvaziamento, "A tabela foi esvaziada antes." depois do ponto). "Abrir
+    registros" abre os Registros da tabela nesta janela, ou leva à aba deles quando já estão abertos, como o "Abrir
+    registros" do navegador, que é o caminho que não expira. O cancelamento que a pessoa pediu e que chegou durante a
+    confirmação final termina em `done` (RN-IMPORT-014), e o aviso diz: "A importação para pedido já tinha terminado
+    quando o cancelamento chegou: 12.345 linhas importadas."
+  - Depois do ponto, o aviso diz também o que a leitura fez no caminho, quando fez:
+    - "12 linhas vazias do arquivo foram puladas." ("1 linha vazia … foi pulada"; `skippedLines` no `summary`,
+      RN-IMPORT-004 e 006);
+    - "8 valores perderam o apóstrofo da proteção contra fórmula." ("1 valor perdeu …"; `unguarded`, RN-IMPORT-004).
+  - O aviso passa ao tom de atenção quando algo do arquivo não entrou como estava:
+    - "4 linhas tinham menos valores que o cabeçalho e foram completadas com nulo." ("1 linha tinha …"; `shortRows`,
+      CSV e TSV, RN-IMPORT-004);
+    - "3 células com fórmula sem resultado guardado chegaram vazias." ("1 célula …"; `formulasWithoutValue`, XLSX).
+  - **Os Registros abertos**: ao fim de uma importação que deixou linhas confirmadas, ou que pode ter deixado (o
+    sucesso; a falha e o cancelamento depois de uma confirmação ou com `uncertain`; no Informix sem log, depois da
+    primeira linha gravada ou do esvaziamento começado), cada aba de Registros daquela tabela nesta janela (a mesma
+    conexão, banco de dados, esquema e tabela) mostra, na faixa de informação sobre a grade, "Linhas foram importadas
+    nesta tabela depois da leitura." com "Atualizar". Ela não atualiza sozinha: as alterações não salvas não se
+    perdem, e "Atualizar" pergunta por elas como sempre (RN-EDIT-007). A faixa sai quando a aba lê de novo.
+  - **O que ficou**, a frase que fecha a falha e o cancelamento, pelo `committed`, pelo `uncertain`, pela fase em que
+    o trabalho parou e pela carga escolhida:
+    - linhas confirmadas: "30.000 linhas confirmadas ficaram na tabela; as da transação em andamento foram desfeitas."
+      ("1 linha confirmada ficou …"), com "A tabela foi esvaziada antes." quando o esvaziamento foi confirmado com
+      elas;
+    - nenhuma (a conferência, a falha antes da primeira confirmação, "Tudo numa transação só"): "Nenhuma linha foi
+      gravada, e a tabela está como antes.";
+    - no Informix sem log: "As 1.233 linhas anteriores ficaram gravadas." na falha, e "As 1.234 linhas gravadas até
+      ali ficaram na tabela." no cancelamento, com "A tabela foi esvaziada antes." quando o esvaziamento terminou;
+      parado no meio do esvaziamento (a fase `emptying`): "A tabela pode ter sido esvaziada em parte; nenhuma linha do
+      arquivo foi gravada.";
+    - com `uncertain`, a falha diz a frase da RN-IMPORT-016 ("A conexão caiu durante a confirmação das linhas 20.001 a
+      30.000: …"), e o cancelamento: "O banco não respondeu ao cancelamento: o Prism não sabe o que ficou na tabela.
+      Confira-a."
+  - **Falha**: o aviso de erro "A importação para pedido parou." e, na descrição, onde e por quê: "Linha 1.234 do
+    arquivo, coluna qtd: «12a» não é um número inteiro." ("Item 1.234 da lista", "Linha 1.234 da planilha Pedidos"; na
+    conferência, o mesmo; para o erro do banco, a mensagem como veio e o SQLSTATE; sem linha, o intervalo da
+    RN-IMPORT-016), seguido do que ficou. A tela decide pelo `code`, pelo `line`, pelo `column` e pelo `uncertain`,
+    nunca pelo texto da mensagem.
+    - A falha deixa também uma entrada na barra de status, "A importação para pedido parou." com "Ver o erro" e
+      "Descartar": a mensagem do banco pode ser longa, e 8 segundos não bastam para lê-la. "Ver o erro" abre o diálogo
+      "Importação interrompida", com o arquivo, a tabela, a linha, a coluna, a mensagem inteira (que dá para copiar),
+      o SQLSTATE e o que ficou, e "Abrir registros" e "Fechar". A entrada é só da tela (o trabalho já foi esquecido na
+      API): não conta como transferência em andamento, e o bloqueio e as saídas a descartam sem perguntar.
+  - **Cancelamento**, no aviso de atenção: "Importação para pedido cancelada." seguido do que ficou: "Importação para
+    pedido cancelada. 30.000 linhas confirmadas ficaram na tabela; as da transação em andamento foram desfeitas." ou
+    "Importação para pedido cancelada. Nenhuma linha foi gravada, e a tabela está como antes."; com `uncertain`:
+    "Importação para pedido cancelada, mas o banco não respondeu ao cancelamento: o Prism não sabe o que ficou na
+    tabela. Confira-a."
+  - Os outros fins, no aviso de atenção, com o que ficou na mesma forma: "A importação para pedido foi cancelada: a
+    conexão foi excluída. …" e "A importação para pedido parou: a conexão passou a ser somente leitura. …". O cofre
+    que fecha não tem aviso: a tela vai à entrada.
+
+- **RN-IMPORT-021.** O bloqueio, o "Sair", fechar a janela e fechar o app.
+  - A importação e a cópia em andamento são comando em andamento da janela que as começou, do começo ao fim (o fim
+    é o `done`, `failed` ou `canceled` lido pela tela), como a exportação (RN-SEG-001, RN-EXPORT-023): o Prism não
+    bloqueia por inatividade no meio delas. A entrada da falha (RN-IMPORT-020) não segura.
+  - As saídas da RN-EXPORT-023 (o "Sair", o "Bloquear", o reinício do serviço, a instalação de uma atualização,
+    fechar a janela, fechar o app) perguntam por todas as transferências em andamento, na mesma ordem (antes das
+    alterações não salvas e das transações), e só cancelam depois da última resposta. Com só exportações, os textos
+    são os da RN-EXPORT-023. Com importações ou cópias:
+    - a frase começa pela conta, com as partes que não são zero, na ordem exportação, importação e cópia: "Há 1
+      importação em andamento.", "Há 2 cópias para outro banco em andamento.", "Há 3 transferências em andamento: 1
+      exportação, 1 importação e 1 cópia para outro banco.";
+    - e diz o que a saída faz (no "Bloquear", "Bloquear" no lugar de "Sair"; ao fechar a janela, "Fechar a janela";
+      ao fechar o app, "Fechar o Prism"): só importações, "Sair cancela a importação: as linhas que ela já
+      confirmou ficam na tabela, e as da transação em andamento são desfeitas." (no plural, "as importações: as
+      linhas que elas já confirmaram ficam nas tabelas, e as das transações em andamento são desfeitas."); só
+      cópias, igual, com "cópia"; importações e cópias, "Sair cancela todas: as linhas que elas já confirmaram
+      ficam nas tabelas, e as das transações em andamento são desfeitas."; com exportações no meio, "Sair cancela
+      todas: os arquivos das exportações não são gravados, e as importações e as cópias deixam nas tabelas só as
+      linhas que já confirmaram.";
+    - os botões: com um tipo só, "Sair e cancelar as importações" e "Continuar importando" ("… as cópias",
+      "Continuar copiando"), e, com mais de um tipo, "Sair e cancelar as transferências" e "Continuar
+      transferindo", com o foco e o Esc no segundo. No "Bloquear", "Bloquear e cancelar …"; ao fechar a janela,
+      "Fechar e cancelar …"; ao fechar o app, "Fechar o Prism e cancelar …";
+    - no reinício e na atualização, a frase entra no aviso de antes deles: "A importação em andamento será
+      cancelada, e ficam na tabela só as linhas que ela já confirmou." ("As 3 transferências em andamento serão
+      canceladas: …", com a parte do que fica quando há importação ou cópia).
+  - Ao fechar a janela, conta o que foi começado nela; nas outras saídas, o de todas as janelas, pela lista da API
+    (`GET api/user/transfers`).
+  - O que sai sem perguntar (o quinto erro de senha, o cofre fechado por outra janela, o Cmd+Q do macOS, a janela
+    que cai, o app morto) cancela do mesmo jeito, pela API (o cofre que fecha, a API que encerra) e pelo processo
+    principal (a cópia do arquivo interrompida e apagada): as linhas já confirmadas ficam, e o banco desfaz a
+    transação em andamento quando a conexão fecha.
+
+### O destino "Banco de dados"
+
+- **RN-IMPORT-022.** No "Exportar dados".
+  - "Banco de dados" deixa de ser "Em breve" na lista de formatos (RN-EXPORT-004), com a frase "Copiar as linhas
+    para uma tabela que já existe, nesta ou em outra conexão." Ele vale nas mesmas origens e entradas da exportação
+    (RN-EXPORT-001 e 002): a tabela ou a visão pelo navegador, os Registros com o filtro e a ordem da aba, e o
+    resultado que é uma leitura, executados de novo numa conexão à parte, do começo, sem o corte da grade.
+  - Escolhido "Banco de dados", as etapas à esquerda passam a ser seis: "Formato", "Extração", "Tabela de destino",
+    "Mapeamento", "Carga" e "Confirmação". A "Extração" é a da exportação (as colunas e "Contar as linhas antes",
+    RN-EXPORT-005); "Formatação" e "Saída" saem, porque não há arquivo. Trocar de volta para um formato de arquivo
+    devolve as cinco etapas da exportação, com o que já estava escolhido nelas.
+  - Na Confirmação, "Avançar" vira "Copiar linhas" ("Copiando…").
+  - A cópia não passa pelo processo principal, que não tem arquivo a entregar, e funciona também fora do Electron.
+  - Ficam lembradas, como as da exportação, as escolhas da Carga (as mesmas da importação, RN-IMPORT-002, menos a
+    conferência do arquivo, que a cópia não tem); a conexão e a tabela de destino não se lembram.
+
+- **RN-IMPORT-023.** Tabela de destino.
+  - "Conexão": todas as conexões do cofre, na ordem do navegador, cada uma com o caminho das pastas ("Estoque /
+    Production PRD / DATA FIX"), a etiqueta do banco e o ambiente que vale nela. A somente leitura aparece
+    desabilitada, com o cadeado e "somente leitura". Vem escolhida a da origem.
+  - "Banco de dados": os bancos do servidor da conexão escolhida, a lista da RN-ARVORE-006 (no Db2, só o da
+    conexão, e o campo fica desabilitado com o motivo). Vem escolhido o da origem, quando a conexão é a mesma;
+    senão, o padrão da conexão.
+  - "Esquema" e "Tabela": as listas do navegador, lidas na sessão daquele banco de dados, a que a árvore abre
+    (RN-ARVORE-006). Escolher uma conexão desconectada a conecta, como expandi-la no navegador, que passa a
+    mostrá-la conectada ("Conectando a DW…"); a falha aparece na etapa, com a mensagem do banco e "Tentar de novo",
+    e a conexão sem usuário ou sem senha mostra a frase da RN-EXPORT-015, sem abrir o "Editar conexão". A tabela
+    tem um campo de busca, e a lista mostra só as tabelas (não as visões). Vêm escolhidos o esquema e a tabela de
+    mesmo nome que a origem, quando existem (primeiro o nome igual letra por letra; senão, sem diferenciar
+    maiúsculas); senão, nada.
+  - A tabela de destino que é a própria origem não serve: a leitura veria as linhas que a cópia grava. A etapa diz
+    "A tabela de destino é a própria origem. Escolha outra tabela." e não avança. É a própria origem a tabela da
+    mesma conexão, banco de dados, esquema e nome; e também a de outra conexão que aponta para o mesmo servidor,
+    porta e banco de dados (o servidor sem diferenciar maiúsculas), com o mesmo esquema e nome. A API confere o
+    mesmo (422 `IMPORT_TARGET_IS_SOURCE`). Nos Registros e no resultado, a origem que é um comando sobre a tabela
+    de destino não é reconhecida pelo texto: a pessoa que copia `SELECT * FROM pedido` para `pedido` vê as linhas
+    dobrarem no PostgreSQL (a leitura é o retrato do começo) e, no Db2 e no Informix, pode ver a leitura alcançar o
+    que já foi confirmado e seguir lendo o que ela mesma grava; a Confirmação avisa quando o nome da tabela de
+    destino aparece no comando (RN-IMPORT-025). Nos Registros, a tela sabe a tabela, e os Registros da própria
+    tabela de destino são a própria origem.
+  - **A origem que cresce**: na cópia de Db2 ou de Informix em que a origem e o destino estão no mesmo servidor,
+    porta e banco de dados (pela regra acima, com qualquer tabela de destino), a Extração liga e trava "Contar as
+    linhas antes", com o motivo na dica: "A origem e o destino estão no mesmo banco: a contagem é obrigatória."
+    Trocar o destino para outro banco destrava a opção e a devolve ao que a pessoa tinha escolhido. A API conta
+    nesse caso mesmo que o pedido diga `count: false`, e a contagem que falha termina a cópia (`side: source`),
+    em vez de seguir sem o total. Na leitura, quando as linhas lidas passam do total mais um décimo dele (no
+    mínimo, mais 1.000), a cópia termina com `IMPORT_SOURCE_GROWING`: "A origem continua crescendo: a cópia leu
+    mais linhas do que as 12.345 contadas e foi encerrada." O que já foi confirmado fica, como em toda falha
+    (RN-IMPORT-016). Duas conexões ao mesmo servidor por nomes diferentes escapam da regra, como na própria
+    origem.
+
+- **RN-IMPORT-024.** Mapeamento da cópia.
+  - É o da importação (RN-IMPORT-009), com as colunas marcadas na Extração no lugar das do arquivo, na ordem do
+    resultado, cada uma com o tipo dela (como o cabeçalho da grade o mostra), e as mesmas marcas, avisos, recusas
+    da tabela e regras do automático (com o nome da coluna da origem, que sempre existe). A coluna repetida na
+    origem (uma junção com dois `id`) aparece repetida; o automático leva só a primeira.
+  - Não há prévia das linhas: ela executaria o comando da origem de novo só para mostrar 20 linhas. No lugar dela,
+    cada par mostra, quando vale, a nota da conversão, na dica e para o leitor de tela:
+    - classes diferentes: "A origem é texto, e o destino é número: cada valor é convertido, e o que não converter
+      para a cópia.";
+    - a data e hora com fuso do PostgreSQL que vai a uma coluna sem fuso (no Db2, no Informix ou no próprio
+      PostgreSQL): "A hora vai como o PostgreSQL a escreve no fuso da sessão, sem o fuso.";
+    - a data e hora que vai a uma coluna só de data: "A origem tem hora, e o destino é só data: o valor com hora
+      que não é zero para a cópia.";
+    - no Db2 e no Informix de destino, a coluna que guarda menos casas que a de origem, quando os dois tipos dizem
+      as casas (`numeric(12,4)` para `DECIMAL(10,2)`; o `timestamp` do PostgreSQL, com 6 casas de fração, para o
+      `DATETIME YEAR TO FRACTION(5)` do Informix): "A origem tem até 4 casas, e o destino guarda 2: o valor com
+      mais casas que não são zero para a cópia." (RN-IMPORT-010). No PostgreSQL de destino, que arredonda: "A
+      origem tem até 4 casas, e o destino guarda 2: o PostgreSQL arredonda o valor.";
+    - no Db2, a data e hora com mais de 7 casas de fração: "O driver entrega até 7 casas de fração: as outras se
+      perdem.";
+    - o `money` do PostgreSQL que vai a uma coluna do Db2 ou do Informix: "O money sai no formato de moeda do
+      servidor (R$ 1.234,56), que não é um número: copie de uma consulta com money::numeric." (RN-IMPORT-026).
+  - O binário só vai para uma coluna binária, e a coluna binária só recebe binário: o par que não for assim fica
+    desabilitado na escolha, com "Binário só vai para uma coluna binária."
+  - A prévia da cópia (`POST api/user/transfers/copies/preview`) lê o catálogo da tabela de destino numa conexão à
+    parte e devolve as colunas, com a classe de cada uma, e o mapeamento sugerido; não lê a origem. As notas e os
+    pares desabilitados, a tela os tira do que ela sabe da origem (o `kind` e o tipo de cada coluna no resultado,
+    seção 6, ou o tipo do catálogo, na tabela pelo navegador) e da classe do destino. Na API, que só conhece os
+    tipos da origem ao abrir a leitura, o valor de uma coluna binária da origem que vai a uma coluna que não é
+    binária, e o de uma coluna que não é binária que vai a uma coluna binária, são recusados na linha dele, com
+    `IMPORT_VALUE_INVALID`: "A coluna foto da origem é binária, e a coluna de destino não é." ("… não é binária,
+    e a coluna de destino é."). O nulo passa nos dois. O `0x` de um texto da origem não vira binário: essa forma é
+    só do arquivo (RN-IMPORT-010).
+
+- **RN-IMPORT-025.** Carga e Confirmação da cópia.
+  - A Carga é a da importação (RN-IMPORT-012), com "Esvaziar a tabela antes de copiar" e os mesmos textos, com
+    "cópia" no lugar de "importação", e sem "Conferir o arquivo inteiro antes de gravar", que é do arquivo: conferir
+    a origem antes seria executar o comando dela duas vezes.
+  - A Confirmação tem o resumo:
+    - "Origem" e "Conexão", como na exportação (RN-EXPORT-015), com "Conta as linhas antes" ou "Sem contar as
+      linhas";
+    - "Destino": a etiqueta do banco, a conexão, o banco de dados e o esquema e a tabela, com o ambiente;
+    - "Colunas": "12 de 15 colunas da origem, em 12 das 20 colunas da tabela", com os pares na dica;
+    - "Carga", como na importação.
+  - Os avisos, no tom de atenção: os da exportação que valem para a origem (sempre, "As linhas são lidas de novo,
+    numa conexão à parte: a cópia leva o que o banco tem agora, e não o que a grade mostra."; as alterações não
+    salvas da grade e a transação aberta na aba, RN-EXPORT-015); os da importação que valem para o destino
+    (RN-IMPORT-013); e, quando o nome da tabela de destino aparece no comando da origem (RN-IMPORT-023): "O comando
+    da origem lê pedido, que é a tabela de destino. A cópia vai gravar nela as linhas que lê; no Db2 e no Informix,
+    a leitura pode alcançar as linhas gravadas, e a cópia para quando passar das linhas contadas." Com "Esvaziar",
+    a caixa da RN-IMPORT-013 vem com a tabela de destino: "Entendo que as linhas atuais de dw.pedido_hist serão
+    apagadas."
+  - "Copiar linhas": a pergunta da RN-PROT-001 da conexão de **destino**, nas regras da importação, com o título
+    "Esvaziar a tabela e copiar?" ou "Copiar dados?", "Apaga todas as linhas de dw.pedido_hist e grava as de
+    estoque.pedido." ou "Grava as linhas de estoque.pedido em dw.pedido_hist.", e "Copiar mesmo assim". A origem só
+    é lida e não pergunta, como na exportação (RN-PROT-001). Depois, o pedido (`POST api/user/transfers/copies`),
+    e, aceito, o assistente fecha e a cópia aparece na barra de status.
+  - As recusas aparecem como na exportação (RN-EXPORT-015): a de campo na etapa e no campo; as outras no alto da
+    Confirmação. A conexão sem usuário ou sem senha diz qual é: "A conexão de origem não tem usuário gravado. …" ou
+    "A conexão de destino não tem senha gravada. …", com o resto da frase da RN-EXPORT-015.
+
+- **RN-IMPORT-026.** Os valores de banco para banco.
+  - Na cópia, os valores não passam pelo texto da grade: sem o corte de 10.000 caracteres e de 32 bytes, e sem os
+    formatos da etapa Arquivo, que ela não tem. Cada valor vai do leitor da origem ao parâmetro do destino na forma
+    que o destino lê sem perder nada:
+
+    | Destino | Origem PostgreSQL | Origem Db2 ou Informix |
+    | --- | --- | --- |
+    | PostgreSQL | o texto do servidor da origem, num parâmetro sem tipo: o destino converte, como na RN-EDIT-006 | o valor do driver escrito pelo Prism no texto canônico (o número sem perder dígitos, com ponto; `aaaa-mm-dd`; `aaaa-mm-dd hh:mm:ss.fffffff`; `hh:mm:ss`; `true` e `false`), num parâmetro sem tipo |
+    | Db2 ou Informix | o texto do servidor da origem, convertido pelo Prism como o de um arquivo (os passos 4 e 5 da RN-IMPORT-010, com os formatos canônicos; o nulo é o nulo da origem, e o texto do nulo, a proteção contra fórmula e as pontas não valem), menos o fuso da data e hora com fuso, abaixo | o valor do driver direto no parâmetro, conferido pelo Prism contra o tipo da coluna de destino (a faixa do inteiro, as casas do decimal, a data e hora numa coluna só de data) |
+
+  - O binário vai sempre em bytes, num parâmetro binário: o da origem PostgreSQL chega como `\x` e os dígitos (o
+    texto do servidor) e o Prism o desfaz; o do Db2 e do Informix chega em bytes.
+  - O texto vai como veio, nos quatro casos.
+  - Para o texto do PostgreSQL ser o mesmo em qualquer servidor, a conexão de leitura da cópia, no PostgreSQL,
+    recebe antes da leitura `SET DateStyle = 'ISO, YMD'`, `SET extra_float_digits = 3` e `SET bytea_output =
+    'hex'`: são só a forma do texto que o servidor escreve, e não mudam nada no banco. Sem isso, um servidor com as
+    datas em `dd/mm/aaaa` gravaria `15/01/2024` num servidor que lê `mm/dd/aaaa`, e um PostgreSQL anterior ao 12
+    cortaria os dígitos do ponto flutuante.
+  - O decimal do Db2 e do Informix com mais de 28 dígitos, que o `decimal` do C# não guarda, é lido como texto e
+    vai como texto, como na RN-EDIT-006. A data e hora do Db2 com mais de 7 casas de fração vai com as 7 que o
+    driver entrega (a nota do Mapeamento avisa). A data e hora com fuso do PostgreSQL vai a uma coluna sem fuso do
+    Db2, do Informix ou do PostgreSQL com a hora que o PostgreSQL de origem escreveu, no fuso da sessão de leitura
+    (o do servidor), sem o fuso: é a única exceção à recusa do fuso da RN-IMPORT-010, porque na cópia a hora vem
+    de uma coluna, e não de um texto que a pessoa escreveu.
+  - Nos quatro casos valem as recusas por classe da RN-IMPORT-010 que a conversão do banco não faria: a data e
+    hora com hora que não é zero numa coluna só de data e, no Db2 e no Informix de destino, as casas a mais que
+    não são zero. O número de ponto flutuante da origem conta as casas do texto mais curto que volta a ele (o
+    `0.1` do `double` tem uma casa).
+  - O `money` do PostgreSQL sai no formato do `lc_monetary` do servidor de origem (`R$ 1.234,56`): para uma
+    coluna `money` de outro PostgreSQL ele vai como texto, e o destino o lê pelo `lc_monetary` dele (com os dois
+    iguais, o valor é o mesmo); para o Db2 e o Informix ele não é um número, e a cópia o recusa na linha dele. Quem
+    copia `money` para outro banco copia de uma consulta com `money::numeric`.
+  - O valor que não converte para a cópia na linha dele, com `IMPORT_VALUE_INVALID` e a mensagem do Prism, ou com a
+    recusa do banco de destino (RN-IMPORT-016).
+
+- **RN-IMPORT-027.** O trabalho da cópia.
+  - `POST api/user/transfers/copies` confere, antes do 202 e sem tocar nos bancos: a forma do pedido
+    (`IMPORT_OPTIONS_INVALID`, no campo) e o mapeamento cuja posição passa das colunas pedidas em `columns`
+    (`IMPORT_MAPPING_INVALID`, no campo `mapping[3].source`); a origem, nas regras da exportação (RN-EXPORT-016: a
+    conexão, o banco de dados, as credenciais, o driver, um comando só, o filtro e a leitura, com as mesmas recusas);
+    o destino (a conexão, o banco de dados, as credenciais, o driver, o somente leitura e a própria origem,
+    `IMPORT_TARGET_IS_SOURCE`); o limite e a tabela ocupada (409), na mesma operação, sob a trava do registro, em que
+    o trabalho entra nele (RN-IMPORT-014). O trabalho tem `kind: copy`, `connectionID` da origem e
+    `targetConnectionID` do destino.
+  - São duas conexões à parte, uma em cada banco, mesmo quando a conexão é a mesma: a de leitura, nas regras da
+    exportação (RN-EXPORT-017: o prazo de trava, a transação `REPEATABLE READ READ ONLY` no PostgreSQL, a contagem
+    quando pedida, os limites de 64 MiB por valor e 256 MiB por linha, a conferência das colunas,
+    `EXPORT_COLUMNS_CHANGED`); e a de gravação, nas regras do carregador (RN-IMPORT-015). A cópia conta como um
+    trabalho só no limite de 3.
+  - As fases: `connecting` (as duas), `counting`, `emptying`, `loading` e `committing`. `rows` são as linhas
+    gravadas; `committed`, as confirmadas; `total`, a contagem (ou nulo); `bytes` e `size`, nulos.
+  - A leitura e a gravação andam juntas: cada linha lida é convertida e entra no comando seguinte; a memória é a de
+    uma linha e de um comando. A transação de leitura do PostgreSQL fica aberta durante toda a cópia, como na
+    exportação.
+  - A falha da leitura (a origem que cai, um valor grande demais, as colunas que mudaram, a origem que cresce,
+    RN-IMPORT-023) para a cópia como a falha
+    da gravação: a transação de destino em andamento é desfeita, e o que já foi confirmado fica. O `error` diz de
+    que lado foi (`side: source` ou `target`), e a tela começa a descrição por "Ao ler a origem:" ou "Ao gravar no
+    destino:", porque as duas mensagens são de bancos diferentes. A linha é o número da linha na leitura da origem,
+    a partir de 1 ("linha 1.234 da origem").
+  - O cancelamento, o abandono, a falta de progresso (`IMPORT_STALLED`, "O banco ficou 2 horas sem responder, e a
+    cópia foi encerrada."), a proteção que muda no destino, o cofre que fecha e a exclusão de qualquer das duas
+    conexões seguem a importação (RN-IMPORT-014), com "cópia" nos textos, e o "Cancelar" da barra de status
+    pergunta nas mesmas condições (RN-IMPORT-019): "Cancelar a cópia de pedido para pedido_hist?", com "Cancelar a
+    cópia" e "Continuar copiando".
+  - A barra de status: "Copiando pedido para pedido_hist… conectando" ("… contando as linhas", "… esvaziando a
+    tabela", "… 45%" com o total, ou "… 12.345 linhas" sem ele, "… confirmando"), com a dica "5.678 de 12.345
+    linhas · 5.000 confirmadas"; a porcentagem é a das linhas gravadas sobre o total, como na exportação
+    (RN-EXPORT-021), com a mesma regra para mais linhas que o total. "Cancelar" tem o nome "Cancelar a cópia de
+    pedido".
+  - O fim, nas regras da importação (RN-IMPORT-020): "12.345 linhas copiadas de pedido para pedido_hist." com
+    "Abrir registros", que abre os Registros da tabela de destino, na conexão e no banco de dados dela; "A cópia de
+    pedido para pedido_hist parou." com o lado, a linha, a mensagem e o que ficou, e a entrada "Ver o erro"; "Cópia
+    de pedido para pedido_hist cancelada. …". A nota dos Registros abertos vale para a tabela de destino.
+  - O log da cópia segue o da importação, com os dois IDs de conexão e sem o comando da origem (RN-LOG-001).
+
+### Os mesmos textos nos dois lados
+
+- **RN-IMPORT-028.** As voltas e as fixtures.
+  - O que o Prism exporta, ele importa de volta com os mesmos valores, e os testes provam isso de ponta a ponta,
+    contra os três servidores, nos contêineres: a tabela com os tipos que se importam (texto com aspas, `;`,
+    quebras de linha nas três formas, apóstrofo, `=`, `+`, `-` e `@` no começo, acentos, ideogramas, emoji, marca
+    de direção; números negativos, com 28 dígitos, com expoente; datas, datas e horas com fração; lógicos;
+    binários; nulos e textos vazios) é exportada em CSV (com os padrões), em JSON (com e sem o nome da origem, com
+    e sem as datas em ISO 8601) e em XLSX, importada numa tabela igual, vazia, e as duas são comparadas valor por
+    valor. A exceção conhecida, e escrita no teste, é a do CSV com os padrões: o nulo e o texto vazio saem iguais
+    (RN-IMPORT-004), e o nulo de uma coluna de texto volta como texto vazio (numa coluna que não é de texto, o
+    vazio volta como nulo, que é o que ele era). Com um "Nulo como" na exportação e o mesmo "Texto do nulo" na
+    importação, o teste confere que o nulo volta como nulo. O JSON e o XLSX distinguem os dois e voltam iguais. No
+    PostgreSQL a volta é provada também num servidor com `DateStyle = 'SQL, DMY'`, que a leitura da exportação
+    fixa em ISO (RN-EXPORT-017).
+  - A cópia de banco para banco é provada do mesmo jeito, em cada par dos três bancos (nove pares), com a mesma
+    tabela, nos tipos que os dois lados têm.
+  - As regras que existem nos dois lados ganham fixtures de ouro na pasta da RN-EXPORT-024 (`src/test-fixtures/`),
+    escritas à mão e nunca regeradas: a volta da proteção contra fórmula (a função da API que tira o apóstrofo,
+    conferida contra os mesmos casos da proteção da tela, `csvFieldOf`, de modo que proteger e tirar devolva o
+    valor, menos o caso do apóstrofo de verdade da RN-IMPORT-004, que a fixture marca); a leitura do campo do CSV
+    (aspas dobradas, a aspa no meio, o texto depois da aspa que fecha, as três quebras de linha, o BOM); o
+    `_xHHHH_` do XLSX nos dois sentidos (`xlsxText` da tela e a leitura da API); a ordem do nulo, da proteção
+    contra fórmula e das pontas (RN-IMPORT-010: o campo `-` com o nulo `-`, o campo `'-`, o ` NULL ` numa coluna
+    de número); e os números e as datas de cada formato (RN-IMPORT-010), com o texto de entrada, o formato
+    escolhido (com e sem "Aceitar o ponto como separador de milhar") e o texto canônico esperado ou a recusa.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `POST api/user/transfers/imports/read` `{ fileID, format, reader }` | 200 `{ encoding, delimiter, listKey, sheets, sheet, columns, shownColumns, rows }` | 404 `IMPORT_FILE_MISSING`; 422 `IMPORT_OPTIONS_INVALID` (no campo), `IMPORT_FILE_UNREADABLE` (com `reason` e `line`), `IMPORT_FILE_TOO_LARGE` |
+| `POST api/user/transfers/imports/preview` `{ fileID, format, reader, values, target, mapping? }` | 200 `{ table, columns, mapping, shownColumns, rows }` | 404 `IMPORT_FILE_MISSING`, `CONNECTION_NOT_FOUND`, `IMPORT_TABLE_NOT_FOUND`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_FILE_UNREADABLE`, `IMPORT_FILE_TOO_LARGE`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_MAPPING_INVALID`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`, `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED` |
+| `POST api/user/transfers/imports` `{ fileID, format, reader, values, target, mapping, load, windowID }` | 202 `{ id }` | 404 `IMPORT_FILE_MISSING`, `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_FILE_TOO_LARGE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
+| `POST api/user/transfers/copies/preview` `{ source, columns, target, mapping? }` | 200 `{ table, mapping }` | 404 `CONNECTION_NOT_FOUND`, `IMPORT_TABLE_NOT_FOUND`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_TARGET_IS_SOURCE`, `IMPORT_MAPPING_INVALID`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`, `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED` |
+| `POST api/user/transfers/copies` `{ source, columns, count, target, mapping, load, windowID }` | 202 `{ id }` | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_MAPPING_INVALID`, `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `IMPORT_TARGET_IS_SOURCE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` como acima |
+| `GET api/user/transfers` e `GET api/user/transfers/{id}` | como na seção 35, com `kind` `import` e `copy`, e os campos novos `targetConnectionID`, `committed`, `size` e `uncertain` | 404 `TRANSFER_NOT_FOUND` |
+| `DELETE api/user/transfers/{id}` | 204: cancela o que roda (que fica `canceled` até ser esquecido) ou esquece o que terminou | 404 `TRANSFER_NOT_FOUND` |
+
+Notas:
+
+- Os nomes: na API, os identificadores terminam em `ID`, como `connectionID` e `resultID`; nos canais do processo
+  principal, em `Id`, como o `destinationId` da seção 35. O `fileId` do canal vai à API como `fileID`, e o número da
+  janela, como `windowID` (RN-EXPORT-016).
+- `fileID`: o identificador que o processo principal deu ao arquivo (o `fileId` da RN-IMPORT-018), 36 caracteres
+  em minúsculas com os hifens, conferido antes de virar nome de arquivo; outra forma é `IMPORT_OPTIONS_INVALID` no
+  campo `fileID`.
+- `format`: `csv`, `tsv`, `json` ou `xlsx`.
+- `reader`, as opções do leitor, com as faixas da RN-IMPORT-004 a 006; a opção ausente é a do padrão:
+  - `csv` e `tsv`: `encoding` (`auto`, `utf-8`, `utf-16le`, `utf-16be`, `windows-1252` ou `iso-8859-1`),
+    `delimiter` (`auto`, `";"`, `","`, `"\t"` ou `"|"`; no `tsv`, ausente ou `"\t"`), `header`, `quote` (`double`
+    ou `none`), `nullText` (até 100 caracteres, sem caractere de controle), `emptyAsNull`, `trim`, `skipEmptyLines`
+    e `unguardFormulas`;
+  - `json`: `keys`, ausente no `imports/read`, que acha as chaves, e, nos outros pedidos, a lista que ele devolveu
+    em `columns` (de 1 a 16.384 nomes de até 256 caracteres, sem repetir), cuja posição é a do `mapping[].source`
+    (RN-IMPORT-005);
+  - `xlsx`: `sheet` (o nome, de 1 a 31 caracteres; ausente, a primeira que não é oculta), `header` e
+    `skipEmptyLines`.
+
+  A resposta de `imports/read` diz o que a leitura achou (`encoding` e `delimiter` com `auto`, e as chaves do
+  JSON), e a tela manda os valores achados nos pedidos seguintes, para a API não percorrer o arquivo de novo.
+- `values`: `{ decimal, thousandsDot, dates }`, com `decimal` em `point` ou `comma`; `thousandsDot` booleano, falso
+  por padrão, que só vale com `comma` (verdadeiro com `point` é `IMPORT_OPTIONS_INVALID`); e `dates` em `iso` ou
+  `dayMonthYear`.
+- `target`: `{ connectionID, database?, schema, table }`, com `schema` e `table` de 1 a 256 caracteres, sem U+0000,
+  como estão no catálogo; `database` segue a regra da abertura de uma sessão (RN-ARVORE-006).
+- `mapping`: de 1 a 16.384 entradas `{ source, target }`, com `source` a posição da coluna do arquivo (ou da
+  origem, na cópia), a partir de 0, sem repetir, e `target` o nome da coluna da tabela, de 1 a 256 caracteres, sem
+  repetir. A coluna que não existe, a calculada pelo banco e a de um tipo que não se importa são
+  `IMPORT_MAPPING_INVALID`, com o caminho do campo (`mapping[3].target`), na prévia; no trabalho, são
+  `IMPORT_TABLE_CHANGED` (RN-IMPORT-015). A posição além das colunas do arquivo (ou das pedidas em `columns`, na
+  cópia) é `IMPORT_MAPPING_INVALID` no campo `mapping[3].source`, na prévia, no `POST` da cópia e no trabalho da
+  importação (RN-IMPORT-009). Ausente na prévia, a resposta traz o mapeamento automático (RN-IMPORT-009).
+- `load`: `{ empty, commitEvery, check }`, com `empty` booleano; `commitEvery` de 1 a 1.000.000, ou nulo para "Tudo
+  numa transação só"; e `check` booleano, verdadeiro por padrão, a conferência do arquivo inteiro (RN-IMPORT-012),
+  só na importação (na cópia, presente é `IMPORT_OPTIONS_INVALID`). No Informix sem log, `commitEvery` é ignorado.
+- `windowID`, como na exportação (RN-EXPORT-016).
+- A resposta de `imports/read`: `encoding` (`{ name, bom }`, com `name` um dos valores do pedido menos `auto`, ou
+  nulo fora do CSV e do TSV), `delimiter` (o caractere, ou nulo), `listKey` (no JSON, a chave da lista, ou nulo),
+  `sheets` (no XLSX, `[{ name, hidden }]`), `sheet` (a lida), `columns` (os nomes, todos), `shownColumns` (quantas
+  das primeiras colunas as linhas trazem, RN-IMPORT-008) e `rows` (até 20, `{ line, values, short }`, com os
+  valores em texto ou nulos, cortados nos 1.000 caracteres, e `short` verdadeiro na linha completada com nulo,
+  RN-IMPORT-004).
+- A resposta de `imports/preview`: `table` (`{ schema, name, oneAtATime, columns, referencedBy }`, cada coluna com
+  `name`, `type`, `nullable`, `defaultValue`, `generated`, `class` e `importable`, com `reason` quando não é, e
+  `referencedBy` a lista das chaves estrangeiras de outras tabelas que apontam para esta, `[{ schema, table,
+  onDelete }]`, com `onDelete` em `cascade`, `setNull`, `setDefault`, `restrict` ou `noAction`, RN-IMPORT-012);
+  `columns` (as do arquivo); `mapping` (o mandado, ou o sugerido); `shownColumns`; e `rows` (até 20, `{ line,
+  problem, short, cells }`, com `cells` uma por coluna mapeada que cabe, `{ value, problem }`, e `problem` nulo ou
+  a frase).
+- A resposta de `copies/preview`: `table`, como acima, e `mapping`. As notas da conversão são da tela
+  (RN-IMPORT-024).
+- O item do trabalho, além do da seção 35: `kind` `import` ou `copy`; `connectionID` é a da origem na exportação e na
+  cópia, e a do destino na importação; `targetConnectionID` é a do destino (nula na exportação; igual a `connectionID`
+  na importação); o diálogo de excluir a conexão conta os trabalhos em que ela é uma das duas; `committed` e `size`
+  (nulos na exportação); `uncertain` (falso na exportação; no `canceled` e no `failed` da importação e da cópia,
+  verdadeiro quando o Prism não sabe o que a última confirmação deixou, RN-IMPORT-014 e 016); `phase` também
+  `checking`, `emptying`, `loading` e `committing`; `reason` também `readOnly`. `summary` ganha `committed`,
+  `emptied`, `shortRows`, `skippedLines`, `unguarded` e `formulasWithoutValue` (`emptied` booleano; os outros,
+  contagens, zero quando não se aplicam), e `error`, `line`, `column`, `side`, `committed` e `uncertain`, todos sempre
+  presentes, nulos quando não se aplicam. O `code` do erro de uma importação ou cópia é `DATABASE_CONNECTION_FAILED`,
+  `SQL_EXECUTION_FAILED`, `IMPORT_VALUE_INVALID`, `IMPORT_VALUE_TOO_LARGE`, `IMPORT_FILE_UNREADABLE`,
+  `IMPORT_TABLE_NOT_FOUND`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_TABLE_CHANGED`, `IMPORT_MAPPING_INVALID` (a posição
+  além das colunas do arquivo, RN-IMPORT-009) ou `IMPORT_STALLED`, e, na leitura da cópia, `EXPORT_COLUMNS_CHANGED`,
+  `EXPORT_VALUE_TOO_LARGE` ou `IMPORT_SOURCE_GROWING` (RN-IMPORT-023).
+- Os `IMPORT_*` da seção 34 (`IMPORT_EMPTY`, `IMPORT_INVALID`, `IMPORT_FILE_INVALID`, `IMPORT_FILE_NEWER`,
+  `IMPORT_PASSPHRASE_*` e `IMPORT_LIMITS_EXCEEDED`) são os da importação de conexões, numa rota só dela; os desta
+  seção são os da importação de dados e da cópia, e nenhum nome se repete. A tela os lê sempre junto da rota que os
+  devolveu.
+- `IMPORT_FILE_UNREADABLE` leva `reason` (`encoding`, `format`, `sheet`, `limits` ou `system`) e `line` (ou nulo),
+  e a frase da RN-IMPORT-004 a 008 na mensagem, sem caminho. `IMPORT_OPTIONS_INVALID` e `IMPORT_MAPPING_INVALID`
+  vêm na forma do erro de campo (`errors` e `errorCodes`), com o caminho do campo;
+  `CONNECTION_CREDENTIALS_MISSING`, também, no campo `userName` ou `password` na importação, e `source.userName`,
+  `source.password`, `target.userName` ou `target.password` na cópia.
+- Os `POST` aceitam um corpo de até 8 MiB (`RequestSizeLimit`), como o da exportação, e a tela confere antes de
+  mandar. Todas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais).
+
+Os canais novos entre a tela e o processo principal, todos pedidos (`ipcRenderer.invoke`), no grupo `transfers` da
+ponte:
+
+| Canal | Pedido | Resposta |
+| --- | --- | --- |
+| `prism:transfer-source` | nada | `{ status: "chosen", fileId, fileName, size }`, `{ status: "canceled" }`, `{ status: "notAFile" }`, `{ status: "tooLarge", size }`, `{ status: "notWritable" }`, `{ status: "noSpace", needed }` ou `{ status: "unreadable", message }` (sem caminho) |
+| `prism:transfer-source-status` | `{ fileId }` | `{ status: "copying", copied, size }`, `{ status: "ready" }`, `{ status: "failed", reason, message }` ou `{ status: "missing" }` |
+| `prism:transfer-source-release` | `{ fileId }` | nada; interrompe a cópia e apaga o arquivo que a API ainda não tomou |
+
+Notas:
+
+- Os três seguem a regra do canal novo do `AGENTS.md` da tela, com as cinco peças, como os da seção 35: o
+  `ipcMain.handle` que começa por `assertFromApp`, o `ipcRenderer.invoke` do preload, o tipo em `PrismBridge` (no
+  grupo `transfers`), o ramo de desenvolvimento de `getBridge` (que responde como fora do Electron) e a validação
+  da resposta na tela. O pedido é conferido por um schema no processo principal. Os nomes não têm dígito, e o
+  `channels.test.ts` ganha a conferência deles.
+- `prism:transfer-source` não recebe nada: o título, os filtros e a pasta inicial são do processo principal.
+- `fileId` tem a forma do identificador da API, conferida antes de virar nome de arquivo. `fileName` é só o nome,
+  sem a pasta, para a tela mostrar; `size`, `copied` e `needed` são em bytes. `reason` da falha da cópia:
+  `diskFull`, `tooLarge`, `unreadable` ou `other` (RN-IMPORT-018).
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-EDIT-006**: a importação de dados e a cópia para outro banco usam a mesma conversão, com os formatos do
+  assistente e os tipos a mais que a importação grava.
+- **RN-EDIT-013**: nos Registros, a barra de edição vem depois de "Exportar CSV", "Exportar…" e "Importar…".
+- **RN-MENU-001**: o menu da tabela ganha "Importar dados…".
+- **RN-PROT-001**: a importação e a cópia perguntam pela conexão de destino: em "Todos os comandos", sempre; em "Só
+  comandos irreversíveis", quando esvaziam a tabela.
+- **RN-PROT-002**: a importação e a cópia não gravam numa conexão somente leitura; a cópia lê de uma.
+- **RN-PROT-006**: a importação e a cópia leem as proteções do destino antes de cada comando e param quando ele
+  passa a ser somente leitura.
+- **RN-SEG-001**: a importação e a cópia em andamento são comando em andamento da janela que as começou.
+- **RN-TX-006**: a pergunta das transferências em andamento (exportações, importações e cópias) vem antes das
+  outras.
+- **RN-CONN-014**: excluir a conexão cancela também as importações e as cópias que gravam nela ou leem dela.
+- **RN-COFRE-008**: fechar o cofre cancela também as importações e as cópias, que deixam o que já confirmaram.
+- **RN-ABAS-004** e **RN-ABAS-007**: fechar a janela e fechar o app perguntam também pelas importações e cópias.
+- **RN-AVISO-006**: "Abrir registros" é a ação do aviso de sucesso da importação e da cópia.
+- **RN-DRIVER-005** e **RN-ATUALIZA-006**: o aviso de antes do reinício e a instalação dizem das importações e
+  cópias que serão canceladas.
+- **RN-LOG-001**: da importação e da cópia, só os IDs, o formato, as contagens, a duração e a classe do erro.
+- **RN-VERSAO-002**: o que a importação de dados lê é contrato.
+- **RN-EXPORT-003** e **RN-EXPORT-004**: "Banco de dados" deixa de ser "Em breve", e com ele as etapas são seis.
+- **RN-EXPORT-010**: sai o exemplo do `DateStyle` de outro servidor, que a leitura da exportação fixa.
+- **RN-EXPORT-015** e **RN-EXPORT-016**: o limite de 3 é de todas as transferências, e a recusa diz isso; o número
+  da janela passa a se chamar `windowID`.
+- **RN-EXPORT-017**: a leitura do PostgreSQL fixa a forma do texto (`DateStyle`, `extra_float_digits` e
+  `bytea_output`), para o arquivo voltar igual pela importação.
+- **RN-EXPORT-018**: a pasta `transfers` recebe também o arquivo da importação, copiado pelo processo principal, e
+  é criada na partida da API e pelo processo principal quando falta.
+- **RN-EXPORT-019**: o destino "Banco de dados" funciona também fora do Electron.
+- **RN-EXPORT-021**: a barra de status mostra também as importações e as cópias, e o botão da lista diz o tipo.
+- **RN-EXPORT-023**: as saídas perguntam por todas as transferências, com os textos da RN-IMPORT-021.
+- **RN-EXPORT-024**: as fixtures ganham as da importação.
+- **Seção 6**: as rotas da importação e da cópia, os campos novos do trabalho, o `windowID` e o 401
+  `VAULT_LOCKED` das rotas que começam um trabalho.
+- **Seção 9**: o assistente "Importar dados", o "Importar…" dos Registros, as etapas do "Banco de dados" e a
+  entrada da falha na barra de status não estão no canvas.
+- **Seção 35**: o primeiro item do "Fica para depois" aponta para esta seção.
+
+### Fica para depois
+
+- Criar a tabela no destino (no "Banco de dados" e na importação), com os tipos traduzidos de um banco para o
+  outro.
+- Substituir ou ignorar a linha que repete uma chave (`ON CONFLICT`, `MERGE`), e pular as linhas com erro, com um
+  relatório delas.
+- Transformar os valores no caminho (uma constante, uma expressão), como o DBeaver.
+- Importar XML, JSON Lines, `.ods` e o `.xls` antigo; escolher outro caractere de aspas e de escape no CSV.
+- Várias tabelas de uma vez (um esquema inteiro, várias planilhas), e arrastar o arquivo para a janela.
+- Salvar a importação ou a cópia como tarefa, para repetir.
+- Desligar as chaves estrangeiras e os gatilhos durante a carga.
+- O `TRUNCATE` no lugar do `DELETE` ao esvaziar uma tabela grande.
+- O `COPY` do PostgreSQL e a cópia em massa do Db2 e do Informix, se a medida mostrar que os lotes perdem do
+  DBeaver.
+- Gravar numa identidade "sempre" (`OVERRIDING SYSTEM VALUE`), e ajustar o contador do banco depois de importar os
+  valores de uma coluna preenchida por ele.
+- A prévia das linhas convertidas na cópia de banco para banco.
+- Os formatos de data `mm/dd/aaaa` e com o mês por extenso, e outros separadores de milhar.
+- Pular as primeiras N linhas do arquivo (o cabeçalho de um relatório antes da tabela), e recusar, como opção, a
+  linha com menos valores que o cabeçalho.
+- Continuar uma importação interrompida de onde parou.

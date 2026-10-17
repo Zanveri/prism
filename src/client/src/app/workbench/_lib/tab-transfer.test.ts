@@ -64,6 +64,12 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(roundTrip(serializeTab(snapshot({ state: filtered })))?.state).toEqual(filtered);
   });
 
+  it("o resultado de leitura leva o `read` da página (RN-EXPORT-002): o \"Exportar…\" continua valendo na outra janela", () => {
+    const read: RowsState = { ...rows, read: true };
+
+    expect(roundTrip(serializeTab(snapshot({ state: read })))?.state).toEqual(read);
+  });
+
   it("as células cortadas voltam como mapa de conjuntos, e o resultado volta parado (sem carregar, contar nem cancelar)", () => {
     const state = roundTrip(serializeTab(snapshot()))?.state as RowsState;
     expect(state.truncated.get(1)?.has(1)).toBe(true);

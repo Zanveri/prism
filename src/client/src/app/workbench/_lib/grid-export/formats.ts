@@ -1,6 +1,5 @@
 import type { Engine } from "@/components/ui/engine-tag";
 
-import { csvFileName } from "../csv";
 import { generateInsertInto } from "./generate-sql";
 import { gridExportCopy } from "./grid-export.copy";
 import type { GridSlice } from "./grid-slice";
@@ -88,9 +87,8 @@ export const exportFormatOf = (id: ExportFormatId): ExportFormat => byId[id];
 
 /**
  * O nome que o diálogo de salvar propõe: `base` (o esquema e a tabela, ou o que a tela escolher) mais `.extensão`, com as regras de nome seguro do CSV
- * de hoje (`csvFileName`, que não se copia aqui): o que o Windows não aceita vira `_`, controle e marca de direção saem, nome de dispositivo ganha um
- * `_` na frente, nada de ponto ou espaço no fim e um tamanho razoável; sobrando nada, `registros`.
+ * (`electron/file-name.ts`, a mesma função que o processo principal aplica ao nome que recebe, RN-EXPORT-019): o que o Windows não aceita vira `_`,
+ * controle e marca de direção saem, nome de dispositivo ganha um `_` na frente, nada de ponto ou espaço no fim e até 120 pontos de código; sobrando
+ * nada, `registros`.
  */
-export function exportFileName(base: string, extension: string): string {
-  return `${csvFileName(base, "").slice(0, -".csv".length)}.${extension.replace(/^\./, "")}`;
-}
+export { exportFileName } from "../../../../../electron/file-name";

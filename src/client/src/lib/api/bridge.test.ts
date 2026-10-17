@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { claimVerification, currentAppZoom, finishVerification, onAppZoomChanged, onVerificationPeer, onWindowCloseRequested, readDataFolder, requestAppZoom } from "./bridge";
+import { chooseExportDestination, claimVerification, copyExport, currentAppZoom, deliverExport, finishVerification, onAppZoomChanged, onVerificationPeer, onWindowCloseRequested, readDataFolder, releaseExportDestination, requestAppZoom, revealExport, transfersAvailable } from "./bridge";
 
 /** A ponte com só o que a pasta de dados usa: o resto não importa aqui. */
 const bridgeAnswering = (reply: () => Promise<unknown>) => vi.stubGlobal("window", { prism: { getDataFolder: reply } });
@@ -172,5 +172,61 @@ describe("a vez da verificação periódica pela ponte (RN-VERIF-002)", () => {
     deliver({ connectionId: "c1", result: { ...ok, status: "talvez" } });
     deliver("c1");
     expect(heard).toHaveBeenCalledExactlyOnceWith({ connectionId: "c1", result: ok });
+  });
+});
+
+describe("o destino e a entrega das exportações de dados (RN-EXPORT-019 e 020), do lado da tela", () => {
+  const transfersWith = (transfers: Record<string, unknown>) => vi.stubGlobal("window", { prism: { transfers: { available: true, ...transfers } } });
+
+  it("`transfersAvailable`: só com a ponte do Electron; fora dele (sem ponte, ou uma ponte sem o grupo) o \"Exportar\" diz que só funciona no app", () => {
+    transfersWith({});
+    expect(transfersAvailable()).toBe(true);
+
+    vi.stubGlobal("window", { prism: {} });
+    expect(transfersAvailable()).toBe(false);
+    vi.stubGlobal("window", { prism: { transfers: { available: false } } });
+    expect(transfersAvailable()).toBe(false);
+  });
+
+  it("a resposta do destino é conferida com o schema: o escolhido traz o identificador e o nome, e o que não confere (um caminho a mais é ignorado, a forma errada recusada) é `error`", async () => {
+    const asked: unknown[] = [];
+    transfersWith({ chooseDestination: async (request: unknown) => (asked.push(request), { status: "chosen", destinationId: "d1", fileName: "pedido.csv" }) });
+    expect(await chooseExportDestination({ suggestedName: "pedido", extension: "csv" })).toEqual({ status: "chosen", destinationId: "d1", fileName: "pedido.csv" });
+    expect(asked).toEqual([{ suggestedName: "pedido", extension: "csv" }]);
+
+    transfersWith({ chooseDestination: async () => ({ status: "chosen", destinationId: "d1", fileName: "pedido.csv", path: "/home/<nome>/pedido.csv" }) });
+    expect(await chooseExportDestination({ suggestedName: "pedido", extension: "csv" })).toEqual({ status: "chosen", destinationId: "d1", fileName: "pedido.csv" });
+
+    for (const reply of [{ status: "chosen" }, { status: "outro" }, null, "chosen"]) {
+      transfersWith({ chooseDestination: async () => reply });
+      expect(await chooseExportDestination({ suggestedName: "pedido", extension: "csv" })).toEqual({ status: "error" });
+    }
+    transfersWith({ chooseDestination: async () => Promise.reject(new Error("Pedido de origem desconhecida.")) });
+    expect(await chooseExportDestination({ suggestedName: "pedido", extension: "csv" })).toEqual({ status: "error" });
+  });
+
+  it("a entrega e a cópia: a resposta conferida, e a ponte que falha vira a entrega que falhou (`other`) ou a cópia que falhou, com a frase dada", async () => {
+    transfersWith({ deliver: async () => ({ status: "failed", reason: "inUse", message: "o arquivo está aberto em outro programa" }), copy: async () => ({ status: "tooLarge" }) });
+    expect(await deliverExport({ transferId: "0f8fad5b-d9cb-469f-a165-70867728950e", destinationId: "d1", reveal: false }, "x")).toEqual({ status: "failed", reason: "inUse", message: "o arquivo está aberto em outro programa" });
+    expect(await copyExport("0f8fad5b-d9cb-469f-a165-70867728950e", "x")).toEqual({ status: "tooLarge" });
+
+    transfersWith({ deliver: async () => ({ status: "delivered" }), copy: async () => Promise.reject(new Error("boom")) });
+    expect(await deliverExport({ transferId: "0f8fad5b-d9cb-469f-a165-70867728950e", destinationId: "d1", reveal: false }, "não deu")).toEqual({ status: "failed", reason: "other", message: "não deu" });
+    expect(await copyExport("0f8fad5b-d9cb-469f-a165-70867728950e", "não copiou")).toEqual({ status: "failed", message: "não copiou" });
+  });
+
+  it("mostrar na pasta e soltar o destino nunca lançam, também sem ponte", async () => {
+    const calls: unknown[] = [];
+    transfersWith({ reveal: async (request: unknown) => void calls.push(["reveal", request]), release: async (request: unknown) => void calls.push(["release", request]) });
+    revealExport("e1");
+    await releaseExportDestination("d1");
+    expect(calls).toEqual([
+      ["reveal", { deliveryId: "e1" }],
+      ["release", { destinationId: "d1" }],
+    ]);
+
+    vi.stubGlobal("window", {});
+    expect(() => revealExport("e1")).not.toThrow();
+    await expect(releaseExportDestination("d1")).resolves.toBeUndefined();
   });
 });

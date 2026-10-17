@@ -30,6 +30,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- RN-EXPORT-024: as fixtures de ouro da exportação de dados, fora das pastas da tela e da API, que os testes dos dois lados leem. -->
+    <Content Include="../../../test-fixtures/export/*.json" Link="test-fixtures/export/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Prism.Api\Prism.Api.csproj" />
     <ProjectReference Include="..\..\Prism.Infrastructure\Prism.Infrastructure.csproj" />
     <ProjectReference Include="..\Prism.TestingCore\Prism.TestingCore.csproj" />

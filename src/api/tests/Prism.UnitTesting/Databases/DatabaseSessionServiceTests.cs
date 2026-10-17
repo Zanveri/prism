@@ -857,5 +857,18 @@ public sealed partial class DatabaseSessionServiceTests
 
             return Task.FromResult(Result.Success<int, DatabaseFailure>(planned.Value.Count));
         }
+
+        /// <summary>RN-EXPORT-017: a leitura da exportação é de uma conexão à parte, que o registro de sessões nunca usa.</summary>
+        public Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<ExportBatch, DatabaseFailure>> ReadExportRowsAsync(ExportReadPlan plan, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
     }
 }

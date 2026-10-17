@@ -13,7 +13,7 @@ internal static class DatabaseSessionMappings
         => source.Page is { } page ? page.ToDto() with { ElapsedMs = source.ElapsedMs } : new QueryResultDto { RowsAffected = source.RowsAffected, ElapsedMs = source.ElapsedMs };
 
     public static QueryResultDto ToDto(this QueryPage source)
-        => new() { Columns = [.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], Rows = source.Rows, HasMore = source.HasMore, ElapsedMs = source.ElapsedMs, TruncatedCells = source.TruncatedCells, TotalRows = source.TotalRows, ResultID = source.ResultID, Editable = source.Editable, CellsWithoutFullValue = source.CellsWithoutFullValue ?? [], FilterApplied = FilterText(source.FilterApplied) };
+        => new() { Columns = [.. source.Columns.Select(column => new QueryColumnDto(column.Name, column.Type, column.Kind))], Rows = source.Rows, HasMore = source.HasMore, ElapsedMs = source.ElapsedMs, TruncatedCells = source.TruncatedCells, TotalRows = source.TotalRows, ResultID = source.ResultID, Editable = source.Editable, CellsWithoutFullValue = source.CellsWithoutFullValue ?? [], FilterApplied = FilterText(source.FilterApplied), Read = source.Read };
 
     /// <summary>RN-EDIT-002: o tipo de catálogo de cada coluna fica na API, que é quem converte o texto (RN-EDIT-006).</summary>
     public static EditTargetDto ToDto(this EditTarget source)

@@ -193,6 +193,59 @@ public sealed class ConnectionRulesTests
     public void VerificationQueryRefusal_ShouldExplain(string query, EDatabaseEngine engine, string refusal)
         => Assert.Equal(refusal, ConnectionRules.VerificationQueryRefusal(query, engine));
 
+    /// <summary>
+    /// RN-VERIF-001 (alterada em 2026-10-17): a consulta não tem caractere de controle nem de direção do texto, como os outros campos da conexão
+    /// (RN-CONN-010), menos a tabulação, a quebra de linha e o retorno de carro, que uma consulta de várias linhas tem. Vale também dentro de um comentário
+    /// ou de uma cadeia, onde o U+202E faria o texto que a prévia da importação manda conferir parecer outro (RN-TRANSF-011).
+    /// </summary>
+    [Trait("ConnectionRules", "VerificationQueryRefusal")]
+    [Theory(DisplayName = "Erro a consulta de verificação com caractere de controle ou de direção do texto")]
+    [InlineData("SELECT 1 FROM systables WHERE tabid = 1 /* \\u202E */", EDatabaseEngine.Informix)]
+    [InlineData("SELECT '\\u202Eabc' FROM SYSIBM.SYSDUMMY1", EDatabaseEngine.Db2)]
+    [InlineData("SELECT 1 -- \\u0000", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT \\u001B[31m 1", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT\\u000B1", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT 1\\u007F", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT \\u0085 1", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT 1 AS \\u200Fx", EDatabaseEngine.PostgreSql)]
+    [InlineData("SELECT 1 AS \\u2066x \\u2069", EDatabaseEngine.PostgreSql)]
+    public void VerificationQueryRefusal_ShouldBeError_ControlOrDirectionCharacter(string escaped, EDatabaseEngine engine)
+    {
+        //Arrange
+        var query = System.Text.RegularExpressions.Regex.Unescape(escaped);
+
+        //Act
+        var refusal = ConnectionRules.VerificationQueryRefusal(query, engine);
+
+        //Assert
+        Assert.Equal("A consulta de verificação não pode ter caractere de controle nem de direção do texto.", refusal);
+    }
+
+    [Trait("ConnectionRules", "VerificationQueryRefusal")]
+    [Fact(DisplayName = "OK a consulta de verificação de várias linhas, com tabulação, quebra de linha e retorno de carro")]
+    public void VerificationQueryRefusal_ShouldBeNull_WithLineBreaksAndTabs()
+    {
+        //Act
+        var refusal = ConnectionRules.VerificationQueryRefusal("SELECT 1\r\n\tFROM systables\n\tWHERE tabid = 1\r", EDatabaseEngine.Informix);
+
+        //Assert
+        Assert.Null(refusal);
+    }
+
+    /// <summary>A ordem das recusas: o tamanho, depois os caracteres, e só então a leitura (o comando que grava e tem um U+202E diz o caractere).</summary>
+    [Trait("ConnectionRules", "VerificationQueryRefusal")]
+    [Fact(DisplayName = "Erro a consulta de verificação diz a primeira recusa: o tamanho, os caracteres e a leitura")]
+    public void VerificationQueryRefusal_ShouldExplainTheFirstRefusal()
+    {
+        //Act
+        var tooLongWithControl = ConnectionRules.VerificationQueryRefusal("SELECT 1 \u202E" + new string('1', ConnectionRules.VerificationQueryMaxLength), EDatabaseEngine.PostgreSql);
+        var writeWithControl = ConnectionRules.VerificationQueryRefusal("UPDATE t SET a = 1 -- \u202E", EDatabaseEngine.PostgreSql);
+
+        //Assert
+        Assert.Equal("A consulta de verificação pode ter no máximo 1.000 caracteres.", tooLongWithControl);
+        Assert.Equal("A consulta de verificação não pode ter caractere de controle nem de direção do texto.", writeWithControl);
+    }
+
     /// <summary>O limite é contado depois de aparada: os espaços em volta não contam.</summary>
     [Trait("ConnectionRules", "VerificationQueryRefusal")]
     [Fact(DisplayName = "Erro a consulta de verificação com mais de 1.000 caracteres, contados depois de aparada")]

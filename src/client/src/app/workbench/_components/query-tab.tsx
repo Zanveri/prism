@@ -7,6 +7,8 @@ import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion } from "../_lib/command-confirmation";
+import { openExportWizard } from "../_lib/data-export/data-exports";
+import { exportBlocker, exportRows, resultSource } from "../_lib/data-export/export-entry";
 import { refreshKey } from "../_lib/grid-editing";
 import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex, scriptWillRun } from "../_lib/result-layout";
@@ -209,6 +211,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   );
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
+  // RN-EXPORT-001: o "Exportar dados…" do menu da célula lê o motivo e abre o assistente pelo que está mais abaixo (o "Salvar" em andamento vem da edição).
+  const exportRef = useRef<{ blocker: string | null; open: () => void }>({ blocker: null, open: () => {} });
+  const menuExport = useMemo(() => ({ blocker: () => exportRef.current.blocker, open: () => exportRef.current.open() }), []);
 
   const shownTab = script === null ? null : shownScriptTab(script, chosenTab !== null && chosenTab.run === script.id ? chosenTab.tab : null);
   // O resultado do executor está à vista: sem script, ou com a aba do último comando à frente (a do cursor aberto).
@@ -252,6 +257,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     confirmSave,
     kept: kept?.rows ?? null,
     scriptBusy,
+    exportData: menuExport,
   });
   const { guard } = edits;
   useEffect(() => {
@@ -347,6 +353,23 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     },
     [script, shownTab, pending, guard],
   );
+
+  /**
+   * "Exportar…" (RN-EXPORT-001), na barra da área: todas as linhas do resultado à frente, pelo assistente. Depois de um script, o da aba de resultado à
+   * frente (o comando daquele resultado, RN-SQL-020); com as Estatísticas à frente, desabilitado. Com a aba ocupada (um comando da pessoa, o "Salvar", o
+   * script rodando ou parado na pergunta de erro), também; a execução da atualização automática não desabilita, e a origem é a grade que está na tela.
+   */
+  const exportShown = kept === null ? exportRows(state) : kept.rows;
+  const exportReason = exportBlocker(exportShown, { busy: busy || scriptBusy || edits.banner.saving, statistics: script !== null && shownTab === "statistics" });
+  const exportNumber = script !== null && typeof shownTab === "number" ? shownTab + 1 : null;
+  const { singleTable } = edits;
+  const openExport = useCallback(() => {
+    if (tab.connectionId === null || exportShown === null) return;
+    openExportWizard(resultSource(exportShown, { connectionId: tab.connectionId, ...inDatabase(tab.database), tabTitle: tab.title, scriptNumber: exportNumber, unsavedEdits: pending, table: singleTable }));
+  }, [tab.connectionId, tab.database, tab.title, exportShown, exportNumber, pending, singleTable]);
+  useEffect(() => {
+    exportRef.current = { blocker: exportReason, open: openExport };
+  });
 
   // RN-TABELA-011: o campo completa as colunas do resultado. Um filtro que dá erro deixa a área sem grade: as colunas continuam as da última.
   const shownRows = shown?.status === "rows" ? shown : null;
@@ -484,6 +507,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             progress={scriptProgress(script)}
             statistics={script === null || shownTab !== "statistics" ? undefined : { body: <ScriptStatistics run={script} />, summary: statisticsSummary(script) }}
             kept={kept === null ? undefined : { busy, onRunAlone: () => handleRunAlone(kept.rows.target) }}
+            exporter={{ blocker: exportReason, onExport: openExport }}
           />
         </div>
       </div>

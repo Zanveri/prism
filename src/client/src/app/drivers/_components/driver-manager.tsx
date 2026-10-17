@@ -38,7 +38,7 @@ export function DriverManager({ highlightedId }: { highlightedId: string | null 
 
   return (
     <div className="flex flex-col gap-6">
-      {restartPending ? <RestartBanner onRestart={actions.restart} /> : null}
+      {restartPending ? <RestartBanner onRestart={actions.restart} exportsNote={actions.exportsNote} /> : null}
 
       {list !== undefined && drivers.isError && pollingSuspended ? (
         <FormMessage tone="error" className="flex flex-wrap items-center gap-x-4 gap-y-2">

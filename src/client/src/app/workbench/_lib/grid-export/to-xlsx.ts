@@ -61,8 +61,8 @@ export function xlsxText(text: string): string {
   return escapeXmlText(escaped);
 }
 
-/** O texto até o limite da célula, sem partir um par substituto ao meio. */
-function withinCell(text: string): string {
+/** O texto até o limite da célula (32.767 unidades UTF-16), sem partir um par substituto ao meio: o mesmo corte da exportação da API (RN-EXPORT-013), conferido pela fixture `xlsx-cell.json`. */
+export function withinCell(text: string): string {
   if (text.length <= maxCellLength) return text;
 
   const splitsPair = (text.charCodeAt(maxCellLength - 1) & 0xfc00) === 0xd800 && (text.charCodeAt(maxCellLength) & 0xfc00) === 0xdc00;

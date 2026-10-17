@@ -332,6 +332,40 @@ public sealed class ConnectionValidatorsTests
         result.ShouldHaveValidationErrorFor(nameof(CreateConnectionCommand.VerificationQuery)).WithErrorCode("CONNECTION_INVALID").WithErrorMessage("A consulta de verificação tem de ser uma leitura só: o texto tem mais de um comando.");
     }
 
+    /// <summary>
+    /// RN-VERIF-001 (alterada em 2026-10-17): a consulta com caractere de controle ou de direção do texto é recusada no campo dela, com a frase da regra, na
+    /// criação, na alteração e no teste (as mesmas regras, num lugar só, `ConnectionRules.VerificationQueryRefusal`); a de várias linhas passa.
+    /// </summary>
+    [Trait("CreateConnectionValidator", "CreateConnectionCommand")]
+    [Fact(DisplayName = "Erro consulta de verificação com caractere de direção do texto, na criação, na alteração e no teste")]
+    public void Connection_ShouldBeError_VerificationQueryWithDirectionCharacter()
+    {
+        //Arrange
+        const string Query = "SELECT 1 /* \u202E */";
+        const string Message = "A consulta de verificação não pode ter caractere de controle nem de direção do texto.";
+
+        //Act
+        var create = CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(engine: EDatabaseEngine.PostgreSql) with { VerificationQuery = Query });
+        var update = UpdateValidator.TestValidate(ConnectionFakers.ReturnUpdateConnectionCommandValid() with { VerificationQuery = Query });
+        var test = new Prism.Application.Connections.Features.TestConnection.TestConnectionValidator().TestValidate(new Prism.Application.Connections.Features.TestConnection.TestConnectionCommand
+        {
+            Engine = EDatabaseEngine.PostgreSql,
+            Host = "postgres.exemplo.invalid",
+            Port = 5432,
+            Database = "estoque",
+            UserName = "datafix",
+            Password = "senha-ficticia",
+            VerificationQuery = Query
+        });
+        var multiline = CreateValidator.TestValidate(ConnectionFakers.ReturnCreateConnectionCommandValid(engine: EDatabaseEngine.PostgreSql) with { VerificationQuery = "SELECT 1\r\n\tWHERE true" });
+
+        //Assert
+        create.ShouldHaveValidationErrorFor(nameof(CreateConnectionCommand.VerificationQuery)).WithErrorCode("CONNECTION_INVALID").WithErrorMessage(Message);
+        update.ShouldHaveValidationErrorFor(nameof(UpdateConnectionCommand.VerificationQuery)).WithErrorCode("CONNECTION_INVALID").WithErrorMessage(Message);
+        test.ShouldHaveValidationErrorFor("VerificationQuery").WithErrorCode("CONNECTION_INVALID").WithErrorMessage(Message);
+        multiline.ShouldNotHaveAnyValidationErrors();
+    }
+
     [Trait("UpdateConnectionValidator", "UpdateConnectionCommand")]
     [Fact(DisplayName = "OK com as proteções, a verificação e a senha do usuário")]
     public void UpdateConnection_ShouldBeOK_WithTheSafeguards()

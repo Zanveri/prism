@@ -39,6 +39,8 @@ type VaultLockProps = {
   isBusy: () => boolean;
   /** Solta o que dependia do cofre aberto, mantendo as abas e o texto de SQL (`discardForLock`, do provedor da área de trabalho). */
   discard: () => void;
+  /** RN-SEG-001 e RN-EXPORT-023: quantas exportações com a entrega que falhou o bloqueio vai descartar (o aviso de antes dele diz). */
+  discardedExports?: () => number;
 };
 
 /**
@@ -62,7 +64,7 @@ type VaultLockProps = {
  * valem para todas. A janela que bloqueia conta às outras, que bloqueiam também, sem fechar o cofre de novo; a que desbloqueia (depois de conferir
  * a senha e o usuário) conta, e as outras soltam a barreira.
  */
-export function VaultLock({ isBusy, discard }: VaultLockProps) {
+export function VaultLock({ isBusy, discard, discardedExports }: VaultLockProps) {
   const queryClient = useQueryClient();
   const { preferences } = usePreferences();
   const { lockEnabled, lockAfterMinutes } = preferences.security;
@@ -102,10 +104,11 @@ export function VaultLock({ isBusy, discard }: VaultLockProps) {
         }}
       />
     );
+  const discarded = secondsLeft === null ? 0 : (discardedExports?.() ?? 0);
   return (
     <>
-      <IdleAnnouncer active={secondsLeft !== null} />
-      {secondsLeft === null ? null : <IdleWarning secondsLeft={secondsLeft} />}
+      <IdleAnnouncer active={secondsLeft !== null} discardedExports={discarded} />
+      {secondsLeft === null ? null : <IdleWarning secondsLeft={secondsLeft} discardedExports={discarded} />}
     </>
   );
 }

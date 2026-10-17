@@ -40,13 +40,15 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return undefined;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
-      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows, filterApplied } = state;
+      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows, filterApplied, read } = state;
       return {
         ...{ status, id, target, columns, rows, hasMore, totalRows, elapsedMs, pages, cursorClosed, total },
         ...(resultId === undefined ? {} : { resultId }),
         ...(readOnly === undefined ? {} : { readOnly }),
         // RN-GRADE-011: como o filtro do resultado entrou; o filtro viaja no `target`, e "Executar de novo" na outra janela o repete.
         ...(filterApplied === undefined || filterApplied === null ? {} : { filterApplied }),
+        // RN-EXPORT-002: o "Exportar…" do resultado continua valendo na outra janela.
+        ...(read === undefined || read === null ? {} : { read }),
         truncated: pairsOf(truncated),
         // RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou.
         ...(generated === undefined || generated.size === 0 ? {} : { generated: pairsOf(generated) }),

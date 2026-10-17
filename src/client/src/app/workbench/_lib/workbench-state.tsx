@@ -26,6 +26,7 @@ import { withDatabase } from "./tab-database";
 import { readTransfer } from "./tab-transfer";
 import { unsavedEdits } from "./unsaved-edits";
 import { createQueryRunner, isPersonBusy, type QueryRunner } from "./use-query-runner";
+import { connectExports, exportTracker } from "./data-export/data-exports";
 import { createLockHandles } from "./workbench-lock";
 import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type TableView } from "./workbench-model";
 import { workbenchCopy } from "./workbench.copy";
@@ -220,6 +221,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     filterHandoff.forgetExcept(tabs.flatMap((tab) => (tab.table && tab.connectionId !== null ? [{ connectionId: tab.connectionId, table: { ...inDatabase(tab.database), ...tab.table } }] : [])));
   }, [tabs]);
 
+  // RN-EXPORT-016 e 021: as exportações desta janela avisam pelos avisos do app; as da página de antes (que caiu ou recarregou) são canceladas; e sair do
+  // cofre (o provedor desmonta) as esquece e solta os destinos.
+  useEffect(() => connectExports(toast), [toast]);
+
   // O filtro pedido que ninguém levou a tempo (a aba da tabela estava ocupada, ou a conexão desconectada) não some calado.
   useEffect(() => filterHandoff.onExpired((table) => toast.warning(workbenchCopy.toasts.filterNotApplied(`${table.schema}.${table.name}`))), [toast]);
 
@@ -355,7 +360,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   // há) e "solta o que dependia do cofre" (`discardForLock`: as abas, o texto de SQL, a aba ativa e os nós abertos da árvore FICAM). Quem chama
   // arma a espera dos pedidos ANTES: um pedido nascido destas mudanças não pode chegar à API com o cofre ainda aberto. A montagem e o porquê
   // estão em `createLockHandles`, em `workbench-lock.ts`.
-  const { isBusy, discard } = createLockHandles({ runners, tabs, createRunner, setTabs, queryClient });
+  const lockHandles = createLockHandles({ runners, tabs, createRunner, setTabs, queryClient });
+  // RN-SEG-001 e RN-EXPORT-023: a exportação de dados em andamento é comando em andamento desta janela, do começo até a entrega; a entrega que falhou não
+  // segura, e o bloqueio a descarta (a API fecha o cofre e esquece os trabalhos; a tela solta os destinos).
+  const isBusy = () => lockHandles.isBusy() || exportTracker.holdsLock();
+  const discard = () => {
+    lockHandles.discard();
+    void exportTracker.vaultClosed();
+  };
 
   const openQueryTab = useCallback(
     (connectionId: string, sql = "", database?: string) => addTab({ id: crypto.randomUUID(), title: `consulta-${nextNumber.current++}.sql`, connectionId, ...inDatabase(database), sessionId: null, sql }),
@@ -638,7 +650,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   return (
     <WorkbenchContext.Provider value={value}>
       {children}
-      <VaultLock isBusy={isBusy} discard={discard} />
+      <VaultLock isBusy={isBusy} discard={discard} discardedExports={exportTracker.failedDeliveries} />
     </WorkbenchContext.Provider>
   );
 }

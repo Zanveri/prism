@@ -4,8 +4,8 @@ using System.Globalization;
 namespace Prism.Application.Common.Texts;
 
 /// <summary>
-/// As regras de texto que valem para mais de um cadastro, num lugar só (RN-PASTA-001 e RN-CONN-010): o caractere de controle e o de direção do texto, e o
-/// corte de um texto longo sem partir um caractere. Os validators, a importação de conexões (RN-TRANSF-014) e a prévia dela (RN-TRANSF-011) as aplicam daqui.
+/// As regras de texto que valem para mais de um cadastro, num lugar só (RN-PASTA-001, RN-CONN-010 e RN-VERIF-001): o caractere de controle e o de direção do
+/// texto, e o corte de um texto longo sem partir um caractere. Os validators, a importação de conexões (RN-TRANSF-014) e a prévia dela (RN-TRANSF-011) as aplicam daqui.
 /// </summary>
 internal static class TextRules
 {
@@ -19,6 +19,13 @@ internal static class TextRules
 
     public static bool HasControlOrDirection(string text)
         => text.Any(IsControlOrDirection);
+
+    /// <summary>
+    /// RN-VERIF-001: a mesma recusa num texto de várias linhas, a consulta de verificação, que pode ter a tabulação, a quebra de linha e o retorno de carro
+    /// (é SQL escrito pela pessoa); os outros caracteres de controle e os de direção do texto, não.
+    /// </summary>
+    public static bool HasControlOrDirectionBesidesLineBreaks(string text)
+        => text.Any(character => character is not ('\t' or '\n' or '\r') && IsControlOrDirection(character));
 
     /// <summary>
     /// O texto até <paramref name="length"/> unidades UTF-16, cortado no fim de um caractere inteiro (um emoji, uma letra com acento combinado). É o corte do

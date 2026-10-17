@@ -42,7 +42,8 @@ internal static class ConnectionRules
     /// As regras de cada campo da conexão (RN-CONN-010), num lugar só: o validator de criar, o de alterar e o do teste as aplicam pelo `MustPass`, e a
     /// importação (RN-TRANSF-014) as chama direto, com a mesma frase. Cada uma devolve o primeiro motivo da recusa, ou nulo quando o valor serve. Os textos
     /// são medidos depois da normalização de cada campo (o nome pela `NormalizeName`, o host, o banco e o usuário aparados), que é o que se grava, e o
-    /// caractere de controle e o de direção do texto (`TextRules`) são recusados no nome, no host, no banco de dados e no usuário.
+    /// caractere de controle e o de direção do texto (`TextRules`) são recusados no nome, no host, no banco de dados e no usuário (e, menos a tabulação e as
+    /// quebras de linha, na consulta de verificação, <see cref="VerificationQueryRefusal"/>).
     /// </summary>
     public static string? NameRefusal(string? name)
     {
@@ -105,8 +106,10 @@ internal static class ConnectionRules
         => string.IsNullOrWhiteSpace(query) ? null : query.Trim();
 
     /// <summary>
-    /// RN-VERIF-001: por que a consulta de verificação não serve, ou nula quando serve (a do banco, em branco, sempre serve). Até 1.000 caracteres e uma
-    /// leitura só no banco da conexão (RN-PROT-005, `ReadOnlySql`), a regra de quem a valida no formulário e no teste.
+    /// RN-VERIF-001: por que a consulta de verificação não serve, ou nula quando serve (a do banco, em branco, sempre serve). Nesta ordem: até 1.000
+    /// caracteres; sem caractere de controle nem de direção do texto, menos a tabulação, a quebra de linha e o retorno de carro (`TextRules`: um U+202E faria a
+    /// consulta que a prévia da importação manda conferir parecer outra, RN-TRANSF-011); e uma leitura só no banco da conexão (RN-PROT-005, `ReadOnlySql`).
+    /// É a regra de quem a valida no formulário de criar e de alterar, no teste e na importação (RN-TRANSF-014), com as mesmas frases.
     /// </summary>
     public static string? VerificationQueryRefusal(string? query, EDatabaseEngine engine)
     {
@@ -115,6 +118,9 @@ internal static class ConnectionRules
 
         if (normalized.Length > VerificationQueryMaxLength)
             return "A consulta de verificação pode ter no máximo 1.000 caracteres.";
+
+        if (TextRules.HasControlOrDirectionBesidesLineBreaks(normalized))
+            return "A consulta de verificação não pode ter caractere de controle nem de direção do texto.";
 
         return ReadOnlySql.VerificationRefusal(normalized, engine) is { } reason ? $"A consulta de verificação tem de ser uma leitura só: {reason}." : null;
     }

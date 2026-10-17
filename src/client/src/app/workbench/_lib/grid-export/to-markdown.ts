@@ -6,7 +6,8 @@ import type { GridSlice } from "./grid-slice";
  */
 const special = /[\\|`*_~[\]<&]/g;
 
-function cell(text: string): string {
+/** Uma célula da tabela, com o escape acima e a quebra de linha como `<br>`: a mesma da exportação da API (RN-EXPORT-009), conferida pela fixture `markdown-cell.json` (RN-EXPORT-024). */
+export function markdownCell(text: string): string {
   const escaped = text.replace(special, (char) => (char === "<" ? "&lt;" : char === "&" ? "&amp;" : `\\${char}`));
   // Depois do escape: o <br> que a quebra de linha vira é nosso, e não pode ser escapado.
   return escaped.replace(/\r\n|\r|\n/g, "<br>");
@@ -22,9 +23,9 @@ export function toMarkdown(slice: GridSlice): string {
 
   const line = (cells: string[]) => `| ${cells.join(" | ")} |`;
   const lines = [
-    line(slice.columns.map((column) => cell(column.name))),
+    line(slice.columns.map((column) => markdownCell(column.name))),
     line(slice.columns.map((column) => (column.kind === "number" ? "---:" : "---"))),
-    ...slice.rows.map((row) => line(row.map((value) => (value === null ? "" : cell(value))))),
+    ...slice.rows.map((row) => line(row.map((value) => (value === null ? "" : markdownCell(value))))),
   ];
 
   return `${lines.join("\n")}\n`;

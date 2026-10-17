@@ -192,6 +192,17 @@ describe("csvFileName: o nome que o diálogo de salvar propõe", () => {
     expect(csvFileName("s", "x".repeat(500)).endsWith(".csv")).toBe(true);
   });
 
+  it("o corte é em 120 pontos de código, e não em unidades UTF-16: o emoji conta um, e nunca é partido ao meio (RN-EXPORT-014)", () => {
+    const emoji = String.fromCodePoint(0x1f600);
+    const cut = csvFileName("s", emoji.repeat(200));
+
+    expect(Array.from(cut.slice(0, -".csv".length))).toHaveLength(120);
+    expect(cut).toBe(`s.${emoji.repeat(118)}.csv`);
+    // O 119º caractere é um emoji inteiro: o `slice` de antes, em unidades UTF-16, deixava a metade dele (um substituto solto) no fim.
+    expect(csvFileName("s", `${"x".repeat(117)}${emoji}${emoji}`)).toBe(`s.${"x".repeat(117)}${emoji}.csv`);
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(csvFileName("s", `${"x".repeat(117)}${emoji}${emoji}`))).toBe(false);
+  });
+
   it("um nome que sobra vazio cai num nome padrão", () => {
     expect(csvFileName("", "")).toBe("registros.csv");
     expect(csvFileName("...", "   ")).toBe("registros.csv");

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
+import type { CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest } from "./transfer-messages";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
 import type { PeerEvent, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
@@ -11,7 +12,7 @@ import type { WorkspaceReport } from "./workspace-messages";
  * da API, o aviso de que ela saiu, o pedido para reiniciá-la, a versão do app (RN-VERSAO-004) e a
  * pasta de dados em uso (só leitura). É tudo o que a tela recebe do processo principal, mais as
  * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`), as abas que voltam na próxima entrada
- * (`workspace`) e o zoom do programa (`zoom`).
+ * (`workspace`), o zoom do programa (`zoom`) e o destino e a entrega das exportações de dados (`transfers`).
  */
 export type PrismBridge = {
   getApiConfig(): Promise<{ baseUrl: string; token: string }>;
@@ -30,6 +31,28 @@ export type PrismBridge = {
   verification: PrismVerification;
   workspace: PrismWorkspace;
   zoom: PrismZoom;
+  transfers: PrismTransfers;
+};
+
+/**
+ * O destino e a entrega de uma exportação de dados (RN-EXPORT-019 e 020). O processo principal abre o diálogo de salvar e guarda o caminho escolhido: a tela
+ * recebe um identificador do destino e o nome do arquivo, nunca a pasta. Quando a API termina o arquivo, a tela pede a entrega com o identificador do
+ * trabalho, e o processo principal o acha na pasta `transfers` da pasta de dados. **Nenhum pedido leva um caminho, e nenhuma resposta devolve um**; o
+ * processo principal confere cada pedido com o schema de `transfer-messages.ts`, e a resposta (aqui sem tipo) a tela confere de novo.
+ */
+export type PrismTransfers = {
+  /** Há processo principal para escolher o destino? Fora do Electron (a ponte de desenvolvimento) não há, e o "Exportar" diz que só funciona no app. */
+  available: boolean;
+  /** Abre o diálogo de salvar com o nome proposto (sem extensão) e a extensão da lista fixa (`destinationReplySchema`). */
+  chooseDestination(request: DestinationRequest): Promise<unknown>;
+  /** Leva o arquivo pronto do trabalho ao destino (`deliverReplySchema`). */
+  deliver(request: DeliverRequest): Promise<unknown>;
+  /** Põe o texto pronto do trabalho na área de transferência (`copyReplySchema`). */
+  copy(request: CopyRequest): Promise<unknown>;
+  /** "Mostrar na pasta": o arquivo da entrega, só na janela que a pediu. */
+  reveal(request: RevealRequest): Promise<void>;
+  /** Solta o destino; a entrega em andamento para. */
+  release(request: ReleaseRequest): Promise<void>;
 };
 
 /**
@@ -226,6 +249,14 @@ const bridge: PrismBridge = {
       ipcRenderer.on("prism:session-peer", handler);
       return () => ipcRenderer.removeListener("prism:session-peer", handler);
     },
+  },
+  transfers: {
+    available: true,
+    chooseDestination: (request) => ipcRenderer.invoke("prism:transfer-destination", request),
+    deliver: (request) => ipcRenderer.invoke("prism:transfer-deliver", request),
+    copy: (request) => ipcRenderer.invoke("prism:transfer-copy", request),
+    reveal: (request) => ipcRenderer.invoke("prism:transfer-reveal", request),
+    release: (request) => ipcRenderer.invoke("prism:transfer-release", request),
   },
   verification: {
     claim: (claim) => ipcRenderer.invoke("prism:verification-claim", claim),

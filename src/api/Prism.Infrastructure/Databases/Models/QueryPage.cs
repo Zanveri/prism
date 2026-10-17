@@ -18,4 +18,8 @@ namespace Prism.Infrastructure.Databases.Models;
 /// dentro desta página. Quem o põe é o registro de sessões.
 /// </param>
 /// <param name="FilterApplied">RN-GRADE-011: como o filtro do resultado entrou no comando; nulo sem filtro. Quem o põe é o registro de sessões.</param>
-public sealed record QueryPage(IReadOnlyList<QueryColumn> Columns, IReadOnlyList<string?[]> Rows, bool HasMore, long ElapsedMs, IReadOnlyList<int[]> TruncatedCells, long? TotalRows = null, Guid? ResultID = null, ResultEditability? Editable = null, IReadOnlyList<FullCellValue>? FullValues = null, IReadOnlyList<int[]>? CellsWithoutFullValue = null, EFilterApplied? FilterApplied = null);
+/// <param name="Read">
+/// RN-EXPORT-001 e 002: o comando executado, com o filtro, é uma leitura só pela regra do somente leitura (RN-PROT-005) e não gravou (não veio pelo
+/// caminho da RN-SQL-013). É o que habilita exportar o resultado inteiro. Quem o põe é o registro de sessões.
+/// </param>
+public sealed record QueryPage(IReadOnlyList<QueryColumn> Columns, IReadOnlyList<string?[]> Rows, bool HasMore, long ElapsedMs, IReadOnlyList<int[]> TruncatedCells, long? TotalRows = null, Guid? ResultID = null, ResultEditability? Editable = null, IReadOnlyList<FullCellValue>? FullValues = null, IReadOnlyList<int[]>? CellsWithoutFullValue = null, EFilterApplied? FilterApplied = null, bool Read = false);

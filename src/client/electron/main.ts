@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { execFile, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,6 +14,7 @@ import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./
 import type { ApiConfigReply } from "./preload";
 import { createSplash, splashGeometry } from "./splash";
 import { startUp } from "./startup";
+import { createTransferDesk } from "./transfer-desk";
 import { installedForAllUsers } from "./update/install-scope";
 import { createHttpGet } from "./update/net-transport";
 import { resolveOrigin, updatesBlocked } from "./update/origin";
@@ -204,6 +206,28 @@ function assertFromApp(event: IpcMainInvokeEvent) {
   if (event.senderFrame?.url.startsWith(`${rendererOrigin}/`) !== true) throw new Error("Pedido de origem desconhecida.");
 }
 
+/**
+ * O destino e a entrega das exportações de dados (RN-EXPORT-019 e 020, `transfer-desk.ts`): este processo abre o diálogo de salvar, guarda o caminho escolhido
+ * (a tela recebe um identificador e o nome do arquivo, nunca a pasta) e, quando a API termina o arquivo na pasta `transfers` da pasta de dados, o leva ao
+ * destino. Nenhum canal recebe um caminho da tela nem devolve um a ela; o arquivo pronto é achado só pelo identificador do trabalho.
+ */
+const transferDesk = createTransferDesk({
+  dataDir: app.getPath("userData"),
+  downloadsDir: () => app.getPath("downloads"),
+  platform: process.platform,
+  async showSaveDialog(windowId, options) {
+    const window = appWindows.get(windowId);
+    // `showOverwriteConfirmation`: no Linux o diálogo não pergunta antes de substituir sem ela (no Windows e no macOS pergunta sempre).
+    const settings = { ...options, properties: ["showOverwriteConfirmation", "createDirectory"] as ("showOverwriteConfirmation" | "createDirectory")[] };
+    const result = window === undefined || window.isDestroyed() ? await dialog.showSaveDialog(settings) : await dialog.showSaveDialog(window, settings);
+    return result.canceled || result.filePath === undefined ? null : result.filePath;
+  },
+  writeClipboard: (text) => clipboard.writeText(text),
+  reveal: (path) => shell.showItemInFolder(path),
+  log: (message) => console.log(`[prism] ${message}`),
+  randomId: () => randomUUID(),
+});
+
 ipcMain.handle("prism:api-config", (event) => {
   assertFromApp(event);
   return describeApi();
@@ -211,6 +235,8 @@ ipcMain.handle("prism:api-config", (event) => {
 
 ipcMain.handle("prism:api-restart", async (event) => {
   assertFromApp(event);
+  // RN-EXPORT-019: o serviço que reinicia solta todos os destinos (a API nova não tem os trabalhos da de antes).
+  await transferDesk.releaseAll();
   await stopApi();
   launchApi();
   // A API nova tem outro token e o cofre fechado: as outras janelas, que mostram "Reiniciar" com a mesma falha, recarregam e pedem o endereço de
@@ -300,7 +326,7 @@ function startUpdater() {
     spawn: (command, args, options) => spawn(command, args, options),
     // Antes de o instalador rodar: o mesmo fechamento do `before-quit` (grava as abas, fecha o cofre e para a API), que só volta quando o
     // processo da API terminou. O instalador desinstala a versão antiga, e a API viva seguraria os arquivos dela.
-    stopApi: () => workspaceHub.flush().then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`)))),
+    stopApi: () => Promise.all([transferDesk.releaseAll(), workspaceHub.flush()]).then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`)))),
     // O caminho normal de saída. No caminho de instalar a API já parou, e o `before-quit` não tem o que esperar.
     quit: () => app.quit(),
     reveal: (path) => shell.showItemInFolder(path),
@@ -432,10 +458,13 @@ function createAppWindow(bounds?: Rect) {
     if (!details.isMainFrame || details.isSameDocument) return;
     hub.setReady(id, false);
     workspaceHub.withdraw(id);
+    // RN-EXPORT-019: a página que recarrega não acompanha mais as exportações dela; a entrega em andamento para, e a cópia pela metade é apagada.
+    void transferDesk.releaseWindow(id);
   });
   window.webContents.on("render-process-gone", () => {
     hub.setReady(id, false);
     workspaceHub.withdraw(id);
+    void transferDesk.releaseWindow(id);
   });
 
   // RN-ABAS-004: fechar a janela fecha as abas dela, com as perguntas de fechar cada uma. Quem pergunta é a tela; quando as abas fecharam, ela pede
@@ -452,6 +481,7 @@ function createAppWindow(bounds?: Rect) {
     appWindows.delete(id);
     closeApproved.delete(id);
     hub.remove(id);
+    void transferDesk.windowClosed(id);
     // RN-ABAS-006: a última janela (ou qualquer uma, com o app saindo) leva as abas para a gravação de antes de sair; as outras as tiram do que volta.
     workspaceHub.windowClosed(id, { last: quitting !== "no" || liveWindowIds().length === 0 });
   });
@@ -556,6 +586,29 @@ ipcMain.handle("prism:verification-finish", (event, done: unknown) => {
   hub.finishVerification(windowIdOf(event.sender), done);
 });
 
+// RN-EXPORT-019 e 020: o destino e a entrega das exportações de dados. Cada pedido confere a origem, e o `transferDesk` confere o conteúdo com o schema de
+// `transfer-messages.ts` e a janela de quem pede (o destino e a entrega são da janela que os pediu).
+ipcMain.handle("prism:transfer-destination", (event, request: unknown) => {
+  assertFromApp(event);
+  return transferDesk.chooseDestination(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:transfer-deliver", (event, request: unknown) => {
+  assertFromApp(event);
+  return transferDesk.deliver(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:transfer-copy", (event, request: unknown) => {
+  assertFromApp(event);
+  return transferDesk.copy(request);
+});
+ipcMain.handle("prism:transfer-reveal", (event, request: unknown) => {
+  assertFromApp(event);
+  transferDesk.reveal(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:transfer-release", (event, request: unknown) => {
+  assertFromApp(event);
+  return transferDesk.release(windowIdOf(event.sender), request);
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -587,9 +640,9 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting === "closing") return;
 
     quitting = "closing";
-    // RN-ABAS-006: as abas de todas as janelas são gravadas antes de o cofre fechar.
-    void workspaceHub
-      .flush()
+    // RN-ABAS-006: as abas de todas as janelas são gravadas antes de o cofre fechar. RN-EXPORT-023: a entrega em andamento para, e a cópia pela metade é
+    // apagada (o que sobrar em `transfers`, a API apaga ao encerrar ou na partida seguinte).
+    void Promise.all([transferDesk.releaseAll(), workspaceHub.flush()])
       .then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`))))
       .finally(() => {
         quitting = "ready";

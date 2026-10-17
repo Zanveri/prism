@@ -49,3 +49,21 @@ describe("toast-queue (RN-AVISO-006)", () => {
     expect(dismissToast(queueOf(3), "2").map((item) => item.id)).toEqual(["1", "3"]);
   });
 });
+
+describe("o aviso com um botão de ação (RN-AVISO-006)", () => {
+  const reveal = { label: "Mostrar na pasta", run: () => {} };
+
+  it("fica 8 segundos também no tom de sucesso, que sem ação some em 4", () => {
+    let queue = pushToast([], { tone: "success", title: "Tabela pedido exportada: 3 linhas em pedido.csv.", action: reveal }, "a");
+    queue = pushToast(queue, { tone: "success", title: "Conexão criada." }, "b");
+
+    expect(queue.map((item) => [item.id, item.durationMs])).toEqual([["a", 8000], ["b", 4000]]);
+  });
+
+  it("um aviso igual ao último, mas com outra ação (ou sem ela), empilha: é outro aviso", () => {
+    const queue = pushToast([], { tone: "success", title: "Pronto.", action: reveal }, "a");
+
+    expect(pushToast(queue, { tone: "success", title: "Pronto.", action: reveal }, "b")).toEqual(queue);
+    expect(pushToast(queue, { tone: "success", title: "Pronto." }, "b")).toHaveLength(2);
+  });
+});

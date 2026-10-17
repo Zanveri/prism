@@ -44,6 +44,8 @@ const resultSchema = z.discriminatedUnion("status", [
     readOnly: name.nullable().optional(),
     /** RN-GRADE-011: como o filtro do resultado entrou no comando. */
     filterApplied: z.enum(["merged", "wrapped"]).optional(),
+    /** RN-EXPORT-002: o comando do resultado é só leitura e não gravou: o "Exportar…" vale na janela que recebe. */
+    read: z.boolean().optional(),
     /** RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou, como `truncated`. */
     generated: z.array(z.tuple([count, z.array(count)])).optional(),
     /** RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas; nula na linha nova. */

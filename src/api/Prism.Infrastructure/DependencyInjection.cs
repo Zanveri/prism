@@ -10,6 +10,9 @@ using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers;
 using Prism.Infrastructure.Drivers.Clients;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Transfers.Clients;
+using Prism.Infrastructure.Transfers.Models;
+using Prism.Infrastructure.Transfers.Services;
 using Prism.Infrastructure.Vault.Clients;
 using Prism.Infrastructure.Vault.Models;
 using Prism.Infrastructure.Vault.Services;
@@ -63,6 +66,12 @@ public static class DependencyInjection
 
         // O gerenciador de drivers sob demanda (seção 16 da especificação): catálogo, instalação e estado.
         services.AddDrivers(dataDirectory);
+
+        // RN-EXPORT-016 e 018: o registro das transferências em segundo plano e a pasta `transfers` dos arquivos temporários. Singleton, como o registro
+        // de sessões: um trabalho atravessa várias requisições (decisão 3 da seção 8), e o descarte do contêiner (o desligamento da API) os cancela.
+        services.AddSingleton(TransferSettings.For(dataDirectory));
+        services.AddTransient<ITransferFileClient, TransferFileClient>();
+        services.AddSingleton<ITransferService, TransferService>();
 
         return services;
     }

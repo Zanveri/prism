@@ -61,4 +61,4 @@ export { Select, type SelectOption } from "./select";
 export { StatusBadge, statusBadgeVariants, type StatusBadgeProps } from "./status-badge";
 export { TextField, type TextFieldProps } from "./text-field";
 export { ToastProvider, useToast } from "./toast";
-export { type ToastTone } from "./toast-queue";
+export { type ToastAction, type ToastTone } from "./toast-queue";

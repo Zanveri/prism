@@ -24,6 +24,7 @@ import { vaultLock } from "@/lib/api/vault-lock";
 import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
 import { credentialsMissingField } from "../_lib/credentials-missing";
+import { openExportWizard } from "../_lib/data-export/data-exports";
 import { databaseOfKey, databaseSessionKey, databaseSessionQuery, errorCodeOf, errorDriverIdOf, isSessionLost, reopenDatabaseSession, treeKey, treePrefixes, treeQuery, type FetchedPath } from "../_lib/database-sessions.service";
 import { backgroundMenu, ignoresContextMenu, keyActionFor, menuFor, type MenuAction } from "../_lib/navigator-menu";
 import { childrenKey, databaseRefOf, flattenVisible, inDatabase, isFocusable, navKey, ownerConnectionId, parentRowIndex, parseNavKey, schemaGroupNodes, tabbableKey, tableGroupNodes, tableTargetOf, treeNodes, type LevelState, type NavNode, type NavPath } from "../_lib/navigator-model";
@@ -101,6 +102,8 @@ const menuIcons: Readonly<Record<string, ReactNode>> = {
   openStructure: <ColumnsIcon />,
   openDiagram: <DiagramIcon />,
   generateSelect: <DocumentIcon />,
+  // RN-EXPORT-001: a seta de baixar que o app já tem (a do "Exportar CSV").
+  exportData: <DownloadIcon />,
   newFolder: <FolderPlusIcon />,
   renameFolder: <PencilIcon />,
   editFolder: <PencilIcon />,
@@ -538,6 +541,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         if (target !== null && engine !== undefined) openQueryTab(target.connectionId, selectAllSql(engine, target.schema, target.name), target.database);
         return;
       }
+      // RN-EXPORT-001: o assistente "Exportar dados", com a tabela (ou a visão) inteira como origem; as colunas ele lê do catálogo ao abrir a Extração.
+      case "exportData":
+        if (target !== null) openExportWizard({ connectionId: target.connectionId, ...inDatabase(target.database), origin: { kind: "table", view: node.kind === "view", schema: target.schema, name: target.name }, columns: null, unsavedEdits: 0 });
+        return;
       case "copy":
         void copyText(action.text);
         return;

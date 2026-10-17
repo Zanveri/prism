@@ -33,6 +33,11 @@ export type QueryPage = {
    * FROM (<comando>) … WHERE …`); nulo sem filtro.
    */
   filterApplied?: FilterApplied | null;
+  /**
+   * RN-EXPORT-002: o comando executado, com o filtro, é uma leitura pela regra do somente leitura (RN-PROT-005) e não gravou (RN-SQL-013). É o que habilita o
+   * "Exportar…" do resultado (RN-EXPORT-001). Nulo quando a API não o diz: na dúvida, não é leitura.
+   */
+  read?: boolean | null;
 };
 
 /** RN-GRADE-011: o filtro do resultado juntado ao comando (`merged`) ou por fora dele (`wrapped`). */
@@ -64,6 +69,8 @@ const responseSchema = z.object({
   editable: z.object({ known: z.boolean(), reason: z.string().nullish() }).nullish().catch(null),
   // RN-GRADE-011: um valor que a tela não conhece não recusa a página, que o banco já entregou; só não se sabe como o filtro entrou.
   filterApplied: z.enum(["merged", "wrapped"]).nullish().catch(null),
+  // RN-EXPORT-002: fora do formato não recusa a página; só o "Exportar…" fica desabilitado, como na dúvida.
+  read: z.boolean().nullish().catch(null),
 });
 
 export const queryResultSchema = responseSchema.transform((response, context): QueryResult => {
@@ -78,7 +85,7 @@ export const queryResultSchema = responseSchema.transform((response, context): Q
   if (rows.some((row) => row.length !== columns.length)) return refuse("Há linha com tamanho diferente do número de colunas.");
 
   const readOnly = response.editable?.known === true ? (response.editable.reason ?? null) : null;
-  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly, filterApplied: response.filterApplied ?? null };
+  return { kind: "rows", columns, rows, hasMore: response.hasMore ?? false, elapsedMs, truncatedCells: response.truncatedCells ?? [], totalRows: response.totalRows ?? null, resultId: response.resultID ?? null, readOnly, filterApplied: response.filterApplied ?? null, read: response.read ?? null };
 });
 
 /** "Carregar mais" só devolve página de linhas. */

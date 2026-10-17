@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils/cn";
 import { createToastApi, type ToastApi } from "./toast-api";
 import { dismissToast, type ToastItem, type ToastTone } from "./toast-queue";
 
+export type { ToastAction } from "./toast-queue";
+
 const ToastContext = createContext<ToastApi | null>(null);
 
 /**
@@ -125,6 +127,19 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: str
           <p className="font-medium break-words">{toast.title}</p>
           {/* O detalhe pode ser a mensagem de um banco: é texto, quebra onde precisar e para em quatro linhas. */}
           {toast.description === undefined ? null : <p className="mt-0.5 line-clamp-4 text-sm break-words text-muted">{toast.description}</p>}
+          {/* RN-AVISO-006: o botão de ação ("Mostrar na pasta"). Receber o foco pausa o relógio, como o hover; usado, o aviso sai. */}
+          {toast.action === undefined ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                toast.action?.run();
+                onDismiss(toast.id);
+              }}
+              className="mt-1.5 -ml-1 cursor-pointer rounded-md px-1 py-0.5 text-sm font-medium text-accent transition-colors hover:bg-selected hover:text-ink"
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
 
         <button type="button" aria-label="Fechar aviso" title="Fechar aviso" onClick={() => onDismiss(toast.id)} className="-mt-1 flex size-7 flex-none cursor-pointer items-center justify-center rounded-md text-base leading-none text-subtle transition-colors hover:bg-selected hover:text-ink">

@@ -1,12 +1,13 @@
 import type { AutoRefreshAction } from "./auto-refresh-menu";
 import type { EditAccess } from "./cell-editing";
 import type { FilterAction } from "./filter-menu";
+import { dataExportCopy } from "./data-export/data-export.copy";
 import { editShortcuts, type EditShortcut, type RowShortcut } from "./grid-editing";
 import { recordsCopy } from "./records.copy";
 
 const copy = recordsCopy.edit.menu;
 
-export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "duplicateRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction;
+export type CellMenuAction = "copy" | "paste" | "edit" | "setNull" | "undo" | "newRow" | "duplicateRow" | "deleteRow" | "filter" | "refresh" | FilterAction | "autoRefresh" | AutoRefreshAction | "exportData";
 
 /**
  * Um item do menu da célula. O modelo só descreve; quem executa é a vista Registros, que tem as pendências e a área de transferência. `checked`: o item é
@@ -38,6 +39,11 @@ export type CellMenuState = {
   refresh?: EditAccess;
   /** RN-GRADE-014: "Atualizar automaticamente", com o submenu dos intervalos (`autoRefreshMenuItem`), logo depois do "Atualizar". */
   autoRefresh?: CellMenuItem;
+  /**
+   * RN-EXPORT-001 e RN-GRADE-004: "Exportar dados…", que abre o assistente com a origem desta grade, num grupo próprio antes dos itens da linha (o "Gerar SQL"
+   * e o "Ir para o registro referenciado", que viriam antes, ainda não estão no menu). Desabilitado com o motivo quando não se aplica.
+   */
+  exportData?: EditAccess;
   /** RN-EDIT-015: os atalhos como a plataforma os escreve (`editShortcuts`), os mesmos das dicas da barra de edição; sem eles, os do Windows e do Linux. */
   shortcuts?: Record<"edit" | RowShortcut, EditShortcut>;
 };
@@ -72,6 +78,7 @@ export function cellMenu(state: CellMenuState): CellMenuItem[][] {
       { id: "undo", label: copy.undo, disabled: !state.pending && !state.deletedRow },
     ],
     ...(view.length === 0 ? [] : [view]),
+    ...(state.exportData === undefined ? [] : [[{ id: "exportData" as const, label: dataExportCopy.entry.menu, disabled: false, ...hintOf(state.exportData) }]]),
     [
       { id: "newRow", label: copy.newRow, shortcut: shortcuts.newRow.label, ...hintOf(state.newRow) },
       { id: "duplicateRow", label: copy.duplicateRow, shortcut: shortcuts.duplicateRow.label, ...hintOf(state.duplicateRow) },

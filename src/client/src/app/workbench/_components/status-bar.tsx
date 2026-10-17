@@ -16,6 +16,7 @@ import { isConnected } from "../_lib/workbench-model";
 import { useWorkbench } from "../_lib/workbench-state";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { CheckFailureDialog, CheckLabel } from "./connection-check";
+import { TransferStatus } from "./data-export/transfer-status";
 
 const copy = workbenchCopy.status;
 
@@ -49,7 +50,7 @@ export function StatusConnectionState({ connectionId, name }: { connectionId: st
 /**
  * A barra de status: a conexão e o banco da aba ativa (o outro banco do servidor em que ela roda, RN-ARVORE-006 e 007, ou o da conexão) com a etiqueta do
  * ambiente (RN-CONN-015), o indicador da verificação periódica (RN-VERIF-003), o cadeado da conexão somente leitura (RN-PROT-002, com a dica de onde ele vem), "Auto-commit"
- * (RN-SESSAO-005: nesta fatia toda sessão é auto-commit) e o cofre aberto. "Conectada" é a mesma
+ * (RN-SESSAO-005: nesta fatia toda sessão é auto-commit), as exportações de dados desta janela (RN-EXPORT-021) e o cofre aberto. "Conectada" é a mesma
  * definição do navegador (`isConnected`): a árvore abriu a sessão dela, ou alguma aba tem a sua.
  */
 export function StatusBar() {
@@ -95,6 +96,8 @@ export function StatusBar() {
         </span>
       )}
       <span>{copy.autoCommit}</span>
+      {/* RN-EXPORT-021: as exportações desta janela, entre o modo de transação e o cofre. */}
+      <TransferStatus />
       {vault.data?.userName ? (
         <span className="ml-auto flex items-center gap-1.5">
           <LockOpenIcon />

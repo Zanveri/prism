@@ -33,4 +33,10 @@ public sealed record QueryResultDto
 
     /// <summary>RN-GRADE-011: como o filtro do resultado entrou no comando, `merged` (junto) ou `wrapped` (por fora, só leitura); nulo sem filtro e nas linhas afetadas.</summary>
     public string? FilterApplied { get; init; }
+
+    /// <summary>
+    /// RN-EXPORT-001 e 002 (seção 6): o comando executado, com o filtro, é uma leitura pela RN-PROT-005 e não veio pelo caminho da RN-SQL-013. É o que
+    /// habilita o "Exportar…" do resultado; falso nas linhas afetadas.
+    /// </summary>
+    public bool Read { get; init; }
 }

@@ -551,6 +551,8 @@ public sealed class DatabaseSessionsTests
         Assert.That(body.GetProperty("truncatedCells").GetArrayLength(), Is.Zero);
         Assert.That(body.GetProperty("rowsAffected").ValueKind, Is.EqualTo(JsonValueKind.Null));
         Assert.That(body.GetProperty("totalRows").ValueKind, Is.EqualTo(JsonValueKind.Null));
+        // RN-EXPORT-001 e 002: a leitura se exporta.
+        Assert.That(body.GetProperty("read").GetBoolean(), Is.True);
         var columns = body.GetProperty("columns").EnumerateArray().ToList();
         Assert.That(columns.Select(column => column.GetProperty("name").GetString()), Is.EqualTo(new[] { "numero", "observacao" }));
         Assert.That(columns.Select(column => column.GetProperty("kind").GetString()), Is.EqualTo(new[] { "number", "text" }));
@@ -654,6 +656,8 @@ public sealed class DatabaseSessionsTests
         Assert.That(body.GetProperty("rows").GetArrayLength(), Is.EqualTo(200));
         Assert.That(body.GetProperty("hasMore").GetBoolean(), Is.False);
         Assert.That(body.GetProperty("totalRows").GetInt64(), Is.EqualTo(1000));
+        // RN-EXPORT-002: exportar o executaria de novo, e ele grava.
+        Assert.That(body.GetProperty("read").GetBoolean(), Is.False);
         await AssertProblemAsync(await host.Client.PostAsync(Url(sessionID, "/queries/next"), null), HttpStatusCode.Conflict, "NO_OPEN_CURSOR");
         // Contar seria gravar de novo: o total que veio com a resposta é o que a contagem devolve.
         var count = await ReadJsonAsync(await host.Client.PostAsync(Url(sessionID, "/queries/count"), null));

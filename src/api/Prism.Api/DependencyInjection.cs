@@ -2,6 +2,7 @@ using Prism.Api.Filters;
 using Prism.Api.Hosting;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Transfers.Services;
 
 namespace Prism.Api;
 
@@ -50,6 +51,9 @@ public static class DependencyInjection
         // aqui roda a conferência da partida (a remoção marcada, a sobra de instalação interrompida, os hashes do que está instalado);
         // sem isto ela só rodaria na primeira requisição que o usasse.
         app.ApplicationServices.GetRequiredService<IDriverService>();
+
+        // RN-EXPORT-018: também é na subida que a pasta `transfers` é criada (ou volta ao modo só do dono) e esvaziada do que sobrou de uma execução que caiu.
+        app.ApplicationServices.GetRequiredService<ITransferService>();
 
         app.UseExceptionHandler(handler => handler.Run(WriteUnexpectedError));
 
