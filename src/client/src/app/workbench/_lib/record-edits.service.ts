@@ -1,7 +1,7 @@
 import { allowRefusal, apiRequest, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
-import { editPreviewSchema, editsAppliedSchema, editTargetSchema, type ApiChange, type EditPreview, type EditsApplied, type EditTarget } from "./record-edits.schema";
+import { editPreviewSchema, editsAppliedSchema, editTargetSchema, sqlTargetSchema, type ApiChange, type EditPreview, type EditsApplied, type EditTarget, type SqlTarget } from "./record-edits.schema";
 
 /**
  * As rotas da edição dos Registros (seção 22). Cada função devolve como valor as recusas que a faixa da grade mostra no próprio lugar
@@ -25,6 +25,22 @@ const saveRefusals = ["EDIT_ROW_MISMATCH", "EDIT_INVALID", "SQL_EXECUTION_FAILED
 export async function editTargetOrRefuse(sessionId: string, resultId: string, catalogSessionId: string | null): Promise<ApiResult<EditTarget>> {
   const body = catalogSessionId === null ? { resultID: resultId } : { resultID: resultId, catalogSessionID: catalogSessionId };
   return allowRefusal(await apiRequest(prismEndpoints.userDatabaseSessionQueriesEditTarget(sessionId), { method: "POST", body, schema: editTargetSchema }), ...targetRefusals);
+}
+
+/**
+ * O que a tela mostra de um `edit-target` do "Gerar SQL" recusado (RN-GRADE-018 e 020): o resultado só leitura por outro motivo (a junção, a união, o
+ * `DISTINCT`: só o INSERT vale, e o motivo diz por quê), o resultado que mudou, e as falhas que o diálogo mostra com "Tentar de novo". A conexão somente
+ * leitura não recusa este pedido.
+ */
+const sqlTargetRefusals = ["RESULT_NOT_EDITABLE", "RESULT_CHANGED", "DATABASE_SESSION_NOT_FOUND", "SQL_EXECUTION_FAILED", "DATABASE_CONNECTION_FAILED", "SESSION_BUSY"];
+
+/**
+ * RN-GRADE-020: o alvo do resultado para o "Gerar SQL" e o "Copiar como" do SQL e do DbUnit (`purpose: "sql"`), que vale também na conexão somente leitura,
+ * com tudo só leitura. Na conexão somente leitura, ele não serve à edição (RN-EDIT-010): quem o guarda o guarda à parte.
+ */
+export async function sqlTargetOrRefuse(sessionId: string, resultId: string, catalogSessionId: string | null): Promise<ApiResult<SqlTarget>> {
+  const body = catalogSessionId === null ? { resultID: resultId, purpose: "sql" } : { resultID: resultId, catalogSessionID: catalogSessionId, purpose: "sql" };
+  return allowRefusal(await apiRequest(prismEndpoints.userDatabaseSessionQueriesEditTarget(sessionId), { method: "POST", body, schema: sqlTargetSchema }), ...sqlTargetRefusals);
 }
 
 /** RN-EDIT-005 e 012: o Salvar. A resposta diz quantas alterações foram gravadas. */
