@@ -311,12 +311,32 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
   const cell = (markup: string, column: number) => markup.match(new RegExp(`<div[^>]*id="g-0-${column}"[^>]*>.*?</div>`, "s"))?.[0] ?? "";
 
   it("com a edição, as células são `gridcell`, com o id e a posição que o clique e o teclado leem, e a ativa é marcada", () => {
-    const markup = renderEditable({ activeColumn: 1 });
+    const markup = renderEditable({ activeColumn: 1, selectedFrom: 1, selectedTo: 1 });
 
     expect(markup.match(/role="gridcell"/g)).toHaveLength(2);
     expect(cell(markup, 1)).toMatch(/data-row="0"[^>]*data-col="1"[^>]*aria-selected="true"/);
     expect(cell(markup, 0)).toContain('aria-selected="false"');
     expect(cell(markup, 1)).toContain("outline-accent");
+  });
+
+  it("RN-GRADE-001: as células escolhidas dizem que estão (`aria-selected`) e têm o fundo de escolha; o número da linha escolhida fica destacado", () => {
+    const markup = renderEditable({ activeColumn: 0, selectedFrom: 0, selectedTo: 1 });
+
+    expect(cell(markup, 0)).toContain('aria-selected="true"');
+    expect(cell(markup, 1)).toContain('aria-selected="true"');
+    expect(cell(markup, 1)).toContain("bg-selected");
+    expect(markup).toMatch(/role="rowheader" data-rowheader="0"[^>]*class="[^"]*bg-selected/);
+    // A linha sem célula escolhida não tem nada disso.
+    const plain = renderEditable({});
+    expect(cell(plain, 0)).toContain('aria-selected="false"');
+    expect(plain).not.toContain("bg-selected");
+  });
+
+  it("RN-GRADE-001: a célula com alteração pendente escolhida continua marcada como pendente, num tom mais forte", () => {
+    const pending = cell(renderEditable({ selectedFrom: 1, selectedTo: 1, mark: { kind: "read", deleted: false, pending: new Map([[1, "paga"]]), failed: false } }), 1);
+
+    expect(pending).toContain("bg-accent/35");
+    expect(pending).toContain('aria-selected="true"');
   });
 
   it("a célula alterada mostra o valor lido riscado ao lado do novo, como no canvas; o NULL novo tem a cor do nulo", () => {

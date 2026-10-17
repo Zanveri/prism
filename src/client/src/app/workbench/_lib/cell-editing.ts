@@ -1,4 +1,5 @@
 import type { EditTarget } from "./record-edits.schema";
+import { gridSelectionCopy } from "./grid-selection.copy";
 import { recordsCopy } from "./records.copy";
 
 const copy = recordsCopy.edit;
@@ -40,17 +41,29 @@ function tableOf(target: EditTarget, column: number): number | null {
   return target.tables.length === 1 ? 0 : (target.columns[column]?.table ?? null);
 }
 
+/** Por que a chave da linha lida não acha a linha no banco: cortada, gerada pelo banco num Salvar, ou nula numa junção externa (a tabela não tem linha ali). */
+type KeyProblem = "truncated" | "generated" | "noRowHere";
+
 /**
  * A chave da linha lida não tem o valor que o banco guarda: uma coluna dela chegou cortada (RN-SQL-011), ou foi o banco que a preencheu numa
  * linha nova salva (RN-EDIT-009); ou, numa junção externa, ela veio nula, e a tabela não tem linha ali. Não há como achar a linha pelo valor
- * que a grade tem. O motivo, ou nulo com a chave inteira.
+ * que a grade tem. O problema, ou nulo com a chave inteira.
  */
-function keyUnknown(target: EditTarget, table: number, row: RowContext): string | null {
+function keyProblem(target: EditTarget, table: number, row: RowContext): KeyProblem | null {
   if (row.kind !== "read") return null;
   const key = target.tables[table].key;
-  if (key.some((column) => row.truncated?.has(column) === true)) return copy.reasons.keyTruncated;
-  if (key.some((column) => row.generated?.has(column) === true)) return copy.reasons.keyGenerated;
-  return row.values !== undefined && key.length > 0 && key.some((column) => row.values?.[column] === null) ? copy.reasons.noRowHere(target.tables[table].name) : null;
+  if (key.some((column) => row.truncated?.has(column) === true)) return "truncated";
+  if (key.some((column) => row.generated?.has(column) === true)) return "generated";
+  return row.values !== undefined && key.length > 0 && key.some((column) => row.values?.[column] === null) ? "noRowHere" : null;
+}
+
+/** O motivo de a chave não achar a linha, com o número da linha na grade quando a ação é sobre várias (RN-EDIT-014). */
+function keyUnknown(target: EditTarget, table: number, row: RowContext, number?: number): string | null {
+  const problem = keyProblem(target, table, row);
+  if (problem === null) return null;
+  if (problem === "noRowHere") return copy.reasons.noRowHere(target.tables[table].name);
+  if (number === undefined) return problem === "truncated" ? copy.reasons.keyTruncated : copy.reasons.keyGenerated;
+  return problem === "truncated" ? gridSelectionCopy.rows.keyTruncatedAt(number) : gridSelectionCopy.rows.keyGeneratedAt(number);
 }
 
 /** O que vale antes da coluna: o resultado, a aba ocupada e a tabela (a de posição `table`). */
@@ -136,4 +149,27 @@ export function columnHintsOf(target: EditTarget | null): readonly (string | nul
     const table = column.table === null ? undefined : target.tables[column.table];
     return isJoin(target) && table !== undefined && column.baseColumn !== null ? copy.editsColumn(table.name, column.baseColumn) : null;
   });
+}
+
+/** Uma linha da seleção para as ações de linha: o número dela na grade (de 1 em diante) e o que ela é. */
+export type SelectedRow = { number: number; row: RowContext };
+
+/**
+ * RN-EDIT-014: "Excluir linhas", sobre as linhas da seleção. Como "Excluir linha", e mais: quando uma delas não se exclui, porque a chave dela não se sabe
+ * (cortada, ou gerada pelo banco numa linha nova salva), nada é excluído, e o motivo é o da primeira na ordem da grade, com o número dela ("a chave da linha
+ * 7 chegou cortada"). A linha que já está marcada para exclusão não impede; quando todas já estão, o motivo diz isso. Com uma linha só, é o "Excluir linha".
+ */
+export function deleteRowsAccess(rows: readonly SelectedRow[], readOnly: string | null, target: EditTarget | null, busy: boolean | "refresh"): EditAccess {
+  if (rows.length === 1) return deleteRowAccess(rows[0].row, readOnly, target, busy);
+  const access = newRowAccess(readOnly, target, busy);
+  if (!access.editable) return access;
+
+  let something = false;
+  for (const { number, row } of rows) {
+    if (row.kind === "read" && row.deleted) continue;
+    const key = target === null ? null : keyUnknown(target, 0, row, number);
+    if (key !== null) return denied(key);
+    something = true;
+  }
+  return something || rows.length === 0 ? allowed : denied(gridSelectionCopy.rows.alreadyDeleted);
 }

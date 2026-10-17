@@ -1,0 +1,1670 @@
+{
+  "rule": "RN-GRADE-019 e RN-EXPORT-024: o texto de cada item do \"Gerar SQL\" (SELECT .. WHERE .. =, SELECT .. WHERE .. IN, INSERT, UPDATE e DELETE pela chave única). Só da tela (_lib/generate-sql/generate-sql.ts): a API não gera estes comandos. O CREATE é o DDL aproximado da Estrutura (table-ddl.ts), com testes próprios.",
+  "notes": [
+    "item: selectEquals, selectIn, insert, update ou delete. engine: postgresql, db2 ou informix (1, 2 e 3 na tela).",
+    "table: o esquema (no Informix, o dono) e o nome como o banco os guarda; null é a tabela que o Prism não conhece, e o INSERT vai para options.target.",
+    "columns: as colunas da tabela que estão no resultado, na ordem dele, com o nome na tabela, o tipo do banco, o tipo da grade (kind) e quem as gera (always, byDefault ou null); a posição de cada uma é a da coluna no resultado.",
+    "key: os nomes das colunas da chave, na ordem dela; vazia é sem chave.",
+    "rows: number é o número da linha na grade; values, o que a grade mostra; read, o lido do banco (sem ele, o mesmo de values); changed, as colunas com alteração pendente; cut, as que chegaram cortadas e não vieram inteiras; generated, as 'gerado pelo banco'. Os valores são texto, null ou { codePoints: [...] }.",
+    "expected: o texto, uma linha por item, juntas por LF, sem quebra no fim; skipped: quantas linhas ficaram de fora."
+  ],
+  "cases": [
+    {
+      "name": "SELECT = com a chave de uma coluna, uma cláusula por linha e uma linha em branco entre os comandos (PostgreSQL)",
+      "item": "selectEquals",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "criado",
+          "type": "timestamp without time zone",
+          "kind": "datetime",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "Ana",
+            "2024-01-15 10:30:00.000000"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "2",
+            "O'Brien",
+            null
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"id\", \"cliente\", \"criado\"",
+        "FROM \"estoque\".\"pedido\"",
+        "WHERE \"id\" = 1;",
+        "",
+        "SELECT \"id\", \"cliente\", \"criado\"",
+        "FROM \"estoque\".\"pedido\"",
+        "WHERE \"id\" = 2;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT = com a chave composta, compacto e sem os nomes completos (Db2)",
+      "item": "selectEquals",
+      "engine": "db2",
+      "table": {
+        "schema": "VENDAS",
+        "name": "PEDIDO"
+      },
+      "columns": [
+        {
+          "name": "LOJA",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "NUMERO",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "TOTAL",
+          "type": "DECIMAL(12,2)",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "LOJA",
+        "NUMERO"
+      ],
+      "options": {
+        "qualified": false,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 4,
+          "values": [
+            "1",
+            "10",
+            "99.90"
+          ]
+        },
+        {
+          "number": 5,
+          "values": [
+            "1",
+            "11",
+            null
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"LOJA\", \"NUMERO\", \"TOTAL\" FROM \"PEDIDO\" WHERE \"LOJA\" = 1 AND \"NUMERO\" = 10;",
+        "SELECT \"LOJA\", \"NUMERO\", \"TOTAL\" FROM \"PEDIDO\" WHERE \"LOJA\" = 1 AND \"NUMERO\" = 11;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT = sem chave: o comentário no começo, IS NULL no nulo, e a coluna json fora da condição (PostgreSQL)",
+      "item": "selectEquals",
+      "engine": "postgresql",
+      "table": {
+        "schema": "public",
+        "name": "avulsa"
+      },
+      "columns": [
+        {
+          "name": "codigo",
+          "type": "character varying(10)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "dados",
+          "type": "json",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "a",
+            null,
+            "{\"x\": 1}"
+          ]
+        }
+      ],
+      "expected": [
+        "-- Sem chave primária nem chave única: a condição usa todas as colunas, e linhas iguais seriam afetadas juntas.",
+        "SELECT \"codigo\", \"nota\", \"dados\"",
+        "FROM \"public\".\"avulsa\"",
+        "WHERE \"codigo\" = 'a' AND \"nota\" IS NULL;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN com a chave de uma coluna, cada chave uma vez (PostgreSQL)",
+      "item": "selectIn",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "Ana"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "2",
+            "Bia"
+          ]
+        },
+        {
+          "number": 3,
+          "values": [
+            "2",
+            "Bia"
+          ]
+        },
+        {
+          "number": 4,
+          "values": [
+            "3",
+            "Caio"
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"id\", \"cliente\"",
+        "FROM \"estoque\".\"pedido\"",
+        "WHERE \"id\" IN (1, 2, 3);"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN com a chave composta: a lista de linhas no IN do PostgreSQL",
+      "item": "selectIn",
+      "engine": "postgresql",
+      "table": {
+        "schema": "vendas",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "loja",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "numero",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(12,2)",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "loja",
+        "numero"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "10",
+            "5.00"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "1",
+            "11",
+            "7.50"
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"loja\", \"numero\", \"total\"",
+        "FROM \"vendas\".\"pedido\"",
+        "WHERE (\"loja\", \"numero\") IN (",
+        "  (1, 10),",
+        "  (1, 11)",
+        ");"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN com a chave composta, compacto (PostgreSQL)",
+      "item": "selectIn",
+      "engine": "postgresql",
+      "table": {
+        "schema": "vendas",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "loja",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "numero",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(12,2)",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "loja",
+        "numero"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "10",
+            "5.00"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "1",
+            "11",
+            "7.50"
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"loja\", \"numero\", \"total\" FROM \"vendas\".\"pedido\" WHERE (\"loja\", \"numero\") IN ((1, 10), (1, 11));"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN com a chave composta: o OR de ANDs do Db2, uma linha da grade por linha do texto",
+      "item": "selectIn",
+      "engine": "db2",
+      "table": {
+        "schema": "VENDAS",
+        "name": "PEDIDO"
+      },
+      "columns": [
+        {
+          "name": "LOJA",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "NUMERO",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "TOTAL",
+          "type": "DECIMAL(12,2)",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "LOJA",
+        "NUMERO"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "10",
+            "5.00"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "1",
+            "11",
+            "7.50"
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"LOJA\", \"NUMERO\", \"TOTAL\"",
+        "FROM \"VENDAS\".\"PEDIDO\"",
+        "WHERE (\"LOJA\" = 1 AND \"NUMERO\" = 10)",
+        "   OR (\"LOJA\" = 1 AND \"NUMERO\" = 11);"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN com a chave composta, compacto: o OR de ANDs do Informix, com o dono como esquema",
+      "item": "selectIn",
+      "engine": "informix",
+      "table": {
+        "schema": "vendas",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "loja",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "numero",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "total",
+          "type": "DECIMAL(12,2)",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "loja",
+        "numero"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "10",
+            "5.00"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "1",
+            "11",
+            "7.50"
+          ]
+        }
+      ],
+      "expected": [
+        "SELECT \"loja\", \"numero\", \"total\" FROM \"vendas\".\"pedido\" WHERE (\"loja\" = 1 AND \"numero\" = 10) OR (\"loja\" = 1 AND \"numero\" = 11);"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN sem chave: a condição de todas as colunas de cada linha, juntas por OR (PostgreSQL)",
+      "item": "selectIn",
+      "engine": "postgresql",
+      "table": {
+        "schema": "public",
+        "name": "avulsa"
+      },
+      "columns": [
+        {
+          "name": "codigo",
+          "type": "character varying(10)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "nota",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "a",
+            null
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "b",
+            "x"
+          ]
+        }
+      ],
+      "expected": [
+        "-- Sem chave primária nem chave única: a condição usa todas as colunas, e linhas iguais seriam afetadas juntas.",
+        "SELECT \"codigo\", \"nota\"",
+        "FROM \"public\".\"avulsa\"",
+        "WHERE (\"codigo\" = 'a' AND \"nota\" IS NULL)",
+        "   OR (\"codigo\" = 'b' AND \"nota\" = 'x');"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "SELECT IN sem nenhuma linha que vire literal: o texto é só o comentário",
+      "item": "selectIn",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 7,
+          "values": [
+            "1",
+            "Ana"
+          ],
+          "cut": [
+            0
+          ]
+        }
+      ],
+      "expected": [
+        "-- Linhas da grade não geradas, com um valor que não pôde vir inteiro: 7."
+      ],
+      "skipped": 1
+    },
+    {
+      "name": "INSERT sem as colunas que o banco gera, sempre e por padrão (PostgreSQL)",
+      "item": "insert",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": "byDefault"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "criado",
+          "type": "timestamp without time zone",
+          "kind": "datetime",
+          "generated": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(12,2)",
+          "kind": "number",
+          "generated": "always"
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "Ana",
+            "2024-01-15 10:30:00.000000",
+            "20.00"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"estoque\".\"pedido\" (\"cliente\", \"criado\")",
+        "VALUES ('Ana', '2024-01-15 10:30:00.000000');"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT compacto com as geradas por padrão, sem as geradas sempre: a forma da exportação com uma linha por comando (PostgreSQL)",
+      "item": "insert",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": "byDefault"
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "criado",
+          "type": "timestamp without time zone",
+          "kind": "datetime",
+          "generated": null
+        },
+        {
+          "name": "total",
+          "type": "numeric(12,2)",
+          "kind": "number",
+          "generated": "always"
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": false
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "Ana",
+            "2024-01-15 10:30:00.000000",
+            "20.00"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "2",
+            "Bia",
+            null,
+            "0.00"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"cliente\", \"criado\") VALUES (1, 'Ana', '2024-01-15 10:30:00.000000');",
+        "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"cliente\", \"criado\") VALUES (2, 'Bia', NULL);"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT na tabela que o Prism não conhece: a tabela dos campos, com as aspas, e as colunas pelo nome do resultado",
+      "item": "insert",
+      "engine": "postgresql",
+      "table": null,
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "nome \"apelido\"",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true,
+        "target": {
+          "schema": "arquivo",
+          "name": "Pedido \"2026\""
+        }
+      },
+      "rows": [
+        {
+          "number": 3,
+          "values": [
+            "1",
+            "Ana"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"arquivo\".\"Pedido \"\"2026\"\"\" (\"id\", \"nome \"\"apelido\"\"\")",
+        "VALUES (1, 'Ana');"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT na tabela que o Prism não conhece, sem esquema: só a tabela",
+      "item": "insert",
+      "engine": "db2",
+      "table": null,
+      "columns": [
+        {
+          "name": "ID",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true,
+        "target": {
+          "schema": "",
+          "name": "COPIA"
+        }
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"COPIA\" (\"ID\") VALUES (1);"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT com o binário no literal do banco: decode no PostgreSQL",
+      "item": "insert",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "anexo"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "arquivo",
+          "type": "bytea",
+          "kind": "binary",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "0xdeadbeef"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"estoque\".\"anexo\" (\"id\", \"arquivo\") VALUES (1, decode('DEADBEEF', 'hex'));"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT com o binário no literal do banco, pelo tipo da coluna no Db2: BLOB(X'…') no BLOB e BX'…' no VARBINARY",
+      "item": "insert",
+      "engine": "db2",
+      "table": {
+        "schema": "LOJA",
+        "name": "ANEXO"
+      },
+      "columns": [
+        {
+          "name": "ID",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "ARQUIVO",
+          "type": "BLOB",
+          "kind": "binary",
+          "generated": null
+        },
+        {
+          "name": "MINIATURA",
+          "type": "VARBINARY",
+          "kind": "binary",
+          "generated": null
+        }
+      ],
+      "key": [
+        "ID"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "0xCAFE",
+            "0x00ff"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"LOJA\".\"ANEXO\" (\"ID\", \"ARQUIVO\", \"MINIATURA\") VALUES (1, BLOB(X'CAFE'), BX'00FF');"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT do Informix: as linhas que ficam de fora não interrompem as outras, e o fim tem um comentário por motivo, com as faixas",
+      "item": "insert",
+      "engine": "informix",
+      "table": {
+        "schema": "loja",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "nome",
+          "type": "VARCHAR(40)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "anexo",
+          "type": "BYTE",
+          "kind": "binary",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 2,
+          "values": [
+            "2",
+            "Ana",
+            null
+          ]
+        },
+        {
+          "number": 3,
+          "values": [
+            "3",
+            "Bia",
+            null
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 4,
+          "values": [
+            "4",
+            "Caio",
+            null
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 5,
+          "values": [
+            "5",
+            "Duda",
+            null
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 7,
+          "values": [
+            "7",
+            "Edu",
+            "0x00"
+          ]
+        },
+        {
+          "number": 9,
+          "values": [
+            "9",
+            {
+              "codePoints": [
+                65,
+                0,
+                66
+              ]
+            },
+            null
+          ]
+        },
+        {
+          "number": 12,
+          "values": [
+            "12",
+            null,
+            null
+          ],
+          "generated": [
+            1
+          ]
+        },
+        {
+          "number": 13,
+          "values": [
+            "13",
+            "Fábio",
+            null
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"loja\".\"pedido\" (\"id\", \"nome\", \"anexo\")",
+        "VALUES (2, 'Ana', NULL);",
+        "",
+        "INSERT INTO \"loja\".\"pedido\" (\"id\", \"nome\", \"anexo\")",
+        "VALUES (13, 'Fábio', NULL);",
+        "",
+        "-- Linhas da grade não geradas, com um valor que não pôde vir inteiro: 3-5.",
+        "-- Linhas da grade não geradas, com um valor binário, que o Informix não escreve como literal: 7.",
+        "-- Linhas da grade não geradas, com um valor que não cabe num literal (caractere de controle que não seja quebra de linha, retorno de carro nem tabulação; no Informix, também data e hora com mais de cinco casas de segundo ou lógico que não seja true nem false): 9.",
+        "-- Linhas da grade não geradas, com um valor que o banco gerou e a grade não mostra (execute de novo para vê-lo): 12."
+      ],
+      "skipped": 6
+    },
+    {
+      "name": "INSERT compacto com texto de várias linhas: a quebra de linha fica dentro das aspas no PostgreSQL, e o comando ocupa mais de uma linha",
+      "item": "insert",
+      "engine": "postgresql",
+      "table": {
+        "schema": "public",
+        "name": "nota"
+      },
+      "columns": [
+        {
+          "name": "texto",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": false,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "linha 1\nlinha 2"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "a\rb"
+          ]
+        },
+        {
+          "number": 3,
+          "values": [
+            "c:\\temp"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"nota\" (\"texto\") VALUES ('linha 1",
+        "linha 2');",
+        "INSERT INTO \"nota\" (\"texto\") VALUES (E'a\\rb');",
+        "INSERT INTO \"nota\" (\"texto\") VALUES (E'c:\\\\temp');"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT do Informix: a quebra de linha por CHR, o lógico 't' e a data e hora com cinco casas",
+      "item": "insert",
+      "engine": "informix",
+      "table": {
+        "schema": "loja",
+        "name": "evento"
+      },
+      "columns": [
+        {
+          "name": "texto",
+          "type": "LVARCHAR",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "ativo",
+          "type": "BOOLEAN",
+          "kind": "boolean",
+          "generated": null
+        },
+        {
+          "name": "quando",
+          "type": "DATETIME YEAR TO FRACTION(5)",
+          "kind": "datetime",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "a\nb",
+            "true",
+            "2024-01-15 10:30:00.123450"
+          ]
+        }
+      ],
+      "expected": [
+        "INSERT INTO \"loja\".\"evento\" (\"texto\", \"ativo\", \"quando\") VALUES ('a' || CHR(10) || 'b', 't', DATETIME (2024-01-15 10:30:00.12345) YEAR TO FRACTION(5));"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "INSERT com o Unicode fora do plano básico e a marca de direção dentro das aspas, como estão",
+      "item": "insert",
+      "engine": "db2",
+      "table": {
+        "schema": "LOJA",
+        "name": "NOTA"
+      },
+      "columns": [
+        {
+          "name": "TEXTO",
+          "type": "VARCHAR(40)",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            {
+              "codePoints": [
+                128512,
+                32,
+                23383,
+                8238,
+                97
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "codePoints": [
+            73,
+            78,
+            83,
+            69,
+            82,
+            84,
+            32,
+            73,
+            78,
+            84,
+            79,
+            32,
+            34,
+            76,
+            79,
+            74,
+            65,
+            34,
+            46,
+            34,
+            78,
+            79,
+            84,
+            65,
+            34,
+            32,
+            40,
+            34,
+            84,
+            69,
+            88,
+            84,
+            79,
+            34,
+            41,
+            32,
+            86,
+            65,
+            76,
+            85,
+            69,
+            83,
+            32,
+            40,
+            39,
+            128512,
+            32,
+            23383,
+            8238,
+            97,
+            39,
+            41,
+            59
+          ]
+        }
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "UPDATE com alteração pendente: o SET leva os valores da grade, e a condição, a chave lida (PostgreSQL)",
+      "item": "update",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "criado",
+          "type": "timestamp without time zone",
+          "kind": "datetime",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "Bia",
+            null
+          ],
+          "read": [
+            "1",
+            "Ana",
+            "2024-01-15 10:30:00.000000"
+          ],
+          "changed": [
+            1,
+            2
+          ]
+        }
+      ],
+      "expected": [
+        "UPDATE \"estoque\".\"pedido\"",
+        "SET \"cliente\" = 'Bia', \"criado\" = NULL",
+        "WHERE \"id\" = 1;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "UPDATE com a chave alterada: o SET leva a coluna da chave com o valor da grade, e a condição segue com a lida",
+      "item": "update",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "pedido"
+      },
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "cliente",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "criado",
+          "type": "timestamp without time zone",
+          "kind": "datetime",
+          "generated": null
+        }
+      ],
+      "key": [
+        "id"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 3,
+          "values": [
+            "9",
+            "Ana",
+            null
+          ],
+          "read": [
+            "1",
+            "Ana",
+            null
+          ],
+          "changed": [
+            0
+          ]
+        }
+      ],
+      "expected": [
+        "UPDATE \"estoque\".\"pedido\" SET \"id\" = 9, \"cliente\" = 'Ana', \"criado\" = NULL WHERE \"id\" = 1;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "UPDATE sem as colunas geradas sempre, que não aceitam valor (Db2)",
+      "item": "update",
+      "engine": "db2",
+      "table": {
+        "schema": "LOJA",
+        "name": "PEDIDO"
+      },
+      "columns": [
+        {
+          "name": "ID",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "STATUS",
+          "type": "VARCHAR(20)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "DOBRO",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": "always"
+        }
+      ],
+      "key": [
+        "ID"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "paga",
+            "4"
+          ]
+        }
+      ],
+      "expected": [
+        "UPDATE \"LOJA\".\"PEDIDO\"",
+        "SET \"STATUS\" = 'paga'",
+        "WHERE \"ID\" = 1;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "UPDATE sem chave: o SET e a condição com todas as colunas, menos as que o Informix não compara com =, e nunca sem WHERE",
+      "item": "update",
+      "engine": "informix",
+      "table": {
+        "schema": "loja",
+        "name": "avulsa"
+      },
+      "columns": [
+        {
+          "name": "codigo",
+          "type": "VARCHAR(10)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "nota",
+          "type": "TEXT",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": false,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "a",
+            "x"
+          ]
+        }
+      ],
+      "expected": [
+        "-- Sem chave primária nem chave única: a condição usa todas as colunas, e linhas iguais seriam afetadas juntas.",
+        "UPDATE \"avulsa\"",
+        "SET \"codigo\" = 'a', \"nota\" = 'x'",
+        "WHERE \"codigo\" = 'a';"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "DELETE pela chave binária: o literal do banco na condição (PostgreSQL)",
+      "item": "delete",
+      "engine": "postgresql",
+      "table": {
+        "schema": "estoque",
+        "name": "anexo"
+      },
+      "columns": [
+        {
+          "name": "hash",
+          "type": "bytea",
+          "kind": "binary",
+          "generated": null
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text",
+          "generated": null
+        }
+      ],
+      "key": [
+        "hash"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "0xDEADBEEF",
+            "a.txt"
+          ]
+        }
+      ],
+      "expected": [
+        "DELETE FROM \"estoque\".\"anexo\"",
+        "WHERE \"hash\" = decode('DEADBEEF', 'hex');"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "DELETE pela chave lida, também na linha marcada para exclusão e na que tem alteração pendente na chave",
+      "item": "delete",
+      "engine": "db2",
+      "table": {
+        "schema": "LOJA",
+        "name": "PEDIDO"
+      },
+      "columns": [
+        {
+          "name": "LOJA",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "NUMERO",
+          "type": "INTEGER",
+          "kind": "number",
+          "generated": null
+        },
+        {
+          "name": "TOTAL",
+          "type": "DECIMAL(12,2)",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "LOJA",
+        "NUMERO"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": false,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1",
+            "10",
+            "5.00"
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "1",
+            "99",
+            "7.50"
+          ],
+          "read": [
+            "1",
+            "11",
+            "7.50"
+          ],
+          "changed": [
+            1
+          ]
+        }
+      ],
+      "expected": [
+        "DELETE FROM \"LOJA\".\"PEDIDO\"",
+        "WHERE \"LOJA\" = 1 AND \"NUMERO\" = 10;",
+        "",
+        "DELETE FROM \"LOJA\".\"PEDIDO\"",
+        "WHERE \"LOJA\" = 1 AND \"NUMERO\" = 11;"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "DELETE sem chave: o comentário no começo, e as colunas BLOB e CLOB do Db2 fora da condição",
+      "item": "delete",
+      "engine": "db2",
+      "table": {
+        "schema": "LOJA",
+        "name": "AVULSA"
+      },
+      "columns": [
+        {
+          "name": "CODIGO",
+          "type": "VARCHAR(10)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "CORPO",
+          "type": "CLOB(1M)",
+          "kind": "text",
+          "generated": null
+        },
+        {
+          "name": "ARQUIVO",
+          "type": "BLOB(2M)",
+          "kind": "binary",
+          "generated": null
+        },
+        {
+          "name": "DIA",
+          "type": "DATE",
+          "kind": "datetime",
+          "generated": null
+        }
+      ],
+      "key": [],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "a",
+            "texto longo",
+            "0xCAFE",
+            "2024-01-15"
+          ]
+        }
+      ],
+      "expected": [
+        "-- Sem chave primária nem chave única: a condição usa todas as colunas, e linhas iguais seriam afetadas juntas.",
+        "DELETE FROM \"LOJA\".\"AVULSA\" WHERE \"CODIGO\" = 'a' AND \"DIA\" = '2024-01-15';"
+      ],
+      "skipped": 0
+    },
+    {
+      "name": "Os nomes hostis vão entre aspas, com a aspa dobrada, também o da tabela e o do esquema",
+      "item": "delete",
+      "engine": "postgresql",
+      "table": {
+        "schema": "sch\"ema",
+        "name": "pe\"dido; DROP TABLE x; --"
+      },
+      "columns": [
+        {
+          "name": "i\"d",
+          "type": "integer",
+          "kind": "number",
+          "generated": null
+        }
+      ],
+      "key": [
+        "i\"d"
+      ],
+      "options": {
+        "qualified": true,
+        "compact": true,
+        "excludeGenerated": true
+      },
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "1"
+          ]
+        }
+      ],
+      "expected": [
+        "DELETE FROM \"sch\"\"ema\".\"pe\"\"dido; DROP TABLE x; --\" WHERE \"i\"\"d\" = 1;"
+      ],
+      "skipped": 0
+    }
+  ]
+}

@@ -28,7 +28,12 @@ const rt = await vi.hoisted(async () => {
     openImport: vi.fn(),
     queryClient: { getQueryData: () => undefined },
     // A conferência do catálogo da edição: o resultado é só leitura (o menu da célula abre com o motivo, sem rota de verdade).
-    service: { editTargetOrRefuse: vi.fn(async () => ({ ok: false, error: { code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: "teste", extensions: {} } })), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
+    service: {
+      editTargetOrRefuse: vi.fn(async () => ({ ok: false, error: { code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: "teste", extensions: {} } })),
+      saveEditsOrRefuse: vi.fn(),
+      previewEditsOrRefuse: vi.fn(),
+      sqlTargetOrRefuse: vi.fn(),
+    },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     saveText: vi.fn(),
     cells: { resultCells: vi.fn() },
@@ -82,6 +87,10 @@ import { autoRefreshCopy } from "../../_lib/auto-refresh.copy";
 import { markImported } from "../../_lib/data-import/data-imports";
 import { treeKey } from "../../_lib/database-sessions.service";
 import { unprotected } from "@/app/connections/_lib/connections.schema";
+import { copyAsCopy } from "../../_lib/copy-as/copy-as.copy";
+import { generateSqlCopy } from "../../_lib/generate-sql/generate-sql.copy";
+import { CopyAdvancedDialog } from "../copy-as/copy-advanced-dialog";
+import { GenerateSqlDialog } from "../generate-sql/generate-sql-dialog";
 
 /** PostgreSQL, como a API numera os bancos. */
 const pg: Engine = 1;
@@ -144,7 +153,7 @@ function fakeRunner(initial: RunnerState) {
 }
 
 /** `runner` troca o executor da vista (o provedor que entrega outro à aba). */
-type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner };
+type Over = { tabId?: string; engine?: Engine | undefined; connected?: boolean; visible?: boolean; disconnected?: boolean; refreshSlot?: RefreshSlot; runner?: QueryRunner; database?: string; onOpenQuery?: (connectionId: string, sql: string, database?: string) => void };
 
 /** A vista de `loja.pedidos` na conexão `c1`: à vista e conectada, salvo o que `over` disser. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
@@ -168,7 +177,7 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
     const auto = elementsOf(panel.autoRefresh).find((element) => element.type === AutoRefreshControl)?.props as unknown as ComponentProps<typeof AutoRefreshControl> | undefined;
     const autoDialog = found.find((element) => element.type === AutoRefreshDialog)?.props as unknown as ComponentProps<typeof AutoRefreshDialog> | undefined;
 
-    return { filter, panel, records: panel.records!, question, menu, values, custom, auto, autoDialog };
+    return { filter, panel, records: panel.records!, question, menu, values, custom, auto, autoDialog, found };
   }
 
   return { show, onOpenTable };
@@ -1506,7 +1515,7 @@ describe("RecordsView: Duplicar linha (RN-EDIT-016)", () => {
 
     view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 2 }, false);
     await settle();
-    const group = view.show().menu!.groups.at(-1) as ContextMenuItem[];
+    const group = view.show().menu!.groups.find((items) => (items as ContextMenuItem[]).some((item) => item.id === "newRow")) as ContextMenuItem[];
 
     expect(group.map((item) => [item.label, item.shortcut, item.disabled === true])).toEqual([
       ["Adicionar linha", "Alt+Insert", false],
@@ -1543,6 +1552,8 @@ describe("RecordsView: Duplicar linha (RN-EDIT-016)", () => {
     const view = mount(fakeRunner(loaded()));
     await duplicate(view, 0);
 
+    // A cópia vem escolhida inteira (RN-EDIT-014): o clique escolhe só a célula, e o "Desfazer alteração" age nela.
+    view.show().panel.editing!.onActivate({ row: 2, column: 1 });
     view.show().panel.editing!.onMenu({ row: 2, column: 1 }, { x: 1, y: 2 }, false);
     await settle();
     view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "undo")!.onSelect!();
@@ -1848,5 +1859,140 @@ describe("RecordsView: \"Importar…\" e a nota das linhas importadas (RN-IMPORT
     expect(bannerOf(view.show().panel).onImportedRefresh).toBe(lit.records.onRefresh);
     runner.state = rowsState({ id: 2 });
     expect(bannerOf(view.show().panel).onImportedRefresh).toBeNull();
+  });
+});
+
+describe("RecordsView: o \"Ordenar\" e o \"Ir para o registro referenciado\" do menu da grade (RN-GRADE-004)", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const submenuOf = (item: ContextMenuItem) => item.submenu!.groups.flatMap(groupItems);
+
+  it("o \"Ordenar\" marca a ordem em vigor da coluna, e a escolhida vai ao campo e é executada, como o clique no cabeçalho", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
+    await settle();
+
+    const sort = view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "sort")!;
+    expect(submenuOf(sort).map((item) => [item.label, item.checked])).toEqual([
+      ["Crescente", false],
+      ["Decrescente", false],
+      ["Sem ordem", true],
+    ]);
+    submenuOf(sort).find((item) => item.id === "sort:desc")!.onSelect!();
+
+    expect(runner.sent.at(-1)).toEqual(sent('ORDER BY "cliente_id" DESC'));
+    expect(view.show().filter.draft).toBe('ORDER BY "cliente_id" DESC');
+  });
+
+  it("numa coluna de chave estrangeira, \"Ir para o registro referenciado\" abre a tabela de lá, filtrada pelo valor; nas outras, o item não aparece", async () => {
+    rt.catalog.data = foreignKeys;
+    const view = mount(fakeRunner(rowsState()));
+    view.show();
+
+    view.show().panel.editing!.onMenu({ row: 0, column: 0 }, { x: 1, y: 1 }, false);
+    await settle();
+    expect(view.show().menu!.groups.flatMap(groupItems).some((item) => item.id === "follow")).toBe(false);
+
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
+    await settle();
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "follow")!.onSelect!();
+
+    expect(view.onOpenTable).toHaveBeenCalledWith({ ...clientes, view: "data" });
+  });
+});
+
+describe("RecordsView: o Copiar avançado e o Gerar SQL do menu da grade, com a tabela da aba (seção 37)", () => {
+  /** O alvo do "Gerar SQL" de `loja.pedidos`, com a chave em `id` e o `cliente_id` que o banco preenche por padrão. */
+  const pedidosTarget = {
+    tables: [{ schema: "loja", name: "pedidos", key: [0], editable: true, reason: null, kind: "table", keyColumns: ["id"] }],
+    columns: [
+      { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: "always" },
+      { table: 0, baseColumn: "cliente_id", editable: true, reason: null, nullable: true, generated: null },
+    ],
+    rowOperations: true,
+    oneAtATime: false,
+  };
+  let clipboard: { writeText: ReturnType<typeof vi.fn> };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const dialogOf = <T,>(view: ReturnType<typeof mount>, type: T) => view.show().found.find((element) => element.type === type)?.props;
+
+  beforeEach(() => {
+    clipboard = { writeText: vi.fn(async () => {}) };
+    vi.stubGlobal("navigator", { clipboard, platform: "Win32" });
+    rt.service.sqlTargetOrRefuse.mockResolvedValue({ ok: true, data: pedidosTarget });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const items = (view: ReturnType<typeof mount>) => view.show().menu!.groups.flatMap(groupItems);
+  const submenu = (view: ReturnType<typeof mount>, id: string) => items(view).find((item) => item.id === id)!.submenu!.groups.flatMap(groupItems);
+  async function menuOn(view: ReturnType<typeof mount>) {
+    view.show().panel.editing!.onMenu({ row: 0, column: 1 }, { x: 10, y: 20 }, false);
+    await settle();
+  }
+
+  it("o submenu Copiar avançado tem o diálogo, os nomes, os números, os nove Copiar como e a configuração; o Gerar SQL tem os seis itens", async () => {
+    const view = mount(fakeRunner(rowsState({ resultId: "r9" })));
+    await menuOn(view);
+
+    expect(submenu(view, "advancedCopy").map((item) => item.id)).toEqual([
+      "copyAdvanced",
+      "copyColumnNames",
+      "copyRowNumbers",
+      "copyAs:csv",
+      "copyAs:sourceCode",
+      "copyAs:dbUnit",
+      "copyAs:html",
+      "copyAs:json",
+      "copyAs:markdown",
+      "copyAs:sql",
+      "copyAs:txt",
+      "copyAs:xml",
+      "copyAsConfigure",
+    ]);
+    expect(submenu(view, "advancedCopy")[0]).toMatchObject({ label: copyAsCopy.menu.advanced, shortcut: "Ctrl+Shift+C" });
+    expect(submenu(view, "generateSql").map((item) => item.label)).toEqual(Object.values(generateSqlCopy.items));
+    // Habilitar não custa consulta: o alvo do "Gerar SQL" só é perguntado na escolha.
+    expect(rt.service.sqlTargetOrRefuse).not.toHaveBeenCalled();
+    // O Ctrl+Shift+C chega à grade.
+    expect(view.show().panel.editing!.onCopyAdvanced).toBeTypeOf("function");
+  });
+
+  it("Copiar como SQL: pergunta o alvo com purpose sql e copia o INSERT na tabela da aba, sem a coluna que o banco calcula", async () => {
+    const view = mount(fakeRunner(rowsState({ resultId: "r9" })));
+    await menuOn(view);
+    submenu(view, "advancedCopy").find((item) => item.id === "copyAs:sql")!.onSelect!();
+    await settle();
+    await settle();
+
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r9", null);
+    expect(clipboard.writeText).toHaveBeenCalledTimes(1);
+    expect(clipboard.writeText.mock.calls[0][0]).toContain('INSERT INTO "loja"."pedidos" ("cliente_id")');
+    expect(rt.toast.success).toHaveBeenCalledWith(copyAsCopy.notice.copied(1, "sql"));
+  });
+
+  it("Copiar avançado… abre o diálogo com as três origens e a tabela da aba como destino", async () => {
+    const view = mount(fakeRunner(rowsState({ resultId: "r9" })));
+    await menuOn(view);
+    submenu(view, "advancedCopy").find((item) => item.id === "copyAdvanced")!.onSelect!();
+    await settle();
+
+    const dialog = dialogOf(view, CopyAdvancedDialog) as unknown as ComponentProps<typeof CopyAdvancedDialog>;
+    expect(dialog.sources.cells.table).toEqual({ schema: "loja", name: "pedidos" });
+    expect(dialog.sources.cells.sourceName).toBe("pedidos");
+    expect(dialog.sources.loaded.rows).toHaveLength(1);
+  });
+
+  it("Gerar SQL ▸ DELETE abre o diálogo com o texto; \"Abrir numa aba de consulta\" vai à conexão e ao banco da aba", async () => {
+    const onOpenQuery = vi.fn();
+    const view = mount(fakeRunner(rowsState({ resultId: "r9" })), { onOpenQuery, database: "vendas" });
+    await menuOn(view);
+    submenu(view, "generateSql").find((item) => item.id === "sql:delete")!.onSelect!();
+    await settle();
+
+    const dialog = dialogOf(view, GenerateSqlDialog) as unknown as ComponentProps<typeof GenerateSqlDialog>;
+    expect(dialog.dialog.view.body).toEqual({ kind: "text", text: 'DELETE FROM "loja"."pedidos"\nWHERE "id" = 10;' });
+
+    dialog.dialog.onOpenInTab();
+    expect(onOpenQuery).toHaveBeenCalledWith("c1", 'DELETE FROM "loja"."pedidos"\nWHERE "id" = 10;', "vendas");
   });
 });

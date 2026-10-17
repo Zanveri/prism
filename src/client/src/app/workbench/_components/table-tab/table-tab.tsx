@@ -37,6 +37,8 @@ type TableTabPanelProps = {
   onView: (tabId: string, view: TableView) => void;
   /** Abre a aba de outra tabela da mesma conexão: o duplo clique numa vizinha do diagrama e o valor de uma chave estrangeira (RN-TABELA-007, na vista Registros). */
   onOpenTable: (connectionId: string, table: TableRef & { view?: TableView; database?: string }) => void;
+  /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL" dos Registros: a aba nova da conexão e do banco desta, com o texto. Estável. */
+  onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
 };
 
 /**
@@ -48,7 +50,7 @@ type TableTabPanelProps = {
  * Nada reconecta sozinho: com a conexão desconectada pela pessoa, a Estrutura e o Diagrama mostram o aviso com "Conectar", e os
  * Registros esperam o "Atualizar". E a aba escondida (`visible` falso) não busca nada até ser aberta.
  */
-export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, connection, environment, visible, disconnected, onView, onOpenTable }: TableTabPanelProps) {
+export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, connection, environment, visible, disconnected, onView, onOpenTable, onOpenQuery }: TableTabPanelProps) {
   const { schema, name } = table;
   const view = viewOf(table.view);
   const hasViews = tableViews.length > 1;
@@ -80,7 +82,7 @@ export const TableTabPanel = memo(function TableTabPanel({ tab, table, runner, c
       </header>
 
       <div ref={panel} tabIndex={-1} role={hasViews ? "tabpanel" : undefined} id={tableViewPanelId(tab.id)} aria-labelledby={hasViews ? tableViewTabId(tab.id, view) : undefined} className="flex min-h-0 flex-1 flex-col">
-        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} refreshSlot={refreshSlot} /> : null}
+        {view === "data" ? <RecordsView tabId={tab.id} runner={runner} engine={connection?.engine} connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} connected={tab.sessionId !== null} visible={visible} disconnected={disconnected} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} onOpenQuery={onOpenQuery} refreshSlot={refreshSlot} /> : null}
         {view !== "data" && disconnected ? <DisconnectedView connectionId={tab.connectionId} database={tab.database} /> : null}
         {view === "structure" && !disconnected ? <StructureView tabId={tab.id} connectionId={tab.connectionId} database={tab.database} engine={connection?.engine} schema={schema} name={name} visible={visible} onOpenDiagram={() => onView(tab.id, "diagram")} refreshSlot={refreshSlot} /> : null}
         {view === "diagram" && !disconnected ? <DiagramView connectionId={tab.connectionId} database={tab.database} schema={schema} name={name} visible={visible} onOpenTable={(ref) => onOpenTable(tab.connectionId, { ...ref, ...inDatabase(tab.database) })} memoryKey={tab.id} refreshSlot={refreshSlot} /> : null}

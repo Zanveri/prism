@@ -1,0 +1,575 @@
+{
+  "rule": "RN-GRADE-016 e RN-EXPORT-024: o que só a tela escreve no \"Copiar como\", das linhas da grade: o número da linha na grade no comentário do SQL, a linha nova ainda não salva (number null), a célula \"gerado pelo banco\" (generated) e o valor cortado que não veio inteiro (cut). Só da tela (documents.ts): a exportação da API lê as linhas do banco, que não têm nada disso.",
+  "notes": [
+    "Como em document.json: format, engine, sourceName, columns, options (as da rota) e os valores (texto, null, { codePoints: [...] } ou { bytes: \"HEX\" }).",
+    "rows: cada linha com number (o da grade; null na linha nova ainda não salva), values, e, quando há, cut e generated (as posições das colunas).",
+    "summary: como em document.json, e notWhole, os valores que saíram cortados nos formatos de dados (no SQL, a linha deles é uma das comentadas)."
+  ],
+  "cases": [
+    {
+      "name": "SQL: a linha nova ainda não salva, a célula gerada pelo banco e o valor que não veio inteiro viram comentário, com o número da grade",
+      "format": "sql",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        {
+          "number": 3,
+          "values": [
+            "3",
+            "Ana"
+          ]
+        },
+        {
+          "number": 7,
+          "values": [
+            "7",
+            "Bia de tal"
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 9,
+          "values": [
+            "9",
+            "Caio"
+          ]
+        },
+        {
+          "number": 12,
+          "values": [
+            null,
+            "Dani"
+          ],
+          "generated": [
+            0
+          ]
+        },
+        {
+          "number": null,
+          "values": [
+            "99",
+            "Eva"
+          ]
+        },
+        {
+          "number": 15,
+          "values": [
+            "15",
+            "Fil"
+          ]
+        }
+      ],
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10,
+        "binary": "literal"
+      },
+      "expected": "INSERT INTO \"estoque\".\"pedido\" (\"id\", \"nome\") VALUES\n  (3, 'Ana');\n-- Linha 7 não exportada: um valor não pôde vir inteiro.\nINSERT INTO \"estoque\".\"pedido\" (\"id\", \"nome\") VALUES\n  (9, 'Caio');\n-- Linha 12 não exportada: um valor que o banco gerou não aparece na grade.\n-- Linha nova não exportada: ela ainda não está no banco.\nINSERT INTO \"estoque\".\"pedido\" (\"id\", \"nome\") VALUES\n  (15, 'Fil');\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 3,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "SQL: na linha, a primeira coluna com um valor sem literal, da esquerda para a direita, decide a frase",
+      "format": "sql",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        {
+          "number": 4,
+          "values": [
+            "4",
+            "x\u0001"
+          ],
+          "cut": [
+            0
+          ]
+        }
+      ],
+      "options": {
+        "schema": "estoque",
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10,
+        "binary": "literal"
+      },
+      "expected": "-- Linha 4 não exportada: um valor não pôde vir inteiro.\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 1,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "SQL: o comentário do caractere de controle leva o número da grade, e o Informix tem uma linha por comando",
+      "format": "sql",
+      "engine": "informix",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "c",
+          "type": "varchar",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        {
+          "number": 41,
+          "values": [
+            "a\u0001"
+          ]
+        },
+        {
+          "number": 42,
+          "values": [
+            "b"
+          ]
+        }
+      ],
+      "options": {
+        "schema": null,
+        "table": "pedido",
+        "omitSchema": false,
+        "rowsPerStatement": 10,
+        "binary": "literal"
+      },
+      "expected": "-- Linha 41 não exportada: um valor tem caractere de controle que não vira literal.\nINSERT INTO \"pedido\" (\"c\") VALUES ('b');\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 1,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "SQL: o binário com o valor inteiro vira o literal do Db2",
+      "format": "sql",
+      "engine": "db2",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "foto",
+          "type": "BLOB",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        {
+          "number": 2,
+          "values": [
+            {
+              "bytes": "CAFE"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "schema": "",
+        "table": "fotos",
+        "omitSchema": false,
+        "rowsPerStatement": 1,
+        "binary": "literal"
+      },
+      "expected": "INSERT INTO \"fotos\" (\"foto\") VALUES (BLOB(X'CAFE'));\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "SQL: o binário cortado com o binário NULL é o nulo, e não comenta a linha: ele não precisa vir inteiro",
+      "format": "sql",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        {
+          "number": 5,
+          "values": [
+            "5",
+            "0xDEAD"
+          ],
+          "cut": [
+            1
+          ]
+        }
+      ],
+      "options": {
+        "schema": "",
+        "table": "fotos",
+        "omitSchema": false,
+        "rowsPerStatement": 1,
+        "binary": "null"
+      },
+      "expected": "INSERT INTO \"fotos\" (\"id\", \"foto\") VALUES (5, NULL);\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "SQL: no Informix, o binário cortado comenta a linha pelo motivo do Informix, como o inteiro: ele não precisa vir inteiro",
+      "format": "sql",
+      "engine": "informix",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "kind": "number"
+        },
+        {
+          "name": "foto",
+          "type": "BYTE",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        {
+          "number": 6,
+          "values": [
+            "6",
+            "0xDEAD"
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 7,
+          "values": [
+            "7",
+            {
+              "bytes": "BEEF"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "schema": "",
+        "table": "fotos",
+        "omitSchema": false,
+        "rowsPerStatement": 1,
+        "binary": "literal"
+      },
+      "expected": "-- Linha 6 não exportada: o Informix não tem literal para binário.\n-- Linha 7 não exportada: o Informix não tem literal para binário.\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 2,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "JSON: o valor cortado é sempre texto, e a célula gerada pelo banco é null",
+      "format": "json",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "n",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "123",
+            "45"
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 2,
+          "values": [
+            "qualquer",
+            "6"
+          ],
+          "generated": [
+            0
+          ]
+        }
+      ],
+      "options": {
+        "wrap": false,
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "[\n  {\n    \"id\": 123,\n    \"n\": \"45\"\n  },\n  {\n    \"id\": null,\n    \"n\": 6\n  }\n]\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 1
+      }
+    },
+    {
+      "name": "CSV: a célula gerada pelo banco é o nulo do formato, e o valor cortado sai como está e conta",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "a",
+          "type": "text",
+          "kind": "text"
+        },
+        {
+          "name": "b",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        {
+          "number": 5,
+          "values": [
+            "x",
+            "abc"
+          ],
+          "cut": [
+            1
+          ]
+        },
+        {
+          "number": 6,
+          "values": [
+            "y",
+            "qualquer"
+          ],
+          "generated": [
+            1
+          ]
+        }
+      ],
+      "options": {
+        "delimiter": ";",
+        "header": false,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "lf",
+        "nullText": "NULL",
+        "binary": "hex"
+      },
+      "expected": "x;abc\ny;NULL\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 1
+      }
+    },
+    {
+      "name": "Código fonte: o número cortado é texto",
+      "format": "sourceCode",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "n",
+          "type": "numeric",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "12"
+          ],
+          "cut": [
+            0
+          ]
+        }
+      ],
+      "options": {
+        "php": "legacy",
+        "quote": "double",
+        "isoDates": true,
+        "binary": "hex"
+      },
+      "expected": "<?php\n$pedido = array(\n\tarray(\n\t\t\"n\" => \"12\",\n\t),\n);\n?>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 1
+      }
+    },
+    {
+      "name": "XML: a linha nova ainda não salva entra nos formatos de dados com o que foi preenchido",
+      "format": "xml",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "kind": "text"
+        }
+      ],
+      "rows": [
+        {
+          "number": null,
+          "values": [
+            null,
+            "Eva"
+          ]
+        }
+      ],
+      "options": {
+        "doctype": false,
+        "binary": "hex"
+      },
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<pedido>\n  <DATA_RECORD>\n    <id/>\n    <nome>Eva</nome>\n  </DATA_RECORD>\n</pedido>\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "CSV: o binário deixado vazio não conta o valor cortado, que não foi escrito",
+      "format": "csv",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "foto",
+          "type": "bytea",
+          "kind": "binary"
+        }
+      ],
+      "rows": [
+        {
+          "number": 1,
+          "values": [
+            "0xDEAD"
+          ],
+          "cut": [
+            0
+          ]
+        }
+      ],
+      "options": {
+        "delimiter": ";",
+        "header": false,
+        "quoting": "auto",
+        "formulaGuard": true,
+        "lineBreak": "lf",
+        "nullText": "",
+        "binary": "null"
+      },
+      "expected": "\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 0
+      }
+    },
+    {
+      "name": "TXT: a célula gerada pelo banco é vazia, ou NULL",
+      "format": "txt",
+      "engine": "postgresql",
+      "sourceName": "pedido",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int4",
+          "kind": "number"
+        }
+      ],
+      "rows": [
+        {
+          "number": 8,
+          "values": [
+            "qualquer"
+          ],
+          "generated": [
+            0
+          ]
+        }
+      ],
+      "options": {
+        "header": false,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": true,
+        "lineBreak": "lf",
+        "binary": "hex"
+      },
+      "expected": "|NULL|\n",
+      "summary": {
+        "cutValues": 0,
+        "removedCharacters": 0,
+        "skippedRows": 0,
+        "notWhole": 0
+      }
+    }
+  ]
+}

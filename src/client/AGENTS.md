@@ -1441,22 +1441,22 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   `record-edits.ts` (as pendências, `PendingEdits`: células de linha lida, numa junção com a linha da tabela, `change`; exclusões e linhas novas, cada lista na ordem em que foi feita; uma
   alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
   `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
-  `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
-  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Adicionar linha, Duplicar linha e Excluir linha, os rótulos da RN-EDIT-001 (até a
-  seção 33, "Adicionar linha" se chamava "Linha nova"; as marcas da linha nova na grade continuam com esse nome); o que não se aplica vem desabilitado,
-  com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, Tab) e `grid-editing.ts` (as linhas e as
-  marcas que a grade desenha). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
+  `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"; `deleteRowsAccess`, a exclusão das
+  linhas da seleção), `cell-menu.ts` (o menu da grade nos grupos do DBeaver, RN-GRADE-004: ver "A seleção da grade", abaixo; os rótulos da RN-EDIT-001 (até
+  a seção 33, "Adicionar linha" se chamava "Linha nova"; as marcas da linha nova na grade continuam com esse nome); o que não se aplica vem desabilitado,
+  com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, PageUp, PageDown, Tab) e `grid-editing.ts` (as linhas e as
+  marcas que a grade desenha, e as teclas). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
   central pelo cache de mutações) e os esquemas, `record-edits.schema.ts`. A página traz `resultID` e o motivo de só leitura (`QueryPage.resultId` e
   `readOnly`, que o executor guarda nas linhas), e o executor dá a sessão da aba (`sessionOf`).
   - **Quem liga tudo é `_lib/use-record-edits.ts`** (na vista Registros e na aba de consulta): o estado (as pendências, que ficam na memória da aba, espaço `edits`, pelo
     resultado; o alvo do catálogo, perguntado na primeira tentativa de editar, pela sessão da árvore da mesma conexão quando ela existe; a célula
     ativa e o campo aberto, do resultado; a faixa, o menu, o "Ver SQL" e a pergunta). A grade (`ResultGrid` com `editing`) passa a `role="grid"`,
     com `gridcell`, `aria-activedescendant` e a posição em `data-row`/`data-col`, que o clique, o duplo clique e o botão direito leem por
-    delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: setas, Home e End (com Ctrl,
-    da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
+    delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: as teclas da seleção (ver "A seleção
+    da grade", abaixo), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
     as alterações quando há alguma (`savesEdits`; sem nenhuma, ou com Shift, a tecla segue para o script da aba de consulta, RN-SCRIPT-001),
-    Alt+Insert adiciona a linha, Ctrl+Alt+Insert a duplica e Alt+Delete a exclui (ver "A barra de edição, o duplicar e os atalhos da linha", abaixo). A grade
-    rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
+    Alt+Insert adiciona a linha, Ctrl+Alt+Insert duplica e Alt+Delete exclui as linhas da seleção (ver "A barra de edição, o duplicar e os atalhos da linha",
+    abaixo). A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
@@ -1470,9 +1470,9 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     Cancelar o tira da passagem; fechar abas pergunta pelo registro `unsaved-edits.ts` (`unsavedQuestion`: uma aba oferece Salvar; várias, ou a aba
     com a vista Registros desmontada, só Descartar e Cancelar), antes da pergunta do SQL digitado. O provedor esquece o registro das abas que
     fecham, como a memória da aba.
-  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; copiar (Ctrl+C e
-    "Copiar valor") leva o valor completo da célula cortada (ver "Valor completo das células cortadas", abaixo); colar vira pendência
-    da célula, como a edição.
+  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; copiar (Ctrl+C, "Copiar" e
+    "Copiar com cabeçalho") leva a seleção, com o valor completo das células cortadas (ver "A seleção da grade" e "Valor completo das células cortadas",
+    abaixo); colar vira pendência da célula ativa, como a edição, e só com uma célula escolhida.
   - **Na aba de consulta** (`query-tab.tsx`, `subject: "result"`, que muda só as frases da conferência do catálogo): executar outro comando (o botão
     e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
     só avisa). O Salvar que gravou tudo NÃO executa de novo (RN-EDIT-009): `savedResultOf` (`record-edits.ts`) monta a grade que fica (os valores
@@ -1528,11 +1528,17 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
       `sr-only` ligado por `aria-describedby`; cada um declara `aria-keyshortcuts`. Depois do clique o foco volta à grade (`onDone`, que a área liga ao
       `[role="grid"]` dela); no "Editar célula" o campo nasce com o foco e o devolve à grade ao fechar. Clicar com o campo aberto o confirma antes (o campo
       confirma ao perder o foco, no `mousedown` do botão).
-    - **O que cada botão faz** é o item de mesmo nome do menu, sobre a célula ativa (`bar.onAction`): `openEditor`, `newRow`, `duplicateRow` e `removeRow`,
-      com a mesma pausa da atualização automática desde o começo (`hold`) e o mesmo descarte quando o resultado mudou no meio (`moved`). Tirada uma linha
-      nova, a célula ativa passa à que ficou no lugar dela, ou à de cima quando ela era a última, e some sem linha nenhuma (`removeRow`). A linha nova que
-      `removeRow` tira é seguida pelo id, e não pela posição: dois "Excluir linha" seguidos enquanto o alvo é perguntado (o duplo clique), o "Descartar"
-      ou o "Carregar mais" no meio mudam a linha daquela posição, e a segunda exclusão não tira a linha nova que passou ao lugar da primeira.
+    - **O que cada botão faz** é o item de mesmo nome do menu (`bar.onAction`): `openEditor` na célula ativa, `newRow`, e `duplicateRows` e `removeRows` nas
+      linhas da seleção (RN-EDIT-014, seção 37), com a mesma pausa da atualização automática desde o começo (`hold`) e o mesmo descarte quando o resultado
+      mudou no meio (`moved`). Com mais de uma linha, os rótulos vão ao plural ("Duplicar linhas", "Excluir linhas"), e a dica e a descrição para o leitor
+      de tela dizem quantas ("Excluir as 3 linhas escolhidas (Alt+Delete)", `EditBarButton.description`). Tiradas linhas novas, a seleção passa a ser a
+      célula ativa, que vai para a linha que ficou no lugar da primeira tirada, ou para a de cima quando não ficou nenhuma depois dela, e some sem linha
+      nenhuma. As linhas são seguidas pela identidade (`refsOf`/`positionsOf`, a lida pela posição, a nova pelo id), e não pela posição: dois "Excluir linha"
+      seguidos enquanto o alvo é perguntado (o duplo clique), o "Descartar" ou o "Carregar mais" no meio mudam a linha daquela posição, e a segunda
+      exclusão não tira a linha nova que passou ao lugar da primeira. Uma linha da seleção cuja chave não se sabe não deixa excluir nenhuma, com o número
+      dela no motivo (`deleteRowsAccess`: "a chave da linha 7 chegou cortada"); a já marcada fica como está. As linhas saem numa passada só
+      (`deleteRows` para as lidas e `removeNewRows` para as novas, pelos conjuntos, em `record-edits.ts`): o Ctrl+A com 50.000 linhas carregadas não faz uma
+      cópia da lista por linha (com `deleteRow` em laço, eram 15 s de tela parada).
     - **Os atalhos** (`rowShortcut`, conferido no `handleKeyDown` da grade antes das setas): Alt+Insert adiciona, Ctrl+Alt+Insert duplica (a mesma tecla, o
       Ctrl decide: antes o ramo do Alt+Insert casava também o Ctrl+Alt+Insert e o Shift+Alt+Insert) e Alt+Delete exclui a linha da célula ativa, com os
       modificadores exatos; com Shift, nada. O AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica e o Delete não faz nada. No macOS
@@ -1540,9 +1546,12 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
       papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
       tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
       `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
-      (`rowAction`). O Delete sozinho continua sem excluir: espera a seleção de linhas (RN-GRADE-001).
-    - **Duplicar linha** (`duplicateRow`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), uma linha nova no fim da grade
-      (`addRow` com as colunas copiadas), com o valor que a tela mostra de cada coluna da tabela que se edita (a pendência também, o nulo como nulo; na
+      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) exclui as linhas inteiras escolhidas, e só elas
+      (`choseWholeRows`): com um retângulo, também o que cobre todas as colunas, ou só com a célula ativa, não faz nada (RN-EDIT-015).
+    - **Duplicar linha(s)** (`duplicateRows`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), até 1.000 linhas de uma
+      vez (`duplicateLimit`), uma linha nova no fim da grade para cada linha da seleção, na ordem da grade (`addRow` com as colunas copiadas; a busca dos
+      valores completos é uma só, para todas; o que não vem não duplica nenhuma, com a coluna e o número da linha na frase do plural; depois, a seleção é das
+      cópias, inteiras, `selectNewRows`), com o valor que a tela mostra de cada coluna da tabela que se edita (a pendência também, o nulo como nulo; na
       linha marcada para exclusão, o lido; numa linha nova de origem, só o que ela tinha). Não copia a que o banco gera, "sempre" ou "por padrão"
       (`generated`, que no PostgreSQL a API passou a dar também ao `serial`), a que não se edita e, na linha nova já salva, a que o banco preencheu; a
       calculada no comando não é da tabela e não entra na lista. A coluna da tabela que o resultado traz duas vezes (`SELECT id, id AS copia`) se copia uma
@@ -1569,11 +1578,13 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   busca nova cancela a anterior. `RESULT_NOT_FOUND`, `DATABASE_SESSION_NOT_FOUND` e `CELLS_INVALID` deixam as células cortadas sem aviso
   central; o resto (a API fora do ar) passa pelo cache de mutações (RN-AVISO-004). O valor sem completo vai cortado, e o aviso diz quantos
   (`recordsCopy.edit.menu.copiedCut` na cópia, `workbenchCopy.tableTab.records.exportedCut` no CSV).
-  - **Onde vale**: Ctrl+C com o foco na grade copia a célula ativa (`copiesCell`, em `grid-editing.ts`; com Shift é o copiar avançado e segue),
-    "Copiar valor" do menu da célula, "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
-    como antes) e "Duplicar linha" (as cortadas das colunas que ela copia; o que não vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
-    nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
-    passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
+  - **Onde vale**: Ctrl+C com o foco na grade, "Copiar" e "Copiar com cabeçalho" copiam a seleção (`copySelection`, ver "A seleção da grade", abaixo:
+    só as cortadas que vão no texto, e a busca para quando o texto passa de 10 MiB, `fetchFullValues` com `keepGoing`), "Exportar CSV" dos Registros (as
+    cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora, como antes) e "Duplicar linha(s)" (as cortadas das colunas que ela copia; o que não
+    vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **Os "Copiar como" e o "Copiar avançado…"
+    (RN-GRADE-003 e 016)** pedem o recorte da seleção ao contexto (`GridSelectionContext.slice`) e o completam por `complete`, que passa por
+    `completeValues` e por `completeSlice` (`grid-slice.ts`); o `runCopyAs` só pede as cortadas que o documento escreve com o valor (`cutCellsToFetch`) e
+    para a busca quando o texto passa de 10 MiB (ver "Copiar como e Copiar avançado", abaixo). O "Gerar SQL" pede só as células cortadas que o item usa (`cutCellsFor`), pela posição na grade (`fullValues`).
   - **As fixtures de ouro da exportação** (RN-EXPORT-024): a API escreve a exportação de todas as linhas (seção 35) com os mesmos valores e escapes
     desta biblioteca, e os dois lados leem as mesmas fixtures, em `src/test-fixtures/export/` (fora de `src/client` e de `src/api`), escritas à mão e
     conferidas por inteiro. Aqui quem as lê é o `_lib/grid-export/export-fixtures.test.ts`, pelo caminho a partir da raiz do repositório: o campo do CSV
@@ -1582,9 +1593,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     `scriptLiteral`), o texto e o atributo do XML com o `isXmlChar`, e a planilha (`xlsxText`, `spreadsheetNumber`, `sheetNameOf` e `withinCell`).
     `jsonValue`, `markdownCell` e `withinCell` são exportados só por isso. **Mudar um escape destas funções é mudar a fixture**, e a API falha até
     seguir a regra nova (o `ExportFixturesTests` dela lê os mesmos arquivos); a fixture nunca se regera a partir do código. Os casos com o par
-    substituto solto vêm como `{ "codePoints": [...] }`, montados por `String.fromCharCode` (o par solto) e `String.fromCodePoint`. As fixtures só da
-    API (o TXT, o PHP, a data em ISO 8601, o literal do binário, o `INSERT` de várias linhas, o nome do XML e o DbUnit) ficam para quando a tela
-    escrever essas regras.
+    substituto solto vêm como `{ "codePoints": [...] }`, montados por `String.fromCharCode` (o par solto) e `String.fromCodePoint`. Desde a seção 37 a
+    tela lê também as que eram só da API (o "Em todos os textos" do CSV, o TXT, o PHP, a data em ISO 8601, o literal do binário, o `INSERT` de várias
+    linhas, o nome do XML e o DbUnit), a `document.json` (o documento inteiro de cada formato de texto, dos dois lados) e a `copy-as.json` (só da tela):
+    ver "Copiar como e Copiar avançado".
   - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
     (RN-EDIT-009): `savedResultOf` devolve `sourceRows` (a linha de antes de cada uma, nula na nova; um segundo Salvar continua a conta), o
     executor a guarda (`RowsState.sourceRows`, por `keepSaved`) e ela viaja com a aba para outra janela (`window-messages.ts`). Sem ela, a cópia de
@@ -1610,6 +1622,106 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   (`returnByValue` falha com "Object reference chain is too long"). No Linux, sob Xvfb: `xvfb-run -a pnpm dev --remoteDebuggingPort <porta>
   --noSandbox -- --user-data-dir=<descartável>` (o `--` leva o argumento ao Electron, e a pasta de dados fica fora da sua); a conexão de teste
   pode ser criada pela própria página, com `window.prism.getApiConfig()` e um `POST api/user/connections`, e um `location.reload()` a mostra no navegador.
+
+## A seleção da grade, o copiar e o menu (seção 37: RN-GRADE-001 a 004, 014 e 015, RN-EDIT-004 e 013 a 016)
+
+A seção 37 da especificação manda; o que segue diz onde ficam as peças e **o contrato que as frentes do "Copiar avançado" e do "Gerar SQL" usam**. Vale nas
+duas grades (os Registros e o resultado da aba de consulta, também nas abas guardadas do script): a seleção é da edição (`useRecordEdits`), e a grade só
+desenha e avisa.
+
+- **O modelo é puro** (`_lib/grid-selection.ts`, com teste, sem React e sem DOM). `GridSelection = { active, anchor, shape }`: a célula ativa e a âncora
+  são `CellRef` (`{ row: RowRef, column }`), e a forma é `cell` (só a ativa), `cells` (um retângulo: `rows: RowSet` e as colunas `from` a `to`) ou `rows`
+  (linhas inteiras: `rows: RowSet`). **As linhas são guardadas pela identidade**: `RowRef` é `{ kind: "read", row }` (a posição no resultado) ou
+  `{ kind: "new", id }` (o `NewRow.id`), e `RowSet = { read: [de, até][], added: id[] }` são faixas e uma lista, **nunca célula por célula**: o Ctrl+A em 100
+  mil linhas é uma faixa, e a pergunta "esta linha está escolhida?" é uma busca binária (o teste de desempenho confere). O "carregar mais" põe as lidas
+  que chegam antes das novas: guardadas assim, a seleção fica nas mesmas linhas, e as lidas que chegam depois de um Ctrl+A não entram nele.
+  `GridLayout = { read, added, columns }` é a grade de agora (as lidas, os ids das novas na ordem, as colunas); toda posição que entra e sai (`GridCell`,
+  `row`) é a da grade agora.
+  - **Os gestos** (devolvem a seleção nova): `select` (o clique, as teclas sem Shift, o Tab do campo), `extend` (Shift+clique, o arraste), `extendByKey`
+    (Shift com as teclas: com linhas inteiras, a vertical estende as linhas e a horizontal só move a ativa), `selectRow`, `extendRows` e `toggleRow` (o
+    número da linha: clique, Shift, Ctrl/Cmd; com um retângulo, o Ctrl+clique é o clique), `dragRows` (o arraste no número, com Ctrl no começo juntando),
+    `selectAll` (Ctrl+A e o canto), `collapse` (Esc, e o Salvar/Descartar/Excluir que tiram linhas), `wholeRows` (Shift+Espaço), `contextCell` e
+    `contextRow` (o botão direito), `selectNewRows` (as cópias do "Duplicar linhas") e `afterSave` (o Salvar da aba de consulta, que não executa de novo).
+  - **As perguntas**: `activeCell`, `selectedRows` (as linhas da seleção, as que têm uma célula escolhida, pela posição, em ordem: é sobre elas que agem o
+    copiar, o "Gerar SQL", "Duplicar/Excluir linhas" e "Copiar número de linha(s)"), `selectedColumns`, `selectedCells` (um gerador, linha a linha),
+    `rowSpan` e `columnSpan` (o que a grade desenha em cada linha à vista e no cabeçalho), `isSelected`, `selectionSize` (`{ rows, cells, whole }`, a
+    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar"/"Definir como nulo" de uma célula só) e `choseWholeRows` (o Delete).
+  - **O recorte** (`sliceOf(selection, layout, source, scope)`, `scope` `cells` (o padrão), `rows` ou `loaded`, os três do "O que copiar" da RN-GRADE-003):
+    um `SelectionSlice`, que é o `GridSlice` dos formatos (`grid-export`) com `positions` e `columnIndexes` (de volta à grade), `newRows` (as linhas novas
+    ainda não salvas, pelo índice no recorte: não têm número na grade, e o "Copiar como SQL" as deixa de fora) e `generated` (as células "gerado pelo
+    banco", que vêm nulas). `rowNumbers` é o número da grade (de 1 em diante). A célula cortada vem com o que a grade tem e a marca em `truncated`.
+- **Quem guarda é `useRecordEdits`**: a seleção é da execução que está na tela (a chave é `id` mais `resultId`: o "carregar mais" a mantém; outra execução,
+  o F5, o filtro, a ordem, a atualização automática e a troca de aba de resultado do script a esquecem, com a célula ativa, na mesma renderização, e voltar
+  à aba de antes não a traz). `updateSelection(change)` aplica um gesto e já põe o resultado no `latest` (as ações depois de um `await` o leem); `putEdits`
+  põe lá também a grade de agora, para a linha nova acrescentada ser achada antes da renderização seguinte. A célula ativa que as ações usam (`active`) é
+  `activeCell` da seleção. Abrir, confirmar e cancelar o campo mantêm a seleção.
+- **O que a grade recebe** (`GridEditing`): `selection` e `layout` (para desenhar), `onSelection(change)` (cada gesto, pela função pura), `onSelecting(on)`
+  (o arraste e a tecla com Shift presa: a contagem só muda quando a seleção para), `status` (a contagem, "3 linhas escolhidas" ou "12 células escolhidas",
+  nula com uma célula ou nenhuma; a `ResultPanel` a põe ao lado do resumo, num `role="status"` que fica na página também vazio), `onCopy()` (a seleção),
+  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho) e `onRowMenu(row, point)` (o botão direito no
+  número da linha). `onActivate(cell)` continua sendo o clique (`select`), e `onMenu` escolhe antes a célula de fora da seleção.
+- **A grade** (`result-grid.tsx`): `aria-multiselectable`, `aria-selected` em cada célula desenhada (escolhida, e não só a ativa), o fundo de escolha
+  (`bg-selected`, o do item escolhido do navegador; a pendente escolhida, `bg-accent/35`), o número da linha (`data-rowheader`, que o clique e o botão direito
+  leem por delegação) e o cabeçalho das colunas da seleção destacados. A linha memorizada recebe as colunas escolhidas como dois números (`selectedFrom`,
+  `selectedTo`), e não a seleção: rolar e desenhar custam o mesmo que sem ela. O canto (o "#") é um `columnheader` com um botão "Escolher todas as linhas" fora
+  do Tab (`tabIndex={-1}`, sem roubar o foco no `mousedown`). **O arraste** segue o ponteiro na janela (`mousemove`/`mouseup` no `window`, também fora da
+  grade) e, passado da borda, rola sozinho a cada 50 ms (`grid-pointer.ts`, puro: `cellAtPoint`, pela caixa, pela rolagem e pelas larguras desenhadas, e
+  `edgeScroll`), lendo a cada passo as linhas, as larguras e o zoom da renderização de agora (`geometry`, uma ref): com "buscar mais linhas ao rolar", a
+  rolagem sozinha traz a página seguinte no meio do arraste, e a célula sob o ponteiro entra nela; o `mousedown` numa célula ou no número tem `preventDefault` (o texto da página não é escolhido) e devolve o foco à grade. **As teclas**:
+  `movementOf` (`grid-cursor.ts`) diz se a tecla é de movimento, se estende e se é vertical; o PageUp e o PageDown andam `pageRows` linhas e, com Ctrl, Alt ou
+  Cmd, não são da grade (o Ctrl+Shift+PageUp/PageDown move a aba, RN-ABAS-001); `selectsAll`, `selectsRows` (Shift+Espaço, antes do "começar a digitar"),
+  `copiesAdvanced` e `deletesRows` estão em `grid-editing.ts`; o Esc é da grade quando a seleção não é só a célula ativa (`escapeCollapses`, pela forma, e não
+  pela contagem: a linha inteira de uma coluna só é uma célula, e o Delete a excluiria), e com a célula ativa só segue para quem está acima. O cabeçalho e o
+  número da linha, presos, são o `scrollPaddingStart` dos dois virtualizadores: o `scrollToIndex` da célula ativa (Ctrl+Home, PageUp, Home) a deixa logo
+  depois deles, e não por baixo. Nada disto foi conferido numa janela:
+  o vitest não tem DOM, e o arraste, a rolagem sozinha e o foco são para conferir sob Xvfb.
+- **O copiar** (RN-GRADE-002; `_lib/grid-copy.ts`, puro: `copyField`, `buildCopyText`, `copyCeiling`, `copiedNotice`, `utf8Length`, `wellFormed`). O texto é
+  montado em partes de `copyChunk` células, cedendo a vez à tela (`setTimeout`), com o tamanho em UTF-8 somado no caminho e o limite de `clipboardLimit`
+  (10 MiB); passado meio segundo, a faixa diz "Copiando…" com o "Cancelar" (o mesmo `onCancelFetch`, que desiste também da cópia). Com célula cortada, o teto
+  sem montar (`copyCeiling`) quase sempre basta; acima do limite, mede o exato antes de buscar nada. A cópia é da foto de quando começou (as linhas, as
+  pendências, a seleção), e a atualização automática fica em pausa até o texto ir para a área de transferência (`hold`). "Copiar nome da(s) coluna(s)" e
+  "Copiar número de linha(s)" (RN-GRADE-015) são `columnNamesText` (o `sqlName` do autocompletar, por tabulação; por isso `useRecordEdits` recebe `engine`) e
+  `rowNumbersOf`. Os textos estão em `_lib/grid-selection.copy.ts`.
+- **O menu** (`cellMenu`, RN-GRADE-004) tem os grupos do DBeaver: Copiar (Ctrl+C), Copiar com cabeçalho, o submenu "Copiar avançado" e Colar; Filtrar (F11),
+  Ordenar e Ir para o registro referenciado; Editar célula, Definir como nulo e Desfazer alteração; Adicionar, Duplicar e Excluir linha(s); Exportar dados… e
+  o submenu "Gerar SQL"; Atualizar (F5) e Atualizar automaticamente. Cada grupo e cada item de fonte aparece só quando quem usa a edição o entrega: `sort`
+  (`GridSortSource`: nos Registros, `orderRecords`, o caminho do clique no cabeçalho; na aba de consulta, o campo de filtro do resultado com `withOrder`; não
+  nas abas guardadas do script), `follow` (`GridFollowSource`, só os Registros, pelas chaves estrangeiras da grade), `copyAs` e `generateSql`.
+  "Desfazer alteração" age nas células escolhidas (`undoWhere`, em `record-edits.ts`, que percorre as pendências e não a seleção).
+- **O contrato com as outras frentes** (seção 37: o "Copiar avançado…", os nove "Copiar como", a configuração deles e o "Gerar SQL"). `useRecordEdits`
+  recebe `copyAs?: CopyAsSource` e `generateSql?: GenerateSqlSource`, os dois `GridMenuSource<A, S> = { access(context): S; choose(action, context) }`:
+  - `access` é chamado ao abrir o menu e devolve o estado dos itens: no `copyAs`, `CopyAsAccess = { dialog, formats?: Partial<Record<CopyAsFormat,
+    EditAccess>>, configure }`; no `generateSql`, `Partial<Record<GenerateSqlKind, EditAccess>>`. O que não vem vale. Sem a fonte, o submenu "Copiar
+    avançado" tem só os nomes e os números, e o "Gerar SQL" não aparece (o item que não existe não aparece).
+  - `choose` recebe a ação (`copyAdvanced`, `copyAs:<formato>` e `copyAsConfigure`, com `copyAsFormats` na ordem do print: `csv`, `sourceCode`,
+    `dbUnit`, `html`, `json`, `markdown`, `sql`, `txt`, `xml`; e `sql:<item>`, com `generateSqlKinds`: `selectEquals`, `selectIn`, `insert`, `update`, `delete`
+    e `create`), já com o menu fechado, e o contexto de agora. O Ctrl+Shift+C chama `copyAs.choose("copyAdvanced", context)` quando o `dialog` vale.
+  - `GridSelectionContext` (também em `RecordEdits.selectionContext()`, para os diálogos relerem): `resultId`, `shown` (as linhas na tela), `engine`,
+    `subject`, `target` (o alvo da edição que já se sabe), `selection`, `layout`, `rows` e `columns` (as da seleção), `pending` (as pendências como a grade
+    as mostra, com as linhas marcadas para exclusão), `busy` (a aba ocupada, ou `"refresh"` com a atualização automática lendo), `slice(scope)`,
+    `complete(slice, keepGoing?, signal?)` (o valor completo das cortadas, pela faixa com o "Cancelar"; nulo quando a pessoa cancelou, também pelo `signal` de
+    quem pediu, como o "Cancelar a busca" do diálogo; `stopped` quando `keepGoing` mandou parar), `fullValues(cells, signal?)` (o mesmo, pela posição na
+    grade, para quem não monta um recorte), `hold()` (a pausa da atualização automática: quem abre um diálogo a segura até fechá-lo, RN-GRADE-014),
+    `moved()` (o resultado já não é o da seleção), `copying(controller)` (a faixa "Copiando…" passado meio segundo, com o "Cancelar" dela abortando a cópia;
+    devolve quem a tira), `ensureTarget()` (o `edit-target` da edição) e o alvo do "Gerar SQL" e do "Copiar como" (abaixo).
+  - **O alvo do "Gerar SQL" e do "Copiar como"** (RN-GRADE-020 e RN-EDIT-010): `sqlTarget(notice?)` é o `edit-target` com `purpose: "sql"`, o MESMO para os
+    dois, perguntado uma vez por resultado (os 32 mais recentes ficam, um por aba de resultado do script) e na sessão em que o resultado foi lido; `notice` vai à
+    faixa enquanto a API responde ("Conferindo a tabela deste resultado…", do "Copiar como"; o diálogo do "Gerar SQL" diz a dele). `knownSqlTarget()` é o que
+    já se sabe sem perguntar (habilitar não custa consulta): o alvo da edição, quando ele traz o `kind` e o `keyColumns` (`sqlTargetOf`); o motivo da página,
+    quando ela já disse que o resultado inteiro é só leitura (a união, o `DISTINCT`, o filtro embrulhado), como `notEditable`, menos na conexão somente leitura
+    agora (`cachedReadOnly`), em que a página de toda leitura diz "a conexão é somente leitura" e o alvo vale ali (RN-PROT-002): quem diz se há outro motivo é a
+    API; ou a resposta de antes. O motivo da página só vale enquanto a conexão é somente leitura (`readOnlyReasonNow`, em `grid-action-context.ts`, também
+    para a edição): desmarcada depois da leitura, a página é como a sem motivo, e a edição e o "Gerar SQL" perguntam à API; marcada depois, nada muda na
+    página, e a API recusa. O texto do motivo só se compara com o valor fixo que a rota escreve (`connectionReadOnlyReason`, o `ReadOnlySql.ResultReason`
+    da API), porque a página não diz a proteção de outro jeito; quem decide é a proteção de agora. A
+    resposta guarda o alvo ou a recusa de que o resultado não se edita; a falha não, e a seguinte pergunta de novo. **O alvo do "Gerar SQL" nunca volta à
+    edição**: o da conexão somente leitura vem todo só leitura e não serve ao Salvar, e a edição pergunta o dela (o contrário vale: o da edição serve aqui).
+  - **A ligação** (seção 37): as fontes são `useCopyAs` (`_lib/copy-as/use-copy-as.ts`, ver "Copiar como e Copiar avançado") e `useGridGenerateSql`
+    (`_lib/generate-sql/use-grid-generate-sql.ts`, ver "Gerar SQL"), montadas em `records-view.tsx` (com a tabela da aba como origem) e em `query-tab.tsx` (no
+    resultado do último comando e em cada aba guardada do script, que usam a mesma edição); os diálogos entram por `resultEditDialogs(edits, actions)`
+    (`GridActionDialogs`). O usuário do cofre, o somente leitura da conexão e o tipo da tabela dos Registros são lidos do cache na hora da escolha
+    (`grid-action-context.ts`: `cachedUserName`, `cachedReadOnly`, `cachedObjectKind`), sem disparar consulta, e o "Abrir numa aba de consulta" chega da
+    área de trabalho por `onOpenQuery` (`workbench-tabs.tsx` → `TableTabPanel` → `RecordsView`, e → `QueryTabPanel`), estável como o `onOpenTable`.
 
 ## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-011 a 013 e RN-TABELA-011)
 
@@ -1751,7 +1863,8 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   execução, porque o tempo conta do fim do último comando. O que conta como atividade continua sendo só tecla, ponteiro e roda de verdade (`watchActivity`).
 - **As pausas** (`pause("hidden" | "editing" | "moving", on)`): `useAutoRefresh` (`_lib/use-auto-refresh.ts`) põe a de fora de vista com a aba escondida e com a vista
   desmontada (a aba de consulta lê `useWorkbenchOnScreen` ela mesma, para não mexer em `workbench-tabs.tsx`; a de tabela recebe `visible`); `useRecordEdits`
-  põe a da edição com alteração não salva, célula aberta, menu da célula, "Filtrar por valor…" ou o campo do "Personalizado" abertos; `handOffTab` põe a da
+  põe a da edição com alteração não salva, célula aberta, menu da célula, "Filtrar por valor…" ou o campo do "Personalizado" abertos, mais de uma célula
+  escolhida (RN-GRADE-001) e a cópia em andamento (RN-GRADE-002); `handOffTab` põe a da
   ida para outra janela. Ao sair da pausa, executa na hora se o prazo passou. **A pausa da edição vale desde o começo da ação**: o duplo clique, o menu, a
   linha nova, "Duplicar linha" (também durante a busca dos valores completos), "Excluir linha" e o "Colar" (com a leitura da área de transferência), pelo
   menu, pela barra de edição ou pelo atalho (seção 33), perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
@@ -1999,7 +2112,9 @@ seção seguinte.
   nome acessível do cadeado e entra no do botão da conexão. A grade não se edita: a página já vem com `editable: { known: true, reason: "a conexão é
   somente leitura" }`, e os itens ficam desabilitados com "Somente leitura: a conexão é somente leitura."; a conexão que passou a ser somente leitura
   depois do resultado responde o `edit-target` com `CONNECTION_READ_ONLY`, tratado como o resultado só leitura, com o mesmo motivo
-  (`recordsCopy.edit.reasons.connectionReadOnly`), e o Salvar recusado assim mostra a frase na faixa.
+  (`recordsCopy.edit.reasons.connectionReadOnly`), e o Salvar recusado assim mostra a frase na faixa. Esse motivo, o da página e o da recusa, só vale
+  enquanto a conexão é somente leitura: `useRecordEdits` lê a proteção da lista das conexões em cache (`cachedReadOnly`, assinando o cache por
+  `useSyncExternalStore`) e, desmarcada (RN-PROT-003), trata a página como a que não se sabe e pergunta o `edit-target` de novo (`readOnlyReasonNow`).
 - **A recusa do comando** (`CONNECTION_READ_ONLY`, 422): o executor a trata no lugar, como o controle de transação recusado antes de executar (`failed`):
   nada foi ao banco, então com linhas na tela elas e o cursor ficam ("Carregar mais" continua), e a frase da API vai no aviso de erro; sem resultado, ela
   vai à área de resultado, com o aviso curto. No script, ela é o erro do comando (`scriptCommandRefusals`), e o script pergunta o que fazer.
@@ -2162,6 +2277,96 @@ Electron não ganhou canal novo.
 - **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
   salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
 
+## Copiar como e Copiar avançado (RN-GRADE-003, 016 e 017)
+
+Seção 37 da especificação. Os escritores, as escolhas lembradas e os dois diálogos são puros ou só de propriedades e estado; a ligação com a seleção da
+grade (o submenu "Copiar avançado" do menu, o Ctrl+Shift+C, a pausa da atualização automática, a busca dos completos, a área de transferência e os
+avisos) é `use-copy-as.ts` (ver "A ligação", no fim desta seção), nos Registros, no resultado da aba de consulta e em cada aba guardada do script.
+
+- **Os nove documentos de texto** (`_lib/grid-export/`: `document.ts` com os tipos, `documents.ts` com o escritor de cada formato e as duas montagens, e
+  um arquivo por formato: `to-csv.ts`, `to-txt.ts`, `to-html.ts`, `to-markdown.ts`, `to-json.ts`, `to-source-code.ts`, `to-sql.ts` e `to-xml.ts`, com o
+  XML e o DbUnit). **Cada um é o escritor da API portado linha a linha** (`Prism.Infrastructure/Transfers/Writers`): `begin`, `write` a cada linha e
+  `end`, cada um devolvendo o pedaço que escreveu, com as mesmas contagens (`DocumentCounts`: os valores cortados do TXT, os caracteres tirados, as linhas
+  comentadas do SQL, e `notWhole`, só da tela, os valores que ficaram cortados). As opções são as da exportação (`FormatOptions`, de
+  `data-export/export-options.ts`), os números ainda como o texto do campo. O texto sai com o par substituto solto como U+FFFD (`wellFormed`, a troca do
+  UTF-8 da API) e o tamanho conta em UTF-8 (`utf8Length`). `writeDocument` monta de uma vez; `buildDocument` monta em partes, cede a vez à tela a cada
+  5.000 células (`pause`), para no limite (`clipboardLimitBytes`, 10 MiB: passar recusa, chegar não) e desiste pelo sinal. O que a linha da grade tem e o
+  arquivo da API não: `number` (o da grade, que o comentário do SQL escreve; `null` na linha nova ainda não salva), `cut` e `generated` (a célula "gerado
+  pelo banco"), que viram o nulo nos formatos de dados e o comentário de frase fixa no SQL (`document.copy.ts`, RN-GRADE-016); no JSON e no Código fonte o
+  valor cortado nunca é número. O binário chega como a grade o escreve (`0x…`): o hexadecimal nos formatos de dados, o nulo com "Deixar vazio", e no SQL o
+  literal (`binaryLiteral`: o `decode('…', 'hex')` do PostgreSQL; no Db2, pelo tipo da coluna, o `BX'…'` do `BINARY` e do `VARBINARY`, o `BLOB(X'…')`
+  do `BLOB` e o `X'…'` do texto `FOR BIT DATA`, em pedaços de 16.336 bytes; e no Informix a linha comentada), como a RN-EXPORT-011 e a API dizem. **Mudar
+  uma regra de formato é mudar os dois lados e a fixture.**
+- **O nome do XML** (`xml-name.ts`) é o `XmlConvert.EncodeLocalName` do .NET, unidade UTF-16 por unidade, com o `_x` já escrito ganhando o `_x005F_`. O
+  que cabe num nome é o do XML 1.0 da **4ª** edição (o Apêndice B, do Unicode 2.0), e não o da 5ª: um caractere mais novo vira escape também no meio do
+  nome. As duas tabelas de faixas vieram do próprio .NET 10 (caractere por caractere do plano básico, uma vez, por um programa descartável) e o
+  `xml-name.test.ts` confere a forma delas; a regra, a `xml-name.json`, dos dois lados. As maiúsculas do DbUnit são as do `ToUpperInvariant`
+  (`upperInvariant`): a maiúscula simples de cada ponto de código (o `ß` e o `ﬁ` ficam), o `ı` fica (como o .NET faz com o ICU), e as formas gregas com
+  iota subscrito vão à simples (`ᾳ` → `ᾼ`); comparado em todos os pontos de código contra o .NET 10, só diferem os caracteres que o Unicode de um dos
+  dois ainda não tem (cinco do plano básico, `U+019B`, `U+0264`, `U+1C8A`, `U+A7CD` e `U+A7DB`).
+- **A prova de que os dois lados escrevem o mesmo**: as fixtures (`export-fixtures.test.ts` aqui, `ExportFixturesTests` na API), com a `document.json`
+  dos dois lados (as opções como a rota as recebe: a API as lê pelo `ExportOptionsReader`, e o binário deixado vazio chega nulo, como na leitura dela) e a
+  `copy-as.json` só daqui. Além delas, uma conferência descartável (não está no repositório) escreveu 20 mil documentos sorteados (os nove formatos, os três
+  bancos, opções sorteadas, nomes e valores hostis, lotes do TXT de mais de 200 linhas) pelos dois lados e comparou o texto e as contagens: nenhuma
+  diferença. **Para repetir depois de mudar um escritor**: um teste temporário escreve os casos e o texto da tela num JSON (as cadeias como unidades UTF-16,
+  porque o `System.Text.Json` recusa o par solto), e um programa do .NET que referencia o `Prism.Infrastructure.dll` chama `ExportFormats.Create` (é
+  `internal`: por reflexão) e compara.
+- **A origem da cópia e a cópia** (`_lib/copy-as/copy-as.ts`, puro). `CopySource` é o contrato com a seleção: o banco, o nome da origem (o da tabela nos
+  Registros, `resultSourceName` no resultado), a tabela de destino quando se sabe (a dos Registros, ou a do alvo da edição de uma tabela só, RN-GRADE-020;
+  `null` quando não) e as colunas (`CopyColumn`: o nome, o tipo do banco, o da grade e o `generated` do alvo) e as linhas (`CopyRow`: os valores como a
+  grade os mostra, com a pendência, o lido na linha excluída e o preenchido na nova; `number`, `cut` e `generated`). `pickColumns` restringe às colunas da
+  seleção. `runCopyAs(pedido, peças)` recusa no SQL, antes de tudo, a coluna repetida (`duplicateColumn`: duas das colunas que vão no `INSERT` com o mesmo
+  nome, pelo `duplicateOf` da exportação, que diz o nome que aparece primeiro, como o `GroupBy` da API, e lê só os nomes, sem montar as linhas; com a frase do "Copiar como", "O resultado tem duas colunas chamadas id: deixe uma de fora da seleção.",
+  `duplicateColumnRefusal`; a tabela de destino não a resolve, e os outros formatos copiam o nome repetido), confere a tabela do SQL e do DbUnit (`needsTable`: sem ela, `needsTable`, e a tela abre o "Copiar avançado…" no
+  formato, com `focusTable`), tira do SQL as colunas `generated: always` sem "Incluir as colunas que o banco calcula" (sem nenhuma que sobre, `noColumns`,
+  com uma frase que a especificação não escreve), e, com célula cortada que o documento escreve com o valor (`cutCellsToFetch`, RN-SQL-017: nas colunas
+  que vão, menos o binário com "Deixar vazio", ou "NULL" no SQL, que sai nulo, e o binário no SQL do Informix, que não tem literal e comenta a linha com
+  qualquer valor; o `sqlWriter` não comenta como "não pôde vir inteiro" a cortada desses dois), monta antes com o que a grade tem e recusa sem buscar o que
+  já passa do limite; depois busca os completos só dessas (`complete(origem, células, keepGoing, sinal)`, a peça da tela, que devolve a mesma origem com os
+  valores inteiros e as marcas das que não vieram e das não pedidas, e `stopped`; ou `null` cancelada). O `keepGoing` é exato (`fetchMeter`): a cada lote, as
+  linhas do começo que já têm todos os valores são escritas pelo escritor do formato, só para medir, e passado o limite a busca para (`tooLarge`); a largura
+  do TXT, o que o HTML e o XML tiram e a linha que o SQL comenta já estão na conta, e nenhuma cópia que caberia é recusada. Monta e põe na área de
+  transferência (`write`; a recusa, a promessa rejeitada e a exceção na hora, sem `navigator.clipboard`, são `failed`, "Não foi possível copiar."). As fases (`onPhase`: `writing`, `fetching`)
+  são para a faixa e o diálogo. O aviso é `copyAsNotice` ("3 linhas copiadas em JSON.", e o resumo depois do ponto, no tom de atenção). A prévia,
+  `previewOf`: o começo do texto (até 100 linhas e 64 KB, sem partir um par), escrito só com as linhas que ele precisa (no TXT, o primeiro lote inteiro,
+  para as larguras serem as de verdade), com as cortadas como a grade as tem; no SQL com a coluna repetida, vazia, com a recusa (`refusal`), que o diálogo
+  mostra no lugar do texto.
+- **As escolhas lembradas** (`copy-as-choices.ts`): `prism:copy-as:<usuário>` no `localStorage`, separada da `prism:data-export:` da exportação
+  (RN-GRADE-017), com o último formato do "Copiar avançado…" e as opções de cada formato, lidas pela mesma leitura tolerante da exportação
+  (`parseFormatOptions`, `rememberedFormatOptions` e `storedObject`, de `export-choices.ts`); a tabela de destino é da origem e não se grava
+  (`readCopyAsChoices(usuário, targetOf(origem))`). O "Copiar como" direto lê as escolhas na hora do clique.
+- **Os diálogos** (`_components/copy-as/`, só de propriedades e estado; o teste os roda com os ganchos simulados). `CopyAdvancedDialog` recebe as três
+  origens de "O que copiar" (`sources`: `cells`, `rows`, `loaded`), as escolhas, o formato e o foco iniciais, e `onCopy` (o `runCopyAs` da tela, que avisa
+  quando copiou), `onRemember` (no clique em "Copiar") e `onClose`; o "Cancelar a busca" aborta o sinal que ele passa ao `onCopy`. `ConfigureCopyAsDialog`
+  recebe as escolhas e entrega todas as opções no `onSave` (quem o abre grava, avisa "Opções do 'Copiar como' salvas." e fecha). Os dois usam a lista
+  `CopyFormatList` (a marca do formato com campo recusado também para o leitor de tela; a coluna repetida do SQL vai em `columns`, pelo `copyProblems`, e
+  desabilita "Copiar" como um campo recusado) e a `FormattingStep` da exportação, que ganhou `target` (sem a
+  tabela de destino, no configurar) e `focusTable`. O `focusTable` do "Copiar avançado…" é só do abrir: a primeira troca de formato o desliga (no evento,
+  `tableFocus`), e o campo da tabela que aparece depois, com as setas na lista passando pelo SQL ou pelo DbUnit, não tira o foco dela. O `onCopy` que lança
+  não deixa o diálogo em "Copiando…" (`try`/`finally`): a fase volta, e "Não foi possível copiar." aparece no alto. **Decisões onde a regra deixava espaço**: no configurar, "Incluir as colunas que o banco calcula"
+  aparece sempre, e as linhas por comando ficam editáveis também numa aba do Informix (as opções valem para qualquer banco; o Informix escreve sempre uma);
+  o diálogo grava as escolhas no clique em "Copiar",
+  antes de saber se copiou.
+- **A ligação** (`_lib/copy-as/use-copy-as.ts`, o gancho, e `copy-source.ts`, puro, os dois com teste). `useCopyAs({ records, userName })` devolve a fonte do
+  submenu (`CopyAsSource`, que `useRecordEdits` recebe) e as propriedades dos dois diálogos abertos (`advanced`, `configure`), que `resultEditDialogs` monta.
+  - **A origem** (`copySourceOf`, do recorte da seleção, `GridSelectionContext.slice`): as colunas da grade com o `generated` do alvo, as linhas na ordem da
+    grade com os valores que ela mostra, o número da grade (nulo na linha nova ainda não salva), as cortadas e as "gerado pelo banco". O que a origem diz
+    além das linhas é `copyOriginOf`: o nome da tabela nos Registros, sem o esquema, e `resultado` no resultado (RN-EXPORT-006); a tabela de destino, a dos
+    Registros ou a do alvo de uma tabela só (`singleTableOf`: o `tables` com um item que não é `elsewhere`, qualquer que seja o `kind`, e não o
+    `rowOperations`, RN-GRADE-020); e as colunas que o banco calcula, as que esse alvo diz da tabela.
+  - **O alvo**: o "Copiar como SQL", o "Copiar como DbUnit" do resultado e o "Copiar avançado…" usam o que a tela já sabe (`knownSqlTarget`), e, sem ele e
+    com a aba livre, perguntam o alvo do "Gerar SQL" (`sqlTarget`, o mesmo, uma vez) com "Conferindo a tabela deste resultado…" na faixa; com a aba ocupada,
+    não perguntam, e a tabela fica como não conhecida. Sem tabela, o SQL e o DbUnit abrem o "Copiar avançado…" no formato, com o foco no campo da tabela, e a
+    pausa da atualização automática passa a ser do diálogo. Os outros formatos não perguntam nada.
+  - **A cópia**: o recorte é tirado no clique, antes de qualquer espera (a cópia leva as linhas de quando começou); `runCopyAs` busca os completos pelo
+    `complete` do contexto (com o sinal do "Cancelar a busca" do diálogo) e escreve pelo `navigator.clipboard.writeText`. No "Copiar como" direto, a faixa diz
+    "Copiando…" passado meio segundo (`copying`, com o "Cancelar" dela), e a pausa vai do clique ao texto; os avisos: o copiado (`copyAsNotice`, no tom que
+    ele diz), a recusa do limite e as das colunas (nenhuma no `INSERT`, ou duas com o mesmo nome; erro) e a falha da área de transferência (atenção). No diálogo, só o copiado vira aviso: a recusa fica no
+    alto dele. As opções são lidas na hora do clique (`readCopyAsChoices`), do usuário do cofre (`cachedUserName`).
+  - **Uma frase só**: a recusa do limite de 10 MiB é a do "Copiar" (`gridSelectionCopy.copy.tooLarge`), a falha da área de transferência é a de hoje
+    (`recordsCopy.edit.menu.notCopied`), os rótulos do submenu são os do menu da grade (`gridSelectionCopy.menu`), e o limite, o tamanho em UTF-8 e o par
+    substituto solto do "Copiar" (`grid-copy.ts`) são os desta biblioteca (`grid-export/document.ts`).
+
 ## Exportar dados (seção 35, RN-EXPORT-001 a 024)
 
 A seção 35 da especificação manda; o que segue diz onde ficam as peças e o que não é óbvio. A API exporta num trabalho em segundo plano
@@ -2298,6 +2503,85 @@ arquivo das importações de dados", em "Processo principal"). Tudo em `_lib/dat
 - **O que não tem teste**: os assistentes montados com as consultas de verdade (as decisões, as etapas e o gancho da cópia têm), o diálogo de abrir do
   sistema, a cópia de um arquivo de 2 GiB e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato das seções 6 e
   36, com a API simulada nos testes. A aba em Commit manual (o aviso da transação aberta da RN-IMPORT-013) não existe ainda na tela, e o aviso não sai.
+
+## Gerar SQL (seção 37, RN-GRADE-006 e 018 a 020)
+
+O submenu "Gerar SQL" da grade e o diálogo dele: o texto de cada item, o plano do resultado, o motivo dos itens desabilitados, o diálogo e o gancho que o
+move, e a ligação com a seleção da grade (seção 37, RN-GRADE-001), o menu (RN-GRADE-004) e o alvo que a edição já pediu (ver "A ligação", abaixo), nos
+Registros, no resultado da aba de consulta e em cada aba guardada do script. O "CREATE" é o DDL aproximado da Estrutura (`approximateDdl`, RN-TABELA-008), e
+não o `CREATE` das colunas do resultado, que a especificação deixou para depois.
+
+- **As peças** (`_lib/generate-sql/`, puras, com teste, menos o gancho):
+  - `generate-sql.ts`: o texto de cada item (`generateSql(item, plano, linhas, opções)`, RN-GRADE-019) sobre os tipos `SqlPlan` (a tabela, as colunas DELA no
+    resultado, cada uma com `at`, a posição no resultado, e `name`, o nome na tabela, e a chave: `complete`, `partial` ou `none`), `SqlRow` (por linha
+    escolhida que está no banco: `number` na grade, `values` como a grade mostra, `read` como o banco leu, `changed`, `cut` e `generated`, tudo pela posição
+    no resultado) e `SqlOptions` (`qualified`, `compact`, `excludeGenerated` e, no INSERT da tabela que o Prism não conhece, `target`). O SELECT lista as
+    colunas da tabela que estão no resultado; a condição é a chave LIDA (`read`), e os valores, os da grade (`values`); a chave com pendência entra no `SET`
+    do UPDATE. O `IN` da chave composta é a lista de linhas no PostgreSQL e o `OR` de `AND`s no Db2 e no Informix (e sem chave nos três). Sem chave, a
+    condição deixa de fora os tipos que o banco não compara com `=` (`comparable`: o tipo sem o tamanho e sem o `[]`). A linha que fica de fora vai para o
+    comentário do motivo, no fim (`rowList` faz as faixas). `valueLiteral` é o literal da exportação em SQL: `scriptLiteral` e `binaryLiteral`.
+  - `sql-plan.ts`: o plano a partir do alvo pedido com `purpose: "sql"` (`sqlPlanOf`: "de uma tabela só" é o `tables` com um item que não é `elsewhere`, e a
+    chave está inteira quando cada nome do `keyColumns` é o `baseColumn` de uma coluna do resultado daquela tabela; o `key` e o `rowOperations` não decidem),
+    `planRefusal` (o motivo do item que o plano não permite, já como frase), `sqlMenuStates` (o motivo de cada um dos seis itens no submenu, também antes do
+    alvo: sem linhas, só linhas novas, a aba ocupada, a atualização automática, a visão dos Registros), `neededColumns` e `cutCellsFor` (as células cortadas que
+    o item usa: só elas vão à rota das células, RN-SQL-017), `completeRows` (as linhas com o valor completo; a pendência já é inteira) e `optionRefusal` (o
+    que as opções impedem: a tabela de destino que falta ou que um campo recusa, as colunas de mesmo nome, o INSERT sem coluna que o banco não gere).
+  - `generate-sql-flow.ts`: o caminho do diálogo (`runSqlFlow`: "Conferindo…", "Buscando os valores completos…" com "Cancelar", "Lendo o catálogo…", o texto,
+    a recusa, a falha com "Tentar de novo", o resultado que mudou) com as peças que falam com a API injetadas (`SqlFlowDeps`: `target`, `fullValues`,
+    `catalog`, `stillCurrent`), e o que o diálogo desenha de cada fase (`sqlDialogView`: o cabeçalho, as caixas que o item tem, os campos da tabela de
+    destino, os avisos, o lugar do SQL e se as saídas valem). O teto de 1 MB é medido em UTF-8 (`utf8Bytes`, pelo `TextEncoder`); antes, o `generateSql`
+    recebe o teto (`stopAfter`) e para quando os comandos passam dele em caracteres, que em UTF-8 têm ao menos um byte cada (`tooLarge`): 100.000 linhas não
+    montam 40 MB para jogar fora.
+  - `generate-sql-choices.ts`: as três caixas, lembradas por usuário em `prism:generate-sql:<usuário>` (o `localStorage` desta instalação, como as escolhas
+    da exportação e as do "Copiar como"), lidas campo a campo; a tabela de destino não se lembra.
+  - `use-generate-sql.ts`: o gancho (`useGenerateSql({ userName, deps })` devolve `open(pedido)`, `close()`, `dialog` (as propriedades do componente, nulo
+    fechado) e `planOf(resultId)`, o plano depois da primeira resposta, para o `sqlMenuStates`; o do CREATE dos Registros, que não vem do alvo (`recordsPlan`,
+    sem colunas nem chave), não fica, e não desabilita os outros itens), e a peça do CREATE, que não depende da grade:
+    `catalogReader` (as três listas da Estrutura, pelo mesmo cache). A resposta do alvo fica guardada por resultado: a segunda escolha não pergunta de novo, e
+    o "Tentar de novo" pergunta. O `hold` das dependências segura a atualização automática do abrir ao fechar (RN-GRADE-014), e fechar interrompe o que estava em andamento.
+    A execução que troca as linhas com o diálogo aberto (`stillCurrent` falso) deixa o lugar do SQL em "O resultado mudou…", sem saídas. O `sqlDialogView`
+    é memorizado pela fase e pelas opções (`useMemo`): renderizar de novo quem mostra o diálogo não gera o texto outra vez.
+  - Os textos estão em `generate-sql.copy.ts`; os comentários do SQL são frases fixas e números.
+- **O componente** (`_components/generate-sql/generate-sql-dialog.tsx`, `GenerateSqlDialog({ dialog, engine, connection })`): o diálogo grande, com o que se
+  gera embaixo do título e a linha da conexão (`connection`: quem liga passa o `ExportConnection` do assistente da exportação, com o ambiente e o cadeado), as
+  "Opções" pelo `CheckboxRow` da exportação, os campos "Esquema" e "Tabela" com o motivo de recusa no campo, os avisos no tom de atenção e o lugar do SQL; no
+  rodapé, "Fechar" à esquerda, e "Abrir numa aba de consulta" e "Copiar" (o principal), desabilitados até o texto ficar pronto. O texto fica no
+  `SqlViewer` (`sql-viewer.tsx`): um CodeMirror só de leitura (`EditorState.readOnly`, focável, com seleção e Ctrl+C), com o realce do banco, a fonte do
+  editor e as linhas quebradas na largura (`EditorView.lineWrapping`); o foco começa nele, menos no INSERT da tabela não conhecida, em que ele apareceria no
+  meio da digitação do nome. O documento troca a cada opção sem recriar o editor. O bloqueio por inatividade fecha o diálogo pelo Esc (`closeOpenPortals`).
+- **O alvo na tela** (`record-edits.schema.ts` e `record-edits.service.ts`, RN-GRADE-020): `sqlTargetSchema` (cada tabela com `kind`, o que a tela não conhece
+  vale `other`, e `keyColumns`, os dois exigidos) e `sqlTargetOrRefuse` (com `purpose: "sql"`; o `RESULT_NOT_EDITABLE`, o `RESULT_CHANGED` e as falhas
+  voltam como valor). O `editTargetSchema` da edição ficou com os dois campos opcionais, para guardar o que vier sem exigir: `sqlTargetOf` diz se o alvo que
+  a edição já pediu serve ao "Gerar SQL" (RN-EDIT-010: o mesmo alvo, uma vez). O contrário não vale na conexão somente leitura: o alvo do "Gerar SQL" dali
+  não vai para a edição.
+- **O literal do binário** (`binaryLiteral` e `binaryDigitsOf`, em `grid-export/script-literal.ts`, ao lado do `scriptLiteral`): `decode('…', 'hex')` no
+  PostgreSQL; no Db2, pelo tipo da coluna, `BX'…'` no `BINARY` e no `VARBINARY`, `BLOB(X'…')` no `BLOB` e `X'…'` no texto `FOR BIT DATA` (o `X'…'` é um
+  texto, que o Db2 recusa numa coluna `BINARY` ou `VARBINARY`), em pedaços de 16.336 bytes; e nenhum no Informix, conferido pela fixture `sql-binary.json`,
+  que a API também lê. É o único: o `to-sql.ts` do "Copiar como" usa este (e o `binaryDigitsOf`), sem cópia, e o "Gerar SQL" e o "Copiar como SQL" passam
+  a ele o tipo da coluna como o banco o diz.
+- **A fixture de ouro** (RN-EXPORT-024): `src/test-fixtures/export/generate-sql.json`, só da tela (a API não gera estes comandos), com cada item nos três
+  bancos, com e sem chave, a chave composta, compacto e não, com e sem os nomes completos, a tabela não conhecida, o binário, a quebra de linha, o Unicode
+  fora do plano básico, os nomes hostis e as linhas de fora com os comentários; quem a lê é `generate-sql.fixtures.test.ts`. As formas de condição também
+  rodam nos três servidores, no teste de integração da API (`GeneratedSql_TheConditionsOfEachItem_FindTheRightRowsOnTheServer`, compilado, sem rodar).
+- **Saiu**: o `generate-sql.ts` antigo da `grid-export` (o `generateSql` de `SELECT *` e o `generateInsertInto`, que confiava no nome digitado) e o
+  `formats.ts` dos oito formatos, que nenhuma tela usava.
+- **A ligação** (`_lib/generate-sql/use-grid-generate-sql.ts`, o gancho, e `sql-selection.ts`, puro, os dois com teste). `useGridGenerateSql({ connectionId,
+  database, userName, records, readOnlyConnection, openQueryTab })` devolve a fonte do submenu (`GenerateSqlSource`, que `useRecordEdits` recebe) e o diálogo
+  aberto, que `resultEditDialogs` monta com a linha da conexão (`SqlDialogConnection`, a do assistente da exportação, pelas listas em cache).
+  - **O submenu** (`access`, ao abrir o menu, sem consulta): o motivo de cada item é o `sqlMenuStates`, com as linhas da grade, as da seleção que estão no
+    banco e as novas, o `busy` do contexto (a aba ocupada, ou a atualização automática lendo), o plano do alvo que a tela já sabe (`knownSqlTarget`: o da
+    edição, o do "Copiar como", o motivo da página) ou o da primeira escolha (`planOf`), e, nos Registros, a tabela da aba com o tipo que a árvore já
+    carregou (`cachedObjectKind`).
+  - **O pedido** (`choose`): as linhas da seleção daquele instante (`sqlSelectionOf`): as que estão no banco viram `SqlRow` (a lida com o valor da grade e o
+    lido, a marcada para exclusão com os lidos, a nova já salva com as células `generated`), e as novas não salvas só contam; nos Registros, `records` com a
+    tabela e o tipo; o somente leitura da conexão pelo cache (`cachedReadOnly`).
+  - **As dependências**: o alvo é o do contexto (`sqlTarget`, o mesmo do "Copiar como", uma vez por resultado, e nunca volta à edição); o valor completo pela
+    linha da grade (`fullValues`, o número da linha menos um; o resultado que mudou no meio responde `changed`); o catálogo do CREATE pelo `catalogReader`, no
+    banco da aba; `stillCurrent` e `hold` pelo contexto; e o "Abrir numa aba de consulta" pelo `onOpenQuery` da área de trabalho, com a conexão e o banco da
+    aba (a aba nova é a do "Nova consulta", à frente, com o texto no editor).
+- **Não conferido numa janela**: nada disto foi visto na tela (não há Xvfb nem banco nesta etapa), só nos testes; o `SqlViewer` não tem teste (o vitest não
+  tem DOM). Falta conferir sob Xvfb que a aba nova do "Abrir numa aba de consulta" nasce com o cursor no começo e o foco no editor (o diálogo, ao fechar,
+  devolve o foco à grade da aba de antes, que já está escondida, e o editor da nova o toma ao montar).
 
 ## Configurações (`src/app/settings`)
 

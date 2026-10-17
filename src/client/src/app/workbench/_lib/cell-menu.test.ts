@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { cellAccess, columnHintsOf, deleteRowAccess, newRowAccess, resultReadOnly, type CellContext } from "./cell-editing";
+import { cellAccess, columnHintsOf, deleteRowAccess, deleteRowsAccess, newRowAccess, resultReadOnly, type CellContext } from "./cell-editing";
 import { autoRefreshMenuItem } from "./auto-refresh-menu";
-import { cellMenu, type CellMenuState } from "./cell-menu";
+import { cellMenu, copyAsFormats, type CellMenuItem, type CellMenuState } from "./cell-menu";
 import { editShortcuts } from "./grid-editing";
+import { gridSelectionCopy } from "./grid-selection.copy";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
 
@@ -138,12 +139,20 @@ const state = (over: Partial<CellMenuState> = {}): CellMenuState => ({ value: "a
 /** Os itens como a tela os mostra: o rótulo, se está desabilitado e o motivo. */
 const shown = (groups: ReturnType<typeof cellMenu>) => groups.map((group) => group.map((item) => [item.label, item.disabled === true, item.hint ?? null]));
 
+const grid = gridSelectionCopy.menu;
+/** O submenu de um item, como a tela o mostra. */
+const submenuOf = (groups: ReturnType<typeof cellMenu>, id: string) => groups.flat().find((item) => item.id === id)?.submenu?.groups.map((group) => (Array.isArray(group) ? group : group.items).map((item: CellMenuItem) => [item.label, item.disabled === true, item.hint ?? null]));
+
 describe("o menu de contexto da célula", () => {
-  it("numa célula que se edita: copiar, colar, editar e NULL habilitados; desfazer só com pendência; separador, adicionar, duplicar e excluir linha", () => {
+  it("numa célula que se edita, os grupos do DBeaver: o copiar e o colar; a edição; as linhas (RN-GRADE-004)", () => {
     expect(shown(cellMenu(state()))).toEqual([
       [
-        [menu.copyValue, false, null],
+        [grid.copy, false, null],
+        [grid.copyWithHeader, false, null],
+        [grid.advanced, false, null],
         [menu.paste, false, null],
+      ],
+      [
         [menu.edit, false, null],
         [menu.setNull, false, null],
         [menu.undo, true, null],
@@ -156,12 +165,97 @@ describe("o menu de contexto da célula", () => {
     ]);
   });
 
+  it("os grupos de quem os tem, na ordem: Filtrar, Ordenar e Ir para o registro referenciado; Exportar dados… e Gerar SQL; Atualizar e o automático", () => {
+    const groups = cellMenu(
+      state({
+        filter: { id: "filter", label: "Filtrar", submenu: { label: "Filtrar", groups: [] } },
+        sort: { direction: null, access: { editable: true } },
+        follow: { editable: true },
+        exportData: { editable: true },
+        generateSql: {},
+        refresh: { editable: true },
+        autoRefresh: autoRefreshMenuItem({ status: "off", stopped: null }, null),
+      }),
+    );
+
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([
+      ["copy", "copyWithHeader", "advancedCopy", "paste"],
+      ["filter", "sort", "follow"],
+      ["edit", "setNull", "undo"],
+      ["newRow", "duplicateRow", "deleteRow"],
+      ["exportData", "generateSql"],
+      ["refresh", "autoRefresh"],
+    ]);
+    expect(groups.flat().find((item) => item.id === "follow")?.label).toBe("Ir para o registro referenciado");
+  });
+
+  it("o \"Copiar avançado\" sem a outra frente tem os nomes e os números; com ela, o diálogo (Ctrl+Shift+C), os nove \"Copiar como\" e a configuração", () => {
+    expect(submenuOf(cellMenu(state()), "advancedCopy")).toEqual([
+      [
+        [grid.columnNames, false, null],
+        [grid.rowNumbers, false, null],
+      ],
+    ]);
+
+    const groups = cellMenu(state({ copyAs: { dialog: { editable: true }, formats: { sql: { editable: false, reason: "Informe a tabela de destino." } }, configure: { editable: true } } }));
+    const advanced = groups.flat().find((item) => item.id === "advancedCopy")!.submenu!.groups as CellMenuItem[][];
+    expect(advanced.map((group) => group.map((item) => item.id))).toEqual([["copyAdvanced", "copyColumnNames", "copyRowNumbers"], copyAsFormats.map((format) => `copyAs:${format}`), ["copyAsConfigure"]]);
+    expect(advanced[1].map((item) => item.label)).toEqual(["Copiar como CSV", "Copiar como Código fonte", "Copiar como DbUnit", "Copiar como HTML", "Copiar como JSON", "Copiar como Markdown", "Copiar como SQL", "Copiar como TXT", "Copiar como XML"]);
+    expect(advanced[0][0].shortcut).toBe("Ctrl+Shift+C");
+    expect(advanced[1][6]).toMatchObject({ disabled: true, hint: "Informe a tabela de destino." });
+    expect(advanced[2][0].label).toBe("Configurar comandos 'Copiar como'…");
+  });
+
+  it("o \"Gerar SQL\" tem os seis itens do print, na ordem, com o motivo de cada um que não vale", () => {
+    expect(submenuOf(cellMenu(state({ generateSql: { create: { editable: false, reason: "Indisponível: pedido é uma visão." } } })), "generateSql")).toEqual([
+      [
+        ["SELECT .. WHERE .. =", false, null],
+        ["SELECT .. WHERE .. IN", false, null],
+        ["INSERT", false, null],
+        ["UPDATE", false, null],
+        ["DELETE pela chave única", false, null],
+        ["CREATE", true, "Indisponível: pedido é uma visão."],
+      ],
+    ]);
+  });
+
+  it("o \"Ordenar\" marca a ordem em uso da coluna; com a aba ocupada, os três dizem o motivo", () => {
+    const sorted = cellMenu(state({ sort: { direction: "desc", access: { editable: true } } })).flat().find((item) => item.id === "sort")!.submenu!.groups[0] as CellMenuItem[];
+    expect(sorted.map((item) => [item.label, item.checked])).toEqual([
+      ["Crescente", false],
+      ["Decrescente", true],
+      ["Sem ordem", false],
+    ]);
+    const busy = cellMenu(state({ sort: { direction: null, access: { editable: false, reason: "ocupada" } } })).flat().find((item) => item.id === "sort")!.submenu!.groups[0] as CellMenuItem[];
+    expect(busy.every((item) => item.disabled === true && item.hint === "ocupada")).toBe(true);
+  });
+
+  it("com mais de uma célula escolhida, \"Colar\" e \"Definir como nulo\" valem para uma só; com várias linhas, \"Duplicar linhas\" e \"Excluir linhas\"", () => {
+    const items = cellMenu(state({ several: true, rows: 3 })).flat();
+
+    expect(items.find((item) => item.id === "paste")).toMatchObject({ disabled: true, hint: "Vale para uma célula só: escolha uma." });
+    expect(items.find((item) => item.id === "setNull")).toMatchObject({ disabled: true, hint: "Vale para uma célula só: escolha uma." });
+    expect(items.find((item) => item.id === "edit")?.disabled).toBeFalsy();
+    expect(items.find((item) => item.id === "duplicateRow")?.label).toBe("Duplicar linhas");
+    expect(items.find((item) => item.id === "deleteRow")?.label).toBe("Excluir linhas");
+  });
+
+  it("sem célula ativa, \"Copiar\" e \"Copiar com cabeçalho\" pedem uma; no macOS o atalho é o do Cmd", () => {
+    const items = cellMenu(state({ hasActive: false })).flat();
+    expect(items.filter((item) => item.id === "copy" || item.id === "copyWithHeader").map((item) => [item.disabled, item.hint])).toEqual([
+      [true, "Escolha uma célula na grade."],
+      [true, "Escolha uma célula na grade."],
+    ]);
+    expect(cellMenu(state({ mac: true })).flat().find((item) => item.id === "copy")?.shortcut).toBe("Cmd+C");
+    expect(cellMenu(state()).flat().find((item) => item.id === "copy")?.shortcut).toBe("Ctrl+C");
+  });
+
   it("copiar leva o texto da célula, e o nulo copia vazio", () => {
     expect(cellMenu(state()).flat().find((item) => item.id === "copy")?.text).toBe("aberta");
     expect(cellMenu(state({ value: null })).flat().find((item) => item.id === "copy")?.text).toBe("");
   });
 
-  it("numa célula pendente, ou numa linha marcada para exclusão, desfazer se habilita", () => {
+  it("com o que desfazer nas células escolhidas, ou numa linha escolhida marcada para exclusão, desfazer se habilita", () => {
     expect(cellMenu(state({ pending: true })).flat().find((item) => item.id === "undo")?.disabled).toBe(false);
     expect(cellMenu(state({ deletedRow: true, access: { editable: false, reason: "x" } })).flat().find((item) => item.id === "undo")?.disabled).toBe(false);
   });
@@ -192,21 +286,21 @@ describe("o menu de contexto da célula", () => {
     ]);
   });
 
-  it("o \"Atualizar automaticamente\" (RN-GRADE-014) vem logo depois do \"Atualizar\" (F5), no grupo da vista, como veio", () => {
+  it("o \"Atualizar automaticamente\" (RN-GRADE-014) vem logo depois do \"Atualizar\" (F5), no último grupo, como veio", () => {
     const auto = autoRefreshMenuItem({ status: "off", stopped: null }, "writes");
     const groups = cellMenu(state({ refresh: { editable: true }, autoRefresh: auto }));
 
-    expect(groups[1].map((item) => item.id)).toEqual(["refresh", "autoRefresh"]);
-    expect(groups[1][1]).toBe(auto);
+    expect(groups[groups.length - 1].map((item) => item.id)).toEqual(["refresh", "autoRefresh"]);
+    expect(groups[groups.length - 1][1]).toBe(auto);
     expect(cellMenu(state()).flat().some((item) => item.id === "autoRefresh")).toBe(false);
   });
 
-  it("\"Exportar dados…\" (RN-EXPORT-001) vem num grupo próprio, depois do da vista e antes dos itens da linha; o que não se aplica vem desabilitado com o motivo", () => {
+  it("\"Exportar dados…\" (RN-EXPORT-001) vem no grupo do \"Gerar SQL\", depois dos itens da linha; o que não se aplica vem desabilitado com o motivo", () => {
     const groups = cellMenu(state({ refresh: { editable: true }, exportData: { editable: true } }));
 
-    expect(groups.map((group) => group.map((item) => item.id))).toEqual([["copy", "paste", "edit", "setNull", "undo"], ["refresh"], ["exportData"], ["newRow", "duplicateRow", "deleteRow"]]);
-    expect(shown([groups[2]])).toEqual([[["Exportar dados…", false, null]]]);
-    expect(shown([cellMenu(state({ exportData: { editable: false, reason: "Não há resultado para exportar." } }))[1]])).toEqual([[["Exportar dados…", true, "Não há resultado para exportar."]]]);
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([["copy", "copyWithHeader", "advancedCopy", "paste"], ["edit", "setNull", "undo"], ["newRow", "duplicateRow", "deleteRow"], ["exportData"], ["refresh"]]);
+    expect(shown([groups[3]])).toEqual([[["Exportar dados…", false, null]]]);
+    expect(shown([cellMenu(state({ exportData: { editable: false, reason: "Não há resultado para exportar." } }))[3]])).toEqual([[["Exportar dados…", true, "Não há resultado para exportar."]]]);
     // A grade sem a entrada (quem não a passa) não tem o item.
     expect(cellMenu(state()).flat().some((item) => item.id === "exportData")).toBe(false);
   });
@@ -236,6 +330,36 @@ describe("o menu de contexto da célula", () => {
     // O que vem antes na ordem dos motivos fica na frente: o resultado só leitura, a aba ocupada, a junção.
     expect(deleteRowAccess(deleted, "DISTINCT", target, false)).toEqual({ editable: false, reason: copy.readOnly("DISTINCT") });
     expect(deleteRowAccess(deleted, null, target, true)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.busy) });
+  });
+});
+
+describe("\"Excluir linhas\" sobre as linhas da seleção (RN-EDIT-014)", () => {
+  const lido = (over: Partial<Extract<CellContext["row"], { kind: "read" }>> = {}) => ({ kind: "read" as const, truncated: undefined, deleted: false, ...over });
+
+  it("com uma linha só, é o \"Excluir linha\" de sempre, com as frases dele", () => {
+    expect(deleteRowsAccess([{ number: 3, row: lido({ truncated: new Set([0]) }) }], null, target, false)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.keyTruncated) });
+  });
+
+  it("a primeira linha cuja chave não se sabe, na ordem da grade, diz o motivo com o número dela, e nada é excluído", () => {
+    const rows = [
+      { number: 2, row: lido() },
+      { number: 7, row: lido({ truncated: new Set([0]) }) },
+      { number: 9, row: lido({ generated: new Set([0]) }) },
+    ];
+    expect(deleteRowsAccess(rows, null, target, false)).toEqual({ editable: false, reason: copy.readOnly("a chave da linha 7 chegou cortada") });
+    expect(deleteRowsAccess([rows[0], rows[2]], null, target, false)).toEqual({ editable: false, reason: copy.readOnly("a chave da linha 9 foi gerada pelo banco; execute de novo para editá-la") });
+    // Sem o alvo a chave não se sabe ainda: a primeira tentativa pergunta.
+    expect(deleteRowsAccess(rows, null, null, false)).toEqual({ editable: true });
+  });
+
+  it("a linha já marcada não impede (fica como está); com todas já marcadas, o motivo diz isso, no plural", () => {
+    expect(deleteRowsAccess([{ number: 1, row: lido({ deleted: true, truncated: new Set([0]) }) }, { number: 2, row: { kind: "new" } }], null, target, false)).toEqual({ editable: true });
+    expect(deleteRowsAccess([{ number: 1, row: lido({ deleted: true }) }, { number: 2, row: lido({ deleted: true }) }], null, target, false)).toEqual({ editable: false, reason: copy.readOnly("as linhas já estão marcadas para exclusão; Desfazer alteração as devolve") });
+  });
+
+  it("o que vem antes na ordem dos motivos fica na frente: o resultado só leitura, a aba ocupada, a junção", () => {
+    expect(deleteRowsAccess([{ number: 1, row: lido() }, { number: 2, row: lido() }], "DISTINCT", target, false)).toEqual({ editable: false, reason: copy.readOnly("DISTINCT") });
+    expect(deleteRowsAccess([{ number: 1, row: lido() }, { number: 2, row: lido() }], null, target, true)).toEqual({ editable: false, reason: copy.readOnly(copy.reasons.busy) });
   });
 });
 

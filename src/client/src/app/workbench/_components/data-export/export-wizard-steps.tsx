@@ -294,7 +294,27 @@ export function ChoiceField<T extends string>({ label, value, options, onChange,
 }
 
 /** Um campo de texto (ou de número escrito) com a recusa no lugar. */
-export function TextOption({ label, value, onChange, error, hint, disabled = false, inputMode, className }: { label: string; value: string; onChange: (value: string) => void; error?: string; hint?: string; disabled?: boolean; inputMode?: "numeric"; className?: string }) {
+export function TextOption({
+  label,
+  value,
+  onChange,
+  error,
+  hint,
+  disabled = false,
+  inputMode,
+  className,
+  autoFocus = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  hint?: string;
+  disabled?: boolean;
+  inputMode?: "numeric";
+  className?: string;
+  autoFocus?: boolean;
+}) {
   const id = useId();
   const aria = fieldAria(id, error);
   return (
@@ -302,7 +322,16 @@ export function TextOption({ label, value, onChange, error, hint, disabled = fal
       <label htmlFor={id} className="text-sm text-muted">
         {label}
       </label>
-      <Input id={id} value={value} disabled={disabled} inputMode={inputMode} onChange={(event) => onChange(event.target.value)} {...aria} aria-describedby={[aria["aria-describedby"], hint === undefined ? undefined : `${id}-hint`].filter(Boolean).join(" ") || undefined} />
+      <Input
+        id={id}
+        value={value}
+        disabled={disabled}
+        inputMode={inputMode}
+        autoFocus={autoFocus}
+        onChange={(event) => onChange(event.target.value)}
+        {...aria}
+        aria-describedby={[aria["aria-describedby"], hint === undefined ? undefined : `${id}-hint`].filter(Boolean).join(" ") || undefined}
+      />
       {hint === undefined ? null : (
         <p id={`${id}-hint`} className="text-sm text-muted">
           {hint}
@@ -324,7 +353,8 @@ const lineBreakChoices = [
 
 /**
  * RN-EXPORT-006 a 013: as opções do formato escolhido, cada uma com o padrão, e "Voltar aos padrões" no fim. As recusas ficam no campo; as que não são de um
- * campo (as colunas repetidas do SQL, as colunas demais do XLSX) ficam no alto da etapa.
+ * campo (as colunas repetidas do SQL, as colunas demais do XLSX) ficam no alto da etapa. As mesmas do "Copiar avançado…" e do "Configurar comandos 'Copiar
+ * como'…" (RN-GRADE-003 e 017), que não mostra a tabela de destino do SQL e a do DbUnit (`target`), porque elas são da origem.
  */
 export function FormattingStep({
   format,
@@ -335,6 +365,8 @@ export function FormattingStep({
   showGenerated,
   onRetryGenerated = null,
   onReset,
+  target = true,
+  focusTable = false,
 }: {
   format: DataFormat;
   options: FormatOptions;
@@ -345,6 +377,10 @@ export function FormattingStep({
   /** Nos Registros, quando a leitura de quais colunas o banco calcula falhou: "Tentar de novo", embaixo do motivo. */
   onRetryGenerated?: (() => void) | null;
   onReset: () => void;
+  /** A tabela de destino do SQL e a do DbUnit aparecem (as da origem); sem elas, as opções valem para qualquer origem. */
+  target?: boolean;
+  /** O foco nasce no campo da tabela (o "Copiar como SQL" sem tabela conhecida, RN-GRADE-016). */
+  focusTable?: boolean;
 }) {
   const set = <K extends DataFormat>(key: K, change: Partial<FormatOptions[K]>) => onChange({ ...options, [key]: { ...options[key], ...change } });
   const columnsProblem = problems.columns;
@@ -422,14 +458,16 @@ export function FormattingStep({
       const o = options.sql;
       body = (
         <>
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm text-muted">{f.sql.target}</legend>
-            <div className="grid grid-cols-2 gap-4">
-              <TextOption label={f.sql.schema} value={o.schema} onChange={(schema) => set("sql", { schema })} error={problems["options.schema"]} disabled={o.omitSchema} />
-              <TextOption label={f.sql.table} value={o.table} onChange={(table) => set("sql", { table })} error={problems["options.table"]} />
-            </div>
-            <p className="text-sm text-muted">{f.sql.namesHint}</p>
-          </fieldset>
+          {target ? (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1 text-sm text-muted">{f.sql.target}</legend>
+              <div className="grid grid-cols-2 gap-4">
+                <TextOption label={f.sql.schema} value={o.schema} onChange={(schema) => set("sql", { schema })} error={problems["options.schema"]} disabled={o.omitSchema} />
+                <TextOption label={f.sql.table} value={o.table} onChange={(table) => set("sql", { table })} error={problems["options.table"]} autoFocus={focusTable} />
+              </div>
+              <p className="text-sm text-muted">{f.sql.namesHint}</p>
+            </fieldset>
+          ) : null}
           <CheckboxRow label={f.sql.omitSchema} checked={o.omitSchema} onChange={(omitSchema) => set("sql", { omitSchema })} />
           <TextOption
             className="max-w-60"
@@ -456,7 +494,7 @@ export function FormattingStep({
       const o = options.dbUnit;
       body = (
         <>
-          <TextOption label={f.dbUnit.table} value={o.table} onChange={(table) => set("dbUnit", { table })} error={problems["options.table"]} />
+          {target ? <TextOption label={f.dbUnit.table} value={o.table} onChange={(table) => set("dbUnit", { table })} error={problems["options.table"]} autoFocus={focusTable} /> : null}
           <CheckboxRow label={f.dbUnit.upperCase} checked={o.upperCase} onChange={(upperCase) => set("dbUnit", { upperCase })} />
           <ChoiceField label={f.dbUnit.nulls} value={o.nulls} options={[{ value: "omit" as const, label: f.dbUnit.omit }, { value: "mark" as const, label: f.dbUnit.mark }]} onChange={(nulls) => set("dbUnit", { nulls })} hint={f.dbUnit.nullsHint} />
         </>

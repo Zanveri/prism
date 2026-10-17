@@ -58,7 +58,7 @@ const askEverything = closeAsks({ closesTheApp: false });
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
@@ -93,17 +93,21 @@ export function WorkbenchTabs() {
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
   // O mesmo com a troca do banco (RN-ARVORE-007) e da conexão (RN-ARVORE-008) da aba de consulta, que também consultam a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestOpenQuery = useRef(openQueryTab);
   const latestSwitchDatabase = useRef(switchDatabase);
   const latestSwitchConnection = useRef(switchConnection);
   // A lista de abas da última renderização, para o que roda depois de uma espera (a ida para outra janela, o fechamento da janela).
   const latestTabs = useRef(tabs);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestOpenQuery.current = openQueryTab;
     latestSwitchDatabase.current = switchDatabase;
     latestSwitchConnection.current = switchConnection;
     latestTabs.current = tabs;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  // RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL", nos Registros e no resultado.
+  const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
   const handleSwitchConnection = useCallback((tabId: string, connectionId: string) => latestSwitchConnection.current(tabId, connectionId), []);
 
@@ -396,9 +400,9 @@ export function WorkbenchTabs() {
             return (
               <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
                 {isTableTab(tab) ? (
-                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
+                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onSwitchConnection={handleSwitchConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onSwitchConnection={handleSwitchConnection} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} onSwitchDatabase={handleSwitchDatabase} />
                 )}
               </div>
             );

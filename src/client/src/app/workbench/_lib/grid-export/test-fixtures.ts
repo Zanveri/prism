@@ -1,4 +1,9 @@
+import type { Engine } from "@/components/ui/engine-tag";
+
+import { defaultOptions, type FormatOptions } from "../data-export/export-options";
 import type { QueryColumn } from "../query.schema";
+import type { DocumentFormat, DocumentRow } from "./document";
+import { writeDocument } from "./documents";
 import type { GridSlice } from "./grid-slice";
 
 /** Só para os testes deste módulo: o recorte e os valores hostis que cada formato tem de aguentar. */
@@ -9,6 +14,28 @@ export const column = (name: string, kind: QueryColumn["kind"] = "text"): QueryC
 export function sliceOf(columns: QueryColumn[], rows: (string | null)[][], extra: { truncated?: [number, number][]; rowNumbers?: number[] } = {}): GridSlice {
   return { columns, rows, truncated: extra.truncated ?? [], rowNumbers: extra.rowNumbers ?? rows.map((_, index) => index + 1) };
 }
+
+/**
+ * O documento de um formato (`writeDocument`) para as colunas e as linhas dadas, com os padrões da exportação e as opções do formato trocadas por `options`.
+ * As linhas são as do recorte (cada uma numerada pela posição, com as células cortadas dele) ou já as do documento.
+ */
+export function documentOf<F extends DocumentFormat>(
+  format: F,
+  columns: readonly QueryColumn[],
+  rows: readonly (readonly (string | null)[])[] | readonly DocumentRow[],
+  options: Partial<FormatOptions[F]> = {},
+  context: { engine?: Engine; sourceName?: string; truncated?: readonly (readonly [number, number])[] } = {},
+) {
+  const defaults = defaultOptions({ schema: "", table: "pedido" });
+  const all = { ...defaults, [format]: { ...defaults[format], ...options } } as FormatOptions;
+  const cut = (index: number) => (context.truncated ?? []).filter(([row]) => row === index).map(([, column]) => column);
+  const documentRows = rows.map((row, index): DocumentRow => (Array.isArray(row) ? { number: index + 1, values: row as (string | null)[], cut: cut(index) } : (row as DocumentRow)));
+  return writeDocument(format, { engine: context.engine ?? 1, sourceName: context.sourceName ?? "pedido", columns, options: all }, documentRows);
+}
+
+/** O documento do recorte, com as células cortadas dele. */
+export const sliceDocument = <F extends DocumentFormat>(format: F, slice: GridSlice, options: Partial<FormatOptions[F]> = {}, context: { engine?: Engine; sourceName?: string } = {}) =>
+  documentOf(format, slice.columns, slice.rows, options, { ...context, truncated: slice.truncated });
 
 /** Os caracteres de controle e os pares soltos se escrevem por código: o lint recusa `\x00` num literal. */
 export const chars = (...codes: number[]) => String.fromCharCode(...codes);

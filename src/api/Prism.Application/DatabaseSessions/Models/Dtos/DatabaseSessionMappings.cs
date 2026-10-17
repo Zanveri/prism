@@ -17,7 +17,7 @@ internal static class DatabaseSessionMappings
 
     /// <summary>RN-EDIT-002: o tipo de catálogo de cada coluna fica na API, que é quem converte o texto (RN-EDIT-006).</summary>
     public static EditTargetDto ToDto(this EditTarget source)
-        => new([.. source.Tables.Select(table => new EditTableDto(table.Schema, table.Name, table.Key, table.Editable, table.Reason))], [.. source.Columns.Select(column => new EditColumnDto(column.Table, column.BaseColumn, column.Editable, column.Reason, column.Nullable, column.Generated))], source.RowOperations, source.OneAtATime);
+        => new([.. source.Tables.Select(table => new EditTableDto(table.Schema, table.Name, table.Key, table.Editable, table.Reason, table.Kind, table.KeyColumns))], [.. source.Columns.Select(column => new EditColumnDto(column.Table, column.BaseColumn, column.Editable, column.Reason, column.Nullable, column.Generated))], source.RowOperations, source.OneAtATime);
 
     /// <summary>O validator já recusou o pedido sem alterações e o tipo que não existe: aqui cada uma vira a do registro de sessões, com o `set` da alteração ou os `values` da linha nova.</summary>
     public static IReadOnlyList<EditChange> ToChanges(this IReadOnlyList<EditChangeDto>? source)

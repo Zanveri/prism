@@ -103,6 +103,24 @@ export function deleteRow(edits: PendingEdits, row: number): PendingEdits {
   return { ...edits, cells: edits.cells.filter((item) => item.row !== row), deleted: [...edits.deleted, row] };
 }
 
+/**
+ * RN-EDIT-013: excluir várias linhas lidas de uma vez ("Excluir linhas", o Delete e o Alt+Delete sobre a seleção), na ordem de `rows`: as já excluídas ficam
+ * como estavam, e as edições das outras saem. Uma passada só, pelos conjuntos, e não uma `deleteRow` por linha: o Ctrl+A com 50.000 linhas carregadas não
+ * custa 50.000 cópias da lista. Sem linha nova a excluir, devolve as mesmas pendências.
+ */
+export function deleteRows(edits: PendingEdits, rows: readonly number[]): PendingEdits {
+  const already = new Set(edits.deleted);
+  const added: number[] = [];
+  for (const row of rows) {
+    if (already.has(row)) continue;
+    already.add(row);
+    added.push(row);
+  }
+  if (added.length === 0) return edits;
+  const gone = new Set(added);
+  return { ...edits, cells: edits.cells.filter((item) => !gone.has(item.row)), deleted: [...edits.deleted, ...added] };
+}
+
 export function undoDelete(edits: PendingEdits, row: number): PendingEdits {
   return { ...edits, deleted: edits.deleted.filter((item) => item !== row) };
 }
@@ -129,9 +147,46 @@ export function undoNewCell(edits: PendingEdits, id: number, column: number): Pe
   };
 }
 
+/**
+ * RN-EDIT-004: "Desfazer alteração" nas células escolhidas (RN-GRADE-001): o valor alterado volta ao lido (numa junção, em todas as linhas da grade que mostram
+ * a mesma linha da tabela, pela `change`), a linha marcada para exclusão que tem uma célula escolhida volta, e, numa linha nova, a célula volta ao padrão
+ * da tabela (a linha fica: quem a tira é "Excluir linha"). `view` são as pendências como a grade as mostra (`linkedCells`); `read`, quantas linhas lidas há;
+ * `chosen` diz se a célula da grade está escolhida e `rowChosen`, se a linha tem uma. Nulo quando nenhuma célula escolhida tem o que desfazer: é assim que o
+ * menu sabe se o item se habilita. Percorre as pendências, e não a seleção: a seleção grande não custa nada aqui.
+ */
+export function undoWhere(edits: PendingEdits, view: PendingEdits, read: number, chosen: (row: number, column: number) => boolean, rowChosen: (row: number) => boolean): PendingEdits | null {
+  let next = edits;
+  let changed = false;
+  for (const cell of view.cells) {
+    if (!chosen(cell.row, cell.column) || !next.cells.some((item) => sameCell(item, cell.row, cell.column, cell.change))) continue;
+    next = undoCell(next, cell.row, cell.column, cell.change);
+    changed = true;
+  }
+  for (const row of edits.deleted) {
+    if (!rowChosen(row)) continue;
+    next = undoDelete(next, row);
+    changed = true;
+  }
+  edits.added.forEach((row, index) => {
+    for (const column of Object.keys(row.values).map(Number)) {
+      if (!chosen(read + index, column)) continue;
+      next = undoNewCell(next, row.id, column);
+      changed = true;
+    }
+  });
+  return changed ? next : null;
+}
+
 /** "Excluir linha" numa linha nova: ela some, porque nunca foi ao banco. */
 export function removeNewRow(edits: PendingEdits, id: number): PendingEdits {
   return { ...edits, added: edits.added.filter((row) => row.id !== id) };
+}
+
+/** Tirar várias linhas novas de uma vez, numa passada só (RN-EDIT-013); sem nenhuma delas entre as novas, devolve as mesmas pendências. */
+export function removeNewRows(edits: PendingEdits, ids: readonly number[]): PendingEdits {
+  const gone = new Set(ids);
+  const added = edits.added.filter((row) => !gone.has(row.id));
+  return added.length === edits.added.length ? edits : { ...edits, added };
 }
 
 /** A alteração de uma célula: numa junção, a linha da tabela dela; senão, a linha da grade. */

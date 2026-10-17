@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-010, Código fonte: o nome da variável a partir do nome da origem, sem o $. Só da API (ExportText.PhpVariable). removed é quantos caracteres de direção saíram.",
+  "rule": "RN-EXPORT-010, Código fonte: o nome da variável a partir do nome da origem, sem o $. Na tela, phpVariable (to-source-code.ts); na API, ExportText.PhpVariable. removed é quantos caracteres de direção saíram.",
   "cases": [
     {
       "name": "nome simples",

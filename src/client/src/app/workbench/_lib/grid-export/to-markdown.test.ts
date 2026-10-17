@@ -1,21 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { column, hostile, hostileValues, sliceOf } from "./test-fixtures";
-import { toMarkdown } from "./to-markdown";
+import type { GridSlice } from "./grid-slice";
+import { column, documentOf, hostile, hostileValues, sliceDocument, sliceOf } from "./test-fixtures";
+
+/** A tabela com a linha de alinhamento e o nulo vazio, os padrões. */
+const toMarkdown = (slice: GridSlice) => sliceDocument("markdown", slice).text;
 
 /** Quantas barras verticais SEPARAM células numa linha: as que a barra invertida não escapa (a separação é sempre ` | `). */
 const separators = (line: string) => (line.match(/(?<!\\)\|/g) ?? []).length;
 
-describe("toMarkdown: a tabela no estilo do GitHub", () => {
+describe("o Markdown: a tabela no estilo do GitHub", () => {
   it("cabeçalho, linha de alinhamento e uma linha por registro; número alinhado à direita", () => {
     const slice = sliceOf([column("id", "number"), column("nome")], [["1", "Ana"], ["2", "Bia"]]);
 
     expect(toMarkdown(slice)).toBe("| id | nome |\n| ---: | --- |\n| 1 | Ana |\n| 2 | Bia |\n");
   });
 
-  it("sem colunas não há tabela; só com colunas, o cabeçalho e o alinhamento", () => {
-    expect(toMarkdown(sliceOf([], []))).toBe("");
+  it("sem linhas, o cabeçalho e o alinhamento", () => {
     expect(toMarkdown(sliceOf([column("a"), column("b", "number")], []))).toBe("| a | b |\n| --- | ---: |\n");
+  });
+
+  it("sem a linha de alinhamento, como no DBeaver, e com o nulo escrito, escapado como uma célula", () => {
+    expect(documentOf("markdown", [column("a")], [[null], ["x"]], { alignmentLine: false, nullText: "N|A" }).text).toBe("| a |\n| N\\|A |\n| x |\n");
+  });
+
+  it("o binário em hexadecimal, ou o nulo do formato com \"Deixar vazio\"", () => {
+    expect(documentOf("markdown", [column("f", "binary")], [["0x0A"]], { nullText: "-" }).text).toBe("| f |\n| --- |\n| 0x0A |\n");
+    expect(documentOf("markdown", [column("f", "binary")], [["0x0A"]], { nullText: "-", binary: "null" }).text).toBe("| f |\n| --- |\n| - |\n");
   });
 
   it("uma célula só", () => {
@@ -33,7 +44,7 @@ describe("toMarkdown: a tabela no estilo do GitHub", () => {
   });
 });
 
-describe("toMarkdown: o que se escapa", () => {
+describe("o Markdown: o que se escapa", () => {
   const cellOf = (value: string) => toMarkdown(sliceOf([column("a")], [[value]])).split("\n")[2];
 
   it("a barra vertical e a barra invertida", () => {

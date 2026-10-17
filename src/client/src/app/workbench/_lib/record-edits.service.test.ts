@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
+import { sqlTargetOf } from "./record-edits.schema";
+import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
 
 const base = "http://127.0.0.1:51234";
 const bridge = { getApiConfig: async () => ({ baseUrl: base, token: "token-de-teste" }), onApiExit: () => () => {}, restartApi: async () => {} };
@@ -83,5 +84,50 @@ describe("edits e edits/preview (seção 22)", () => {
 
     expect(await previewEditsOrRefuse("s1", "r1", changes)).toEqual({ ok: true, data: preview });
     expect(request(fake)).toEqual({ url: `${base}/api/user/database-sessions/s1/queries/edits/preview`, method: "POST", body: { resultID: "r1", changes } });
+  });
+});
+
+describe("edit-target do Gerar SQL (RN-GRADE-020)", () => {
+  const sqlTarget = { ...target, tables: [{ ...target.tables[0], kind: "table", keyColumns: ["id"] }] };
+
+  it("pede com purpose sql, e lê o tipo e a chave pelo nome de cada tabela", async () => {
+    const fake = fetchAnswers(json(sqlTarget));
+
+    expect(await sqlTargetOrRefuse("s1", "r1", "arvore")).toEqual({ ok: true, data: sqlTarget });
+    expect(request(fake).body).toEqual({ resultID: "r1", catalogSessionID: "arvore", purpose: "sql" });
+  });
+
+  it("sem a sessão da árvore, o corpo leva o resultado e o pedido; o tipo que a tela não conhece vale other", async () => {
+    const fake = fetchAnswers(json({ ...sqlTarget, tables: [{ ...sqlTarget.tables[0], kind: "sinônimo" }] }));
+
+    const answer = await sqlTargetOrRefuse("s1", "r1", null);
+
+    expect(request(fake).body).toEqual({ resultID: "r1", purpose: "sql" });
+    expect(answer.ok ? answer.data.tables[0].kind : null).toBe("other");
+  });
+
+  it("a resposta sem o keyColumns não serve ao Gerar SQL", async () => {
+    fetchAnswers(json(target));
+
+    await expect(sqlTargetOrRefuse("s1", "r1", null)).rejects.toMatchObject({ error: { code: "RESPONSE_INVALID" } });
+  });
+
+  it("o resultado só leitura e o que mudou voltam como valor; a API fora do ar lança e vai ao aviso central", async () => {
+    fetchAnswers(refusal(422, "RESULT_NOT_EDITABLE", { reason: "DISTINCT" }));
+    expect(await sqlTargetOrRefuse("s1", "r1", null)).toMatchObject({ ok: false, error: { code: "RESULT_NOT_EDITABLE" } });
+    fetchAnswers(refusal(409, "RESULT_CHANGED"));
+    expect(await sqlTargetOrRefuse("s1", "r1", null)).toMatchObject({ ok: false, error: { code: "RESULT_CHANGED" } });
+
+    fetchAnswers(refusal(500, "INTERNAL_SERVER_ERROR"));
+    await expect(sqlTargetOrRefuse("s1", "r1", null)).rejects.toMatchObject({ error: { code: "INTERNAL_SERVER_ERROR" } });
+  });
+
+  it("o alvo que a edição já pediu serve ao Gerar SQL quando traz o tipo e a chave pelo nome; o de antes, sem eles, não", async () => {
+    fetchAnswers(json(sqlTarget));
+    const edit = await editTargetOrRefuse("s1", "r1", null);
+
+    expect(edit.ok ? sqlTargetOf(edit.data) : null).toEqual(sqlTarget);
+    expect(sqlTargetOf(target)).toBeNull();
+    expect(sqlTargetOf(null)).toBeNull();
   });
 });

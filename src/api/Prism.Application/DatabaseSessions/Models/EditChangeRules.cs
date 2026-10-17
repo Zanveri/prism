@@ -11,10 +11,19 @@ internal static class EditChangeRules
 {
     public const string ErrorCode = "EDIT_INVALID";
 
+    /// <summary>RN-GRADE-020: o pedido do `edit-target` para o "Gerar SQL" e o "Copiar como" do SQL e do DbUnit.</summary>
+    public const string SqlPurpose = "sql";
+
     private static readonly string[] Kinds = ["update", "delete", "insert"];
+
+    private static readonly string[] Purposes = ["edit", SqlPurpose];
 
     public static void MustNameTheResult<T>(this IRuleBuilder<T, Guid> rule)
         => rule.NotEqual(Guid.Empty).WithMessage("Informe o resultado (resultID) da página que está sendo editada.").WithErrorCode(ErrorCode);
+
+    /// <summary>RN-GRADE-020: o `purpose` do `edit-target`, ausente ou nulo (o padrão, `edit`), `edit` ou `sql`.</summary>
+    public static void MustBeAPurpose<T>(this IRuleBuilder<T, string?> rule)
+        => rule.Must(purpose => purpose is null || Purposes.Contains(purpose, StringComparer.Ordinal)).WithMessage("O pedido (purpose) deve ser edit ou sql.").WithErrorCode(ErrorCode);
 
     public static void MustBeChanges<T>(this IRuleBuilder<T, IReadOnlyList<EditChangeDto>?> rule)
     {

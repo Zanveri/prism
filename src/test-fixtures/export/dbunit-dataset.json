@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-012: o conjunto de dados do DbUnit inteiro. Só da API (DbUnitExportWriter), pronta para quando a tela o escrever.",
+  "rule": "RN-EXPORT-012: o conjunto de dados do DbUnit inteiro. Na tela, dbUnitWriter (to-xml.ts); na API, DbUnitExportWriter.",
   "notes": [
     "table é a tabela de destino já resolvida; nulls: omit (omitir o atributo) ou mark (escrever [NULL]); cada valor de rows é texto, null ou { codePoints: [...] }.",
     "expected é o texto do arquivo; removed, os pontos de código tirados por o XML 1.0 não os aceitar."

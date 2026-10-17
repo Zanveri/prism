@@ -257,14 +257,14 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                 // RN-EDIT-002 e 010: cada execução é um resultado novo, e o que o texto diz da edição dele sai sem consultar o banco. O
                 // comando executado até o fim que devolveu linhas gravou (RN-SQL-013): é só leitura. O filtro junto é lido com o comando
                 // (a edição vale como sem ele); o embrulhado é só leitura, com o motivo do próprio comando.
-                // RN-PROT-002: na conexão somente leitura o resultado inteiro é só leitura, com o motivo que a grade mostra.
-                var source = readOnly ? ResultSource.ReadOnly(ReadOnlySql.ResultReason)
-                    : page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
+                // RN-PROT-002: na conexão somente leitura a página diz o resultado inteiro só leitura, com o motivo que a grade mostra; RN-GRADE-020: o
+                // que o texto diz das tabelas fica com o resultado, para o alvo do "Gerar SQL" nela e para a edição quando ela deixar de ser somente leitura.
+                var source = page.TotalRows is not null ? ResultSource.ReadOnly(EditableSql.WroteRows)
                     : filtered is { Applied: EFilterApplied.Wrapped } ? ResultSource.ReadOnly(EditableSql.Read(sql, dialect).Reason ?? EditableSql.FilteredOutside)
                     : EditableSql.Read(sent, dialect);
                 // RN-EXPORT-001 e 002: exportar executa o comando de novo, numa conexão à parte; só vale para a leitura só, pelo comando montado, que não gravou.
                 var read = page.TotalRows is null && ReadOnlySql.ExportRefusal(sent, session.Info.Engine) is null;
-                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read);
+                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null);
                 var withoutFullValue = result.Cells.Add(page);
                 ReplaceResult(session, result);
 
@@ -377,7 +377,19 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         if (result.IsFailure)
             return result.Error;
 
-        return await TargetOfAsync(session, result.Value, catalogSessionID, cancellationToken);
+        return await TargetOfAsync(session, result.Value, catalogSessionID, keep: true, cancellationToken);
+    }
+
+    public async Task<Result<EditTarget, DatabaseFailure>> GetReadOnlyEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, string reason, CancellationToken cancellationToken)
+    {
+        if (!_sessions.TryGetValue(sessionID, out var session))
+            return SessionNotFound();
+
+        var result = EditableResult(session, resultID);
+        if (result.IsFailure)
+            return result.Error;
+
+        return (await TargetOfAsync(session, result.Value, catalogSessionID, keep: false, cancellationToken)).Map(target => EditTargetResolver.ReadOnly(target, reason));
     }
 
     public async Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
@@ -390,7 +402,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
             return found.Error;
 
         var result = found.Value;
-        var target = await TargetOfAsync(session, result, catalogSessionID: null, cancellationToken);
+        var target = await TargetOfAsync(session, result, catalogSessionID: null, keep: true, cancellationToken);
 
         return target.IsFailure ? target.Error : EditPlanner.Preview(DialectOf(session), target.Value, result.Columns, changes);
     }
@@ -535,9 +547,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
     /// <summary>
     /// RN-EDIT-010: o alvo da edição de um resultado, consultado uma vez e guardado com ele. O resultado inteiro só leitura responde
-    /// sem ir ao banco.
+    /// sem ir ao banco. Sem `keep` (o "Gerar SQL" numa conexão somente leitura, RN-GRADE-020), o alvo consultado não fica guardado; o que já estava, serve.
     /// </summary>
-    private async Task<Result<EditTarget, DatabaseFailure>> TargetOfAsync(Session session, ResultState result, Guid? catalogSessionID, CancellationToken cancellationToken)
+    private async Task<Result<EditTarget, DatabaseFailure>> TargetOfAsync(Session session, ResultState result, Guid? catalogSessionID, bool keep, CancellationToken cancellationToken)
     {
         if (result.Target is { } known)
             return known;
@@ -551,7 +563,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         var target = catalog.IsFailure ? catalog.Error : EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalog.Value);
         Log(session, nameof(GetEditTargetAsync), started, target);
 
-        if (target.IsSuccess)
+        if (keep && target.IsSuccess)
             result.Target = target.Value;
 
         return target;
@@ -954,7 +966,12 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// <param name="schemaChanges">RN-SQL-024: o <see cref="Session.SchemaChanges"/> da sessão quando o resultado foi lido.</param>
     /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
     /// <param name="read">RN-EXPORT-002: o comando do resultado, com o filtro, é uma leitura só e não gravou: o resultado inteiro se exporta.</param>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false)
+    /// <param name="readOnlyReason">
+    /// RN-PROT-002: o motivo da conexão somente leitura em que o resultado foi lido, que a página leva no lugar do que o texto diz. Não muda o
+    /// <paramref name="source"/>: o alvo do "Gerar SQL" nela (RN-GRADE-020) e o da edição, quando ela deixa de ser somente leitura, saem dele. Quem recusa
+    /// a edição na conexão somente leitura é a rota, pela opção de agora.
+    /// </param>
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false, string? readOnlyReason = null)
     {
         public bool Read => read;
 
@@ -970,7 +987,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
 
         public IReadOnlyList<QueryColumn> Columns => columns;
 
-        public ResultEditability Editability { get; } = source.Reason is { } reason ? ResultEditability.ReadOnly(reason) : ResultEditability.Unknown;
+        public ResultEditability Editability { get; } = (readOnlyReason ?? source.Reason) is { } reason ? ResultEditability.ReadOnly(reason) : ResultEditability.Unknown;
 
         public EFilterApplied? FilterApplied => filterApplied;
 

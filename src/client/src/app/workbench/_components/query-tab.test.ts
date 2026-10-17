@@ -21,7 +21,7 @@ const rt = await vi.hoisted(async () => {
     ...createHookRuntime(),
     queryClient: { getQueryData: () => undefined },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
-    service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn() },
+    service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn(), sqlTargetOrRefuse: vi.fn() },
     cells: { resultCells: vi.fn() },
     /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
     screen: { on: true },
@@ -68,6 +68,7 @@ import { groupItems } from "@/components/ui/context-menu";
 import { elementsOf } from "@/lib/testing/react-tree";
 
 import { editCell, noEdits } from "../_lib/record-edits";
+import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
@@ -87,6 +88,11 @@ import { ScriptErrorDialog } from "./script-error-dialog";
 import { ScriptStatistics } from "./script-statistics";
 import { ScriptTabs } from "./script-tabs";
 import type { FilterRefusal } from "../_lib/use-query-runner";
+import { copyAsCopy } from "../_lib/copy-as/copy-as.copy";
+import type { SqlTarget } from "../_lib/record-edits.schema";
+import { CopyAdvancedDialog } from "./copy-as/copy-advanced-dialog";
+import { ConfigureCopyAsDialog } from "./copy-as/configure-copy-as-dialog";
+import { GenerateSqlDialog } from "./generate-sql/generate-sql-dialog";
 
 const copy = recordsCopy.edit;
 /** PostgreSQL, como a API numera os bancos. */
@@ -167,7 +173,7 @@ const tab: QueryTab = { id: "q1", title: "Consulta 1", connectionId: "c1", sessi
 /** A aba `q1` na conexão `c1`, à vista. O painel é memorizado: a função dele é a de dentro do `memo`. */
 function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
   const panel = (QueryTabPanel as unknown as { type: (props: ComponentProps<typeof QueryTabPanel>) => ReactNode }).type;
-  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn() };
+  const props = { tab: { ...tab, ...over }, runner: runner as unknown as QueryRunner, engine: pg as Engine | undefined, active: true, onSqlChange: vi.fn(), onEdited: vi.fn(), onSave: vi.fn(), onSwitchConnection: vi.fn(), onOpenTable: vi.fn(), onSwitchDatabase: vi.fn(), onOpenQuery: vi.fn() };
 
   /** O que a aba entrega agora à área de resultado, ao editor e às janelas por cima. Duas voltas, como no teste dos Registros: os efeitos da primeira mexem nos registros de módulo. */
   function show() {
@@ -191,7 +197,7 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = 
     const autoDialog = found.find((element) => element.type === AutoRefreshDialog)?.props as unknown as ComponentProps<typeof AutoRefreshDialog> | undefined;
     const scriptError = found.find((element) => element.type === ScriptErrorDialog)?.props as unknown as ComponentProps<typeof ScriptErrorDialog> | undefined;
 
-    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys, auto, autoDialog, toolbar, scriptError };
+    return { area, editor, question, menu, banner, picker, connection, noConnection, filter, keys, auto, autoDialog, toolbar, scriptError, found };
   }
 
   return { show, props };
@@ -245,7 +251,7 @@ describe("QueryTabPanel: a grade do resultado de um comando se edita como a dos 
     const items = view.show().menu!.groups.flatMap(groupItems);
 
     expect(items.find((item) => item.label === copy.menu.edit)).toMatchObject({ disabled: true, hint: copy.readOnly("união de consultas") });
-    expect(items.find((item) => item.label === copy.menu.copyValue)?.disabled).toBe(false);
+    expect(items.find((item) => item.label === gridSelectionCopy.menu.copy)?.disabled).toBe(false);
     expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
   });
 
@@ -273,7 +279,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onCopy();
     await settle();
 
     expect(rt.cells.resultCells).toHaveBeenCalledWith("s1", "r1", [{ row: 0, column: 1 }], expect.any(AbortSignal));
@@ -281,14 +288,14 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     expect(rt.toast.success.mock.calls).toEqual([[copy.menu.copied]]);
   });
 
-  it("'Copiar valor' do menu da célula também leva o valor completo", async () => {
+  it("'Copiar' do menu da célula também leva o valor completo", async () => {
     rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
     rt.cells.resultCells.mockResolvedValue({ ok: true, data: [full] });
     const view = mount(fakeRunner(cut()));
 
     view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
     await settle();
-    view.show().menu!.groups.flatMap(groupItems).find((item) => item.label === copy.menu.copyValue)!.onSelect!();
+    view.show().menu!.groups.flatMap(groupItems).find((item) => item.label === gridSelectionCopy.menu.copy)!.onSelect!();
     await settle();
 
     expect(clipboard.writeText.mock.calls).toEqual([[full]]);
@@ -297,7 +304,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
   it("sem célula cortada, nada é pedido: copia o que a grade tem", async () => {
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 0 });
+    view.show().area.editing!.onActivate({ row: 0, column: 0 });
+    view.show().area.editing!.onCopy();
     await settle();
 
     expect(rt.cells.resultCells).not.toHaveBeenCalled();
@@ -308,7 +316,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     rt.cells.resultCells.mockResolvedValue({ ok: false, error: { status: 404, code: "RESULT_NOT_FOUND", title: "Resultado não localizado.", detail: null, errors: null, extensions: {} } });
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onCopy();
     await settle();
 
     expect(clipboard.writeText.mock.calls).toEqual([[full.slice(0, 10_000)]]);
@@ -323,7 +332,8 @@ describe("QueryTabPanel: copiar leva o valor completo da célula cortada (RN-SQL
     }));
     const view = mount(fakeRunner(cut()));
 
-    view.show().area.editing!.onCopy({ row: 0, column: 1 });
+    view.show().area.editing!.onActivate({ row: 0, column: 1 });
+    view.show().area.editing!.onCopy();
     const busy = view.show();
     busy.banner!.props.onCancelFetch();
     await settle();
@@ -1265,7 +1275,7 @@ describe("QueryTabPanel: as abas guardadas do script se editam (seção 33, RN-S
     return run;
   }
 
-  it("a aba guardada recebe a edição e a faixa; o alvo é o do resultado dela, e o menu da célula não tem Filtrar, Atualizar nem Atualizar automaticamente", async () => {
+  it("a aba guardada recebe a edição e a faixa; o alvo é o do resultado dela, e o menu da célula não tem Filtrar, Ordenar, Atualizar nem Atualizar automaticamente", async () => {
     rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
     const runner = fakeRunner(rowsState({ target: last }));
     twoTabs(runner);
@@ -1283,8 +1293,10 @@ describe("QueryTabPanel: as abas guardadas do script se editam (seção 33, RN-S
     const ids = view.show().menu!.groups.flatMap(groupItems).map((item) => item.id);
 
     expect(rt.service.editTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
-    expect(ids).toEqual(expect.arrayContaining(["copy", "paste", "edit", "setNull", "undo", "newRow", "duplicateRow", "deleteRow"]));
+    expect(ids).toEqual(expect.arrayContaining(["copy", "copyWithHeader", "advancedCopy", "paste", "edit", "setNull", "undo", "newRow", "duplicateRow", "deleteRow"]));
     expect(ids).not.toContain("filter");
+    // RN-SQL-023: o "Ordenar" é do resultado do último comando, como o "Filtrar".
+    expect(ids).not.toContain("sort");
     expect(ids).not.toContain("refresh");
     expect(ids).not.toContain("autoRefresh");
   });
@@ -1700,6 +1712,15 @@ describe("QueryTabPanel: o aviso antes de executar, na conexão que confirma (RN
 });
 
 describe("QueryTabPanel: a grade de uma conexão somente leitura não se edita (RN-PROT-002 e RN-EDIT-002)", () => {
+  // A lista das conexões em cache diz que `c1` é somente leitura agora: o motivo dela, na página ou na recusa, só vale enquanto ela é (RN-PROT-003).
+  const getQueryData = rt.queryClient.getQueryData;
+  beforeEach(() => {
+    rt.queryClient.getQueryData = ((key: unknown) => (Array.isArray(key) && key[0] === "connections" ? [{ id: "c1", protections: { readOnly: true } }] : undefined)) as never;
+  });
+  afterEach(() => {
+    rt.queryClient.getQueryData = getQueryData;
+  });
+
   it("a página da conexão somente leitura já diz por quê: a faixa mostra o motivo, e “Editar célula” fica desabilitado com ele, sem perguntar o alvo", async () => {
     const view = mount(fakeRunner(rowsState({ readOnly: "a conexão é somente leitura" })));
 
@@ -1737,5 +1758,122 @@ describe("QueryTabPanel: a grade de uma conexão somente leitura não se edita (
       "Excluir linha (Alt+Delete). Somente leitura: a conexão é somente leitura.",
     ]);
     expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("desmarcado o \"Somente leitura\" depois da leitura, o motivo da página não vale: a faixa não o mostra, e \"Editar célula\" pergunta o alvo à API", async () => {
+    rt.queryClient.getQueryData = getQueryData;
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    const view = mount(fakeRunner(rowsState({ readOnly: "a conexão é somente leitura" })));
+
+    expect(view.show().banner?.props.readOnly).toBeNull();
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    const items = view.show().menu!.groups.flatMap(groupItems);
+
+    expect(rt.service.editTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(items.find((item) => item.label === copy.menu.edit)?.disabled).toBeFalsy();
+  });
+});
+
+describe("QueryTabPanel: o \"Ordenar\" do menu da grade, pelo campo de filtro do resultado (RN-GRADE-004 e 011)", () => {
+  const filtered = (text: string) => ({ ...rowsState().target, filter: text });
+
+  it("a ordem escolhida é escrita no campo e aplicada; a ordem em uso, a do filtro aplicado, vem marcada", async () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
+    await settle();
+    const sort = () => view.show().menu!.groups.flatMap(groupItems).find((item) => item.id === "sort")!.submenu!.groups.flatMap(groupItems);
+    expect(sort().map((item) => item.checked)).toEqual([false, false, true]);
+    sort().find((item) => item.id === "sort:asc")!.onSelect!();
+    await settle();
+
+    expect(runner.sent).toEqual([filtered('ORDER BY "status" ASC')]);
+  });
+});
+
+describe("QueryTabPanel: o Copiar avançado e o Gerar SQL do menu da grade, no resultado e nas abas guardadas do script (seção 37)", () => {
+  /** O alvo do "Gerar SQL" de `loja.pedido`, de uma tabela só. */
+  const sqlTarget: SqlTarget = { ...target, tables: target.tables.map((table) => ({ ...table, kind: "table" as const, keyColumns: ["id"] })) };
+  let clipboard: { writeText: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    clipboard = { writeText: vi.fn(async () => {}) };
+    vi.stubGlobal("navigator", { clipboard, platform: "Win32" });
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.sqlTargetOrRefuse.mockResolvedValue({ ok: true, data: sqlTarget });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const items = (view: ReturnType<typeof mount>) => view.show().menu!.groups.flatMap(groupItems);
+  const submenu = (view: ReturnType<typeof mount>, id: string) => items(view).find((item) => item.id === id)!.submenu!.groups.flatMap(groupItems);
+  const dialogOf = (view: ReturnType<typeof mount>, type: unknown) => view.show().found.find((element) => element.type === type)?.props;
+  async function chooseOn(view: ReturnType<typeof mount>, parent: string, id: string) {
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    submenu(view, parent).find((item) => item.id === id)!.onSelect!();
+    await settle();
+    await settle();
+  }
+
+  it("Copiar como JSON: a origem é `resultado`; Copiar como SQL usa a tabela do alvo de uma tabela só, que a edição já perguntou", async () => {
+    const view = mount(fakeRunner(rowsState()));
+    await chooseOn(view, "advancedCopy", "copyAs:json");
+    expect(clipboard.writeText.mock.calls[0][0]).toContain('"resultado"');
+    expect(rt.toast.success).toHaveBeenCalledWith(copyAsCopy.notice.copied(1, "json"));
+
+    await chooseOn(view, "advancedCopy", "copyAs:sql");
+    expect(clipboard.writeText.mock.calls[1][0]).toContain('INSERT INTO "loja"."pedido" ("status")');
+    // O alvo que a edição já pediu (ao abrir o menu) não traz o tipo nem a chave pelo nome: o do "Gerar SQL" é perguntado uma vez, com purpose sql.
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+  });
+
+  it("numa junção, Copiar como SQL abre o Copiar avançado… no SQL, com o foco no campo da tabela", async () => {
+    rt.service.sqlTargetOrRefuse.mockResolvedValue({ ok: true, data: { ...sqlTarget, tables: [...sqlTarget.tables, { ...sqlTarget.tables[0], name: "cliente" }] } });
+    const view = mount(fakeRunner(rowsState()));
+    await chooseOn(view, "advancedCopy", "copyAs:sql");
+
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+    expect(dialogOf(view, CopyAdvancedDialog)).toMatchObject({ initialFormat: "sql", focusTable: true });
+  });
+
+  it("Configurar comandos 'Copiar como'… abre o diálogo dele", async () => {
+    const view = mount(fakeRunner(rowsState()));
+    await chooseOn(view, "advancedCopy", "copyAsConfigure");
+    expect(dialogOf(view, ConfigureCopyAsDialog)).toBeDefined();
+  });
+
+  it("Gerar SQL ▸ UPDATE abre o diálogo; \"Abrir numa aba de consulta\" abre a aba nova da conexão da aba", async () => {
+    const view = mount(fakeRunner(rowsState()));
+    await chooseOn(view, "generateSql", "sql:update");
+
+    const dialog = dialogOf(view, GenerateSqlDialog) as unknown as ComponentProps<typeof GenerateSqlDialog>;
+    expect(dialog.engine).toBe(pg);
+    expect(dialog.dialog.view.body).toEqual({ kind: "text", text: 'UPDATE "loja"."pedido"\nSET "status" = \'aberta\'\nWHERE "id" = 10;' });
+    dialog.dialog.onOpenInTab();
+    expect(view.props.onOpenQuery).toHaveBeenCalledWith("c1", 'UPDATE "loja"."pedido"\nSET "status" = \'aberta\'\nWHERE "id" = 10;', undefined);
+  });
+
+  it("a aba guardada do script tem o Copiar avançado e o Gerar SQL; o alvo é o do resultado dela, pela sessão em que foi lido", async () => {
+    const first: RunTarget = { sql: "select * from loja.pedido where id < 5", offset: 0, engine: pg };
+    const last: RunTarget = { sql: "select * from loja.pedido", offset: 40, engine: pg };
+    const runner = fakeRunner(rowsState({ target: last }));
+    let run = createScriptRun(1, [first, last]);
+    run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
+    run = withEntry(run, 1, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    runner.scriptState = { ...finishRun(run, "done"), results: [{ entry: 0, rows: rowsState({ id: 7, target: first, rows: [["1", "a"]], hasMore: false, resultId: "r0", sessionId: "s0" }) }, { entry: 1, rows: runner.state as RowsState }], live: 1 };
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+
+    await chooseOn(view, "generateSql", "sql:delete");
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s0", "r0", null);
+    const dialog = dialogOf(view, GenerateSqlDialog) as unknown as ComponentProps<typeof GenerateSqlDialog>;
+    expect(dialog.dialog.view.body).toEqual({ kind: "text", text: 'DELETE FROM "loja"."pedido"\nWHERE "id" = 1;' });
+    dialog.dialog.onClose();
+
+    view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
+    await settle();
+    expect(submenu(view, "advancedCopy").map((item) => item.id)).toContain("copyAs:xml");
   });
 });

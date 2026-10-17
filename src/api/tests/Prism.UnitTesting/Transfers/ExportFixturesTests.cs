@@ -8,12 +8,11 @@ using System.Xml;
 namespace Prism.UnitTesting.Transfers;
 
 /// <summary>
-/// RN-EXPORT-024: as fixtures de ouro de `src/test-fixtures/export/`, escritas à mão, com as entradas e a saída esperada de cada caso. As do campo do
-/// CSV, do texto do HTML, da célula do Markdown, do valor e da chave do JSON, do literal do SQL, do texto e do atributo do XML e da planilha (o texto, o
-/// número, o nome e o corte da célula) são lidas também pelo teste da tela (`export-fixtures.test.ts`), e os dois lados escrevem o mesmo texto; as
-/// outras (TXT, PHP, data em ISO 8601, "Em todos os textos" do CSV, o literal do binário, o `INSERT` de várias linhas, o nome do XML e o DbUnit) são só
-/// da API, prontas para quando a tela as escrever. Cada arquivo é conferido por inteiro: mudar uma regra é mudar a fixture, e nunca regerá-la a partir
-/// do código.
+/// RN-EXPORT-024: as fixtures de ouro de `src/test-fixtures/export/`, escritas à mão, com as entradas e a saída esperada de cada caso, lidas também pelo
+/// teste da tela (`export-fixtures.test.ts`): os dois lados escrevem o mesmo texto. Desde a seção 37 a tela escreve os nove formatos de texto (o "Copiar
+/// como", RN-GRADE-016), e as que eram só da API (TXT, PHP, data em ISO 8601, "Em todos os textos" do CSV, o literal do binário, o `INSERT` de várias
+/// linhas, o nome do XML e o DbUnit) passaram a ser dos dois lados, com a do documento inteiro de cada formato (`document.json`). Cada arquivo é
+/// conferido por inteiro: mudar uma regra é mudar a fixture, e nunca regerá-la a partir do código.
 /// </summary>
 public sealed class ExportFixturesTests
 {
@@ -164,6 +163,29 @@ public sealed class ExportFixturesTests
             var (text, counts) = ExportWriting.Write(ExportFormats.DbUnit, columns, Rows(test.GetProperty("rows")), options);
 
             return ($"{text}|{counts.RemovedCharacters}", $"{test.GetProperty("expected").GetString()}|{test.GetProperty("removed").GetInt64()}");
+        });
+
+    [Trait("ExportWriter", "Write")]
+    [Fact(DisplayName = "OK o documento inteiro de cada formato de texto e o resumo são os da fixture")]
+    public void Document_ShouldMatchTheFixture()
+        => AssertAll("document.json", test =>
+        {
+            var format = test.GetProperty("format").GetString()!;
+            var (options, errors) = ExportOptionsReader.Read(format, test.GetProperty("options"), defaultTable: null);
+            if (options is null)
+                return (string.Join('|', errors.Select(error => $"{error.Field}: {error.Message}")), "as opções da fixture valem");
+
+            var columns = test.GetProperty("columns").EnumerateArray().Select(column => new ExportColumn(column.GetProperty("name").GetString()!, column.GetProperty("type").GetString()!, column.GetProperty("kind").GetString()!)).ToList();
+            var rows = Rows(test.GetProperty("rows"));
+
+            // RN-EXPORT-006 e 011: com o binário deixado vazio (ou NULL, no SQL), a API nem pede o valor binário ao leitor, e ele chega nulo ao escritor.
+            if (options.Binary == EExportBinary.Null)
+                rows = [.. rows.Select(row => (IReadOnlyList<ExportCell>)[.. row.Select((cell, index) => columns[index].Kind == "binary" ? ExportCell.Null : cell)])];
+
+            var (text, counts) = ExportWriting.Write(format, columns, rows, options, Text(test.GetProperty("sourceName"))!, Engine(test.GetProperty("engine").GetString()!));
+            var summary = test.GetProperty("summary");
+
+            return ($"{text}|{counts.CutValues}|{counts.RemovedCharacters}|{counts.SkippedRows}", $"{Text(test.GetProperty("expected"))}|{summary.GetProperty("cutValues").GetInt64()}|{summary.GetProperty("removedCharacters").GetInt64()}|{summary.GetProperty("skippedRows").GetInt64()}");
         });
 
     [Trait("ExportText", "XlsxText")]

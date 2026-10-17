@@ -2,7 +2,7 @@
   "rule": "RN-EXPORT-007 e RN-TABELA-006: um campo do CSV. Na tela, csvFieldOf (csv.ts) com os padrões e a célula do toDelimited (to-delimited.ts); na API, ExportText.CsvField.",
   "notes": [
     "value e expected são texto, null (o nulo) ou { codePoints: [...] }, que cada lado monta ponto de código por ponto de código.",
-    "quoting: auto é 'Só quando precisa' nos dois lados; all é 'Em todos os valores' (always na tela). 'Em todos os textos' é só da API, em csv-field-text.json.",
+    "quoting: auto é 'Só quando precisa' nos dois lados; all é 'Em todos os valores' (always na tela). 'Em todos os textos' está em csv-field-text.json. A tela confere também o csvField (to-csv.ts), o campo do CSV da exportação que o \"Copiar como CSV\" escreve.",
     "O par substituto solto fica no campo como veio: quem o troca por U+FFFD é o UTF-8 do arquivo."
   ],
   "cases": [

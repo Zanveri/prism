@@ -1,5 +1,5 @@
 {
-  "rule": "RN-EXPORT-012: o nome de elemento do XML e de atributo do DbUnit, pela regra do .NET (XmlConvert.EncodeLocalName), com o ToUpperInvariant antes quando upperCase. Só da API (ExportText.XmlName), pronta para quando a tela o escrever.",
+  "rule": "RN-EXPORT-012: o nome de elemento do XML e de atributo do DbUnit, pela regra do .NET (XmlConvert.EncodeLocalName), com o ToUpperInvariant antes quando upperCase. Na tela, xmlName (xml-name.ts), com o upperInvariant antes; na API, ExportText.XmlName.",
   "notes": [
     "value é texto ou { codePoints: [...] }; expected é o nome como sai no arquivo, cuja volta (XmlConvert.DecodeName) é o value."
   ],

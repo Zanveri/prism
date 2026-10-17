@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { copiesCell, editShortcuts, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarksOf, rowShortcut, savesEdits } from "./grid-editing";
+import { copiesAdvanced, copiesCell, deletesRows, editShortcuts, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarksOf, rowShortcut, savesEdits, selectsAll, selectsRows } from "./grid-editing";
 import { addRow, deleteRow, editCell, editNewCell, noEdits } from "./record-edits";
 
 const rows = [
@@ -148,5 +148,37 @@ describe("os atalhos da linha com o foco na grade (RN-EDIT-015)", () => {
       duplicateRow: { label: "Cmd+Option+Insert", aria: "Meta+Alt+Insert Control+Alt+Insert" },
       deleteRow: { label: "Option+Delete", aria: "Alt+Backspace Alt+Delete" },
     });
+  });
+});
+
+describe("as teclas da seleção (RN-GRADE-001 a 003 e RN-EDIT-015)", () => {
+  const key = (key: string, over: Partial<{ ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }> = {}) => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...over });
+
+  it("Ctrl+A (Cmd+A) escolhe tudo; com Shift ou Alt, não", () => {
+    expect(selectsAll(key("a", { ctrlKey: true }))).toBe(true);
+    expect(selectsAll(key("A", { metaKey: true }))).toBe(true);
+    expect(selectsAll(key("a", { ctrlKey: true, shiftKey: true }))).toBe(false);
+    expect(selectsAll(key("a"))).toBe(false);
+  });
+
+  it("Shift+Espaço escolhe as linhas inteiras; o Espaço sozinho e com Ctrl, não", () => {
+    expect(selectsRows(key(" ", { shiftKey: true }))).toBe(true);
+    expect(selectsRows(key(" "))).toBe(false);
+    expect(selectsRows(key(" ", { shiftKey: true, ctrlKey: true }))).toBe(false);
+  });
+
+  it("Ctrl+Shift+C é o \"Copiar avançado…\"; Ctrl+C é o copiar; com Alt, nenhum", () => {
+    expect(copiesAdvanced(key("C", { ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(copiesAdvanced(key("c", { ctrlKey: true }))).toBe(false);
+    expect(copiesCell(key("c", { ctrlKey: true, shiftKey: true }))).toBe(false);
+    expect(copiesAdvanced(key("c", { ctrlKey: true, shiftKey: true, altKey: true }))).toBe(false);
+  });
+
+  it("o Delete sozinho exclui as linhas inteiras; com qualquer modificador, não; no macOS a \"delete\" (Backspace) também", () => {
+    expect(deletesRows(key("Delete"), "Win32")).toBe(true);
+    expect(deletesRows(key("Delete", { altKey: true }), "Win32")).toBe(false);
+    expect(deletesRows(key("Delete", { shiftKey: true }), "Win32")).toBe(false);
+    expect(deletesRows(key("Backspace"), "Win32")).toBe(false);
+    expect(deletesRows(key("Backspace"), "MacIntel")).toBe(true);
   });
 });

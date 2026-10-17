@@ -132,3 +132,28 @@ describe("o que exportar grava (RN-SQL-017)", () => {
     expect(withFullValues(result, noFullValues)).toBe(result);
   });
 });
+
+describe("parar de pedir entre um lote e outro (RN-GRADE-002 e RN-SQL-017)", () => {
+  it("quem pediu manda parar depois de um lote: o resto não é pedido, conta como sem valor, e a resposta diz que parou", async () => {
+    const cut = Array.from({ length: fullValuesBatch + 5 }, (_, index) => ({ row: index, column: 0, resultRow: index }));
+    const fetchCells = vi.fn<FetchCells>(async (cells) => cells.map(() => "x"));
+    const seen: number[] = [];
+
+    const full = await fetchFullValues(cut, fetchCells, new AbortController().signal, (batch) => {
+      seen.push(batch.length);
+      return false;
+    });
+
+    expect(fetchCells).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual([fullValuesBatch]);
+    expect(full).toMatchObject({ missing: 5, stopped: true });
+    expect(full?.valueOf(0, 0)).toBe("x");
+  });
+
+  it("depois do último lote não há o que parar: a resposta é a de sempre", async () => {
+    const full = await fetchFullValues([{ row: 0, column: 0, resultRow: 0 }], async () => ["x"], new AbortController().signal, () => false);
+
+    expect(full).toMatchObject({ missing: 0 });
+    expect(full?.stopped).toBeUndefined();
+  });
+});
