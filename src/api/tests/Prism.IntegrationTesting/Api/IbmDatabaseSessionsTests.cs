@@ -36,6 +36,18 @@ public abstract class IbmDatabaseSessionsTests
     /// <summary>RN-GRADE-011: um filtro que só este banco recusa, pelas aspas ou pelos comentários dele; nulo onde não há.</summary>
     protected virtual string? InvalidFilterOfThisDatabase => null;
 
+    /// <summary>RN-EXPORT-011: as colunas da tabela que a exportação em SQL leva de volta ao banco, escritas sem aspas, com `id` primeiro.</summary>
+    protected abstract string ExportTableShape { get; }
+
+    /// <summary>Os nomes das colunas de <see cref="ExportTableShape"/>, escritos sem aspas, na ordem.</summary>
+    protected abstract string[] ExportTableColumns { get; }
+
+    /// <summary>Os comandos que põem as linhas da prova na tabela (texto com aspa, barra invertida, quebra de linha, retorno de carro e tabulação; números; datas; nulos).</summary>
+    protected abstract IEnumerable<string> ExportTableRows(string table);
+
+    /// <summary>RN-EXPORT-011: as linhas por comando do arquivo; no Informix, sempre 1.</summary>
+    protected virtual int ExportRowsPerStatement => 2;
+
     [OneTimeSetUp]
     public async Task StartAsync()
         => _settings = await StartDatabaseAsync();
@@ -184,6 +196,47 @@ public abstract class IbmDatabaseSessionsTests
         Assert.That(afterwards.GetProperty("rows").GetArrayLength(), Is.EqualTo(10));
     }
 
+    /// <summary>
+    /// RN-EXPORT-011: o arquivo SQL volta para o banco. Os `INSERT` exportados de uma tabela com os valores difíceis para um literal (os literais do texto
+    /// com `CHR`, os números, as datas, o binário do Db2), executados um a um numa cópia vazia, dão as mesmas linhas: a exportação em CSV das duas tabelas é
+    /// a mesma, byte a byte. Ainda não foi executado contra os servidores (o relatório da parte 3 diz isso).
+    /// </summary>
+    [Test]
+    public async Task Export_Sql_RunsBackIntoACopyOfTheTable()
+    {
+        await using var host = await StartHostAsync();
+        await host.CreateUserAsync(UserName, UserFakers.RandomPassword());
+        var client = host.Client;
+        var connectionID = await client.CreateConnectionAsync(_settings);
+        var session = await client.OpenSessionAsync(connectionID);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (source, copy) = ($"exporta_sql_{suffix}", $"copia_sql_{suffix}");
+        await client.ExecuteAsync(session, $"CREATE TABLE loja.{source} {ExportTableShape}");
+        await client.ExecuteAsync(session, $"CREATE TABLE loja.{copy} {ExportTableShape}");
+
+        try
+        {
+            foreach (var insert in ExportTableRows($"loja.{source}"))
+                await client.ExecuteAsync(session, insert);
+
+            var columns = ExportTableColumns.Select(Name).ToList();
+            var script = await TransferCalls.ExportTextAsync(host, TransferCalls.QueryExport(connectionID, $"SELECT * FROM loja.{source} ORDER BY id", columns, "sql", new { schema = Name("loja"), table = Name(copy), rowsPerStatement = ExportRowsPerStatement }));
+            await TestContext.Out.WriteLineAsync(script);
+            foreach (var statement in script.Split(";\n", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                await StepAsync("POST queries (INSERT exportado)", await client.ExecuteRawAsync(session, statement), HttpStatusCode.OK);
+
+            var original = await TransferCalls.ExportTextAsync(host, TransferCalls.QueryExport(connectionID, $"SELECT * FROM loja.{source} ORDER BY id", columns, "csv"));
+            var copied = await TransferCalls.ExportTextAsync(host, TransferCalls.QueryExport(connectionID, $"SELECT * FROM loja.{copy} ORDER BY id", columns, "csv"));
+            await TestContext.Out.WriteLineAsync(original);
+            Assert.That(copied, Is.EqualTo(original));
+        }
+        finally
+        {
+            await client.ExecuteAsync(session, $"DROP TABLE loja.{source}");
+            await client.ExecuteAsync(session, $"DROP TABLE loja.{copy}");
+        }
+    }
+
     /// <summary>RN-SESSAO-003: a falha ao abrir responde 422 com a mensagem do banco no detalhe.</summary>
     [Test]
     public async Task Open_WrongDatabasePassword_Returns422DatabaseConnectionFailed_WithTheDatabaseMessage()
@@ -213,6 +266,15 @@ public sealed class Db2DatabaseSessionsTests : IbmDatabaseSessionsTests
 
     protected override Task<ConnectionSettings> StartDatabaseAsync()
         => Db2Singleton.GetSettingsAsync();
+
+    /// <summary>O binário no `BLOB` (que sai em `BLOB(X'…')`) e no `VARBINARY` (`X'…'`), o lógico, o decimal de 31 dígitos e o real.</summary>
+    protected override string ExportTableShape
+        => "(id INTEGER NOT NULL PRIMARY KEY, texto VARCHAR(200), dado BLOB(1M), hash VARBINARY(32), valor DECIMAL(31, 10), fracao DOUBLE, ativo BOOLEAN, momento TIMESTAMP(6), dia DATE)";
+
+    protected override string[] ExportTableColumns => ["id", "texto", "dado", "hash", "valor", "fracao", "ativo", "momento", "dia"];
+
+    protected override IEnumerable<string> ExportTableRows(string table)
+        => [$"INSERT INTO {table} VALUES (1, 'O''Brien \\ a' || CHR(10) || 'b' || CHR(13) || 'c' || CHR(9) || 'd ação', BLOB(X'00FF10'), X'CAFE', 123456789012345678901.0123456789, 0.1, TRUE, '2024-01-15 10:30:00.123456', '2024-01-15'), (2, '', BLOB(X'01'), X'02', -0.5, 1e300, FALSE, NULL, NULL), (3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"];
 }
 
 [TestFixture]
@@ -232,6 +294,27 @@ public sealed class InformixDatabaseSessionsTests : IbmDatabaseSessionsTests
 
     protected override Task<ConnectionSettings> StartDatabaseAsync()
         => InformixSingleton.GetSettingsAsync();
+
+    /// <summary>
+    /// A data e hora com fração (que sai em `DATETIME (…) YEAR TO FRACTION(5)`), o texto com as quebras (em `CHR`), o decimal de 31 dígitos e o real. O
+    /// binário fica de fora: o Informix não tem literal para ele, e a linha sairia como comentário. O lógico também: pela DRDA ele chega como número, e
+    /// o literal é o número, que esta prova ainda não mostrou que o Informix aceita numa coluna `BOOLEAN`.
+    /// </summary>
+    protected override string ExportTableShape
+        => "(id INTEGER NOT NULL, texto LVARCHAR(200), valor DECIMAL(31, 10), fracao FLOAT, momento DATETIME YEAR TO FRACTION(5), dia DATE, PRIMARY KEY (id))";
+
+    protected override string[] ExportTableColumns => ["id", "texto", "valor", "fracao", "momento", "dia"];
+
+    protected override int ExportRowsPerStatement => 1;
+
+    /// <summary>O Informix não aceita várias linhas num `INSERT … VALUES`: um comando por linha.</summary>
+    protected override IEnumerable<string> ExportTableRows(string table)
+        =>
+        [
+            $"INSERT INTO {table} VALUES (1, 'O''Brien \\ a' || CHR(10) || 'b' || CHR(13) || 'c' || CHR(9) || 'd', 123456789012345678901.0123456789, 0.1, DATETIME (2024-01-15 10:30:00.12345) YEAR TO FRACTION(5), MDY(1, 15, 2024))",
+            $"INSERT INTO {table} VALUES (2, '', -0.5, 1e300, NULL, NULL)",
+            $"INSERT INTO {table} VALUES (3, NULL, NULL, NULL, NULL, NULL)"
+        ];
 
     /// <summary>
     /// RN-ARVORE-006: a lista traz os bancos do servidor (`sysmaster:sysdatabases`), e outro deles abre com as credenciais da conexão e o
