@@ -1,5 +1,9 @@
 import { dataExportCopy, formatCount } from "../data-export/data-export.copy";
 import type { DocumentFormat } from "../grid-export/document";
+import { gridSelectionCopy } from "../grid-selection.copy";
+import { recordsCopy } from "../records.copy";
+
+const menu = gridSelectionCopy.menu;
 
 /**
  * Os textos do "Copiar como", do "Copiar avançado…" e do "Configurar comandos 'Copiar como'…" (RN-GRADE-003, 016 e 017), em pt-BR. As frases são as da
@@ -11,12 +15,12 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 const nameOf = (format: DocumentFormat) => dataExportCopy.formats.names[format];
 
 export const copyAsCopy = {
-  // RN-GRADE-003: os itens do submenu "Copiar avançado", para quem monta o menu da grade.
+  // RN-GRADE-003: os itens do submenu "Copiar avançado", os mesmos do menu da grade (`gridSelectionCopy.menu`, que os desenha).
   menu: {
-    submenu: "Copiar avançado",
-    advanced: "Copiar avançado…",
-    copyAs: (format: DocumentFormat) => `Copiar como ${nameOf(format)}`,
-    configure: "Configurar comandos 'Copiar como'…",
+    submenu: menu.advanced,
+    advanced: menu.advancedDialog,
+    copyAs: (format: DocumentFormat) => menu.copyAs(nameOf(format)),
+    configure: menu.configureCopyAs,
   },
 
   // RN-GRADE-003: o diálogo "Copiar avançado".
@@ -62,7 +66,8 @@ export const copyAsCopy = {
     removed: (count: number) => (count === 1 ? "1 caractere que o formato não aceita foi tirado." : `${formatCount(count)} caracteres que o formato não aceita foram tirados.`),
     skipped: (count: number) => (count === 1 ? "1 linha não copiada, comentada no SQL: o comentário diz por quê." : `${formatCount(count)} linhas não copiadas, comentadas no SQL: o comentário de cada uma diz por quê.`),
     notWhole: (count: number) => (count === 1 ? "1 valor não pôde vir inteiro e foi cortado." : `${formatCount(count)} valores não puderam vir inteiros e foram cortados.`),
-    tooLarge: "O texto passou de 10 MiB, o limite da área de transferência. Escolha menos células, ou use Exportar dados… para gravar um arquivo.",
-    failed: "Não foi possível copiar.",
+    // A recusa do limite e a falha da área de transferência são as do "Copiar" (RN-GRADE-002): uma frase só para os dois.
+    tooLarge: gridSelectionCopy.copy.tooLarge,
+    failed: recordsCopy.edit.menu.notCopied,
   },
 };

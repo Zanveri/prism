@@ -1,43 +1,8 @@
-import type { Engine } from "@/components/ui/engine-tag";
-
 import { integerIn } from "../data-export/export-options";
 import { quoteIdentifier } from "../table-sql";
 import { emptyCounts, type DocumentContext, type DocumentWriter } from "./document";
 import { documentCopy } from "./document.copy";
-import { scriptLiteral } from "./script-literal";
-
-/** RN-EXPORT-011: o maior pedaço de uma constante hexadecimal do Db2, 32.672 dígitos (16.336 bytes). */
-export const db2HexPieceDigits = 32_672;
-
-/**
- * RN-EXPORT-011: o literal do binário (o `ExportText.BinaryLiteral` da API, conferido pela fixture `sql-binary.json`), dos dígitos hexadecimais do valor.
- * No PostgreSQL, `decode('DEADBEEF', 'hex')`, que vale qualquer que seja o `standard_conforming_strings`. No Db2, pelo tipo da coluna: `BINARY` e
- * `VARBINARY` com a constante binária, `BX'DEADBEEF'`; `BLOB` com `BLOB(X'…')`; o texto binário (`CHAR () FOR BIT DATA`, `VARCHAR () FOR BIT DATA`) e o
- * resto com a hexadecimal, `X'DEADBEEF'`, que é um texto e que o Db2 recusa numa coluna `BINARY` ou `VARBINARY` (SQL0408N). Em pedaços de até 16.336 bytes
- * unidos por `||`. No Informix não há: `null`, e a linha vira comentário.
- *
- * @param type O tipo da coluna como o banco o diz (`BLOB`, `BINARY`, `VARBINARY`, `VARCHAR () FOR BIT DATA`…).
- */
-export function binaryLiteral(engine: Engine, hex: string, type: string): string | null {
-  const digits = hex.toUpperCase();
-  if (engine === 1) return `decode('${digits}', 'hex')`;
-  if (engine !== 2) return null;
-
-  const name = type.trim().toUpperCase();
-  const blob = name === "BLOB";
-  const constant = name === "BINARY" || name === "VARBINARY" ? "BX" : "X";
-  const pieces: string[] = [];
-  let offset = 0;
-  do {
-    const piece = `${constant}'${digits.slice(offset, offset + db2HexPieceDigits)}'`;
-    pieces.push(blob ? `BLOB(${piece})` : piece);
-    offset += db2HexPieceDigits;
-  } while (offset < digits.length);
-  return pieces.join(" || ");
-}
-
-/** Os dígitos do binário como a grade o escreve (`0x…`, inteiro: RN-SQL-017), ou `null` quando o texto não é isso. */
-const hexOf = (value: string) => (/^0x(?:[0-9A-Fa-f]{2})*$/.test(value) ? value.slice(2) : null);
+import { binaryDigitsOf, binaryLiteral, scriptLiteral } from "./script-literal";
 
 /** O caractere de controle (abaixo de U+0020, e o DEL) que não é quebra de linha, retorno de carro nem tabulação: o que um script não leva. */
 // eslint-disable-next-line no-control-regex
@@ -79,7 +44,7 @@ export function sqlWriter({ engine, columns, options }: DocumentContext): Docume
     const column = columns[index];
     if (column.kind === "binary") {
       if (o.binary === "null") return { literal: "NULL" };
-      const hex = hexOf(value);
+      const hex = binaryDigitsOf(value);
       if (hex !== null) {
         const literal = binaryLiteral(engine, hex, column.type);
         return literal === null ? { reason: reasons.informixBinary } : { literal };

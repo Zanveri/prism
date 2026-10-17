@@ -1,5 +1,6 @@
 import type { Engine } from "@/components/ui";
 
+import { clipboardLimitBytes, utf8Length, wellFormed } from "./grid-export/document";
 import { gridSelectionCopy } from "./grid-selection.copy";
 import { sqlName } from "./sql-completion";
 
@@ -10,34 +11,14 @@ const copy = gridSelectionCopy;
  * React: o texto, o limite e os avisos. Quem lê a seleção, busca os valores completos e escreve na área de transferência é `use-record-edits.ts`.
  */
 
-/** O limite da área de transferência, o mesmo da exportação (RN-EXPORT-014): 10 MiB de texto em UTF-8. */
-export const clipboardLimit = 10_485_760;
+/** O limite da área de transferência, o mesmo da exportação (RN-EXPORT-014) e do "Copiar como" (RN-GRADE-016): 10 MiB de texto em UTF-8. */
+export const clipboardLimit = clipboardLimitBytes;
 
 /** Quantas células o texto monta antes de ceder a vez à tela (a seleção grande não prende a janela). */
 export const copyChunk = 5_000;
 
-/** Os bytes do texto em UTF-8, com o par substituto solto contado como o U+FFFD que ele vira (três bytes). */
-export function utf8Length(text: string): number {
-  let bytes = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index);
-    if (code < 0x80) bytes += 1;
-    else if (code < 0x800) bytes += 2;
-    else if (code >= 0xd800 && code <= 0xdbff && index + 1 < text.length && (text.charCodeAt(index + 1) & 0xfc00) === 0xdc00) {
-      bytes += 4;
-      index += 1;
-    } else bytes += 3;
-  }
-  return bytes;
-}
-
-const surrogate = /[\ud800-\udfff]/;
-const loneSurrogate = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
-
-/** O texto como o UTF-8 o escreve: o Unicode fora do plano básico e as marcas de direção vão como estão, e o par substituto solto vira U+FFFD. */
-export function wellFormed(text: string): string {
-  return surrogate.test(text) ? text.replace(loneSurrogate, "�") : text;
-}
+// O tamanho em UTF-8 e o par substituto solto são os do "Copiar como" (`grid-export/document.ts`): uma conta só para os dois limites de 10 MiB.
+export { utf8Length, wellFormed };
 
 const needsQuotes = /[\t"\n\r]/;
 

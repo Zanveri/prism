@@ -1,5 +1,8 @@
 import { formatCount } from "@/lib/utils/format";
 
+import { gridSelectionCopy } from "../grid-selection.copy";
+import { recordsCopy } from "../records.copy";
+
 /** O número como a tela o escreve (`1.234`). */
 const number = (count: number) => count.toLocaleString("pt-BR");
 
@@ -8,16 +11,9 @@ const number = (count: number) => count.toLocaleString("pt-BR");
  * coluna, valor) entra num comentário, porque uma quebra de linha dentro de um `--` o encerra e o que vem depois passa a ser código.
  */
 export const generateSqlCopy = {
-  /** Os seis itens do submenu, na ordem do print do dono (RN-GRADE-006). */
-  items: {
-    selectEquals: "SELECT .. WHERE .. =",
-    selectIn: "SELECT .. WHERE .. IN",
-    insert: "INSERT",
-    update: "UPDATE",
-    delete: "DELETE pela chave única",
-    create: "CREATE",
-  },
-  menu: "Gerar SQL",
+  /** Os seis itens do submenu, na ordem do print do dono (RN-GRADE-006): os do menu da grade (`gridSelectionCopy.menu`, que os desenha). */
+  items: gridSelectionCopy.menu.sql,
+  menu: gridSelectionCopy.menu.generateSql,
 
   /** Os comentários do texto (RN-GRADE-019): o do começo, sem chave, e os do fim, um por motivo, seguidos dos números das linhas na grade. */
   sql: {
@@ -81,7 +77,7 @@ export const generateSqlCopy = {
     openInTab: "Abrir numa aba de consulta",
     copy: "Copiar",
     copied: "SQL copiado.",
-    notCopied: "Não foi possível copiar.",
+    notCopied: recordsCopy.edit.menu.notCopied,
   },
 
   /** As frases no tom de atenção, acima do editor (RN-GRADE-018). */

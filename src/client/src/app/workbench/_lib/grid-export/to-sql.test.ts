@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { QueryColumn } from "../query.schema";
 import { chars, documentOf } from "./test-fixtures";
-import { binaryLiteral, db2HexPieceDigits } from "./to-sql";
+import { binaryLiteral, db2HexPieceDigits } from "./script-literal";
 
 const col = (name: string, kind: QueryColumn["kind"] = "text", type: string = kind): QueryColumn => ({ name, type, kind });
 const sql = { schema: "estoque", table: "pedido" };

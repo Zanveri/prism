@@ -83,7 +83,9 @@ export function utf8Length(text: string): number {
  * O texto como o UTF-8 o guarda (RN-EXPORT-006): o par substituto solto vira U+FFFD, a troca que o `UTF8Encoding` da API faz ao gravar o arquivo. Os
  * formatos que escapam o par solto (o JSON) ou o tiram (HTML, XML, DbUnit) já não o têm; os outros (CSV, TXT, Markdown, SQL, Código fonte) o levam até aqui.
  */
-export const wellFormed = (text: string) => text.replace(/\p{Cs}/gu, "\uFFFD");
+const surrogate = /[\ud800-\udfff]/;
+
+export const wellFormed = (text: string) => (surrogate.test(text) ? text.replace(/\p{Cs}/gu, "\uFFFD") : text);
 
 /** Os pontos de código do texto (RN-EXPORT-008: a largura do TXT, sem a largura de exibição): o par substituto conta um, e o solto também. */
 export function codePointCount(text: string): number {

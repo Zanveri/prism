@@ -17,7 +17,7 @@ import { toDelimited, type Delimiter } from "./to-delimited";
 import { isoDateTime, jsonKeys, jsonValue } from "./to-json";
 import { markdownCell } from "./to-markdown";
 import { phpString, phpVariable } from "./to-source-code";
-import { binaryLiteral } from "./to-sql";
+import { binaryLiteral } from "./script-literal";
 import { sheetNameOf, spreadsheetNumber, withinCell, xlsxText } from "./to-xlsx";
 import { upperInvariant, xmlName } from "./xml-name";
 
