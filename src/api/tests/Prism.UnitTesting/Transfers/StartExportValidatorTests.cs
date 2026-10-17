@@ -113,21 +113,29 @@ public sealed class StartExportValidatorTests
     public void Validate_TooManyColumns_ShouldBeRefused()
         => AssertRefused(Command(columns: [.. Enumerable.Range(0, 32768).Select(position => new ExportColumnDto { Position = position, Name = $"c{position}" })]), "columns");
 
-    /// <summary>Os formatos que esta versão ainda não escreve são recusados no campo, com a frase que diz isso, antes de qualquer trabalho.</summary>
     [Trait("StartExportValidator", "StartExportCommand")]
-    [Theory(DisplayName = "Erro o formato fora da lista e o que esta versão ainda não escreve")]
+    [Theory(DisplayName = "Erro o formato fora da lista")]
     [InlineData("pdf", "O formato deve ser um destes: csv, sourceCode, dbUnit, html, json, markdown, sql, txt, xlsx, xml.")]
     [InlineData(null, "O formato deve ser um destes: csv, sourceCode, dbUnit, html, json, markdown, sql, txt, xlsx, xml.")]
     [InlineData("CSV", "O formato deve ser um destes: csv, sourceCode, dbUnit, html, json, markdown, sql, txt, xlsx, xml.")]
     public void Validate_Format_ShouldBeRefusedOnTheField(string? format, string message)
         => Validator.TestValidate(Command(format: format)).ShouldHaveValidationErrorFor("format").WithErrorCode(OptionsInvalid).WithErrorMessage(message);
 
+    /// <summary>RN-EXPORT-004: os dez formatos da lista são escritos; a tabela de destino do SQL e do DbUnit é a da origem quando não vem.</summary>
     [Trait("StartExportValidator", "StartExportCommand")]
-    [Theory(DisplayName = "Erro o formato que esta versão ainda não escreve")]
+    [Theory(DisplayName = "OK cada formato da lista, com os padrões")]
+    [InlineData("csv")]
+    [InlineData("sourceCode")]
+    [InlineData("dbUnit")]
+    [InlineData("html")]
+    [InlineData("json")]
+    [InlineData("markdown")]
+    [InlineData("sql")]
+    [InlineData("txt")]
     [InlineData("xlsx")]
-    public void Validate_FormatNotWrittenYet_ShouldBeRefusedOnTheField(string format)
-        => Validator.TestValidate(Command(format: format)).ShouldHaveValidationErrorFor("format").WithErrorCode(OptionsInvalid)
-            .WithErrorMessage($"O formato {format} ainda não é exportado por esta versão do Prism.");
+    [InlineData("xml")]
+    public void Validate_EachFormat_ShouldBeOK(string format)
+        => Validator.TestValidate(Command(source: new ExportSourceDto { Kind = "query", ConnectionID = Guid.CreateVersion7(), Sql = "SELECT 1 AS id", Name = "pedido" }, format: format)).ShouldNotHaveAnyValidationErrors();
 
     /// <summary>RN-EXPORT-011: duas colunas com o mesmo nome fariam um `INSERT` que o banco recusa; nos outros formatos o nome repetido passa.</summary>
     [Trait("StartExportValidator", "StartExportCommand")]
@@ -145,6 +153,25 @@ public sealed class StartExportValidatorTests
         //Assert
         sql.ShouldHaveValidationErrorFor("columns").WithErrorCode(OptionsInvalid).WithErrorMessage("O resultado tem duas colunas chamadas id: deixe uma de fora na Extração.");
         json.ShouldNotHaveAnyValidationErrors();
+    }
+
+    /// <summary>RN-EXPORT-013: uma planilha do Excel tem no máximo 16.384 colunas; a recusa diz quantas deixar de fora.</summary>
+    [Trait("StartExportValidator", "StartExportCommand")]
+    [Fact(DisplayName = "Erro o XLSX com mais de 16.384 colunas; OK com 16.384")]
+    public void Validate_XlsxWithTooManyColumns_ShouldBeRefused()
+    {
+        //Arrange
+        static ExportColumnDto[] Columns(int count) => [.. Enumerable.Range(0, count).Select(position => new ExportColumnDto { Position = position, Name = $"c{position}" })];
+
+        //Act
+        var limit = Validator.TestValidate(Command(columns: Columns(16384), format: "xlsx"));
+        var over = Validator.TestValidate(Command(columns: Columns(17600), format: "xlsx"));
+        var csv = Validator.TestValidate(Command(columns: Columns(17600), format: "csv"));
+
+        //Assert
+        limit.ShouldNotHaveAnyValidationErrors();
+        over.ShouldHaveValidationErrorFor("columns").WithErrorCode(OptionsInvalid).WithErrorMessage("Uma planilha do Excel tem no máximo 16.384 colunas: deixe 1.216 de fora na Extração, ou escolha outro formato.");
+        csv.ShouldNotHaveAnyValidationErrors();
     }
 
     /// <summary>RN-EXPORT-014: o XLSX não é texto e já é compactado: sem BOM, sem .zip e sem a área de transferência.</summary>

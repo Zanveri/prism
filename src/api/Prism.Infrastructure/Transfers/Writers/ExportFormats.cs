@@ -2,10 +2,7 @@ using Prism.Infrastructure.Transfers.Models;
 
 namespace Prism.Infrastructure.Transfers.Writers;
 
-/// <summary>
-/// RN-EXPORT-004 e seção 6: os formatos da exportação de dados, pelo nome que a rota recebe (`format`), e o escritor de cada um. O formato da lista
-/// que ainda não tem escritor (o XLSX, nesta entrega) é recusado ao começar, no campo `format`, até ganhar o dele.
-/// </summary>
+/// <summary>RN-EXPORT-004 e seção 6: os formatos da exportação de dados, pelo nome que a rota recebe (`format`), e o escritor de cada um.</summary>
 public static class ExportFormats
 {
     public const string Csv = "csv";
@@ -32,7 +29,8 @@ public static class ExportFormats
         [SourceCode] = (context, output) => new SourceCodeExportWriter(context, output),
         [Sql] = (context, output) => new SqlExportWriter(context, output),
         [Xml] = (context, output) => new XmlExportWriter(context, output),
-        [DbUnit] = (context, output) => new DbUnitExportWriter(context, output)
+        [DbUnit] = (context, output) => new DbUnitExportWriter(context, output),
+        [Xlsx] = (context, output) => new XlsxExportWriter(context, output)
     };
 
     public static bool Exists(string? format)
@@ -41,10 +39,6 @@ public static class ExportFormats
     /// <summary>RN-EXPORT-014: o formato é texto (vai para a área de transferência, leva BOM, se compacta em .zip). Só o XLSX não é.</summary>
     public static bool IsText(string format)
         => format != Xlsx;
-
-    /// <summary>O formato já tem escritor nesta versão da API.</summary>
-    public static bool IsWritten(string format)
-        => Writers.ContainsKey(format);
 
     internal static ExportWriter Create(string format, ExportWriterContext context, Stream output)
         => Writers[format](context, output);

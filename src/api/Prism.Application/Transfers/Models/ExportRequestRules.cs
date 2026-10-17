@@ -2,6 +2,7 @@ using Prism.Application.Scripts.Models;
 using Prism.Application.Transfers.Features.StartExport;
 using Prism.Application.Transfers.Models.Dtos;
 using Prism.Infrastructure.Transfers.Writers;
+using System.Globalization;
 
 namespace Prism.Application.Transfers.Models;
 
@@ -20,6 +21,9 @@ internal static class ExportRequestRules
 
     /// <summary>Seção 6: o nome do arquivo dentro do .zip tem de 1 a 128 caracteres.</summary>
     public const int MaxEntryNameLength = 128;
+
+    /// <summary>RN-EXPORT-013: as colunas de uma planilha do Excel, no máximo (A a XFD).</summary>
+    public const int MaxSheetColumns = 16384;
 
     public static IReadOnlyList<(string Field, string Message)> Refusals(StartExportCommand request)
     {
@@ -62,8 +66,6 @@ internal static class ExportRequestRules
         var format = request.Format;
         if (!ExportFormats.Exists(format))
             refusals.Add(("format", $"O formato deve ser um destes: {string.Join(", ", ExportFormats.All)}."));
-        else if (!ExportFormats.IsWritten(format!))
-            refusals.Add(("format", $"O formato {format} ainda não é exportado por esta versão do Prism."));
         else
             refusals.AddRange(ExportOptionsReader.Read(format!, request.Options, DefaultTable(source)).Errors.Select(error => (error.Field, error.Message)));
 
@@ -103,16 +105,23 @@ internal static class ExportRequestRules
     }
 
     /// <summary>
-    /// RN-EXPORT-011: o que o formato não aceita nas colunas marcadas, que o assistente já não deixa passar da Extração. No SQL, duas colunas com o mesmo
-    /// nome fariam um `INSERT` que o banco recusa.
+    /// RN-EXPORT-011 e 013: o que o formato não aceita nas colunas marcadas, que o assistente já não deixa passar da Extração. No SQL, duas colunas com o
+    /// mesmo nome fariam um `INSERT` que o banco recusa; no XLSX, uma planilha do Excel tem no máximo 16.384 colunas.
     /// </summary>
     private static string? FormatColumnsRefusal(string? format, IReadOnlyList<ExportColumnDto> columns)
     {
         if (format == ExportFormats.Sql && columns.GroupBy(column => column?.Name, StringComparer.Ordinal).FirstOrDefault(group => group.Key is not null && group.Count() > 1) is { } repeated)
             return $"O resultado tem duas colunas chamadas {repeated.Key}: deixe uma de fora na Extração.";
 
+        if (format == ExportFormats.Xlsx && columns.Count > MaxSheetColumns)
+            return $"Uma planilha do Excel tem no máximo 16.384 colunas: deixe {Thousands(columns.Count - MaxSheetColumns)} de fora na Extração, ou escolha outro formato.";
+
         return null;
     }
+
+    /// <summary>O número com o ponto de milhar do português ("1.234"), sem depender da cultura da máquina.</summary>
+    private static string Thousands(int value)
+        => value.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');
 
     /// <summary>RN-EXPORT-011 e 012: a tabela de destino do SQL e do DbUnit, quando ela não vem: a da origem (`source.table`, ou `source.name` nos Registros).</summary>
     public static string? DefaultTable(Dtos.ExportSourceDto? source)
