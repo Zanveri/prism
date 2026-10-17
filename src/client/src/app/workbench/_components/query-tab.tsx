@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useId, useMemo, useReducer, useRef, useState, type KeyboardEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
@@ -7,8 +7,11 @@ import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion } from "../_lib/command-confirmation";
+import { useCopyAs } from "../_lib/copy-as/use-copy-as";
 import { openExportWizard } from "../_lib/data-export/data-exports";
 import { exportBlocker, exportRows, resultSource } from "../_lib/data-export/export-entry";
+import { useGridGenerateSql } from "../_lib/generate-sql/use-grid-generate-sql";
+import { cachedReadOnly, cachedUserName } from "../_lib/grid-action-context";
 import { refreshKey } from "../_lib/grid-editing";
 import { applyResultFilter, clearResultFilter, filterBaseOf } from "../_lib/result-filter";
 import { commandWillRun, initialLayout, layoutReducer, paneFlex, scriptWillRun } from "../_lib/result-layout";
@@ -64,6 +67,8 @@ type QueryTabPanelProps = {
   onOpenTable: (connectionId: string, table: { schema: string; name: string; view?: TableView; database?: string }) => void;
   /** RN-ARVORE-007: a aba passa a outro banco do servidor da conexão (`undefined`: o da conexão), depois da pergunta das alterações não salvas. Estável. */
   onSwitchDatabase: (tabId: string, database: string | undefined) => void;
+  /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL": uma aba de consulta nova, com o texto no editor. Estável. */
+  onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
 };
 
 /** A plataforma, para o atalho do script (RN-SQL-019): Alt+X, ou Cmd+Option+X no macOS. */
@@ -123,8 +128,9 @@ function NoConnectionBar({ reason, onAssign }: { reason: NoConnectionReason; onA
  * resultado, no "Salvar" da grade (em "Todos os comandos") e ao ligar a atualização automática (em "Todos os comandos", uma vez). Cancelado, nada sai, e a
  * aba fica como estava, com o resultado de antes.
  */
-export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase }: QueryTabPanelProps) {
+export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, active, onSqlChange, onEdited, onSave, onSwitchConnection, onOpenTable, onSwitchDatabase, onOpenQuery }: QueryTabPanelProps) {
   const state = useQueryRunner(runner);
+  const queryClient = useQueryClient();
   const script = useScriptRun(runner);
   // RN-PROT-001: o aviso antes de executar, pelas proteções da conexão da aba.
   const confirmation = useCommandConfirmation(tab.connectionId, tab.database);
@@ -256,6 +262,19 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // RN-SQL-023: numa aba guardada do script a edição é a das linhas dela, e o menu da célula fica sem "Filtrar", "Atualizar" e "Atualizar automaticamente",
   // que são do resultado do último comando. Enquanto o script roda ou espera a pergunta de erro, a edição fica ocupada em todas as abas de resultado.
   const scriptBusy = script !== null && (script.phase === "running" || script.phase === "paused");
+  // Seção 37: o submenu "Copiar avançado" (RN-GRADE-003, 016 e 017) e o "Gerar SQL" (RN-GRADE-006 e 018) da grade, no resultado do último comando e em cada
+  // aba guardada do script (RN-SQL-023): a origem é `resultado`, e a tabela de destino, a do alvo de uma tabela só. O usuário e o somente leitura da conexão
+  // são lidos do cache na hora da escolha.
+  const userName = useCallback(() => cachedUserName(queryClient), [queryClient]);
+  const copyAs = useCopyAs({ records: null, userName });
+  const generateSql = useGridGenerateSql({
+    connectionId: tab.connectionId,
+    database: tab.database,
+    userName: cachedUserName(queryClient),
+    records: () => null,
+    readOnlyConnection: () => cachedReadOnly(queryClient, tab.connectionId),
+    openQueryTab: (id, sql, db) => onOpenQuery?.(id, sql, db),
+  });
   const edits = useRecordEdits({
     tabId: tab.id,
     runner,
@@ -273,6 +292,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     exportData: menuExport,
     engine,
     sort: kept === null && base !== null ? resultSort : undefined,
+    copyAs: copyAs.source,
+    generateSql: generateSql.source,
   });
   const { guard } = edits;
   useEffect(() => {
@@ -527,7 +548,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         </div>
       </div>
       {/* Fora da caixa que trata o Ctrl+S do script: os diálogos e o menu vão por portal, e o teclado deles subiria até ela pela árvore do React. */}
-      {resultEditDialogs(edits)}
+      {resultEditDialogs(edits, { copyAs, generateSql, engine, connectionId: tab.connectionId, database: tab.database })}
       {/*
         RN-SQL-021: a pergunta de erro do script, enquanto ele espera a resposta, só na aba à vista (a ativa, com a área de trabalho na tela). O diálogo vai
         por portal, por cima de tudo: o de uma aba escondida, ou da área de trabalho por baixo de Configurações, cobria a tela de outra coisa e tirava o foco

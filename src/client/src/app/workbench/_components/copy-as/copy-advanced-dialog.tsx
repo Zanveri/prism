@@ -2,9 +2,9 @@ import { useId, useMemo, useRef, useState } from "react";
 
 import { Button, Dialog, DuplicateIcon, FormMessage } from "@/components/ui";
 
-import { copyProblems, copyScopes, previewOf, sourceSize, targetOf, type CopyOutcome, type CopyPhase, type CopyRequest, type CopyScope, type CopySource } from "../../_lib/copy-as/copy-as";
+import { copyProblems, copyScopes, previewOf, sourceSize, targetOf, type CopyOutcome, type CopyPhase, type CopyScope } from "../../_lib/copy-as/copy-as";
 import { copyAsCopy } from "../../_lib/copy-as/copy-as.copy";
-import type { CopyAsChoices } from "../../_lib/copy-as/copy-as-choices";
+import type { CopyAdvancedDialogProps } from "../../_lib/copy-as/use-copy-as";
 import { defaultOptions, type FormatOptions } from "../../_lib/data-export/export-options";
 import { resetFormat } from "../../_lib/data-export/export-wizard";
 import type { DocumentFormat } from "../../_lib/grid-export/document";
@@ -13,24 +13,7 @@ import { CopyFormatList } from "./copy-format-list";
 
 const a = copyAsCopy.advanced;
 
-export type CopyAdvancedDialogProps = {
-  /** O que cada escolha de "O que copiar" copia: as células da seleção, as linhas inteiras dela e todas as linhas carregadas, cada uma já como origem. */
-  sources: Record<CopyScope, CopySource>;
-  /** As escolhas lembradas (`readCopyAsChoices`), com a tabela de destino da origem (`targetOf`). */
-  initial: CopyAsChoices;
-  /** O formato com que o diálogo abre no lugar do lembrado: o do "Copiar como SQL" ou "Copiar como DbUnit" sem tabela conhecida (RN-GRADE-016). */
-  initialFormat?: DocumentFormat;
-  /** O foco nasce no campo da tabela de destino (o mesmo caso). */
-  focusTable?: boolean;
-  /**
-   * Copia (o `runCopyAs` da tela, que pausa a atualização automática, busca os valores completos e avisa "3 linhas copiadas em CSV." quando copiou). O diálogo
-   * passa o sinal do "Cancelar a busca" e quer saber a fase, para mostrar a busca nele.
-   */
-  onCopy: (request: CopyRequest, control: { signal: AbortSignal; onPhase: (phase: CopyPhase) => void }) => Promise<CopyOutcome>;
-  /** Lembra o formato e as opções (`writeCopyAsChoices`), no clique em "Copiar": são as do "Copiar como" daquele formato também (RN-GRADE-017). */
-  onRemember: (choices: CopyAsChoices) => void;
-  onClose: () => void;
-};
+export type { CopyAdvancedDialogProps };
 
 /**
  * "Copiar avançado…" (Ctrl+Shift+C, RN-GRADE-003): o diálogo grande. À esquerda, o formato, os nove do "Copiar como"; à direita, "O que copiar" (as células
@@ -47,6 +30,9 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
   const [scope, setScope] = useState<CopyScope>("cells");
   const [phase, setPhase] = useState<CopyPhase | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  // O foco no campo da tabela é só do abrir (RN-GRADE-016): a primeira troca de formato o desliga, e o campo da tabela que aparece depois (as setas na lista
+  // passando pelo SQL ou pelo DbUnit) não tira o foco da lista.
+  const [tableFocus, setTableFocus] = useState(focusTable);
   const abort = useRef<AbortController | null>(null);
 
   const source = sources[scope];
@@ -68,9 +54,17 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
     const controller = new AbortController();
     abort.current = controller;
     setPhase("writing");
-    const outcome = await onCopy({ format, options, source }, { signal: controller.signal, onPhase: setPhase });
-    abort.current = null;
-    setPhase(null);
+    // O que a cópia lançar não deixa o diálogo preso em "Copiando…", com o Esc, o X e o "Cancelar" desabilitados: a fase volta, e a recusa aparece no alto.
+    let outcome: CopyOutcome;
+    try {
+      outcome = await onCopy({ format, options, source }, { signal: controller.signal, onPhase: setPhase });
+    } catch (error) {
+      console.error("[prism] copiar avançado:", error);
+      outcome = { kind: "failed", message: copyAsCopy.notice.failed };
+    } finally {
+      abort.current = null;
+      setPhase(null);
+    }
     if (outcome.kind === "copied") onClose();
     else if (outcome.kind === "tooLarge" || outcome.kind === "noColumns" || outcome.kind === "duplicateColumn" || outcome.kind === "failed") setRefusal(outcome.message);
   }
@@ -96,7 +90,17 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
             <h3 id={`${idPrefix}-format`} className="mb-2 font-medium">
               {a.format}
             </h3>
-            <CopyFormatList format={format} onChoose={(next) => change(() => setFormat(next))} idPrefix={idPrefix} label={a.formats} />
+            <CopyFormatList
+              format={format}
+              onChoose={(next) =>
+                change(() => {
+                  setTableFocus(false);
+                  setFormat(next);
+                })
+              }
+              idPrefix={idPrefix}
+              label={a.formats}
+            />
           </section>
           <div className="flex min-w-0 flex-1 flex-col gap-5">
             <fieldset className="flex flex-col gap-2">
@@ -138,7 +142,7 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
                 problems={problems}
                 informix={source.engine === 3}
                 showGenerated={source.table !== null}
-                focusTable={focusTable}
+                focusTable={tableFocus}
                 onReset={() => change(() => setOptions(resetFormat(options, format, defaultOptions(targetOf(source)))))}
               />
             </section>

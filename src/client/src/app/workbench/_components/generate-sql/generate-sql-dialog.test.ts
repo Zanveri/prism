@@ -19,7 +19,8 @@ vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOr
 
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
-import { sqlTargetAnswer, useGenerateSql } from "../../_lib/generate-sql/use-generate-sql";
+import { sqlTargetAnswer } from "../../_lib/generate-sql/generate-sql-flow";
+import { useGenerateSql } from "../../_lib/generate-sql/use-generate-sql";
 import { GenerateSqlDialog } from "./generate-sql-dialog";
 
 const columns: QueryColumn[] = [

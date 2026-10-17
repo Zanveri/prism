@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components/ui";
@@ -18,6 +18,7 @@ import { editBar, type EditBarAction, type EditBarButton } from "./edit-bar";
 import { customPlan, filterMenuItem, filterPlan, isFilterAction, valuesPlan, type FilterMenuContext, type FilterPlan } from "./filter-menu";
 import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullValues, type GridPosition, type KeepGoing } from "./full-values";
 import { resultCells } from "./full-values.service";
+import { cachedReadOnly, readOnlyReasonNow } from "./grid-action-context";
 import { buildCopyText, clipboardLimit, columnNamesText, copiedNotice, copyCeiling, rowNumbersOf, utf8Length } from "./grid-copy";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { completeSlice } from "./grid-export/grid-slice";
@@ -51,9 +52,10 @@ import {
   type SliceSource,
 } from "./grid-selection";
 import { gridSelectionCopy } from "./grid-selection.copy";
-import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoWhere, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
-import { editErrorDetails, type EditPreview, type EditTarget } from "./record-edits.schema";
-import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse } from "./record-edits.service";
+import { addRow, changeKeyOf, changesOf, deleteRows, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRows, savedResultOf, undoWhere, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
+import { sqlTargetAnswer, type TargetAnswer as SqlTargetAnswer } from "./generate-sql/generate-sql-flow";
+import { editErrorDetails, sqlTargetOf, type EditPreview, type EditTarget } from "./record-edits.schema";
+import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
 import { recordsCopy } from "./records.copy";
 import { recall, remember } from "./tab-memory";
 import type { RecordsSort } from "./table-sql";
@@ -68,6 +70,9 @@ const platform = typeof navigator === "undefined" ? "" : navigator.platform;
 
 /** RN-EDIT-016: "Duplicar linhas" vale para até 1.000 linhas de uma vez. */
 export const duplicateLimit = 1_000;
+
+/** Quantos alvos do "Gerar SQL" e do "Copiar como" ficam guardados, dos resultados mais recentes (o de cada aba de resultado de um script grande). */
+const sqlAnswersKept = 32;
 
 /** Quanto o copiar espera antes de dizer "Copiando…" na faixa (RN-GRADE-002). */
 const copyingAfterMs = 500;
@@ -93,13 +98,39 @@ export type GridSelectionContext = {
   columns: readonly number[];
   /** O recorte: as células escolhidas (o padrão), as linhas inteiras da seleção, ou todas as linhas carregadas. */
   slice: (scope?: SliceScope) => SelectionSlice;
-  /** RN-SQL-017: o recorte com o valor completo das células cortadas; nulo quando a pessoa cancelou a busca. `missing`: quantas não vieram inteiras. */
-  complete: (slice: SelectionSlice, keepGoing?: KeepGoing) => Promise<{ slice: SelectionSlice; missing: number; stopped: boolean } | null>;
+  /**
+   * RN-SQL-017: o recorte com o valor completo das células cortadas; nulo quando a pessoa cancelou a busca (o "Cancelar" da faixa, ou o `signal` de quem
+   * pediu, como o "Cancelar a busca" do "Copiar avançado…"). `missing`: quantas não vieram inteiras.
+   */
+  complete: (slice: SelectionSlice, keepGoing?: KeepGoing, signal?: AbortSignal) => Promise<{ slice: SelectionSlice; missing: number; stopped: boolean } | null>;
+  /** RN-SQL-017: o valor completo destas células (pela posição na grade), como `complete`, para quem não monta um recorte (o "Gerar SQL"). */
+  fullValues: (cells: Iterable<GridPosition>, signal?: AbortSignal) => Promise<FullValues | null>;
+  /**
+   * As pendências como a grade as mostra quando a ação começou (numa junção, repetidas nas linhas que mostram a mesma linha da tabela), com as linhas
+   * marcadas para exclusão: o "Gerar SQL" separa o valor da grade do lido (RN-GRADE-006).
+   */
+  pending: PendingEdits;
+  /** A aba ocupada (um comando da pessoa, o Salvar), ou a atualização automática lendo as linhas de novo (`"refresh"`, RN-GRADE-014). */
+  busy: boolean | "refresh";
   /** RN-GRADE-014: a pausa da atualização automática desde o começo da ação; devolve quem a solta. */
   hold: () => () => void;
   /** O resultado da tela já não é o desta seleção: a ação não age. */
   moved: () => boolean;
   ensureTarget: () => Promise<EditTarget | null>;
+  /**
+   * RN-GRADE-020 e RN-EDIT-010: o alvo do "Gerar SQL" e do "Copiar como" do SQL e do DbUnit (`purpose: "sql"`), o mesmo para os dois, perguntado uma vez por
+   * resultado: o da edição, quando ela já o tem com o tipo e a chave pelo nome (`sqlTargetOf`); o motivo da página, quando ela já disse que o resultado
+   * inteiro é só leitura; ou a API. Na conexão somente leitura ele vale ali e não volta à edição. `notice` vai à faixa enquanto a API responde ("Conferindo a
+   * tabela deste resultado…").
+   */
+  sqlTarget: (notice?: string) => Promise<SqlTargetAnswer>;
+  /** O que `sqlTarget` já sabe, sem perguntar (habilitar não custa consulta, RN-EDIT-010); nulo antes da primeira resposta. */
+  knownSqlTarget: () => SqlTargetAnswer | null;
+  /**
+   * RN-GRADE-002 e 016: a cópia que monta o texto em partes, com a faixa "Copiando…" passado meio segundo e o "Cancelar" dela, que aborta `controller`.
+   * Devolve quem tira a faixa.
+   */
+  copying: (controller: AbortController) => () => void;
 };
 
 /**
@@ -325,7 +356,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const [answer, setAnswer] = useState<TargetAnswer | null>(null);
   const known = answer !== null && answer.resultId === resultId ? answer : null;
   const target = known?.target ?? null;
-  const readOnlyReason = shown?.readOnly ?? known?.readOnly ?? null;
+  // RN-PROT-002: o somente leitura da conexão agora, pela lista das conexões em cache, que a tela relê quando ele muda. O motivo dele, na página ou na recusa
+  // de antes, só vale enquanto ele vale: desmarcado (RN-PROT-003), a edição pergunta de novo à API (`readOnlyReasonNow`).
+  const subscribeConnections = useCallback((notify: () => void) => queryClient.getQueryCache().subscribe(notify), [queryClient]);
+  const readOnlyNow = useSyncExternalStore(subscribeConnections, () => cachedReadOnly(queryClient, connectionId));
+  const readOnlyReason = readOnlyReasonNow(shown?.readOnly ?? null, readOnlyNow) ?? readOnlyReasonNow(known?.readOnly ?? null, readOnlyNow);
   const [bannerState, setBanner] = useState<Banner>(noBanner);
   const banner = bannerState.resultId === resultId ? bannerState : noBanner;
   // RN-GRADE-001: a seleção (com a célula ativa) é das linhas na tela: outra execução (também o F5, o filtro, a ordem e a atualização automática) e a troca de
@@ -499,6 +534,61 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     return promise;
   }, [sessionOfShown, queryClient, connectionId, database, subject, say]);
 
+  // RN-GRADE-020 e RN-EDIT-010: o alvo do "Gerar SQL" e do "Copiar como", guardado à parte do da edição (o da conexão somente leitura não serve a ela), por
+  // resultado: as abas guardadas do script têm cada uma o seu, e voltar a uma não pergunta de novo. Só os mais recentes ficam (`sqlAnswersKept`).
+  const sqlAnswers = useRef(new Map<string, SqlTargetAnswer>());
+  const sqlAsking = useRef<{ resultId: string; promise: Promise<SqlTargetAnswer> } | null>(null);
+
+  /** O alvo do "Gerar SQL" que já se sabe deste resultado, sem perguntar: o da edição, o motivo da página, ou a resposta de antes. */
+  const knownSqlTarget = useCallback((): SqlTargetAnswer | null => {
+    const { resultId: id, target: current, shown: rows } = latest.current;
+    if (id === null) return null;
+    const fromEdit = sqlTargetOf(current);
+    if (fromEdit !== null) return { kind: "target", target: fromEdit };
+    // A página já disse que o resultado inteiro é só leitura (a união, o DISTINCT, o filtro que a API embrulhou): o alvo diria o mesmo. Na conexão somente
+    // leitura, não: a página de toda leitura dela diz "a conexão é somente leitura", e o alvo do "Gerar SQL" vale ali (RN-GRADE-020 e RN-PROT-002); quem diz
+    // se há outro motivo é a API. Desmarcado o somente leitura depois da leitura, o motivo dele na página também não vale (`readOnlyReasonNow`): a API diz.
+    const readOnlyNow = cachedReadOnly(queryClient, connectionId);
+    const reason = readOnlyReasonNow(rows?.readOnly ?? null, readOnlyNow);
+    if (reason !== null && !readOnlyNow) return { kind: "notEditable", reason };
+    return sqlAnswers.current.get(id) ?? null;
+  }, [queryClient, connectionId]);
+
+  /**
+   * RN-GRADE-020: o `edit-target` com `purpose: "sql"`, uma vez por resultado, pela sessão em que ele foi lido e com a sessão da árvore da mesma conexão. A
+   * resposta que diz o alvo ou o motivo fica para o resultado; a que falhou, não (a seguinte pergunta de novo).
+   */
+  const sqlTarget = useCallback(
+    async (notice?: string): Promise<SqlTargetAnswer> => {
+      const known = knownSqlTarget();
+      if (known !== null) return known;
+      const id = latest.current.resultId;
+      const sessionId = sessionOfShown();
+      if (id === null || sessionId === null) return { kind: "failed", message: null };
+      if (sqlAsking.current?.resultId === id) return sqlAsking.current.promise;
+
+      const catalogSessionId = connectionId === null ? null : (queryClient.getQueryData<DatabaseSession>(databaseSessionKey(connectionId, database))?.id ?? null);
+      const promise = (async () => {
+        if (notice !== undefined) say(notice);
+        const answer = sqlTargetAnswer(await throughMutationCache(queryClient, () => sqlTargetOrRefuse(sessionId, id, catalogSessionId)).catch(() => null));
+        if (notice !== undefined) setBanner((current) => (current.resultId === id && current.notice === notice ? { ...current, notice: null } : current));
+        if (answer.kind === "target" || answer.kind === "notEditable") {
+          const answers = sqlAnswers.current;
+          answers.delete(id);
+          answers.set(id, answer);
+          for (const old of answers.keys()) if (answers.size > sqlAnswersKept) answers.delete(old);
+        }
+        return answer;
+      })();
+      sqlAsking.current = { resultId: id, promise };
+      void promise.finally(() => {
+        if (sqlAsking.current?.promise === promise) sqlAsking.current = null;
+      });
+      return promise;
+    },
+    [knownSqlTarget, sessionOfShown, connectionId, database, queryClient, say],
+  );
+
   // RN-SQL-023: a aba guardada do script está à frente: as linhas dela são as de um resultado guardado, e não as do executor.
   const keptNow = useRef(kept !== null);
   useEffect(() => {
@@ -541,17 +631,21 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
    * segue livre; uma busca nova cancela a anterior. `from` é o resultado de onde as células são (por padrão, o da tela).
    */
   const completeValues = useCallback(
-    async (cells: Iterable<GridPosition>, from: RowsState | null = latest.current.shown, keepGoing?: KeepGoing): Promise<FullValues | null> => {
+    async (cells: Iterable<GridPosition>, from: RowsState | null = latest.current.shown, keepGoing?: KeepGoing, signal?: AbortSignal): Promise<FullValues | null> => {
       const cut = from === null ? [] : cutCellsOf(cells, from.truncated, from.sourceRows);
       if (cut.length === 0) return noFullValues;
       const sessionId = from?.sessionId ?? runner.sessionOf();
       const id = from?.resultId ?? null;
       if (sessionId === null || id === null) return { valueOf: () => undefined, missing: cut.length };
 
+      if (signal?.aborted === true) return null;
       fetchingRef.current?.abort();
       const controller = new AbortController();
       fetchingRef.current = controller;
       setFetching(controller);
+      // Quem pediu também desiste por um sinal dele (o "Cancelar a busca" do diálogo), como pelo "Cancelar" da faixa.
+      const stop = () => controller.abort();
+      signal?.addEventListener("abort", stop, { once: true });
       const fetchCells: FetchCells = async (batch, signal) => {
         const answer = await resultCells(sessionId, id, batch, signal);
         if (signal.aborted) return null;
@@ -561,6 +655,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         return null;
       };
       const full = await fetchFullValues(cut, fetchCells, controller.signal, keepGoing);
+      signal?.removeEventListener("abort", stop);
       if (fetchingRef.current === controller) {
         fetchingRef.current = null;
         setFetching(null);
@@ -578,6 +673,25 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     copyingRef.current?.abort();
     copyingRef.current = null;
     setCopying(false);
+  }, []);
+
+  /**
+   * RN-GRADE-002 e 016: a cópia em andamento, que a faixa mostra passado meio segundo ("Copiando…") e o "Cancelar" dela aborta. Uma cópia nova toma o lugar
+   * da anterior, que é cancelada. Devolve quem tira a faixa (só a desta cópia).
+   */
+  const trackCopy = useCallback((controller: AbortController) => {
+    copyingRef.current?.abort();
+    copyingRef.current = controller;
+    const timer = setTimeout(() => {
+      if (copyingRef.current === controller) setCopying(true);
+    }, copyingAfterMs);
+    return () => {
+      clearTimeout(timer);
+      if (copyingRef.current === controller) {
+        copyingRef.current = null;
+        setCopying(false);
+      }
+    };
   }, []);
 
   /** Grava um valor na célula como pendência; voltar ao valor lido tira a pendência. */
@@ -624,12 +738,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       for (const row of rows) for (const column of columns) if (row < current.rows.length && current.truncated.get(row)?.has(column) === true) cut.push({ row, column });
 
       const release = hold();
-      copyingRef.current?.abort();
       const controller = new AbortController();
-      copyingRef.current = controller;
-      const timer = setTimeout(() => {
-        if (copyingRef.current === controller) setCopying(true);
-      }, copyingAfterMs);
+      const done = trackCopy(controller);
       try {
         let full: FullValues = noFullValues;
         if (cut.length > 0) {
@@ -659,15 +769,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           else toast.success(copiedNotice({ rows: rows.length, cells: rows.length * columns.length, header }));
         });
       } finally {
-        clearTimeout(timer);
-        if (copyingRef.current === controller) {
-          copyingRef.current = null;
-          setCopying(false);
-        }
+        done();
         release();
       }
     },
-    [viewNow, completeValues, toast, hold],
+    [viewNow, completeValues, toast, hold, trackCopy],
   );
 
   /**
@@ -794,16 +900,19 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       if (known === null || current === null) return;
 
       const read = current.rows.length;
-      let next = latest.current.edits;
+      const readRows: number[] = [];
+      const newIds: number[] = [];
       let firstNew: number | null = null;
       for (const position of positions) {
-        if (position < read) next = deleteRow(next, position);
+        if (position < read) readRows.push(position);
         else {
           firstNew = firstNew === null ? position : Math.min(firstNew, position);
           const id = latest.current.layout.added[position - read];
-          if (id !== undefined) next = removeNewRow(next, id);
+          if (id !== undefined) newIds.push(id);
         }
       }
+      // Uma passada só para as lidas e outra para as novas: a seleção pode ter todas as linhas carregadas.
+      const next = removeNewRows(deleteRows(latest.current.edits, readRows), newIds);
       if (next !== latest.current.edits) putEdits(next);
       if (firstNew !== null) {
         const total = read + next.added.length;
@@ -1068,9 +1177,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
    * linhas na tela.
    */
   const selectionContext = useCallback((): GridSelectionContext | null => {
-    const { shown: current, edits: pending, selection: chosen, layout: grid, resultId: from, target: known } = latest.current;
+    const { shown: current, edits: pending, selection: chosen, layout: grid, resultId: from, target: known, busy: running, saving: writing } = latest.current;
     if (current === null) return null;
-    const source = sliceSourceOf(current, pending, viewNow());
+    const view = viewNow();
+    const source = sliceSourceOf(current, pending, view);
     return {
       resultId: from,
       shown: current,
@@ -1082,17 +1192,23 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       rows: selectedRows(chosen, grid),
       columns: selectedColumns(chosen, grid),
       slice: (scope: SliceScope = "cells") => sliceOf(chosen, grid, source, scope),
-      complete: async (slice, keepGoing) => {
+      complete: async (slice, keepGoing, signal) => {
         const cells = slice.truncated.map(([row, column]) => ({ row: slice.positions[row], column: slice.columnIndexes[column] }));
-        const full = await completeValues(cells, current, keepGoing);
+        const full = await completeValues(cells, current, keepGoing, signal);
         if (full === null) return null;
         return { slice: { ...slice, ...completeSlice(slice, (row, column) => full.valueOf(slice.positions[row], slice.columnIndexes[column])) }, missing: full.missing, stopped: full.stopped === true };
       },
+      fullValues: (cells, signal) => completeValues(cells, current, undefined, signal),
+      pending: view,
+      busy: writing ? true : running,
       hold,
       moved: () => moved(from),
       ensureTarget,
+      sqlTarget,
+      knownSqlTarget,
+      copying: trackCopy,
     };
-  }, [sliceSourceOf, viewNow, subject, completeValues, hold, moved, ensureTarget]);
+  }, [sliceSourceOf, viewNow, subject, completeValues, hold, moved, ensureTarget, sqlTarget, knownSqlTarget, trackCopy]);
 
   /** RN-GRADE-003: Ctrl+Shift+C, o "Copiar avançado…" da outra frente, sobre a seleção; sem célula ativa, ou sem a frente, nada. */
   const copyAdvanced = useCallback(() => {

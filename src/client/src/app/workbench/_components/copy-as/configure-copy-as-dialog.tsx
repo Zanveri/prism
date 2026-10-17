@@ -4,7 +4,8 @@ import { Button, Dialog } from "@/components/ui";
 
 import { configureProblems } from "../../_lib/copy-as/copy-as";
 import { copyAsCopy } from "../../_lib/copy-as/copy-as.copy";
-import { noTarget, type CopyAsChoices } from "../../_lib/copy-as/copy-as-choices";
+import { noTarget } from "../../_lib/copy-as/copy-as-choices";
+import type { ConfigureCopyAsDialogProps } from "../../_lib/copy-as/use-copy-as";
 import { defaultOptions, type FormatOptions } from "../../_lib/data-export/export-options";
 import { resetFormat } from "../../_lib/data-export/export-wizard";
 import { documentFormats, type DocumentFormat } from "../../_lib/grid-export/document";
@@ -23,7 +24,7 @@ export const refusedFormats = (options: FormatOptions): DocumentFormat[] => docu
  * (`onSave`, que grava, fecha e avisa), e fica desabilitado com um campo recusado em qualquer formato, que ganha a marca na lista. "Cancelar", Esc e o X
  * fecham sem gravar e sem perguntar. Só de propriedades e estado: quem lê e grava as escolhas (`readCopyAsChoices`, `writeCopyAsChoices`) é quem o abre.
  */
-export function ConfigureCopyAsDialog({ initial, onSave, onClose }: { initial: CopyAsChoices; onSave: (choices: CopyAsChoices) => void; onClose: () => void }) {
+export function ConfigureCopyAsDialog({ initial, onSave, onClose }: ConfigureCopyAsDialogProps) {
   const idPrefix = useId();
   const [format, setFormat] = useState<DocumentFormat>("csv");
   const [options, setOptions] = useState<FormatOptions>(initial.options);

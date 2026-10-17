@@ -1,9 +1,10 @@
 import type { Engine } from "@/components/ui/engine-tag";
+import type { ApiResult } from "@/lib/api/prism-api";
 
 import type { Column, ForeignKey, TableIndex } from "../database-sessions.schema";
 import type { ObjectKind } from "../object-kind";
 import type { QueryColumn } from "../query.schema";
-import type { SqlTarget } from "../record-edits.schema";
+import { editErrorDetails, type SqlTarget } from "../record-edits.schema";
 import { approximateDdl } from "../table-ddl";
 import { workbenchCopy } from "../workbench.copy";
 import { generateSql, type GeneratedSql, type SqlItem, type SqlOptions, type SqlPlan, type SqlRow, type SqlTable } from "./generate-sql";
@@ -36,6 +37,19 @@ export type SqlDialogRequest = {
 
 /** O que o `edit-target` do "Gerar SQL" respondeu, como o diálogo o usa. `message` é a da API ou a do banco, como veio. */
 export type TargetAnswer = { kind: "target"; target: SqlTarget } | { kind: "notEditable"; reason: string } | { kind: "changed" } | { kind: "failed"; message: string | null };
+
+/**
+ * RN-GRADE-020: a resposta do `edit-target` com `purpose: "sql"`, como o diálogo a usa: o alvo; o resultado inteiro só leitura por outro motivo (só o INSERT
+ * vale, com o motivo da API); o resultado que mudou; ou a falha, com a mensagem da API ou a do banco. `null` é a chamada que lançou: o aviso central já disse
+ * por quê (RN-AVISO-004), e o diálogo oferece "Tentar de novo".
+ */
+export function sqlTargetAnswer(result: ApiResult<SqlTarget> | null): TargetAnswer {
+  if (result === null) return { kind: "failed", message: null };
+  if (result.ok) return { kind: "target", target: result.data };
+  if (result.error.code === "RESULT_NOT_EDITABLE") return { kind: "notEditable", reason: editErrorDetails(result.error.extensions).reason ?? result.error.detail ?? result.error.title };
+  if (result.error.code === "RESULT_CHANGED") return { kind: "changed" };
+  return { kind: "failed", message: result.error.detail ?? result.error.title };
+}
 
 /** O valor completo das células cortadas (RN-SQL-017): `valueOf` com `undefined` para o que não veio inteiro; o resultado que mudou; ou a busca cancelada. */
 export type FullValuesAnswer = { kind: "values"; valueOf: (row: SqlRow, column: number) => string | undefined } | { kind: "changed" } | { kind: "cancelled" };
@@ -182,8 +196,8 @@ export function sqlDialogView(request: SqlDialogRequest, phase: SqlDialogPhase, 
       if (item === "create") return { ...base, body: { kind: "refused", text: dialogCopy.changed } };
       const refusal = optionRefusal(item, phase.plan, options);
       if (refusal !== null) return { ...base, body: { kind: "refused", text: refusal } };
-      const generated = generateSql(item, phase.plan, phase.rows, options);
-      if (utf8Bytes(generated.text) > sqlTextLimit) return { ...base, body: { kind: "refused", text: dialogCopy.tooLarge } };
+      const generated = generateSql(item, phase.plan, phase.rows, options, sqlTextLimit);
+      if (generated.tooLarge === true || utf8Bytes(generated.text) > sqlTextLimit) return { ...base, body: { kind: "refused", text: dialogCopy.tooLarge } };
       return { ...base, warnings: rowWarnings(request, phase.rows, generated), body: { kind: "text", text: generated.text }, canOutput: true, generated };
     }
   }

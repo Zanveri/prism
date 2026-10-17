@@ -1,12 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components/ui/toast";
-import { throughMutationCache } from "@/lib/api/mutation-cache";
-import { ApiRequestError, type ApiResult } from "@/lib/api/prism-api";
+import { ApiRequestError } from "@/lib/api/prism-api";
 
-import { editErrorDetails, type SqlTarget } from "../record-edits.schema";
-import { sqlTargetOrRefuse } from "../record-edits.service";
 import { columnsQuery, foreignKeysQuery, indexesQuery } from "../table-structure.service";
 import type { SqlOptions, SqlPlan, SqlTable } from "./generate-sql";
 import { readSqlOptions, writeSqlOptions, type RememberedSqlOptions } from "./generate-sql-choices";
@@ -17,8 +14,8 @@ const dialogCopy = generateSqlCopy.dialog;
 
 /**
  * O diálogo "Gerar SQL" (RN-GRADE-018) ligado: abre com as linhas da seleção daquele instante, segue o caminho de `runSqlFlow`, lembra as opções por usuário,
- * copia e abre a aba de consulta. As peças que falam com a API e com a grade vêm de quem o usa (`GenerateSqlDeps`); `sqlTargetReader` e `catalogReader`
- * montam as duas que não dependem da grade.
+ * copia e abre a aba de consulta. As peças que falam com a API e com a grade vêm de quem o usa (`GenerateSqlDeps`: a grade, `use-grid-generate-sql.ts`,
+ * entrega o alvo pelo contexto dela, `GridSelectionContext.sqlTarget`, o mesmo do "Copiar como"); `catalogReader` monta a do CREATE.
  */
 
 /** O que o diálogo recebe ao abrir, com o resultado: as respostas do `edit-target` ficam guardadas por ele. */
@@ -45,31 +42,6 @@ export type GenerateSqlDialogProps = {
   onClose: () => void;
 };
 
-/**
- * RN-GRADE-020: a resposta do `edit-target` com `purpose: "sql"`, como o diálogo a usa: o alvo; o resultado inteiro só leitura por outro motivo (só o INSERT
- * vale, com o motivo da API); o resultado que mudou; ou a falha, com a mensagem da API ou a do banco. `null` é a chamada que lançou: o aviso central já disse
- * por quê (RN-AVISO-004), e o diálogo oferece "Tentar de novo".
- */
-export function sqlTargetAnswer(result: ApiResult<SqlTarget> | null): TargetAnswer {
-  if (result === null) return { kind: "failed", message: null };
-  if (result.ok) return { kind: "target", target: result.data };
-  if (result.error.code === "RESULT_NOT_EDITABLE") return { kind: "notEditable", reason: editErrorDetails(result.error.extensions).reason ?? result.error.detail ?? result.error.title };
-  if (result.error.code === "RESULT_CHANGED") return { kind: "changed" };
-  return { kind: "failed", message: result.error.detail ?? result.error.title };
-}
-
-/**
- * O `target` do caminho: o alvo que a tela já tem (o da edição, quando ele traz o tipo e a chave pelo nome, `sqlTargetOf`; RN-EDIT-010: o mesmo alvo, uma
- * vez), ou o `edit-target` com `purpose: "sql"`, pelo cache de mutações, na sessão em que o resultado foi lido e com a sessão da árvore da mesma conexão.
- */
-export function sqlTargetReader({ queryClient, sessionId, resultId, catalogSessionId, known }: { queryClient: QueryClient; sessionId: string; resultId: string; catalogSessionId: string | null; known: () => SqlTarget | null }): SqlFlowDeps["target"] {
-  return async () => {
-    const held = known();
-    if (held !== null) return { kind: "target", target: held };
-    return sqlTargetAnswer(await throughMutationCache(queryClient, () => sqlTargetOrRefuse(sessionId, resultId, catalogSessionId)).catch(() => null));
-  };
-}
-
 /** O `catalog` do caminho (o CREATE): as três listas da Estrutura, pela sessão da árvore e do mesmo cache (RN-TABELA-003), com a mensagem da falha. */
 export function catalogReader(queryClient: QueryClient, connectionId: string, database?: string): SqlFlowDeps["catalog"] {
   return async (table): Promise<CatalogAnswer> => {
@@ -87,6 +59,9 @@ export function catalogReader(queryClient: QueryClient, connectionId: string, da
 }
 
 const defaultCopy = (text: string) => navigator.clipboard.writeText(text);
+
+/** A fase do resultado que mudou com o diálogo aberto, sempre a mesma: o texto memorizado não é refeito por ela a cada renderização. */
+const changedPhase: SqlDialogPhase = { kind: "changed" };
 
 /** O que o diálogo guarda enquanto está aberto. */
 type Open = { request: GenerateSqlRequest; phase: SqlDialogPhase };
@@ -138,9 +113,12 @@ export function useGenerateSql({ userName, deps }: { userName: string | null; de
           return answer;
         },
       };
+      // O plano do CREATE dos Registros não vem do alvo (é a tabela da aba, sem colunas nem chave, `recordsPlan`): não diz o que os outros itens permitem, e
+      // não fica para o submenu.
+      const fromTarget = request.item !== "create" || request.records === null;
       const show = (phase: SqlDialogPhase) => {
         if (controller.signal.aborted) return;
-        if (phase.kind === "rows" || phase.kind === "ddl" || (phase.kind === "refused" && phase.plan !== null)) plans.current.set(request.resultId, phase.plan as SqlPlan);
+        if (fromTarget && (phase.kind === "rows" || phase.kind === "ddl" || (phase.kind === "refused" && phase.plan !== null))) plans.current.set(request.resultId, phase.plan as SqlPlan);
         setOpen((now) => (now?.request === request ? { request, phase } : now));
       };
       void runSqlFlow(request, flow, controller.signal, show).catch((error: unknown) => {
@@ -158,11 +136,13 @@ export function useGenerateSql({ userName, deps }: { userName: string | null; de
 
   const openDialog = useCallback((request: GenerateSqlRequest) => start(request, false), [start]);
 
+  // RN-GRADE-018: a execução que já rodava trocou as linhas com o diálogo aberto: nada é gerado. O texto é refeito só quando a fase ou as opções mudam, e não
+  // a cada renderização de quem mostra o diálogo: com muitas linhas, gerar custa.
+  const phase: SqlDialogPhase | null = open === null ? null : open.phase.kind === "changed" || deps.stillCurrent() ? open.phase : changedPhase;
+  const view = useMemo(() => (open === null || phase === null ? null : sqlDialogView(open.request, phase, options)), [open, phase, options]);
+
   let dialog: GenerateSqlDialogProps | null = null;
-  if (open !== null) {
-    // RN-GRADE-018: a execução que já rodava trocou as linhas com o diálogo aberto: nada é gerado.
-    const phase: SqlDialogPhase = open.phase.kind === "changed" || deps.stillCurrent() ? open.phase : { kind: "changed" };
-    const view = sqlDialogView(open.request, phase, options);
+  if (open !== null && view !== null) {
     const text = view.body.kind === "text" ? view.body.text : null;
     dialog = {
       view,

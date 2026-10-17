@@ -6,6 +6,7 @@ import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { useToast, type Engine } from "@/components/ui";
 
+import { useCopyAs } from "../../_lib/copy-as/use-copy-as";
 import { csvExportOf } from "../../_lib/csv";
 import { openExportWizard } from "../../_lib/data-export/data-exports";
 import { exportRows, recordsSource, runnerExportBlocker } from "../../_lib/data-export/export-entry";
@@ -15,6 +16,8 @@ import { treeQuery } from "../../_lib/database-sessions.service";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
 import { allCutCells, noFullValues, withFullValues, type FullValues } from "../../_lib/full-values";
+import { useGridGenerateSql } from "../../_lib/generate-sql/use-grid-generate-sql";
+import { cachedObjectKind, cachedReadOnly, cachedUserName } from "../../_lib/grid-action-context";
 import { inDatabase } from "../../_lib/navigator-model";
 import { objectKindOf } from "../../_lib/object-kind";
 import { saveText } from "../../_lib/save-file";
@@ -61,6 +64,8 @@ type RecordsViewProps = {
   onOpenTable: (table: TableRef & { view?: TableView }) => void;
   /** RN-GRADE-012: onde a vista deixa o "Atualizar" para o F5 da aba. */
   refreshSlot?: RefreshSlot;
+  /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL": a aba nova da conexão e do banco desta, com o texto no editor. */
+  onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
 };
 
 /**
@@ -90,7 +95,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -179,7 +184,22 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const sortSource = useMemo<GridSortSource>(() => ({ current: () => gridMenuRef.current.sort, apply: (next) => gridMenuRef.current.order(next) }), []);
   const followSource = useMemo<GridFollowSource>(() => ({ links: (column) => gridMenuRef.current.links?.has(column) === true, linkable: (value) => gridMenuRef.current.linkable(value), follow: (column, value) => gridMenuRef.current.follow(column, value) }), []);
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, exportData: menuExport, engine, sort: sortSource, follow: followSource });
+  // Seção 37: o submenu "Copiar avançado" (RN-GRADE-003, 016 e 017) e o "Gerar SQL" (RN-GRADE-006 e 018) da grade, com a tabela da aba como origem: o nome
+  // dela nos formatos, a tabela de destino do SQL e do DbUnit, e o tipo (tabela ou visão) que a árvore já sabe, para o CREATE. O usuário, o somente leitura
+  // da conexão e o tipo são lidos do cache na hora da escolha.
+  const recordsTable = useMemo(() => ({ schema, name }), [schema, name]);
+  const userName = useCallback(() => cachedUserName(queryClient), [queryClient]);
+  const copyAs = useCopyAs({ records: recordsTable, userName });
+  const generateSql = useGridGenerateSql({
+    connectionId,
+    database,
+    userName: cachedUserName(queryClient),
+    records: () => ({ schema, name, kind: cachedObjectKind(queryClient, { connectionId, database, schema, name }) }),
+    readOnlyConnection: () => cachedReadOnly(queryClient, connectionId),
+    openQueryTab: (id, sql, db) => onOpenQuery?.(id, sql, db),
+  });
+
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, exportData: menuExport, engine, sort: sortSource, follow: followSource, copyAs: copyAs.source, generateSql: generateSql.source });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {
@@ -392,7 +412,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         onCount={() => void runner.countTotal()}
         onRerun={refresh}
       />
-      {resultEditDialogs(edits)}
+      {resultEditDialogs(edits, { copyAs, generateSql, engine, connectionId, database })}
       {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
       {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={edits.banner.onViewSql} />}
       {edits.question === null && handoffWaits ? (
