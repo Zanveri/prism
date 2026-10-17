@@ -2,6 +2,7 @@
 using IBM.Data.Db2;
 using Prism.Infrastructure.Databases.Models;
 using System.Data.Common;
+using System.Text;
 using ILogger = Serilog.ILogger;
 
 namespace Prism.Infrastructure.Databases.Clients;
@@ -27,6 +28,13 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>A ida e volta da sonda é um `BEGIN WORK` e um `ROLLBACK WORK`: se o banco não responde nesse prazo, ela falhou.</summary>
     private const int ProbeTimeoutSeconds = 5;
+
+    /// <summary>
+    /// O texto que o driver da IBM manda como `CLOB` quando o parâmetro não tem tipo: o de mais caracteres que isso. E o tamanho do `LONG VARCHAR` do driver,
+    /// em bytes de UTF-8, que é como ele manda o texto (<see cref="BindImportParameter"/>).
+    /// </summary>
+    private const int UntypedTextCharacters = 16_350;
+    private const int LongVarCharBytes = 32_767;
 
     /// <summary>Um índice do Informix guarda até dezesseis colunas, em `part1` a `part16`; o número negativo é coluna em ordem decrescente.</summary>
     private static readonly IEnumerable<int> IndexParts = Enumerable.Range(1, 16);
@@ -147,6 +155,22 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
                                                 ORDER BY 2 DESC, 1, 4";
 
     protected override string LockTimeoutSql => "SET LOCK MODE TO WAIT 5";
+
+    /// <summary>RN-IMPORT-015 e RN-EXPORT-011: o Informix não aceita várias linhas num `INSERT … VALUES`: a carga vai uma linha por comando, preparado uma vez.</summary>
+    protected override int RowsPerLoadCommand(int columns)
+        => 1;
+
+    /// <summary>
+    /// RN-IMPORT-010 e 015: o texto de mais de 16.350 caracteres, que o driver mandaria como `CLOB`, vai como `LONG VARCHAR` enquanto cabe nos 32.767 bytes
+    /// dele: o Informix não converte `CLOB` nem `TEXT` em `LVARCHAR` ("No cast from text to lvarchar"), e o `LONG VARCHAR` entra no `LVARCHAR`, no `TEXT` e
+    /// no `CLOB`. O maior que isso segue como o driver o manda, e só o `TEXT` e o `CLOB` o guardam. O texto menor fica sem tipo, como sempre.
+    /// </summary>
+    protected override void BindImportParameter(DbParameter parameter, EditParameter value)
+    {
+        base.BindImportParameter(parameter, value);
+        if (value.Value is string { Length: > UntypedTextCharacters } text && Encoding.UTF8.GetByteCount(text) <= LongVarCharBytes)
+            ((DB2Parameter)parameter).DB2Type = DB2Type.LongVarChar;
+    }
 
     protected override string ForeignKeysSql => ForeignKeyColumnsSql("child_table.owner = ? AND child_table.tabname = ?");
 

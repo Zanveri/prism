@@ -112,13 +112,24 @@ public sealed partial class AdoDatabaseConnectionTests
         command.SetupProperty(mock => mock.CommandText, string.Empty);
         command.SetupProperty(mock => mock.CommandTimeout);
 
-        // As consultas de catálogo levam o esquema e a tabela como parâmetro.
-        var parameters = new Mock<DbParameterCollection>();
+        // As consultas de catálogo levam o esquema e a tabela como parâmetro; os comandos da carga, os valores, que o banco de mentira anota.
+        var parameters = new FakeParameters();
+        DbTransaction? transaction = null;
+        command.Protected().SetupSet<DbTransaction?>("DbTransaction", ItExpr.IsAny<DbTransaction?>()).Callback(value => transaction = value);
+        command.Protected().SetupGet<DbTransaction?>("DbTransaction").Returns(() => transaction);
         command.Protected().Setup<DbParameter>("CreateDbParameter").Returns(() => new Mock<DbParameter>().SetupAllProperties().Object);
-        command.Protected().SetupGet<DbParameterCollection>("DbParameterCollection").Returns(parameters.Object);
+        command.Protected().SetupGet<DbParameterCollection>("DbParameterCollection").Returns(parameters);
+        command.Setup(mock => mock.PrepareAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            _prepared++;
+
+            return Task.CompletedTask;
+        });
         command.Setup(mock => mock.ExecuteNonQueryAsync(It.IsAny<CancellationToken>())).Returns((CancellationToken token) =>
         {
             _sent.Add(command.Object.CommandText);
+            _sentValues.Add([.. parameters.Values]);
+            _sentInTransaction.Add(command.Object.Transaction is not null);
 
             return _nonQuery(command.Object.CommandText, token);
         });

@@ -135,6 +135,43 @@ public interface IDatabaseConnection : IAsyncDisposable
     Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-IMPORT-015: prepara a conexão à parte do carregador (a da importação e a de gravação da cópia), logo depois de conectar: o prazo de espera de
+    /// trava (RN-EDIT-010), e nada mais. A conexão é nova, e o modo só de leitura que a RN-PROT-006 põe nas sessões das abas não está nela: o Prism não
+    /// manda nada sobre o modo, e a recusa de um servidor que começa as sessões só de leitura (SQLSTATE 25006) é a resposta.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-IMPORT-015: quantas linhas vão, no máximo, num comando da carga com `columns` colunas mapeadas: no PostgreSQL, os comandos de uma linha de um
+    /// lote; no Db2, as linhas de um `INSERT … VALUES` (até 500 e até 10.000 parâmetros); no Informix, uma.
+    /// </summary>
+    int LoadRowsPerCommand(int columns);
+
+    /// <summary>
+    /// RN-IMPORT-015: abre a transação da carga, do driver: o esvaziamento, as linhas e a leitura do catálogo da primeira transação entram nela, até o
+    /// <see cref="CommitLoadAsync"/>. Não se chama no banco sem log de transação (RN-EDIT-012), em que cada comando fica gravado ao terminar.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> BeginLoadTransactionAsync(CancellationToken cancellationToken);
+
+    /// <summary>RN-IMPORT-012: o esvaziamento, `DELETE FROM "esquema"."tabela"`, na transação da carga (no banco sem log, gravado sozinho, ao terminar).</summary>
+    Task<UnitResult<DatabaseFailure>> EmptyTableAsync(string schema, string table, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-IMPORT-015 e 016: grava as linhas, cada uma com um valor já convertido por coluna de `target`, num comando ou num lote (no máximo
+    /// <see cref="LoadRowsPerCommand"/>), na transação da carga. Na recusa do banco a transação é desfeita, e `Change` é a posição em `rows` da linha
+    /// recusada, quando se sabe: no comando de uma linha só (no Informix, todos), ela, em toda falha; o lote do PostgreSQL diz o comando que falhou; no
+    /// Db2, o comando de várias linhas recusado por um dado ou por uma restrição (SQLSTATE das classes 22 e 23) é executado de novo, linha por linha, na
+    /// mesma transação, até a recusada; nas outras classes, nula.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> InsertRowsAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-IMPORT-014 e 015: confirma a transação da carga. O cancelamento não a interrompe: ela vai até o fim, e quem a pediu só vê o cancelamento depois
+    /// dela. Sem transação aberta (o banco sem log), não faz nada.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> CommitLoadAsync();
+
+    /// <summary>
     /// RN-EXPORT-017, o começo da leitura da exportação, numa conexão à parte que só ela usa: o prazo de espera de trava (RN-EDIT-010) e, no
     /// PostgreSQL, a forma do texto que o servidor escreve (`DateStyle`, `extra_float_digits`, `bytea_output`) e a transação `REPEATABLE READ READ ONLY`
     /// em que a contagem e a leitura veem o mesmo instante do banco. No Db2 e no Informix não há transação: a leitura é a de uma sessão nova.
@@ -146,7 +183,8 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// PostgreSQL, num ponto de salvamento só dele, para a recusa dele não estragar a transação. A recusa do banco é um sucesso sem total (nulo): a
     /// exportação segue sem ele. A falha é a da conexão que não serve mais.
     /// </summary>
-    Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken);
+    /// <param name="required">RN-IMPORT-023: a contagem é obrigatória (a cópia de Db2 ou de Informix com a origem e o destino no mesmo banco): a recusa do banco é a falha, e não um total nulo.</param>
+    Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken);
 
     /// <summary>RN-EXPORT-017: envia o comando da exportação e devolve as colunas do resultado, com o leitor aberto para o <see cref="ReadExportRowsAsync"/>.</summary>
     Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken);

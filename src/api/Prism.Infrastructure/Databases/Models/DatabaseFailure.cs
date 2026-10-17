@@ -83,5 +83,9 @@ public enum ECancelOutcome
 /// Na edição (RN-EDIT-005 e 012): `Reason` é o motivo de o resultado ser só leitura; `Change` é a posição, no pedido, da alteração que
 /// falhou, e `Column` a da coluna do resultado; `RowsAffected` é quantas linhas o comando dela afetou; `Applied` só vem no banco sem log
 /// de transação, e diz quantas alterações já estavam gravadas, na ordem de execução, antes da que falhou.
+///
+/// Na carga da importação e da cópia (RN-IMPORT-016): `Change` é a posição, entre as linhas mandadas num comando (ou num lote), da linha que o banco
+/// recusou, quando se sabe; e `ColumnName` é o nome da coluna da tabela que o banco diz no erro (no PostgreSQL, o campo `column`, que vem na recusa do
+/// nulo), ou nulo.
 /// </summary>
-public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null);
+public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null);

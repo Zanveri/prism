@@ -149,7 +149,7 @@ public sealed class PostgresExportTests
     {
         await using var connection = await BeginAsync();
 
-        var total = await connection.CountExportAsync("SELECT numero, valor, criado_em, observacao FROM loja.pedido", CancellationToken.None);
+        var total = await connection.CountExportAsync("SELECT numero, valor, criado_em, observacao FROM loja.pedido", required: false, CancellationToken.None);
         await StartReadAsync(connection, "SELECT numero, valor, criado_em, observacao FROM loja.pedido ORDER BY numero");
         var (rows, batches) = await ReadAllAsync(connection, PlanFor(4) with { MaxRows = 400 });
 
@@ -169,7 +169,7 @@ public sealed class PostgresExportTests
     {
         await using var connection = await BeginAsync();
 
-        var total = await connection.CountExportAsync("SELECT x FROM loja.nao_existe", CancellationToken.None);
+        var total = await connection.CountExportAsync("SELECT x FROM loja.nao_existe", required: false, CancellationToken.None);
         await StartReadAsync(connection, "SELECT numero FROM loja.pedido ORDER BY numero LIMIT 3");
         var (rows, _) = await ReadAllAsync(connection, PlanFor(1));
 
@@ -191,7 +191,7 @@ public sealed class PostgresExportTests
             await ExecuteAsync(writer, $"INSERT INTO {table} (id) VALUES (1), (2)");
             await using var connection = await BeginAsync();
 
-            var total = await connection.CountExportAsync($"SELECT id FROM {table}", CancellationToken.None);
+            var total = await connection.CountExportAsync($"SELECT id FROM {table}", required: false, CancellationToken.None);
             await ExecuteAsync(writer, $"INSERT INTO {table} (id) VALUES (3)");
             await StartReadAsync(connection, $"SELECT id FROM {table} ORDER BY id");
             var (rows, _) = await ReadAllAsync(connection, PlanFor(1));

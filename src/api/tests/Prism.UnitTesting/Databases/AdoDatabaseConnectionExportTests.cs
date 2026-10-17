@@ -63,7 +63,7 @@ public sealed partial class AdoDatabaseConnectionTests
         _sent.Clear();
 
         //Act
-        var total = await connection.CountExportAsync(CountQuery, CancellationToken.None);
+        var total = await connection.CountExportAsync(CountQuery, required: false, CancellationToken.None);
 
         //Assert
         Assert.Equal(42L, total.Value);
@@ -83,7 +83,7 @@ public sealed partial class AdoDatabaseConnectionTests
         _sent.Clear();
 
         //Act
-        var total = await connection.CountExportAsync(CountQuery, CancellationToken.None);
+        var total = await connection.CountExportAsync(CountQuery, required: false, CancellationToken.None);
         var columns = await connection.StartExportReadAsync(ReadQuery, CancellationToken.None);
         var batch = await connection.ReadExportRowsAsync(PlanOf(0), CancellationToken.None);
 

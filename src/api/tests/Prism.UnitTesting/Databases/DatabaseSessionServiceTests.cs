@@ -868,13 +868,32 @@ public sealed partial class DatabaseSessionServiceTests
         public Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
-        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, CancellationToken cancellationToken)
+        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
         public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
         public Task<Result<ExportBatch, DatabaseFailure>> ReadExportRowsAsync(ExportReadPlan plan, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        /// <summary>RN-IMPORT-015: o carregador da importação e da cópia é de uma conexão à parte, que o registro de sessões nunca usa.</summary>
+        public Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public int LoadRowsPerCommand(int columns)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> BeginLoadTransactionAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> EmptyTableAsync(string schema, string table, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> InsertRowsAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> CommitLoadAsync()
             => throw new NotSupportedException();
     }
 }

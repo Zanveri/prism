@@ -297,6 +297,15 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
         parameter.Value = value.Value ?? DBNull.Value;
     }
 
+    /// <summary>RN-IMPORT-015: a carga vai em lotes de até 500 comandos de uma linha (`NpgsqlBatch`), numa ida só ao banco.</summary>
+    protected override bool LoadsInBatches => true;
+
+    protected override int RowsPerLoadCommand(int columns)
+        => MaxLoadRows;
+
+    protected override string LoadParameter(int position)
+        => $"${position}";
+
     /// <summary>RN-IMPORT-011: o tipo vem do catálogo (`format_type`, que já põe as aspas), e nunca do pedido.</summary>
     protected override string? ImportCastSql(string type, int parameter)
         => $"CAST(${parameter} AS {type})";
@@ -449,11 +458,12 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     /// A string de conexão sai do construtor do driver, nunca de concatenação: host, banco, usuário e senha são texto de quem cadastrou a
     /// conexão. Sem pool: cada sessão é dona da própria conexão, e fechar a sessão fecha a conexão no banco. Com `IncludeErrorDetail`: o
     /// detalhe do erro (qual chave se repetiu, qual linha violou a regra) faz parte da mensagem que a tela mostra (RN-SQL-009), e nenhuma
-    /// exceção do driver vai para o log.
+    /// exceção do driver vai para o log. Com `IncludeFailedBatchedCommand`: sem ela, o Npgsql deixa nulo o `BatchCommand` do erro, que diz qual
+    /// comando do lote o banco recusou, e é por ele que a carga acha a linha recusada (RN-IMPORT-016).
     /// </summary>
     protected override DbConnection CreateConnection()
     {
-        _dataSource = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder { Host = settings.Host, Port = settings.Port, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true }.ConnectionString);
+        _dataSource = NpgsqlDataSource.Create(new NpgsqlConnectionStringBuilder { Host = settings.Host, Port = settings.Port, Database = settings.Database, Username = settings.UserName, Password = settings.Password, Pooling = false, IncludeErrorDetail = true, IncludeFailedBatchedCommand = true }.ConnectionString);
 
         return _dataSource.CreateConnection();
     }
@@ -500,7 +510,7 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
 
     /// <summary>
     /// RN-SQL-009: a mensagem do servidor, e o detalhe e a dica quando ele os manda, cada um na sua linha e com o rótulo que o
-    /// PostgreSQL usa. A `Message` da exceção não serve: leva o SQLSTATE na frente e junta tudo num formato do driver. O cancelamento
+    /// PostgreSQL usa, e o nome da coluna do erro, quando ele o diz. A `Message` da exceção não serve: leva o SQLSTATE na frente e junta tudo num formato do driver. O cancelamento
     /// chega embrulhado, com a `PostgresException` por dentro. O que não veio do servidor (host que não responde, conexão que caiu) tem a
     /// causa na exceção interna.
     /// </summary>
@@ -516,7 +526,8 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
         if (postgres.Hint is { Length: > 0 } hint)
             message += $"\nHINT: {hint}";
 
-        return new DatabaseFailure(kind, message, postgres.SqlState, postgres.Position > 0 ? postgres.Position : null);
+        // RN-IMPORT-016: a coluna que o banco diz no erro (na recusa do nulo), que a importação leva à coluna do arquivo.
+        return new DatabaseFailure(kind, message, postgres.SqlState, postgres.Position > 0 ? postgres.Position : null, ColumnName: postgres.ColumnName is { Length: > 0 } column ? column : null);
     }
 
     /// <summary>

@@ -320,7 +320,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         if (job.Count)
         {
             Advance(transfer, ETransferPhase.Counting);
-            var counted = await connection.CountExportAsync(job.Sql, token);
+            var counted = await connection.CountExportAsync(job.Sql, required: false, token);
             if (counted.IsFailure)
                 return (null, DatabaseFailureOf(counted.Error), null);
 
