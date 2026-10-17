@@ -1,0 +1,155 @@
+{
+  "rule": "RN-EXPORT-012 e 024: o texto e o atributo do XML, e a limpeza do XML 1.0. Na tela, escapeXmlText e escapeXmlAttribute depois de stripUnaccepted com isXmlChar (text-escape.ts); na API, ExportText.XmlText e ExportText.XmlAttribute.",
+  "notes": [
+    "kind: text (o conteúdo de um elemento) ou attribute (o valor entre aspas duplas). value é texto ou { codePoints: [...] }.",
+    "expected é o texto escapado, sem o que o XML 1.0 não aceita; removed, quantos pontos de código saíram."
+  ],
+  "cases": [
+    {
+      "name": "texto simples",
+      "kind": "text",
+      "value": "Ana",
+      "expected": "Ana",
+      "removed": 0
+    },
+    {
+      "name": "texto vazio",
+      "kind": "text",
+      "value": "",
+      "expected": "",
+      "removed": 0
+    },
+    {
+      "name": "marcação no texto: a aspa fica",
+      "kind": "text",
+      "value": "<script>alert(\"x\")</script> & ]]> 'a'",
+      "expected": "&lt;script&gt;alert(\"x\")&lt;/script&gt; &amp; ]]&gt; 'a'",
+      "removed": 0
+    },
+    {
+      "name": "marcação no atributo: a aspa dupla vira entidade",
+      "kind": "attribute",
+      "value": "<script>alert(\"x\")</script> & ]]> 'a'",
+      "expected": "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; ]]&gt; 'a'",
+      "removed": 0
+    },
+    {
+      "name": "retorno de carro no texto",
+      "kind": "text",
+      "value": "a\rb",
+      "expected": "a&#13;b",
+      "removed": 0
+    },
+    {
+      "name": "CRLF no texto: só o retorno de carro vira entidade",
+      "kind": "text",
+      "value": "a\r\nb",
+      "expected": "a&#13;\nb",
+      "removed": 0
+    },
+    {
+      "name": "CRLF no atributo",
+      "kind": "attribute",
+      "value": "a\r\nb",
+      "expected": "a&#13;&#10;b",
+      "removed": 0
+    },
+    {
+      "name": "tabulação e quebra de linha ficam no texto",
+      "kind": "text",
+      "value": "a\tb\nc",
+      "expected": "a\tb\nc",
+      "removed": 0
+    },
+    {
+      "name": "tabulação e quebra de linha viram entidade no atributo",
+      "kind": "attribute",
+      "value": "a\tb\nc",
+      "expected": "a&#9;b&#10;c",
+      "removed": 0
+    },
+    {
+      "name": "controles que o XML 1.0 não aceita saem e contam",
+      "kind": "text",
+      "value": "a\u0000b\u0001c\u0007d\u001be\u007ff\u0085g",
+      "expected": "abcde\u007ff\u0085g",
+      "removed": 4
+    },
+    {
+      "name": "controles saem também do atributo",
+      "kind": "attribute",
+      "value": "\u0000x\u000b",
+      "expected": "x",
+      "removed": 2
+    },
+    {
+      "name": "U+FFFE e U+FFFF saem",
+      "kind": "text",
+      "value": "x\ufffey\uffffz",
+      "expected": "xyz",
+      "removed": 2
+    },
+    {
+      "name": "U+FEFF e U+202E ficam",
+      "kind": "text",
+      "value": "\ufeffa\u202eb",
+      "expected": "\ufeffa\u202eb",
+      "removed": 0
+    },
+    {
+      "name": "par substituto solto sai",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          120,
+          55296,
+          121,
+          56320,
+          122
+        ]
+      },
+      "expected": "xyz",
+      "removed": 2
+    },
+    {
+      "name": "par substituto solto sai do atributo",
+      "kind": "attribute",
+      "value": {
+        "codePoints": [
+          56319,
+          33
+        ]
+      },
+      "expected": "!",
+      "removed": 1
+    },
+    {
+      "name": "emoji e ideogramas ficam",
+      "kind": "text",
+      "value": "🙂 漢字 👨\u200d👩\u200d👧",
+      "expected": "🙂 漢字 👨\u200d👩\u200d👧",
+      "removed": 0
+    },
+    {
+      "name": "um escape do XLSX já escrito fica",
+      "kind": "text",
+      "value": "_x0041_",
+      "expected": "_x0041_",
+      "removed": 0
+    },
+    {
+      "name": "apóstrofo e aspa no atributo",
+      "kind": "attribute",
+      "value": "O'Brien \"x\"",
+      "expected": "O'Brien &quot;x&quot;",
+      "removed": 0
+    },
+    {
+      "name": "barra invertida fica",
+      "kind": "attribute",
+      "value": "C:\\temp\\",
+      "expected": "C:\\temp\\",
+      "removed": 0
+    }
+  ]
+}

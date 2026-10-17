@@ -3,6 +3,7 @@ using Prism.Infrastructure.Transfers.Models;
 using Prism.Infrastructure.Transfers.Writers;
 using System.Text;
 using System.Text.Json;
+using System.Xml;
 
 namespace Prism.UnitTesting.Transfers;
 
@@ -125,6 +126,42 @@ public sealed class ExportFixturesTests
             var (text, counts) = ExportWriting.Write(ExportFormats.Sql, columns, Rows(test.GetProperty("rows")), sql, engine: Engine(test.GetProperty("engine").GetString()!));
 
             return ($"{text}|{counts.SkippedRows}", $"{test.GetProperty("expected").GetString()}|{test.GetProperty("skippedRows").GetInt64()}");
+        });
+
+    [Trait("ExportText", "XmlText")]
+    [Fact(DisplayName = "OK o texto e o atributo do XML e os caracteres tirados são os da fixture")]
+    public void XmlText_ShouldMatchTheFixture()
+        => AssertAll("xml-text.json", test =>
+        {
+            var value = Text(test.GetProperty("value"))!;
+            int removed;
+            var escaped = test.GetProperty("kind").GetString() == "attribute" ? ExportText.XmlAttribute(value, out removed) : ExportText.XmlText(value, out removed);
+
+            return ($"{escaped}|{removed}", $"{Text(test.GetProperty("expected"))}|{test.GetProperty("removed").GetInt32()}");
+        });
+
+    [Trait("ExportText", "XmlName")]
+    [Fact(DisplayName = "OK o nome do XML é o da fixture, e a volta é exata")]
+    public void XmlName_ShouldMatchTheFixture()
+        => AssertAll("xml-name.json", test =>
+        {
+            var value = Text(test.GetProperty("value"))!;
+            var cased = test.GetProperty("upperCase").GetBoolean() ? value.ToUpperInvariant() : value;
+            var name = ExportText.XmlName(cased);
+
+            return ($"{name}|{XmlConvert.DecodeName(name) == cased}", $"{test.GetProperty("expected").GetString()}|True");
+        });
+
+    [Trait("DbUnitExportWriter", "Write")]
+    [Fact(DisplayName = "OK o DbUnit e os caracteres tirados são os da fixture")]
+    public void DbUnit_ShouldMatchTheFixture()
+        => AssertAll("dbunit-dataset.json", test =>
+        {
+            var options = new DbUnitExportOptions(test.GetProperty("table").GetString()!, test.GetProperty("upperCase").GetBoolean(), test.GetProperty("nulls").GetString() == "mark", EExportBinary.Hex);
+            var columns = Strings(test.GetProperty("columns")).Select(name => new ExportColumn(name, "text", "text")).ToList();
+            var (text, counts) = ExportWriting.Write(ExportFormats.DbUnit, columns, Rows(test.GetProperty("rows")), options);
+
+            return ($"{text}|{counts.RemovedCharacters}", $"{test.GetProperty("expected").GetString()}|{test.GetProperty("removed").GetInt64()}");
         });
 
     /// <summary>Confere cada caso e junta as diferenças numa falha só, com o nome de cada caso: a fixture inteira é a regra.</summary>

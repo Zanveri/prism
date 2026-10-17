@@ -1,0 +1,210 @@
+{
+  "rule": "RN-EXPORT-012: o conjunto de dados do DbUnit inteiro. Só da API (DbUnitExportWriter), pronta para quando a tela o escrever.",
+  "notes": [
+    "table é a tabela de destino já resolvida; nulls: omit (omitir o atributo) ou mark (escrever [NULL]); cada valor de rows é texto, null ou { codePoints: [...] }.",
+    "expected é o texto do arquivo; removed, os pontos de código tirados por o XML 1.0 não os aceitar."
+  ],
+  "cases": [
+    {
+      "name": "o exemplo da regra",
+      "table": "pedido",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "id",
+        "cliente"
+      ],
+      "rows": [
+        [
+          "1",
+          "Ana"
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <PEDIDO ID=\"1\" CLIENTE=\"Ana\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "sem linhas",
+      "table": "pedido",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "id"
+      ],
+      "rows": [],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset/>\n",
+      "removed": 0
+    },
+    {
+      "name": "o nulo omite o atributo",
+      "table": "pedido",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "id",
+        "cliente"
+      ],
+      "rows": [
+        [
+          "1",
+          null
+        ],
+        [
+          null,
+          null
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <PEDIDO ID=\"1\"/>\n    <PEDIDO/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "o nulo escrito como [NULL]",
+      "table": "pedido",
+      "upperCase": true,
+      "nulls": "mark",
+      "columns": [
+        "id",
+        "cliente"
+      ],
+      "rows": [
+        [
+          "1",
+          null
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <PEDIDO ID=\"1\" CLIENTE=\"[NULL]\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "o texto vazio não é nulo",
+      "table": "pedido",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "cliente"
+      ],
+      "rows": [
+        [
+          ""
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <PEDIDO CLIENTE=\"\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "sem as maiúsculas",
+      "table": "pedido",
+      "upperCase": false,
+      "nulls": "omit",
+      "columns": [
+        "id",
+        "Cliente"
+      ],
+      "rows": [
+        [
+          "1",
+          "Ana"
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <pedido id=\"1\" Cliente=\"Ana\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "o nome repetido ganha _2, _3",
+      "table": "t",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "id",
+        "ID",
+        "id"
+      ],
+      "rows": [
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <T ID=\"1\" ID_2=\"2\" ID_3=\"3\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "o nome repetido sem as maiúsculas",
+      "table": "t",
+      "upperCase": false,
+      "nulls": "omit",
+      "columns": [
+        "id",
+        "ID",
+        "id"
+      ],
+      "rows": [
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <t id=\"1\" ID=\"2\" id_2=\"3\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "os nomes pela regra do XML, depois das maiúsculas",
+      "table": "nota fiscal",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "nome completo",
+        "1a"
+      ],
+      "rows": [
+        [
+          "x",
+          "y"
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <NOTA_x0020_FISCAL NOME_x0020_COMPLETO=\"x\" _x0031_A=\"y\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "o valor escapa a aspa, a tabulação e as quebras",
+      "table": "t",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "v"
+      ],
+      "rows": [
+        [
+          "diz \"oi\" <b> & a\tb\nc\rd"
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <T V=\"diz &quot;oi&quot; &lt;b&gt; &amp; a&#9;b&#10;c&#13;d\"/>\n</dataset>\n",
+      "removed": 0
+    },
+    {
+      "name": "o que o XML 1.0 não aceita sai e conta",
+      "table": "t",
+      "upperCase": true,
+      "nulls": "omit",
+      "columns": [
+        "v",
+        "w"
+      ],
+      "rows": [
+        [
+          "a\u0001b",
+          {
+            "codePoints": [
+              55296,
+              99
+            ]
+          }
+        ]
+      ],
+      "expected": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<dataset>\n    <T V=\"ab\" W=\"c\"/>\n</dataset>\n",
+      "removed": 2
+    }
+  ]
+}
