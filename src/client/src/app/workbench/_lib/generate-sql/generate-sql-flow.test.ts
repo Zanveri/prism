@@ -177,3 +177,38 @@ describe("o caminho do diálogo Gerar SQL (RN-GRADE-018)", () => {
     expect(sqlDialogView(request({ item: "selectIn", records: { schema: "loja", name: "pedido", kind: "table" } }), { kind: "checking" }, defaultSqlOptions).subtitle).toBe("SELECT .. WHERE .. IN · loja.pedido · 2 linhas");
   });
 });
+
+describe("as colunas inteiras: as linhas que faltam vêm antes (RN-GRADE-023)", () => {
+  it("depois de conferir a tabela, carrega com o andamento no lugar do SQL, e o texto é das linhas que chegaram", async () => {
+    const loadRows = vi.fn<NonNullable<SqlFlowDeps["loadRows"]>>(async (_request, _plan, _signal, progress) => {
+      progress("Carregando as linhas que faltam… 2 linhas");
+      return { kind: "rows", rows: [row(1, ["1", "Ana"]), row(2, ["2", "Bia"]), row(3, ["3", "Cid"])], newRows: 1 };
+    });
+
+    const shown = await phasesOf(request(), deps({ loadRows }));
+
+    expect(shown.map((phase) => phase.kind)).toEqual(["checking", "loading", "rows"]);
+    expect(sqlDialogView(request(), shown[1], defaultSqlOptions).body).toEqual({ kind: "status", text: "Carregando as linhas que faltam… 2 linhas", cancel: true });
+    const view = sqlDialogView(request(), shown[2], defaultSqlOptions);
+    expect(view.subtitle).toBe("UPDATE · estoque.pedido · 3 linhas");
+    // As linhas novas não salvas que vieram com as colunas inteiras ficam de fora, com o aviso.
+    expect(view.warnings).toContain("As linhas novas ainda não salvas ficaram de fora: o Ver SQL mostra o INSERT delas.");
+  });
+
+  it("sem nada a carregar, as linhas são as do pedido; o limite de 1 MB, a recusa e a falha da leitura dizem por quê", async () => {
+    expect((await phasesOf(request(), deps({ loadRows: async () => null }))).map((phase) => phase.kind)).toEqual(["checking", "rows"]);
+
+    const tooLarge = (await phasesOf(request(), deps({ loadRows: async () => ({ kind: "tooLarge" }) }))).at(-1)!;
+    expect(sqlDialogView(request(), tooLarge, defaultSqlOptions).body).toEqual({ kind: "refused", text: "O SQL passaria de 1 MB, o limite do texto de uma aba de consulta. Escolha menos linhas, ou exporte em SQL (Exportar dados…)." });
+    expect((await phasesOf(request(), deps({ loadRows: async () => ({ kind: "refused", reason: "o cursor fechou", detail: null }) }))).at(-1)).toMatchObject({ kind: "refused", reason: "o cursor fechou" });
+    expect((await phasesOf(request(), deps({ loadRows: async () => ({ kind: "refused", reason: "Não foi possível ler as linhas que faltam.", detail: "ERROR: x" }) }))).at(-1)).toEqual({ kind: "failed", title: "Não foi possível ler as linhas que faltam.", message: "ERROR: x" });
+    expect((await phasesOf(request(), deps({ loadRows: async () => ({ kind: "changed" }) }))).at(-1)).toEqual({ kind: "changed" });
+    expect((await phasesOf(request(), deps({ loadRows: async () => ({ kind: "cancelled" }) }))).map((phase) => phase.kind)).toEqual(["checking"]);
+  });
+
+  it("o CREATE não carrega nada", async () => {
+    const loadRows = vi.fn(async () => null);
+    await phasesOf(request({ item: "create" }), deps({ loadRows }));
+    expect(loadRows).not.toHaveBeenCalled();
+  });
+});

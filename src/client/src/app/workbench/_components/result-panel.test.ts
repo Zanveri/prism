@@ -160,7 +160,7 @@ describe("ResultActions: os botões da barra", () => {
 });
 
 describe("a área de resultado na vista Registros de uma tabela (RN-TABELA-002)", () => {
-  const records = { name: "mes.apontamento", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+  const records = { name: "mes.apontamento", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
   const renderRecords = (state: RunnerState) =>
     renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state, connected: true, records, onLoadMore: noop, onCount: noop, onRerun: noop })));
 
@@ -339,7 +339,7 @@ describe("a execução da atualização automática na área de resultado (RN-GR
   });
 
   it("não ocupa a área para a pessoa: nos Registros o botão segue \"Atualizar\" (e não \"Cancelar\"), e \"Exportar CSV\" segue habilitado", () => {
-    const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+    const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
     const markup = renderWith(autoRunning, { records });
 
     expect(markup).toContain("Atualizar");
@@ -363,7 +363,7 @@ describe("a execução da atualização automática na área de resultado (RN-GR
 
   it("nos Registros, o controle fica no rodapé, logo depois de \"Atualizar\" (ou de \"Cancelar\"), e não na barra", () => {
     const control = createElement("span", { "data-controle": "" }, "relógio");
-    const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+    const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
 
     for (const state of [rowsState, { status: "running", cancelling: false, previous: rowsState } as RunnerState]) {
       const markup = renderWith(state, { autoRefresh: control, records });
@@ -377,7 +377,7 @@ describe("a execução da atualização automática na área de resultado (RN-GR
 });
 
 describe("o \"Exportar…\" da área de resultado (RN-EXPORT-001)", () => {
-  const records = { name: "estoque.pedido", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+  const records = { name: "estoque.pedido", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
   const enabled = { blocker: null, onExport: noop };
   const panel = (props: Partial<Parameters<typeof ResultPanel>[0]>) =>
     renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { ...rowsState, read: true }, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop, ...props })));

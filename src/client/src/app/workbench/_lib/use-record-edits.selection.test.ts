@@ -443,7 +443,7 @@ describe("o menu da grade e a seleção (RN-GRADE-004)", () => {
 
   it("o \"Ordenar\" marca a ordem em uso da coluna da célula ativa e pede a escolhida", async () => {
     const apply = vi.fn();
-    const sort: GridSortSource = { current: () => ({ column: "Nome", direction: "asc" }), apply };
+    const sort: GridSortSource = { applied: () => ({ column: "Nome", direction: "asc" }), apply };
     const view = mount(fakeRunner(rowsState()), { sort });
     view.show().editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
     await settle();
