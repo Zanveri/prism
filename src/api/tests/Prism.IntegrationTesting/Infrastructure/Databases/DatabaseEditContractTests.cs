@@ -15,7 +15,7 @@ namespace Prism.IntegrationTesting.Infrastructure.Databases;
 /// comando afeta outro número de linhas ou o banco recusa. Cada banco monta um esquema só dele (no Informix, um dono, com os nomes de
 /// tabela sorteados, porque lá o nome é único no banco inteiro) e o apaga no fim.
 /// </summary>
-public abstract class DatabaseEditContractTests
+public abstract partial class DatabaseEditContractTests
 {
     private ServiceProvider _provider = null!;
     private IDatabaseSessionService _service = null!;

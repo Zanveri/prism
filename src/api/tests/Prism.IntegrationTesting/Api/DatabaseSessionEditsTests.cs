@@ -221,6 +221,76 @@ public sealed class DatabaseSessionEditsTests
         }
     }
 
+    /// <summary>
+    /// A coluna inteira (seção 38, RN-EDIT-019 a 023) em HTTP: a contagem (`queries/edits/count`, `{ rows }`), o "Ver SQL" com a contagem e o `UPDATE`
+    /// primeiro e a `note` só na contagem, e o "Salvar" com o `rows` confirmado. As recusas levam o código e as extensões da seção 6: o `rows` que falta,
+    /// a outra alteração na contagem, a coluna da chave e o resultado que mudou desde a contagem, com o detalhe da regra.
+    /// </summary>
+    [Test]
+    public async Task WholeColumn_FromTheCountToTheSave_FollowsTheRoutesOfSection38()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var inteira = $"\"{_schema}\".\"inteira\"";
+        await host.Client.ExecuteAsync(session, $"CREATE TABLE {inteira} (id integer PRIMARY KEY, status text)");
+        await host.Client.ExecuteAsync(session, $"INSERT INTO {inteira} VALUES (1, 'aberta'), (2, 'aberta'), (3, 'aberta')");
+
+        var resultID = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {inteira}\nWHERE id > 1\nORDER BY 1")).GetProperty("resultID").GetGuid();
+        var whole = new { kind = "updateAll", table = 0, set = new[] { new { column = 1, value = (string?)"todas" } } };
+
+        var counted = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { whole } }), HttpStatusCode.OK);
+        Assert.That(counted.ToString(), Is.EqualTo("""{"rows":2}"""));
+
+        var mixed = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { whole, new { kind = "delete", table = 0, key = new[] { "2" } } } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+        Assert.That(mixed.GetProperty("change").GetInt32(), Is.EqualTo(1));
+
+        var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID, changes = new object[] { new { kind = "update", table = 0, key = new[] { "3" }, set = new[] { new { column = 1, value = (string?)"três" } } }, whole } }), HttpStatusCode.OK);
+        var statements = preview.GetProperty("statements").EnumerateArray().ToList();
+        Assert.That(statements.Select(statement => statement.GetProperty("sql").GetString()), Is.EqualTo(new[] { $"SELECT COUNT(*) FROM {inteira} WHERE id > 1\n", $"UPDATE {inteira} SET \"status\" = 'todas' WHERE id > 1\n", $"UPDATE {inteira} SET \"status\" = 'três' WHERE \"id\" = 3" }));
+        Assert.That(statements.Select(statement => statement.TryGetProperty("note", out var note) ? note.GetString() : null), Is.EqualTo(new[] { "A contagem confere, antes do UPDATE, que o comando ainda devolve as linhas confirmadas.", null, null }));
+        Assert.That(statements.Select(statement => statement.GetProperty("values").GetArrayLength()), Is.All.Zero);
+
+        var withoutRows = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { whole } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+        Assert.That(withoutRows.GetProperty("change").GetInt32(), Is.Zero);
+        await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 1.5 } } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+
+        var key = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { new { kind = "updateAll", table = 0, set = new[] { new { column = 0, value = (string?)"9" } } } } }), HttpStatusCode.UnprocessableEntity, "EDIT_ALL_ROWS_NOT_SUPPORTED");
+        Assert.That((key.GetProperty("change").GetInt32(), key.GetProperty("column").GetInt32(), key.GetProperty("reason").GetString()), Is.EqualTo((0, 0, "id é da chave de inteira: na coluna inteira, todas as linhas ficariam com a mesma chave")));
+
+        var changed = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 5 } } }), HttpStatusCode.Conflict, "RESULT_CHANGED");
+        Assert.That(changed.GetProperty("detail").GetString(), Is.EqualTo("O resultado mudou desde a contagem: o comando devolve agora 2 linhas, e não as 5 confirmadas. Nada foi gravado; salve de novo para contar outra vez."));
+
+        var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 2 } } }), HttpStatusCode.OK);
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1}"""));
+
+        var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {inteira} ORDER BY 1")).GetProperty("rows").ToString();
+        Assert.That(rows, Is.EqualTo("""[["1","aberta"],["2","todas"],["3","todas"]]"""));
+    }
+
+    /// <summary>
+    /// RN-EDIT-023: o corpo das três rotas da edição vai até 32 MiB, acima do padrão do Kestrel (30 MB): um pedido de 31 MiB é lido como uma contagem; um
+    /// acima de 32 MiB é recusado antes de o handler rodar (o status é o 500 do defeito conhecido de toda rota que lê corpo, e não 413).
+    /// </summary>
+    [Test]
+    public async Task WholeColumn_TheBodyOfTheEditRoutes_GoesUpTo32MiB()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var resultID = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {Pedido}\nORDER BY 1")).GetProperty("resultID").GetGuid();
+
+        object Body(int bytes)
+            => new { resultID, changes = new object[] { new { kind = "updateAll", table = 0, set = new[] { new { column = 1, value = (string?)new string('a', bytes) } } } } };
+
+        var read = await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), Body(31 * 1024 * 1024));
+        Assert.That(read.StatusCode, Is.EqualTo(HttpStatusCode.OK), await read.Content.ReadAsStringAsync());
+
+        foreach (var route in new[] { "/queries/edits/count", "/queries/edits/preview", "/queries/edits" })
+        {
+            var refused = await host.Client.PostAsJsonAsync(Url(session, route), Body(32 * 1024 * 1024 + 1));
+            Assert.That(refused.StatusCode, Is.Not.EqualTo(HttpStatusCode.OK).And.Not.EqualTo(HttpStatusCode.UnprocessableEntity).And.Not.EqualTo(HttpStatusCode.Conflict), route);
+        }
+    }
+
     private async Task<Guid> StartSessionAsync(ApiHost host)
     {
         await host.CreateUserAsync("marina.costa", UserFakers.RandomPassword());
