@@ -113,6 +113,17 @@ describe("a conta do limite enquanto as linhas que faltam chegam (RN-GRADE-023)"
     expect(meter({ rows }, 2)).toBe(false);
   });
 
+  it("as linhas que chegam valem o que a grade mostra: com a coluna inteira pendente, o valor dela, e não o lido (RN-EDIT-018)", () => {
+    const big = "x".repeat(40);
+    const rows = [["1", big], ["2", big], ["3", big]];
+    // Lida, a página passa do limite; com "descricao = 'y'" pendente em todas as linhas, cada célula vale um byte e o separador.
+    expect(loadedRowsMeter([1], 0, 50)({ rows }, 1)).toBe(false);
+    const meter = loadedRowsMeter([1], 0, 50, new Map([[1, "y"]]));
+    expect(meter({ rows }, 1)).toBe(true);
+    // O nulo pendente vale só o separador; a outra coluna copiada continua com o lido.
+    expect(loadedRowsMeter([0, 1], 0, 6, new Map([[1, null]]))({ rows }, 1)).toBe(true);
+  });
+
   it("o padrão é o limite da área de transferência", () => {
     expect(loadedRowsMeter([0], clipboardLimit)({ rows: [] }, 0)).toBe(true);
     expect(loadedRowsMeter([0], clipboardLimit)({ rows: [["", "a"], ["x"]] }, 1)).toBe(false);

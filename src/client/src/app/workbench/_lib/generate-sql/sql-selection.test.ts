@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addRow, deleteRow, editCell, noEdits } from "../record-edits";
+import { addRow, deleteRow, editCell, editWholeColumn, noEdits } from "../record-edits";
 import type { RowsState } from "../use-query-runner";
 import { sqlSelectionOf } from "./sql-selection";
 
@@ -59,5 +59,18 @@ describe("as linhas do Gerar SQL tiradas da seleção (RN-GRADE-006)", () => {
 
   it("a ordem é a da seleção, que é a da grade", () => {
     expect(sqlSelectionOf(shown(), noEdits, [2, 0]).rows.map((row) => row.number)).toEqual([3, 1]);
+  });
+});
+
+describe("a coluna inteira pendente no Gerar SQL (RN-EDIT-018)", () => {
+  it("vale em cada linha lida que não está marcada para exclusão, com a pendência da célula por cima; a cortada que ela cobre não é buscada", () => {
+    const pending = deleteRow(editCell(editWholeColumn(noEdits, 2, "novo"), 0, 2, "meu", "novo"), 2);
+    const { rows } = sqlSelectionOf(shown(), pending, [0, 1, 2]);
+
+    expect(rows.map((row) => [row.values[2], row.changed, row.cut])).toEqual([
+      ["meu", [2], []],
+      ["novo", [2], []],
+      [null, [], []],
+    ]);
   });
 });

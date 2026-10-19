@@ -167,3 +167,22 @@ describe("com várias linhas na seleção (RN-GRADE-001, RN-EDIT-013 e 014)", ()
     expect([remove.label, remove.reason, remove.description]).toEqual(["Excluir linha", reason, reason]);
   });
 });
+
+describe("o \"Editar célula\" com várias células escolhidas na coluna (RN-EDIT-013, 017 e 018)", () => {
+  it("a dica e a descrição dizem para quantas a edição vale", () => {
+    const edit = editBar(state({ edit: { scope: "Vale para as 37 células escolhidas da coluna status." } }))[0];
+    expect(edit.title).toBe("Editar célula (F2). Vale para as 37 células escolhidas da coluna status.");
+    expect(edit.description).toBe("Vale para as 37 células escolhidas da coluna status.");
+    expect(edit.reason).toBeNull();
+  });
+
+  it("com a coluna inteira, o que vale nela entra no lugar do que vale na célula ativa, depois do resultado e da aba", () => {
+    const reason = "Indisponível: a coluna inteira executa de novo o comando do resultado, e ele não é só de leitura.";
+    const cut = at(1, readRow({ truncated: new Set([1]) }));
+    const edit = editBar(state({ active: cut, edit: { scope: "Vale para todas as linhas do resultado (coluna status).", access: { editable: false, reason } } }))[0];
+    expect(edit).toMatchObject({ reason, title: `Editar célula (F2). Vale para todas as linhas do resultado (coluna status). ${reason}` });
+    // A célula cortada da ativa não conta: a coluna inteira não é célula a célula.
+    expect(editBar(state({ active: cut, edit: { scope: "x.", access: { editable: true } } }))[0].reason).toBeNull();
+    expect(editBar(state({ busy: true, edit: { scope: "x.", access: { editable: false, reason } } }))[0].reason).toBe(copy.readOnly(copy.reasons.busy));
+  });
+});

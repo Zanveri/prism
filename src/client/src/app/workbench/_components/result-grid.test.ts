@@ -445,3 +445,43 @@ describe("a linha nova salva na aba de consulta, com o que o banco preencheu (RN
     expect(markup).toContain(">nova<");
   });
 });
+
+describe("a coluna inteira pendente na grade (RN-EDIT-018)", () => {
+  const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
+  const pending = new Map([[1, { value: "fechada", hint: "Alteração pendente em todas as linhas: observacao = 'fechada'", uncertain: false }]]);
+  const render = (extra: Partial<Parameters<typeof GridRow>[0]> = {}, row: (string | null)[] = ["1", "aberta"]) =>
+    renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row, columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, columnPending: pending, ...extra }));
+  const cell = (markup: string, column: number) => markup.match(new RegExp(`<div[^>]*id="g-0-${column}"[^>]*>.*?</div>`, "s"))?.[0] ?? "";
+
+  it("a célula daquela coluna na linha lida mostra o valor novo, com o lido riscado ao lado, como uma pendência", () => {
+    const markup = cell(render(), 1);
+    expect(markup).toContain("bg-accent/20");
+    expect(markup).toMatch(/line-through">aberta<\/span>fechada/);
+    expect(markup).toContain('title="Valor lido: aberta"');
+    // A outra coluna não muda.
+    expect(cell(render(), 0)).not.toContain("line-through");
+  });
+
+  it("a célula com pendência própria mostra o valor dela, com o da coluna inteira riscado; a linha nova e a excluída não recebem a coluna inteira", () => {
+    const own = cell(render({ mark: { kind: "read", deleted: false, pending: new Map([[1, "paga"]]), failed: false } }), 1);
+    expect(own).toMatch(/line-through">fechada<\/span>paga/);
+    expect(own).toContain('title="Valor da coluna inteira: fechada"');
+
+    expect(cell(render({ mark: { kind: "new", deleted: false, pending: new Map(), failed: false } }, [null, null]), 1)).not.toContain("fechada");
+    expect(cell(render({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false } }), 1)).not.toContain("fechada");
+  });
+
+  it("a nota da coluna que pode estar gravada em parte das linhas vai na dica da célula", () => {
+    const uncertain = new Map([[1, { value: "x", hint: "h", uncertain: true }]]);
+    expect(cell(render({ columnPending: uncertain }), 1)).toContain("o valor desta coluna pode estar gravado em parte das linhas");
+  });
+
+  it("o cabeçalho ganha o ponto no tom de atenção, a dica e o nome para o leitor de tela", () => {
+    const header = renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true, pendingHint: "Alteração pendente em todas as linhas: observacao = 'fechada'" }));
+    expect(header).toContain("data-column-pending");
+    expect(header).toContain("bg-accent");
+    expect(header).toContain("observacao · text\nAlteração pendente em todas as linhas: observacao = &#x27;fechada&#x27;");
+    expect(header).toContain('aria-label="observacao text, alteração pendente em todas as linhas"');
+    expect(renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true }))).not.toContain("data-column-pending");
+  });
+});
