@@ -1,7 +1,19 @@
 import { allowRefusal, apiRequest, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
-import { editPreviewSchema, editsAppliedSchema, editTargetSchema, sqlTargetSchema, type ApiChange, type EditPreview, type EditsApplied, type EditTarget, type SqlTarget } from "./record-edits.schema";
+import {
+  editPreviewSchema,
+  editsAppliedSchema,
+  editTargetSchema,
+  sqlTargetSchema,
+  wholeColumnCountSchema,
+  type ApiChange,
+  type EditPreview,
+  type EditsApplied,
+  type EditTarget,
+  type SqlTarget,
+  type WholeColumnCount,
+} from "./record-edits.schema";
 
 /**
  * As rotas da edição dos Registros (seção 22). Cada função devolve como valor as recusas que a faixa da grade mostra no próprio lugar
@@ -15,8 +27,14 @@ import { editPreviewSchema, editsAppliedSchema, editTargetSchema, sqlTargetSchem
  */
 const targetRefusals = ["RESULT_NOT_EDITABLE", "CONNECTION_READ_ONLY", "RESULT_CHANGED", "DATABASE_SESSION_NOT_FOUND", "SQL_EXECUTION_FAILED", "DATABASE_CONNECTION_FAILED", "SESSION_BUSY"];
 
-/** O que a faixa mostra de um Salvar recusado, com a alteração que falhou quando a API a aponta; e a conexão que passou a ser somente leitura (RN-PROT-002). */
-const saveRefusals = ["EDIT_ROW_MISMATCH", "EDIT_INVALID", "SQL_EXECUTION_FAILED", "RESULT_CHANGED", "RESULT_NOT_EDITABLE", "CONNECTION_READ_ONLY", "SESSION_BUSY", "DATABASE_SESSION_NOT_FOUND"];
+/**
+ * O que a faixa mostra de um Salvar recusado, com a alteração que falhou quando a API a aponta; a conexão que passou a ser somente leitura (RN-PROT-002); e a
+ * coluna inteira que não se altera naquele resultado (RN-EDIT-023).
+ */
+const saveRefusals = ["EDIT_ROW_MISMATCH", "EDIT_INVALID", "EDIT_ALL_ROWS_NOT_SUPPORTED", "SQL_EXECUTION_FAILED", "RESULT_CHANGED", "RESULT_NOT_EDITABLE", "CONNECTION_READ_ONLY", "SESSION_BUSY", "DATABASE_SESSION_NOT_FOUND"];
+
+/** O que a faixa mostra de uma contagem da coluna inteira recusada (RN-EDIT-019 e 023): as do Salvar, e a transação da aba que falhou. */
+const countRefusals = [...saveRefusals, "TRANSACTION_FAILED"];
 
 /**
  * RN-EDIT-002, 003 e 010: o que se edita no resultado da página, perguntado na primeira tentativa de editar. `catalogSessionId` é a
@@ -46,6 +64,14 @@ export async function sqlTargetOrRefuse(sessionId: string, resultId: string, cat
 /** RN-EDIT-005 e 012: o Salvar. A resposta diz quantas alterações foram gravadas. */
 export async function saveEditsOrRefuse(sessionId: string, resultId: string, changes: ApiChange[]): Promise<ApiResult<EditsApplied>> {
   return allowRefusal(await apiRequest(prismEndpoints.userDatabaseSessionQueriesEdits(sessionId), { method: "POST", body: { resultID: resultId, changes }, schema: editsAppliedSchema }), ...saveRefusals);
+}
+
+/**
+ * RN-EDIT-019 e 023: a contagem da coluna inteira, antes da pergunta do "Salvar", na sessão da aba: `changes` leva só a `updateAll` (sem `rows`). É um
+ * comando na sessão: fecha o cursor aberto, e se cancela pelo `queries/cancel`.
+ */
+export async function countWholeColumnOrRefuse(sessionId: string, resultId: string, changes: ApiChange[]): Promise<ApiResult<WholeColumnCount>> {
+  return allowRefusal(await apiRequest(prismEndpoints.userDatabaseSessionQueriesEditsCount(sessionId), { method: "POST", body: { resultID: resultId, changes }, schema: wholeColumnCountSchema }), ...countRefusals);
 }
 
 /** RN-EDIT-008: os comandos que o Salvar executaria, sem executar nada. */

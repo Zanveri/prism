@@ -61,7 +61,7 @@ export const commandConfirmationCopy = {
   autoRefresh: "Ligada, ela executa este comando de novo a cada intervalo, sem perguntar, até ser desligada.",
 
   // Por que o aviso aparece.
-  why: (connection: string, level: Confirmation, folder: string | null) =>
+  why: (connection: string, level: Confirmation, folder: string | null): string =>
     folder === null ? `Você vê este aviso porque a conexão ${connection} tem a proteção “${levelName[level]}”.` : `Você vê este aviso porque a conexão ${connection} herda da pasta ${folder} a proteção “${levelName[level]}”.`,
 
   confirm: { command: "Executar mesmo assim", script: "Executar script", save: "Salvar mesmo assim", autoRefresh: "Ligar mesmo assim" },

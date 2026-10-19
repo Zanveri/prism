@@ -129,6 +129,11 @@ type KeptResultNoteProps = {
   busy: boolean;
   onRunAlone: () => void;
   /**
+   * RN-EDIT-022: depois de salvar a coluna inteira nesta aba (que não lê de novo), o que mudou e que ela mostra só as linhas que leu ("Coluna preco atualizada
+   * em 1.234 linhas; esta aba mostra só as que leu. …"), depois da nota de sempre; nula sem isso.
+   */
+  note?: string | null;
+  /**
    * O botão sai da página com o foco: o comando executado troca os resultados do script, e a aba guardada sai com eles. Quem desenha a área leva o foco à
    * grade nova (`rescueFocus`, RN-SQL-006), em vez de deixá-lo cair no `body`.
    */
@@ -140,7 +145,7 @@ type KeptResultNoteProps = {
  * comando", que executa só ele, como o Ctrl+Enter nele. Com outro comando em andamento na aba, o botão fica à vista, sem executar, e diz por quê; não se
  * desabilita de verdade, para não perder o foco (como o de contar, RN-SQL-006).
  */
-export function KeptResultNote({ busy, onRunAlone, onFocusLost }: KeptResultNoteProps) {
+export function KeptResultNote({ busy, onRunAlone, onFocusLost, note = null }: KeptResultNoteProps) {
   const lost = useRef(onFocusLost);
   useLayoutEffect(() => {
     lost.current = onFocusLost;
@@ -156,7 +161,7 @@ export function KeptResultNote({ busy, onRunAlone, onFocusLost }: KeptResultNote
   return (
     <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-raised px-3 py-1.5 text-xs">
       <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
-      <span className="min-w-0 flex-1 text-ink">{scriptRunCopy.kept.note}</span>
+      <span className="min-w-0 flex-1 text-ink">{note === null ? scriptRunCopy.kept.note : `${scriptRunCopy.kept.note} ${note}`}</span>
       <Button
         ref={watchFocus}
         type="button"

@@ -8,6 +8,7 @@ import { isMacPlatform } from "@/lib/utils/platform";
 
 import { isAutoRefreshAction, type AutoRefreshSource } from "./auto-refresh-menu";
 import { cellAccess, columnHintsOf, deleteRowsAccess, isJoin, newRowAccess, resultReadOnly, type EditAccess, type RowContext, type SelectedRow } from "./cell-editing";
+import type { WholeColumnQuestion } from "./command-confirmation";
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { cellMenu, isCopyAsAction, isGenerateSqlAction, type CellMenuAction, type CellMenuItem, type CopyAsAccess, type CopyAsAction, type GenerateSqlAction, type GenerateSqlKind } from "./cell-menu";
@@ -20,6 +21,9 @@ import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullVa
 import { resultCells } from "./full-values.service";
 import { cachedReadOnly, readOnlyReasonNow } from "./grid-action-context";
 import { buildCopyText, cellsFloor, clipboardLimit, columnNamesText, copiedNotice, copyCeiling, loadedRowsMeter, rowNumbersOf, utf8Length } from "./grid-copy";
+import { allRowsLine, assignmentOf, columnPendingOf, commandLimits, editScopeOf, groupRefusal, scopeHint, setNullLabel, wholeColumnBlocker, type EditScope } from "./multi-edit";
+import { multiEditCopy } from "./multi-edit.copy";
+import { cancelQuery } from "./query.service";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { completeSlice } from "./grid-export/grid-slice";
 import { customPrefix, distinctValues, type CompareOperator, type DistinctValue } from "./grid-export/value-filter";
@@ -56,18 +60,58 @@ import {
   type SliceSource,
 } from "./grid-selection";
 import { gridSelectionCopy } from "./grid-selection.copy";
-import { addRow, changeKeyOf, changesOf, deleteRows, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRows, savedResultOf, undoWhere, withoutApplied, type EditValue, type PendingEdits, type SavedResult, type SaveFailure } from "./record-edits";
+import {
+  addRow,
+  cellsPendingIn,
+  changeKeyOf,
+  changesOf,
+  columnEditOf,
+  columnEditsOf,
+  deleteRows,
+  editCell,
+  editNewCell,
+  editWholeColumn,
+  failureOf,
+  groupBuilder,
+  linkedCells,
+  noEdits,
+  pendingCell,
+  pendingCount,
+  referenceOf,
+  removeNewRows,
+  savedResultOf,
+  undoWhere,
+  undoWholeColumns,
+  withColumnsWritten,
+  withoutApplied,
+  type EditValue,
+  type PendingEdits,
+  type PlannedChanges,
+  type SavedResult,
+  type SaveFailure,
+} from "./record-edits";
 import { sqlTargetAnswer, type TargetAnswer as SqlTargetAnswer } from "./generate-sql/generate-sql-flow";
-import { editErrorDetails, sqlTargetOf, type EditPreview, type EditTarget } from "./record-edits.schema";
-import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
+import { editErrorDetails, sqlTargetOf, type ApiChange, type EditPreview, type EditTarget } from "./record-edits.schema";
+import { countWholeColumnOrRefuse, editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
 import { recordsCopy } from "./records.copy";
 import { recall, remember } from "./tab-memory";
 import { nextSort, type RecordsSort } from "./table-sql";
 import { unsavedEdits } from "./unsaved-edits";
+import { wholeColumnQuestion } from "./whole-column-question";
 import { isBusyState, isPersonBusy, type LoadMoreOutcome, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
 
 const copy = recordsCopy.edit;
 const selectionCopy = gridSelectionCopy;
+const multi = multiEditCopy;
+
+/** RN-EDIT-017: quantas células o grupo grande monta de cada vez, cedendo a vez à tela entre uma parte e outra; até lá, o grupo entra na mesma chamada. */
+export const groupChunk = 5_000;
+
+/** RN-EDIT-023: o teto do corpo das rotas da edição, que a tela confere antes de mandar. */
+export const editBodyLimit = 32 * 1024 * 1024;
+
+/** RN-EDIT-023: o corpo do pedido passa do teto das rotas da edição. */
+const bodyTooLarge = (resultId: string, changes: readonly ApiChange[]) => utf8Length(JSON.stringify({ resultID: resultId, changes })) > editBodyLimit;
 
 /** A plataforma, para os atalhos que o menu da célula escreve (RN-EDIT-015): Option e Cmd no macOS. */
 const platform = typeof navigator === "undefined" ? "" : navigator.platform;
@@ -237,8 +281,19 @@ export type OpenCustomFilter = { prefix: string; point: { x: number; y: number }
 
 export type UnsavedQuestion = { count: number; saving: boolean; onSave: () => void; onDiscard: () => void; onCancel: () => void };
 
-/** Um Salvar que gravou tudo: o resultado em que gravou, a grade como fica sem executar de novo (RN-EDIT-009) e se quem salvou quer ler de novo. */
-export type SavedEdits = { resultId: string; result: SavedResult; reread: boolean };
+/**
+ * Um Salvar que gravou tudo: o resultado em que gravou, a grade como fica sem executar de novo (RN-EDIT-009) e se quem salvou quer ler de novo. Com a coluna
+ * inteira (RN-EDIT-022), `whole` diz quais colunas e quantas linhas mudaram: o resultado do executor é lido de novo, e a aba guardada do script (`kept`) fica
+ * com as linhas que tem e a nota. `partial`: o "Salvar" do Informix sem log que parou no meio com a coluna inteira gravada (ou talvez gravada em parte,
+ * RN-EDIT-021): a grade fica com o que foi gravado (`result`), o cursor fechou, e nada é lido de novo.
+ */
+export type SavedEdits = { resultId: string; result: SavedResult; reread: boolean; whole?: { columns: readonly string[]; rows: number }; kept?: boolean; partial?: boolean };
+
+/** RN-EDIT-007 e 019: como um "Salvar" terminou: gravou tudo, falhou (a faixa diz), ou a pessoa cancelou a contagem ou a pergunta. */
+export type SaveOutcome = "saved" | "failed" | "cancelled";
+
+/** O escopo do campo aberto, guardado com ele: as linhas do grupo pela identidade, para o "carregar mais" no meio não as trocar (RN-EDIT-017). */
+type OpenScope = { kind: "one" } | { kind: "cells"; column: number; refs: readonly RowRef[] } | { kind: "all"; column: number };
 
 type Params = {
   tabId: string;
@@ -265,6 +320,11 @@ type Params = {
    * quando a pessoa cancela: nada é gravado e as alterações ficam. Sem ele, o Salvar não pergunta.
    */
   confirmSave?: (count: number) => true | Promise<boolean>;
+  /**
+   * RN-EDIT-019: a pergunta do "Salvar" com a coluna inteira, que vem sempre (também sem a proteção da conexão, e no lugar da dela), com o ambiente e a
+   * conexão da aba. Resolve falso quando a pessoa cancela. Sem ele, o Salvar segue sem perguntar.
+   */
+  confirmWholeColumn?: (question: WholeColumnQuestion) => Promise<boolean>;
   /**
    * RN-SQL-023: a aba guardada do script que está à frente (não a do último comando): a edição é a das linhas dela, e não a do resultado do executor. O
    * resultado é um dos que a API guarda (RN-SQL-024), e o Salvar fecha o cursor do último (`onSaved`).
@@ -312,21 +372,40 @@ function selectedRowsOf(shown: RowsState | null, edits: PendingEdits, rows: read
 /** RN-EDIT-016: "Duplicar linhas" sobre as linhas da seleção: o limite de 1.000, que não é motivo de só leitura e vem sozinho. */
 const duplicateRowsAccess = (rows: number): EditAccess => (rows > duplicateLimit ? { editable: false, reason: selectionCopy.rows.duplicateLimit } : { editable: true });
 
-type BarState = { shown: RowsState | null; edits: PendingEdits; readOnlyReason: string | null; target: EditTarget | null; busy: boolean | "refresh"; saving: boolean; selection: GridSelection; layout: GridLayout };
+type BarState = {
+  shown: RowsState | null;
+  edits: PendingEdits;
+  readOnlyReason: string | null;
+  target: EditTarget | null;
+  busy: boolean | "refresh";
+  saving: boolean;
+  selection: GridSelection;
+  layout: GridLayout;
+  /** RN-EDIT-013, 017 e 018: o "Editar célula" com outras células escolhidas na coluna da ativa (para quantas vale, e o que vale na coluna inteira). */
+  edit?: { scope: string | null; access?: EditAccess };
+  /** RN-EDIT-017: um grupo de células sendo montado: os quatro esperam o fim. */
+  building?: boolean;
+};
 
 /**
  * RN-EDIT-013 e 014: os quatro botões da barra de edição, pelo que a tela já sabe agora (sem perguntar ao catálogo, RN-EDIT-010): o resultado, o alvo
  * quando já foi perguntado, a aba ocupada (o Salvar também), a célula ativa, que só vale numa linha que existe, e as linhas da seleção, sobre as quais
  * "Duplicar linha(s)" e "Excluir linha(s)" agem.
  */
-function barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, layout }: BarState): EditBarButton[] {
+function barOf(state: BarState): EditBarButton[] {
+  const buttons = barButtons(state);
+  // RN-EDIT-017: com um grupo de células sendo montado, as ações que mudam as pendências esperam o fim, com o motivo.
+  return state.building === true ? buttons.map((button) => ({ ...button, reason: multiEditCopy.applyingBusy, title: recordsCopy.edit.bar.disabledTitle(recordsCopy.edit.bar.title(button.label, button.shortcut.label), multiEditCopy.applyingBusy), description: multiEditCopy.applyingBusy })) : buttons;
+}
+
+function barButtons({ shown, edits, readOnlyReason, target, busy, saving, selection, layout, edit }: BarState): EditBarButton[] {
   const rows = (shown?.rows.length ?? 0) + edits.added.length;
   const active = activeCell(selection, layout);
   // RN-GRADE-022: com colunas inteiras, "Duplicar linha" e "Excluir linha" não valem (as linhas são todas as do resultado), com o motivo depois dos de só
   // leitura, da aba ocupada e do `rowOperations`, no lugar dos das linhas.
   if (choseWholeColumns(selection)) {
     const columns: EditAccess = { editable: false, reason: selectionCopy.rows.chooseRows };
-    return editBar({ readOnly: readOnlyReason, target, busy: saving || busy, active: active !== null && active.row < rows ? { cell: active, row: rowContextOf(shown, edits, active.row) } : null, rows, platform, selection: { rows: 1, duplicate: columns, remove: columns } });
+    return editBar({ readOnly: readOnlyReason, target, busy: saving || busy, active: active !== null && active.row < rows ? { cell: active, row: rowContextOf(shown, edits, active.row) } : null, rows, platform, selection: { rows: 1, duplicate: columns, remove: columns }, ...(edit === undefined ? {} : { edit }) });
   }
   const chosen = selectedRows(selection, layout);
   return editBar({
@@ -337,6 +416,7 @@ function barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, 
     rows,
     platform,
     ...(chosen.length === 0 ? {} : { selection: { rows: chosen.length, duplicate: duplicateRowsAccess(chosen.length), remove: deleteRowsAccess(selectedRowsOf(shown, edits, chosen), null, target, false) } }),
+    ...(edit === undefined ? {} : { edit }),
   });
 }
 
@@ -367,6 +447,14 @@ export function wholeColumnsStatus(shown: RowsState, selection: GridSelection, l
 /** O motivo de "Exportar dados…" não valer, como o acesso de um item do menu. */
 const accessOfBlocker = (blocker: string | null): EditAccess => (blocker === null ? { editable: true } : { editable: false, reason: blocker });
 
+/**
+ * RN-EDIT-019: as recusas da contagem da coluna inteira que a API dá antes de qualquer comando na sessão (a alteração inválida, o resultado que não se edita,
+ * a conexão somente leitura, a sessão ocupada ou que não existe mais): o cursor aberto não foi tocado. As outras (a recusa do banco, o cancelamento, a tabela
+ * que mudou, o teto das chaves do Informix) chegaram à sessão, e a contagem o fechou; na dúvida, ele é dado como fechado.
+ */
+const countRefusedBeforeTheSession = ["EDIT_INVALID", "RESULT_NOT_EDITABLE", "CONNECTION_READ_ONLY", "SESSION_BUSY", "DATABASE_SESSION_NOT_FOUND"];
+const countReachedTheSession = (error: { code: string }) => !countRefusedBeforeTheSession.includes(error.code);
+
 /** RN-SQL-017: as recusas com que as células pedidas ficam cortadas, sem o aviso central: o resultado mudou, a sessão caiu, a célula está fora dele. */
 const cellRefusals = ["RESULT_NOT_FOUND", "DATABASE_SESSION_NOT_FOUND", "CELLS_INVALID"];
 
@@ -389,11 +477,16 @@ async function writeClipboard(text: string, toast: ReturnType<typeof useToast>, 
  */
 function valuesOf(shown: RowsState, view: PendingEdits, edits: PendingEdits): (row: number, column: number) => EditValue {
   const pending = new Map<string, EditValue>(view.cells.map((cell) => [`${cell.row}:${cell.column}`, cell.value]));
+  // RN-EDIT-018: a coluna inteira vale nas linhas lidas que não estão marcadas para exclusão (a excluída leva o lido, como no duplicar, RN-EDIT-016).
+  const wholes = new Map<number, EditValue>(columnEditsOf(edits).map((edit) => [edit.column, edit.value]));
+  const deleted = wholes.size === 0 ? null : new Set(edits.deleted);
   const read = shown.rows.length;
   return (row, column) => {
     if (row >= read) return edits.added[row - read]?.values[column] ?? null;
     const key = `${row}:${column}`;
-    return pending.has(key) ? (pending.get(key) ?? null) : (shown.rows[row]?.[column] ?? null);
+    if (pending.has(key)) return pending.get(key) ?? null;
+    if (wholes.has(column) && deleted?.has(row) !== true) return wholes.get(column) ?? null;
+    return shown.rows[row]?.[column] ?? null;
   };
 }
 
@@ -413,7 +506,7 @@ function valuesOf(shown: RowsState, view: PendingEdits, edits: PendingEdits): (r
  *   pendências (RN-EDIT-012). Sem o alvo (as pendências lembradas com a aba voltam sem ele), o Salvar e o "Ver SQL" o perguntam antes.
  * - As alterações não salvas vão ao registro da aba (`unsaved-edits.ts`), de onde quem fecha abas pergunta.
  */
-export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave, kept = null, scriptBusy = false, exportData, engine, sort, follow, copyAs, generateSql }: Params) {
+export function useRecordEdits({ tabId, runner, state, connectionId, database, subject = "table", onSaved, filter, refresh, autoRefresh, confirmSave, confirmWholeColumn, kept = null, scriptBusy = false, exportData, engine, sort, follow, copyAs, generateSql }: Params) {
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -454,21 +547,28 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const columnCount = shown?.columns.length ?? 0;
   const layout = useMemo<GridLayout>(() => ({ read: readCount, added: edits.added.map((row) => row.id), columns: columnCount }), [readCount, columnCount, edits.added]);
   const active = activeCell(selection, layout);
-  const [editorState, setEditorState] = useState<(CellEditorState & { resultId: string | null }) | null>(null);
+  const [editorState, setEditorState] = useState<(CellEditorState & { resultId: string | null; scope?: OpenScope }) | null>(null);
   const editor: CellEditorState | null = editorState !== null && editorState.resultId === resultId ? editorState : null;
+  // RN-EDIT-019: o "Salvar" toma a grade da contagem até a resposta (`saving`, que as ações leem como "há um comando em andamento na aba"); `phase` diz à
+  // faixa em que parte ele está, e `savingSince`, desde quando grava (o relógio do "Salvando…", RN-EDIT-021).
   const [saving, setSaving] = useState(false);
+  const [phase, setPhase] = useState<"counting" | "asking" | "saving" | null>(null);
+  const [savingSince, setSavingSince] = useState<number | null>(null);
+  // RN-EDIT-017: o grupo grande sendo montado ("Aplicando o valor a 100.000 células…"), com o "Cancelar".
+  const [building, setBuilding] = useState<{ count: number; controller: AbortController } | null>(null);
+  const buildingRef = useRef<AbortController | null>(null);
   // O menu é do resultado em que abriu, como o campo: as linhas trocadas debaixo dele (a execução automática que já rodava quando ele abriu) o fecham, em vez
   // de deixar a escolha cair na mesma posição de outra linha.
   const [menuState, setMenu] = useState<(OpenCellMenu & { resultId: string | null }) | null>(null);
   const menu: OpenCellMenu | null = menuState !== null && menuState.resultId === resultId ? menuState : null;
   const [preview, setPreview] = useState<EditPreview | null>(null);
-  const [question, setQuestion] = useState<{ count: number; proceed: () => void } | null>(null);
+  const [question, setQuestion] = useState<{ count: number; proceed: () => void; rereads: boolean } | null>(null);
   // RN-GRADE-013: o diálogo "Filtrar por valor…" e o campo do "Personalizado", com o que cada um precisa para juntar a condição ao campo.
   const [valueFilter, setValueFilter] = useState<{ cell: GridCell; values: DistinctValue[]; rows: number; more: boolean } | null>(null);
   const [customFilter, setCustomFilter] = useState<{ cell: GridCell; operator: CompareOperator; point: { x: number; y: number }; problem: string | null } | null>(null);
-  const sources = useRef({ filter, refresh, autoRefresh, confirmSave, exportData, engine, sort, follow, copyAs, generateSql });
+  const sources = useRef({ filter, refresh, autoRefresh, confirmSave, confirmWholeColumn, exportData, engine, sort, follow, copyAs, generateSql });
   useEffect(() => {
-    sources.current = { filter, refresh, autoRefresh, confirmSave, exportData, engine, sort, follow, copyAs, generateSql };
+    sources.current = { filter, refresh, autoRefresh, confirmSave, confirmWholeColumn, exportData, engine, sort, follow, copyAs, generateSql };
   });
   // RN-SQL-017: a busca dos valores completos em andamento, que a faixa mostra e deixa cancelar.
   const [fetching, setFetching] = useState<AbortController | null>(null);
@@ -486,14 +586,17 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const marks = useMemo(() => rowMarksOf(view, shown?.rows.length ?? 0, banner.failedRow), [view, shown, banner.failedRow]);
   const count = pendingCount(edits);
   const columnHints = useMemo(() => columnHintsOf(target), [target]);
+  // RN-EDIT-018: a coluna inteira pendente, por coluna, o mesmo mapa enquanto as pendências não mudam (a grade o passa a todas as linhas).
+  const shownColumns = shown?.columns ?? null;
+  const columnPending = useMemo(() => (shownColumns === null ? null : columnPendingOf(edits, shownColumns, engine)), [edits, shownColumns, engine]);
   // Na aba de consulta o cabeçalho marca a coluna que não se edita, como no canvas; os Registros, de uma tabela só, ficam como estavam. Memorizado:
   // a grade conta a largura das colunas por ele.
   const columnReadOnly = useMemo(() => (subject === "result" && target !== null ? target.columns.map((column) => !column.editable) : null), [subject, target]);
 
   // Tudo o que as ações leem depois de um `await`: o estado de agora, e não o da renderização em que a ação começou.
-  const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active, selection, layout, scope });
+  const latest = useRef({ shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active, selection, layout, scope, building: building !== null });
   useEffect(() => {
-    latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active, selection, layout, scope };
+    latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active, selection, layout, scope, building: building !== null };
   });
 
   /**
@@ -512,8 +615,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (current === null || known === null || !isJoin(known) || cell.row >= current.rows.length) return undefined;
     return changeKeyOf(current.rows, known, cell.row, cell.column) ?? undefined;
   }, []);
-  const editorRef = useRef<(CellEditorState & { resultId: string | null }) | null>(null);
-  const setEditor = useCallback((next: CellEditorState | null) => {
+  const editorRef = useRef<(CellEditorState & { resultId: string | null; scope?: OpenScope }) | null>(null);
+  const setEditor = useCallback((next: (CellEditorState & { scope?: OpenScope }) | null) => {
     const value = next === null ? null : { ...next, resultId: latest.current.resultId };
     editorRef.current = value;
     setEditorState(value);
@@ -690,18 +793,23 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   /** A linha da grade: uma lida (com o corte e a exclusão) ou uma nova. */
   const rowOf = useCallback((row: number): RowContext => rowContextOf(latest.current.shown, latest.current.edits, row), []);
 
-  const accessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target): EditAccess => {
-    const { readOnlyReason: reason, busy: running, saving: writing } = latest.current;
-    return cellAccess({ readOnly: reason, target: known, busy: writing || running, column: cell.column, row: rowOf(cell.row) });
+  /** O que vale na célula; `row` nulo confere só o resultado, a aba, a tabela e a coluna, sem a linha (a das células de um grupo, RN-EDIT-017). */
+  const accessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target, row: RowContext | null = rowOf(cell.row)): EditAccess => {
+    const { readOnlyReason: reason, busy: running, saving: writing, building: assembling } = latest.current;
+    const access = cellAccess({ readOnly: reason, target: known, busy: writing || running, column: cell.column, row: row ?? { kind: "new" } });
+    // RN-EDIT-017: com um grupo de células sendo montado, uma nova edição espera o fim.
+    return access.editable && assembling ? { editable: false, reason: multi.applyingBusy } : access;
   }, [rowOf]);
 
-  /** O texto que a célula mostra agora: a pendência, quando há, ou o valor lido. */
+  /** O texto que a célula mostra agora: a pendência, quando há, a coluna inteira (na linha lida que não está marcada para exclusão), ou o valor lido. */
   const valueAt = useCallback((cell: GridCell): EditValue => {
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
     if (cell.row < read) {
       const changed = pendingCell(viewNow(), cell.row, cell.column);
-      return changed === null ? (current?.rows[cell.row][cell.column] ?? null) : changed.value;
+      if (changed !== null) return changed.value;
+      const whole = columnEditOf(pending, cell.column);
+      return whole !== null && !pending.deleted.includes(cell.row) ? whole.value : (current?.rows[cell.row][cell.column] ?? null);
     }
     return pending.added[cell.row - read]?.values[cell.column] ?? null;
   }, [viewNow]);
@@ -781,11 +889,14 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     };
   }, []);
 
-  /** Grava um valor na célula como pendência; voltar ao valor lido tira a pendência. */
+  /**
+   * Grava um valor na célula como pendência; voltar ao valor de referência tira a pendência: o lido, ou, com a coluna inteira pendente naquela coluna, o
+   * valor dela (RN-EDIT-018).
+   */
   const applyValue = useCallback((cell: GridCell, value: EditValue) => {
     const { shown: current, edits: pending } = latest.current;
     const read = current?.rows.length ?? 0;
-    if (cell.row < read) putEdits(editCell(pending, cell.row, cell.column, value, current!.rows[cell.row][cell.column], changeAt(cell)));
+    if (cell.row < read) putEdits(editCell(pending, cell.row, cell.column, value, referenceOf(pending, cell.column, current!.rows[cell.row][cell.column]), changeAt(cell)));
     else {
       const row = pending.added[cell.row - read];
       if (row !== undefined) putEdits(editNewCell(pending, row.id, cell.column, value));
@@ -903,7 +1014,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           const columnsNow = selectedColumns(chosen, firstGrid);
           const shownValue = valuesOf(first, viewNow(first), pending);
           const already = cellsFloor(selectedRows(chosen, firstGrid).map((row) => columnsNow.map((column) => shownValue(row, column))));
-          const loaded = await loadRest(from, { keepGoing: loadedRowsMeter(columnsNow, already) });
+          const wholes = new Map(columnEditsOf(pending).map((edit) => [edit.column, edit.value]));
+          const loaded = await loadRest(from, { keepGoing: loadedRowsMeter(columnsNow, already, clipboardLimit, wholes) });
           if (loaded.kind === "stopped") return void toast.error(selectionCopy.copy.tooLarge);
           if (loaded.kind !== "ready") return;
           current = loaded.context.shown;
@@ -1007,35 +1119,184 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
   }, [ensureTarget, accessOf, say, hold, moved]);
 
+  /** As linhas pela identidade (RN-GRADE-001): as ações que perguntam o alvo antes de agir as acham de novo depois, mesmo que a grade tenha mudado no meio. */
+  const refsOf = useCallback((rows: readonly number[]): RowRef[] => rows.flatMap((row) => refAt(latest.current.layout, row) ?? []), []);
+  const positionsOf = useCallback((refs: readonly RowRef[]): number[] => refs.flatMap((ref) => positionOf(latest.current.layout, ref) ?? []), []);
+
+  /** A edição da célula ativa vale para outras escolhidas na coluna dela (RN-EDIT-017 e 018)? Só quando `cell` é a ativa: a de outra célula é só dela. */
+  const scopeAt = useCallback((cell: GridCell): EditScope => {
+    const { selection: chosen, layout: grid } = latest.current;
+    const now = activeCell(chosen, grid);
+    return now === null || now.row !== cell.row || now.column !== cell.column ? { kind: "one" } : editScopeOf(chosen, grid);
+  }, []);
+
+  /**
+   * O nome da linha nas recusas do grupo (RN-EDIT-017): "linha 7", ou, na linha nova já salva da aba de consulta (a que não tem linha no resultado da API,
+   * RN-EDIT-009), "linha nova 2", pela ordem dela entre as salvas.
+   */
+  const labelOf = useCallback((row: number): string => {
+    const sourceRows = latest.current.shown?.sourceRows;
+    if (sourceRows === undefined || sourceRows[row] !== null) return multi.row(row + 1);
+    let position = 0;
+    for (let at = 0; at <= row; at++) if (sourceRows[at] === null) position += 1;
+    return multi.newRow(position);
+  }, []);
+
+  /**
+   * RN-EDIT-017 e 018: a edição de várias células, depois de conferi-las. Primeiro o que vale para a célula ativa, sem a linha dela (o resultado, a aba
+   * ocupada, a tabela e a coluna, que são os de todas: a mesma coluna); depois, com o alvo, as linhas escolhidas uma a uma, sem consulta (a primeira que não
+   * pode receber o valor, com o número dela), ou, com a coluna inteira, os motivos dela (`wholeColumnBlocker`, em "Indisponível: …"). O que não vale vai à
+   * faixa, e nada muda. Com uma célula só, é a edição de sempre (`whenEditable`).
+   */
+  const whenScopeEditable = useCallback(
+    async (cell: GridCell, act: (scope: OpenScope) => void, from: string | null = latest.current.resultId) => {
+      const scope = scopeAt(cell);
+      if (scope.kind === "one") return whenEditable(cell, () => act({ kind: "one" }), from);
+      if (moved(from)) return;
+      const tableColumn = (known: EditTarget | null) => accessOf(cell, known, null);
+      const early = tableColumn(latest.current.target);
+      if (!early.editable) return say(early.reason);
+      const refs = scope.kind === "cells" ? refsOf(scope.rows) : [];
+      const release = hold();
+      try {
+        const known = await ensureTarget();
+        if (moved(from)) return;
+        const access = tableColumn(known);
+        if (!access.editable) return say(access.reason);
+        if (known === null) return;
+        const current = latest.current.shown;
+        if (current === null) return;
+        if (scope.kind === "cells") {
+          const refused = groupRefusal({ target: known, column: cell.column, rows: positionsOf(refs), rowOf, labelOf });
+          if (refused !== null) return say(refused, "warning");
+          say(null);
+          return act({ kind: "cells", column: cell.column, refs });
+        }
+        const blocker = wholeColumnBlocker({ target: known, column: cell.column, columns: current.columns, read: current.read, sql: current.target.sql, filter: current.target.filter, engine: sources.current.engine });
+        if (blocker !== null) return say(multi.unavailable(blocker), "warning");
+        say(null);
+        act({ kind: "all", column: cell.column });
+      } finally {
+        release();
+      }
+    },
+    [scopeAt, whenEditable, moved, accessOf, say, refsOf, positionsOf, hold, ensureTarget, rowOf, labelOf],
+  );
+
+  /**
+   * RN-EDIT-014 e 018: o que vale para a coluna inteira da célula ativa, sem consulta: o resultado, a aba, a tabela e a coluna dela (os motivos de sempre) e,
+   * no lugar dos da célula e da linha, os da coluna inteira, em "Indisponível: …". Sem o alvo, só os que a página e o texto do comando dizem.
+   */
+  const wholeAccessOf = useCallback((cell: GridCell, known: EditTarget | null = latest.current.target): EditAccess => {
+    const access = accessOf(cell, known, null);
+    const current = latest.current.shown;
+    if (!access.editable || current === null) return access;
+    const blocker = wholeColumnBlocker({ target: known, column: cell.column, columns: current.columns, read: current.read, sql: current.target.sql, filter: current.target.filter, engine: sources.current.engine });
+    return blocker === null ? access : { editable: false, reason: multi.unavailable(blocker) };
+  }, [accessOf]);
+
+  /** RN-EDIT-017: desiste do grupo que está sendo montado: nenhuma célula fica alterada. */
+  const cancelBuild = useCallback(() => {
+    buildingRef.current?.abort();
+    buildingRef.current = null;
+    setBuilding(null);
+    latest.current = { ...latest.current, building: false };
+  }, []);
+
+  /**
+   * RN-EDIT-017 e 018: o valor nas células do escopo. Com a coluna inteira, uma alteração só (`editWholeColumn`), na hora. Com várias células, o grupo é
+   * montado fora das pendências (`groupBuilder`) e trocado num passo só: até `groupChunk` células, na mesma chamada; acima, em partes, cedendo a vez à tela,
+   * com "Aplicando o valor a N células…" e o "Cancelar" na faixa, e as outras ações de edição esperando o fim. O resultado que saiu da tela no meio não recebe
+   * nada.
+   */
+  const applyScope = useCallback(
+    async (scope: Exclude<OpenScope, { kind: "one" }>, value: EditValue) => {
+      const from = latest.current.resultId;
+      if (scope.kind === "all") return putEdits(editWholeColumn(latest.current.edits, scope.column, value));
+      const positions = positionsOf(scope.refs);
+      const { shown: current, edits: pending } = latest.current;
+      if (current === null || positions.length === 0) return;
+      const read = current.rows.length;
+      const builder = groupBuilder(pending, scope.column, value);
+      const add = (row: number) => {
+        if (row < read) builder.read(row, referenceOf(pending, scope.column, current.rows[row]?.[scope.column] ?? null), changeAt({ row, column: scope.column }));
+        else {
+          const id = latest.current.layout.added[row - read];
+          if (id !== undefined) builder.added(id);
+        }
+      };
+      if (positions.length <= groupChunk) {
+        for (const row of positions) add(row);
+        return putEdits(builder.done());
+      }
+
+      buildingRef.current?.abort();
+      const controller = new AbortController();
+      buildingRef.current = controller;
+      setBuilding({ count: positions.length, controller });
+      latest.current = { ...latest.current, building: true };
+      const release = hold();
+      try {
+        for (let start = 0; start < positions.length; start += groupChunk) {
+          for (const row of positions.slice(start, start + groupChunk)) add(row);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          if (controller.signal.aborted || moved(from)) return;
+        }
+        putEdits(builder.done());
+      } finally {
+        if (buildingRef.current === controller) {
+          buildingRef.current = null;
+          setBuilding(null);
+          latest.current = { ...latest.current, building: false };
+        }
+        release();
+      }
+    },
+    [positionsOf, putEdits, changeAt, hold, moved],
+  );
+
   const openEditor = useCallback((cell: GridCell, initial?: string) => {
-    void whenEditable(cell, () => {
+    void whenScopeEditable(cell, (scope) => {
       // RN-GRADE-001: abrir o campo mantém a seleção; só a célula que não era a ativa passa a ser ela.
       const now = latest.current.active;
       if (now === null || now.row !== cell.row || now.column !== cell.column) setActive(cell);
-      setEditor({ ...cell, draft: initial ?? valueAt(cell) ?? "" });
+      // RN-EDIT-017: o campo diz para quantas a edição vale, e começar a digitar já é mexer no texto.
+      const name = latest.current.shown?.columns[cell.column]?.name ?? "";
+      const hint = scope.kind === "one" ? null : scope.kind === "all" ? multi.hint.all(name) : multi.hint.cells(scope.refs.length, name);
+      setEditor({ ...cell, draft: initial ?? valueAt(cell) ?? "", touched: initial !== undefined, hint, scope });
     });
-  }, [whenEditable, valueAt, setEditor, setActive]);
+  }, [whenScopeEditable, valueAt, setEditor, setActive]);
 
+  /**
+   * Confirmar o campo (Enter, Tab, Shift+Tab, o botão, sair dele). Sem ter mexido no texto, nada é aplicado, nem à célula ativa (RN-EDIT-017): abrir e fechar o
+   * campo nunca faz uma alteração; quando ele valia para várias, a faixa diz por quê. Mexido, o texto final vai à célula ou a todas as do escopo. O Tab e o
+   * Shift+Tab passam à próxima célula editável, e a seleção passa a ser ela.
+   */
   const commit = useCallback((move?: 1 | -1) => {
     const open = editorRef.current;
     if (open === null) return;
     setEditor(null);
     // O campo de um resultado que já saiu da tela não grava no novo.
     if (open.resultId !== latest.current.resultId) return;
-    applyValue(open, open.draft);
+    const scope = open.scope ?? { kind: "one" };
+    if (scope.kind === "one") {
+      if (open.touched !== false) applyValue(open, open.draft);
+    } else if (open.touched === true) void applyScope(scope, open.draft);
+    else say(multi.untouched, "warning");
 
     const columns = latest.current.shown?.columns.length ?? 0;
     const next = move === undefined ? null : nextEditable(open, move, columns, (row, column) => accessOf({ row, column }).editable);
     if (next !== null) {
       setActive(next);
-      setEditor({ ...next, draft: valueAt(next) ?? "" });
+      setEditor({ ...next, draft: valueAt(next) ?? "", touched: false, hint: null, scope: { kind: "one" } });
     }
-  }, [setEditor, setActive, applyValue, accessOf, valueAt]);
+  }, [setEditor, setActive, applyValue, applyScope, accessOf, valueAt, say]);
 
   const cancel = useCallback(() => setEditor(null), [setEditor]);
 
   const newRow = useCallback(async () => {
     const from = latest.current.resultId;
+    if (latest.current.building) return say(multi.applyingBusy);
     const early = newRowAccess(latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
     if (!early.editable) return say(early.reason);
     const release = hold();
@@ -1058,10 +1319,6 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     }
   }, [ensureTarget, putEdits, say, setActive, hold, moved]);
 
-  /** As linhas pela identidade (RN-GRADE-001): as ações que perguntam o alvo antes de agir as acham de novo depois, mesmo que a grade tenha mudado no meio. */
-  const refsOf = useCallback((rows: readonly number[]): RowRef[] => rows.flatMap((row) => refAt(latest.current.layout, row) ?? []), []);
-  const positionsOf = useCallback((refs: readonly RowRef[]): number[] => refs.flatMap((ref) => positionOf(latest.current.layout, ref) ?? []), []);
-
   /**
    * RN-EDIT-014 e 015: "Excluir linha(s)" sobre as linhas `rows` (as da seleção): marca as lidas para exclusão, que ficam riscadas, e tira da grade as novas.
    * Quando uma delas não se exclui (a chave que não se sabe), nada é excluído, e a faixa diz o motivo da primeira, com o número; a já marcada fica como está.
@@ -1072,6 +1329,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
    */
   const removeRows = useCallback(async (rows: readonly number[], from: string | null = latest.current.resultId) => {
     if (moved(from) || rows.length === 0) return;
+    if (latest.current.building) return say(multi.applyingBusy);
     const early = deleteRowsAccess(selectedRowsOf(latest.current.shown, latest.current.edits, rows), latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
     if (!early.editable) return say(early.reason);
     const refs = refsOf(rows);
@@ -1127,6 +1385,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
    */
   const duplicateRows = useCallback(async (rows: readonly number[], from: string | null = latest.current.resultId) => {
     if (moved(from) || rows.length === 0) return;
+    if (latest.current.building) return say(multi.applyingBusy);
     const early = newRowAccess(latest.current.readOnlyReason, latest.current.target, latest.current.saving || latest.current.busy);
     if (!early.editable) return say(early.reason);
     const limit = duplicateRowsAccess(rows.length);
@@ -1217,42 +1476,232 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   }, [rowAction]);
 
   /**
-   * RN-EDIT-004: "Desfazer alteração" nas células escolhidas: o valor alterado volta ao lido, a linha marcada para exclusão que tem uma célula escolhida
-   * volta, e, numa linha nova, a célula volta ao padrão da tabela. Sem nada escolhido além da célula ativa, a dela.
+   * RN-EDIT-004 e 018: o que o "Desfazer alteração" faria agora, e o rótulo dele. Com colunas escolhidas inteiras, tira as alterações da coluna inteira delas e
+   * as pendências delas em todas as linhas (também as novas), e o rótulo diz a conta ("Desfazer a alteração da coluna preco e de 37 células"). Com outras
+   * células escolhidas, o de sempre (`undoWhere`: o valor volta ao de referência, a linha excluída escolhida volta, a célula da linha nova volta ao padrão); e
+   * quando elas só têm a alteração da coluna inteira, que não se desfaz linha a linha, nada, com o motivo. Percorre as pendências, e não a seleção.
    */
-  const undoSelection = useCallback(() => {
-    // O recado da faixa é da última tentativa (o aviso do "Duplicar linha" fica até a próxima ação de edição, RN-EDIT-016).
-    say(null);
-    const { edits: pending, selection: chosen, layout: grid } = latest.current;
+  const undoPlan = useCallback((): { next: PendingEdits | null; label?: string; reason?: string } => {
+    const { edits: pending, selection: chosen, layout: grid, shown: current, saving: writing } = latest.current;
+    // RN-EDIT-019: da contagem até a resposta do Salvar, as pendências não mudam.
+    if (writing) return { next: null, reason: copy.readOnly(copy.reasons.busy) };
+    const wholeChosen = chosenWholeColumns(chosen, grid);
+    if (wholeChosen !== null) {
+      const next = undoWholeColumns(pending, wholeChosen);
+      const withEdit = wholeChosen.filter((column) => columnEditOf(pending, column) !== null);
+      if (withEdit.length === 0) return { next };
+      return { next, label: multi.undo.columns(withEdit.map((column) => current?.columns[column]?.name ?? ""), cellsPendingIn(pending, wholeChosen)) };
+    }
     const next = undoWhere(pending, viewNow(), grid.read, (row, column) => isSelected(chosen, grid, { row, column }), (row) => rowSpan(chosen, grid, row) !== null);
+    if (next !== null || columnEditsOf(pending).length === 0) return { next };
+    // As células escolhidas só têm a alteração da coluna inteira: ela vale para todas as linhas, e se desfaz pelo cabeçalho.
+    const columns = selectedColumns(chosen, grid);
+    return columns.some((column) => columnEditOf(pending, column) !== null) ? { next: null, reason: multi.undo.wholeOnly } : { next };
+  }, [viewNow]);
+
+  /** RN-EDIT-004: "Desfazer alteração" nas células escolhidas (`undoPlan`). Com um grupo de células sendo montado, espera o fim. */
+  const undoSelection = useCallback(() => {
+    if (latest.current.building) return say(multi.applyingBusy);
+    const { next, reason } = undoPlan();
+    // O recado da faixa é da última tentativa (o aviso do "Duplicar linha" fica até a próxima ação de edição, RN-EDIT-016).
+    if (latest.current.saving) return say(reason ?? null);
+    say(null);
     if (next !== null) putEdits(next);
-  }, [putEdits, say, viewNow]);
+  }, [putEdits, say, undoPlan]);
 
   /**
    * RN-EDIT-004: "Descartar". As linhas novas saem da grade, e a seleção é desfeita: fica só a célula ativa, quando a linha dela continua (RN-GRADE-001); as
-   * colunas inteiras ficam (RN-GRADE-022).
+   * colunas inteiras ficam (RN-GRADE-022). A alteração da coluna inteira sai também (RN-EDIT-018).
    */
   const discard = useCallback(() => {
+    cancelBuild();
     setEditor(null);
     const hadNew = latest.current.edits.added.length > 0;
     putEdits(noEdits);
     setBanner(noBanner);
     // As colunas inteiras ficam, com as linhas que ficaram (RN-GRADE-022).
     if (hadNew) updateSelection((held, grid) => afterRowsRemoved(held, grid));
-  }, [setEditor, putEdits, updateSelection]);
+  }, [setEditor, putEdits, updateSelection, cancelBuild]);
 
   /** O aviso antes do Salvar (RN-PROT-001) em espera: um segundo Salvar não abre outro. */
   const confirming = useRef(false);
+  // RN-EDIT-019 e 021: o "Cancelar" da contagem e do "Salvar" já pediu ao banco o cancelamento; e os comandos da pergunta aberta, para o "Ver SQL" dela.
+  const cancelAsked = useRef(false);
+  const askedPreview = useRef<EditPreview | null>(null);
+
+  /** RN-EDIT-019 e 021: o "Cancelar" da contagem e do "Salvar": pede ao banco o cancelamento do comando em execução na sessão (`queries/cancel`). */
+  const cancelSave = useCallback(() => {
+    const sessionId = sessionOfShown();
+    if (sessionId === null || cancelAsked.current) return;
+    cancelAsked.current = true;
+    void cancelQuery(sessionId);
+  }, [sessionOfShown]);
 
   /**
-   * RN-EDIT-005 e 012: o Salvar. Devolve se gravou tudo; `reread` vai a `onSaved` (os Registros leem de novo). Na conexão com "Todos os comandos"
-   * (RN-PROT-001), pergunta antes, uma vez por Salvar, com quantas alterações vão; cancelado, nada é gravado. A resposta pode chegar depois de as linhas
-   * mudarem: o Salvar segue com o que está na tela então, e só se for o mesmo resultado.
+   * A contagem e o "Salvar" são comandos na sessão: o cursor aberto fecha (RN-EDIT-009 e 019), e o "Carregar mais" dá lugar a "O cursor foi fechado". Numa aba
+   * guardada do script, é o do último comando que fecha (RN-SQL-023). A grade fica com as linhas que tem.
    */
-  const save = useCallback(async (reread = true): Promise<boolean> => {
+  const closeCursor = useCallback(
+    (current: RowsState) => {
+      if (current.resultId == null) return;
+      runner.keepSaved(current.resultId, { rows: current.rows, truncated: current.truncated, generated: current.generated ?? new Map(), ...(current.sourceRows === undefined ? {} : { sourceRows: current.sourceRows }) });
+    },
+    [runner],
+  );
+
+  /** O "Salvar" toma a grade (`saving`), da contagem até a resposta (RN-EDIT-019); `phase` é o que a faixa diz. */
+  const startSaving = useCallback((next: "counting" | "saving") => {
+    setSaving(true);
+    setPhase(next);
+    if (next === "saving") setSavingSince(Date.now());
+    latest.current = { ...latest.current, saving: true };
+    cancelAsked.current = false;
+  }, []);
+  const stopSaving = useCallback(() => {
+    setSaving(false);
+    setPhase(null);
+    setSavingSince(null);
+    latest.current = { ...latest.current, saving: false };
+  }, []);
+
+  /**
+   * A recusa do Salvar na faixa (RN-EDIT-005, 012 e 021): no banco sem log, o que já foi gravado sai das pendências; a coluna inteira que falhou no meio fica,
+   * com a nota de que pode estar gravada em parte das linhas; e, com a coluna inteira gravada (ou talvez gravada), a grade passa a mostrar o gravado nas linhas
+   * lidas, o cursor fechou, e nada é lido de novo (`partial`, RN-EDIT-022).
+   */
+  const refuseSave = useCallback(
+    (error: Parameters<typeof failureOf>[0], plan: PlannedChanges, known: EditTarget, current: RowsState, pending: PendingEdits, id: string): SaveOutcome => {
+      const failure = failureOf(error, plan, known.oneAtATime, current.columns.map((column) => column.name));
+      const done = failure.applied + (failure.written ? 1 : 0);
+      let left = done > 0 ? withoutApplied(pending, plan.origins, done) : pending;
+      if (failure.whole === "uncertain") left = { ...left, columns: columnEditsOf(left).map((edit) => ({ ...edit, uncertain: true })) };
+      if (left !== pending) putEdits(left);
+      if (failure.whole !== undefined) {
+        // A coluna inteira gravada, e por cima dela as alterações por linha gravadas depois dela (RN-EDIT-021), como a grade as mostrava.
+        const written = failure.whole === "written" ? columnEditsOf(pending) : [];
+        const rowsWritten = new Set(plan.origins.slice(0, done).flatMap((origin) => (origin.kind === "row" && origin.change === undefined ? [origin.row] : [])));
+        const cells = written.length === 0 ? [] : pending.cells.filter((cell) => cell.change === undefined && rowsWritten.has(cell.row));
+        const result: SavedResult = { rows: withColumnsWritten(current.rows, written, pending.deleted, cells), truncated: current.truncated, generated: current.generated ?? new Map(), ...(current.sourceRows === undefined ? {} : { sourceRows: current.sourceRows }) };
+        onSaved({ resultId: id, result, reread: false, partial: true, kept: keptNow.current });
+      }
+      setBanner({ resultId: id, failure, failedRow: failure.origin === null || failure.written ? null : gridRowOf(failure.origin, left, current.rows.length), notice: null });
+      return "failed";
+    },
+    [putEdits, onSaved],
+  );
+
+  /**
+   * RN-EDIT-019 a 022: o "Salvar" com a coluna inteira. A grade fica tomada da contagem até a resposta, e a atualização automática em pausa. A API conta, na
+   * sessão da aba, as linhas que o comando vai alterar (com "Contando as linhas do resultado…" e o "Cancelar", que interrompe a contagem no banco e volta à
+   * faixa de antes); a contagem fecha o cursor aberto, também quando a pergunta é cancelada. Depois, os comandos do `queries/edits/preview`, e a pergunta, que
+   * vem sempre e é a única daquele "Salvar". Confirmada, `queries/edits` leva exatamente as alterações que ela descreveu, com o `rows` contado. O que gravou
+   * tudo avisa quantas linhas mudaram e chama `onSaved` com `whole`; quem usa lê o resultado de novo.
+   */
+  const saveWholeColumn = useCallback(
+    async (reread: boolean): Promise<SaveOutcome> => {
+      const { shown: current, resultId: id, edits: pending } = latest.current;
+      const sessionId = sessionOfShown();
+      if (current === null || id === null || sessionId === null) return "failed";
+
+      startSaving("counting");
+      const release = hold();
+      const refuse = (failure: SaveFailure): SaveOutcome => {
+        setBanner({ resultId: id, failure, failedRow: null, notice: null });
+        return "failed";
+      };
+      try {
+        const known = latest.current.target ?? (await ensureTarget());
+        if (known === null || latest.current.resultId !== id) return "failed";
+        const names = current.columns.map((column) => column.name);
+        const draft = changesOf(pending, current.rows, known);
+        if (bodyTooLarge(id, draft.changes)) {
+          say(multi.tooLarge, "warning");
+          return "failed";
+        }
+
+        const counted = await throughMutationCache(queryClient, () => countWholeColumnOrRefuse(sessionId, id, draft.changes.slice(0, 1))).catch(() => null);
+        if (counted === null) return "failed";
+        // A contagem que chegou à sessão fechou o cursor; a recusada antes dela (a alteração inválida, a forma que não vale, só leitura, a sessão ocupada)
+        // não tocou nele, e o "Carregar mais" continua.
+        if (counted.ok || countReachedTheSession(counted.error)) closeCursor(current);
+        if (!counted.ok) {
+          // Cancelada pela pessoa, a contagem volta à faixa de antes, sem salvar nada; a falha do banco diz por quê, com a mensagem dele, como veio.
+          if (counted.error.code === "SQL_EXECUTION_FAILED" && editErrorDetails(counted.error.extensions).outcome !== null) return "cancelled";
+          if (counted.error.code === "SQL_EXECUTION_FAILED") return refuse(failureNotice(multi.countFailed, counted.error.detail ?? null));
+          return refuse(failureOf(counted.error, draft, known.oneAtATime, names));
+        }
+        // O "Cancelar" que chegou depois de a contagem responder não tem comando a interromper no banco, mas volta à faixa de antes do mesmo jeito
+        // (RN-EDIT-019): a pergunta não abre.
+        if (cancelAsked.current) return "cancelled";
+        if (latest.current.resultId !== id) return "failed";
+
+        const preview = await throughMutationCache(queryClient, () => previewEditsOrRefuse(sessionId, id, draft.changes)).catch(() => null);
+        if (preview === null) return "failed";
+        if (cancelAsked.current) return "cancelled";
+        if (!preview.ok) return refuse(failureOf(preview.error, draft, known.oneAtATime, names));
+        if (latest.current.resultId !== id) return "failed";
+
+        const rows = counted.data.rows;
+        const wholes = columnEditsOf(pending);
+        const columns = wholes.map((edit) => names[edit.column] ?? "");
+        const table = known.tables[0];
+        const question = wholeColumnQuestion({
+          columns,
+          assignments: wholes.map((edit) => assignmentOf(sources.current.engine, current.columns[edit.column], edit.value)),
+          rows,
+          table: table === undefined ? "" : `${table.schema}.${table.name}`,
+          // RN-EDIT-019: a comparação com o total só vale com o resultado lido até o fim; o "Contar total" diz quantas o comando tinha, e não quantas a grade tem.
+          total: current.hasMore ? null : current.rows.length,
+          loaded: current.rows.length,
+          kept: keptNow.current,
+          limited: commandLimits(current.target.sql, sources.current.engine, current.target.filter).limited,
+          others: pendingCount(pending) - wholes.length,
+          subject,
+          oneAtATime: known.oneAtATime,
+          preview: preview.data,
+        });
+        setPhase("asking");
+        askedPreview.current = preview.data;
+        const confirmed = (await sources.current.confirmWholeColumn?.(question)) ?? true;
+        askedPreview.current = null;
+        if (!confirmed) return "cancelled";
+        if (latest.current.resultId !== id) return "failed";
+
+        startSaving("saving");
+        const plan = changesOf(pending, current.rows, known, rows);
+        const result = await throughMutationCache(queryClient, () => saveEditsOrRefuse(sessionId, id, plan.changes)).catch(() => null);
+        if (result === null) return "failed";
+        if (!result.ok) return refuseSave(result.error, plan, known, current, pending, id);
+
+        toast.success(multi.saved(columns, rows, Math.max(result.data.applied - 1, 0)));
+        putEdits(noEdits);
+        setBanner(noBanner);
+        const saved = savedResultOf(current, pending, current.columns.length);
+        if (pending.deleted.length > 0 || pending.added.length > 0) updateSelection((held) => afterSave(held, { deleted: pending.deleted, read: current.rows.length, added: pending.added.map((row) => row.id) }));
+        onSaved({ resultId: id, result: saved, reread, whole: { columns, rows }, kept: keptNow.current });
+        return "saved";
+      } finally {
+        askedPreview.current = null;
+        stopSaving();
+        release();
+      }
+    },
+    [sessionOfShown, startSaving, stopSaving, hold, ensureTarget, say, queryClient, closeCursor, subject, refuseSave, toast, putEdits, updateSelection, onSaved],
+  );
+
+  /**
+   * RN-EDIT-005, 012 e 019: o Salvar. Devolve como terminou (`SaveOutcome`); `reread` vai a `onSaved` (os Registros leem de novo). Com a coluna inteira, conta e
+   * pergunta sempre (`saveWholeColumn`). Sem ela, na conexão com "Todos os comandos" (RN-PROT-001), pergunta antes, uma vez por Salvar, com quantas alterações
+   * vão; cancelado, nada é gravado. A resposta pode chegar depois de as linhas mudarem: o Salvar segue com o que está na tela então, e só se for o mesmo
+   * resultado. O grupo de células que estava sendo montado não entra (RN-EDIT-017). Enquanto grava, a faixa diz "Salvando…", com o tempo depois de 2 s e o
+   * "Cancelar" (RN-EDIT-021).
+   */
+  const saveNow = useCallback(async (reread = true): Promise<SaveOutcome> => {
+    if (latest.current.building) cancelBuild();
     const before = latest.current;
-    if (pendingCount(before.edits) === 0) return true;
-    if (before.saving || before.shown === null || before.resultId === null || sessionOfShown() === null || confirming.current) return false;
+    if (pendingCount(before.edits) === 0) return "saved";
+    if (before.saving || before.shown === null || before.resultId === null || sessionOfShown() === null || confirming.current) return "failed";
+    if (columnEditsOf(before.edits).length > 0) return saveWholeColumn(reread);
 
     // Sem a pergunta, a resposta vem na hora (`true`), e o Salvar segue na mesma chamada, como antes.
     const answer = sources.current.confirmSave?.(pendingCount(before.edits)) ?? true;
@@ -1261,23 +1710,27 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       const confirmed = await answer.finally(() => {
         confirming.current = false;
       });
-      if (!confirmed || latest.current.resultId !== before.resultId) return false;
+      if (!confirmed) return "cancelled";
+      if (latest.current.resultId !== before.resultId) return "failed";
     }
 
     const { shown: current, resultId: id, edits: pending, saving: writing } = latest.current;
     const sessionId = sessionOfShown();
-    if (pendingCount(pending) === 0) return true;
-    if (writing || current === null || id === null || sessionId === null) return false;
+    if (pendingCount(pending) === 0) return "saved";
+    if (writing || current === null || id === null || sessionId === null) return "failed";
 
-    setSaving(true);
-    latest.current = { ...latest.current, saving: true };
+    startSaving("saving");
     try {
       const known = latest.current.target ?? (await ensureTarget());
-      if (known === null || latest.current.resultId !== id) return false;
+      if (known === null || latest.current.resultId !== id) return "failed";
 
       const plan = changesOf(pending, current.rows, known);
+      if (bodyTooLarge(id, plan.changes)) {
+        say(multi.tooLarge, "warning");
+        return "failed";
+      }
       const result = await throughMutationCache(queryClient, () => saveEditsOrRefuse(sessionId, id, plan.changes)).catch(() => null);
-      if (result === null) return false;
+      if (result === null) return "failed";
 
       if (result.ok) {
         toast.success(copy.saved(result.data.applied));
@@ -1289,23 +1742,31 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         // ativa, quando a linha dela continua na grade.
         if (pending.deleted.length > 0 || pending.added.length > 0) updateSelection((held) => afterSave(held, { deleted: pending.deleted, read: current.rows.length, added: pending.added.map((row) => row.id) }));
         onSaved({ resultId: id, result: saved, reread });
-        return true;
+        return "saved";
       }
 
-      const failure = failureOf(result.error, plan, known.oneAtATime);
-      const done = failure.applied + (failure.written ? 1 : 0);
-      const left = done > 0 ? withoutApplied(pending, plan.origins, done) : pending;
-      if (left !== pending) putEdits(left);
-      setBanner({ resultId: id, failure, failedRow: failure.origin === null || failure.written ? null : gridRowOf(failure.origin, left, current.rows.length), notice: null });
-      return false;
+      return refuseSave(result.error, plan, known, current, pending, id);
     } finally {
-      setSaving(false);
-      latest.current = { ...latest.current, saving: false };
+      stopSaving();
     }
-  }, [sessionOfShown, queryClient, toast, putEdits, ensureTarget, onSaved, updateSelection]);
+  }, [cancelBuild, sessionOfShown, saveWholeColumn, startSaving, stopSaving, ensureTarget, say, queryClient, toast, putEdits, updateSelection, onSaved, refuseSave]);
 
-  /** RN-EDIT-008: "Ver SQL", pela API, sem executar nada. */
+  /** O Salvar como booleano (gravou tudo), para quem só quer saber disso (o registro da aba, o Ctrl+S). */
+  const save = useCallback(async (reread = true): Promise<boolean> => (await saveNow(reread)) === "saved", [saveNow]);
+
+  /**
+   * O "Salvar" da pessoa, o da faixa e o Ctrl+S: enquanto o grupo de células é montado, ele espera, com "Aplicando o valor às células escolhidas.", e o grupo
+   * continua (RN-EDIT-017). Só a troca de aba, o fechar e o executar de novo cancelam a montagem antes de perguntar (`guard`, RN-EDIT-007).
+   */
+  const saveByPerson = useCallback(() => {
+    if (latest.current.building) return say(multi.applyingBusy);
+    void save();
+  }, [save, say]);
+
+  /** RN-EDIT-008: "Ver SQL", pela API, sem executar nada. Com a pergunta da coluna inteira aberta, os comandos que ela já tem (RN-EDIT-019). */
   const viewSql = useCallback(async () => {
+    if (askedPreview.current !== null) return setPreview(askedPreview.current);
+    if (latest.current.building) return say(multi.applyingBusy);
     const { shown: current, resultId: id, edits: pending } = latest.current;
     const sessionId = sessionOfShown();
     if (current === null || id === null || sessionId === null) return;
@@ -1313,11 +1774,12 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (known === null || latest.current.resultId !== id) return;
 
     const plan = changesOf(pending, current.rows, known);
+    if (bodyTooLarge(id, plan.changes)) return say(multi.tooLarge, "warning");
     const result = await throughMutationCache(queryClient, () => previewEditsOrRefuse(sessionId, id, plan.changes)).catch(() => null);
     if (result === null) return;
     if (result.ok) setPreview(result.data);
-    else setBanner({ resultId: id, failure: failureOf(result.error, plan, known.oneAtATime), failedRow: null, notice: null });
-  }, [sessionOfShown, queryClient, ensureTarget]);
+    else setBanner({ resultId: id, failure: failureOf(result.error, plan, known.oneAtATime, current.columns.map((column) => column.name)), failedRow: null, notice: null });
+  }, [sessionOfShown, queryClient, ensureTarget, say]);
 
   /**
    * O que o "Filtrar" sabe da célula agora (RN-GRADE-013): o valor LIDO (a pendência ainda não está no banco), se chegou cortado, a linha nova, o
@@ -1464,7 +1926,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       // rótulos ficam no singular: as linhas da seleção são todas as do resultado.
       const wholeColumns = choseWholeColumns(chosen);
       const chooseRows: EditAccess = { editable: false, reason: selectionCopy.rows.chooseRows };
-      const undoable = undoWhere(pending, viewNow(), grid.read, (row, column) => isSelected(chosen, grid, { row, column }), (row) => rowSpan(chosen, grid, row) !== null) !== null;
+      const undo = undoPlan();
+      // RN-EDIT-017 e 018: "Editar célula" e "Definir como nulo" valem para as células escolhidas da coluna da célula ativa; com a coluna inteira, pelos
+      // motivos dela. A conferência de cada linha fica para a ação (`whenScopeEditable`).
+      const scope = scopeAt(cell);
+      const group = scope.kind === "one" ? undefined : { access: scope.kind === "all" ? wholeAccessOf(cell, known) : accessOf(cell, known, null), nullLabel: setNullLabel(scope, copy.menu.setNull) };
       const filterContext = filterContextOf(cell);
       const context = selectionContext();
       const busyReason: EditAccess = { editable: false, reason: gridFilterCopy.menu.unavailable(gridFilterCopy.reasons.busy) };
@@ -1479,7 +1945,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       const groups = cellMenu({
         value: valueAt(cell),
         access,
-        pending: undoable,
+        pending: undo.next !== null,
+        ...(undo.label === undefined && undo.reason === undefined ? {} : { undo: { ...(undo.label === undefined ? {} : { label: undo.label }), ...(undo.reason === undefined ? {} : { reason: undo.reason }) } }),
+        ...(group === undefined ? {} : { group }),
         deletedRow: false,
         nullable: known?.columns[cell.column]?.nullable ?? true,
         rows: wholeColumns ? 1 : rows.length,
@@ -1563,7 +2031,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
               openEditor(cell);
               break;
             case "setNull":
-              if (!several) void whenEditable(cell, () => applyValue(cell, null), from);
+              // RN-EDIT-017: o nulo vai a todas as células escolhidas da coluna, depois de conferi-las, como a edição; com uma, só a ela.
+              void whenScopeEditable(cell, (chosenScope) => (chosenScope.kind === "one" ? applyValue(cell, null) : void applyScope(chosenScope, null)), from);
               break;
             case "undo":
               undoSelection();
@@ -1591,7 +2060,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     } finally {
       release();
     }
-  }, [ensureTarget, accessOf, valueAt, whenEditable, applyValue, openEditor, undoSelection, newRow, duplicateRows, removeRows, copySelection, copyColumnNames, copyRowNumbers, toast, viewNow, filterContextOf, runFilterPlan, hold, moved, updateSelection, selectionContext, sortReasonNow]);
+  }, [ensureTarget, accessOf, valueAt, whenEditable, whenScopeEditable, applyValue, applyScope, openEditor, undoSelection, undoPlan, scopeAt, wholeAccessOf, newRow, duplicateRows, removeRows, copySelection, copyColumnNames, copyRowNumbers, toast, filterContextOf, runFilterPlan, hold, moved, updateSelection, selectionContext, sortReasonNow]);
 
   /** O botão direito no número da linha: fora da seleção, escolhe a linha inteira antes; dentro dela, deixa como está; e abre o menu sobre a célula ativa. */
   const openRowMenu = useCallback((row: number, point: { x: number; y: number }) => {
@@ -1610,12 +2079,22 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (cell !== null) void openMenu(cell, point, false, undefined, false);
   }, [updateSelection, openMenu]);
 
-  /** RN-EDIT-007: com pendências, a ação (filtrar, ordenar, atualizar, executar de novo) espera a resposta da pergunta. */
-  const guard = useCallback((proceed: () => void) => {
+  /**
+   * RN-EDIT-007: com pendências, a ação (filtrar, ordenar, atualizar, executar de novo) espera a resposta da pergunta. O grupo de células que estava sendo
+   * montado é cancelado antes (RN-EDIT-017): a pergunta é pelas alterações que já estão nas pendências. `rereads`: a ação não executa nada (a troca de aba
+   * de resultado do script), e o "Salvar" do aviso que grava a coluna inteira lê o resultado de novo, como o da faixa (RN-EDIT-022); nas outras, quem lê é a
+   * ação que segue.
+   */
+  const guard = useCallback((proceed: () => void, rereads = false) => {
+    if (latest.current.building) cancelBuild();
     const pending = pendingCount(latest.current.edits);
     if (pending === 0) proceed();
-    else setQuestion({ count: pending, proceed });
-  }, []);
+    else setQuestion({ count: pending, proceed, rereads });
+  }, [cancelBuild]);
+
+  // RN-EDIT-017: o grupo em montagem é do resultado em que começou: outra execução, a troca de aba de resultado do script e a vista que sai de cena (fechar a
+  // aba, ir à Estrutura) o cancelam.
+  useEffect(() => cancelBuild, [scope, cancelBuild]);
 
   // RN-GRADE-014: a atualização automática fica em pausa enquanto a grade é editada (alteração não salva, célula aberta) ou tem um menu ou diálogo aberto
   // sobre ela, e enquanto uma ação pergunta o alvo para abrir um deles (`hold`): a execução trocaria as linhas debaixo do que a pessoa está fazendo. Ao sair
@@ -1623,7 +2102,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   // trocado) tira a pausa dela do executor. Também com mais de uma célula escolhida (RN-GRADE-001): a execução esqueceria a seleção antes do botão direito ou
   // do Ctrl+C; escolher uma célula só, ou o Esc, a liberam.
   const several = hasSeveralCells(selection, layout);
-  const gridInUse = count > 0 || editor !== null || menu !== null || valueFilter !== null || customFilter !== null || several;
+  const gridInUse = count > 0 || editor !== null || menu !== null || valueFilter !== null || customFilter !== null || several || building !== null || saving;
   useEffect(() => {
     runner.autoRefresh.pause("editing", gridInUse || holds.current > 0);
   }, [runner, gridInUse, released]);
@@ -1642,8 +2121,18 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   }, [tabId, count]);
   useEffect(() => () => unsavedEdits.set(tabId, unsavedEdits.countOf(tabId) === 0 ? null : { count: unsavedEdits.countOf(tabId), save: null }), [tabId]);
 
+  // RN-EDIT-013, 017 e 018: o "Editar célula" diz para quantas a edição vale; com a coluna inteira, vale pelos motivos dela, sem consulta.
+  const editScope = useMemo(() => editScopeOf(selection, layout), [selection, layout]);
+  const barEdit = useMemo(() => {
+    if (editScope.kind === "one" || shown === null || active === null) return undefined;
+    const hint = scopeHint(editScope, shown.columns[editScope.column]?.name ?? "", "bar");
+    if (editScope.kind !== "all") return { scope: hint };
+    const access = cellAccess({ readOnly: readOnlyReason, target, busy: saving || busy, column: active.column, row: { kind: "new" } });
+    const blocker = access.editable ? wholeColumnBlocker({ target, column: active.column, columns: shown.columns, read: shown.read, sql: shown.target.sql, filter: shown.target.filter, engine }) : null;
+    return { scope: hint, access: blocker === null ? access : { editable: false as const, reason: multi.unavailable(blocker) } };
+  }, [editScope, shown, active, target, readOnlyReason, busy, saving, engine]);
   // RN-EDIT-013 e 014: os botões da barra, pelas linhas da seleção; contar e conferir as linhas de uma seleção grande custa uma volta nelas, uma vez por mudança.
-  const buttons = useMemo(() => barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, layout }), [shown, edits, readOnlyReason, target, busy, saving, selection, layout]);
+  const buttons = useMemo(() => barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, layout, edit: barEdit, building: building !== null }), [shown, edits, readOnlyReason, target, busy, saving, selection, layout, barEdit, building]);
   // RN-GRADE-001: a contagem da barra do resultado, com mais de uma célula escolhida; enquanto a seleção muda (o arraste, a tecla presa), fica a de antes.
   const size = selectionSize(selection, layout);
   const statusNow = size.columns > 0 && shown !== null ? wholeColumnsStatus(shown, selection, layout) : size.cells > 1 ? selectionCopy.count(size.rows, size.cells, size.whole) : null;
@@ -1667,11 +2156,13 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           editor,
           columnHints,
           columnReadOnly,
+          columnPending,
           onActivate: setActive,
           onEdit: openEditor,
           onDraft: (text) => {
             const open = editorRef.current;
-            if (open !== null) setEditor({ row: open.row, column: open.column, draft: text });
+            // RN-EDIT-017: qualquer mudança no texto (uma tecla, colar, apagar) é mexer nele; o escopo e a dica ficam.
+            if (open !== null) setEditor({ row: open.row, column: open.column, draft: text, touched: true, hint: open.hint ?? null, ...(open.scope === undefined ? {} : { scope: open.scope }) });
           },
           onCommit: commit,
           onCancel: cancel,
@@ -1682,7 +2173,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCopy: () => void copySelection(false),
           ...(copyAs === undefined ? {} : { onCopyAdvanced: copyAdvanced }),
           onDeleteRows: deleteKey,
-          onSave: () => void save(),
+          onSave: saveByPerson,
           onNewRow: () => void newRow(),
           onDuplicateRow: () => rowAction("duplicateRow"),
           onDeleteRow: () => rowAction("deleteRow"),
@@ -1720,7 +2211,14 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     banner: {
       pending: count,
       oneAtATime: target?.oneAtATime === true,
-      saving,
+      saving: phase === "saving",
+      counting: phase === "counting",
+      asking: phase === "asking",
+      savingSince,
+      onCancelSave: cancelSave,
+      wholeLine: shown === null ? null : allRowsLine(edits, shown.columns, engine),
+      building: building === null ? null : multi.applying(building.count),
+      onCancelBuild: cancelBuild,
       readOnly: resultReadOnly(readOnlyReason, target),
       notice: banner.notice,
       noticeTone: banner.tone ?? ("lock" as const),
@@ -1731,7 +2229,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       onCancelFetch: cancelFetch,
       onViewSql: () => void viewSql(),
       onDiscard: discard,
-      onSave: () => void save(),
+      onSave: saveByPerson,
     },
     menu,
     closeMenu: () => setMenu(null),
@@ -1776,10 +2274,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
             count: question.count,
             saving,
             onSave: () => {
-              void save(false).then((saved) => {
-                if (!saved) return;
+              // RN-EDIT-019: com a coluna inteira, o Salvar daqui também conta e pergunta; cancelado, a ação que este aviso interrompia também fica.
+              void saveNow(question.rereads).then((outcome) => {
+                if (outcome === "failed") return;
                 setQuestion(null);
-                question.proceed();
+                if (outcome === "saved") question.proceed();
               });
             },
             onDiscard: () => {

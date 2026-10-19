@@ -27,7 +27,7 @@ import type { TableRef } from "../../_lib/table-diagram";
 import { recordsSql, sortOf, sqlLiteral, type RecordsSort } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
 import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, orderRecords, runRecords, settleHandoff, takeHandoff } from "../../_lib/table-view";
-import { saveQuestion } from "../../_lib/command-confirmation";
+import { saveQuestion, type WholeColumnQuestion } from "../../_lib/command-confirmation";
 import { useAutoRefresh } from "../../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../../_lib/use-command-confirmation";
 import { isAutoRun, isPersonBusy, useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
@@ -133,9 +133,12 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // RN-EDIT-001 a 012: a edição das células. As ações que executam de novo (atualizar, filtrar, ordenar, limpar) perguntam antes com
   // alterações não salvas (`guard`, RN-EDIT-007); depois de um Salvar que gravou tudo, os registros são lidos de novo, sem perguntar.
   const reload = useCallback(() => run(filter), [run, filter]);
-  const reloadAfterSave = useCallback(({ reread }: SavedEdits) => {
+  // RN-EDIT-021: o Salvar do Informix sem log que parou no meio com a coluna inteira gravada (ou talvez gravada) deixa na grade o que foi gravado, e nada é
+  // lido de novo: o cursor fechou, e "Atualizar" lê.
+  const reloadAfterSave = useCallback(({ reread, partial, resultId, result }: SavedEdits) => {
+    if (partial === true) return runner.keepSaved(resultId, result);
     if (reread) reload();
-  }, [reload]);
+  }, [reload, runner]);
 
   // RN-GRADE-013: o "Filtrar" do menu da célula junta a condição ao texto do campo (lido na hora da escolha) e o envia como o "Aplicar", com a
   // pergunta das alterações não salvas antes (RN-EDIT-007); "Remover todos os filtros e ordenações" é o "Limpar". As funções leem o que muda por uma ref.
@@ -171,6 +174,9 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const confirmation = useCommandConfirmation(connectionId, database);
   const { confirmed } = confirmation;
   const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
+  // RN-EDIT-019: o "Salvar" com a coluna inteira pergunta sempre, com o ambiente e a conexão da aba, e cobre a pergunta da proteção.
+  const { always } = confirmation;
+  const confirmWholeColumn = useCallback((question: WholeColumnQuestion) => always(question), [always]);
 
   // A seta do cabeçalho é a da ordem EM VIGOR, quando ela é de uma coluna só da grade que está na tela (as linhas ficam lá, esmaecidas, enquanto outro comando roda).
   const onScreen = state.status === "running" ? state.previous : state;
@@ -202,7 +208,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
     openQueryTab: (id, sql, db) => onOpenQuery?.(id, sql, db),
   });
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, exportData: menuExport, engine, sort: sortSource, follow: followSource, copyAs: copyAs.source, generateSql: generateSql.source });
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, confirmWholeColumn, exportData: menuExport, engine, sort: sortSource, follow: followSource, copyAs: copyAs.source, generateSql: generateSql.source });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {

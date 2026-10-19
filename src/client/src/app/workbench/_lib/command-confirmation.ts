@@ -25,10 +25,34 @@ export type CommandQuestion =
    * A importação de dados e a cópia para outro banco (RN-IMPORT-013 e 025), pela conexão de destino: o título ("Esvaziar a tabela e importar?"), o que ela
    * faz, os comandos (o `DELETE` do esvaziamento e o `INSERT` com as colunas mapeadas) e o botão ("Importar mesmo assim", "Copiar mesmo assim").
    */
-  | { kind: "load"; title: string; does: string; commands: string[]; confirm: string };
+  | { kind: "load"; title: string; does: string; commands: string[]; confirm: string }
+  | WholeColumnQuestion;
 
-/** De quem é o aviso: a conexão, o banco da aba, o ambiente (próprio ou herdado, RN-PASTA-005) e a proteção que o pede, com a pasta de onde ela vem. */
-export type ConfirmationContext = { connection: string; database: string; environment: ShownEnvironment | null; level: Confirmation; from: Folder | null };
+/**
+ * RN-EDIT-019: a pergunta do "Salvar" com a coluna inteira, que vem SEMPRE, também sem a proteção "Confirmar antes de executar" (ela altera linhas que a pessoa
+ * não viu), e é a única daquele "Salvar". Os textos já vêm prontos (`wholeColumnQuestion`, em `whole-column-question.ts`), de cima para baixo: o título, a
+ * primeira frase com uma linha por coluna, as linhas de atenção, as outras pendências, o que vem depois, o aviso do banco sem log, o `UPDATE` como o
+ * `queries/edits/preview` o devolve (com a nota dele) e o botão. `rows` são as linhas contadas.
+ */
+export type WholeColumnQuestion = {
+  kind: "wholeColumn";
+  title: string;
+  lead: string;
+  assignments: readonly string[];
+  warnings: readonly string[];
+  others: string | null;
+  after: string;
+  oneAtATime: string | null;
+  command: { sql: string; note: string | null } | null;
+  confirm: string;
+  rows: number;
+};
+
+/**
+ * De quem é o aviso: a conexão, o banco da aba, o ambiente (próprio ou herdado, RN-PASTA-005) e a proteção que o pede, com a pasta de onde ela vem. Na
+ * pergunta da coluna inteira (RN-EDIT-019), que vem também sem a proteção, `level` é nulo quando a conexão não tem nenhuma.
+ */
+export type ConfirmationContext = { connection: string; database: string; environment: ShownEnvironment | null; level: Confirmation | null; from: Folder | null };
 
 /** A confirmação que vale (nula: "Não") e se a conexão é somente leitura, de `shownProtections`. */
 type Protections = Pick<ShownProtections, "confirm" | "readOnly">;

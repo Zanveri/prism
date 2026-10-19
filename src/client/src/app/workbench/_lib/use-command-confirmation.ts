@@ -21,6 +21,11 @@ export type CommandConfirmation = {
   confirm: (make: MakeQuestion, proceed: () => void, cancelled?: () => void) => void;
   /** O mesmo, para quem espera a resposta (o Salvar da grade): verdadeiro na hora quando não pergunta; senão, a resposta da pessoa. */
   confirmed: (make: MakeQuestion) => true | Promise<boolean>;
+  /**
+   * RN-EDIT-019: a pergunta que vem sempre, com ou sem a proteção da conexão (o "Salvar" com a coluna inteira): o aviso abre com o ambiente, a conexão e o
+   * banco da aba, e com a proteção, quando há (a frase dela vai junto). Resolve com a resposta da pessoa.
+   */
+  always: (question: CommandQuestion) => Promise<boolean>;
   /** O aviso aberto, ou nulo. */
   open: OpenConfirmation | null;
 };
@@ -89,6 +94,19 @@ export function useCommandConfirmation(connectionId: string | null, database: st
 
   const confirmed = useCallback((make: MakeQuestion) => answerOf(confirm, make), [confirm]);
 
+  const always = useCallback(
+    (question: CommandQuestion) =>
+      new Promise<boolean>((resolve) => {
+        const { current: now, database: shownDatabase } = latest.current;
+        const level = now?.protections.confirm ?? null;
+        const previous = waiting.current;
+        waiting.current = { proceed: () => resolve(true), cancelled: () => resolve(false) };
+        previous?.cancelled?.();
+        setAsking({ question, context: { connection: now?.connection.name ?? "", database: shownDatabase ?? now?.connection.database ?? "", environment: now?.environment ?? null, level: level?.level ?? null, from: level?.from ?? null } });
+      }),
+    [],
+  );
+
   // A vista que sai de cena não deixa ninguém esperando a resposta.
   useEffect(
     () => () => {
@@ -99,5 +117,5 @@ export function useCommandConfirmation(connectionId: string | null, database: st
     [],
   );
 
-  return { confirm, confirmed, open: asking === null ? null : { question: asking.question, context: asking.context, onConfirm: () => settle(true), onCancel: () => settle(false) } };
+  return { confirm, confirmed, always, open: asking === null ? null : { question: asking.question, context: asking.context, onConfirm: () => settle(true), onCancel: () => settle(false) } };
 }

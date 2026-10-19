@@ -231,7 +231,7 @@ type ResultPanelProps = {
    * no lugar do rodapé do cursor. `busy`: há comando da pessoa em andamento na aba (o `state` desta área é a cópia guardada, que não sabe disso), e o botão
    * não executa.
    */
-  kept?: { busy: boolean; onRunAlone: () => void };
+  kept?: { busy: boolean; onRunAlone: () => void; note?: string | null };
   /**
    * RN-EXPORT-001: "Exportar…". Nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, na barra da área (que fica à vista com a
    * área recolhida), depois do zoom da grade e antes de recolher e maximizar.
@@ -414,7 +414,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
 
             {kept !== undefined ? (
               // O botão sai da página com o foco quando o comando executado troca os resultados do script: o foco vai à grade nova (RN-SQL-006).
-              <KeptResultNote busy={kept.busy} onRunAlone={kept.onRunAlone} onFocusLost={rescueFocus} />
+              <KeptResultNote busy={kept.busy} onRunAlone={kept.onRunAlone} onFocusLost={rescueFocus} note={kept.note ?? null} />
             ) : running || records ? null : rows.cursorClosed ? (
               // RN-SQL-007: o cursor fechou; o que resta é executar de novo.
               <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-raised px-3 py-1.5 text-xs">

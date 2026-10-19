@@ -3,15 +3,16 @@ import { useId } from "react";
 import { Button, Dialog, environmentTextColor } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
-import type { AskedCommand, CommandQuestion, ConfirmationContext } from "../_lib/command-confirmation";
+import type { AskedCommand, CommandQuestion, ConfirmationContext, WholeColumnQuestion } from "../_lib/command-confirmation";
 import { commandConfirmationCopy as copy } from "../_lib/command-confirmation.copy";
+import { multiEditCopy } from "../_lib/multi-edit.copy";
 
 type ConfirmCommandDialogProps = {
   question: CommandQuestion;
   context: ConfirmationContext;
   onConfirm: () => void;
   onCancel: () => void;
-  /** Só no "Salvar" das edições: o "Ver SQL" (RN-EDIT-008) no próprio aviso, que abre os comandos por cima dele. */
+  /** Só no "Salvar" das edições (também o da coluna inteira): o "Ver SQL" (RN-EDIT-008) no próprio aviso, que abre os comandos por cima dele. */
   onViewSql?: () => void;
 };
 
@@ -27,6 +28,7 @@ function titleOf(question: CommandQuestion): string {
     case "autoRefresh":
       return copy.titles.autoRefresh;
     case "load":
+    case "wholeColumn":
       return question.title;
   }
 }
@@ -49,6 +51,8 @@ export function describedIds(question: CommandQuestion, base: string): string {
       return summary;
     case "load":
       return `${does} ${sql}`;
+    case "wholeColumn":
+      return `${summary} ${does}`;
   }
 }
 
@@ -74,6 +78,42 @@ function CommandBlock({ command, ids }: { command: AskedCommand; ids?: string })
 }
 
 /**
+ * RN-EDIT-019: o corpo da pergunta da coluna inteira: a primeira frase, uma linha por coluna ("preco = 10.00"), as linhas de atenção (no tom de atenção), as
+ * outras pendências, o que vem depois, o aviso do banco sem log (no tom de erro) e o `UPDATE`, em código, com a nota dele. O leitor de tela ouve a primeira
+ * frase com as colunas e as linhas de atenção (`describedIds`).
+ */
+function WholeColumnBody({ question, ids }: { question: WholeColumnQuestion; ids: string }) {
+  return (
+    <>
+      <div id={`${ids}-resumo`} className="flex flex-col gap-1">
+        <p className="text-body">{question.lead}</p>
+        <ul className="flex flex-col gap-0.5 pl-1 font-mono text-sm text-ink">
+          {question.assignments.map((assignment) => (
+            <li key={assignment}>{assignment}</li>
+          ))}
+        </ul>
+      </div>
+      <ul id={`${ids}-faz`} className="flex flex-col gap-1">
+        {question.warnings.map((warning) => (
+          <li key={warning} className="text-sm text-accent">
+            {warning}
+          </li>
+        ))}
+      </ul>
+      {question.others === null ? null : <p className="text-body">{question.others}</p>}
+      <p className="text-body">{question.after}</p>
+      {question.oneAtATime === null ? null : <p className="text-sm font-medium text-danger">{question.oneAtATime}</p>}
+      {question.command === null ? null : (
+        <div className="flex flex-col gap-1">
+          <code className="block max-h-40 overflow-auto rounded-md border border-border bg-background px-3 py-2.5 font-mono text-sm leading-5 whitespace-pre text-ink">{question.command.sql}</code>
+          {question.command.note === null ? null : <p className="text-xs text-muted">{question.command.note}</p>}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * O aviso antes de executar (RN-PROT-001, o `ConfirmarComando` do canvas), que ocupa a janela antes de o comando sair da tela. No topo, a faixa do
  * ambiente da conexão (o próprio ou o herdado da pasta, RN-PASTA-005), na cor dele, com a conexão e o banco da aba; sem ambiente, a faixa neutra. Depois o
  * título, o que o comando faz quando a tela sabe dizer ("Este DELETE não tem WHERE: …"), o comando em código (no script, a lista dos que pedem confirmação,
@@ -95,7 +135,18 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
   );
 
   const confirmLabel =
-    question.kind === "script" ? copy.confirm.script : question.kind === "save" ? copy.confirm.save : question.kind === "autoRefresh" ? copy.confirm.autoRefresh : question.kind === "load" ? question.confirm : copy.confirm.command;
+    question.kind === "script"
+      ? copy.confirm.script
+      : question.kind === "save"
+        ? copy.confirm.save
+        : question.kind === "autoRefresh"
+          ? copy.confirm.autoRefresh
+          : question.kind === "load" || question.kind === "wholeColumn"
+            ? question.confirm
+            : copy.confirm.command;
+  // Por que o aviso aparece: a proteção da conexão; na coluna inteira, que pergunta sempre (RN-EDIT-019), a frase dela e, com a proteção, também a desta.
+  const protection = context.level === null ? null : copy.why(context.connection, context.level, context.from?.name ?? null);
+  const why = question.kind === "wholeColumn" ? [multiEditCopy.question.why, protection].filter((part) => part !== null).join(" ") : protection;
 
   return (
     <Dialog
@@ -108,7 +159,7 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
       onClose={onCancel}
       footer={
         <>
-          {question.kind === "save" && onViewSql !== undefined ? (
+          {(question.kind === "save" || question.kind === "wholeColumn") && onViewSql !== undefined ? (
             <Button type="button" variant="ghost" onClick={onViewSql} className="mr-auto">
               {copy.save.viewSql}
             </Button>
@@ -158,7 +209,8 @@ export function ConfirmCommandDialog({ question, context, onConfirm, onCancel, o
             </ol>
           </>
         ) : null}
-        <p className="text-xs text-muted">{copy.why(context.connection, context.level, context.from?.name ?? null)}</p>
+        {question.kind === "wholeColumn" ? <WholeColumnBody question={question} ids={ids} /> : null}
+        {why === null ? null : <p className="text-xs text-muted">{why}</p>}
       </div>
     </Dialog>
   );
