@@ -12,8 +12,11 @@ export const charWidth = 7.8;
 const typeCharWidth = 6.6;
 /** O espaço entre o nome e o tipo, no cabeçalho (`gap-1.5`). */
 const nameTypeGap = 6;
-/** A seta da ordem e o espaço antes dela (`size-3` e `gap-1.5`). */
-const sortArrowWidth = 18;
+/**
+ * RN-GRADE-021: o botão de ordenar do cabeçalho, sempre reservado: 24 px, e os 4 px que ele deixa para a divisa, menos o respiro da direita (12 px), que o nome
+ * não tem quando o botão está ao lado dele.
+ */
+const sortArrowWidth = 16;
 
 /** A largura de saída: entre estas duas, pelo cabeçalho e pela primeira página. */
 const minBaseWidth = 72;
@@ -28,7 +31,7 @@ export const fitCap = 600;
 
 /**
  * A largura do cabeçalho de uma coluna: o nome, o tipo (quando o cabeçalho o mostra, RN-CONFIG-006), a marca da coluna que não se edita (RN-EDIT-002,
- * depois do tipo, com ` · `) e, quando o cabeçalho ordena, a seta.
+ * depois do tipo, com ` · `) e, quando o cabeçalho ordena, o espaço do botão de ordenar.
  */
 function headerWidth(column: QueryColumn, { sortable, showType, mark = null }: { sortable: boolean; showType: boolean; mark?: string | null }): number {
   const note = showType ? (mark === null ? column.type : `${column.type} · ${mark}`) : (mark ?? "");

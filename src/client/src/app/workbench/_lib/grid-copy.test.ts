@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildCopyText, clipboardLimit, columnNamesText, copiedNotice, copyCeiling, copyField, rowNumbersOf, utf8Length, wellFormed, type CopyPlan } from "./grid-copy";
+import { buildCopyText, cellsFloor, clipboardLimit, columnNamesText, copiedNotice, copyCeiling, copyField, loadedRowsMeter, rowNumbersOf, utf8Length, wellFormed, type CopyPlan } from "./grid-copy";
 
 const pg = 1 as const;
 const db2 = 2 as const;
@@ -99,5 +99,33 @@ describe("os nomes das colunas e os números das linhas (RN-GRADE-015)", () => {
   it("os números como a grade os mostra, de 1 em diante, em ordem; as linhas novas não têm número", () => {
     expect(rowNumbersOf([0, 2, 4, 5, 6], 5)).toEqual([1, 3, 5]);
     expect(rowNumbersOf([5, 6], 5)).toEqual([]);
+  });
+});
+
+describe("a conta do limite enquanto as linhas que faltam chegam (RN-GRADE-023)", () => {
+  it("o piso é a soma dos valores em UTF-8 e um separador por célula; cada página soma as colunas copiadas, e passar do limite para", () => {
+    expect(cellsFloor([["ab", null], ["ç", "1"]])).toBe(3 + 1 + 3 + 2);
+
+    const meter = loadedRowsMeter([1], 4, 10);
+    const rows = [["x", "aa"], ["y", "bbb"], ["z", "cccc"]];
+    expect(meter({ rows: rows.slice(0, 1) }, 0)).toBe(true);
+    expect(meter({ rows: rows.slice(0, 2) }, 1)).toBe(true);
+    expect(meter({ rows }, 2)).toBe(false);
+  });
+
+  it("as linhas que chegam valem o que a grade mostra: com a coluna inteira pendente, o valor dela, e não o lido (RN-EDIT-018)", () => {
+    const big = "x".repeat(40);
+    const rows = [["1", big], ["2", big], ["3", big]];
+    // Lida, a página passa do limite; com "descricao = 'y'" pendente em todas as linhas, cada célula vale um byte e o separador.
+    expect(loadedRowsMeter([1], 0, 50)({ rows }, 1)).toBe(false);
+    const meter = loadedRowsMeter([1], 0, 50, new Map([[1, "y"]]));
+    expect(meter({ rows }, 1)).toBe(true);
+    // O nulo pendente vale só o separador; a outra coluna copiada continua com o lido.
+    expect(loadedRowsMeter([0, 1], 0, 6, new Map([[1, null]]))({ rows }, 1)).toBe(true);
+  });
+
+  it("o padrão é o limite da área de transferência", () => {
+    expect(loadedRowsMeter([0], clipboardLimit)({ rows: [] }, 0)).toBe(true);
+    expect(loadedRowsMeter([0], clipboardLimit)({ rows: [["", "a"], ["x"]] }, 1)).toBe(false);
   });
 });

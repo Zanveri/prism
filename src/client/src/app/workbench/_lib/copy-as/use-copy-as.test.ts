@@ -19,7 +19,7 @@ vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOr
 import { defaultOptions } from "../data-export/export-options";
 import { writeDocument } from "../grid-export/documents";
 import type { KeepGoing } from "../full-values";
-import { emptySelection, select, selectedColumns, selectedRows, selectRow, sliceOf, type GridLayout, type GridSelection, type SelectionSlice, type SliceSource } from "../grid-selection";
+import { emptySelection, select, selectColumn, selectedColumns, selectedRows, selectRow, sliceOf, type GridLayout, type GridSelection, type SelectionSlice, type SliceSource } from "../grid-selection";
 import { gridSelectionCopy } from "../grid-selection.copy";
 import { noEdits } from "../record-edits";
 import { recordsCopy } from "../records.copy";
@@ -83,6 +83,10 @@ function fakeContext(change: Partial<GridSelectionContext> & { selection?: GridS
     layout,
     rows: selectedRows(selection, layout),
     columns: selectedColumns(selection, layout),
+    wholeColumns: null,
+    rowsToLoad: false,
+    total: null,
+    loadRest: vi.fn(),
     slice: (scope = "cells") => sliceOf(selection, layout, source, scope),
     complete: vi.fn(async (slice: SelectionSlice) => ({ slice: { ...slice, rows: slice.rows.map((row) => row.map((value) => (value === "cortado…" ? "cortado e inteiro" : value))), truncated: [] }, missing: 0, stopped: false })),
     fullValues: vi.fn(),
@@ -311,7 +315,7 @@ describe("o diálogo \"Copiar avançado…\" e o \"Configurar comandos 'Copiar c
     expect(context.held).toEqual({ taken: 1, released: 0 });
 
     const signal = new AbortController().signal;
-    const outcome = await dialog.onCopy({ format: "json", options: dialog.initial.options, source: dialog.sources.loaded }, { signal, onPhase: vi.fn() });
+    const outcome = await dialog.onCopy({ format: "json", options: dialog.initial.options, source: dialog.sources.loaded }, { signal, onPhase: vi.fn(), onProgress: vi.fn() });
     expect(outcome.kind).toBe("copied");
     expect(context.complete).toHaveBeenCalledWith(expect.objectContaining({ positions: [0, 1] }), expect.any(Function), signal);
     expect(rt.toast.success).toHaveBeenCalledWith(copyAsCopy.notice.copied(2, "json"));
@@ -329,7 +333,7 @@ describe("o diálogo \"Copiar avançado…\" e o \"Configurar comandos 'Copiar c
     expect(context.sqlTarget).not.toHaveBeenCalled();
     expect(dialog.sources.cells.table).toBeNull();
 
-    const outcome = await dialog.onCopy({ format: "csv", options: dialog.initial.options, source: dialog.sources.cells }, { signal: new AbortController().signal, onPhase: vi.fn() });
+    const outcome = await dialog.onCopy({ format: "csv", options: dialog.initial.options, source: dialog.sources.cells }, { signal: new AbortController().signal, onPhase: vi.fn(), onProgress: vi.fn() });
     expect(outcome).toEqual({ kind: "failed", message: recordsCopy.edit.menu.notCopied });
     expect(rt.toast.warning).not.toHaveBeenCalled();
   });
@@ -347,5 +351,79 @@ describe("o diálogo \"Copiar avançado…\" e o \"Configurar comandos 'Copiar c
     expect(rt.toast.success).toHaveBeenCalledWith(copyAsCopy.configure.saved);
     expect(render().configure).toBeNull();
     expect(context.held.released).toBe(1);
+  });
+});
+
+describe("com colunas inteiras, as linhas que faltam vêm antes (RN-GRADE-023)", () => {
+  /** O contexto das colunas inteiras com linhas a ler, e o que o carregar devolve: o contexto com as duas linhas, todas as do resultado. */
+  function wholeContext(outcome?: Awaited<ReturnType<GridSelectionContext["loadRest"]>>) {
+    const whole = selectColumn(emptySelection, 1, { ...layout, read: 1 });
+    const all = fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: false, total: 2 });
+    const loadRest = vi.fn<GridSelectionContext["loadRest"]>(async () => outcome ?? { kind: "ready", context: all });
+    const first = fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: true, total: null, loadRest, slice: (scope = "cells") => sliceOf(whole, { ...layout, read: 1 }, { columns, valueAt: (row, column) => values[row][column], truncatedAt: () => false, generatedAt: () => false }, scope) });
+    return { first, loadRest };
+  }
+
+  it("o \"Copiar como\" carrega antes, pela faixa, e copia todas as linhas da coluna", async () => {
+    const { first, loadRest } = wholeContext();
+    render().source.choose("copyAs:json", first);
+    await settle();
+
+    expect(loadRest).toHaveBeenCalledWith(expect.objectContaining({ keepGoing: expect.any(Function) }));
+    expect(loadRest.mock.calls[0][0]?.onProgress).toBeUndefined();
+    expect(writeText).toHaveBeenCalledWith(expected("json", [["Ana"], ["cortado e inteiro"]], ["nome"]));
+  });
+
+  it("o limite durante o carregar é a recusa de sempre; a recusa das linhas fica na faixa, sem outro aviso", async () => {
+    const stopped = wholeContext({ kind: "stopped" });
+    render().source.choose("copyAs:csv", stopped.first);
+    await settle();
+    expect(rt.toast.error).toHaveBeenCalledWith(copyAsCopy.notice.tooLarge);
+    expect(writeText).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    const refused = wholeContext({ kind: "refused", reason: "o cursor fechou", detail: null });
+    render().source.choose("copyAs:csv", refused.first);
+    await settle();
+    expect(rt.toast.error).not.toHaveBeenCalled();
+    expect(rt.toast.warning).not.toHaveBeenCalled();
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it("o diálogo diz \"todas as linhas\" e, ao copiar, carrega com o andamento nele; \"Todas as linhas carregadas\" não carrega nada", async () => {
+    const { first, loadRest } = wholeContext();
+    render().source.choose("copyAdvanced", first);
+    await settle();
+    const dialog = render().advanced!;
+    expect(dialog.whole).toEqual({ total: null, rowsToLoad: true });
+
+    const onProgress = vi.fn();
+    const onPhase = vi.fn();
+    const outcome = await dialog.onCopy({ format: "json", options: dialog.initial.options, source: dialog.sources.cells }, { signal: new AbortController().signal, onPhase, onProgress });
+    expect(onPhase).toHaveBeenCalledWith("loading");
+    expect(loadRest).toHaveBeenCalledWith(expect.objectContaining({ onProgress }));
+    expect(outcome).toMatchObject({ kind: "copied", text: expected("json", [["Ana"], ["cortado e inteiro"]], ["nome"]) });
+
+    loadRest.mockClear();
+    await dialog.onCopy({ format: "json", options: dialog.initial.options, source: dialog.sources.loaded }, { signal: new AbortController().signal, onPhase, onProgress });
+    expect(loadRest).not.toHaveBeenCalled();
+  });
+
+  it("com o total sabido, o diálogo diz o das linhas do resultado mais as novas ainda não salvas, como a barra (RN-GRADE-022)", async () => {
+    const whole = selectColumn(emptySelection, 1, { ...layout, added: [7, 8] });
+    render().source.choose("copyAdvanced", fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: false, total: 1234, layout: { ...layout, added: [7, 8] } }));
+    await settle();
+
+    expect(render().advanced!.whole).toEqual({ total: 1236, rowsToLoad: false });
+  });
+
+  it("no diálogo, a recusa das linhas aparece no alto dele, com a mensagem do banco", async () => {
+    const { first } = wholeContext({ kind: "refused", reason: "Não foi possível ler as linhas que faltam.", detail: "ERROR: x" });
+    render().source.choose("copyAdvanced", first);
+    await settle();
+    const dialog = render().advanced!;
+
+    const outcome = await dialog.onCopy({ format: "csv", options: dialog.initial.options, source: dialog.sources.cells }, { signal: new AbortController().signal, onPhase: vi.fn(), onProgress: vi.fn() });
+    expect(outcome).toEqual({ kind: "failed", message: "Não foi possível ler as linhas que faltam. ERROR: x" });
   });
 });

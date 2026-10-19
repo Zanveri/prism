@@ -72,4 +72,19 @@ public sealed class Db2EditTests : DatabaseEditContractTests
     /// <summary>No Db2 o qualificador sem esquema é lido no esquema atual da sessão, e não no da tabela do `FROM`: vai com ele.</summary>
     protected override string JoinQualifier(string table)
         => $"{Schema}.{Table(table)}";
+    /// <summary>A sonda S-COL-1 no Db2: o `LIMIT … OFFSET` do fim do comando dentro da tabela derivada do `UPDATE` (a sonda de antes só o provou na contagem).</summary>
+    [Test]
+    public async Task WholeColumn_WithLimitAndOffset_IsSavedByTheKey()
+    {
+        var session = await OpenSessionAsync();
+        var page = await EditableAsync(session, $"SELECT * FROM {Quoted("pedido")} ORDER BY 1 LIMIT 2 OFFSET 1");
+        EditChange change = new(EEditKind.UpdateAll, 0, [], [new EditValue(Column(page, "quantidade"), "7")]);
+
+        var counted = Value(await Service.CountWholeColumnAsync(session, page.ResultID!.Value, [change], CancellationToken.None));
+        var saved = await Service.ApplyEditsAsync(session, page.ResultID.Value, [change with { Rows = counted }], CancellationToken.None);
+
+        Assert.That(counted, Is.EqualTo(2));
+        Assert.That(saved.IsSuccess, Is.True, saved.IsFailure ? saved.Error.Message : null);
+        Assert.That(await RowsAsync("pedido", "quantidade"), Is.EqualTo(new[] { ("1", (string?)"1"), ("2", "7"), ("3", "7") }));
+    }
 }

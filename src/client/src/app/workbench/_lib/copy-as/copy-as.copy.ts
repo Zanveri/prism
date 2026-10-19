@@ -32,6 +32,10 @@ export const copyAsCopy = {
     scopes: { cells: "As células escolhidas", rows: "As linhas inteiras da seleção", loaded: "Todas as linhas carregadas" },
     loadedHint: "As linhas que ainda não foram carregadas não entram. Para todas, use Exportar dados…",
     size: (rows: number, columns: number) => `${formatCount(rows)} ${plural(rows, "linha", "linhas")} e ${formatCount(columns)} ${plural(columns, "coluna", "colunas")}`,
+    // RN-GRADE-022: com colunas inteiras, "todas as linhas", ou "todas as 1.234 linhas" com o total sabido.
+    wholeSize: (total: number | null, columns: number) => `${total === null ? "todas as linhas" : `todas as ${formatCount(total)} ${plural(total, "linha", "linhas")}`} e ${formatCount(columns)} ${plural(columns, "coluna", "colunas")}`,
+    previewLoaded: "Na prévia, só as linhas carregadas; a cópia carrega as que faltam.",
+    cancelLoading: "Cancelar",
     options: "Opções",
     preview: "Prévia",
     previewCut: "Na prévia, os valores cortados aparecem como na grade; a cópia leva os completos.",

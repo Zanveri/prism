@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sqlTargetOf } from "./record-edits.schema";
-import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
+import { countWholeColumnOrRefuse, editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
 
 const base = "http://127.0.0.1:51234";
 const bridge = { getApiConfig: async () => ({ baseUrl: base, token: "token-de-teste" }), onApiExit: () => () => {}, restartApi: async () => {} };
@@ -129,5 +129,44 @@ describe("edit-target do Gerar SQL (RN-GRADE-020)", () => {
     expect(edit.ok ? sqlTargetOf(edit.data) : null).toEqual(sqlTarget);
     expect(sqlTargetOf(target)).toBeNull();
     expect(sqlTargetOf(null)).toBeNull();
+  });
+});
+
+describe("a coluna inteira nas rotas da edição (RN-EDIT-019 e 023)", () => {
+  const updateAll = { kind: "updateAll" as const, table: 0, set: [{ column: 2, value: "10.00" }] };
+
+  it("a contagem vai por `queries/edits/count`, com só a coluna inteira, e lê as linhas", async () => {
+    const fake = fetchAnswers(json({ rows: 1234, transaction: { mode: "autocommit" } }));
+
+    expect(await countWholeColumnOrRefuse("s1", "r1", [updateAll])).toEqual({ ok: true, data: { rows: 1234 } });
+    expect(request(fake)).toEqual({ url: `${base}/api/user/database-sessions/s1/queries/edits/count`, method: "POST", body: { resultID: "r1", changes: [updateAll] } });
+  });
+
+  it("as recusas da contagem voltam como valor, com o motivo da coluna inteira e o desfecho do cancelamento", async () => {
+    fetchAnswers(refusal(422, "EDIT_ALL_ROWS_NOT_SUPPORTED", { change: 0, column: 0, reason: "id é da chave de pedido" }));
+    expect(await countWholeColumnOrRefuse("s1", "r1", [updateAll])).toMatchObject({ ok: false, error: { code: "EDIT_ALL_ROWS_NOT_SUPPORTED", extensions: { reason: "id é da chave de pedido" } } });
+
+    fetchAnswers(refusal(422, "SQL_EXECUTION_FAILED", { outcome: "canceled" }));
+    expect(await countWholeColumnOrRefuse("s1", "r1", [updateAll])).toMatchObject({ ok: false, error: { code: "SQL_EXECUTION_FAILED", extensions: { outcome: "canceled" } } });
+
+    for (const code of ["RESULT_CHANGED", "TRANSACTION_FAILED", "SESSION_BUSY"]) {
+      fetchAnswers(refusal(409, code));
+      expect(await countWholeColumnOrRefuse("s1", "r1", [updateAll])).toMatchObject({ ok: false, error: { code } });
+    }
+    fetchAnswers(json({ rows: -1 }));
+    await expect(countWholeColumnOrRefuse("s1", "r1", [updateAll])).rejects.toMatchObject({ error: { code: "RESPONSE_INVALID" } });
+  });
+
+  it("o Salvar leva a coluna inteira com o `rows` contado, e recebe a recusa dela como valor; o preview lê a nota de cada comando", async () => {
+    const fake = fetchAnswers(json({ applied: 2 }));
+    await saveEditsOrRefuse("s1", "r1", [{ ...updateAll, rows: 1234 }]);
+    expect(request(fake).body).toEqual({ resultID: "r1", changes: [{ ...updateAll, rows: 1234 }] });
+
+    fetchAnswers(refusal(422, "EDIT_ALL_ROWS_NOT_SUPPORTED", { change: 0, reason: "x" }));
+    expect(await saveEditsOrRefuse("s1", "r1", [updateAll])).toMatchObject({ ok: false, error: { code: "EDIT_ALL_ROWS_NOT_SUPPORTED" } });
+
+    fetchAnswers(json({ statements: [{ sql: "SELECT COUNT(*) FROM t", values: [], note: "A contagem confere." }, { sql: "UPDATE t SET c = 1", values: [] }, { sql: "x", values: [], note: 3 }], oneAtATime: false }));
+    const preview = await previewEditsOrRefuse("s1", "r1", [updateAll]);
+    expect(preview).toEqual({ ok: true, data: { statements: [{ sql: "SELECT COUNT(*) FROM t", values: [], note: "A contagem confere." }, { sql: "UPDATE t SET c = 1", values: [] }, { sql: "x", values: [], note: null }], oneAtATime: false } });
   });
 });

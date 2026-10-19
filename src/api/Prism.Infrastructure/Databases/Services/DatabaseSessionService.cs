@@ -264,7 +264,7 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
                     : EditableSql.Read(sent, dialect);
                 // RN-EXPORT-001 e 002: exportar executa o comando de novo, numa conexão à parte; só vale para a leitura só, pelo comando montado, que não gravou.
                 var read = page.TotalRows is null && ReadOnlySql.ExportRefusal(sent, session.Info.Engine) is null;
-                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null);
+                var result = new ResultState(source, page.Columns, session.SchemaChanges, filtered?.Applied, read, readOnly ? ReadOnlySql.ResultReason : null, sent);
                 var withoutFullValue = result.Cells.Add(page);
                 ReplaceResult(session, result);
 
@@ -401,10 +401,30 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
         if (found.IsFailure)
             return found.Error;
 
+        var whole = WholeColumnSql.Find(changes);
+        if (whole.IsFailure)
+            return whole.Error;
+
         var result = found.Value;
         var target = await TargetOfAsync(session, result, catalogSessionID: null, keep: true, cancellationToken);
+        if (target.IsFailure)
+            return target.Error;
 
-        return target.IsFailure ? target.Error : EditPlanner.Preview(DialectOf(session), target.Value, result.Columns, changes);
+        // RN-EDIT-023: a contagem e o `UPDATE` da coluna inteira vêm antes dos comandos por linha, como o "Salvar" os executa.
+        var dialect = DialectOf(session);
+        IReadOnlyList<EditStatement> first = [];
+        if (whole.Value is { } index)
+        {
+            var statements = WholeColumnSql.Preview(dialect, result.Sql, result.Read, target.Value, result.Columns, changes[index], index);
+            if (statements.IsFailure)
+                return statements.Error;
+
+            first = statements.Value;
+        }
+
+        var preview = EditPlanner.Preview(dialect, target.Value, result.Columns, changes);
+
+        return preview.IsFailure ? preview.Error : preview.Value with { Statements = [.. first, .. preview.Value.Statements] };
     }
 
     /// <summary>
@@ -416,43 +436,118 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
         => RunAsync(sessionID, nameof(ApplyEditsAsync), waitsForTurn: false, async session =>
         {
+            var whole = WholeColumnSql.Find(changes);
+            if (whole.IsFailure)
+                return whole.Error;
+
             var found = EditableResult(session, resultID);
             if (found.IsFailure)
                 return found.Error;
 
             var result = found.Value;
             var dialect = DialectOf(session);
-            if (result.Source.Tables.Count == 0)
-                return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null).Error;
-
             var tables = TablesOf(result);
-            var expected = result.Target;
-            if (expected is null)
-            {
-                var described = await session.Connection.DescribeEditTablesAsync(tables, cancellationToken);
-                if (described.IsFailure)
-                    return described.Error;
+            var expected = await ExpectedTargetAsync(session, result, cancellationToken);
+            if (expected.IsFailure)
+                return expected.Error;
 
-                var resolved = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, described.Value);
-                if (resolved.IsFailure)
-                    return resolved.Error;
-
-                expected = result.Target = resolved.Value;
-            }
-
-            var planned = EditPlanner.Plan(dialect, expected, result.Columns, changes);
+            var planned = Plan(dialect, result, expected.Value, changes, whole.Value);
             if (planned.IsFailure)
                 return planned.Error;
 
-            return await session.Connection.ApplyEditsAsync(tables, expected.OneAtATime, catalogs =>
+            var saved = await session.Connection.ApplyEditsAsync(tables, expected.Value.OneAtATime, whole.Value is not null, catalogs =>
             {
                 var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalogs);
-                if (now.IsFailure || !EditTargetResolver.Same(expected, now.Value))
-                    return Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(TableChanged(expected, now));
+                if (now.IsFailure || !EditTargetResolver.Same(expected.Value, now.Value))
+                    return Result.Failure<EditPlan, DatabaseFailure>(TableChanged(expected.Value, now));
 
-                return EditPlanner.Plan(dialect, now.Value, result.Columns, changes);
+                return Plan(dialect, result, now.Value, changes, whole.Value);
+            }, cancellationToken);
+
+            // RN-EDIT-021 e RN-LOG-001: os IDs e o número de linhas da coluna inteira, nunca o comando, os nomes nem os valores.
+            if (saved.IsSuccess && whole.Value is { } index)
+                _logger.Information("Sessão {SessionID}: a coluna inteira do resultado {ResultID} alterou {Rows} linhas.", session.Info.ID, resultID, changes[index].Rows);
+
+            return saved;
+        }, cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-019, 020 e 023: a contagem da pergunta da coluna inteira, na sessão do resultado, como o "Salvar": a conferência das alterações antes do
+    /// banco, e a do catálogo na própria sessão, dentro da contagem (a tabela que mudou, ou o nome sem esquema que leva agora a outra, RN-SQL-024).
+    /// </summary>
+    public Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken)
+        => RunAsync(sessionID, nameof(CountWholeColumnAsync), waitsForTurn: false, async session =>
+        {
+            var only = WholeColumnSql.OnlyOne(changes);
+            if (only.IsFailure)
+                return only.Error;
+
+            var found = EditableResult(session, resultID);
+            if (found.IsFailure)
+                return found.Error;
+
+            var result = found.Value;
+            var dialect = DialectOf(session);
+            var index = only.Value;
+            var expected = await ExpectedTargetAsync(session, result, cancellationToken);
+            if (expected.IsFailure)
+                return expected.Error;
+
+            var planned = WholeColumnSql.Plan(dialect, result.Sql, result.Read, expected.Value, result.Columns, changes[index], index, requiresRows: false);
+            if (planned.IsFailure)
+                return planned.Error;
+
+            return await session.Connection.CountWholeColumnAsync(TablesOf(result), catalogs =>
+            {
+                var now = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, catalogs);
+                if (now.IsFailure || !EditTargetResolver.Same(expected.Value, now.Value))
+                    return Result.Failure<WholeColumnPlan, DatabaseFailure>(TableChanged(expected.Value, now));
+
+                return WholeColumnSql.Plan(dialect, result.Sql, result.Read, now.Value, result.Columns, changes[index], index, requiresRows: false);
             }, cancellationToken);
         }, cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-005: o alvo de antes é o que o `edit-target` respondeu (sem ele, o catálogo é consultado aqui, na própria sessão, cujo cursor o "Salvar" e a
+    /// contagem fecham de qualquer jeito). O resultado inteiro só leitura é a recusa do texto, sem ir ao banco.
+    /// </summary>
+    private static async Task<Result<EditTarget, DatabaseFailure>> ExpectedTargetAsync(Session session, ResultState result, CancellationToken cancellationToken)
+    {
+        var dialect = DialectOf(session);
+        if (result.Source.Tables.Count == 0)
+            return EditTargetResolver.Resolve(dialect, result.Source, result.Columns, null).Error;
+
+        if (result.Target is { } known)
+            return known;
+
+        var described = await session.Connection.DescribeEditTablesAsync(TablesOf(result), cancellationToken);
+        if (described.IsFailure)
+            return described.Error;
+
+        var resolved = EditTargetResolver.Resolve(dialect, result.Source, result.Columns, described.Value);
+        if (resolved.IsSuccess)
+            result.Target = resolved.Value;
+
+        return resolved;
+    }
+
+    /// <summary>RN-EDIT-005 e 021: a coluna inteira (no "Salvar", com o número de linhas confirmado) e os comandos por linha, contra o alvo dado.</summary>
+    private static Result<EditPlan, DatabaseFailure> Plan(ESqlDialect dialect, ResultState result, EditTarget target, IReadOnlyList<EditChange> changes, int? whole)
+    {
+        WholeColumnPlan? wholeColumn = null;
+        if (whole is { } index)
+        {
+            var planned = WholeColumnSql.Plan(dialect, result.Sql, result.Read, target, result.Columns, changes[index], index, requiresRows: true);
+            if (planned.IsFailure)
+                return planned.Error;
+
+            wholeColumn = planned.Value;
+        }
+
+        var commands = EditPlanner.Plan(dialect, target, result.Columns, changes);
+
+        return commands.IsFailure ? commands.Error : new EditPlan(wholeColumn, commands.Value);
+    }
 
     /// <summary>RN-SESSAO-004: a API encerrando fecha as sessões. O contêiner descarta o serviço no desligamento, antes do cofre, de quem ele depende.</summary>
     public async ValueTask DisposeAsync()
@@ -966,14 +1061,21 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     /// <param name="schemaChanges">RN-SQL-024: o <see cref="Session.SchemaChanges"/> da sessão quando o resultado foi lido.</param>
     /// <param name="filterApplied">RN-GRADE-011: como o filtro entrou no comando do resultado; nulo sem filtro.</param>
     /// <param name="read">RN-EXPORT-002: o comando do resultado, com o filtro, é uma leitura só e não gravou: o resultado inteiro se exporta.</param>
+    /// <param name="sql">RN-EDIT-023: o comando executado, com o filtro junto.</param>
     /// <param name="readOnlyReason">
     /// RN-PROT-002: o motivo da conexão somente leitura em que o resultado foi lido, que a página leva no lugar do que o texto diz. Não muda o
     /// <paramref name="source"/>: o alvo do "Gerar SQL" nela (RN-GRADE-020) e o da edição, quando ela deixa de ser somente leitura, saem dele. Quem recusa
     /// a edição na conexão somente leitura é a rota, pela opção de agora.
     /// </param>
-    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false, string? readOnlyReason = null)
+    private sealed class ResultState(ResultSource source, IReadOnlyList<QueryColumn> columns, int schemaChanges, EFilterApplied? filterApplied = null, bool read = false, string? readOnlyReason = null, string? sql = null)
     {
         public bool Read => read;
+
+        /// <summary>
+        /// RN-EDIT-023: o comando como a API o executou, com o filtro do resultado já junto, só na memória (nunca no disco nem no log): é o `<Q>` da coluna
+        /// inteira (RN-EDIT-020).
+        /// </summary>
+        public string? Sql => sql;
 
         public int SchemaChanges => schemaChanges;
 

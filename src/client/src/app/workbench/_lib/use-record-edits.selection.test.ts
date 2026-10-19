@@ -405,13 +405,16 @@ describe("as ações de linha agem nas linhas da seleção (RN-EDIT-013 a 016)",
     expect([...view.show().editing!.marks.keys()]).toEqual([2]);
   });
 
-  it("com mais de uma célula escolhida, \"Colar\" e \"Definir como nulo\" valem para uma só", async () => {
+  it("com mais de uma célula escolhida, \"Colar\" vale para uma só; \"Definir como nulo\" vale para as da coluna da ativa (RN-EDIT-017)", async () => {
     const view = mount(fakeRunner(rowsState()));
     view.show().editing!.onSelection((held, grid) => selectAll(held, grid));
     view.show().editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
     await settle();
 
-    expect(items(view).filter((item) => item.id === "paste" || item.id === "setNull").map((item) => item.hint)).toEqual([selection.menu.oneCellOnly, selection.menu.oneCellOnly]);
+    expect(items(view).filter((item) => item.id === "paste" || item.id === "setNull").map((item) => [item.label, item.hint])).toEqual([
+      ["Colar", selection.menu.oneCellOnly],
+      [`Definir as ${rowsState().rows.length} células como nulo`, undefined],
+    ]);
   });
 });
 
@@ -443,7 +446,7 @@ describe("o menu da grade e a seleção (RN-GRADE-004)", () => {
 
   it("o \"Ordenar\" marca a ordem em uso da coluna da célula ativa e pede a escolhida", async () => {
     const apply = vi.fn();
-    const sort: GridSortSource = { current: () => ({ column: "Nome", direction: "asc" }), apply };
+    const sort: GridSortSource = { applied: () => ({ column: "Nome", direction: "asc" }), apply };
     const view = mount(fakeRunner(rowsState()), { sort });
     view.show().editing!.onMenu({ row: 0, column: 1 }, { x: 1, y: 1 }, false);
     await settle();

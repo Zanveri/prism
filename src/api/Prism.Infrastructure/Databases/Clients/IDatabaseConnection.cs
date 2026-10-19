@@ -116,8 +116,17 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// tabelas no catálogo antes do primeiro comando e entrega o que achou a `plan`, que devolve os comandos ou a recusa; cada comando
     /// tem de afetar exatamente uma linha. Qualquer falha desfaz tudo o que este "Salvar" fez, menos no banco sem log, em que as
     /// anteriores ficam gravadas (`Applied`). O cursor aberto fecha antes, como antes de qualquer comando. Devolve quantas foram gravadas.
+    ///
+    /// RN-EDIT-021: com a coluna inteira (`wholeColumn`, a do plano), ela vai primeiro: a contagem tem de dar as linhas confirmadas, e o `UPDATE` tem de
+    /// alterar exatamente elas (a coluna inteira conta como uma alteração gravada).
     /// </summary>
-    Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken);
+    Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, bool wholeColumn, Func<IReadOnlyList<EditCatalogTable?>, Result<EditPlan, DatabaseFailure>> plan, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-019 e 023: a contagem da coluna inteira, na sessão, antes da pergunta: fecha o cursor aberto, confere as tabelas no catálogo da própria
+    /// sessão e entrega o que achou a `plan`, que devolve a forma da contagem ou a recusa. Devolve quantas linhas o comando do resultado devolve agora.
+    /// </summary>
+    Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(EditTables tables, Func<IReadOnlyList<EditCatalogTable?>, Result<WholeColumnPlan, DatabaseFailure>> plan, CancellationToken cancellationToken);
 
     /// <summary>
     /// RN-IMPORT-009, 012 e 015: a tabela de destino de uma importação, pelo esquema e pelo nome como estão no catálogo, numa conexão à parte: o que a

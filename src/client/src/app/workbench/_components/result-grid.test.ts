@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import type { QueryColumn } from "../_lib/query.schema";
 import { recordsCopy } from "../_lib/records.copy";
-import { GridHeaderCell, GridRow, ResultGrid } from "./result-grid";
+import { followsActiveRow, GridHeaderCell, GridRow, ResultGrid } from "./result-grid";
 
 const columns: QueryColumn[] = [
   { name: "id", type: "int4", kind: "number" },
@@ -39,11 +39,14 @@ describe("a linha da grade e o valor nulo (RN-CONFIG-005)", () => {
   });
 });
 
-describe("o cabeçalho da grade que ordena (RN-TABELA-005)", () => {
+describe("o cabeçalho escolhe a coluna, e a ordem vai para o botão de ordenar (RN-GRADE-021)", () => {
   const item = virtualColumns[0];
   const renderHeader = (over: Partial<Parameters<typeof GridHeaderCell>[0]> = {}) => renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[0], item, ...over }));
+  const sort = (direction: "asc" | "desc" | null = null, reason: string | null = null) => ({ direction, reason, onSort: () => {} });
+  const sortButton = (markup: string) => markup.match(/<button[^>]*data-sort[^>]*>/)?.[0] ?? "";
+  const nameButton = (markup: string) => markup.match(/<button[^>]*data-colheader[^>]*>/)?.[0] ?? "";
 
-  it("no resultado de uma consulta é só texto: nome e tipo, sem botão", () => {
+  it("sem a edição e sem ordem é só texto: nome e tipo, sem botão", () => {
     const markup = renderHeader();
 
     expect(markup).not.toContain("<button");
@@ -52,27 +55,71 @@ describe("o cabeçalho da grade que ordena (RN-TABELA-005)", () => {
     expect(markup).toContain(">int4<");
   });
 
-  it("na vista Registros é um botão, sem ordem ainda: 'none' e a dica diz que o clique ordena crescente", () => {
-    const markup = renderHeader({ sort: null, onSort: () => {} });
+  it("na grade editável o nome é um botão fora do Tab que escolhe a coluna inteira, com a dica do atalho e a descrição para o leitor de tela", () => {
+    const markup = renderHeader({ choosable: true });
+    const name = nameButton(markup);
 
-    expect(markup).toContain('aria-sort="none"');
-    expect(markup).toMatch(/<button[^>]*title="Ordenar por id \(crescente\)"/);
-    expect(markup).not.toContain("<svg");
+    expect(name).toContain('tabindex="-1"');
+    expect(name).toContain('data-colheader="0"');
+    expect(name).toContain('aria-label="id"');
+    expect(name).toContain("Clique para escolher a coluna inteira (Ctrl+Espaço).");
+    expect(markup).toContain(">Escolher a coluna inteira<");
+    expect(renderHeader({ choosable: true, mac: true })).toContain("(Control+Espaço).");
+    // Sem o botão de ordenar (as abas guardadas do script), o nome ocupa tudo, e não há `aria-sort`.
+    expect(markup).not.toContain("data-sort");
+    expect(markup).not.toContain("aria-sort");
   });
 
-  it("ordenada por esta coluna: 'ascending' ou 'descending', a seta aponta o sentido e a dica diz o próximo clique", () => {
-    const asc = renderHeader({ sort: { column: "id", direction: "asc" }, onSort: () => {} });
-    const desc = renderHeader({ sort: { column: "id", direction: "desc" }, onSort: () => {} });
+  it("o botão de ordenar fica à direita do nome, fora do Tab, e a dica e o nome dizem o que o próximo clique faz", () => {
+    const none = renderHeader({ choosable: true, sort: sort() });
+    const asc = renderHeader({ choosable: true, sort: sort("asc") });
+    const desc = renderHeader({ choosable: true, sort: sort("desc") });
 
+    expect(none).toContain('aria-sort="none"');
+    expect(sortButton(none)).toContain('aria-label="Ordenar por id, crescente"');
+    expect(sortButton(none)).toContain('tabindex="-1"');
     expect(asc).toContain('aria-sort="ascending"');
-    expect(asc).toContain("Ordenar por id (decrescente)");
-    expect(asc).toMatch(/<svg[^>]*rotate-180/);
+    expect(sortButton(asc)).toContain('title="Ordenar por id, decrescente"');
     expect(desc).toContain('aria-sort="descending"');
-    expect(desc).toContain("Tirar a ordem por id");
-    expect(desc).not.toMatch(/<svg[^>]*rotate-180/);
+    expect(sortButton(desc)).toContain('title="Tirar a ordem de id"');
+    // O botão vem depois do nome, irmão dele, e não dentro.
+    expect(none).toMatch(/<\/button><span id="[^"]*" class="sr-only">Escolher a coluna inteira<\/span><span data-colheader="0"[^>]*><button[^>]*data-sort/);
   });
 
-  // E1: a largura da coluna é calculada sem a seta da ordem. Quando ela aparece, alguém tem de ceder os 18 px dela: era o nome (o `id` encolhia a zero e
+  it("sem ordem, o botão só aparece com o ponteiro sobre o cabeçalho, e o espaço dele fica reservado; na coluna que ordena, fica sempre à vista", () => {
+    expect(sortButton(renderHeader({ choosable: true, sort: sort() }))).toMatch(/class="[^"]*invisible[^"]*group-hover\/header:visible/);
+    expect(sortButton(renderHeader({ choosable: true, sort: sort("asc") }))).not.toContain("invisible");
+    // O espaço do botão é do tamanho dele, sempre, e o clique nele, com o botão escondido, escolhe a coluna (`data-colheader`).
+    expect(renderHeader({ choosable: true, sort: sort() })).toMatch(/<span data-colheader="0" class="[^"]*w-6[^"]*flex-none/);
+  });
+
+  it("a seta aponta o sentido: para cima na crescente, para baixo na decrescente, e as duas, apagadas, sem ordem", () => {
+    expect(renderHeader({ sort: sort("asc") })).toContain('d="M8 13V3M4 7l4-4 4 4"');
+    expect(renderHeader({ sort: sort("desc") })).toContain('d="M8 3v10M4 9l4 4 4-4"');
+    expect(renderHeader({ sort: sort() })).toMatch(/<svg[^>]*class="[^"]*text-subtle/);
+  });
+
+  it("desabilitado, o botão continua à vista (`aria-disabled`), com o motivo na dica e no nome", () => {
+    const button = sortButton(renderHeader({ choosable: true, sort: sort(null, "há um comando em andamento na aba") }));
+
+    expect(button).toContain('aria-disabled="true"');
+    expect(button).toContain('title="Ordenar por id, crescente. Indisponível: há um comando em andamento na aba."');
+  });
+
+  it("o botão termina antes da área da divisa: 4 px nas colunas do meio, 8 px na última, onde a divisa fica dentro", () => {
+    expect(renderHeader({ sort: sort() })).toMatch(/<span class="[^"]*mr-\[4px\]/);
+    expect(renderHeader({ sort: sort(), last: true })).toMatch(/<span class="[^"]*mr-\[8px\]/);
+  });
+
+  it("a coluna escolhida inteira diz `aria-selected` no `columnheader`, e o cabeçalho da seleção fica destacado", () => {
+    const whole = renderHeader({ choosable: true, selected: true, whole: true });
+
+    expect(whole).toMatch(/<div role="columnheader"[^>]*aria-selected="true"/);
+    expect(whole).toMatch(/<div role="columnheader"[^>]*class="[^"]*bg-selected/);
+    expect(renderHeader({ choosable: true, selected: true })).not.toContain("aria-selected");
+  });
+
+  // E1: a largura da coluna é calculada sem o botão de ordenar. O espaço dele é sempre reservado, e alguém tem de ceder: era o nome (o `id` encolhia a zero e
   // sobrava `integer ▲`). O vitest não tem layout: aqui se confere a REGRA de quem encolhe; a medida em pixels é da conferência na tela.
   const classesOf = (markup: string, pattern: RegExp) => (markup.match(pattern)?.[1] ?? "").split(" ");
   /** As classes da caixa do rótulo (a que tem o nome e o tipo dentro), do nome e do tipo. */
@@ -83,9 +130,10 @@ describe("o cabeçalho da grade que ordena (RN-TABELA-005)", () => {
   });
 
   it.each([
-    ["ordenado (com a seta)", () => renderHeader({ sort: { column: "id", direction: "asc" }, onSort: () => {} })],
-    ["que ordena, sem ordem", () => renderHeader({ sort: null, onSort: () => {} })],
-    ["só de texto (resultado de uma consulta)", () => renderHeader()],
+    ["ordenado (com a seta)", () => renderHeader({ choosable: true, sort: sort("asc") })],
+    ["que ordena, sem ordem", () => renderHeader({ choosable: true, sort: sort() })],
+    ["que só escolhe (a aba guardada)", () => renderHeader({ choosable: true })],
+    ["só de texto", () => renderHeader()],
   ])("no cabeçalho %s o nome da coluna NÃO encolhe, e o tipo absorve sozinho o que falta", (_name, render) => {
     const { box, name, type } = labelOf(render());
 
@@ -105,24 +153,28 @@ describe("o cabeçalho da grade que ordena (RN-TABELA-005)", () => {
     expect(box.filter((item) => item === "flex-none" || item === "shrink-0" || item === "flex-1" || item === "grow")).toEqual([]);
   });
 
-  it("a seta da ordem nunca encolhe e fica FORA da caixa do rótulo: o que cabe ao nome já desconta a seta", () => {
-    const markup = renderHeader({ sort: { column: "id", direction: "desc" }, onSort: () => {} });
+  it("o botão de ordenar nunca encolhe e fica FORA da caixa do rótulo: o que cabe ao nome já desconta o botão", () => {
+    const markup = renderHeader({ choosable: true, sort: sort("desc") });
 
     expect(classesOf(markup, /<svg[^>]*class="([^"]*)"/)).toContain("flex-none");
-    // A caixa do rótulo fecha (nome, tipo) antes de a seta começar: a seta é irmã dela, e não filha.
-    expect(markup).toMatch(/>int4<\/span><\/span><svg/);
-  });
-
-  it("a ordem de outra coluna não marca esta", () => {
-    const markup = renderHeader({ sort: { column: "observacao", direction: "asc" }, onSort: () => {} });
-
-    expect(markup).toContain('aria-sort="none"');
-    expect(markup).not.toContain("<svg");
+    // A caixa do rótulo fecha (nome, tipo) dentro do botão do nome, antes de o espaço do botão de ordenar começar.
+    expect(markup).toMatch(/>int4<\/span><\/span><\/button>/);
   });
 
   it("a coluna de número fica alinhada à direita também quando é botão", () => {
-    expect(renderHeader({ sort: null, onSort: () => {} })).toMatch(/<button[^>]*justify-end/);
-    expect(renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], sort: null, onSort: () => {} }))).not.toMatch(/<button[^>]*justify-end/);
+    expect(nameButton(renderHeader({ choosable: true, sort: sort() }))).toContain("justify-end");
+    expect(nameButton(renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true, sort: sort() })))).not.toContain("justify-end");
+  });
+
+  it("o gesto no nome não rola a grade de volta à linha da ativa; o teclado, o clique numa célula e o campo que abre rolam", () => {
+    // O clique no nome com a ativa na linha 3 (ou sem ativa, que vai para a primeira) deixa a ativa ali: a grade fica onde a pessoa lia.
+    expect(followsActiveRow(3, 3, false)).toBe(false);
+    expect(followsActiveRow(0, 0, false)).toBe(false);
+    // A ativa que muda de linha depois ("Adicionar linha", o arraste que passou a outra) e a que nenhum gesto do cabeçalho segura rolam, como sempre.
+    expect(followsActiveRow(9, 3, false)).toBe(true);
+    expect(followsActiveRow(3, null, false)).toBe(true);
+    // Digitar depois do clique no nome abre o campo na ativa, que vem à vista.
+    expect(followsActiveRow(0, 0, true)).toBe(true);
   });
 });
 
@@ -186,11 +238,11 @@ describe("a divisa à direita do cabeçalho de cada coluna (RN-GRADE-009)", () =
   const resizable = { width: 100, last: false, onResize: () => {}, onFit: () => {} };
   const renderHeader = (over: Partial<Parameters<typeof GridHeaderCell>[0]> = {}) => renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[0], item, ...over }));
 
-  it("o cabeçalho que ordena tem a divisa AO LADO do botão, e não dentro dele: o clique que termina um arrasto não ordena", () => {
-    const markup = renderHeader({ ...resizable, sort: null, onSort: () => {} });
+  it("o cabeçalho com o nome e o botão de ordenar tem a divisa AO LADO deles, e não dentro: o clique que termina um arrasto não escolhe nem ordena", () => {
+    const markup = renderHeader({ ...resizable, choosable: true, sort: { direction: null, reason: null, onSort: () => {} } });
 
-    expect(markup).toMatch(/<\/button><div[^>]*role="separator"/);
-    expect(markup.match(/<button[\s\S]*?<\/button>/)?.[0]).not.toContain("separator");
+    expect(markup).toMatch(/<\/button><\/span><div[^>]*role="separator"/);
+    for (const button of markup.match(/<button[\s\S]*?<\/button>/g) ?? []) expect(button).not.toContain("separator");
   });
 
   it("o cabeçalho só de texto (o resultado de uma consulta) também tem a divisa", () => {
@@ -203,12 +255,12 @@ describe("a divisa à direita do cabeçalho de cada coluna (RN-GRADE-009)", () =
 
   it("sem quem mude a largura, não há divisa", () => {
     expect(renderHeader()).not.toContain("separator");
-    expect(renderHeader({ sort: null, onSort: () => {} })).not.toContain("separator");
+    expect(renderHeader({ choosable: true, sort: { direction: null, reason: null, onSort: () => {} } })).not.toContain("separator");
   });
 
   it("o nome do cabeçalho para o leitor de tela é o da coluna e o tipo, e não o da divisa que mora dentro dele", () => {
     expect(renderHeader(resizable)).toMatch(/<div role="columnheader"[^>]*aria-label="id int4"/);
-    expect(renderHeader({ ...resizable, sort: null, onSort: () => {} })).toMatch(/<div role="columnheader"[^>]*aria-label="id int4"/);
+    expect(renderHeader({ ...resizable, choosable: true, sort: { direction: null, reason: null, onSort: () => {} } })).toMatch(/<div role="columnheader"[^>]*aria-label="id int4"/);
   });
 });
 
@@ -237,11 +289,11 @@ describe("o tipo de dado no cabeçalho é uma preferência (RN-CONFIG-006)", () 
 
   it("ligado (o padrão), o cabeçalho mostra o nome e o tipo", () => {
     expect(renderHeader()).toContain(">int4<");
-    expect(renderHeader({ showType: true, sort: null, onSort: () => {} })).toContain(">int4<");
+    expect(renderHeader({ showType: true, choosable: true, sort: { direction: null, reason: null, onSort: () => {} } })).toContain(">int4<");
   });
 
   it("desligado, só o nome, nos dois cabeçalhos; o nome para o leitor de tela é o que se vê", () => {
-    for (const markup of [renderHeader({ showType: false }), renderHeader({ showType: false, sort: { column: "id", direction: "asc" }, onSort: () => {} })]) {
+    for (const markup of [renderHeader({ showType: false }), renderHeader({ showType: false, choosable: true, sort: { direction: "asc", reason: null, onSort: () => {} } })]) {
       expect(markup).toContain(">id<");
       expect(markup).not.toContain(">int4<");
       expect(markup).toMatch(/<div role="columnheader"[^>]*aria-label="id"/);
@@ -332,6 +384,15 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
     expect(plain).not.toContain("bg-selected");
   });
 
+  it("RN-GRADE-022: com colunas inteiras, as células delas ficam escolhidas em toda linha desenhada, e o número da linha não fica destacado", () => {
+    const markup = renderEditable({ wholeColumns: new Set([1]) });
+
+    expect(cell(markup, 1)).toContain('aria-selected="true"');
+    expect(cell(markup, 1)).toContain("bg-selected");
+    expect(cell(markup, 0)).toContain('aria-selected="false"');
+    expect(markup).not.toMatch(/role="rowheader"[^>]*class="[^"]*bg-selected/);
+  });
+
   it("RN-GRADE-001: a célula com alteração pendente escolhida continua marcada como pendente, num tom mais forte", () => {
     const pending = cell(renderEditable({ selectedFrom: 1, selectedTo: 1, mark: { kind: "read", deleted: false, pending: new Map([[1, "paga"]]), failed: false } }), 1);
 
@@ -382,5 +443,45 @@ describe("a linha nova salva na aba de consulta, com o que o banco preencheu (RN
     expect(generated).toContain("text-subtle");
     expect(generated).not.toContain(">NULL<");
     expect(markup).toContain(">nova<");
+  });
+});
+
+describe("a coluna inteira pendente na grade (RN-EDIT-018)", () => {
+  const cellIdOf = (row: number, column: number) => `g-${row}-${column}`;
+  const pending = new Map([[1, { value: "fechada", hint: "Alteração pendente em todas as linhas: observacao = 'fechada'", uncertain: false }]]);
+  const render = (extra: Partial<Parameters<typeof GridRow>[0]> = {}, row: (string | null)[] = ["1", "aberta"]) =>
+    renderToStaticMarkup(createElement(GridRow, { index: 0, start: 0, row, columns, virtualColumns, truncated: undefined, nullText: "NULL", cellIdOf, columnPending: pending, ...extra }));
+  const cell = (markup: string, column: number) => markup.match(new RegExp(`<div[^>]*id="g-0-${column}"[^>]*>.*?</div>`, "s"))?.[0] ?? "";
+
+  it("a célula daquela coluna na linha lida mostra o valor novo, com o lido riscado ao lado, como uma pendência", () => {
+    const markup = cell(render(), 1);
+    expect(markup).toContain("bg-accent/20");
+    expect(markup).toMatch(/line-through">aberta<\/span>fechada/);
+    expect(markup).toContain('title="Valor lido: aberta"');
+    // A outra coluna não muda.
+    expect(cell(render(), 0)).not.toContain("line-through");
+  });
+
+  it("a célula com pendência própria mostra o valor dela, com o da coluna inteira riscado; a linha nova e a excluída não recebem a coluna inteira", () => {
+    const own = cell(render({ mark: { kind: "read", deleted: false, pending: new Map([[1, "paga"]]), failed: false } }), 1);
+    expect(own).toMatch(/line-through">fechada<\/span>paga/);
+    expect(own).toContain('title="Valor da coluna inteira: fechada"');
+
+    expect(cell(render({ mark: { kind: "new", deleted: false, pending: new Map(), failed: false } }, [null, null]), 1)).not.toContain("fechada");
+    expect(cell(render({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false } }), 1)).not.toContain("fechada");
+  });
+
+  it("a nota da coluna que pode estar gravada em parte das linhas vai na dica da célula", () => {
+    const uncertain = new Map([[1, { value: "x", hint: "h", uncertain: true }]]);
+    expect(cell(render({ columnPending: uncertain }), 1)).toContain("o valor desta coluna pode estar gravado em parte das linhas");
+  });
+
+  it("o cabeçalho ganha o ponto no tom de atenção, a dica e o nome para o leitor de tela", () => {
+    const header = renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true, pendingHint: "Alteração pendente em todas as linhas: observacao = 'fechada'" }));
+    expect(header).toContain("data-column-pending");
+    expect(header).toContain("bg-accent");
+    expect(header).toContain("observacao · text\nAlteração pendente em todas as linhas: observacao = &#x27;fechada&#x27;");
+    expect(header).toContain('aria-label="observacao text, alteração pendente em todas as linhas"');
+    expect(renderToStaticMarkup(createElement(GridHeaderCell, { column: columns[1], item: virtualColumns[1], choosable: true }))).not.toContain("data-column-pending");
   });
 });

@@ -35,7 +35,7 @@ const noop = () => {};
 const bar = '<div role="toolbar" aria-label="Edição da grade">';
 
 const rows: RowsState = { status: "rows", id: 1, target: { sql: "select * from loja.pedido", offset: 0 }, columns: [{ name: "id", type: "int4", kind: "number" }], rows: [["1"], ["2"]], truncated: new Map(), hasMore: true, totalRows: null, elapsedMs: 42, pages: 1, loadingMore: false, cancelling: false, cursorClosed: false, total: null, counting: false };
-const records = { name: "loja.pedido", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+const records = { name: "loja.pedido", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
 const onAction = vi.fn();
 const buttons = [{ id: "edit" as const, label: "Editar célula", shortcut: { label: "F2", aria: "F2" }, title: "Editar célula (F2)", reason: null }];
 const editing = { bar: { buttons, onAction } } as unknown as GridEditing;

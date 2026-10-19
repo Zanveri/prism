@@ -163,6 +163,7 @@ export function ExtractionStep({
   count,
   onCount,
   countLocked = null,
+  fromGrid = false,
   problem,
 }: {
   origin: ExportOrigin;
@@ -176,6 +177,8 @@ export function ExtractionStep({
   onCount: (count: boolean) => void;
   /** RN-IMPORT-023: na cópia de Db2 ou de Informix no mesmo banco, a contagem fica ligada e travada, com o motivo (nulo quando a escolha é livre). */
   countLocked?: string | null;
+  /** RN-EXPORT-005: aberto pela grade com colunas inteiras escolhidas: só elas vieram marcadas, e a lista diz isso, acima delas. */
+  fromGrid?: boolean;
   problem: string | null;
 }) {
   const e = dataExportCopy.extraction;
@@ -216,17 +219,21 @@ export function ExtractionStep({
         ) : (
           // A lista rola, e o Tab anda pelas caixas. O nome repetido aparece repetido, cada um com a sua caixa.
           // O motivo (nenhuma marcada, a recusa da API) descreve cada caixa: é nelas que o foco anda, e o "Avançar" desabilitado não o recebe.
-          <ul aria-describedby={problem === null ? undefined : problemId} className="max-h-60 overflow-y-auto rounded-md border border-border-strong p-1 [content-visibility:auto]">
-            {columns.map((column, index) => (
-              <li key={index}>
-                <label className="flex cursor-pointer items-center gap-2.5 rounded px-2 py-1 hover:bg-selected">
-                  <input type="checkbox" checked={checked[index] === true} onChange={(event) => onToggle(index, event.target.checked)} aria-describedby={problem === null ? undefined : problemId} className="size-4 flex-none cursor-pointer accent-accent" />
-                  <span className="min-w-0 truncate font-mono text-ink">{column.name}</span>
-                  <span className="ml-auto flex-none font-mono text-xs text-muted">{column.type}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
+          // Aberta pela grade com colunas inteiras escolhidas, a frase acima diz que só elas vieram marcadas (RN-EXPORT-005).
+          <>
+            {fromGrid ? <p className="text-sm text-muted">{e.fromGrid}</p> : null}
+            <ul aria-describedby={problem === null ? undefined : problemId} className="max-h-60 overflow-y-auto rounded-md border border-border-strong p-1 [content-visibility:auto]">
+              {columns.map((column, index) => (
+                <li key={index}>
+                  <label className="flex cursor-pointer items-center gap-2.5 rounded px-2 py-1 hover:bg-selected">
+                    <input type="checkbox" checked={checked[index] === true} onChange={(event) => onToggle(index, event.target.checked)} aria-describedby={problem === null ? undefined : problemId} className="size-4 flex-none cursor-pointer accent-accent" />
+                    <span className="min-w-0 truncate font-mono text-ink">{column.name}</span>
+                    <span className="ml-auto flex-none font-mono text-xs text-muted">{column.type}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         <FieldError id={problemId}>{problem ?? undefined}</FieldError>
       </section>

@@ -54,8 +54,15 @@ export function sqlTargetOf(target: EditTarget | null): SqlTarget | null {
   return { ...target, tables };
 }
 
-/** RN-EDIT-008: os comandos do Salvar, com os literais; os valores sem literal vão como `?`, e o texto deles em `values`, na ordem. */
-export const editPreviewSchema = z.object({ statements: z.array(z.object({ sql: z.string(), values: z.array(z.string().nullable()) })), oneAtATime: z.boolean() });
+/**
+ * RN-EDIT-008 e 023: os comandos do Salvar, com os literais; os valores sem literal vão como `?`, e o texto deles em `values`, na ordem. `note`, opcional, é a
+ * frase que a pergunta e o "Ver SQL" mostram embaixo do comando, como veio (a da contagem da coluna inteira, a dos lotes do Informix); a que não é texto vira
+ * nula, e o comando aparece sem ela.
+ */
+export const editPreviewSchema = z.object({
+  statements: z.array(z.object({ sql: z.string(), values: z.array(z.string().nullable()), note: z.string().nullish().catch(null) })),
+  oneAtATime: z.boolean(),
+});
 
 export type EditPreview = z.infer<typeof editPreviewSchema>;
 
@@ -63,11 +70,23 @@ export const editsAppliedSchema = z.object({ applied: z.number().int() });
 
 export type EditsApplied = z.infer<typeof editsAppliedSchema>;
 
-/** Uma alteração do pedido: `table` pela posição em `tables`, `column` pela posição no resultado, `key` com os textos que a grade leu na chave. */
+/**
+ * RN-EDIT-019 e 023: a contagem da coluna inteira (`queries/edits/count`): as linhas que o comando do resultado devolve agora, na sessão da aba. O
+ * `transaction` (o Commit manual, que a tela ainda não tem) é tolerado em qualquer formato.
+ */
+export const wholeColumnCountSchema = z.object({ rows: z.number().int().min(0) });
+
+export type WholeColumnCount = z.infer<typeof wholeColumnCountSchema>;
+
+/**
+ * Uma alteração do pedido: `table` pela posição em `tables`, `column` pela posição no resultado, `key` com os textos que a grade leu na chave. A coluna inteira
+ * (`updateAll`, RN-EDIT-023) leva uma atribuição por coluna e `rows`, as linhas que a pessoa confirmou, obrigatório só no "Salvar".
+ */
 export type ApiChange =
   | { kind: "update"; table: number; key: string[]; set: { column: number; value: string | null }[] }
   | { kind: "delete"; table: number; key: string[] }
-  | { kind: "insert"; table: number; values: { column: number; value: string | null }[] };
+  | { kind: "insert"; table: number; values: { column: number; value: string | null }[] }
+  | { kind: "updateAll"; table: number; set: { column: number; value: string | null }[]; rows?: number };
 
 /** As extensões das recusas da edição. O que vier fora do formato vira nulo: a mensagem aparece do mesmo jeito. */
 const editErrorDetailsSchema = z.object({
@@ -76,11 +95,13 @@ const editErrorDetailsSchema = z.object({
   column: z.number().int().min(0).nullish().catch(null),
   rowsAffected: z.number().int().min(0).nullish().catch(null),
   applied: z.number().int().min(0).nullish().catch(null),
+  // RN-SQL-010 e RN-EDIT-021: o desfecho do comando que terminou depois de um pedido de cancelamento.
+  outcome: z.enum(["canceled", "unknown", "partial"]).nullish().catch(null),
 });
 
-export type EditErrorDetails = { reason: string | null; change: number | null; column: number | null; rowsAffected: number | null; applied: number | null };
+export type EditErrorDetails = { reason: string | null; change: number | null; column: number | null; rowsAffected: number | null; applied: number | null; outcome: "canceled" | "unknown" | "partial" | null };
 
 export function editErrorDetails(extensions: Record<string, unknown>): EditErrorDetails {
   const details = editErrorDetailsSchema.parse(extensions);
-  return { reason: details.reason ?? null, change: details.change ?? null, column: details.column ?? null, rowsAffected: details.rowsAffected ?? null, applied: details.applied ?? null };
+  return { reason: details.reason ?? null, change: details.change ?? null, column: details.column ?? null, rowsAffected: details.rowsAffected ?? null, applied: details.applied ?? null, outcome: details.outcome ?? null };
 }

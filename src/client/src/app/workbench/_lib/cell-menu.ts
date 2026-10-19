@@ -88,8 +88,19 @@ export type CellMenuState = {
   deleteRow: EditAccess;
   /** RN-GRADE-001: as linhas da seleção; com mais de uma, "Duplicar linhas" e "Excluir linhas". Sem ele, uma. */
   rows?: number;
-  /** RN-GRADE-001: mais de uma célula escolhida: "Colar" e "Definir como nulo" valem para uma só. */
+  /** RN-GRADE-001: mais de uma célula escolhida: "Colar" vale para uma só. */
   several?: boolean;
+  /**
+   * RN-EDIT-017 e 018: "Editar célula" e "Definir como nulo" com outras células escolhidas na coluna da célula ativa: se valem para elas (com a coluna inteira,
+   * os motivos dela, em "Indisponível: …"), e o rótulo do nulo ("Definir as 37 células como nulo", "Definir a coluna inteira como nulo"). Sem ele, a célula
+   * ativa (`access`) e o rótulo de sempre.
+   */
+  group?: { access: EditAccess; nullLabel: string };
+  /**
+   * RN-EDIT-004 e 018: o "Desfazer alteração" com a coluna escolhida inteira diz a conta ("Desfazer a alteração da coluna preco e de 37 células"); com só
+   * algumas células de uma coluna que tem a alteração da coluna inteira, e nada mais a desfazer nelas, fica desabilitado com o motivo. Sem ele, o de sempre.
+   */
+  undo?: { label?: string; reason?: string };
   /** Há célula ativa: sem ela, "Copiar" e "Copiar com cabeçalho" pedem uma (RN-GRADE-002). Sem ele, há. */
   hasActive?: boolean;
   /** RN-GRADE-015: "Copiar nome da(s) coluna(s)" e "Copiar número de linha(s)"; sem eles, valem. */
@@ -138,7 +149,9 @@ const allowed: EditAccess = { editable: true };
 export function cellMenu(state: CellMenuState): CellMenuItem[][] {
   const shortcuts = state.shortcuts ?? defaultShortcuts;
   const several = state.several === true ? { disabled: true, hint: grid.oneCellOnly } : null;
-  const notNullable = several ?? (!state.access.editable ? hintOf(state.access) : state.nullable ? {} : { disabled: true, hint: copy.notNullable });
+  const editAccess = state.group?.access ?? state.access;
+  const notNullable = !editAccess.editable ? hintOf(editAccess) : state.nullable ? {} : { disabled: true, hint: copy.notNullable };
+  const undoHint = state.undo?.reason === undefined ? { disabled: !state.pending && !state.deletedRow } : { disabled: true, hint: state.undo.reason };
   const chooseCell = state.hasActive === false ? { disabled: true, hint: gridSelectionCopy.copy.chooseCell } : {};
   const many = (state.rows ?? 1) > 1;
 
@@ -201,9 +214,9 @@ export function cellMenu(state: CellMenuState): CellMenuItem[][] {
     ],
     ...(view.length === 0 ? [] : [view]),
     [
-      { id: "edit", label: copy.edit, shortcut: shortcuts.edit.label, ...hintOf(state.access) },
-      { id: "setNull", label: copy.setNull, ...notNullable },
-      { id: "undo", label: copy.undo, disabled: !state.pending && !state.deletedRow },
+      { id: "edit", label: copy.edit, shortcut: shortcuts.edit.label, ...hintOf(editAccess) },
+      { id: "setNull", label: state.group?.nullLabel ?? copy.setNull, ...notNullable },
+      { id: "undo", label: state.undo?.label ?? copy.undo, ...undoHint },
     ],
     [
       { id: "newRow", label: copy.newRow, shortcut: shortcuts.newRow.label, ...hintOf(state.newRow) },

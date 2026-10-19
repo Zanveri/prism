@@ -37,10 +37,13 @@ export function runnerExportBlocker(state: RunnerState, options: { busy: boolean
 const sourceColumns = (columns: readonly QueryColumn[]) => columns.map(({ name, type }) => ({ name, type }));
 
 /** A origem dos Registros: o comando que a grade mostra (com o filtro e a ordem aplicados) e o texto deles, a tabela e as colunas do resultado. */
-export function recordsSource(rows: RowsState, place: { connectionId: string; database?: string; schema: string; name: string; filter: string; unsavedEdits: number }): ExportSource {
+export function recordsSource(rows: RowsState, place: { connectionId: string; database?: string; schema: string; name: string; filter: string; unsavedEdits: number; checkedColumns?: readonly number[] | null }): ExportSource {
   const origin: ExportOrigin = { kind: "records", schema: place.schema, name: place.name, sql: rows.target.sql, filter: place.filter };
-  return { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), origin, columns: sourceColumns(rows.columns), unsavedEdits: place.unsavedEdits };
+  return { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), origin, columns: sourceColumns(rows.columns), unsavedEdits: place.unsavedEdits, ...checkedOf(place.checkedColumns) };
 }
+
+/** RN-EXPORT-001 e 005: as colunas inteiras escolhidas na grade (RN-GRADE-022), que a Extração abre marcadas; sem elas, nada (todas marcadas). */
+const checkedOf = (columns: readonly number[] | null | undefined) => (columns === null || columns === undefined || columns.length === 0 ? {} : { checkedColumns: columns });
 
 /**
  * A origem do resultado da aba de consulta (ou de uma aba do script): o comando daquele resultado, como foi executado, com o filtro dele (RN-GRADE-011), e
@@ -48,8 +51,8 @@ export function recordsSource(rows: RowsState, place: { connectionId: string; da
  */
 export function resultSource(
   rows: RowsState,
-  place: { connectionId: string; database?: string; tabTitle: string; scriptNumber: number | null; unsavedEdits: number; table: { schema: string; name: string } | null },
+  place: { connectionId: string; database?: string; tabTitle: string; scriptNumber: number | null; unsavedEdits: number; table: { schema: string; name: string } | null; checkedColumns?: readonly number[] | null },
 ): ExportSource {
   const origin: ExportOrigin = { kind: "result", tabTitle: place.tabTitle, scriptNumber: place.scriptNumber, sql: rows.target.sql, filter: rows.target.filter ?? null, table: place.table };
-  return { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), origin, columns: sourceColumns(rows.columns), unsavedEdits: place.unsavedEdits };
+  return { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), origin, columns: sourceColumns(rows.columns), unsavedEdits: place.unsavedEdits, ...checkedOf(place.checkedColumns) };
 }

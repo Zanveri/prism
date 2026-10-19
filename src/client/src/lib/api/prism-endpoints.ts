@@ -34,6 +34,7 @@ export const prismEndpoints = {
   userDatabaseSessionQueriesEditTarget: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edit-target`,
   userDatabaseSessionQueriesEdits: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits`,
   userDatabaseSessionQueriesEditsPreview: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/preview`,
+  userDatabaseSessionQueriesEditsCount: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/count`,
   userDatabaseSessionResultCells: (id: string, resultId: string) => `api/user/database-sessions/${encodeURIComponent(id)}/results/${encodeURIComponent(resultId)}/cells`,
   userScripts: "api/user/scripts",
   userScript: (id: string) => `api/user/scripts/${encodeURIComponent(id)}`,

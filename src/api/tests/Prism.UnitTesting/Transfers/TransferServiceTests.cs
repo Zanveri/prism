@@ -784,7 +784,8 @@ public sealed partial class TransferServiceTests : IAsyncDisposable
         public Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, bool wholeColumn, Func<IReadOnlyList<EditCatalogTable?>, Result<EditPlan, DatabaseFailure>> plan, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(EditTables tables, Func<IReadOnlyList<EditCatalogTable?>, Result<WholeColumnPlan, DatabaseFailure>> plan, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -21,7 +21,7 @@ const rt = await vi.hoisted(async () => {
     ...createHookRuntime(),
     queryClient: { getQueryData: () => undefined },
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
-    service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn(), sqlTargetOrRefuse: vi.fn() },
+    service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn(), sqlTargetOrRefuse: vi.fn(), countWholeColumnOrRefuse: vi.fn() },
     cells: { resultCells: vi.fn() },
     /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
     screen: { on: true },
@@ -55,6 +55,8 @@ vi.mock("../_lib/use-command-confirmation", () => ({
       if (question === null) return true;
       return new Promise<boolean>((resolve) => rt.asked.push({ question, proceed: () => resolve(true), cancelled: () => resolve(false) }));
     },
+    // RN-EDIT-019: a pergunta que vem sempre (a da coluna inteira).
+    always: (question: { kind: string } & Record<string, unknown>) => new Promise<boolean>((resolve) => rt.asked.push({ question, proceed: () => resolve(true), cancelled: () => resolve(false) })),
     open: null,
   }),
 }));
@@ -67,7 +69,7 @@ import { ContextMenu } from "@/components/ui";
 import { groupItems } from "@/components/ui/context-menu";
 import { elementsOf } from "@/lib/testing/react-tree";
 
-import { editCell, noEdits } from "../_lib/record-edits";
+import { editCell, editWholeColumn, noEdits } from "../_lib/record-edits";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
@@ -1875,5 +1877,66 @@ describe("QueryTabPanel: o Copiar avançado e o Gerar SQL do menu da grade, no r
     view.show().area.editing!.onMenu({ row: 0, column: 1 }, { x: 4, y: 4 }, false);
     await settle();
     expect(submenu(view, "advancedCopy").map((item) => item.id)).toContain("copyAs:xml");
+  });
+});
+
+describe("QueryTabPanel: depois do Salvar com a coluna inteira (RN-EDIT-019 e 022)", () => {
+  const preview = { statements: [{ sql: "SELECT COUNT(*)", values: [], note: "n" }, { sql: "UPDATE", values: [] }], oneAtATime: false };
+
+  beforeEach(() => {
+    rt.service.editTargetOrRefuse.mockResolvedValue({ ok: true, data: target });
+    rt.service.countWholeColumnOrRefuse.mockResolvedValue({ ok: true, data: { rows: 40 } });
+    rt.service.previewEditsOrRefuse.mockResolvedValue({ ok: true, data: preview });
+    rt.service.saveEditsOrRefuse.mockResolvedValue({ ok: true, data: { applied: 1 } });
+  });
+
+  it("a pergunta vem sempre, também sem a proteção; confirmada, o resultado do último comando é lido de novo, como o F5, sem outra pergunta", async () => {
+    remember("q1", "edits", { resultId: "r1", edits: editWholeColumn(noEdits, 1, "paga") });
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner);
+
+    view.show().banner!.props.onSave();
+    await settle();
+    await settle();
+    expect(rt.asked.map((asked) => asked.question.kind)).toEqual(["wholeColumn"]);
+    expect(rt.asked[0].question).toMatchObject({ title: "Alterar status em 40 linhas de loja.pedido?", after: "Depois, a aba executa o comando de novo, para mostrar o que o banco tem." });
+    rt.asked[0].proceed();
+    await settle();
+    await settle();
+
+    expect(rt.service.saveEditsOrRefuse).toHaveBeenCalledWith("s1", "r1", [{ kind: "updateAll", table: 0, set: [{ column: 1, value: "paga" }], rows: 40 }]);
+    expect(runner.rerun).toHaveBeenCalledOnce();
+    expect(rt.asked).toHaveLength(1);
+    expect(rt.toast.success).toHaveBeenCalledWith("Coluna status atualizada em 40 linhas.");
+  });
+
+  it("numa aba guardada do script, não lê de novo: a grade fica com as linhas que leu, com o valor salvo, e a nota diz o que mudou", async () => {
+    remember("q1", "edits", { resultId: "r0", edits: editWholeColumn(noEdits, 1, "b") });
+    const last: RunTarget = { sql: "select * from loja.pedido", offset: 40, engine: pg };
+    const first: RunTarget = { sql: "select * from loja.pedido where id < 5", offset: 0, engine: pg };
+    const runner = fakeRunner(rowsState({ target: last }));
+    let run = createScriptRun(1, [first, last]);
+    run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
+    run = withEntry(run, 1, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    runner.scriptState = { ...finishRun(run, "done"), results: [{ entry: 0, rows: rowsState({ id: 7, target: first, rows: [["1", "a"]], hasMore: false, resultId: "r0" }) }, { entry: 1, rows: runner.state as RowsState }], live: 1 };
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+
+    view.show().banner!.props.onSave();
+    await settle();
+    await settle();
+    expect(rt.asked[0].question).toMatchObject({ after: "Depois, esta aba fica com as linhas que leu, com o valor novo; Executar este comando lê todas de novo." });
+    // A aba leu as linhas todas (uma), e o comando devolve 40 agora: as duas linhas de atenção, na ordem da regra.
+    expect((rt.asked[0].question.warnings as string[]).slice(0, 2)).toEqual([
+      "A grade tem 1 linha, e o comando devolve 40 agora: o resultado mudou desde que foi lido.",
+      "Este resultado é de um comando anterior do script. O banco o executa de novo agora, depois dos comandos que vieram depois dele.",
+    ]);
+    rt.asked[0].proceed();
+    await settle();
+    await settle();
+
+    expect(runner.keepSaved).toHaveBeenLastCalledWith("r0", { rows: [["1", "b"]], truncated: new Map(), generated: new Map() });
+    expect(runner.rerun).not.toHaveBeenCalled();
+    expect(view.show().area.kept?.note).toBe("Coluna status atualizada em 40 linhas; esta aba mostra só as que leu. Executar este comando lê todas de novo.");
   });
 });

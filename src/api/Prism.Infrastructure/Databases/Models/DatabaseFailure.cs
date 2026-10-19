@@ -33,6 +33,13 @@ public enum EDatabaseFailure
     /// <summary>RN-EDIT-005: um comando do "Salvar" afetou zero linhas ou mais de uma; o "Salvar" foi desfeito (menos no Informix sem log, RN-EDIT-012).</summary>
     EditRowMismatch,
 
+    /// <summary>
+    /// RN-EDIT-018, 020 e 023: a coluna inteira não se altera naquele resultado (a junção, a coluna da chave, a chave com o nome repetido, o comando
+    /// que não é leitura, o limite de linhas sem ordem, o sorteio, mais de 1.000.000 de chaves no caminho por lotes); o motivo vai em `Reason`. Nada
+    /// foi ao banco, ou só a leitura das chaves.
+    /// </summary>
+    EditAllRowsNotSupported,
+
     /// <summary>RN-SQL-017: o resultado de que se pedem os valores completos não é mais o da sessão (outro comando rodou), ou nunca foi.</summary>
     ResultNotFound,
 

@@ -14,7 +14,7 @@ internal static class EditChangeRules
     /// <summary>RN-GRADE-020: o pedido do `edit-target` para o "Gerar SQL" e o "Copiar como" do SQL e do DbUnit.</summary>
     public const string SqlPurpose = "sql";
 
-    private static readonly string[] Kinds = ["update", "delete", "insert"];
+    private static readonly string[] Kinds = ["update", "delete", "insert", "updateAll"];
 
     private static readonly string[] Purposes = ["edit", SqlPurpose];
 
@@ -28,6 +28,6 @@ internal static class EditChangeRules
     public static void MustBeChanges<T>(this IRuleBuilder<T, IReadOnlyList<EditChangeDto>?> rule)
     {
         rule.Must(changes => changes is { Count: > 0 }).WithMessage("Informe ao menos uma alteração.").WithErrorCode(ErrorCode);
-        rule.ForEach(change => change.ChildRules(item => item.RuleFor(dto => dto.Kind).Must(kind => Kinds.Contains(kind, StringComparer.Ordinal)).WithMessage("O tipo da alteração deve ser update, delete ou insert.").WithErrorCode(ErrorCode)));
+        rule.ForEach(change => change.ChildRules(item => item.RuleFor(dto => dto.Kind).Must(kind => Kinds.Contains(kind, StringComparer.Ordinal)).WithMessage("O tipo da alteração deve ser update, delete, insert ou updateAll.").WithErrorCode(ErrorCode)));
     }
 }

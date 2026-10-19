@@ -18,6 +18,33 @@ export function ChevronIcon(props: ComponentProps<"svg">) {
   );
 }
 
+/** RN-GRADE-021: a seta para cima, da ordem crescente no botão de ordenar do cabeçalho. */
+export function ArrowUpIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 13V3M4 7l4-4 4 4" />
+    </Icon>
+  );
+}
+
+/** RN-GRADE-021: a seta para baixo, da ordem decrescente. */
+export function ArrowDownIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M8 3v10M4 9l4 4 4-4" />
+    </Icon>
+  );
+}
+
+/** RN-GRADE-021: as duas setas, para cima e para baixo, da coluna sem ordem. */
+export function ArrowsUpDownIcon(props: ComponentProps<"svg">) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 13V3M3 5.5L5.5 3 8 5.5M10.5 3v10M8 10.5l2.5 2.5 2.5-2.5" />
+    </Icon>
+  );
+}
+
 export function FolderIcon(props: ComponentProps<"svg">) {
   return (
     <Icon {...props}>

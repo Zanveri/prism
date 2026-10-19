@@ -13,7 +13,8 @@ export function previewText(preview: EditPreview): string {
 /**
  * "Ver SQL" (RN-EDIT-008): os comandos que o Salvar vai executar, na ordem, com os valores escritos como literais do banco para leitura;
  * o valor sem literal (caractere de controle) aparece como `?`, com o texto dele embaixo, na ordem. Diz que na execução os valores vão
- * como parâmetros e, no banco sem log, que cada comando é gravado sozinho. Dá para copiar; não executa nada.
+ * como parâmetros e, no banco sem log, que cada comando é gravado sozinho. Com a coluna inteira (RN-EDIT-023), a contagem e o `UPDATE` dela vêm
+ * primeiro, cada um com a nota que a API manda, embaixo dele, como veio. Dá para copiar (os comandos, sem as notas); não executa nada.
  */
 export function EditSqlDialog({ preview, onClose }: { preview: EditPreview; onClose: () => void }) {
   const toast = useToast();
@@ -46,7 +47,14 @@ export function EditSqlDialog({ preview, onClose }: { preview: EditPreview; onCl
         </>
       }
     >
-      <pre className="max-h-80 overflow-auto rounded-md border border-border bg-background p-3 font-editor text-xs break-words whitespace-pre-wrap text-ink">{previewText(preview)}</pre>
+      <div className="flex max-h-80 flex-col gap-2 overflow-auto rounded-md border border-border bg-background p-3">
+        {preview.statements.map((statement, index) => (
+          <div key={index} className="flex flex-col gap-0.5">
+            <pre className="font-editor text-xs break-words whitespace-pre-wrap text-ink">{`${statement.sql};`}</pre>
+            {statement.note == null ? null : <p className="font-sans text-xs text-muted">{statement.note}</p>}
+          </div>
+        ))}
+      </div>
       {unwritten.length === 0 ? null : (
         <div className="mt-3 text-sm text-muted">
           <p>{copy.sqlUnwritten}</p>

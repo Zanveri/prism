@@ -65,14 +65,25 @@ export type SqlFlowDeps = {
   catalog: (table: SqlTable, signal: AbortSignal) => Promise<CatalogAnswer>;
   /** O resultado da grade ainda é o de quando o diálogo abriu (a execução que já rodava não trocou as linhas). */
   stillCurrent: () => boolean;
+  /**
+   * RN-GRADE-023: com colunas inteiras e linhas que o cursor ainda não leu, carrega as que faltam e devolve as linhas do diálogo, todas as do resultado
+   * (`rows`, com as novas não salvas contadas em `newRows`); `progress` mostra o andamento no lugar do SQL. Para quando o texto passaria de 1 MB, com a recusa
+   * dele (`tooLarge`); recusa com a frase quando as linhas não podem vir (`refused`). Nulo quando não há o que carregar: as linhas são as do pedido.
+   */
+  loadRows?: (request: SqlDialogRequest, plan: SqlPlan, signal: AbortSignal, progress: (text: string) => void) => Promise<LoadedRows | null>;
 };
+
+/** O que o carregar das linhas que faltam devolveu ao diálogo (RN-GRADE-023). */
+export type LoadedRows = { kind: "rows"; rows: readonly SqlRow[]; newRows: number } | { kind: "tooLarge" } | { kind: "refused"; reason: string; detail: string | null } | { kind: "cancelled" } | { kind: "changed" };
 
 /** Onde o diálogo está. `rows` e `ddl` são o texto pronto para as opções refazerem; o plano vai junto para a tela lembrar o que o resultado permite. */
 export type SqlDialogPhase =
   | { kind: "checking" }
+  | { kind: "loading"; text: string }
   | { kind: "fetching" }
   | { kind: "catalog" }
-  | { kind: "rows"; plan: SqlPlan; rows: readonly SqlRow[] }
+  /** `newRows`: com as linhas que faltavam carregadas (RN-GRADE-023), as novas não salvas que ficam de fora; sem ele, as do pedido. */
+  | { kind: "rows"; plan: SqlPlan; rows: readonly SqlRow[]; newRows?: number }
   | { kind: "ddl"; plan: SqlPlan; text: string }
   | { kind: "refused"; reason: string; plan: SqlPlan | null }
   | { kind: "failed"; title: string; message: string | null }
@@ -117,6 +128,20 @@ export async function runSqlFlow(request: SqlDialogRequest, deps: SqlFlowDeps, s
   }
 
   let rows = request.rows;
+  let newRows: number | undefined;
+  // RN-GRADE-023: com colunas inteiras, as linhas que faltam vêm antes dos valores completos, com o andamento no lugar do SQL.
+  if (deps.loadRows !== undefined) {
+    const loaded = await deps.loadRows(request, plan, signal, (text) => show({ kind: "loading", text }));
+    if (signal.aborted) return;
+    if (loaded !== null) {
+      if (loaded.kind === "cancelled") return;
+      if (loaded.kind === "changed") return show({ kind: "changed" });
+      if (loaded.kind === "tooLarge") return show({ kind: "refused", reason: dialogCopy.tooLarge, plan });
+      if (loaded.kind === "refused") return show(loaded.detail === null ? { kind: "refused", reason: loaded.reason, plan } : { kind: "failed", title: loaded.reason, message: loaded.detail });
+      rows = loaded.rows;
+      newRows = loaded.newRows;
+    }
+  }
   const cells = cutCellsFor(item, plan, rows);
   if (cells.length > 0) {
     show({ kind: "fetching" });
@@ -127,7 +152,7 @@ export async function runSqlFlow(request: SqlDialogRequest, deps: SqlFlowDeps, s
   }
 
   if (!deps.stillCurrent()) return show({ kind: "changed" });
-  show({ kind: "rows", plan, rows });
+  show({ kind: "rows", plan, rows, ...(newRows === undefined ? {} : { newRows }) });
 }
 
 /** O limite do texto (RN-GRADE-018): 1 MB em UTF-8, o teto do texto de uma aba de consulta (RN-ABAS-006) e de um script (RN-SCRIPT-004). */
@@ -173,13 +198,17 @@ export function sqlDialogView(request: SqlDialogRequest, phase: SqlDialogPhase, 
   const plan = planOf(phase);
   const table = plan?.table ?? (request.records === null ? null : { schema: request.records.schema, name: request.records.name });
   const unknownInsert = item === "insert" && plan !== null && plan.table === null;
-  const subtitle = [generateSqlCopy.items[item], ...(table === null || unknownInsert ? [] : [shownTable(table)]), ...(item === "create" ? [] : [dialogCopy.rows(request.rows.length)])].join(dialogCopy.separator);
+  // As linhas do subtítulo: as do texto, quando as que faltavam chegaram (RN-GRADE-023); senão, as do pedido.
+  const rowCount = phase.kind === "rows" ? phase.rows.length : request.rows.length;
+  const subtitle = [generateSqlCopy.items[item], ...(table === null || unknownInsert ? [] : [shownTable(table)]), ...(item === "create" ? [] : [dialogCopy.rows(rowCount)])].join(dialogCopy.separator);
   const shown: SqlOptionsShown = item === "create" ? { qualified: false, compact: false, excludeGenerated: false } : { qualified: !unknownInsert, compact: true, excludeGenerated: item === "insert" && !unknownInsert };
   const base = { subtitle, shown, targetFields: unknownInsert, warnings: [] as string[], canOutput: false, generated: null };
 
   switch (phase.kind) {
     case "checking":
       return { ...base, body: { kind: "status", text: dialogCopy.checking, cancel: false } };
+    case "loading":
+      return { ...base, body: { kind: "status", text: phase.text, cancel: true } };
     case "fetching":
       return { ...base, body: { kind: "status", text: dialogCopy.fetching, cancel: true } };
     case "catalog":
@@ -198,7 +227,7 @@ export function sqlDialogView(request: SqlDialogRequest, phase: SqlDialogPhase, 
       if (refusal !== null) return { ...base, body: { kind: "refused", text: refusal } };
       const generated = generateSql(item, phase.plan, phase.rows, options, sqlTextLimit);
       if (generated.tooLarge === true || utf8Bytes(generated.text) > sqlTextLimit) return { ...base, body: { kind: "refused", text: dialogCopy.tooLarge } };
-      return { ...base, warnings: rowWarnings(request, phase.rows, generated), body: { kind: "text", text: generated.text }, canOutput: true, generated };
+      return { ...base, warnings: rowWarnings({ ...request, newRows: phase.newRows ?? request.newRows }, phase.rows, generated), body: { kind: "text", text: generated.text }, canOutput: true, generated };
     }
   }
 }

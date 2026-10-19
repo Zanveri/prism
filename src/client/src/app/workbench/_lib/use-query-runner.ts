@@ -127,6 +127,13 @@ export type RowsState = {
   read?: boolean | null;
 };
 
+/**
+ * O que um "Carregar mais" fez: trouxe a página (`loaded`); não havia o que ler (`end`, sem `hasMore`); não leu porque a aba estava ocupada (`busy`); achou o
+ * cursor fechado ou a sessão caída (`closed`); a leitura falhou (`failed`, com a mensagem do banco, como veio, ou a da API; nula quando foi cancelada); ou a
+ * aba saiu de cena, outro comando tomou o lugar, ou nada estava na tela (`gone`).
+ */
+export type LoadMoreOutcome = { kind: "loaded" } | { kind: "end" } | { kind: "busy" } | { kind: "closed" } | { kind: "failed"; message: string | null } | { kind: "gone" };
+
 export type AffectedState = { status: "affected"; rowsAffected: number; elapsedMs: number };
 
 /**
@@ -269,7 +276,11 @@ export type QueryRunner = {
    * livre, com o resultado e o cursor que a tela mostra).
    */
   autoRunSettled: () => Promise<void>;
-  loadMore: () => Promise<void>;
+  /**
+   * "Carregar mais" (RN-SQL-005): a página seguinte do cursor. Diz o que houve (`LoadMoreOutcome`), para quem carrega as linhas que faltam de uma vez
+   * (RN-GRADE-023, `useRecordEdits`) seguir, parar ou recusar com o motivo; os avisos de sempre (o cursor fechado, a falha do banco) saem como antes.
+   */
+  loadMore: () => Promise<LoadMoreOutcome>;
   countTotal: () => Promise<void>;
   /**
    * O texto do editor mudou: a posição do erro era a do texto enviado. Desfaz a marca que estiver
@@ -1054,14 +1065,21 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     return retired && !before;
   };
 
-  const loadMore = async () => {
+  const loadMore = async (): Promise<LoadMoreOutcome> => {
     // Sem a espera, tudo até o envio acontece já na chamada: quem chama vê a aba ocupada na hora.
-    if (autoBusy !== null && (await retiredWhileWaiting())) return;
-    return guarded(async () => {
+    if (autoBusy !== null && (await retiredWhileWaiting())) return { kind: "gone" };
+    let outcome: LoadMoreOutcome = { kind: "gone" };
+    await guarded(async () => {
       if (retired) return refuse("loadMore");
-      if (state.status !== "rows" || !state.hasMore || state.cursorClosed || isBusy()) return;
+      if (state.status !== "rows") return;
+      if (!state.hasMore) return void (outcome = { kind: "end" });
+      if (state.cursorClosed) return void (outcome = { kind: "closed" });
+      if (isBusy()) return void (outcome = { kind: "busy" });
       // Aba desconectada: o cursor foi fechado com a sessão.
-      if (sessionId === null) return closeCursor();
+      if (sessionId === null) {
+        outcome = { kind: "closed" };
+        return closeCursor();
+      }
 
       const session = sessionId;
       const started = epoch;
@@ -1080,20 +1098,27 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         const { rows, truncatedCells, hasMore } = page.data;
         set({ ...current, rows: [...current.rows, ...rows], truncated: withTruncated(current.truncated, truncatedCells, current.rows.length), hasMore, pages: current.pages + 1, loadingMore: false, cancelling: false });
         warnTruncated(page.data);
+        outcome = { kind: "loaded" };
         return;
       }
 
       patchRows({ loadingMore: false, cancelling: false });
       if (page.error.code === "DATABASE_SESSION_NOT_FOUND") sessionLost();
-      if (page.error.code === "NO_OPEN_CURSOR" || page.error.code === "DATABASE_SESSION_NOT_FOUND") closeCursor();
-      else if (page.error.code === "SQL_EXECUTION_FAILED") {
-        // A leitura falhou ou foi cancelada: o comando morreu e a API fechou o cursor (o pedido seguinte já responderia 409
-        // `NO_OPEN_CURSOR`), então as linhas ficam e a tela oferece executar de novo, em vez de um "Carregar mais" que não leva a nada.
-        // O aviso é o da falha, que o aviso central já deu, ou o do desfecho do cancelamento.
-        patchRows({ cursorClosed: true });
-        warnOutcome(page.error);
+      if (page.error.code === "NO_OPEN_CURSOR" || page.error.code === "DATABASE_SESSION_NOT_FOUND") {
+        outcome = { kind: "closed" };
+        closeCursor();
+      } else {
+        outcome = { kind: "failed", message: cancelOutcomeOf(page.error) === null ? (page.error.detail ?? page.error.title) : null };
+        if (page.error.code === "SQL_EXECUTION_FAILED") {
+          // A leitura falhou ou foi cancelada: o comando morreu e a API fechou o cursor (o pedido seguinte já responderia 409
+          // `NO_OPEN_CURSOR`), então as linhas ficam e a tela oferece executar de novo, em vez de um "Carregar mais" que não leva a nada.
+          // O aviso é o da falha, que o aviso central já deu, ou o do desfecho do cancelamento.
+          patchRows({ cursorClosed: true });
+          warnOutcome(page.error);
+        }
       }
     });
+    return outcome;
   };
 
   const countTotal = async () => {

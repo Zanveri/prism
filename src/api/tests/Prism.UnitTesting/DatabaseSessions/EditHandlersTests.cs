@@ -3,6 +3,7 @@ using FluentValidation.TestHelper;
 using Moq;
 using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Features.ApplyEdits;
+using Prism.Application.DatabaseSessions.Features.CountWholeColumn;
 using Prism.Application.DatabaseSessions.Features.GetEditTarget;
 using Prism.Application.DatabaseSessions.Features.PreviewEdits;
 using Prism.Application.DatabaseSessions.Models.Dtos;
@@ -10,6 +11,7 @@ using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Vault.Models;
 using System.Net;
+using System.Text.Json;
 
 namespace Prism.UnitTesting.DatabaseSessions;
 
@@ -23,6 +25,7 @@ public sealed class EditHandlersTests
     private static readonly GetEditTargetValidator GetEditTargetValidator = new();
     private static readonly ApplyEditsValidator ApplyEditsValidator = new();
     private static readonly PreviewEditsValidator PreviewEditsValidator = new();
+    private static readonly CountWholeColumnValidator CountWholeColumnValidator = new();
 
     private readonly Mock<IConnectionQueries> _connectionQueries = new();
     private readonly Mock<IDatabaseSessionService> _databaseSessionService = new();
@@ -258,5 +261,127 @@ public sealed class EditHandlersTests
         Assert.Equal(("CONNECTION_READ_ONLY", refusal), (preview.Error.Type, preview.Error.Detail));
         _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.Exactly(4));
         _databaseSessionService.VerifyNoOtherCalls();
+    }
+    /// <summary>RN-EDIT-023: a coluna inteira chega ao registro com o `set` e o `rows`; o `rows` que não é um inteiro vira -1, e o que falta, nulo, para o registro recusar com o `change`.</summary>
+    [Trait("ApplyEditsHandler", "ApplyEditsCommand")]
+    [Fact(DisplayName = "OK a coluna inteira chega com o set e o rows; o rows que falta é nulo, e o que não é inteiro é -1")]
+    public async Task ApplyEdits_ShouldBeOK_WithTheWholeColumn()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        IReadOnlyList<EditChange>? received = null;
+        _databaseSessionService.Setup(s => s.ApplyEditsAsync(sessionID, resultID, It.IsAny<IReadOnlyList<EditChange>>(), cancellationToken)).Callback<Guid, Guid, IReadOnlyList<EditChange>, CancellationToken>((_, _, changes, _) => received = changes).ReturnsAsync(Result.Success<int, DatabaseFailure>(1));
+        static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement.Clone();
+        var command = new ApplyEditsCommand
+        {
+            SessionID = sessionID,
+            ResultID = resultID,
+            Changes =
+            [
+                new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "paga"), new EditValueDto(2, null)], Rows = Json("1234") },
+                new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "x")] },
+                new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "x")], Rows = Json("1.5") },
+                new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "x")], Rows = Json("\"3\"") },
+                new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "x")], Rows = Json("null") }
+            ]
+        };
+
+        //Act
+        await new ApplyEditsHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(command, cancellationToken);
+
+        //Assert
+        Assert.NotNull(received);
+        Assert.All(received, change => Assert.Equal(EEditKind.UpdateAll, change.Kind));
+        Assert.Equal([new EditValue(1, "paga"), new EditValue(2, null)], received[0].Values);
+        Assert.Empty(received[0].Key);
+        Assert.Equal([1234, null, -1, -1, null], received.Select(change => change.Rows));
+    }
+
+    /// <summary>RN-EDIT-019 e 023: a contagem da coluna inteira devolve `{ rows }`, com a alteração como o "Salvar" a manda.</summary>
+    [Trait("CountWholeColumnHandler", "CountWholeColumnCommand")]
+    [Fact(DisplayName = "OK a contagem da coluna inteira devolve as linhas, com a alteração do pedido")]
+    public async Task CountWholeColumn_ShouldBeOK()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        IReadOnlyList<EditChange>? received = null;
+        _databaseSessionService.Setup(s => s.CountWholeColumnAsync(sessionID, resultID, It.IsAny<IReadOnlyList<EditChange>>(), cancellationToken)).Callback<Guid, Guid, IReadOnlyList<EditChange>, CancellationToken>((_, _, changes, _) => received = changes).ReturnsAsync(Result.Success<long, DatabaseFailure>(1234));
+
+        //Act
+        var result = await new CountWholeColumnHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new CountWholeColumnCommand { SessionID = sessionID, ResultID = resultID, Changes = [new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "paga")] }] }, cancellationToken);
+
+        //Assert
+        Assert.Equal(new WholeColumnCountDto(1234), result.Value);
+        Assert.Equal((EEditKind.UpdateAll, (long?)null), (Assert.Single(received!).Kind, received![0].Rows));
+    }
+
+    /// <summary>RN-EDIT-023: as recusas do registro de sessões chegam à rota com o código e as extensões da seção 6.</summary>
+    [Trait("CountWholeColumnHandler", "CountWholeColumnCommand")]
+    [Fact(DisplayName = "Erro a coluna inteira que não se altera vira 422 EDIT_ALL_ROWS_NOT_SUPPORTED com change, column e reason; o resultado que mudou, 409 RESULT_CHANGED")]
+    public async Task CountWholeColumn_ShouldBeError_WhenTheRegistryRefuses()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID) = (Guid.CreateVersion7(), Guid.CreateVersion7());
+        IReadOnlyList<EditChangeDto> changes = [new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(0, "1")] }];
+        _databaseSessionService.SetupSequence(s => s.CountWholeColumnAsync(sessionID, resultID, It.IsAny<IReadOnlyList<EditChange>>(), cancellationToken))
+            .ReturnsAsync(Result.Failure<long, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditAllRowsNotSupported, "A coluna inteira não se altera neste resultado: id é da chave de pedido: na coluna inteira, todas as linhas ficariam com a mesma chave.", Reason: "id é da chave de pedido: na coluna inteira, todas as linhas ficariam com a mesma chave", Change: 0, Column: 0)))
+            .ReturnsAsync(Result.Failure<long, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.ResultChanged, "A tabela pedido mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo.")));
+        var handler = new CountWholeColumnHandler(_connectionQueries.Object, _databaseSessionService.Object);
+
+        //Act
+        var refused = await handler.Handle(new CountWholeColumnCommand { SessionID = sessionID, ResultID = resultID, Changes = changes }, cancellationToken);
+        var changed = await handler.Handle(new CountWholeColumnCommand { SessionID = sessionID, ResultID = resultID, Changes = changes }, cancellationToken);
+
+        //Assert
+        Assert.Equal(("EDIT_ALL_ROWS_NOT_SUPPORTED", HttpStatusCode.UnprocessableEntity), (refused.Error.Type, refused.Error.StatusCode));
+        Assert.Equal(((object?)0, (object?)0, (object?)"id é da chave de pedido: na coluna inteira, todas as linhas ficariam com a mesma chave"), (refused.Error.Extensions["change"], refused.Error.Extensions["column"], refused.Error.Extensions["reason"]));
+        Assert.Equal(("RESULT_CHANGED", HttpStatusCode.Conflict), (changed.Error.Type, changed.Error.StatusCode));
+    }
+
+    /// <summary>RN-PROT-002: a contagem da coluna inteira também é recusada na conexão somente leitura, antes de chegar ao registro de sessões.</summary>
+    [Trait("CountWholeColumnHandler", "ConnectionReadOnly")]
+    [Fact(DisplayName = "Erro na conexão somente leitura a contagem da coluna inteira vira 422 CONNECTION_READ_ONLY sem ir ao banco")]
+    public async Task CountWholeColumn_ShouldBeError_WhenTheConnectionIsReadOnly()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var (sessionID, resultID, connectionID) = (Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7());
+        _databaseSessionService.Setup(s => s.ConnectionOf(sessionID)).Returns(connectionID);
+        _connectionQueries.Setup(q => q.IsReadOnly(connectionID, cancellationToken)).ReturnsAsync(Result.Success<bool?, EVaultError>(true));
+
+        //Act
+        var result = await new CountWholeColumnHandler(_connectionQueries.Object, _databaseSessionService.Object).Handle(new CountWholeColumnCommand { SessionID = sessionID, ResultID = resultID, Changes = [new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "paga")] }] }, cancellationToken);
+
+        //Assert
+        Assert.Equal(("CONNECTION_READ_ONLY", HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+        _databaseSessionService.Verify(s => s.ConnectionOf(sessionID), Times.Once);
+        _databaseSessionService.VerifyNoOtherCalls();
+    }
+
+    [Trait("CountWholeColumnValidator", "CountWholeColumnCommand")]
+    [Fact(DisplayName = "OK o tipo updateAll passa nos três pedidos da edição; sem resultado ou sem alterações a contagem é EDIT_INVALID")]
+    public void Validators_ShouldAcceptTheWholeColumn()
+    {
+        //Arrange
+        IReadOnlyList<EditChangeDto> changes = [new EditChangeDto { Kind = "updateAll", Table = 0, Set = [new EditValueDto(1, "paga")] }];
+
+        //Act
+        var count = CountWholeColumnValidator.TestValidate(new CountWholeColumnCommand { ResultID = Guid.CreateVersion7(), Changes = changes });
+        var save = ApplyEditsValidator.TestValidate(new ApplyEditsCommand { ResultID = Guid.CreateVersion7(), Changes = changes });
+        var preview = PreviewEditsValidator.TestValidate(new PreviewEditsCommand { ResultID = Guid.CreateVersion7(), Changes = changes });
+        var noResult = CountWholeColumnValidator.TestValidate(new CountWholeColumnCommand { Changes = changes });
+        var noChanges = CountWholeColumnValidator.TestValidate(new CountWholeColumnCommand { ResultID = Guid.CreateVersion7(), Changes = [] });
+        var unknownKind = CountWholeColumnValidator.TestValidate(new CountWholeColumnCommand { ResultID = Guid.CreateVersion7(), Changes = [new EditChangeDto { Kind = "updateall" }] });
+
+        //Assert
+        count.ShouldNotHaveAnyValidationErrors();
+        save.ShouldNotHaveAnyValidationErrors();
+        preview.ShouldNotHaveAnyValidationErrors();
+        noResult.ShouldHaveValidationErrorFor(command => command.ResultID).WithErrorCode("EDIT_INVALID");
+        noChanges.ShouldHaveValidationErrorFor(command => command.Changes).WithErrorCode("EDIT_INVALID");
+        unknownKind.ShouldHaveValidationErrorFor("Changes[0].Kind").WithErrorCode("EDIT_INVALID").WithErrorMessage("O tipo da alteração deve ser update, delete, insert ou updateAll.");
     }
 }

@@ -379,6 +379,13 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     protected override string LockTimeoutSql => "SET lock_timeout = '5s'";
 
     /// <summary>
+    /// RN-EDIT-021: em Auto-commit, o "Salvar" com a coluna inteira abre a transação em Repeatable read: a conferência do catálogo, a contagem e o
+    /// `UPDATE` veem o mesmo retrato, e a linha que outra sessão alterou depois dele é a recusa 40001 do banco, sem nada gravado. (O Serializable da aba,
+    /// RN-ISOL-001, e o nível da aba no Commit manual entram com eles.)
+    /// </summary>
+    protected override IsolationLevel? WholeColumnIsolation => IsolationLevel.RepeatableRead;
+
+    /// <summary>
     /// RN-EXPORT-017 e RN-IMPORT-028: além do prazo de trava, a forma do texto que o servidor escreve, para ela ser a mesma em qualquer servidor e o
     /// arquivo voltar igual pela importação: a data em ISO, o número de ponto flutuante com todos os dígitos e o binário em hexadecimal. Só a forma do
     /// texto: nada muda no banco. Num servidor com os padrões, o texto é o mesmo da grade.

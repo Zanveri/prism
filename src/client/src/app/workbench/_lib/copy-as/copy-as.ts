@@ -222,8 +222,11 @@ export function copyAsNotice(format: DocumentFormat, rows: number, counts: Docum
 
 export type CopyRequest = { format: DocumentFormat; options: FormatOptions; source: CopySource };
 
-/** Onde a cópia está: escrevendo o texto (a faixa diz "Copiando…" passado meio segundo) ou buscando os valores completos ("Buscando os valores completos…"). */
-export type CopyPhase = "writing" | "fetching";
+/**
+ * Onde a cópia está: escrevendo o texto (a faixa diz "Copiando…" passado meio segundo), buscando os valores completos ("Buscando os valores completos…") ou,
+ * com colunas inteiras, carregando as linhas que faltam (RN-GRADE-023, "Carregando as linhas que faltam… 1.400 linhas").
+ */
+export type CopyPhase = "writing" | "fetching" | "loading";
 
 /** Um valor completo que a busca trouxe (RN-SQL-017), na linha e na coluna da origem; `null` quando ele não veio. */
 export type FetchedValue = { row: number; column: number; value: string | null };

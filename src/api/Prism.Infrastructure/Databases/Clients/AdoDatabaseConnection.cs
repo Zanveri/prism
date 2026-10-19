@@ -298,6 +298,12 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// </summary>
     protected abstract string EditKeysSql { get; }
 
+    /// <summary>
+    /// RN-EDIT-021: o nível de isolamento da transação do "Salvar" com a coluna inteira, para a conferência do catálogo, a contagem e o `UPDATE` verem o
+    /// mesmo retrato do banco. Nulo, por padrão: vale o do banco (Db2 e Informix). O PostgreSQL em Auto-commit responde Repeatable read.
+    /// </summary>
+    protected virtual IsolationLevel? WholeColumnIsolation => null;
+
     /// <summary>RN-EDIT-010: o comando que dá à conexão à parte do catálogo um prazo de espera de trava, em vez de esperar para sempre.</summary>
     protected abstract string LockTimeoutSql { get; }
 
@@ -409,12 +415,22 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
     /// <summary>
     /// RN-SQL-010: a recusa é o banco dizendo que interrompeu o comando, e com isso o desfez? Por padrão, o SQLSTATE 57014, que o
-    /// PostgreSQL e o Db2 usam. O banco que diz isso de outro jeito responde aqui (o Informix, pelo erro nativo da exceção). Só a
-    /// exceção desta recusa decide, e não um estado guardado da conexão: o pedido de cancelamento roda em outra thread e também passa
-    /// pelo <see cref="ToFailure"/>.
+    /// PostgreSQL e o Db2 usam, e a exceção sem nenhuma informação do banco, no driver que a lança na interrupção
+    /// (<see cref="CameWithoutErrorInformation"/>). O banco que diz isso de outro jeito responde aqui (o Informix, pelo erro nativo da
+    /// exceção). Só a exceção desta recusa decide, e não um estado guardado da conexão: o pedido de cancelamento roda em outra thread e
+    /// também passa pelo <see cref="ToFailure"/>.
     /// </summary>
     protected virtual bool IsInterruption(Exception exception, DatabaseFailure failure)
-        => failure.SqlState == QueryCanceledSqlState;
+        => failure.SqlState == QueryCanceledSqlState || CameWithoutErrorInformation(exception);
+
+    /// <summary>
+    /// RN-SQL-010 e RN-EDIT-021: a exceção é a do driver que não trouxe nenhum erro do banco ("no error information available")? No driver da
+    /// IBM é como chega, às vezes, o comando interrompido dentro da transação do driver (a do "Salvar" e a da carga), nos dois bancos. Ela conta
+    /// como interrupção, e quem decide o desfecho é o `RunAsync` (<see cref="WithTheCancelOutcome"/>): sem pedido de cancelamento ela fica um
+    /// erro comum, sem desfecho. Por padrão, nenhuma exceção é assim.
+    /// </summary>
+    protected virtual bool CameWithoutErrorInformation(Exception exception)
+        => false;
 
     /// <summary>
     /// Vale tentar o comando como leitura paginada? Só pela primeira palavra: quem diz se ele grava é o banco, dentro da transação só de
@@ -920,11 +936,18 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// abandonado. A transação sai do campo antes do `COMMIT`: se ele falha, o banco já a encerrou (no PostgreSQL, a recusa de uma
     /// restrição adiada desfaz a transação), e o `ROLLBACK` do fim não tem o que desfazer. No banco sem log cada comando é confirmado
     /// sozinho, e a recusa diz quantos já estavam gravados (`Applied`).
+    ///
+    /// RN-EDIT-021: a coluna inteira vem primeiro, depois da conferência do catálogo: a contagem tem de dar as linhas confirmadas (senão nada é
+    /// executado, `ResultChanged`), e o `UPDATE` (ou a soma dos lotes, cada um com as linhas das chaves dele) tem de alterar exatamente elas (senão tudo
+    /// é desfeito, `ResultChanged`; no banco sem log ele já ficou gravado, `EditRowMismatch` com `Applied` 1). No banco que pede (o PostgreSQL), a
+    /// transação de um "Salvar" com a coluna inteira é a do retrato (<see cref="WholeColumnIsolation"/>). No banco sem log, a falha do `UPDATE` da
+    /// coluna inteira, de qualquer tipo (também o cancelamento), pode tê-lo deixado gravado em parte: `Outcome` é `Unknown`.
     /// </summary>
-    public async Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
+    public async Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, bool wholeColumn, Func<IReadOnlyList<EditCatalogTable?>, Result<EditPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
     {
         int? failing = null;
         var applied = 0;
+        var writingTheWholeColumn = false;
 
         var result = await RunAsync(nameof(ApplyEditsAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
@@ -932,13 +955,59 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             await ApplySessionModeAsync(readOnly: false, token);
 
             if (!oneAtATime)
-                _editTransaction = await _connection!.BeginTransactionAsync(token);
+                _editTransaction = wholeColumn && WholeColumnIsolation is { } isolation ? await _connection!.BeginTransactionAsync(isolation, token) : await _connection!.BeginTransactionAsync(token);
 
             var planned = plan(await DescribeCoreAsync(tables, inTheSession: true, token));
             if (planned.IsFailure)
                 return Result.Failure<int, DatabaseFailure>(planned.Error);
 
-            foreach (var edit in planned.Value)
+            if (planned.Value.WholeColumn is { } whole)
+            {
+                failing = whole.Change;
+                var confirmed = whole.Rows ?? 0;
+                var keys = whole.ReadsKeys ? await ReadKeysAsync(whole, token) : null;
+                if (whole.ReadsKeys && keys is null)
+                    return WholeColumnSql.NotSupported(WholeColumnSql.TooManyKeysReason, whole.Change);
+
+                var counted = keys?.Count ?? await CountWholeColumnRowsAsync(whole.CountSql, token);
+                if (counted != confirmed)
+                    return new DatabaseFailure(EDatabaseFailure.ResultChanged, WholeColumnSql.CountChanged(counted, confirmed), Change: whole.Change);
+
+                IReadOnlyList<WholeColumnBatch>? batches = null;
+                if (keys is not null)
+                {
+                    var built = whole.Batches!(keys);
+                    if (built.IsFailure)
+                        return built.Error;
+
+                    batches = built.Value;
+                }
+
+                writingTheWholeColumn = true;
+                long affected = 0;
+                if (batches is not null)
+                {
+                    foreach (var batch in batches)
+                    {
+                        var done = await RunCountedAsync(batch.Command, token);
+                        affected += done;
+                        if (done != batch.Keys)
+                            break;
+                    }
+                }
+                else
+                    affected = await RunCountedAsync(whole.Update!, token);
+
+                writingTheWholeColumn = false;
+                if (affected != confirmed && !oneAtATime)
+                    return new DatabaseFailure(EDatabaseFailure.ResultChanged, WholeColumnSql.UpdateChanged(affected, confirmed), Change: whole.Change);
+
+                applied++;
+                if (affected != confirmed)
+                    return new DatabaseFailure(EDatabaseFailure.EditRowMismatch, WholeColumnSql.WrittenAnyway(affected, confirmed), Change: whole.Change, RowsAffected: affected);
+            }
+
+            foreach (var edit in planned.Value.Commands)
             {
                 failing = edit.Change;
                 var affected = await RunEditAsync(edit, token);
@@ -949,6 +1018,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             }
 
             failing = null;
+
+            // RN-EDIT-021: o cancelamento que chega depois do último comando não desfaz nada (o driver da IBM, que não lança, o diria cancelado).
+            if (planned.Value.WholeColumn is not null)
+                _executed = true;
+
             if (_editTransaction is { } transaction)
             {
                 _editTransaction = null;
@@ -961,7 +1035,11 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
 
         int? written = oneAtATime ? applied : null;
         if (result.IsFailure)
-            return result.Error with { Change = failing, Applied = written };
+        {
+            var failure = result.Error with { Change = failing, Applied = written };
+
+            return oneAtATime && writingTheWholeColumn ? failure with { Outcome = ECancelOutcome.Unknown } : failure;
+        }
 
         if (result.Value.IsSuccess)
             return result.Value.Value;
@@ -970,6 +1048,46 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         await DisposeCursorAsync();
 
         return result.Value.Error with { Applied = written };
+    }
+
+    /// <summary>
+    /// RN-EDIT-019 e 023: a contagem da pergunta da coluna inteira, na sessão, como o "Salvar" que ela começa: fecha o cursor aberto, confere antes o
+    /// catálogo na própria sessão (a tabela que mudou é a recusa do plano) e conta pela forma do plano. No banco que tem, numa transação só de leitura; no
+    /// caminho por lotes, lendo as chaves do comando, até 1.000.001.
+    /// </summary>
+    public async Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(EditTables tables, Func<IReadOnlyList<EditCatalogTable?>, Result<WholeColumnPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
+    {
+        var result = await RunAsync(nameof(CountWholeColumnAsync), EDatabaseFailure.ExecutionFailed, async token =>
+        {
+            var planned = plan(await DescribeCoreAsync(tables, inTheSession: true, token));
+            if (planned.IsFailure)
+                return Result.Failure<long, DatabaseFailure>(planned.Error);
+
+            var whole = planned.Value;
+            if (whole.ReadsKeys)
+            {
+                var keys = await ReadKeysAsync(whole, token);
+
+                return keys is null ? WholeColumnSql.NotSupported(WholeColumnSql.TooManyKeysReason, whole.Change) : Result.Success<long, DatabaseFailure>(keys.Count);
+            }
+
+            await BeginReadOnlyAsync(token);
+            var counted = await CountWholeColumnRowsAsync(whole.CountSql, token);
+
+            return counted < 0 ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "A contagem não devolveu nenhuma linha.") : Result.Success<long, DatabaseFailure>(counted);
+        }, cancellationToken);
+
+        // A posição seria a do comando embrulhado, e não a do que o usuário escreveu.
+        if (result.IsFailure)
+            return result.Error with { Position = null };
+
+        if (result.Value.IsSuccess)
+            return result.Value.Value;
+
+        // A recusa do plano (o catálogo mudou) e o teto das chaves: o que ficou aberto (o leitor das chaves) sai aqui.
+        await DisposeCursorAsync();
+
+        return result.Value.Error;
     }
 
     public async Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken)
@@ -1415,6 +1533,85 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         await command.DisposeAsync();
 
         return affected;
+    }
+
+    /// <summary>
+    /// RN-EDIT-021: um comando da coluna inteira, que altera muitas linhas: pelo envio do banco (<see cref="ExecuteReaderAsync"/>), em que o driver da IBM
+    /// repete o pedido de cancelamento que chega antes de o comando estar executando. Devolve as linhas afetadas.
+    /// </summary>
+    private async Task<long> RunCountedAsync(EditCommand edit, CancellationToken cancellationToken)
+    {
+        var command = _connection!.CreateCommand();
+        command.CommandText = edit.Sql;
+        command.CommandTimeout = 0;
+        command.Transaction = _editTransaction;
+
+        foreach (var value in edit.Parameters)
+        {
+            var parameter = command.CreateParameter();
+            BindEditParameter(parameter, value);
+            command.Parameters.Add(parameter);
+        }
+
+        // O `Cancel` o alcança por aqui; se ele lança, quem o descarta é o fim do cursor abandonado.
+        _command = command;
+        long affected;
+        await using (var reader = await ExecuteReaderAsync(command, cancellationToken))
+        {
+            affected = reader.RecordsAffected;
+            while (await reader.NextResultAsync(cancellationToken))
+            {
+            }
+        }
+
+        _command = null;
+        await command.DisposeAsync();
+
+        return affected;
+    }
+
+    /// <summary>RN-EDIT-020: a contagem da coluna inteira, lida até o fim, dentro do comando em andamento. -1 quando o banco não devolveu linha (o corte do cancelamento no driver da IBM).</summary>
+    private async Task<long> CountWholeColumnRowsAsync(string sql, CancellationToken cancellationToken)
+    {
+        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken);
+
+        // O total chega como inteiro de 32 bits nos drivers da IBM e como texto no PostgreSQL, que lê o resultado em texto.
+        var counted = await reader.ReadAsync(cancellationToken) ? Convert.ToInt64(reader.GetValue(0), CultureInfo.InvariantCulture) : -1;
+        await FinishCursorAsync(cancellationToken);
+
+        return counted;
+    }
+
+    /// <summary>
+    /// RN-EDIT-020: o caminho por lotes do Informix lê as chaves do próprio comando do resultado, como a grade as escreve (o valor cortado, inteiro), na
+    /// memória. Nulo quando ele devolve mais de 1.000.000 de linhas: a leitura para na seguinte, e o leitor fica para o fim do cursor abandonado.
+    /// </summary>
+    private async Task<IReadOnlyList<IReadOnlyList<string>>?> ReadKeysAsync(WholeColumnPlan whole, CancellationToken cancellationToken)
+    {
+        var positions = whole.KeyColumns!;
+        var reader = await StartAsync(whole.CountSql, [], userCommand: true, cancellationToken);
+        var kinds = positions.Select(position => ColumnKind(reader, position)).ToList();
+        var keys = new List<IReadOnlyList<string>>();
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (keys.Count == WholeColumnSql.MaxKeys)
+                return null;
+
+            keys.Add([.. positions.Select((position, part) => KeyText(ReadCell(reader, position, kinds[part])))]);
+        }
+
+        await FinishCursorAsync(cancellationToken);
+
+        return keys;
+    }
+
+    /// <summary>A chave lida como a grade a escreve (RN-SQL-011), e inteira quando a grade a cortaria.</summary>
+    private static string KeyText(object value)
+    {
+        var text = CellFormatter.Format(value, out var truncated) ?? string.Empty;
+
+        return truncated ? CellFormatter.Full(value).Write() : text;
     }
 
     /// <summary>

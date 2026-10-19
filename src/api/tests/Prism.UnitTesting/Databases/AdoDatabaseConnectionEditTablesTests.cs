@@ -41,11 +41,11 @@ public sealed partial class AdoDatabaseConnectionTests
         //Act
         var outside = await connection.DescribeEditTablesAsync(tables, CancellationToken.None);
         var sentOutside = _sent.ToList();
-        await connection.ApplyEditsAsync(tables, oneAtATime: true, catalogs =>
+        await connection.ApplyEditsAsync(tables, oneAtATime: true, wholeColumn: false, catalogs =>
         {
             described = catalogs;
 
-            return Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditInvalid, "nada a gravar"));
+            return Result.Failure<EditPlan, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditInvalid, "nada a gravar"));
         }, CancellationToken.None);
 
         //Assert
@@ -67,11 +67,11 @@ public sealed partial class AdoDatabaseConnectionTests
         IReadOnlyList<EditCatalogTable?>? described = null;
 
         //Act
-        await connection.ApplyEditsAsync(new EditTables([new EditTableName("loja", "pedido", "\"loja\".\"pedido\"")], [1000L]), oneAtATime: true, catalogs =>
+        await connection.ApplyEditsAsync(new EditTables([new EditTableName("loja", "pedido", "\"loja\".\"pedido\"")], [1000L]), oneAtATime: true, wholeColumn: false, catalogs =>
         {
             described = catalogs;
 
-            return Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditInvalid, "nada a gravar"));
+            return Result.Failure<EditPlan, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditInvalid, "nada a gravar"));
         }, CancellationToken.None);
 
         //Assert

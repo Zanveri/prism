@@ -25,7 +25,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOr
 vi.mock("../table-structure.service", () => ({ columnsQuery: () => ({ list: "columns" }), foreignKeysQuery: () => ({ list: "foreignKeys" }), indexesQuery: () => ({ list: "indexes" }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 
-import { emptySelection, select, selectAll, selectedColumns, selectedRows, sliceOf, type GridLayout, type GridSelection } from "../grid-selection";
+import { emptySelection, select, selectAll, selectColumn, selectedColumns, selectedRows, sliceOf, type GridLayout, type GridSelection } from "../grid-selection";
 import { gridSelectionCopy } from "../grid-selection.copy";
 import { addRow, editCell, noEdits, type PendingEdits } from "../record-edits";
 import { generateSqlCopy } from "./generate-sql.copy";
@@ -84,6 +84,10 @@ function fakeContext(change: Partial<GridSelectionContext> & { selection?: GridS
     layout,
     rows: selectedRows(selection, layout),
     columns: selectedColumns(selection, layout),
+    wholeColumns: null,
+    rowsToLoad: false,
+    total: null,
+    loadRest: vi.fn(),
     slice: (scope = "cells") => sliceOf(selection, layout, { columns: shown.columns, valueAt: (row, column) => shown.rows[row]?.[column] ?? null, truncatedAt: () => false, generatedAt: () => false }, scope),
     complete: vi.fn(),
     fullValues: vi.fn(async () => ({ valueOf: (row: number, column: number) => (row === 1 && column === 1 ? "cortado e inteiro" : undefined), missing: 0 })),
@@ -239,5 +243,46 @@ describe("o diálogo aberto pela grade (RN-GRADE-018)", () => {
   it("o menu tem os seis itens com os nomes do print, os mesmos do diálogo", () => {
     expect(generateSqlCopy.items).toBe(gridSelectionCopy.menu.sql);
     expect(generateSqlCopy.menu).toBe(gridSelectionCopy.menu.generateSql);
+  });
+});
+
+describe("com colunas inteiras, o \"Gerar SQL\" carrega antes as linhas que faltam (RN-GRADE-023)", () => {
+  it("depois de conferir a tabela, o lugar do SQL diz o andamento, e o texto é de todas as linhas que chegaram", async () => {
+    const whole = selectColumn(emptySelection, 1, { read: 1, added: [], columns: 2 });
+    const all = fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: false, total: 2 });
+    let progressShown: string | null = null;
+    const loadRest = vi.fn<GridSelectionContext["loadRest"]>(async (options) => {
+      options?.onProgress?.("Carregando as linhas que faltam… 1 linha");
+      progressShown = render().dialog?.view.body.kind === "status" ? (render().dialog!.view.body as { text: string }).text : null;
+      // A conta do limite recebe as linhas que já estavam e as de cada página.
+      expect(options?.keepGoing?.(shown, 0)).toBe(true);
+      return { kind: "ready", context: all };
+    });
+    const first = fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: true, total: null, loadRest, rows: [0] });
+
+    render().source.choose("sql:update", first);
+    await settle();
+    await settle();
+
+    expect(loadRest).toHaveBeenCalledOnce();
+    expect(progressShown).toBe("Carregando as linhas que faltam… 1 linha");
+    const view = render().dialog!.view;
+    expect(view.body).toMatchObject({ kind: "text" });
+    expect(view.subtitle).toContain("2 linhas");
+  });
+
+  it("o limite de 1 MB durante o carregar recusa com a frase dele; as linhas que não vêm, com a recusa do carregar", async () => {
+    const whole = selectColumn(emptySelection, 1, { read: 1, added: [], columns: 2 });
+    const stopped = fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: true, loadRest: async () => ({ kind: "stopped" }) });
+    render().source.choose("sql:update", stopped);
+    await settle();
+    await settle();
+    expect(render().dialog!.view.body).toEqual({ kind: "refused", text: generateSqlCopy.dialog.tooLarge });
+
+    const refused = fakeContext({ selection: whole, wholeColumns: [1], rowsToLoad: true, loadRest: async () => ({ kind: "refused", reason: gridSelectionCopy.loadRest.busy, detail: null }) });
+    render().source.choose("sql:update", refused);
+    await settle();
+    await settle();
+    expect(render().dialog!.view.body).toEqual({ kind: "refused", text: gridSelectionCopy.loadRest.busy });
   });
 });

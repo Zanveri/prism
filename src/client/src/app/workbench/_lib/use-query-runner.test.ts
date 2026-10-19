@@ -1091,7 +1091,8 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
 
     const loading = runner.loadMore();
     expect(runner.getState()).toMatchObject({ status: "rows", loadingMore: true });
-    await loading;
+    // RN-GRADE-023: quem carrega as linhas que faltam de uma vez sabe o que cada página fez.
+    expect(await loading).toEqual({ kind: "loaded" });
 
     const state = runner.getState();
     expect(state).toMatchObject({ status: "rows", rows: [["1", "a"], ["2", "b"], ["3", "c"], ["4", "d"]], hasMore: false, pages: 2, loadingMore: false, elapsedMs: 42 });
@@ -1142,7 +1143,8 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
     const loading = runner.loadMore();
     await runner.cancel();
     answer.resolve(problem(422, "SQL_EXECUTION_FAILED", afterCancel.postgresCanceled));
-    await loading;
+    // Cancelada, a leitura falhou sem mensagem do banco: o desfecho do cancelamento já é o aviso.
+    expect(await loading).toEqual({ kind: "failed", message: null });
 
     expect(runner.getState()).toMatchObject({ status: "rows", rows: [["1", "a"], ["2", "b"]], cursorClosed: true, loadingMore: false, cancelling: false });
     expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.commandCancelled);
@@ -1197,7 +1199,8 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
     const { api, toast, runner } = await withFirstPage();
     api.on(`POST ${sessions}/s1/queries/next`, problem(422, "SQL_EXECUTION_FAILED", { detail: "ERROR: division by zero", sqlState: "22012" }));
 
-    await runner.loadMore();
+    // RN-GRADE-023: a falha volta com a mensagem do banco, como veio, para a faixa dizer por que as linhas que faltam não vieram.
+    expect(await runner.loadMore()).toEqual({ kind: "failed", message: "ERROR: division by zero" });
 
     expect(runner.getState()).toMatchObject({ status: "rows", rows: [["1", "a"], ["2", "b"]], cursorClosed: true, loadingMore: false });
     expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de SQL_EXECUTION_FAILED", "ERROR: division by zero");
@@ -1205,7 +1208,7 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
 
     // Fechado, "carregar mais" não vai à API (o botão nem aparece).
     const calls = api.calls.length;
-    await runner.loadMore();
+    expect(await runner.loadMore()).toEqual({ kind: "closed" });
     expect(api.calls).toHaveLength(calls);
   });
 
@@ -1213,7 +1216,7 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
     const { api, onSession, runner } = await withFirstPage();
     api.on(`POST ${sessions}/s1/queries/next`, problem(404, "DATABASE_SESSION_NOT_FOUND"));
 
-    await runner.loadMore();
+    expect(await runner.loadMore()).toEqual({ kind: "closed" });
 
     expect(runner.getState()).toMatchObject({ status: "rows", cursorClosed: true });
     expect(onSession).toHaveBeenLastCalledWith(null);

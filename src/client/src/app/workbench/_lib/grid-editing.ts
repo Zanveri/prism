@@ -6,6 +6,7 @@ import type { GridLayout, GridSelection } from "./grid-selection";
 import type { QueryRow } from "./query.schema";
 import type { ChangeOrigin, EditValue, PendingEdits } from "./record-edits";
 import { recordsCopy } from "./records.copy";
+import type { RecordsSort } from "./table-sql";
 
 const shortcutCopy = recordsCopy.edit.shortcuts;
 
@@ -15,8 +16,18 @@ const shortcutCopy = recordsCopy.edit.shortcuts;
  */
 export type RowMark = { kind: "read" | "new"; deleted: boolean; pending: ReadonlyMap<number, EditValue>; failed: boolean };
 
-/** O campo de edição aberto numa célula, com o texto que está nele. */
-export type CellEditorState = GridCell & { draft: string };
+/**
+ * RN-GRADE-021: o botão de ordenar do cabeçalho, pelo mesmo caminho do "Ordenar" do menu (RN-TABELA-010 nos Registros, RN-GRADE-011 no resultado): a ordem
+ * aplicada (a seta fica à vista na coluna dela, quando é de uma coluna só), o motivo de ele não valer agora (o mesmo do "Ordenar" do menu, nulo quando vale)
+ * e o clique, que segue o ciclo crescente, decrescente e sem ordem para a coluna dele (pelo nome).
+ */
+export type HeaderSort = { applied: RecordsSort | null; reason: string | null; onSort: (column: string) => void };
+
+/**
+ * O campo de edição aberto numa célula, com o texto que está nele. RN-EDIT-017: `touched` diz se o texto mudou desde que o campo abriu (uma tecla, colar,
+ * apagar; começar a digitar já é mexer); `hint`, para quantas células a edição vale ("Vale para as 37 células escolhidas da coluna preco."), nula com uma só.
+ */
+export type CellEditorState = GridCell & { draft: string; touched?: boolean; hint?: string | null };
 
 /**
  * A edição que a vista Registros e a aba de consulta entregam à grade (RN-EDIT-001). A grade só desenha e avisa: quem decide o que cada célula
@@ -49,6 +60,11 @@ export type GridEditing = {
   columnHints: readonly (string | null)[] | null;
   /** As colunas que não se editam, marcadas no cabeçalho ("somente leitura", como no canvas): só na aba de consulta, com o catálogo respondido. */
   columnReadOnly?: readonly boolean[] | null;
+  /**
+   * RN-EDIT-018: as alterações da coluna inteira pendentes, por coluna (o valor e a dica do cabeçalho): a grade desenha a célula daquela coluna em cada linha
+   * lida com o valor novo e o lido riscado ao lado, e o cabeçalho ganha a marca. O MESMO mapa enquanto as pendências não mudam; nulo sem nenhuma.
+   */
+  columnPending?: ReadonlyMap<number, { value: EditValue; hint: string; uncertain: boolean }> | null;
   /** O clique numa célula: ela é a ativa e a seleção (`select`). */
   onActivate: (cell: GridCell) => void;
   /** Abrir o campo na célula: duplo clique, F2, Enter, ou começar a digitar (`initial` substitui o valor). */
@@ -64,6 +80,13 @@ export type GridEditing = {
   onMenu: (cell: GridCell, point: { x: number; y: number }, keyboard: boolean) => void;
   /** O botão direito no número da linha: fora da seleção, escolhe a linha inteira antes; dentro dela, deixa como está; e abre o menu (RN-GRADE-001). */
   onRowMenu: (row: number, point: { x: number; y: number }) => void;
+  /**
+   * RN-GRADE-021: o botão direito no nome da coluna: fora das colunas inteiras escolhidas, escolhe a coluna antes; entre elas, deixa como está; e abre o menu
+   * com a célula ativa naquela coluna (`contextColumn`).
+   */
+  onColumnMenu: (column: number, point: { x: number; y: number }) => void;
+  /** RN-GRADE-021: o botão de ordenar do cabeçalho; sem ele, o cabeçalho não tem o botão, e o nome ocupa tudo (as abas guardadas do script, RN-SQL-023). */
+  sort?: HeaderSort;
   /** RN-GRADE-002 e RN-SQL-017: Ctrl+C com o foco na grade copia a seleção, com o valor completo das células cortadas. Sem célula ativa, nada. */
   onCopy: () => void;
   /** RN-GRADE-003: Ctrl+Shift+C abre o "Copiar avançado…", quando a grade o tem; sem célula ativa, nada. */
@@ -121,6 +144,14 @@ export function selectsAll(event: KeyEvent): boolean {
 /** RN-GRADE-001: Shift+Espaço escolhe as linhas inteiras das células escolhidas (e por isso não abre o campo de edição com um espaço, RN-EDIT-001). */
 export function selectsRows(event: KeyEvent): boolean {
   return event.key === " " && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
+/**
+ * RN-GRADE-022: Ctrl+Espaço escolhe as colunas inteiras das células escolhidas. No macOS é o Control+Espaço, como no Excel (o Cmd+Espaço é do sistema): a
+ * tecla é a mesma, o Control, nas duas plataformas. Não abre o campo de edição com um espaço (RN-EDIT-001).
+ */
+export function selectsColumns(event: KeyEvent): boolean {
+  return event.key === " " && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
 }
 
 /**
@@ -215,6 +246,8 @@ export function rowMarksOf(edits: PendingEdits, rowCount: number, failedRow: num
 /** A linha da grade de uma alteração do pedido (a que falhou, para destacá-la), ou nula se ela não está mais lá. */
 export function gridRowOf(origin: ChangeOrigin, edits: PendingEdits, rowCount: number): number | null {
   if (origin.kind === "row") return origin.row;
+  // RN-EDIT-021: a coluna inteira não é de uma linha.
+  if (origin.kind === "all") return null;
   const position = edits.added.findIndex((row) => row.id === origin.id);
   return position < 0 ? null : rowCount + position;
 }

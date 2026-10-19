@@ -6,7 +6,8 @@ import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
-import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion } from "../_lib/command-confirmation";
+import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion, type WholeColumnQuestion } from "../_lib/command-confirmation";
+import { multiEditCopy } from "../_lib/multi-edit.copy";
 import { useCopyAs } from "../_lib/copy-as/use-copy-as";
 import { openExportWizard } from "../_lib/data-export/data-exports";
 import { exportBlocker, exportRows, resultSource } from "../_lib/data-export/export-entry";
@@ -159,8 +160,21 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
 
-  // RN-EDIT-009: o Salvar que gravou tudo deixa na grade o que foi salvo, sem executar de novo (também antes de a aba ir para outra janela).
-  const keepSaved = useCallback(({ resultId, result }: SavedEdits) => runner.keepSaved(resultId, result), [runner]);
+  // RN-EDIT-022: a nota da aba guardada do script em que a coluna inteira foi salva (ela não lê de novo), pelo resultado dela.
+  const [keptNotes, setKeptNotes] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // RN-EDIT-009: o Salvar que gravou tudo deixa na grade o que foi salvo, sem executar de novo (também antes de a aba ir para outra janela). Com a coluna
+  // inteira (RN-EDIT-022), o resultado do último comando é lido de novo, como o F5 (com o filtro, mantendo as outras abas do script), sem a pergunta da
+  // proteção: a da coluna inteira já disse que ela viria; a aba guardada do script fica com as linhas que tem, com a nota. O Salvar do Informix sem log que
+  // parou no meio (`partial`) só deixa na grade o que foi gravado (RN-EDIT-021).
+  const keepSaved = useCallback(
+    ({ resultId, result, reread, whole, kept: inKept, partial }: SavedEdits) => {
+      runner.keepSaved(resultId, result);
+      if (whole === undefined || partial === true) return;
+      if (inKept === true) return setKeptNotes((notes) => new Map(notes).set(resultId, multiEditCopy.keptNote(whole.columns, whole.rows)));
+      if (reread) void runner.rerun();
+    },
+    [runner],
+  );
 
   // RN-GRADE-011: o campo de filtro do resultado, o mesmo dos Registros, acima da grade. Aplicar executa de novo o comando do resultado com o texto do campo
   // (a API o junta ao comando), e o texto do editor não muda; executar pelo editor limpa o filtro. O que se decide é de `result-filter.ts`, com teste.
@@ -215,18 +229,17 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     }),
     [engine, sendFilter],
   );
-  // RN-GRADE-004: o "Ordenar" do menu da grade, pelo campo de filtro do resultado (RN-GRADE-011): a ordem em uso é a do filtro aplicado, e a escolhida é
-  // escrita no campo (`withOrder`) e aplicada como o "Aplicar".
+  // RN-GRADE-004 e RN-GRADE-021: o "Ordenar" do menu da grade e o botão de ordenar do cabeçalho, pelo campo de filtro do resultado (RN-GRADE-011): a ordem em
+  // uso é a do filtro aplicado, e a escolhida é escrita no campo (`withOrder`) e aplicada como o "Aplicar".
+  // RN-GRADE-021: a ordem em uso é a desta renderização: o botão de ordenar do cabeçalho mostra a seta dela.
+  const sortColumns = (state.status === "rows" ? state : state.status === "running" && state.previous?.status === "rows" ? state.previous : null)?.columns ?? null;
+  const appliedSort = useMemo(() => (sortColumns === null ? null : sortOf(filterApplied, sortColumns, engine)), [sortColumns, filterApplied, engine]);
   const resultSort = useMemo<GridSortSource>(
     () => ({
-      current: () => {
-        const now = runner.getState();
-        const rows = now.status === "rows" ? now : now.status === "running" && now.previous?.status === "rows" ? now.previous : null;
-        return rows === null ? null : sortOf(filterNow.current.applied, rows.columns, engine);
-      },
+      applied: () => appliedSort,
       apply: (next) => sendFilter(withOrder(filterNow.current.draft, next, engine)),
     }),
-    [runner, engine, sendFilter],
+    [appliedSort, engine, sendFilter],
   );
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
@@ -240,6 +253,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const tabIds = useId();
   // A aba guardada à frente (não a do último comando): as linhas dela, que se editam como as do último (RN-SQL-023).
   const kept = script === null || typeof shownTab !== "number" || shownTab === script.live ? null : (script.results.find((result) => result.entry === shownTab) ?? null);
+  // RN-EDIT-022: a nota da aba guardada à frente, depois de salvar a coluna inteira nela.
+  const keptNote = kept === null ? null : (keptNotes.get(kept.rows.resultId ?? "") ?? null);
   // RN-SQL-019: o comando do script em execução, que o editor marca.
   const runningAt = script !== null && script.phase === "running" && script.current !== null ? entryAt(script, script.current).target : null;
 
@@ -258,6 +273,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const auto = useAutoRefresh(runner, active && onScreen && liveShown, confirmAuto);
   // RN-PROT-001: o "Salvar" da grade, em "Todos os comandos", pergunta uma vez, com quantas alterações vão.
   const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
+  // RN-EDIT-019: o "Salvar" com a coluna inteira pergunta sempre, com o ambiente e a conexão da aba, e cobre a pergunta da proteção.
+  const { always } = confirmation;
+  const confirmWholeColumn = useCallback((question: WholeColumnQuestion) => always(question), [always]);
 
   // RN-SQL-023: numa aba guardada do script a edição é a das linhas dela, e o menu da célula fica sem "Filtrar", "Atualizar" e "Atualizar automaticamente",
   // que são do resultado do último comando. Enquanto o script roda ou espera a pergunta de erro, a edição fica ocupada em todas as abas de resultado.
@@ -287,6 +305,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     refresh: kept === null ? menuRerun : undefined,
     autoRefresh: kept === null ? auto.source : undefined,
     confirmSave,
+    confirmWholeColumn,
     kept: kept?.rows ?? null,
     scriptBusy,
     exportData: menuExport,
@@ -384,7 +403,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         choose();
         return true;
       }
-      guard(choose);
+      // RN-EDIT-022: o "Salvar" do aviso que grava a coluna inteira lê de novo o resultado do último comando, como o da faixa: a troca de aba não executa nada.
+      guard(choose, true);
       return false;
     },
     [script, shownTab, pending, guard],
@@ -398,11 +418,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const exportShown = kept === null ? exportRows(state) : kept.rows;
   const exportReason = exportBlocker(exportShown, { busy: busy || scriptBusy || edits.banner.saving, statistics: script !== null && shownTab === "statistics" });
   const exportNumber = script !== null && typeof shownTab === "number" ? shownTab + 1 : null;
-  const { singleTable } = edits;
+  const { singleTable, chosenColumns } = edits;
   const openExport = useCallback(() => {
     if (tab.connectionId === null || exportShown === null) return;
-    openExportWizard(resultSource(exportShown, { connectionId: tab.connectionId, ...inDatabase(tab.database), tabTitle: tab.title, scriptNumber: exportNumber, unsavedEdits: pending, table: singleTable }));
-  }, [tab.connectionId, tab.database, tab.title, exportShown, exportNumber, pending, singleTable]);
+    // RN-EXPORT-005: com colunas inteiras escolhidas na grade, só elas vêm marcadas na Extração.
+    openExportWizard(resultSource(exportShown, { connectionId: tab.connectionId, ...inDatabase(tab.database), tabTitle: tab.title, scriptNumber: exportNumber, unsavedEdits: pending, table: singleTable, checkedColumns: chosenColumns() }));
+  }, [tab.connectionId, tab.database, tab.title, exportShown, exportNumber, pending, singleTable, chosenColumns]);
   useEffect(() => {
     exportRef.current = { blocker: exportReason, open: openExport };
   });
@@ -542,7 +563,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             tabs={script === null || shownTab === null ? undefined : { list: <ScriptTabs run={script} shown={shownTab} idPrefix={tabIds} panelId={`${tabIds}-panel`} onChoose={chooseScriptTab} />, panelId: `${tabIds}-panel`, labelledBy: scriptTabId(tabIds, shownTab) }}
             progress={scriptProgress(script)}
             statistics={script === null || shownTab !== "statistics" ? undefined : { body: <ScriptStatistics run={script} />, summary: statisticsSummary(script) }}
-            kept={kept === null ? undefined : { busy, onRunAlone: () => handleRunAlone(kept.rows.target) }}
+            kept={kept === null ? undefined : { busy, onRunAlone: () => handleRunAlone(kept.rows.target), note: keptNote }}
             exporter={{ blocker: exportReason, onExport: openExport }}
           />
         </div>
@@ -559,7 +580,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       ) : null}
       {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
       {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
-      {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" ? edits.banner.onViewSql : undefined} />}
+      {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}
     </>
   );
 });

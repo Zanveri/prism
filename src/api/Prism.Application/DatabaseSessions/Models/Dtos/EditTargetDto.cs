@@ -13,3 +13,6 @@ public sealed record EditColumnDto(int? Table, string? BaseColumn, bool Editable
 
 /// <summary>A resposta do "Salvar": quantas alterações foram gravadas.</summary>
 public sealed record EditsAppliedDto(int Applied);
+
+/// <summary>RN-EDIT-019 e 023: quantas linhas o comando do resultado devolve agora, que a pergunta da coluna inteira mostra e o "Salvar" leva em `rows`.</summary>
+public sealed record WholeColumnCountDto(long Rows);

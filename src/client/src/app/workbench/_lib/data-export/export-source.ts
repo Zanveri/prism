@@ -29,7 +29,21 @@ export type ExportSource = {
   columns: readonly SourceColumn[] | null;
   /** RN-EDIT-007 e RN-EXPORT-015: as alterações não salvas da grade de onde a exportação saiu (a Confirmação avisa que elas não vão). */
   unsavedEdits: number;
+  /**
+   * RN-EXPORT-001 e 005: aberto pela grade com colunas inteiras escolhidas (RN-GRADE-022), as posições delas em `columns`: só elas vêm marcadas na Extração,
+   * com a frase que diz isso. Ausente, todas vêm marcadas.
+   */
+  checkedColumns?: readonly number[];
 };
+
+/**
+ * As caixas da Extração ao abrir (RN-EXPORT-005): todas marcadas, ou, com as colunas inteiras escolhidas na grade, só elas (as posições fora das colunas não
+ * contam; sem nenhuma que valha, todas).
+ */
+export function initialChecked(columns: readonly SourceColumn[], checkedColumns: readonly number[] | undefined): boolean[] {
+  const chosen = new Set(checkedColumns?.filter((position) => position >= 0 && position < columns.length) ?? []);
+  return columns.map((_, position) => chosen.size === 0 || chosen.has(position));
+}
 
 const w = dataExportCopy.wizard;
 

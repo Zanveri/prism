@@ -7,6 +7,14 @@ import { formatCount } from "@/lib/utils/format";
 export const gridSelectionCopy = {
   // RN-GRADE-001: a contagem da barra do resultado, com mais de uma célula escolhida.
   count: (rows: number, cells: number, whole: boolean) => (whole ? `${formatCount(rows, "linha escolhida", "linhas escolhidas")}` : `${formatCount(cells, "célula escolhida", "células escolhidas")}`),
+  // RN-GRADE-022: a contagem com colunas inteiras: o nome da coluna como o cabeçalho o mostra (ou quantas), e os números que já se sabem. Com o total sabido,
+  // ele soma as linhas do resultado e as novas ainda não salvas; sem ele, quantas a grade tem.
+  wholeColumns: (names: readonly string[], known: { total: number } | { loaded: number; added: number }) => {
+    const label = names.length === 1 ? `Coluna ${names[0]}` : `${names.length.toLocaleString("pt-BR")} colunas`;
+    if ("total" in known) return known.total === 1 ? `${label}: a única linha` : known.total === 0 ? `${label}: todas as linhas` : `${label}: todas as ${known.total.toLocaleString("pt-BR")} linhas`;
+    const loaded = formatCount(known.loaded, "carregada", "carregadas");
+    return `${label}: todas as linhas (${known.added === 0 ? loaded : `${loaded} e ${formatCount(known.added, "nova", "novas")}`})`;
+  },
   // O canto da grade, o "#" do cabeçalho do número da linha.
   selectAll: "Escolher todas as linhas",
 
@@ -55,6 +63,9 @@ export const gridSelectionCopy = {
     },
     // RN-GRADE-001: "Colar" e "Definir como nulo" agem numa célula só.
     oneCellOnly: "Vale para uma célula só: escolha uma.",
+    // RN-GRADE-021: o "Ordenar" do menu e o botão de ordenar do cabeçalho, com o mesmo motivo, na mesma ordem.
+    sortUnavailable: (reason: string) => `Indisponível: ${reason}.`,
+    sortNotRead: "ordenar executa de novo o comando do resultado, e ele não é só de leitura",
     // O "Ir para o registro referenciado" sem para onde ir: o nulo, o valor cortado e o que não cabe numa linha de filtro (RN-TABELA-007).
     followUnavailable: "Indisponível: este valor não leva a um registro.",
     copyShortcut: "Ctrl+C",
@@ -63,8 +74,22 @@ export const gridSelectionCopy = {
     advancedShortcutMac: "Cmd+Shift+C",
   },
 
+  // RN-GRADE-023: carregar as linhas que faltam antes de copiar ou gerar SQL das colunas inteiras, e por que elas não puderam vir.
+  loadRest: {
+    progress: (loaded: number, total: number | null) =>
+      total === null ? `Carregando as linhas que faltam… ${formatCount(loaded, "linha", "linhas")}` : `Carregando as linhas que faltam… ${loaded.toLocaleString("pt-BR")} de ${formatCount(total, "linha", "linhas")}`,
+    tooMany: "O resultado tem mais de 100.000 linhas, o limite do que a grade carrega para copiar ou gerar SQL. Use Exportar dados…, que lê todas do banco.",
+    closed: (subject: "table" | "result") =>
+      `As linhas que faltam não podem ser lidas: o cursor deste resultado fechou. ${subject === "table" ? "Atualize os registros, ou escolha só as linhas carregadas (Ctrl+A)." : "Execute o comando de novo, ou escolha só as linhas carregadas (Ctrl+A)."}`,
+    busy: "Há um comando em andamento na aba: tente outra vez quando ele terminar.",
+    refreshing: "A atualização automática está lendo as linhas de novo; tente outra vez em um instante.",
+    failed: "Não foi possível ler as linhas que faltam.",
+  },
+
   // RN-EDIT-013 a 016: as ações de linha com mais de uma linha na seleção.
   rows: {
+    // RN-GRADE-022: com colunas inteiras, "Duplicar linha" e "Excluir linha" não valem; o motivo não é de só leitura e vem sozinho.
+    chooseRows: "Escolha as linhas pelo número da linha.",
     duplicate: "Duplicar linhas",
     remove: "Excluir linhas",
     duplicateTitle: (count: number, shortcut: string) => `Duplicar as ${count.toLocaleString("pt-BR")} linhas escolhidas (${shortcut})`,

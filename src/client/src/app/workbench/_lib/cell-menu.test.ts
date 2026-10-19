@@ -230,11 +230,12 @@ describe("o menu de contexto da célula", () => {
     expect(busy.every((item) => item.disabled === true && item.hint === "ocupada")).toBe(true);
   });
 
-  it("com mais de uma célula escolhida, \"Colar\" e \"Definir como nulo\" valem para uma só; com várias linhas, \"Duplicar linhas\" e \"Excluir linhas\"", () => {
+  it("com mais de uma célula escolhida, \"Colar\" vale para uma só; com várias linhas, \"Duplicar linhas\" e \"Excluir linhas\"", () => {
     const items = cellMenu(state({ several: true, rows: 3 })).flat();
 
     expect(items.find((item) => item.id === "paste")).toMatchObject({ disabled: true, hint: "Vale para uma célula só: escolha uma." });
-    expect(items.find((item) => item.id === "setNull")).toMatchObject({ disabled: true, hint: "Vale para uma célula só: escolha uma." });
+    // RN-EDIT-017: o "Definir como nulo" vale para as células escolhidas da coluna da ativa.
+    expect(items.find((item) => item.id === "setNull")?.disabled).toBeFalsy();
     expect(items.find((item) => item.id === "edit")?.disabled).toBeFalsy();
     expect(items.find((item) => item.id === "duplicateRow")?.label).toBe("Duplicar linhas");
     expect(items.find((item) => item.id === "deleteRow")?.label).toBe("Excluir linhas");
@@ -380,5 +381,24 @@ describe("a linha nova depois do Salvar, com o que o banco preencheu (RN-EDIT-00
 describe("os rótulos do menu da célula são os da especificação (RN-EDIT-001)", () => {
   it("Editar célula, Definir como nulo, Adicionar linha (seção 33: era \"Linha nova\"), Excluir linha e Desfazer alteração", () => {
     expect([menu.edit, menu.setNull, menu.newRow, menu.deleteRow, menu.undo]).toEqual(["Editar célula", "Definir como nulo", "Adicionar linha", "Excluir linha", "Desfazer alteração"]);
+  });
+});
+
+describe("o menu com várias células escolhidas na coluna e com a coluna inteira (RN-EDIT-017 e 018)", () => {
+  it("\"Editar célula\" e \"Definir como nulo\" seguem o que vale para o grupo, e o nulo diz para quantas", () => {
+    const cells = cellMenu(state({ several: true, group: { access: { editable: true }, nullLabel: "Definir as 37 células como nulo" } })).flat();
+    expect(cells.find((item) => item.id === "setNull")).toMatchObject({ label: "Definir as 37 células como nulo" });
+    expect(cells.find((item) => item.id === "setNull")?.disabled).toBeFalsy();
+
+    const unavailable = { editable: false as const, reason: "Indisponível: o comando sorteia as linhas, e o banco escolheria outras ao executar de novo: escolha as células da coluna." };
+    const whole = cellMenu(state({ several: true, group: { access: unavailable, nullLabel: "Definir a coluna inteira como nulo" } })).flat();
+    expect(whole.find((item) => item.id === "edit")).toMatchObject({ disabled: true, hint: unavailable.reason });
+    expect(whole.find((item) => item.id === "setNull")).toMatchObject({ label: "Definir a coluna inteira como nulo", disabled: true, hint: unavailable.reason });
+  });
+
+  it("o \"Desfazer alteração\" diz a conta com a coluna inteira, e fica desabilitado com o motivo quando só ela vale nas células escolhidas", () => {
+    expect(cellMenu(state({ pending: true, undo: { label: "Desfazer a alteração da coluna preco e de 37 células" } })).flat().find((item) => item.id === "undo")).toMatchObject({ label: "Desfazer a alteração da coluna preco e de 37 células", disabled: false });
+    const only = cellMenu(state({ pending: false, undo: { reason: "A alteração desta coluna vale para todas as linhas: escolha a coluna inteira, pelo cabeçalho, para desfazê-la." } })).flat().find((item) => item.id === "undo");
+    expect(only).toMatchObject({ label: "Desfazer alteração", disabled: true, hint: "A alteração desta coluna vale para todas as linhas: escolha a coluna inteira, pelo cabeçalho, para desfazê-la." });
   });
 });

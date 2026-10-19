@@ -177,7 +177,10 @@ function mount(runner: ReturnType<typeof fakeRunner>, over: Over = {}) {
     const auto = elementsOf(panel.autoRefresh).find((element) => element.type === AutoRefreshControl)?.props as unknown as ComponentProps<typeof AutoRefreshControl> | undefined;
     const autoDialog = found.find((element) => element.type === AutoRefreshDialog)?.props as unknown as ComponentProps<typeof AutoRefreshDialog> | undefined;
 
-    return { filter, panel, records: panel.records!, question, menu, values, custom, auto, autoDialog, found };
+    // RN-GRADE-021: a ordem do cabeçalho é o botão de ordenar, que a edição entrega à grade (`editing.sort`): a seta que ele mostra e o clique nele.
+    const sort = panel.editing?.sort;
+    const records = { ...panel.records!, sort: sort?.applied ?? null, onSort: (column: string) => sort?.onSort(column) };
+    return { filter, panel, records, question, menu, values, custom, auto, autoDialog, found };
   }
 
   return { show, onOpenTable };
@@ -1091,7 +1094,7 @@ describe("RecordsView: a atualização automática (RN-GRADE-014)", () => {
     expect(runner.autoRefresh.start).toHaveBeenCalledExactlyOnceWith(30_000);
   });
 
-  it("a execução automática não ocupa a vista para a pessoa: o campo não está ocupado, e F5, aplicar e ordenar vão ao executor, que a põe de lado", () => {
+  it("a execução automática não ocupa a vista para a pessoa: o campo não está ocupado, e F5 e aplicar vão ao executor, que a põe de lado; o botão de ordenar espera (RN-GRADE-021)", () => {
     const slot = createRefreshSlot();
     const autoRun: RunnerState = { status: "running", cancelling: false, previous: rowsState(), auto: true };
     const runner = fakeRunner(autoRun);
@@ -1106,9 +1109,12 @@ describe("RecordsView: a atualização automática (RN-GRADE-014)", () => {
     view.show().filter.onApply();
     expect(runner.sent.at(-1)).toEqual(sent("cliente_id = 4"));
 
+    // RN-GRADE-021: enquanto a atualização automática lê as linhas de novo, o botão de ordenar fica à vista e desabilitado, com o motivo.
     runner.state = autoRun;
-    view.show().records.onSort("id");
-    expect(runner.sent).toHaveLength(3);
+    const during = view.show();
+    expect(during.panel.editing?.sort?.reason).toBe(recordsCopy.edit.reasons.refreshing);
+    during.records.onSort("id");
+    expect(runner.sent).toHaveLength(2);
   });
 
   it("\"Exportar CSV\" durante a execução automática espera por ela e exporta o resultado novo", async () => {

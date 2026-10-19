@@ -168,3 +168,38 @@ describe("os textos do script no aviso", () => {
     expect(texts).toContain("O comando do script pede confirmação. Confirmado, ele roda sem perguntar de novo.");
   });
 });
+
+describe("a pergunta do \"Salvar\" com a coluna inteira (RN-EDIT-019)", () => {
+  const whole: CommandQuestion = {
+    kind: "wholeColumn",
+    title: "Alterar preco em 1.234 linhas de estoque.pedido?",
+    lead: "O valor vai para todas as linhas que o comando do resultado devolve agora, também as que a grade não carregou:",
+    assignments: ["preco = 10.00"],
+    warnings: ["Gatilhos e chaves estrangeiras com ON UPDATE agem sobre essas linhas, e o número acima conta só as da tabela."],
+    others: "O Salvar grava também a outra alteração não salva.",
+    after: "Depois, a aba executa o comando de novo, para mostrar o que o banco tem.",
+    oneAtATime: "Este banco não tem log de transação: a alteração é gravada na hora, e não há como desfazê-la; se o banco recusar no meio, parte das linhas fica alterada.",
+    command: { sql: 'UPDATE "estoque"."pedido" SET "preco" = 10.00', note: "nota" },
+    confirm: "Alterar 1.234 linhas",
+    rows: 1234,
+  };
+
+  it("o título, a primeira frase com as colunas, as linhas de atenção, as outras pendências, o depois, o sem log, o UPDATE com a nota, o Ver SQL e os botões", () => {
+    const onViewSql = vi.fn();
+    const { dialog, texts, buttons } = drawn(whole, { level: null, from: null }, onViewSql);
+
+    expect(dialog.props).toMatchObject({ role: "alertdialog", title: whole.title, describedBy: ":r1:-resumo :r1:-faz" });
+    expect(texts).toEqual(expect.arrayContaining([whole.lead, "preco = 10.00", ...whole.warnings, whole.others, whole.after, whole.oneAtATime, 'UPDATE "estoque"."pedido" SET "preco" = 10.00', "nota", "Você vê este aviso sempre que uma alteração vale para a coluna inteira."]));
+    const labels = buttons.map((button) => button.props.children);
+    expect(labels).toEqual(["Ver SQL", "Alterar 1.234 linhas", copy.cancel]);
+    (buttons[0].props.onClick as () => void)();
+    expect(onViewSql).toHaveBeenCalledOnce();
+    // O foco começa em "Cancelar".
+    expect(buttons[2].props.autoFocus).toBe(true);
+  });
+
+  it("com a proteção da conexão, a frase dela vem junto da da coluna inteira", () => {
+    const { texts } = drawn(whole, { level: "all", from: null });
+    expect(texts).toContain("Você vê este aviso sempre que uma alteração vale para a coluna inteira. Você vê este aviso porque a conexão MES Produção tem a proteção “Todos os comandos”.");
+  });
+});

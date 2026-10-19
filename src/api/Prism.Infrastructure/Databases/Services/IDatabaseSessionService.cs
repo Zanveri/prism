@@ -167,4 +167,11 @@ public interface IDatabaseSessionService
     /// valores completos dele, e os guardados continuam guardados.
     /// </summary>
     Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-019 e 023: a contagem da coluna inteira, na sessão do resultado, sem esperar a vez (`SessionBusy`), como o "Salvar" que ela começa: `changes`
+    /// tem só a alteração da coluna inteira (`EditInvalid`, senão), conferida como no "Ver SQL"; a tabela que mudou na sessão é `ResultChanged`. Devolve
+    /// quantas linhas o comando do resultado devolve agora.
+    /// </summary>
+    Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 }

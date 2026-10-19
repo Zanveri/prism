@@ -6,14 +6,16 @@ import type { QueryColumn } from "./query.schema";
  * A seleção da grade (RN-GRADE-001), sem React e sem DOM: o modelo, o que cada gesto faz com ele e as perguntas que a grade, o copiar, as ações de linha, o
  * "Copiar avançado" e o "Gerar SQL" fazem a ele. Quem guarda o estado é `use-record-edits.ts`; quem desenha é `result-grid.tsx`.
  *
- * - A grade tem uma célula ativa e uma seleção, de uma de duas formas: um retângulo de células, da âncora até a célula ativa (`cells`), ou linhas inteiras,
- *   seguidas ou não (`rows`). Sem nada escolhido além da célula ativa, a seleção é ela (`cell`).
+ * - A grade tem uma célula ativa e uma seleção, de uma de três formas: um retângulo de células, da âncora até a célula ativa (`cells`); linhas inteiras,
+ *   seguidas ou não (`rows`); ou colunas inteiras, seguidas ou não (`columns`, RN-GRADE-022), que valem para TODAS as linhas do resultado: as lidas, as que o
+ *   cursor ainda não leu e as novas. Sem nada escolhido além da célula ativa, a seleção é ela (`cell`).
  * - As linhas são guardadas pela identidade, e não pelo lugar na grade: as lidas pela posição no resultado, em faixas, e as novas pelo id da linha nova
  *   (`NewRow.id`), uma a uma. O "carregar mais" põe as lidas que chegam ANTES das novas e empurra as novas para baixo; guardadas assim, a âncora, a célula
  *   ativa e as linhas da seleção continuam nas mesmas linhas. As lidas que chegam depois de um Ctrl+A não entram nele (a faixa termina onde as lidas
  *   terminavam), e as novas que já estavam, sim.
  * - Nunca célula por célula: escolher 100 mil células (o Ctrl+A em 5.000 linhas de 20 colunas) é uma faixa e a lista das novas, e a pergunta "esta linha está
- *   escolhida?" é uma busca binária nas faixas.
+ *   escolhida?" é uma busca binária nas faixas. As colunas inteiras são só a lista das posições das colunas: escolher a coluna de um milhão de linhas custa o
+ *   mesmo que escolher uma célula, e as linhas que chegam depois (o "Carregar mais") já chegam escolhidas, porque a forma não guarda linha nenhuma.
  *
  * As posições que entram e saem (`GridCell`, `row`) são as da grade AGORA: as lidas e, depois delas, as novas, na ordem da `GridLayout`.
  */
@@ -31,11 +33,12 @@ export type RowRange = readonly [number, number];
 export type RowSet = { read: readonly RowRange[]; added: readonly number[] };
 
 /**
- * A forma da seleção: só a célula ativa (`cell`); um retângulo de células, nas linhas `rows` e nas colunas de `from` a `to` (`cells`); ou linhas inteiras
- * (`rows`). Um retângulo é sempre um retângulo, também quando cobre todas as colunas: só o número da linha, o canto, o Shift+Espaço e o Ctrl+A escolhem
- * linhas inteiras, e só elas valem para o Delete (RN-EDIT-015).
+ * A forma da seleção: só a célula ativa (`cell`); um retângulo de células, nas linhas `rows` e nas colunas de `from` a `to` (`cells`); linhas inteiras
+ * (`rows`); ou colunas inteiras (`columns`: as posições delas no resultado, em ordem e sem repetir, com todas as linhas do resultado, RN-GRADE-022). Um
+ * retângulo é sempre um retângulo, também quando cobre todas as colunas ou todas as linhas: só o número da linha, o canto, o Shift+Espaço e o Ctrl+A escolhem
+ * linhas inteiras, e só elas valem para o Delete (RN-EDIT-015); só o nome da coluna, no cabeçalho, e o Ctrl+Espaço escolhem colunas inteiras.
  */
-export type SelectionShape = { kind: "cell" } | { kind: "cells"; rows: RowSet; from: number; to: number } | { kind: "rows"; rows: RowSet };
+export type SelectionShape = { kind: "cell" } | { kind: "cells"; rows: RowSet; from: number; to: number } | { kind: "rows"; rows: RowSet } | { kind: "columns"; columns: readonly number[] };
 
 /**
  * A seleção: a célula ativa (a do foco, que a grade anuncia), a âncora (a célula clicada ou, depois do clique no número da linha, a ativa que ele deixa: de
@@ -142,11 +145,38 @@ function rowSetOf(ref: RowRef): RowSet {
   return ref.kind === "read" ? { read: [[ref.row, ref.row]], added: [] } : { read: [], added: [ref.id] };
 }
 
-/** As linhas da seleção pela identidade (as que têm uma célula escolhida); só a célula ativa, a linha dela. */
-function rowSetOfSelection(selection: GridSelection): RowSet {
+/** Todas as linhas da grade agora, as lidas e as novas: as das colunas inteiras, contadas na hora, e não guardadas. */
+function allRowsOf(layout: GridLayout): RowSet {
+  return { read: layout.read > 0 ? [[0, layout.read - 1]] : [], added: [...layout.added] };
+}
+
+/** As linhas da seleção pela identidade (as que têm uma célula escolhida); só a célula ativa, a linha dela; com colunas inteiras, todas as da grade agora. */
+function rowSetOfSelection(selection: GridSelection, layout: GridLayout): RowSet {
+  if (selection.shape.kind === "columns") return allRowsOf(layout);
   if (selection.shape.kind !== "cell") return selection.shape.rows;
   return selection.active === null ? noRows : rowSetOf(selection.active.row);
 }
+
+/** As colunas de uma a outra (em qualquer ordem), como a lista em ordem das colunas inteiras. */
+function columnsBetween(a: number, b: number): number[] {
+  const from = Math.min(a, b);
+  return Array.from({ length: Math.abs(a - b) + 1 }, (_, index) => from + index);
+}
+
+/** A lista das colunas inteiras em ordem e sem repetir. */
+const sortedColumns = (columns: Iterable<number>): number[] => [...new Set(columns)].sort((left, right) => left - right);
+
+/**
+ * A célula ativa de um gesto nas colunas inteiras (RN-GRADE-022): na coluna dada, na linha em que a ativa estava (na primeira linha da grade, quando não havia
+ * célula ativa, ou quando a linha dela saiu); sem linha nenhuma na grade, não há célula ativa.
+ */
+function activeInColumn(selection: GridSelection, layout: GridLayout, column: number): CellRef | null {
+  if (layout.read + layout.added.length === 0) return null;
+  const row = selection.active !== null && positionOf(layout, selection.active.row) !== null ? selection.active.row : refAt(layout, 0)!;
+  return { row, column };
+}
+
+const validColumn = (layout: GridLayout, column: number) => Number.isInteger(column) && column >= 0 && column < layout.columns;
 
 const columnOf = (selection: GridSelection) => selection.active?.column ?? 0;
 
@@ -174,9 +204,11 @@ export function extend(selection: GridSelection, cell: GridCell, layout: GridLay
 
 /**
  * Shift com as teclas de movimento: com linhas inteiras escolhidas, as que andam na vertical estendem as linhas, da linha da âncora até a da célula ativa, e
- * as que andam na horizontal só movem a célula ativa; fora delas, o retângulo da âncora até a célula.
+ * as que andam na horizontal só movem a célula ativa; com colunas inteiras, o espelho (RN-GRADE-022): as que andam na horizontal estendem as colunas, da
+ * coluna da âncora até a da célula ativa, e as que andam na vertical só movem a célula ativa; fora delas, o retângulo da âncora até a célula.
  */
 export function extendByKey(selection: GridSelection, cell: GridCell, layout: GridLayout, vertical: boolean): GridSelection {
+  if (selection.shape.kind === "columns") return extendColumnsByKey(selection, cell, layout, vertical);
   if (selection.shape.kind !== "rows") return extend(selection, cell, layout);
   const target = refOfCell(layout, cell);
   if (target === null) return selection;
@@ -254,10 +286,14 @@ export function collapse(selection: GridSelection): GridSelection {
   return selection.shape.kind === "cell" && selection.anchor === selection.active ? selection : { active: selection.active, anchor: selection.active, shape: { kind: "cell" } };
 }
 
-/** Shift+Espaço: as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver; é o caminho do teclado até o Delete. */
+/**
+ * Shift+Espaço: as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver; é o caminho do teclado até o Delete. Com colunas inteiras,
+ * a linha inteira da célula ativa (RN-GRADE-022): as colunas não viram todas as linhas.
+ */
 export function wholeRows(selection: GridSelection): GridSelection {
   if (selection.shape.kind === "rows") return selection;
-  const rows = rowSetOfSelection(selection);
+  if (selection.shape.kind === "columns") return selection.active === null ? selection : { ...selection, shape: { kind: "rows", rows: rowSetOf(selection.active.row) } };
+  const rows = selection.shape.kind === "cells" ? selection.shape.rows : selection.active === null ? noRows : rowSetOf(selection.active.row);
   return isEmpty(rows) ? selection : { ...selection, shape: { kind: "rows", rows } };
 }
 
@@ -271,11 +307,14 @@ export function contextCell(selection: GridSelection, cell: GridCell, layout: Gr
   return isSelected(selection, layout, cell) ? { ...selection, active: ref } : select(selection, cell, layout);
 }
 
-/** O botão direito no número da linha: fora da seleção, escolhe a linha inteira; dentro dela (a linha tem uma célula escolhida), deixa a seleção como está. */
+/**
+ * O botão direito no número da linha: fora da seleção, escolhe a linha inteira; dentro dela (a linha tem uma célula escolhida), deixa a seleção como está. Com
+ * colunas inteiras, toda linha tem uma célula escolhida, e as colunas ficam (RN-GRADE-001 e 022), embora o número não esteja destacado.
+ */
 export function contextRow(selection: GridSelection, row: number, layout: GridLayout): GridSelection {
   const ref = refAt(layout, row);
   if (ref === null) return selection;
-  return hasRow(rowSetOfSelection(selection), ref) ? selection : selectRow(selection, row, layout);
+  return hasRow(rowSetOfSelection(selection, layout), ref) ? selection : selectRow(selection, row, layout);
 }
 
 /**
@@ -290,10 +329,17 @@ export function selectNewRows(ids: readonly number[], column: number): GridSelec
 
 /**
  * A seleção depois de um "Salvar" que gravou tudo e deixou a grade com o que foi salvo, sem executar de novo (a aba de consulta, RN-EDIT-009): as excluídas
- * saíram (as de depois sobem), e as novas viraram linhas lidas no fim, na ordem delas. Fica só a célula ativa, quando a linha dela continua na grade.
+ * saíram (as de depois sobem), e as novas viraram linhas lidas no fim, na ordem delas. Fica só a célula ativa, quando a linha dela continua na grade. As
+ * colunas inteiras ficam (RN-GRADE-022), com a célula ativa na linha dela, ou na primeira, quando a dela saiu.
  */
 export function afterSave(selection: GridSelection, { deleted, read, added }: { deleted: readonly number[]; read: number; added: readonly number[] }): GridSelection {
   const active = selection.active;
+  if (selection.shape.kind === "columns") {
+    const moved = active === null ? emptySelection : afterSave({ ...selection, shape: { kind: "cell" } }, { deleted, read, added });
+    const total = read - new Set(deleted).size + added.length;
+    const cell = moved.active ?? (total > 0 && active !== null ? { row: { kind: "read" as const, row: 0 }, column: active.column } : null);
+    return { active: cell, anchor: cell, shape: selection.shape };
+  }
   if (active === null) return emptySelection;
   const gone = [...new Set(deleted)];
   const before = (row: number) => gone.filter((deletedRow) => deletedRow < row).length;
@@ -308,6 +354,97 @@ export function afterSave(selection: GridSelection, { deleted, read, added }: { 
   return { active: cell, anchor: cell, shape: { kind: "cell" } };
 }
 
+/**
+ * RN-GRADE-022: o clique no nome da coluna, no cabeçalho: a coluna inteira, com todas as linhas do resultado. A célula ativa vai para ela, na linha em que
+ * estava (na primeira, sem célula ativa; sem linha nenhuma, não há célula ativa), e é a âncora. O Ctrl+clique com um retângulo ou com linhas inteiras faz o
+ * mesmo: as formas não se misturam.
+ */
+export function selectColumn(selection: GridSelection, column: number, layout: GridLayout): GridSelection {
+  if (!validColumn(layout, column)) return selection;
+  const active = activeInColumn(selection, layout, column);
+  return { active, anchor: active, shape: { kind: "columns", columns: [column] } };
+}
+
+/**
+ * Shift+clique no nome da coluna: as colunas da coluna da âncora até a clicada, na ordem da grade, e a célula ativa vai para a clicada, na mesma linha; sem
+ * âncora (ou com a linha dela fora da grade), é o clique.
+ */
+export function extendColumns(selection: GridSelection, column: number, layout: GridLayout): GridSelection {
+  if (!validColumn(layout, column)) return selection;
+  const anchor = cellAt(layout, selection.anchor);
+  if (anchor === null) return selectColumn(selection, column, layout);
+  return { active: activeInColumn(selection, layout, column), anchor: selection.anchor, shape: { kind: "columns", columns: columnsBetween(anchor.column, column) } };
+}
+
+/**
+ * Ctrl+clique (Cmd+clique no macOS) no nome da coluna: com colunas inteiras escolhidas, acrescenta a coluna, ou a tira quando já estava; a célula ativa vai
+ * para a clicada, e é a âncora. Tirada a última, a seleção volta a ser a célula ativa. Com outra forma, é o clique.
+ */
+export function toggleColumn(selection: GridSelection, column: number, layout: GridLayout): GridSelection {
+  if (selection.shape.kind !== "columns") return selectColumn(selection, column, layout);
+  if (!validColumn(layout, column)) return selection;
+  const chosen = selection.shape.columns;
+  const columns = chosen.includes(column) ? chosen.filter((at) => at !== column) : sortedColumns([...chosen, column]);
+  const active = activeInColumn(selection, layout, column);
+  return { active, anchor: active, shape: columns.length === 0 ? { kind: "cell" } : { kind: "columns", columns } };
+}
+
+/**
+ * O arraste a partir do nome da coluna: as colunas da do começo (`start`, a da âncora) até a que está sob o ponteiro (`column`, a da célula ativa). Com Ctrl
+ * (Cmd) no começo do arraste (`adding`), elas se juntam às colunas inteiras que já estavam em `base`, a seleção de antes do arraste.
+ */
+export function dragColumns(base: GridSelection, start: number, column: number, layout: GridLayout, adding: boolean): GridSelection {
+  if (!validColumn(layout, start) || !validColumn(layout, column)) return base;
+  const range = columnsBetween(start, column);
+  const columns = adding && base.shape.kind === "columns" ? sortedColumns([...base.shape.columns, ...range]) : range;
+  return { active: activeInColumn(base, layout, column), anchor: activeInColumn(base, layout, start), shape: { kind: "columns", columns } };
+}
+
+/**
+ * Ctrl+Espaço (Control+Espaço no macOS): as colunas inteiras das células escolhidas, como o Excel: as colunas do retângulo, ou a da célula ativa sozinha; com
+ * linhas inteiras escolhidas, a coluna da célula ativa. A célula ativa e a âncora ficam onde estavam. Sem célula ativa, nada.
+ */
+export function wholeColumns(selection: GridSelection, layout: GridLayout): GridSelection {
+  if (selection.shape.kind === "columns") return selection;
+  if (selection.shape.kind === "cells") {
+    const from = Math.max(selection.shape.from, 0);
+    const to = Math.min(selection.shape.to, layout.columns - 1);
+    return to < from ? selection : { ...selection, shape: { kind: "columns", columns: columnsBetween(from, to) } };
+  }
+  const active = activeCell(selection, layout);
+  return active === null ? selection : { ...selection, shape: { kind: "columns", columns: [active.column] } };
+}
+
+/**
+ * O botão direito no nome da coluna (RN-GRADE-021): fora das colunas inteiras escolhidas (também dentro de um retângulo ou de linhas inteiras), escolhe antes a
+ * coluna inteira; entre elas, a seleção fica. Nos dois casos a célula ativa vai para aquela coluna, na linha em que estava (na primeira, quando não havia), e o
+ * menu da grade abre sobre ela.
+ */
+export function contextColumn(selection: GridSelection, column: number, layout: GridLayout): GridSelection {
+  if (selection.shape.kind !== "columns" || !selection.shape.columns.includes(column)) return selectColumn(selection, column, layout);
+  return { ...selection, active: activeInColumn(selection, layout, column) };
+}
+
+/**
+ * O "Descartar" e o "Excluir linhas" que tiram linhas novas da grade (RN-GRADE-001): fica só a célula ativa, como no `collapse`; com colunas inteiras, elas
+ * ficam (RN-GRADE-022), com as linhas que ficaram, e a célula ativa que estava numa linha tirada vai para a primeira linha da grade.
+ */
+export function afterRowsRemoved(selection: GridSelection, layout: GridLayout): GridSelection {
+  if (selection.shape.kind !== "columns") return collapse(selection);
+  if (selection.active === null || cellAt(layout, selection.active) !== null) return selection;
+  const active = activeInColumn(selection, layout, selection.active.column);
+  return { active, anchor: active, shape: selection.shape };
+}
+
+/** Shift com as teclas, com colunas inteiras: a horizontal estende as colunas, da coluna da âncora até a da célula ativa; a vertical só move a ativa. */
+function extendColumnsByKey(selection: GridSelection, cell: GridCell, layout: GridLayout, vertical: boolean): GridSelection {
+  const target = refOfCell(layout, cell);
+  if (target === null) return selection;
+  if (vertical) return { ...selection, active: target };
+  const anchor = cellAt(layout, selection.anchor);
+  return { active: target, anchor: anchor === null ? target : selection.anchor, shape: { kind: "columns", columns: columnsBetween(anchor?.column ?? cell.column, cell.column) } };
+}
+
 // ——— As perguntas ————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
 
 /** A célula ativa na grade agora, ou nula (sem célula ativa, ou com a linha dela fora da grade). */
@@ -315,22 +452,54 @@ export function activeCell(selection: GridSelection, layout: GridLayout): GridCe
   return cellAt(layout, selection.active);
 }
 
-/** As colunas da seleção, de uma a outra: as do retângulo, todas com linhas inteiras, a da célula ativa; nula sem nada escolhido. */
+/**
+ * As colunas da seleção, de uma a outra, quando são seguidas: as do retângulo, todas com linhas inteiras, a da célula ativa; nula sem nada escolhido. Com
+ * colunas inteiras, que podem não ser seguidas, é nula: quem desenha pergunta `wholeColumnSet`, e quem age, `selectedColumns`.
+ */
 export function columnSpan(selection: GridSelection, layout: GridLayout): RowRange | null {
   if (layout.columns === 0) return null;
+  if (selection.shape.kind === "columns") return null;
   if (selection.shape.kind === "rows") return [0, layout.columns - 1];
   if (selection.shape.kind === "cells") return [Math.max(selection.shape.from, 0), Math.min(selection.shape.to, layout.columns - 1)];
   const active = activeCell(selection, layout);
   return active === null ? null : [active.column, active.column];
 }
 
+/** As colunas inteiras escolhidas (RN-GRADE-022), na ordem da grade, só as que a grade tem; nula com outra forma. */
+export function chosenWholeColumns(selection: GridSelection, layout: GridLayout): readonly number[] | null {
+  return selection.shape.kind === "columns" ? selection.shape.columns.filter((column) => column < layout.columns) : null;
+}
+
+/** RN-GRADE-022: a seleção é de colunas inteiras (o nome da coluna, o Ctrl+Espaço): vale para todas as linhas do resultado, também as não carregadas. */
+export function choseWholeColumns(selection: GridSelection): boolean {
+  return selection.shape.kind === "columns";
+}
+
+/**
+ * As colunas inteiras escolhidas como um conjunto, que quem chama memoriza pela seleção: a grade passa o mesmo objeto a cada linha à vista, e a linha
+ * memorizada não é redesenhada por ele. Nula com outra forma.
+ */
+export function wholeColumnSet(selection: GridSelection, layout: GridLayout): ReadonlySet<number> | null {
+  const columns = chosenWholeColumns(selection, layout);
+  return columns === null ? null : new Set(columns);
+}
+
+/** O cabeçalho da coluna fica destacado (RN-GRADE-001 e 022): a coluna está na seleção (com colunas inteiras, entre as escolhidas). */
+export function headerChosen(selection: GridSelection, layout: GridLayout, column: number): boolean {
+  if (selection.shape.kind === "columns") return selection.shape.columns.includes(column);
+  const span = columnSpan(selection, layout);
+  return span !== null && column >= span[0] && column <= span[1];
+}
+
 /**
  * As colunas escolhidas na linha da posição `row`, de uma a outra, ou nula quando a linha não tem célula escolhida. É o que a grade desenha em cada linha à
- * vista, a cada renderização: uma busca binária nas faixas, e nada célula por célula.
+ * vista, a cada renderização: uma busca binária nas faixas, e nada célula por célula. Com colunas inteiras é nula (as colunas podem não ser seguidas, e o
+ * número da linha não fica destacado): a grade desenha por `wholeColumnSet`.
  */
 export function rowSpan(selection: GridSelection, layout: GridLayout, row: number): RowRange | null {
   const ref = refAt(layout, row);
   if (ref === null) return null;
+  if (selection.shape.kind === "columns") return null;
   if (selection.shape.kind === "cell") {
     const active = activeCell(selection, layout);
     return active !== null && active.row === row ? [active.column, active.column] : null;
@@ -340,16 +509,18 @@ export function rowSpan(selection: GridSelection, layout: GridLayout, row: numbe
 
 /** A célula está escolhida? */
 export function isSelected(selection: GridSelection, layout: GridLayout, cell: GridCell): boolean {
+  if (selection.shape.kind === "columns") return refAt(layout, cell.row) !== null && selection.shape.columns.includes(cell.column) && cell.column < layout.columns;
   const span = rowSpan(selection, layout, cell.row);
   return span !== null && cell.column >= span[0] && cell.column <= span[1];
 }
 
 /**
- * As linhas da seleção (as que têm uma célula escolhida), pela posição na grade agora, em ordem; sem nada escolhido além da célula ativa, a linha dela. É
- * sobre elas que agem o copiar, o "Gerar SQL", "Duplicar linhas", "Excluir linhas" e "Copiar número de linha(s)".
+ * As linhas da seleção (as que têm uma célula escolhida), pela posição na grade agora, em ordem; sem nada escolhido além da célula ativa, a linha dela; com
+ * colunas inteiras, todas as linhas da grade agora (as que faltam carregar não estão aqui: quem precisa delas as carrega antes, RN-GRADE-023). É sobre elas
+ * que agem o copiar, o "Gerar SQL", "Duplicar linhas", "Excluir linhas" e "Copiar número de linha(s)".
  */
 export function selectedRows(selection: GridSelection, layout: GridLayout): number[] {
-  const rows = rowSetOfSelection(selection);
+  const rows = rowSetOfSelection(selection, layout);
   const out: number[] = [];
   for (const [from, to] of rows.read) for (let row = from; row <= Math.min(to, layout.read - 1); row += 1) out.push(row);
   if (rows.added.length > 0) {
@@ -361,22 +532,32 @@ export function selectedRows(selection: GridSelection, layout: GridLayout): numb
   return out;
 }
 
-/** As colunas da seleção, em ordem: as do retângulo, todas com linhas inteiras, a da célula ativa. */
+/** As colunas da seleção, em ordem: as do retângulo, todas com linhas inteiras, as colunas inteiras escolhidas, a da célula ativa. */
 export function selectedColumns(selection: GridSelection, layout: GridLayout): number[] {
+  const whole = chosenWholeColumns(selection, layout);
+  if (whole !== null) return [...whole];
   const span = columnSpan(selection, layout);
   return span === null ? [] : Array.from({ length: span[1] - span[0] + 1 }, (_, index) => span[0] + index);
 }
 
 /** As células escolhidas, linha a linha, na ordem da grade; um gerador, para a seleção grande não virar uma lista de células. */
 export function* selectedCells(selection: GridSelection, layout: GridLayout): Generator<GridCell> {
-  const span = columnSpan(selection, layout);
-  if (span === null) return;
-  for (const row of selectedRows(selection, layout)) for (let column = span[0]; column <= span[1]; column += 1) yield { row, column };
+  const columns = selectedColumns(selection, layout);
+  if (columns.length === 0) return;
+  for (const row of selectedRows(selection, layout)) for (const column of columns) yield { row, column };
 }
 
-/** Quantas linhas e quantas células a seleção tem agora, e se são linhas inteiras (a contagem da barra do resultado). */
-export function selectionSize(selection: GridSelection, layout: GridLayout): { rows: number; cells: number; whole: boolean } {
-  const rows = rowSetOfSelection(selection);
+/**
+ * Quantas linhas e quantas células a seleção tem agora, e se são linhas inteiras (a contagem da barra do resultado); `columns` é quantas colunas inteiras
+ * (zero com outra forma): com elas, as linhas e as células são as que a grade tem agora, e a contagem da barra é outra (RN-GRADE-022).
+ */
+export function selectionSize(selection: GridSelection, layout: GridLayout): { rows: number; cells: number; whole: boolean; columns: number } {
+  if (selection.shape.kind === "columns") {
+    const rows = layout.read + layout.added.length;
+    const columns = chosenWholeColumns(selection, layout)!.length;
+    return { rows, cells: rows * columns, whole: false, columns };
+  }
+  const rows = rowSetOfSelection(selection, layout);
   let count = 0;
   for (const [from, to] of rows.read) count += Math.max(Math.min(to, layout.read - 1) - from + 1, 0);
   if (rows.added.length > 0) {
@@ -385,17 +566,21 @@ export function selectionSize(selection: GridSelection, layout: GridLayout): { r
   }
   const span = columnSpan(selection, layout);
   const width = span === null ? 0 : span[1] - span[0] + 1;
-  return { rows: count, cells: count * width, whole: selection.shape.kind === "rows" };
+  return { rows: count, cells: count * width, whole: selection.shape.kind === "rows", columns: 0 };
 }
 
-/** Mais de uma célula escolhida: a contagem aparece, a atualização automática espera (RN-GRADE-014), e "Colar" e "Definir como nulo" não valem. */
+/**
+ * Mais de uma célula escolhida: a contagem aparece, a atualização automática espera (RN-GRADE-014), e "Colar" não vale. As colunas inteiras contam sempre como
+ * várias, também num resultado de uma linha só (RN-GRADE-022): a escolha é de todas as linhas do resultado.
+ */
 export function hasSeveralCells(selection: GridSelection, layout: GridLayout): boolean {
-  return selectionSize(selection, layout).cells > 1;
+  return selection.shape.kind === "columns" || selectionSize(selection, layout).cells > 1;
 }
 
 /**
  * RN-GRADE-001: o Esc volta a seleção para a célula ativa só, e é da grade sempre que ela não é só a célula ativa: também a linha inteira de uma coluna só
- * (uma célula, mas linhas inteiras, que o Delete excluiria, RN-EDIT-015). Com a célula ativa só, o Esc segue para quem está acima da grade.
+ * (uma célula, mas linhas inteiras, que o Delete excluiria, RN-EDIT-015) e as colunas inteiras. Com a célula ativa só, o Esc segue para quem está acima da
+ * grade.
  */
 export function escapeCollapses(selection: GridSelection): boolean {
   return selection.shape.kind !== "cell";
@@ -404,6 +589,31 @@ export function escapeCollapses(selection: GridSelection): boolean {
 /** Linhas inteiras escolhidas (pelo número da linha, pelo canto, pelo Shift+Espaço ou pelo Ctrl+A): só elas valem para o Delete sozinho (RN-EDIT-015). */
 export function choseWholeRows(selection: GridSelection, layout: GridLayout): boolean {
   return selection.shape.kind === "rows" && selectionSize(selection, layout).rows > 0;
+}
+
+/**
+ * O que a seleção escolhe numa coluna (RN-EDIT-017 e 018, para a edição de várias células): as linhas da grade agora cujas células daquela coluna estão
+ * escolhidas, pela posição (as lidas e as novas, em ordem), e se a escolha é a coluna inteira (`allRows`: vale também para as linhas que o cursor ainda não
+ * leu, e para as que chegarem; as lidas que estão em `rows` são só as carregadas). Nula quando a coluna não tem célula escolhida.
+ */
+export type ColumnChoice = { column: number; rows: readonly number[]; allRows: boolean };
+
+export function columnChoice(selection: GridSelection, layout: GridLayout, column: number): ColumnChoice | null {
+  if (!validColumn(layout, column)) return null;
+  if (selection.shape.kind === "columns") return selection.shape.columns.includes(column) ? { column, rows: selectedRows(selection, layout), allRows: true } : null;
+  if (!selectedColumns(selection, layout).includes(column)) return null;
+  const rows = selectedRows(selection, layout);
+  return rows.length === 0 ? null : { column, rows, allRows: false };
+}
+
+/**
+ * A escolha da coluna da célula ativa, quando a célula ativa está dentro da seleção (RN-EDIT-017: é ela que diz se a edição vale para várias); nula sem célula
+ * ativa ou com ela fora da seleção (depois do Ctrl+clique que tirou a linha dela), e a edição é só dela.
+ */
+export function activeColumnChoice(selection: GridSelection, layout: GridLayout): ColumnChoice | null {
+  const active = activeCell(selection, layout);
+  if (active === null || !isSelected(selection, layout, active)) return null;
+  return columnChoice(selection, layout, active.column);
 }
 
 // ——— O recorte ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————

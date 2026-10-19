@@ -17,7 +17,7 @@ import { readExportChoices, writeExportChoices } from "../../_lib/data-export/ex
 import { closeExportWizard, exportTracker, type ExportWizardRequest } from "../../_lib/data-export/data-exports";
 import { defaultOptions, formatSentence, isTextFormat, type FormatOptions } from "../../_lib/data-export/export-options";
 import { exportRequest, maxRequestBytes, requestBytes } from "../../_lib/data-export/export-request";
-import { knowsGenerated, originName, originSchema, progressName, sourceTitle, targetDefaults, toastSubject, type SourceColumn } from "../../_lib/data-export/export-source";
+import { initialChecked, knowsGenerated, originName, originSchema, progressName, sourceTitle, targetDefaults, toastSubject, type SourceColumn } from "../../_lib/data-export/export-source";
 import {
   choicesToRemember,
   chosenColumns,
@@ -111,8 +111,9 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
   const generatedUnknown = origin.kind !== "records" || catalog.data !== undefined ? null : generatedFailed ? catalogMessage(catalog.error) : dataExportCopy.extraction.loading;
 
   const [choices, setChoices] = useState<WizardChoices>(() => ({ ...readExportChoices(userName, targetDefaults(origin)), checked: null }));
-  // As colunas chegam (ou já estavam): todas marcadas ao abrir. Ajuste durante a renderização: a etapa nunca mostra a lista sem as caixas.
-  if (columns !== null && (choices.checked === null || choices.checked.length !== columns.length)) setChoices({ ...choices, checked: columns.map(() => true) });
+  // As colunas chegam (ou já estavam): todas marcadas ao abrir, ou, aberto pela grade com colunas inteiras escolhidas, só elas (RN-EXPORT-005). Ajuste
+  // durante a renderização: a etapa nunca mostra a lista sem as caixas.
+  if (columns !== null && (choices.checked === null || choices.checked.length !== columns.length)) setChoices({ ...choices, checked: initialChecked(columns, source.checkedColumns) });
 
   const [step, setStep] = useState<WizardStep>("format");
   const [exporting, setExporting] = useState(false);
@@ -381,6 +382,7 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
             count={choices.count}
             onCount={(count) => change({ count })}
             countLocked={database ? copy.countForced : null}
+            fromGrid={source.checkedColumns !== undefined && source.checkedColumns.length > 0}
             problem={extractionProblem(choices, context, apiProblems.columns ?? null)}
           />
         );

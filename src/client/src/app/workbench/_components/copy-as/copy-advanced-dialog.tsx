@@ -23,12 +23,14 @@ export type { CopyAdvancedDialogProps };
  * busca", que volta ao diálogo sem copiar. Copiado, fecha; a recusa do limite de 10 MiB aparece no alto, e o diálogo fica aberto. "Cancelar", Esc e o X
  * fecham sem perguntar, menos enquanto copia.
  */
-export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable = false, onCopy, onRemember, onClose }: CopyAdvancedDialogProps) {
+export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable = false, whole, onCopy, onRemember, onClose }: CopyAdvancedDialogProps) {
   const idPrefix = useId();
   const [format, setFormat] = useState<DocumentFormat>(initialFormat ?? initial.format);
   const [options, setOptions] = useState<FormatOptions>(initial.options);
   const [scope, setScope] = useState<CopyScope>("cells");
   const [phase, setPhase] = useState<CopyPhase | null>(null);
+  // RN-GRADE-023: o andamento do carregar das linhas que faltam ("Carregando as linhas que faltam… 1.400 linhas").
+  const [progress, setProgress] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   // O foco no campo da tabela é só do abrir (RN-GRADE-016): a primeira troca de formato o desliga, e o campo da tabela que aparece depois (as setas na lista
   // passando pelo SQL ou pelo DbUnit) não tira o foco da lista.
@@ -57,13 +59,14 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
     // O que a cópia lançar não deixa o diálogo preso em "Copiando…", com o Esc, o X e o "Cancelar" desabilitados: a fase volta, e a recusa aparece no alto.
     let outcome: CopyOutcome;
     try {
-      outcome = await onCopy({ format, options, source }, { signal: controller.signal, onPhase: setPhase });
+      outcome = await onCopy({ format, options, source }, { signal: controller.signal, onPhase: setPhase, onProgress: setProgress });
     } catch (error) {
       console.error("[prism] copiar avançado:", error);
       outcome = { kind: "failed", message: copyAsCopy.notice.failed };
     } finally {
       abort.current = null;
       setPhase(null);
+      setProgress(null);
     }
     if (outcome.kind === "copied") onClose();
     else if (outcome.kind === "tooLarge" || outcome.kind === "noColumns" || outcome.kind === "duplicateColumn" || outcome.kind === "failed") setRefusal(outcome.message);
@@ -107,6 +110,8 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
               <legend className="mb-1 font-medium">{a.scope}</legend>
               {copyScopes.map((candidate) => {
                 const size = sourceSize(sources[candidate]);
+                // RN-GRADE-022: com colunas inteiras, as células escolhidas e as linhas inteiras delas são todas as linhas do resultado.
+                const sized = whole !== undefined && candidate !== "loaded" ? a.wholeSize(whole.total, size.columns) : a.size(size.rows, size.columns);
                 const detailId = `${idPrefix}-${candidate}-detail`;
                 return (
                   <label key={candidate} className="flex cursor-pointer items-start gap-2.5 text-ink">
@@ -122,7 +127,7 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
                     <span className="flex min-w-0 flex-col">
                       <span>{a.scopes[candidate]}</span>
                       <span id={detailId} className="text-sm text-muted">
-                        {a.size(size.rows, size.columns)}
+                        {sized}
                         {candidate === "loaded" ? `. ${a.loadedHint}` : ""}
                       </span>
                     </span>
@@ -152,11 +157,20 @@ export function CopyAdvancedDialog({ sources, initial, initialFormat, focusTable
                 {a.preview}
               </h3>
               {preview.cut ? <p className="text-sm text-muted">{a.previewCut}</p> : null}
+              {whole?.rowsToLoad === true && scope !== "loaded" ? <p className="text-sm text-muted">{a.previewLoaded}</p> : null}
               <pre tabIndex={0} aria-labelledby={`${idPrefix}-preview`} className="max-h-56 overflow-auto rounded-md border border-border bg-panel p-2 font-mono text-xs whitespace-pre text-ink outline-none focus-visible:ring-1 focus-visible:ring-accent">
                 {preview.refusal ?? (preview.text === "" ? a.previewEmpty : preview.text)}
               </pre>
             </section>
 
+            {phase === "loading" && progress !== null ? (
+              <div role="status" className="flex items-center gap-3 text-sm text-body">
+                <span>{progress}</span>
+                <Button type="button" variant="secondary" size="compact" onClick={() => abort.current?.abort()}>
+                  {a.cancelLoading}
+                </Button>
+              </div>
+            ) : null}
             {phase === "fetching" ? (
               <div role="status" className="flex items-center gap-3 text-sm text-body">
                 <span>{a.fetching}</span>
