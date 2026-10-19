@@ -29,6 +29,11 @@ type EditsBannerProps = {
   fetching: boolean;
   /** RN-GRADE-002: a cópia de uma seleção grande ainda monta o texto, passado meio segundo: "Copiando…", com o mesmo "Cancelar", que desiste dela. */
   copying?: boolean;
+  /**
+   * RN-GRADE-023: o copiar ou o "Copiar número de linha(s)" das colunas inteiras carregando as linhas que faltam ("Carregando as linhas que faltam… 1.400
+   * linhas"), com o mesmo "Cancelar", que para de carregar sem copiar nada; nulo sem isso.
+   */
+  loading?: string | null;
   onCancelFetch: () => void;
   /**
    * RN-IMPORT-020: a tabela recebeu linhas de uma importação depois da leitura que está na tela; a faixa diz isso, com "Atualizar" (o da aba, que pergunta
@@ -46,16 +51,16 @@ type EditsBannerProps = {
  * veio, que fica até o próximo Salvar ou o Descartar); o motivo de só leitura; e a nota das linhas importadas depois da leitura (RN-IMPORT-020). É estado
  * da tela, e não aviso (RN-AVISO-005). Sem nada disso, não aparece.
  */
-export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, noticeTone = "lock", failure, fetching, copying = false, onCancelFetch, onImportedRefresh = null, onViewSql, onDiscard, onSave }: EditsBannerProps) {
-  if (pending === 0 && failure === null && readOnly === null && notice === null && !fetching && !copying && onImportedRefresh === null) return null;
+export function EditsBanner({ pending, oneAtATime, saving, readOnly, notice, noticeTone = "lock", failure, fetching, copying = false, loading = null, onCancelFetch, onImportedRefresh = null, onViewSql, onDiscard, onSave }: EditsBannerProps) {
+  if (pending === 0 && failure === null && readOnly === null && notice === null && !fetching && !copying && loading === null && onImportedRefresh === null) return null;
 
   return (
     <div className="flex flex-none flex-col gap-1.5 border-b border-border bg-raised px-3 py-1.5 text-xs">
-      {fetching || copying ? (
+      {loading !== null || fetching || copying ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span aria-hidden className="size-2 flex-none animate-pulse rounded-full bg-accent" />
           <span role="status" className="text-ink">
-            {fetching ? copy.fullValues.fetching : gridSelectionCopy.copy.copying}
+            {loading ?? (fetching ? copy.fullValues.fetching : gridSelectionCopy.copy.copying)}
           </span>
           <Button type="button" variant="secondary" size="compact" className="ml-auto h-7 px-2.5 text-xs" onClick={onCancelFetch}>
             {copy.fullValues.cancel}

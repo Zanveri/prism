@@ -2,15 +2,15 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 
 import type { GridZoom } from "@/app/settings/_lib/preferences";
-import { ChevronIcon } from "@/components/ui";
+import { ArrowDownIcon, ArrowsUpDownIcon, ArrowUpIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 import { isMacPlatform } from "@/lib/utils/platform";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
-import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowShortcut, savesEdits, selectsAll, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
-import { choseWholeRows, collapse, columnSpan, dragRows, escapeCollapses, extend, extendByKey, extendRows, rowSpan, select, selectAll, selectRow, toggleRow, wholeRows } from "../_lib/grid-selection";
+import { choseWholeColumns, choseWholeRows, collapse, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
@@ -18,7 +18,7 @@ import type { QueryColumn, QueryRow } from "../_lib/query.schema";
 import { nearEnd } from "../_lib/result-paging";
 import { observeRenderedOffset } from "../_lib/row-measure";
 import type { ColumnLink } from "../_lib/foreign-key-links";
-import { fitsFilter, type RecordsSort } from "../_lib/table-sql";
+import { fitsFilter, type SortDirection } from "../_lib/table-sql";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { CellEditor } from "./cell-editor";
 import { ColumnResizer } from "./column-resizer";
@@ -68,6 +68,11 @@ type GridRowProps = {
   /** RN-GRADE-001: as colunas escolhidas nesta linha, de `selectedFrom` a `selectedTo` (-1 sem nenhuma). Números, para a linha memorizada comparar. */
   selectedFrom?: number;
   selectedTo?: number;
+  /**
+   * RN-GRADE-022: as colunas inteiras escolhidas, o MESMO conjunto para todas as linhas enquanto a seleção não muda (a linha memorizada não é redesenhada por
+   * ele); nulo com outra forma. O número da linha não fica destacado por elas: nenhuma linha está escolhida inteira.
+   */
+  wholeColumns?: ReadonlySet<number> | null;
 };
 
 /**
@@ -76,7 +81,7 @@ type GridRowProps = {
  * valores entram como texto dos filhos do React, nunca como HTML (RN-SHELL-002). A altura da linha
  * e a largura do número dela são as variáveis do zoom (`--grid-row` e `--grid-gutter`, na caixa da grade).
  */
-export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf, selectedFrom = -1, selectedTo = -1 }: GridRowProps) {
+export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf, selectedFrom = -1, selectedTo = -1, wholeColumns = null }: GridRowProps) {
   const role = cellIdOf === undefined ? "cell" : "gridcell";
   const deleted = mark?.deleted === true;
   const rowChosen = selectedFrom >= 0;
@@ -107,7 +112,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         const align = columns[item.index].kind === "number" ? " text-right" : "";
         // Só na grade editável: o id que a célula ativa anuncia, a posição que o clique lê, se a célula está escolhida (RN-GRADE-001) e as marcas da
         // pendência, da exclusão e da célula ativa. A escolhida tem o fundo de escolha do tema, o do item escolhido do navegador.
-        const chosen = rowChosen && item.index >= selectedFrom && item.index <= selectedTo;
+        const chosen = (rowChosen && item.index >= selectedFrom && item.index <= selectedTo) || wholeColumns?.has(item.index) === true;
         const cell = cellIdOf === undefined ? {} : { id: cellIdOf(index, item.index), "data-row": index, "data-col": item.index, "aria-selected": chosen };
         const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", deleted && "text-subtle line-through");
 
@@ -190,13 +195,24 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
   );
 });
 
+/** RN-GRADE-021: o botão de ordenar de uma coluna: a ordem dela (nula sem ordem, ou com a ordem de outra coluna), o motivo de ele não valer e o clique. */
+export type HeaderSortButton = { direction: SortDirection | null; reason: string | null; onSort: () => void };
+
 type GridHeaderCellProps = {
   column: QueryColumn;
   item: VirtualItem;
-  /** A ordem em vigor, quando a grade ordena pelo cabeçalho (a vista Registros, RN-TABELA-005). */
-  sort?: RecordsSort | null;
-  /** Clicar no cabeçalho. Sem ele o cabeçalho é só texto, como no resultado de uma consulta. */
-  onSort?: (column: QueryColumn) => void;
+  /**
+   * RN-GRADE-021: o botão de ordenar, à direita do nome, com o espaço dele sempre reservado. Sem ele não há botão, e o nome ocupa o cabeçalho todo (as abas
+   * guardadas do script, que não ordenam; o resultado sem a edição).
+   */
+  sort?: HeaderSortButton;
+  /**
+   * RN-GRADE-021 e 022: o nome é o botão que escolhe a coluna inteira (na grade editável), fora do Tab; o clique, o Shift, o Ctrl, o arraste e o botão direito
+   * nele são lidos pela grade, por delegação (`data-colheader`). Sem ele, o nome é só texto.
+   */
+  choosable?: boolean;
+  /** O clique no nome que chega sem ponteiro (o leitor de tela que aciona o botão): escolhe a coluna, como o `mousedown` da grade faria. */
+  onChoose?: () => void;
   /** A largura da coluna a 100% de zoom: a que a divisa mostra e de onde o arrasto parte (RN-GRADE-009). */
   width?: number;
   /** A última coluna: a divisa fica dentro dela. */
@@ -215,21 +231,39 @@ type GridHeaderCellProps = {
   readOnlyMark?: boolean;
   /** RN-GRADE-001: a coluna está na seleção, e o cabeçalho fica destacado. */
   selected?: boolean;
+  /** RN-GRADE-022: a coluna está escolhida inteira: o `columnheader` diz `aria-selected`. */
+  whole?: boolean;
+  /** O macOS escreve o atalho do Ctrl+Espaço como Control+Espaço. */
+  mac?: boolean;
 };
 
+/** A seta do botão de ordenar: para cima na crescente, para baixo na decrescente, e as duas, no tom apagado, sem ordem (RN-GRADE-021). */
+function SortArrow({ direction }: { direction: SortDirection | null }) {
+  if (direction === "asc") return <ArrowUpIcon className="text-accent" />;
+  if (direction === "desc") return <ArrowDownIcon className="text-accent" />;
+  return <ArrowsUpDownIcon className="text-subtle" />;
+}
+
 /**
- * O cabeçalho de uma coluna: o nome e o tipo. Na vista Registros ele é um botão (RN-TABELA-005): clicar
- * ordena crescente, de novo decrescente, de novo tira a ordem; `aria-sort` e a dica dizem em que pé está.
- * À direita, nas duas grades, a divisa que muda a largura da coluna (RN-GRADE-009), irmã do botão: o clique
- * que termina um arrasto não ordena. O nome do cabeçalho para o leitor de tela é o da coluna e o tipo
- * (`aria-label`), e não o que se juntaria da divisa que mora dentro dele.
+ * O cabeçalho de uma coluna (RN-GRADE-021): o `columnheader`, com o `aria-sort` dela quando a grade ordena, e duas partes lado a lado, mais a divisa da
+ * largura (RN-GRADE-009), que continua irmã delas, na borda direita: o clique que termina um arrasto não chega ao nome.
+ *
+ * 1. O nome (e o tipo, quando a configuração o mostra): na grade editável, um botão fora do Tab que escolhe a coluna inteira (RN-GRADE-022). O clique, o
+ *    arraste e o botão direito nele são da grade (`data-colheader`); o `mousedown` é cancelado lá, e o foco fica na grade. O clique que chega sem ponteiro (o
+ *    leitor de tela que aciona o botão) também escolhe, por `onChoose`.
+ * 2. O botão de ordenar, de 24 px, com a seta de 16 px, que termina antes da área da divisa. O espaço dele fica sempre reservado: o botão fica à vista na
+ *    coluna que ordena e, nas outras, com o ponteiro sobre o cabeçalho; escondido, não recebe o clique, e o clique no espaço dele escolhe a coluna (o espaço
+ *    também é `data-colheader`). Desabilitado, é `aria-disabled`, com o motivo na dica e no nome.
+ *
+ * O nome do cabeçalho para o leitor de tela é o da coluna e o tipo (`aria-label`), e não o que se juntaria dos botões e da divisa que moram dentro dele.
  */
-export function GridHeaderCell({ column, item, sort, onSort, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false, selected = false }: GridHeaderCellProps) {
-  // A largura de saída da coluna é contada sem a seta da ordem (`baseWidths`, em `grid-columns.ts`). Quando a seta aparece, quem cede os 18 px dela é o TIPO, e só ele: o nome não
-  // encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com um peso, por maior que fosse o do tipo,
-  // o nome ainda perdia centésimos de pixel, e com 1/64 de pixel a menos o Chromium já desenha a reticência (`cliente_id` virava `cliente_…`; antes disso o `id`
-  // ordenado encolhia a zero e sobrava `integer ▲`: E1). A caixa do rótulo encolhe com a célula e fica ao lado da seta, que é irmã dela: `max-w-full` no nome é
-  // "o que cabe já descontada a seta", e só o nome que nem sozinho cabe é cortado, com reticências, em vez de vazar para a coluna ao lado.
+export function GridHeaderCell({ column, item, sort, choosable = false, onChoose, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false, selected = false, whole = false, mac = false }: GridHeaderCellProps) {
+  const describedBy = useId();
+  // A largura de saída da coluna é contada sem o botão de ordenar (`baseWidths`, em `grid-columns.ts`). O espaço dele é sempre reservado, e quem cede os px
+  // dele é o TIPO, e só ele: o nome não encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com
+  // um peso, por maior que fosse o do tipo, o nome ainda perdia centésimos de pixel, e com 1/64 de pixel a menos o Chromium já desenha a reticência
+  // (`cliente_id` virava `cliente_…`: E1). A caixa do rótulo encolhe com a célula e fica ao lado do botão, que é irmão dela: `max-w-full` no nome é "o que
+  // cabe já descontado o botão", e só o nome que nem sozinho cabe é cortado, com reticências, em vez de vazar para a coluna ao lado.
   const label = (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
       <span className="max-w-full shrink-0 truncate">{column.name}</span>
@@ -241,27 +275,78 @@ export function GridHeaderCell({ column, item, sort, onSort, width = item.size, 
   );
   const align = column.kind === "number" ? " justify-end" : "";
   const position = { left: item.start, width: item.size };
-  // O nome para o leitor de tela é o que se vê; a dica do cabeçalho só de texto diz o tipo mesmo com ele escondido.
+  // O nome para o leitor de tela é o que se vê; a dica do cabeçalho diz o tipo mesmo com ele escondido.
   const name = `${showType ? `${column.name} ${column.type}` : column.name}${readOnlyMark ? `, ${editCopy.readOnlyMark}` : ""}`;
+  const about = hint === null ? `${column.name} · ${column.type}` : `${column.name} · ${column.type}\n${hint}`;
   const resizer = onResize === undefined ? null : <ColumnResizer name={column.name} width={width} zoom={scale} last={last} onResize={onResize} onFit={onFit ?? (() => {})} />;
+  const direction = sort?.direction ?? null;
+  const ariaSort = sort === undefined ? {} : { "aria-sort": direction === "asc" ? ("ascending" as const) : direction === "desc" ? ("descending" as const) : ("none" as const) };
+  const header = cn("group/header absolute top-0 flex h-full border-r border-border whitespace-nowrap", selected && "bg-selected text-ink");
 
-  if (onSort === undefined) {
+  if (!choosable && sort === undefined) {
     return (
-      <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} title={hint === null ? `${column.name} · ${column.type}` : `${column.name} · ${column.type}\n${hint}`} className={cn(`absolute top-0 flex h-full gap-1.5 border-r border-border px-3 whitespace-nowrap${align}`, selected && "bg-selected text-ink")} style={position}>
+      <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} title={about} className={cn(header, `gap-1.5 px-3${align}`)} style={position}>
         {label}
         {resizer}
       </div>
     );
   }
 
-  const direction = sort?.column === column.name ? sort.direction : null;
+  const sortTitle = sort === undefined ? null : copy.sortTitle(column.name, direction);
+  const sortLabel = sortTitle === null || sort === undefined ? null : sort.reason === null ? sortTitle : copy.sortUnavailable(sortTitle, sort.reason);
+  // A dica do nome é a de antes (o nome, o tipo e o motivo da coluna que não se edita), e o que o clique faz.
+  const nameTitle = choosable ? `${about}\n${copy.chooseColumnHint(mac)}` : about;
+  const nameClass = cn("flex h-full min-w-0 flex-1 items-center gap-1.5 pl-3 text-left", sort === undefined && "pr-3", align);
 
   return (
-    <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"} className={cn("absolute top-0 h-full border-r border-border whitespace-nowrap", selected && "bg-selected text-ink")} style={position}>
-      <button type="button" onClick={() => onSort(column)} title={hint === null ? copy.sortTitle(column.name, direction) : `${copy.sortTitle(column.name, direction)}\n${hint}`} className={`flex h-full w-full cursor-pointer items-center gap-1.5 px-3 text-left transition-colors hover:bg-selected${align}`}>
-        {label}
-        {direction === null ? null : <ChevronIcon className={cn("size-3 text-accent", direction === "asc" && "rotate-180")} />}
-      </button>
+    <div role="columnheader" aria-colindex={item.index + 2} aria-label={name} {...ariaSort} {...(whole ? { "aria-selected": true } : {})} className={header} style={position}>
+      {choosable ? (
+        <>
+          <button
+            type="button"
+            tabIndex={-1}
+            data-colheader={item.index}
+            aria-label={column.name}
+            aria-describedby={describedBy}
+            title={nameTitle}
+            onClick={(event) => {
+              // O clique do ponteiro já escolheu no `mousedown` (`detail` 1 em diante); o do leitor de tela chega sem ele.
+              if (event.detail === 0) onChoose?.();
+            }}
+            className={cn(nameClass, "cursor-pointer transition-colors hover:bg-selected")}
+          >
+            {label}
+          </button>
+          <span id={describedBy} className="sr-only">
+            {copy.chooseColumn}
+          </span>
+        </>
+      ) : (
+        <span title={nameTitle} className={nameClass}>
+          {label}
+        </span>
+      )}
+      {sort === undefined || sortLabel === null ? null : (
+        // O espaço do botão, sempre reservado; escondido o botão, o clique aqui escolhe a coluna, como no nome. Termina antes da área da divisa.
+        <span data-colheader={choosable ? item.index : undefined} className={cn("flex h-full w-6 flex-none items-center justify-center", last ? "mr-[8px]" : "mr-[4px]")}>
+          <button
+            type="button"
+            tabIndex={-1}
+            data-sort
+            aria-label={sortLabel}
+            aria-disabled={sort.reason !== null || undefined}
+            title={sortLabel}
+            // O clique no botão não tira o foco da grade (RN-GRADE-021): as teclas dela seguem valendo logo depois.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              if (sort.reason === null) sort.onSort();
+            }}
+            className={cn("flex h-full w-6 cursor-pointer items-center justify-center rounded-sm hover:bg-selected aria-disabled:cursor-not-allowed aria-disabled:opacity-50", direction === null && "invisible group-hover/header:visible")}
+          >
+            <SortArrow direction={direction} />
+          </button>
+        </span>
+      )}
       {resizer}
     </div>
   );
@@ -281,9 +366,6 @@ type ResultGridProps = {
    * ter identidade estável, para a grade memorizada não ser refeita à toa.
    */
   onReachEnd?: () => void;
-  /** Ordenar pelo cabeçalho (RN-TABELA-005): só a vista Registros passa; no resultado de uma consulta a ordem é do `ORDER BY` da pessoa. */
-  sort?: RecordsSort | null;
-  onSort?: (column: QueryColumn) => void;
   /** As chaves estrangeiras da tabela (RN-TABELA-007): o valor das colunas que elas cobrem leva à tabela referenciada. Só a vista Registros passa. */
   links?: ReadonlyMap<number, ColumnLink>;
   onFollow?: (columnIndex: number, value: string) => void;
@@ -318,7 +400,15 @@ const hasBox = (element: HTMLElement) => element.clientHeight > 0 || element.cli
  * contadas uma vez, da primeira página, e "carregar mais" só aumenta a altura rolável. As escolhidas
  * pela pessoa (`widths`) passam por cima delas.
  */
-export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, generated, nullText = copy.null, onReachEnd, sort, onSort, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom, editing }: ResultGridProps) {
+/**
+ * A grade rola na vertical até a célula ativa que mudou (RN-GRADE-001), menos quando ela ficou na linha em que o gesto no nome da coluna a deixou
+ * (RN-GRADE-021 e 022: o nome escolhe a coluna sem levar a grade de volta à linha da ativa); o campo de edição aberto a traz à vista sempre.
+ */
+export function followsActiveRow(row: number, heldRow: number | null, editorOpen: boolean): boolean {
+  return editorOpen || row !== heldRow;
+}
+
+export const ResultGrid = memo(function ResultGrid({ columns, rows: read, truncated, generated, nullText = copy.null, onReachEnd, links, onFollow, linkable, widths: chosen = noWidths, onResize, showTypes = true, zoom = 100, onZoom, editing }: ResultGridProps) {
   const scroll = useRef<HTMLDivElement>(null);
   // As linhas que a grade desenha: com a edição, as lidas e, depois delas, as novas.
   const rows = editing?.rows ?? read;
@@ -412,17 +502,24 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     lineHeight: `calc(var(--text-sm--line-height) * ${metrics.factor})`,
   } as CSSProperties;
 
-  // A célula ativa fica à vista quando muda: a linha nova entra depois das lidas, e "Adicionar linha" a ativa lá no fim.
+  // A célula ativa fica à vista quando muda: a linha nova entra depois das lidas, e "Adicionar linha" a ativa lá no fim. RN-GRADE-021 e 022: o gesto no nome
+  // da coluna leva a ativa para ela, na linha em que estava (na primeira, sem ativa), e a grade não rola na vertical por isso: a pessoa escolhe a coluna pelo
+  // cabeçalho preso, rolada até onde lia. `heldRow` é a linha da ativa no gesto do cabeçalho; o teclado e o clique numa célula ou no número a soltam, e o
+  // campo que abre traz a ativa à vista (`followsActiveRow`).
   const activeRow = editing?.active?.row ?? null;
   const activeColumn = editing?.active?.column ?? null;
+  const editorOpen = editing?.editor != null;
+  const heldRow = useRef<number | null>(null);
   useEffect(() => {
-    if (activeRow === null || activeColumn === null) return;
-    rowVirtualizer.scrollToIndex(activeRow);
+    if (activeRow === null || activeColumn === null) {
+      heldRow.current = null;
+      return;
+    }
+    if (followsActiveRow(activeRow, heldRow.current, editorOpen)) rowVirtualizer.scrollToIndex(activeRow);
     columnVirtualizer.scrollToIndex(activeColumn);
-  }, [activeRow, activeColumn, rowVirtualizer, columnVirtualizer]);
+  }, [activeRow, activeColumn, editorOpen, rowVirtualizer, columnVirtualizer]);
 
   // Fechar o campo de edição devolve o foco à grade, para as setas e o F2 seguirem dali; não o rouba de quem o levou para outro lugar.
-  const editorOpen = editing?.editor != null;
   const wasOpen = useRef(editorOpen);
   useEffect(() => {
     const element = scroll.current;
@@ -465,16 +562,18 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   // botão soltar; passado da borda, a grade rola sozinha, e a célula da borda entra. A contagem da barra espera o botão soltar (`onSelecting`).
   const drag = useRef<(() => void) | null>(null);
   useEffect(() => () => drag.current?.(), []);
-  function startDrag(onCell: (cell: GridCell) => void, rowsOnly: boolean, from: GridCell) {
+  // `mode`: o arraste numa célula (o retângulo), no número da linha (as linhas: só a vertical conta e rola) ou no nome da coluna (as colunas inteiras,
+  // RN-GRADE-022: só a horizontal conta e rola, também na grade sem linhas).
+  function startDrag(onCell: (cell: GridCell) => void, mode: "cells" | "rows" | "columns", from: GridCell) {
     const element = scroll.current;
     if (element === null || editing === undefined) return;
     drag.current?.();
-    const keyOf = (cell: GridCell) => (rowsOnly ? `${cell.row}` : `${cell.row}:${cell.column}`);
+    const keyOf = (cell: GridCell) => (mode === "rows" ? `${cell.row}` : mode === "columns" ? `${cell.column}` : `${cell.row}:${cell.column}`);
     let last = keyOf(from);
     let pointer: { x: number; y: number } | null = null;
     const follow = () => {
       const now = geometry.current;
-      const cell = pointer === null ? null : cellAtPoint(pointer, boxOf(element), now.starts, now.drawn, now.count);
+      const cell = pointer === null ? null : cellAtPoint(pointer, boxOf(element), now.starts, now.drawn, mode === "columns" ? Math.max(now.count, 1) : now.count);
       if (cell === null || keyOf(cell) === last) return;
       last = keyOf(cell);
       onCell(cell);
@@ -485,7 +584,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     };
     const timer = setInterval(() => {
       if (pointer === null) return;
-      const { dx, dy } = edgeScroll(pointer, boxOf(element), true, !rowsOnly);
+      const { dx, dy } = edgeScroll(pointer, boxOf(element), mode !== "columns", mode !== "rows");
       if (dx === 0 && dy === 0) return;
       element.scrollTop += dy;
       element.scrollLeft += dx;
@@ -505,8 +604,40 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     settled(true);
   }
 
+  /** O nome da coluna do evento (`data-colheader`, RN-GRADE-021), ou nulo fora de um. */
+  function columnHeaderOf(target: EventTarget): number | null {
+    const element = target instanceof Element ? target.closest<HTMLElement>("[data-colheader]") : null;
+    if (element === null || scroll.current?.contains(element) !== true) return null;
+    return Number(element.dataset.colheader);
+  }
+
   function handleMouseDown(event: MouseEvent<HTMLDivElement>) {
-    if (editing === undefined || event.button !== 0) return;
+    if (editing === undefined) return;
+    const column = columnHeaderOf(event.target);
+    // RN-GRADE-021: no nome da coluna, nenhum botão do mouse tira o foco da grade. O direito (e o do meio) também tem o `mousedown` cancelado: o nome é um
+    // botão, e o menu devolve o foco a quem o tinha quando abriu. O foco vem para a grade, como no botão direito numa célula.
+    if (column !== null && event.button !== 0) {
+      event.preventDefault();
+      scroll.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.button !== 0) return;
+    // RN-GRADE-021: o botão de ordenar age no clique dele; o `mousedown` só é cancelado, e o foco fica na grade.
+    if (event.target instanceof Element && event.target.closest("[data-sort]") !== null) return void event.preventDefault();
+    heldRow.current = column === null ? null : (editing.active?.row ?? 0);
+    if (column !== null) {
+      // RN-GRADE-022: o clique no nome escolhe a coluna inteira; Shift estende da coluna da âncora; Ctrl (Cmd no macOS) acrescenta ou tira, e o arraste com
+      // ele junta. O `mousedown` é cancelado, como o do canto: o foco fica na grade, e o teclado dela age logo depois.
+      event.preventDefault();
+      scroll.current?.focus({ preventScroll: true });
+      const base = editing.selection;
+      const toggles = mac ? event.metaKey : event.ctrlKey;
+      if (event.shiftKey) editing.onSelection((held, grid) => extendColumns(held, column, grid));
+      else if (toggles) editing.onSelection((held, grid) => toggleColumn(held, column, grid));
+      else editing.onSelection((held, grid) => selectColumn(held, column, grid));
+      if (!event.shiftKey) startDrag((target) => editing.onSelection((_, grid) => dragColumns(base, column, target.column, grid, toggles)), "columns", { row: 0, column });
+      return;
+    }
     const header = rowHeaderOf(event.target);
     const cell = header === null ? cellOf(event.target) : null;
     if (header === null && (cell === null || editingAt(cell))) return;
@@ -521,7 +652,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       if (event.shiftKey) editing.onSelection((held, grid) => extendRows(held, header, grid));
       else if (toggles) editing.onSelection((held, grid) => toggleRow(held, header, grid));
       else editing.onSelection((held, grid) => selectRow(held, header, grid));
-      if (!event.shiftKey) startDrag((target) => editing.onSelection((_, grid) => dragRows(base, header, target.row, grid, toggles)), true, { row: header, column: 0 });
+      if (!event.shiftKey) startDrag((target) => editing.onSelection((_, grid) => dragRows(base, header, target.row, grid, toggles)), "rows", { row: header, column: 0 });
       return;
     }
 
@@ -529,7 +660,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     // que está sob o ponteiro.
     if (event.shiftKey) editing.onSelection((held, grid) => extend(held, cell!, grid));
     else editing.onActivate(cell!);
-    startDrag((target) => editing.onSelection((held, grid) => extend(held, target, grid)), false, cell!);
+    startDrag((target) => editing.onSelection((held, grid) => extend(held, target, grid)), "cells", cell!);
   }
 
   function handleDoubleClick(event: MouseEvent<HTMLDivElement>) {
@@ -543,7 +674,11 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     event.preventDefault();
     const point = { x: event.clientX, y: event.clientY };
     const header = rowHeaderOf(event.target);
+    const column = header === null ? columnHeaderOf(event.target) : null;
+    heldRow.current = column === null ? null : (editing.active?.row ?? 0);
     if (header !== null) return editing.onRowMenu(header, point);
+    // RN-GRADE-021: o botão direito no nome da coluna (e no espaço do botão de ordenar) escolhe antes a coluna inteira, quando ela não está entre as escolhidas.
+    if (column !== null) return editing.onColumnMenu(column, point);
     const cell = cellOf(event.target);
     if (cell === null || editingAt(cell)) return;
     // Fora da seleção, a célula é escolhida antes; dentro dela, a seleção fica (RN-GRADE-004).
@@ -564,6 +699,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    heldRow.current = null;
     if (editing === undefined || editing.editor !== null || event.target !== event.currentTarget) return;
 
     if (savesEdits(event, editing.pending)) {
@@ -580,7 +716,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       else editing.onDeleteRow();
       return;
     }
-    // RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas; com um retângulo, ou só a célula ativa, a tecla não faz nada.
+    // RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas; com um retângulo, colunas inteiras ou só a célula ativa, a tecla não faz nada.
     if (deletesRows(event, platform)) {
       if (choseWholeRows(editing.selection, editing.layout)) {
         event.preventDefault();
@@ -618,6 +754,12 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     if (selectsRows(event)) {
       event.preventDefault();
       editing.onSelection((held) => wholeRows(held));
+      return;
+    }
+    // RN-GRADE-022: Ctrl+Espaço (Control+Espaço no macOS) escolhe as colunas inteiras das células escolhidas; também não abre o campo.
+    if (selectsColumns(event)) {
+      event.preventDefault();
+      editing.onSelection((held, grid) => wholeColumns(held, grid));
       return;
     }
 
@@ -662,8 +804,15 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       />
     );
   const activeId = editing?.active == null ? undefined : cellIdOf(editing.active.row, editing.active.column);
-  // RN-GRADE-001: as colunas da seleção, que o cabeçalho destaca.
-  const headerSpan = editing === undefined ? null : columnSpan(editing.selection, editing.layout);
+  // RN-GRADE-022: as colunas inteiras escolhidas, um conjunto só para todas as linhas à vista enquanto a seleção não muda.
+  const selection = editing?.selection;
+  const layout = editing?.layout;
+  const whole = useMemo(() => (selection === undefined || layout === undefined ? null : wholeColumnSet(selection, layout)), [selection, layout]);
+  const wholeChosen = selection !== undefined && choseWholeColumns(selection);
+  // RN-GRADE-021: o botão de ordenar de cada coluna, pela ordem aplicada e pelo motivo de agora; o clique segue o ciclo dela (quem decide é a edição).
+  const sorting = editing?.sort;
+  const sortOf = (name: string) =>
+    sorting === undefined ? undefined : { direction: sorting.applied?.column === name ? sorting.applied.direction : null, reason: sorting.reason, onSort: () => sorting.onSort(name) };
 
   // Uma página que não chega a encher a janela não tem o que rolar: a seguinte vem sem a pessoa pedir.
   useEffect(() => {
@@ -707,18 +856,21 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               key={item.index}
               column={columns[item.index]}
               item={item}
-              sort={sort}
-              onSort={onSort}
+              sort={sortOf(columns[item.index].name)}
+              choosable={editing !== undefined}
+              onChoose={editing === undefined ? undefined : () => editing.onSelection((held, grid) => selectColumn(held, item.index, grid))}
               width={widths[item.index]}
               last={item.index === columns.length - 1}
               showType={showTypes}
               scale={metrics.factor}
               hint={editing?.columnHints?.[item.index] ?? null}
               readOnlyMark={editing?.columnReadOnly?.[item.index] === true}
-              selected={headerSpan !== null && item.index >= headerSpan[0] && item.index <= headerSpan[1]}
+              selected={editing !== undefined && headerChosen(editing.selection, editing.layout, item.index)}
+              whole={wholeChosen && whole?.has(item.index) === true}
+              mac={mac}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
-              // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009).
-              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: onSort !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null }))}
+              // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009), e reserva o espaço do botão de ordenar.
+              onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: sorting !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null }))}
             />
           ))}
         </div>
@@ -746,6 +898,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               cellIdOf={editing === undefined ? undefined : cellIdOf}
               selectedFrom={span?.[0] ?? -1}
               selectedTo={span?.[1] ?? -1}
+              wholeColumns={whole}
             />
           );
         })}

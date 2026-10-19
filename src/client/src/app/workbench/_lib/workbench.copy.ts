@@ -192,8 +192,12 @@ export const workbenchCopy = {
     cursorClosed: "O cursor foi fechado. Execute de novo para continuar.",
     rerun: "Executar de novo",
     null: "NULL",
-    // RN-TABELA-005: a dica do cabeçalho que ordena diz o que o próximo clique faz.
-    sortTitle: (name: string, direction: "asc" | "desc" | null) => (direction === null ? `Ordenar por ${name} (crescente)` : direction === "asc" ? `Ordenar por ${name} (decrescente)` : `Tirar a ordem por ${name}`),
+    // RN-GRADE-021: a dica e o nome do botão de ordenar do cabeçalho dizem o que o próximo clique faz; desabilitado, com o motivo depois.
+    sortTitle: (name: string, direction: "asc" | "desc" | null) => (direction === null ? `Ordenar por ${name}, crescente` : direction === "asc" ? `Ordenar por ${name}, decrescente` : `Tirar a ordem de ${name}`),
+    sortUnavailable: (title: string, reason: string) => `${title}. Indisponível: ${reason}.`,
+    // RN-GRADE-021: o nome da coluna é o botão que escolhe a coluna inteira (RN-GRADE-022), fora do Tab; a dica diz o atalho do teclado.
+    chooseColumn: "Escolher a coluna inteira",
+    chooseColumnHint: (mac: boolean) => `Clique para escolher a coluna inteira (${mac ? "Control+Espaço" : "Ctrl+Espaço"}).`,
     // RN-SQL-011: a dica da célula que chegou cortada.
     truncated: "Valor cortado",
     // RN-SQL-010: o comando que o usuário cancelou. Não é erro do banco.

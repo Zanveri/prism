@@ -26,7 +26,7 @@ import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import type { TableRef } from "../../_lib/table-diagram";
 import { recordsSql, sortOf, sqlLiteral, type RecordsSort } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
-import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, orderRecords, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
+import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, orderRecords, runRecords, settleHandoff, takeHandoff } from "../../_lib/table-view";
 import { saveQuestion } from "../../_lib/command-confirmation";
 import { useAutoRefresh } from "../../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../../_lib/use-command-confirmation";
@@ -74,9 +74,9 @@ type RecordsViewProps = {
  * (grade, "carregar mais", contar o total, cancelar). Só leitura. O texto do comando não passa por editor: o
  * executor recebe o comando pronto, e a tela o mostra embaixo do filtro.
  *
- * A ordem mora no texto do campo: clicar no cabeçalho de uma coluna escreve, troca ou tira o `ORDER BY` ali e executa
- * (`sortRecords`), "Limpar" tira a condição e a ordem de uma vez (`clearRecords`), e a seta do cabeçalho é lida do filtro
- * em vigor, quando a ordem dele é de uma coluna só (`sortOf`).
+ * A ordem mora no texto do campo: o botão de ordenar do cabeçalho de uma coluna (RN-GRADE-021) e o "Ordenar" do menu escrevem, trocam ou tiram o
+ * `ORDER BY` ali e executam (`orderRecords`, com a ordem seguinte do ciclo, que a edição decide), "Limpar" tira a condição e a ordem de uma vez
+ * (`clearRecords`), e a seta do cabeçalho é lida do filtro em vigor, quando a ordem dele é de uma coluna só (`sortOf`).
  *
  * Executa ao abrir e, ao voltar a esta vista, só se a aba ainda não tem resultado nenhum: um erro, um
  * cancelamento ou as linhas que estão na tela ficam como estão, e quem as refaz é "Atualizar". A vista
@@ -172,16 +172,19 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   const { confirmed } = confirmation;
   const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
 
-  // RN-GRADE-004 e RN-TABELA-007: o "Ordenar" e o "Ir para o registro referenciado" do menu da grade, pelo que está mais abaixo (a ordem em vigor, as chaves
-  // estrangeiras, o seguir do link), lido na hora por uma ref.
-  const gridMenuRef = useRef<{ sort: RecordsSort | null; order: (sort: RecordsSort | null) => void; links: ReadonlyMap<number, unknown> | undefined; linkable: (value: string) => boolean; follow: (column: number, value: string) => void }>({
-    sort: null,
+  // A seta do cabeçalho é a da ordem EM VIGOR, quando ela é de uma coluna só da grade que está na tela (as linhas ficam lá, esmaecidas, enquanto outro comando roda).
+  const onScreen = state.status === "running" ? state.previous : state;
+  const gridColumns = onScreen?.status === "rows" ? onScreen.columns : null;
+  const sort = useMemo(() => (gridColumns === null ? null : sortOf(filter, gridColumns, engine)), [filter, gridColumns, engine]);
+  // RN-GRADE-004, RN-GRADE-021 e RN-TABELA-007: o "Ordenar" do menu e o botão de ordenar do cabeçalho (a ordem em vigor, desta renderização, e o que a troca)
+  // e o "Ir para o registro referenciado" (as chaves estrangeiras, o seguir do link), pelo que está mais abaixo, lido na hora por uma ref.
+  const gridMenuRef = useRef<{ order: (sort: RecordsSort | null) => void; links: ReadonlyMap<number, unknown> | undefined; linkable: (value: string) => boolean; follow: (column: number, value: string) => void }>({
     order: () => {},
     links: undefined,
     linkable: () => false,
     follow: () => {},
   });
-  const sortSource = useMemo<GridSortSource>(() => ({ current: () => gridMenuRef.current.sort, apply: (next) => gridMenuRef.current.order(next) }), []);
+  const sortSource = useMemo<GridSortSource>(() => ({ applied: () => sort, apply: (next) => gridMenuRef.current.order(next) }), [sort]);
   const followSource = useMemo<GridFollowSource>(() => ({ links: (column) => gridMenuRef.current.links?.has(column) === true, linkable: (value) => gridMenuRef.current.linkable(value), follow: (column, value) => gridMenuRef.current.follow(column, value) }), []);
 
   // Seção 37: o submenu "Copiar avançado" (RN-GRADE-003, 016 e 017) e o "Gerar SQL" (RN-GRADE-006 e 018) da grade, com a tabela da aba como origem: o nome
@@ -245,11 +248,12 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
    * não desabilita, e a origem é a grade que está na tela.
    */
   const exportBlocker = runnerExportBlocker(state, { busy: isPersonBusy(state) || edits.banner.saving });
-  const pending = edits.pending;
+  const { pending, chosenColumns } = edits;
   const openExport = useCallback(() => {
     const rows = exportRows(runner.getState());
-    if (rows !== null) openExportWizard(recordsSource(rows, { connectionId, ...inDatabase(database), schema, name, filter, unsavedEdits: pending }));
-  }, [runner, connectionId, database, schema, name, filter, pending]);
+    // RN-EXPORT-005: com colunas inteiras escolhidas na grade, só elas vêm marcadas na Extração.
+    if (rows !== null) openExportWizard(recordsSource(rows, { connectionId, ...inDatabase(database), schema, name, filter, unsavedEdits: pending, checkedColumns: chosenColumns() }));
+  }, [runner, connectionId, database, schema, name, filter, pending, chosenColumns]);
   useEffect(() => {
     exportRef.current = { blocker: exportBlocker, open: openExport };
   });
@@ -284,10 +288,6 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // Que valores viram link diz o mesmo `sqlLiteral` que o clique usa, com o banco da conexão (hoje só o valor com caractere de controle não vira, em banco nenhum).
   const linkable = useCallback((value: string) => engine !== undefined && sqlLiteral(engine, value, "text") !== null, [engine]);
 
-  // A seta do cabeçalho é a da ordem EM VIGOR, quando ela é de uma coluna só da grade que está na tela (as linhas ficam lá, esmaecidas, enquanto outro comando roda).
-  const onScreen = state.status === "running" ? state.previous : state;
-  const gridColumns = onScreen?.status === "rows" ? onScreen.columns : null;
-  const sort = useMemo(() => (gridColumns === null ? null : sortOf(filter, gridColumns, engine)), [filter, gridColumns, engine]);
   // RN-TABELA-011: o campo completa as colunas da tabela, que são as da grade (`SELECT *`). Um filtro errado deixa a área com o erro e sem grade: as colunas
   // que o campo sugere continuam as da última grade, para a pessoa corrigir o filtro.
   const [seenColumns, setSeenColumns] = useState<readonly { name: string; type: string }[]>([]);
@@ -344,17 +344,15 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
     });
   }
 
-  /** O clique no cabeçalho escreve, troca ou tira o `ORDER BY` no texto do campo e o envia (`sortRecords`, RN-TABELA-010). */
-  function sortBy(column: string) {
-    if (engine !== undefined && gridColumns !== null) guard(() => sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
-  }
-
-  /** O "Ordenar" do menu da grade (RN-GRADE-004): a ordem escolhida para a coluna, pelo mesmo caminho do clique no cabeçalho (`orderRecords`). */
+  /**
+   * O "Ordenar" do menu da grade (RN-GRADE-004) e o botão de ordenar do cabeçalho (RN-GRADE-021, que pede a ordem seguinte do ciclo): a ordem escolhida para a
+   * coluna, escrita no campo e executada (`orderRecords`, RN-TABELA-010).
+   */
   function orderBy(next: RecordsSort | null) {
     if (engine !== undefined) guard(() => orderRecords({ engine, schema, name }, { draft, sort: next }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
   useEffect(() => {
-    gridMenuRef.current = { sort, order: orderBy, links, linkable, follow };
+    gridMenuRef.current = { order: orderBy, links, linkable, follow };
   });
 
   /** "Limpar" tira a condição e a ordem de uma vez (`clearRecords`, RN-TABELA-010). */
@@ -389,8 +387,6 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
           name: `${schema}.${name}`,
           onRefresh: refresh,
           onCancel: () => void runner.cancel(),
-          sort,
-          onSort: sortBy,
           onExport: exportCsv,
           links,
           onFollow: follow,

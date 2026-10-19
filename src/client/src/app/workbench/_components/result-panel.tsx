@@ -15,7 +15,6 @@ import { dataImportCopy } from "../_lib/data-import/data-import.copy";
 import { autoLoadArmed } from "../_lib/result-paging";
 import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
-import type { RecordsSort } from "../_lib/table-sql";
 import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { EditBar } from "./edit-bar";
@@ -159,9 +158,6 @@ type RecordsMode = {
   name: string;
   onRefresh: () => void;
   onCancel: () => void;
-  /** A ordem em vigor e quem a muda ao clicar num cabeçalho (RN-TABELA-005). Com algo em andamento a grade não ordena: o executor recusaria. */
-  sort: RecordsSort | null;
-  onSort: (column: string) => void;
   /** "Exportar CSV" (RN-TABELA-006): grava as linhas carregadas num arquivo. Só vale com linhas na tela. */
   onExport: () => void;
   /** As colunas que são chave estrangeira e o clique no valor delas (RN-TABELA-007). */
@@ -279,7 +275,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   // Identidade estável: a grade é memorizada.
   const resize = useCallback((index: number, width: number) => setSizing((held) => withWidth(held, index, width)), []);
   // "Carregar mais" e a contagem também ocupam a sessão (RN-SESSAO-002) e se cancelam (RN-SQL-010). A execução da atualização automática (RN-GRADE-014) não
-  // ocupa a área para a pessoa: "Atualizar" não vira "Cancelar", "Exportar CSV" e a ordem pelo cabeçalho seguem valendo (o comando dela toma o lugar).
+  // ocupa a área para a pessoa: "Atualizar" não vira "Cancelar" e "Exportar CSV" segue valendo (o comando dela toma o lugar). O botão de ordenar do cabeçalho
+  // é da edição (`editing.sort`, RN-GRADE-021), que diz quando ele não vale.
   const busy = isPersonBusy(state);
   const cancelling = (state.status === "running" || state.status === "rows") && state.cancelling;
   // RN-CONFIG-005: a grade só avisa que chegou ao fim; quem decide se a página seguinte pode vir é esta conta.
@@ -400,8 +397,6 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 generated={rows.generated}
                 nullText={nullText}
                 onReachEnd={autoLoad ? onLoadMore : undefined}
-                sort={records?.sort}
-                onSort={records === undefined || busy ? undefined : (column) => records.onSort(column.name)}
                 links={records?.links}
                 onFollow={records?.onFollow}
                 linkable={records?.linkable}

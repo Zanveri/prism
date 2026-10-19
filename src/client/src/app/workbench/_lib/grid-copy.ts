@@ -112,3 +112,24 @@ export function columnNamesText(names: readonly string[], engine: Engine | undef
 export function rowNumbersOf(rows: readonly number[], read: number): number[] {
   return rows.filter((row) => row < read).map((row) => row + 1);
 }
+
+/**
+ * RN-GRADE-023: a conta do limite de 10 MiB enquanto as linhas que faltam chegam, para o copiar das colunas inteiras: a soma, em UTF-8, dos valores das
+ * colunas copiadas e de um separador por célula. É um piso do texto (as aspas, o cabeçalho, os valores completos das cortadas e o que cada formato escreve
+ * em volta só aumentam): passar dele já é passar do limite, e o carregar para sem pedir a página seguinte. `initial` é o piso das linhas que a grade já tinha
+ * (as lidas, com as pendências, e as novas); cada chamada depois soma as linhas de `from` em diante e diz se o carregar segue.
+ */
+export function loadedRowsMeter(columns: readonly number[], initial: number, limit: number = clipboardLimit): (rows: { rows: readonly (readonly (string | null)[])[] }, from: number) => boolean {
+  let bytes = initial;
+  return (page, from) => {
+    if (from > 0) for (let row = from; row < page.rows.length; row += 1) for (const column of columns) bytes += utf8Length(page.rows[row]?.[column] ?? "") + 1;
+    return bytes <= limit;
+  };
+}
+
+/** O piso do texto de células já na grade (RN-GRADE-023): os valores em UTF-8 e um separador por célula. */
+export function cellsFloor(rows: readonly (readonly (string | null)[])[]): number {
+  let bytes = 0;
+  for (const row of rows) for (const value of row) bytes += utf8Length(value ?? "") + 1;
+  return bytes;
+}

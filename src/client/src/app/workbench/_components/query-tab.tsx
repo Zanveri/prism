@@ -215,18 +215,17 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     }),
     [engine, sendFilter],
   );
-  // RN-GRADE-004: o "Ordenar" do menu da grade, pelo campo de filtro do resultado (RN-GRADE-011): a ordem em uso é a do filtro aplicado, e a escolhida é
-  // escrita no campo (`withOrder`) e aplicada como o "Aplicar".
+  // RN-GRADE-004 e RN-GRADE-021: o "Ordenar" do menu da grade e o botão de ordenar do cabeçalho, pelo campo de filtro do resultado (RN-GRADE-011): a ordem em
+  // uso é a do filtro aplicado, e a escolhida é escrita no campo (`withOrder`) e aplicada como o "Aplicar".
+  // RN-GRADE-021: a ordem em uso é a desta renderização: o botão de ordenar do cabeçalho mostra a seta dela.
+  const sortColumns = (state.status === "rows" ? state : state.status === "running" && state.previous?.status === "rows" ? state.previous : null)?.columns ?? null;
+  const appliedSort = useMemo(() => (sortColumns === null ? null : sortOf(filterApplied, sortColumns, engine)), [sortColumns, filterApplied, engine]);
   const resultSort = useMemo<GridSortSource>(
     () => ({
-      current: () => {
-        const now = runner.getState();
-        const rows = now.status === "rows" ? now : now.status === "running" && now.previous?.status === "rows" ? now.previous : null;
-        return rows === null ? null : sortOf(filterNow.current.applied, rows.columns, engine);
-      },
+      applied: () => appliedSort,
       apply: (next) => sendFilter(withOrder(filterNow.current.draft, next, engine)),
     }),
-    [runner, engine, sendFilter],
+    [appliedSort, engine, sendFilter],
   );
   const rerunRef = useRef<() => void>(() => {});
   const menuRerun = useCallback(() => rerunRef.current(), []);
@@ -398,11 +397,12 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const exportShown = kept === null ? exportRows(state) : kept.rows;
   const exportReason = exportBlocker(exportShown, { busy: busy || scriptBusy || edits.banner.saving, statistics: script !== null && shownTab === "statistics" });
   const exportNumber = script !== null && typeof shownTab === "number" ? shownTab + 1 : null;
-  const { singleTable } = edits;
+  const { singleTable, chosenColumns } = edits;
   const openExport = useCallback(() => {
     if (tab.connectionId === null || exportShown === null) return;
-    openExportWizard(resultSource(exportShown, { connectionId: tab.connectionId, ...inDatabase(tab.database), tabTitle: tab.title, scriptNumber: exportNumber, unsavedEdits: pending, table: singleTable }));
-  }, [tab.connectionId, tab.database, tab.title, exportShown, exportNumber, pending, singleTable]);
+    // RN-EXPORT-005: com colunas inteiras escolhidas na grade, só elas vêm marcadas na Extração.
+    openExportWizard(resultSource(exportShown, { connectionId: tab.connectionId, ...inDatabase(tab.database), tabTitle: tab.title, scriptNumber: exportNumber, unsavedEdits: pending, table: singleTable, checkedColumns: chosenColumns() }));
+  }, [tab.connectionId, tab.database, tab.title, exportShown, exportNumber, pending, singleTable, chosenColumns]);
   useEffect(() => {
     exportRef.current = { blocker: exportReason, open: openExport };
   });

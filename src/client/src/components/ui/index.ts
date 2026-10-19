@@ -9,6 +9,9 @@ export { FieldError, FormMessage, type FormMessageProps } from "./form-message";
 export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
   AlertIcon,
+  ArrowDownIcon,
+  ArrowsUpDownIcon,
+  ArrowUpIcon,
   BugIcon,
   ChartIcon,
   CheckIcon,

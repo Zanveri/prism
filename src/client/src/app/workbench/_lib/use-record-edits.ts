@@ -19,18 +19,22 @@ import { customPlan, filterMenuItem, filterPlan, isFilterAction, valuesPlan, typ
 import { cutCellsOf, fetchFullValues, noFullValues, type FetchCells, type FullValues, type GridPosition, type KeepGoing } from "./full-values";
 import { resultCells } from "./full-values.service";
 import { cachedReadOnly, readOnlyReasonNow } from "./grid-action-context";
-import { buildCopyText, clipboardLimit, columnNamesText, copiedNotice, copyCeiling, rowNumbersOf, utf8Length } from "./grid-copy";
+import { buildCopyText, cellsFloor, clipboardLimit, columnNamesText, copiedNotice, copyCeiling, loadedRowsMeter, rowNumbersOf, utf8Length } from "./grid-copy";
 import { nextEditable, type GridCell } from "./grid-cursor";
 import { completeSlice } from "./grid-export/grid-slice";
 import { customPrefix, distinctValues, type CompareOperator, type DistinctValue } from "./grid-export/value-filter";
 import { gridFilterCopy } from "./grid-filter.copy";
-import { editShortcuts, gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing } from "./grid-editing";
+import { editShortcuts, gridRowOf, gridRowsOf, rowMarksOf, type CellEditorState, type GridEditing, type HeaderSort } from "./grid-editing";
 import {
   activeCell,
+  afterRowsRemoved,
   afterSave,
+  chosenWholeColumns,
+  choseWholeColumns,
   choseWholeRows,
   collapse,
   contextCell,
+  contextColumn,
   contextRow,
   emptySelection,
   hasSeveralCells,
@@ -58,9 +62,9 @@ import { editErrorDetails, sqlTargetOf, type EditPreview, type EditTarget } from
 import { editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
 import { recordsCopy } from "./records.copy";
 import { recall, remember } from "./tab-memory";
-import type { RecordsSort } from "./table-sql";
+import { nextSort, type RecordsSort } from "./table-sql";
 import { unsavedEdits } from "./unsaved-edits";
-import { isBusyState, isPersonBusy, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
+import { isBusyState, isPersonBusy, type LoadMoreOutcome, type QueryRunner, type RowsState, type RunnerState } from "./use-query-runner";
 
 const copy = recordsCopy.edit;
 const selectionCopy = gridSelectionCopy;
@@ -76,6 +80,28 @@ const sqlAnswersKept = 32;
 
 /** Quanto o copiar espera antes de dizer "Copiando…" na faixa (RN-GRADE-002). */
 const copyingAfterMs = 500;
+
+/** RN-GRADE-023: até quantas linhas lidas a grade carrega para copiar ou gerar SQL das colunas inteiras, contando as que já tinha. */
+export const loadRestLimit = 100_000;
+
+/**
+ * RN-GRADE-023: o que o carregar das linhas que faltam fez. `ready`: todas as linhas do resultado estão na grade (também quando não faltava nenhuma), com o
+ * contexto delas (`context`, a seleção e o recorte com as linhas que chegaram); `stopped`: quem pediu mandou parar (`keepGoing`, o limite do texto: a recusa
+ * é a dele); `refused`: as linhas não puderam vir (o cursor fechado, a aba ocupada, o limite de 100.000, a leitura que falhou), com a frase e, na leitura que
+ * falhou, a mensagem do banco, como veio (`detail`); `cancelled`: a pessoa cancelou, ou o resultado saiu da tela. As linhas que já chegaram ficam na grade.
+ */
+export type LoadRestOutcome =
+  | { kind: "ready"; context: GridSelectionContext }
+  | { kind: "stopped" }
+  | { kind: "refused"; reason: string; detail: string | null }
+  | { kind: "cancelled" };
+
+/**
+ * RN-GRADE-023: como carregar. `keepGoing` recebe as linhas de agora e a posição da primeira que chegou (0 na primeira chamada, antes de pedir nada, com as que
+ * a grade já tinha) e diz se segue: falso para, e o carregar acaba em `stopped`. `signal`: o "Cancelar" de quem pediu (o do diálogo). `onProgress`: quem
+ * mostra o andamento ("Carregando as linhas que faltam… 1.400 linhas"); sem ele, a faixa sobre a grade o mostra, com o "Cancelar" dela, e diz as recusas.
+ */
+export type LoadRestOptions = { keepGoing?: (rows: RowsState, from: number) => boolean; signal?: AbortSignal; onProgress?: (text: string) => void };
 
 /**
  * Seção 37: o que a grade entrega às frentes do "Copiar avançado" e do "Gerar SQL" (RN-GRADE-003, 006 e 016 a 018) quando um item delas é escolhido no menu,
@@ -93,9 +119,24 @@ export type GridSelectionContext = {
   target: EditTarget | null;
   selection: GridSelection;
   layout: GridLayout;
-  /** As linhas da seleção (as que têm uma célula escolhida) e as colunas dela, pela posição na grade, em ordem. */
+  /**
+   * As linhas da seleção (as que têm uma célula escolhida) e as colunas dela, pela posição na grade, em ordem. Com colunas inteiras, as linhas são todas as da
+   * grade agora (as que faltam carregar não estão: `rowsToLoad`, e `loadRest` as traz).
+   */
   rows: readonly number[];
   columns: readonly number[];
+  /** RN-GRADE-022: as colunas inteiras escolhidas, na ordem da grade; nulas com outra forma. */
+  wholeColumns: readonly number[] | null;
+  /** RN-GRADE-023: o resultado tem linhas que o cursor ainda não leu (`hasMore`): com colunas inteiras, quem precisa de todas as carrega antes. */
+  rowsToLoad: boolean;
+  /** O total de linhas do resultado, quando já se sabe (lido até o fim, ou contado, RN-SQL-006), sem as novas ainda não salvas; nulo sem ele. */
+  total: number | null;
+  /**
+   * RN-GRADE-023: carrega as linhas que faltam pelo caminho do "Carregar mais" (as páginas seguintes do mesmo cursor), até o fim do resultado, e devolve o
+   * contexto com elas. Recusa na hora com o cursor fechado (a aba guardada do script também), a aba ocupada ou a atualização automática lendo, e passadas
+   * 100.000 linhas; segura a atualização automática do começo ao fim.
+   */
+  loadRest: (options?: LoadRestOptions) => Promise<LoadRestOutcome>;
   /** O recorte: as células escolhidas (o padrão), as linhas inteiras da seleção, ou todas as linhas carregadas. */
   slice: (scope?: SliceScope) => SelectionSlice;
   /**
@@ -146,10 +187,10 @@ export type CopyAsSource = GridMenuSource<CopyAsAction, CopyAsAccess>;
 export type GenerateSqlSource = GridMenuSource<GenerateSqlAction, Partial<Record<GenerateSqlKind, EditAccess>>>;
 
 /**
- * RN-GRADE-004: o "Ordenar" do menu, pelo mesmo caminho do clique no cabeçalho (RN-TABELA-010) nos Registros e do campo de filtro no resultado
- * (RN-GRADE-011): a ordem em uso e o que a troca (`null` tira a ordem).
+ * RN-GRADE-004 e RN-GRADE-021: o "Ordenar" do menu e o botão de ordenar do cabeçalho, pelo mesmo caminho (RN-TABELA-010 nos Registros, o campo de filtro no
+ * resultado, RN-GRADE-011): a ordem aplicada (a desta renderização: o botão desenha a seta dela) e o que a troca (`null` tira a ordem).
  */
-export type GridSortSource = { current: () => RecordsSort | null; apply: (sort: RecordsSort | null) => void };
+export type GridSortSource = { applied: () => RecordsSort | null; apply: (sort: RecordsSort | null) => void };
 
 /** RN-TABELA-007: o "Ir para o registro referenciado" dos Registros: a coluna é chave estrangeira, o valor tem para onde ir, e o que segue. */
 export type GridFollowSource = { links: (column: number) => boolean; linkable: (value: string) => boolean; follow: (column: number, value: string) => void };
@@ -162,6 +203,9 @@ type TargetAnswer = { resultId: string; target: EditTarget | null; readOnly: str
  * (o de "Duplicar linha", RN-EDIT-016).
  */
 type Banner = { resultId: string | null; failure: SaveFailure | null; failedRow: number | null; notice: string | null; tone?: "warning" };
+
+/** A recusa da faixa que vem com a mensagem do banco, como veio (RN-SQL-009): a frase de cima e o detalhe embaixo, como a do Salvar. */
+const failureNotice = (headline: string, detail: string | null): SaveFailure => ({ headline, detail, origin: null, column: null, applied: 0, written: false });
 
 export type OpenCellMenu = {
   groups: CellMenuItem[][];
@@ -278,6 +322,12 @@ type BarState = { shown: RowsState | null; edits: PendingEdits; readOnlyReason: 
 function barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, layout }: BarState): EditBarButton[] {
   const rows = (shown?.rows.length ?? 0) + edits.added.length;
   const active = activeCell(selection, layout);
+  // RN-GRADE-022: com colunas inteiras, "Duplicar linha" e "Excluir linha" não valem (as linhas são todas as do resultado), com o motivo depois dos de só
+  // leitura, da aba ocupada e do `rowOperations`, no lugar dos das linhas.
+  if (choseWholeColumns(selection)) {
+    const columns: EditAccess = { editable: false, reason: selectionCopy.rows.chooseRows };
+    return editBar({ readOnly: readOnlyReason, target, busy: saving || busy, active: active !== null && active.row < rows ? { cell: active, row: rowContextOf(shown, edits, active.row) } : null, rows, platform, selection: { rows: 1, duplicate: columns, remove: columns } });
+  }
   const chosen = selectedRows(selection, layout);
   return editBar({
     readOnly: readOnlyReason,
@@ -288,6 +338,30 @@ function barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, 
     platform,
     ...(chosen.length === 0 ? {} : { selection: { rows: chosen.length, duplicate: duplicateRowsAccess(chosen.length), remove: deleteRowsAccess(selectedRowsOf(shown, edits, chosen), null, target, false) } }),
   });
+}
+
+/**
+ * RN-GRADE-021 e RN-GRADE-004: por que o botão de ordenar do cabeçalho e o "Ordenar" do menu não valem agora (nulo quando valem), com o mesmo motivo e na
+ * mesma ordem: a aba ocupada (um comando, o "Salvar", o script rodando ou parado na pergunta de erro); a atualização automática lendo as linhas de novo; e,
+ * no resultado da aba de consulta, o comando que não é só de leitura (o `read` falso da página: ordenar o executaria de novo, RN-GRADE-011).
+ */
+export function sortReasonFor({ personBusy, saving, busy, shown, subject }: { personBusy: boolean; saving: boolean; busy: boolean | "refresh"; shown: RowsState | null; subject: "table" | "result" }): string | null {
+  if (personBusy || saving) return gridFilterCopy.reasons.busy;
+  if (busy === "refresh") return copy.reasons.refreshing;
+  if (subject === "result" && shown?.read === false) return selectionCopy.menu.sortNotRead;
+  return null;
+}
+
+/**
+ * RN-GRADE-022: a contagem da barra com colunas inteiras: o nome da coluna (ou quantas), e o total quando se sabe (lido até o fim, ou contado, RN-SQL-006),
+ * somado às linhas novas ainda não salvas; sem ele, quantas linhas a grade tem carregadas, e as novas.
+ */
+export function wholeColumnsStatus(shown: RowsState, selection: GridSelection, layout: GridLayout): string | null {
+  const columns = chosenWholeColumns(selection, layout);
+  if (columns === null || columns.length === 0) return null;
+  const names = columns.map((column) => shown.columns[column]?.name ?? "");
+  const total = shown.hasMore ? shown.total : shown.rows.length;
+  return selectionCopy.wholeColumns(names, total === null ? { loaded: shown.rows.length, added: layout.added.length } : { total: total + layout.added.length });
 }
 
 /** O motivo de "Exportar dados…" não valer, como o acesso de um item do menu. */
@@ -402,6 +476,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   // RN-GRADE-002: a cópia que monta o texto em partes; passado meio segundo, a faixa diz "Copiando…", com "Cancelar".
   const [copying, setCopying] = useState(false);
   const copyingRef = useRef<AbortController | null>(null);
+  // RN-GRADE-023: o carregar das linhas que faltam, que a faixa mostra ("Carregando as linhas que faltam… 1.400 linhas") e deixa cancelar.
+  const [loadingRest, setLoadingRest] = useState<string | null>(null);
+  const loadingRef = useRef<AbortController | null>(null);
 
   // RN-EDIT-002: numa junção, a pendência de uma linha de uma tabela aparece em todas as linhas da grade que a mostram.
   const view = useMemo(() => (shown === null || target === null || !isJoin(target) ? edits : linkedCells(edits, shown.rows, target)), [edits, shown, target]);
@@ -419,9 +496,13 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     latest.current = { shown, resultId, edits, target, readOnlyReason, busy, personBusy, saving, active, selection, layout, scope };
   });
 
-  /** As pendências como a grade as mostra agora (numa junção, repetidas nas linhas que mostram a mesma linha da tabela). */
-  const viewNow = useCallback((): PendingEdits => {
-    const { shown: current, edits: pending, target: known } = latest.current;
+  /**
+   * As pendências como a grade as mostra agora (numa junção, repetidas nas linhas que mostram a mesma linha da tabela); `rows`, as linhas em que se mostram,
+   * quando não são as da última renderização (as que acabaram de chegar pelo carregar das linhas que faltam, RN-GRADE-023).
+   */
+  const viewNow = useCallback((rows?: RowsState): PendingEdits => {
+    const { shown: last, edits: pending, target: known } = latest.current;
+    const current = rows ?? last;
     return current === null || known === null || !isJoin(known) ? pending : linkedCells(pending, current.rows, known);
   }, []);
 
@@ -665,8 +746,14 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     [runner, queryClient],
   );
 
-  /** O "Cancelar" da faixa: desiste da busca dos valores completos e da cópia que monta o texto (RN-GRADE-002), sem tocar na área de transferência. */
+  /**
+   * O "Cancelar" da faixa: desiste do carregar das linhas que faltam (RN-GRADE-023), da busca dos valores completos e da cópia que monta o texto
+   * (RN-GRADE-002), sem tocar na área de transferência.
+   */
   const cancelFetch = useCallback(() => {
+    loadingRef.current?.abort();
+    loadingRef.current = null;
+    setLoadingRest(null);
     fetchingRef.current?.abort();
     fetchingRef.current = null;
     setFetching(null);
@@ -716,6 +803,84 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     };
   }, []);
 
+  // O contexto das linhas que chegaram, montado como o `selectionContext` (que vem abaixo e usa o `loadRest`): por uma ref, posta depois dele.
+  const contextRef = useRef<(rows: RowsState) => GridSelectionContext | null>(() => null);
+
+  /**
+   * RN-GRADE-023: as linhas que faltam, pelo caminho do "Carregar mais" (`runner.loadMore`: as páginas seguintes do mesmo cursor, sem executar de novo), até
+   * o fim do resultado. As linhas que chegam ficam na grade, como se a pessoa as tivesse carregado, também quando o carregar para ou é cancelado. Sem linhas a
+   * carregar, nada é pedido. Recusa na hora, sem esperar: o cursor fechado (depois de um "Salvar", dos 5 minutos sem leitura, e na aba guardada do script), a
+   * aba ocupada (um comando, o "Salvar", o script) e a atualização automática lendo; e, passadas 100.000 linhas lidas com o resultado ainda tendo mais, o
+   * limite. A atualização automática fica em pausa do começo ao fim (`hold`). As linhas de agora são lidas do executor a cada página, e não da última
+   * renderização: o contexto que volta é o delas. `from` é o resultado da seleção: se ele sai da tela no meio, o carregar acaba calado.
+   */
+  const loadRest = useCallback(
+    async (from: string | null, options: LoadRestOptions = {}): Promise<LoadRestOutcome> => {
+      const { keepGoing, signal, onProgress } = options;
+      const inBanner = onProgress === undefined;
+      const refuse = (reason: string, detail: string | null = null): LoadRestOutcome => {
+        if (inBanner) {
+          if (detail === null) say(reason, "warning");
+          else setBanner({ resultId: from, failure: failureNotice(reason, detail), failedRow: null, notice: null });
+        }
+        return { kind: "refused", reason, detail };
+      };
+      let current = latest.current.shown;
+      if (current === null || moved(from) || signal?.aborted === true) return { kind: "cancelled" };
+      const ready = (rows: RowsState): LoadRestOutcome => {
+        const context = contextRef.current(rows);
+        return context === null ? { kind: "cancelled" } : { kind: "ready", context };
+      };
+      if (keepGoing !== undefined && !keepGoing(current, 0)) return { kind: "stopped" };
+      if (!current.hasMore) return ready(current);
+      if (keptNow.current || current.cursorClosed) return refuse(selectionCopy.loadRest.closed(subject));
+      if (latest.current.personBusy || latest.current.saving) return refuse(selectionCopy.loadRest.busy);
+      if (latest.current.busy === "refresh") return refuse(selectionCopy.loadRest.refreshing);
+      if ((current.total ?? 0) > loadRestLimit || current.rows.length >= loadRestLimit) return refuse(selectionCopy.loadRest.tooMany);
+
+      const release = hold();
+      const controller = new AbortController();
+      const stop = () => controller.abort();
+      signal?.addEventListener("abort", stop, { once: true });
+      if (inBanner) {
+        loadingRef.current?.abort();
+        loadingRef.current = controller;
+      }
+      const show = (rows: RowsState) => {
+        const text = selectionCopy.loadRest.progress(rows.rows.length, rows.total);
+        if (inBanner) setLoadingRest(text);
+        else onProgress(text);
+      };
+      try {
+        while (current.hasMore) {
+          if (current.rows.length >= loadRestLimit) return refuse(selectionCopy.loadRest.tooMany);
+          show(current);
+          const before = current.rows.length;
+          const outcome: LoadMoreOutcome = await runner.loadMore();
+          if (controller.signal.aborted || moved(from)) return { kind: "cancelled" };
+          const now = shownOf(runner.getState());
+          if (now === null || now.resultId !== from) return { kind: "cancelled" };
+          current = now;
+          if (outcome.kind === "failed") return refuse(selectionCopy.loadRest.failed, outcome.message);
+          if (outcome.kind === "closed") return refuse(selectionCopy.loadRest.closed(subject));
+          if (outcome.kind === "busy") return refuse(selectionCopy.loadRest.busy);
+          if (outcome.kind === "gone") return { kind: "cancelled" };
+          if (keepGoing !== undefined && !keepGoing(current, before)) return { kind: "stopped" };
+        }
+        if (current.rows.length > loadRestLimit) return refuse(selectionCopy.loadRest.tooMany);
+        return ready(current);
+      } finally {
+        signal?.removeEventListener("abort", stop);
+        if (loadingRef.current === controller) {
+          loadingRef.current = null;
+          setLoadingRest(null);
+        }
+        release();
+      }
+    },
+    [runner, hold, moved, say, subject],
+  );
+
   /**
    * RN-GRADE-002: "Copiar" (Ctrl+C) e "Copiar com cabeçalho", da seleção: as linhas escolhidas, na ordem da grade, e nelas as colunas escolhidas, com o que a
    * grade mostra. A célula cortada vai com o valor completo (RN-SQL-017), pedido só para as que vão no texto; antes, a conta do que a grade já tem (cada cortada
@@ -725,22 +890,36 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
    */
   const copySelection = useCallback(
     async (header: boolean) => {
-      const { shown: current, edits: pending, selection: chosen, layout: grid } = latest.current;
-      if (current === null || activeCell(chosen, grid) === null) return;
-      const rows = selectedRows(chosen, grid);
-      const columns = selectedColumns(chosen, grid);
-      if (rows.length === 0 || columns.length === 0) return;
-
-      const valueOf = valuesOf(current, viewNow(), pending);
-      const names = header ? columns.map((column) => current.columns[column]?.name ?? "") : null;
-      const plan = { header: names, rows: rows.length, columns: columns.length, valueAt: (row: number, column: number) => valueOf(rows[row], columns[column]) };
-      const cut: GridPosition[] = [];
-      for (const row of rows) for (const column of columns) if (row < current.rows.length && current.truncated.get(row)?.has(column) === true) cut.push({ row, column });
-
+      const { shown: first, edits: pending, selection: chosen, layout: firstGrid, resultId: from } = latest.current;
+      if (first === null || activeCell(chosen, firstGrid) === null) return;
       const release = hold();
       const controller = new AbortController();
-      const done = trackCopy(controller);
+      let done = () => {};
       try {
+        // RN-GRADE-023: com colunas inteiras, todas as linhas do resultado: as que faltam vêm antes, com o limite de 10 MiB contado a cada página.
+        let current = first;
+        let grid = firstGrid;
+        if (choseWholeColumns(chosen) && first.hasMore) {
+          const columnsNow = selectedColumns(chosen, firstGrid);
+          const shownValue = valuesOf(first, viewNow(first), pending);
+          const already = cellsFloor(selectedRows(chosen, firstGrid).map((row) => columnsNow.map((column) => shownValue(row, column))));
+          const loaded = await loadRest(from, { keepGoing: loadedRowsMeter(columnsNow, already) });
+          if (loaded.kind === "stopped") return void toast.error(selectionCopy.copy.tooLarge);
+          if (loaded.kind !== "ready") return;
+          current = loaded.context.shown;
+          grid = loaded.context.layout;
+        }
+        const rows = selectedRows(chosen, grid);
+        const columns = selectedColumns(chosen, grid);
+        if (rows.length === 0 || columns.length === 0) return;
+
+        const valueOf = valuesOf(current, viewNow(current), pending);
+        const names = header ? columns.map((column) => current.columns[column]?.name ?? "") : null;
+        const plan = { header: names, rows: rows.length, columns: columns.length, valueAt: (row: number, column: number) => valueOf(rows[row], columns[column]) };
+        const cut: GridPosition[] = [];
+        for (const row of rows) for (const column of columns) if (row < current.rows.length && current.truncated.get(row)?.has(column) === true) cut.push({ row, column });
+
+        done = trackCopy(controller);
         let full: FullValues = noFullValues;
         if (cut.length > 0) {
           // A conta do que a grade já tem: o teto de cada valor (três bytes por unidade, as aspas e o separador) quase sempre basta, sem montar nada; só quando
@@ -773,7 +952,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         release();
       }
     },
-    [viewNow, completeValues, toast, hold, trackCopy],
+    [viewNow, completeValues, toast, hold, trackCopy, loadRest],
   );
 
   /**
@@ -788,13 +967,22 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     void writeClipboard(columnNamesText(names, sources.current.engine), toast, () => toast.success(selectionCopy.names.copied(names.length)));
   }, [toast]);
 
-  /** RN-GRADE-015: "Copiar número de linha(s)", das linhas da seleção, como a grade os mostra, um por linha; as linhas novas não têm número. */
-  const copyRowNumbers = useCallback(() => {
-    const { selection: chosen, layout: grid } = latest.current;
+  /**
+   * RN-GRADE-015: "Copiar número de linha(s)", das linhas da seleção, como a grade os mostra, um por linha; as linhas novas não têm número. Com colunas
+   * inteiras, os números de todas as linhas do resultado, que vêm antes (RN-GRADE-023).
+   */
+  const copyRowNumbers = useCallback(async () => {
+    const { selection: chosen, shown: current, resultId: from } = latest.current;
+    let grid = latest.current.layout;
+    if (choseWholeColumns(chosen) && current?.hasMore === true) {
+      const loaded = await loadRest(from);
+      if (loaded.kind !== "ready") return;
+      grid = loaded.context.layout;
+    }
     const numbers = rowNumbersOf(selectedRows(chosen, grid), grid.read);
     if (numbers.length === 0) return;
     void writeClipboard(numbers.join("\n"), toast, () => toast.success(selectionCopy.numbers.copied(numbers.length)));
-  }, [toast]);
+  }, [toast, loadRest]);
 
   /**
    * A ação que precisa da célula editável: pergunta o alvo, confere, e só então age; senão a faixa diz por quê. A recusa que não depende do alvo (a aba
@@ -1040,13 +1228,17 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (next !== null) putEdits(next);
   }, [putEdits, say, viewNow]);
 
-  /** RN-EDIT-004: "Descartar". As linhas novas saem da grade, e a seleção é desfeita: fica só a célula ativa, quando a linha dela continua (RN-GRADE-001). */
+  /**
+   * RN-EDIT-004: "Descartar". As linhas novas saem da grade, e a seleção é desfeita: fica só a célula ativa, quando a linha dela continua (RN-GRADE-001); as
+   * colunas inteiras ficam (RN-GRADE-022).
+   */
   const discard = useCallback(() => {
     setEditor(null);
     const hadNew = latest.current.edits.added.length > 0;
     putEdits(noEdits);
     setBanner(noBanner);
-    if (hadNew) updateSelection(collapse);
+    // As colunas inteiras ficam, com as linhas que ficaram (RN-GRADE-022).
+    if (hadNew) updateSelection((held, grid) => afterRowsRemoved(held, grid));
   }, [setEditor, putEdits, updateSelection]);
 
   /** O aviso antes do Salvar (RN-PROT-001) em espera: um segundo Salvar não abre outro. */
@@ -1176,10 +1368,13 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
    * Seção 37: o que o menu entrega às frentes do "Copiar avançado" e do "Gerar SQL", com a seleção e as linhas de agora (`GridSelectionContext`). Nulo sem
    * linhas na tela.
    */
-  const selectionContext = useCallback((): GridSelectionContext | null => {
-    const { shown: current, edits: pending, selection: chosen, layout: grid, resultId: from, target: known, busy: running, saving: writing } = latest.current;
+  const selectionContext = useCallback((loaded?: RowsState): GridSelectionContext | null => {
+    const { shown: last, edits: pending, selection: chosen, layout: lastGrid, resultId: from, target: known, busy: running, saving: writing } = latest.current;
+    // As linhas que acabaram de chegar pelo carregar das linhas que faltam (RN-GRADE-023) ainda não estão na última renderização: a grade é a delas.
+    const current = loaded ?? last;
     if (current === null) return null;
-    const view = viewNow();
+    const grid: GridLayout = loaded === undefined ? lastGrid : { ...lastGrid, read: loaded.rows.length };
+    const view = viewNow(current);
     const source = sliceSourceOf(current, pending, view);
     return {
       resultId: from,
@@ -1191,6 +1386,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       layout: grid,
       rows: selectedRows(chosen, grid),
       columns: selectedColumns(chosen, grid),
+      wholeColumns: chosenWholeColumns(chosen, grid),
+      rowsToLoad: current.hasMore,
+      total: current.hasMore ? current.total : current.rows.length,
+      loadRest: (options) => loadRest(from, options),
       slice: (scope: SliceScope = "cells") => sliceOf(chosen, grid, source, scope),
       complete: async (slice, keepGoing, signal) => {
         const cells = slice.truncated.map(([row, column]) => ({ row: slice.positions[row], column: slice.columnIndexes[column] }));
@@ -1208,7 +1407,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       knownSqlTarget,
       copying: trackCopy,
     };
-  }, [sliceSourceOf, viewNow, subject, completeValues, hold, moved, ensureTarget, sqlTarget, knownSqlTarget, trackCopy]);
+  }, [sliceSourceOf, viewNow, subject, completeValues, hold, moved, ensureTarget, sqlTarget, knownSqlTarget, trackCopy, loadRest]);
+  useEffect(() => {
+    contextRef.current = (rows) => selectionContext(rows);
+  });
 
   /** RN-GRADE-003: Ctrl+Shift+C, o "Copiar avançado…" da outra frente, sobre a seleção; sem célula ativa, ou sem a frente, nada. */
   const copyAdvanced = useCallback(() => {
@@ -1219,6 +1421,22 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     if (access.editable) source.choose("copyAdvanced", context);
     else say(access.reason);
   }, [selectionContext, say]);
+
+  /** RN-GRADE-021 e RN-GRADE-004: por que o botão de ordenar e o "Ordenar" do menu não valem agora (`sortReasonFor`), com o estado de agora. */
+  const sortReasonNow = useCallback((): string | null => {
+    const { personBusy: running, saving: writing, busy: now, shown: current } = latest.current;
+    return sortReasonFor({ personBusy: running, saving: writing, busy: now, shown: current, subject });
+  }, [subject]);
+
+  /** RN-GRADE-021: o clique no botão de ordenar: o ciclo crescente, decrescente e sem ordem da coluna, pelo caminho do "Ordenar" do menu. */
+  const sortByHeader = useCallback(
+    (column: string) => {
+      const source = sources.current.sort;
+      if (source === undefined || sortReasonNow() !== null) return;
+      source.apply(nextSort(source.applied(), column));
+    },
+    [sortReasonNow],
+  );
 
   /**
    * O menu da grade (RN-GRADE-004): o alvo é perguntado antes, para cada item dizer se vale e por quê. O botão direito numa célula fora da seleção a escolhe
@@ -1242,12 +1460,17 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       const read = current.rows.length;
       const rows = selectedRows(chosen, grid);
       const several = hasSeveralCells(chosen, grid);
+      // RN-GRADE-022: com colunas inteiras, as ações de linha não valem (depois dos motivos de só leitura, da aba ocupada e do `rowOperations`), e os
+      // rótulos ficam no singular: as linhas da seleção são todas as do resultado.
+      const wholeColumns = choseWholeColumns(chosen);
+      const chooseRows: EditAccess = { editable: false, reason: selectionCopy.rows.chooseRows };
       const undoable = undoWhere(pending, viewNow(), grid.read, (row, column) => isSelected(chosen, grid, { row, column }), (row) => rowSpan(chosen, grid, row) !== null) !== null;
       const filterContext = filterContextOf(cell);
       const context = selectionContext();
       const busyReason: EditAccess = { editable: false, reason: gridFilterCopy.menu.unavailable(gridFilterCopy.reasons.busy) };
+      const sortWhy = sortReasonNow();
       const sortSource = sources.current.sort;
-      const sortNow = sortSource?.current() ?? null;
+      const sortNow = sortSource?.applied() ?? null;
       const columnName = current.columns[cell.column]?.name;
       const followSource = sources.current.follow;
       const readValue = cell.row < read ? (current.rows[cell.row]?.[cell.column] ?? null) : null;
@@ -1259,18 +1482,18 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
         pending: undoable,
         deletedRow: false,
         nullable: known?.columns[cell.column]?.nullable ?? true,
-        rows: rows.length,
+        rows: wholeColumns ? 1 : rows.length,
         several,
         hasActive: activeCell(chosen, grid) !== null,
         newRow: rowAccess,
-        duplicateRow: rowAccess.editable ? duplicateRowsAccess(rows.length) : rowAccess,
-        deleteRow: deleteRowsAccess(selectedRowsOf(current, pending, rows), reason, known, writing || running),
-        rowNumbers: rows.length > 0 && rowNumbersOf(rows, grid.read).length === 0 ? { editable: false, reason: selectionCopy.numbers.onlyNew } : { editable: true },
+        duplicateRow: !rowAccess.editable ? rowAccess : wholeColumns ? chooseRows : duplicateRowsAccess(rows.length),
+        deleteRow: wholeColumns ? (rowAccess.editable ? chooseRows : rowAccess) : deleteRowsAccess(selectedRowsOf(current, pending, rows), reason, known, writing || running),
+        rowNumbers: rows.length > 0 && rowNumbersOf(rows, grid.read).length === 0 && !current.hasMore ? { editable: false, reason: selectionCopy.numbers.onlyNew } : { editable: true },
         shortcuts: editShortcuts(platform),
         mac: isMacPlatform(platform),
         ...(sources.current.copyAs === undefined || context === null ? {} : { copyAs: sources.current.copyAs.access(context) }),
         ...(filterContext === null ? {} : { filter: filterMenuItem(filterContext) }),
-        ...(sortSource === undefined || columnName === undefined ? {} : { sort: { direction: sortNow?.column === columnName ? sortNow.direction : null, access: personBusy || writing ? busyReason : { editable: true } } }),
+        ...(sortSource === undefined || columnName === undefined ? {} : { sort: { direction: sortNow?.column === columnName ? sortNow.direction : null, access: sortWhy === null ? { editable: true } : { editable: false, reason: selectionCopy.menu.sortUnavailable(sortWhy) } } }),
         ...(followSource === undefined || !followSource.links(cell.column) ? {} : { follow: followable ? { editable: true } : { editable: false, reason: selectionCopy.menu.followUnavailable } }),
         ...(sources.current.refresh === undefined ? {} : { refresh: personBusy || writing ? busyReason : { editable: true } }),
         ...(sources.current.autoRefresh === undefined ? {} : { autoRefresh: sources.current.autoRefresh.item() }),
@@ -1321,7 +1544,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
               copyColumnNames();
               break;
             case "copyRowNumbers":
-              copyRowNumbers();
+              void copyRowNumbers();
               break;
             case "paste": {
               if (several) break;
@@ -1368,11 +1591,21 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     } finally {
       release();
     }
-  }, [ensureTarget, accessOf, valueAt, whenEditable, applyValue, openEditor, undoSelection, newRow, duplicateRows, removeRows, copySelection, copyColumnNames, copyRowNumbers, toast, viewNow, filterContextOf, runFilterPlan, hold, moved, updateSelection, selectionContext]);
+  }, [ensureTarget, accessOf, valueAt, whenEditable, applyValue, openEditor, undoSelection, newRow, duplicateRows, removeRows, copySelection, copyColumnNames, copyRowNumbers, toast, viewNow, filterContextOf, runFilterPlan, hold, moved, updateSelection, selectionContext, sortReasonNow]);
 
   /** O botão direito no número da linha: fora da seleção, escolhe a linha inteira antes; dentro dela, deixa como está; e abre o menu sobre a célula ativa. */
   const openRowMenu = useCallback((row: number, point: { x: number; y: number }) => {
     updateSelection((held, grid) => contextRow(held, row, grid));
+    const cell = latest.current.active;
+    if (cell !== null) void openMenu(cell, point, false, undefined, false);
+  }, [updateSelection, openMenu]);
+
+  /**
+   * RN-GRADE-021: o botão direito no nome da coluna: fora das colunas inteiras escolhidas, escolhe antes a coluna inteira; entre elas, deixa como está; e abre
+   * o menu sobre a célula ativa, que vai para aquela coluna. Sem linha nenhuma na grade não há célula ativa, e o menu não abre.
+   */
+  const openColumnMenu = useCallback((column: number, point: { x: number; y: number }) => {
+    updateSelection((held, grid) => contextColumn(held, column, grid));
     const cell = latest.current.active;
     if (cell !== null) void openMenu(cell, point, false, undefined, false);
   }, [updateSelection, openMenu]);
@@ -1396,6 +1629,9 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   }, [runner, gridInUse, released]);
   useEffect(() => () => runner.autoRefresh.pause("editing", false), [runner]);
 
+  /** RN-EXPORT-001 e 005: as colunas inteiras escolhidas agora, lidas na hora da escolha (as entradas do assistente as abrem marcadas). */
+  const chosenColumns = useCallback(() => chosenWholeColumns(latest.current.selection, latest.current.layout), []);
+
   // O registro da aba, de onde quem fecha abas pergunta; desmontada (a aba na Estrutura), a vista não tem como salvar.
   const saveRef = useRef(save);
   useEffect(() => {
@@ -1410,7 +1646,10 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   const buttons = useMemo(() => barOf({ shown, edits, readOnlyReason, target, busy, saving, selection, layout }), [shown, edits, readOnlyReason, target, busy, saving, selection, layout]);
   // RN-GRADE-001: a contagem da barra do resultado, com mais de uma célula escolhida; enquanto a seleção muda (o arraste, a tecla presa), fica a de antes.
   const size = selectionSize(selection, layout);
-  const statusNow = size.cells > 1 ? selectionCopy.count(size.rows, size.cells, size.whole) : null;
+  const statusNow = size.columns > 0 && shown !== null ? wholeColumnsStatus(shown, selection, layout) : size.cells > 1 ? selectionCopy.count(size.rows, size.cells, size.whole) : null;
+  // RN-GRADE-021: o botão de ordenar do cabeçalho, onde a grade tem o "Ordenar" (não nas abas guardadas do script): a ordem aplicada e o motivo de agora.
+  const sortApplied = sort === undefined ? null : sort.applied();
+  const sortReason = shown === null ? null : sortReasonFor({ personBusy, saving, busy, shown, subject });
 
   const editing: GridEditing | undefined =
     shown === null
@@ -1438,6 +1677,8 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           onCancel: cancel,
           onMenu: (cell, point, keyboard) => void openMenu(cell, point, keyboard),
           onRowMenu: openRowMenu,
+          onColumnMenu: openColumnMenu,
+          ...(sort === undefined ? {} : { sort: { applied: sortApplied, reason: sortReason, onSort: sortByHeader } satisfies HeaderSort }),
           onCopy: () => void copySelection(false),
           ...(copyAs === undefined ? {} : { onCopyAdvanced: copyAdvanced }),
           onDeleteRows: deleteKey,
@@ -1486,6 +1727,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
       failure: banner.failure,
       fetching: fetching !== null,
       copying,
+      loading: loadingRest,
       onCancelFetch: cancelFetch,
       onViewSql: () => void viewSql(),
       onDiscard: discard,
@@ -1558,6 +1800,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
      * aqui); nulo sem linhas na tela.
      */
     selectionContext,
+    /**
+     * RN-EXPORT-001 e 005: as colunas inteiras escolhidas agora (RN-GRADE-022), que o "Exportar dados…" e os "Exportar…" da grade abrem marcadas na Extração;
+     * nulas com outra forma.
+     */
+    chosenColumns,
   };
 }
 
