@@ -7,8 +7,9 @@ import type { EditAccess } from "../cell-editing";
 import type { TargetAnswer } from "../generate-sql/generate-sql-flow";
 import type { DocumentFormat } from "../grid-export/document";
 import { activeCell, type SelectionSlice } from "../grid-selection";
-import { cellsFloor, loadedRowsMeter } from "../grid-copy";
+import { cellsFloor, clipboardLimit, loadedRowsMeter } from "../grid-copy";
 import { gridSelectionCopy } from "../grid-selection.copy";
+import { columnEditsOf } from "../record-edits";
 import type { CopyAsSource, GridSelectionContext } from "../use-record-edits";
 import { copyScopes, runCopyAs, targetOf, type CopyDeps, type CopyOutcome, type CopyPhase, type CopyRequest, type CopyScope, type CopySource } from "./copy-as";
 import { readCopyAsChoices, writeCopyAsChoices, type CopyAsChoices } from "./copy-as-choices";
@@ -170,7 +171,10 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
       const slice = context.slice(scope);
       if (context.wholeColumns === null || !context.rowsToLoad) return { context, slice };
       control.onPhase?.("loading");
-      const loaded = await context.loadRest({ keepGoing: loadedRowsMeter(slice.columnIndexes, cellsFloor(slice.rows)), signal: control.signal, onProgress: control.onProgress });
+      // As linhas que chegam são medidas com o valor da coluna inteira pendente, como a grade as mostra (RN-EDIT-018).
+      const wholes = new Map(columnEditsOf(context.pending).map((edit) => [edit.column, edit.value]));
+      const keepGoing = loadedRowsMeter(slice.columnIndexes, cellsFloor(slice.rows), clipboardLimit, wholes);
+      const loaded = await context.loadRest({ keepGoing, signal: control.signal, onProgress: control.onProgress });
       if (loaded.kind === "stopped") return { kind: "tooLarge", message: copyAsCopy.notice.tooLarge };
       if (loaded.kind === "refused") return control.onProgress === undefined ? { kind: "cancelled" } : { kind: "failed", message: loaded.detail === null ? loaded.reason : `${loaded.reason} ${loaded.detail}` };
       if (loaded.kind === "cancelled") return { kind: "cancelled" };

@@ -12,6 +12,8 @@ import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowShortcut, savesE
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
 import { choseWholeColumns, choseWholeRows, collapse, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
+import { multiEditCopy } from "../_lib/multi-edit.copy";
+import type { EditValue } from "../_lib/record-edits";
 import { recordsCopy } from "../_lib/records.copy";
 import { anchorOf, gridMetrics, scrollFor, wheelZoom, zoomIn, zoomOut, type ScrollAnchor } from "../_lib/grid-zoom";
 import type { QueryColumn, QueryRow } from "../_lib/query.schema";
@@ -73,6 +75,12 @@ type GridRowProps = {
    * ele); nulo com outra forma. O número da linha não fica destacado por elas: nenhuma linha está escolhida inteira.
    */
   wholeColumns?: ReadonlySet<number> | null;
+  /**
+   * RN-EDIT-018: as alterações da coluna inteira pendentes, o MESMO mapa para todas as linhas enquanto as pendências não mudam: na linha lida que não está
+   * marcada para exclusão, a célula daquela coluna mostra o valor novo, com o lido riscado ao lado; a que tem pendência própria mostra o dela, com o da coluna
+   * inteira riscado.
+   */
+  columnPending?: ReadonlyMap<number, { value: EditValue; hint: string; uncertain: boolean }> | null;
 };
 
 /**
@@ -81,13 +89,15 @@ type GridRowProps = {
  * valores entram como texto dos filhos do React, nunca como HTML (RN-SHELL-002). A altura da linha
  * e a largura do número dela são as variáveis do zoom (`--grid-row` e `--grid-gutter`, na caixa da grade).
  */
-export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf, selectedFrom = -1, selectedTo = -1, wholeColumns = null }: GridRowProps) {
+export const GridRow = memo(function GridRow({ index, start, row, columns, virtualColumns, truncated, generated, nullText, links, onFollow, linkable = fitsFilter, scale = 1, mark, activeColumn = null, editor = null, cellIdOf, selectedFrom = -1, selectedTo = -1, wholeColumns = null, columnPending = null }: GridRowProps) {
   const role = cellIdOf === undefined ? "cell" : "gridcell";
   const deleted = mark?.deleted === true;
   const rowChosen = selectedFrom >= 0;
 
   return (
-    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row) hover:bg-raised", mark?.failed && "bg-danger/15")} style={{ transform: `translateY(${start}px)` }}>
+    // A linha com o campo de edição aberto fica por cima das outras (cada linha é um contexto de empilhamento, pelo `transform`): a dica do campo
+    // (RN-EDIT-017) passa por cima da linha de baixo, e continua por baixo do cabeçalho preso.
+    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row) hover:bg-raised", mark?.failed && "bg-danger/15", editor !== null && "z-[15]")} style={{ transform: `translateY(${start}px)` }}>
       <div
         role="rowheader"
         // Só na grade editável: a posição que o clique, o arraste e o botão direito no número da linha leem (RN-GRADE-001).
@@ -124,13 +134,29 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
           );
         }
 
-        // RN-EDIT-004: a célula alterada mostra o valor lido riscado ao lado do novo, como no canvas; na linha nova, só o que foi preenchido.
+        // RN-EDIT-018: a coluna inteira pendente vale na linha lida que não está marcada para exclusão; a referência da célula passa a ser o valor dela.
+        const whole = mark?.kind === "new" || deleted ? undefined : columnPending?.get(item.index);
+
+        // RN-EDIT-004: a célula alterada mostra o valor lido riscado ao lado do novo, como no canvas; na linha nova, só o que foi preenchido. Sob a coluna inteira,
+        // o riscado é o valor dela (RN-EDIT-018).
         if (mark?.pending.has(item.index) === true) {
           const next = mark.pending.get(item.index) ?? null;
+          const struck = whole === undefined ? value : whole.value;
+          const title = mark.kind !== "read" ? undefined : whole === undefined ? editCopy.pendingTitle(value ?? nullText) : multiEditCopy.ownTitle(whole.value ?? nullText);
           return (
-            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={mark.kind === "read" ? editCopy.pendingTitle(value ?? nullText) : undefined} className={cn(cellClass, align, "bg-accent/20", marked, chosen && "bg-accent/35")} style={style}>
-              {mark.kind === "read" ? <span className="mr-2 text-[length:calc(11px*var(--grid-zoom))] text-muted line-through">{value ?? nullText}</span> : null}
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={title} className={cn(cellClass, align, "bg-accent/20", marked, chosen && "bg-accent/35")} style={style}>
+              {mark.kind === "read" ? <span className="mr-2 text-[length:calc(11px*var(--grid-zoom))] text-muted line-through">{struck ?? nullText}</span> : null}
               {next === null ? <span className="text-subtle">{nullText}</span> : next}
+            </div>
+          );
+        }
+
+        if (whole !== undefined) {
+          const title = whole.uncertain ? `${multiEditCopy.wholeTitle(value ?? nullText)}\n${multiEditCopy.uncertain}` : multiEditCopy.wholeTitle(value ?? nullText);
+          return (
+            <div key={item.index} role={role} aria-colindex={item.index + 2} {...cell} title={title} className={cn(cellClass, align, "bg-accent/20", marked, chosen && "bg-accent/35")} style={style}>
+              <span className="mr-2 text-[length:calc(11px*var(--grid-zoom))] text-muted line-through">{value ?? nullText}</span>
+              {whole.value === null ? <span className="text-subtle">{nullText}</span> : whole.value}
             </div>
           );
         }
@@ -235,6 +261,8 @@ type GridHeaderCellProps = {
   whole?: boolean;
   /** O macOS escreve o atalho do Ctrl+Espaço como Control+Espaço. */
   mac?: boolean;
+  /** RN-EDIT-018: a coluna tem uma alteração pendente em todas as linhas: um ponto no tom de atenção ao lado do nome, com a dica ("… preco = 10.00"). */
+  pendingHint?: string | null;
 };
 
 /** A seta do botão de ordenar: para cima na crescente, para baixo na decrescente, e as duas, no tom apagado, sem ordem (RN-GRADE-021). */
@@ -257,7 +285,7 @@ function SortArrow({ direction }: { direction: SortDirection | null }) {
  *
  * O nome do cabeçalho para o leitor de tela é o da coluna e o tipo (`aria-label`), e não o que se juntaria dos botões e da divisa que moram dentro dele.
  */
-export function GridHeaderCell({ column, item, sort, choosable = false, onChoose, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false, selected = false, whole = false, mac = false }: GridHeaderCellProps) {
+export function GridHeaderCell({ column, item, sort, choosable = false, onChoose, width = item.size, last = false, onResize, onFit, showType = true, scale = 1, hint = null, readOnlyMark = false, selected = false, whole = false, mac = false, pendingHint = null }: GridHeaderCellProps) {
   const describedBy = useId();
   // A largura de saída da coluna é contada sem o botão de ordenar (`baseWidths`, em `grid-columns.ts`). O espaço dele é sempre reservado, e quem cede os px
   // dele é o TIPO, e só ele: o nome não encolhe (`shrink-0`), e o tipo absorve o que falta inteiro, até sumir. Não há peso de encolhimento entre os dois: com
@@ -266,6 +294,7 @@ export function GridHeaderCell({ column, item, sort, choosable = false, onChoose
   // cabe já descontado o botão", e só o nome que nem sozinho cabe é cortado, com reticências, em vez de vazar para a coluna ao lado.
   const label = (
     <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+      {pendingHint === null ? null : <span aria-hidden data-column-pending className="size-[calc(6px*var(--grid-zoom))] flex-none rounded-full bg-accent" />}
       <span className="max-w-full shrink-0 truncate">{column.name}</span>
       {/* 11 px em 100%, no zoom da grade (RN-GRADE-010). */}
       {showType || readOnlyMark ? (
@@ -276,8 +305,8 @@ export function GridHeaderCell({ column, item, sort, choosable = false, onChoose
   const align = column.kind === "number" ? " justify-end" : "";
   const position = { left: item.start, width: item.size };
   // O nome para o leitor de tela é o que se vê; a dica do cabeçalho diz o tipo mesmo com ele escondido.
-  const name = `${showType ? `${column.name} ${column.type}` : column.name}${readOnlyMark ? `, ${editCopy.readOnlyMark}` : ""}`;
-  const about = hint === null ? `${column.name} · ${column.type}` : `${column.name} · ${column.type}\n${hint}`;
+  const name = `${showType ? `${column.name} ${column.type}` : column.name}${readOnlyMark ? `, ${editCopy.readOnlyMark}` : ""}${pendingHint === null ? "" : `, ${multiEditCopy.headerMark}`}`;
+  const about = [`${column.name} · ${column.type}`, hint, pendingHint].filter((part) => part !== null).join("\n");
   const resizer = onResize === undefined ? null : <ColumnResizer name={column.name} width={width} zoom={scale} last={last} onResize={onResize} onFit={onFit ?? (() => {})} />;
   const direction = sort?.direction ?? null;
   const ariaSort = sort === undefined ? {} : { "aria-sort": direction === "asc" ? ("ascending" as const) : direction === "desc" ? ("descending" as const) : ("none" as const) };
@@ -797,6 +826,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       <CellEditor
         label={editCopy.editorLabel(columns[editor.column]?.name ?? "", editor.row < read.length ? editCopy.rowLabel(editor.row + 1) : editCopy.newRowMark)}
         draft={editor.draft}
+        hint={editor.hint ?? null}
         number={columns[editor.column]?.kind === "number"}
         onDraft={editing!.onDraft}
         onCommit={editing!.onCommit}
@@ -868,6 +898,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               selected={editing !== undefined && headerChosen(editing.selection, editing.layout, item.index)}
               whole={wholeChosen && whole?.has(item.index) === true}
               mac={mac}
+              pendingHint={editing?.columnPending?.get(item.index)?.hint ?? null}
               onResize={onResize === undefined ? undefined : (width) => onResize(item.index, width)}
               // O ajuste olha TODAS as linhas carregadas, e não só a primeira página (RN-GRADE-009), e reserva o espaço do botão de ordenar.
               onFit={onResize === undefined ? undefined : () => onResize(item.index, fitWidth(columns[item.index], item.index, rows, nullText, { sortable: sorting !== undefined, showType: showTypes, mark: marks?.[item.index] ?? null }))}
@@ -899,6 +930,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
               selectedFrom={span?.[0] ?? -1}
               selectedTo={span?.[1] ?? -1}
               wholeColumns={whole}
+              columnPending={editing?.columnPending ?? null}
             />
           );
         })}

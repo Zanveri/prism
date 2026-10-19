@@ -40,6 +40,12 @@ export type EditBarState = {
    * a aba ocupada e o `rowOperations`, que esta função confere antes. Sem ele, a linha da célula ativa.
    */
   selection?: { rows: number; duplicate: EditAccess; remove: EditAccess };
+  /**
+   * RN-EDIT-013, 017 e 018: o "Editar célula" com outras células escolhidas na coluna da célula ativa: para quantas vale (`scope`, "Vale para as 37 células
+   * escolhidas da coluna preco.", que vai na dica e na descrição) e, com a coluna inteira, o que vale nela (`access`: os motivos da tabela e da coluna da
+   * célula ativa e, no lugar dos da célula e da linha, os da coluna inteira, em "Indisponível: …"). Sem ele, a célula ativa.
+   */
+  edit?: { scope: string | null; access?: EditAccess };
 };
 
 const reasonOf = (access: EditAccess) => (access.editable ? null : access.reason);
@@ -59,26 +65,30 @@ const reasonOf = (access: EditAccess) => (access.editable ? null : access.reason
  * 6. sem nenhuma linha na grade, "O resultado não tem linhas." nos três que agem sobre uma; sem célula ativa, "Escolha uma célula na grade." e "Escolha uma
  *    linha na grade.". "Adicionar linha" continua valendo nos dois.
  */
-export function editBar({ readOnly, target, busy, active, rows, platform, selection }: EditBarState): EditBarButton[] {
+export function editBar({ readOnly, target, busy, active, rows, platform, selection, edit: group }: EditBarState): EditBarButton[] {
   const shortcuts = editShortcuts(platform);
   const whole = resultReadOnly(readOnly, target) ?? (busy ? copy.readOnly(busy === "refresh" ? copy.reasons.refreshing : copy.reasons.busy) : null);
   const rowOperations = whole ?? reasonOf(newRowAccess(null, target, false));
   const missing = (choose: string) => (rows === 0 ? copy.bar.noRows : active === null ? choose : null);
   const many = selection !== undefined && selection.rows > 1 ? selection.rows : null;
 
-  const edit = whole ?? (active === null ? null : reasonOf(cellAccess({ readOnly: null, target, busy: false, column: active.cell.column, row: active.row }))) ?? missing(copy.bar.chooseCell);
+  const edit =
+    whole ?? (active === null ? null : reasonOf(group?.access ?? cellAccess({ readOnly: null, target, busy: false, column: active.cell.column, row: active.row }))) ?? missing(copy.bar.chooseCell);
   const duplicate = rowOperations ?? (selection === undefined ? null : reasonOf(selection.duplicate)) ?? missing(copy.bar.chooseRow);
   const remove = rowOperations ?? (selection !== undefined ? reasonOf(selection.remove) : active === null ? null : reasonOf(deleteRowAccess(active.row, null, target, false))) ?? missing(copy.bar.chooseRow);
 
-  const button = (id: EditBarAction, label: string, reason: string | null, several?: { title: (count: number, shortcut: string) => string; description: (count: number) => string }): EditBarButton => {
+  const button = (id: EditBarAction, label: string, reason: string | null, several?: { title: (count: number, shortcut: string) => string; description: (count: number) => string }, scope: string | null = null): EditBarButton => {
     const shortcut = shortcuts[id];
-    const base = several === undefined || many === null ? copy.bar.title(label, shortcut.label) : several.title(many, shortcut.label);
-    const description = [several === undefined || many === null ? null : several.description(many), reason].filter((part) => part !== null).join(" ");
-    return { id, label, shortcut, title: reason === null ? base : copy.bar.disabledTitle(base, reason), reason, description: description === "" ? null : description };
+    const plain = several === undefined || many === null ? copy.bar.title(label, shortcut.label) : several.title(many, shortcut.label);
+    const base = scope === null ? plain : copy.bar.disabledTitle(plain, scope);
+    const description = [several === undefined || many === null ? null : several.description(many), scope, reason].filter((part) => part !== null).join(" ");
+    // A dica com o escopo já termina em ponto: o motivo vem depois dele, sem outro.
+    const title = reason === null ? base : scope === null ? copy.bar.disabledTitle(base, reason) : `${base} ${reason}`;
+    return { id, label, shortcut, title, reason, description: description === "" ? null : description };
   };
 
   return [
-    button("edit", copy.menu.edit, edit),
+    button("edit", copy.menu.edit, edit, undefined, group?.scope ?? null),
     button("newRow", copy.menu.newRow, rowOperations),
     button("duplicateRow", many === null ? copy.menu.duplicateRow : plural.duplicate, duplicate, { title: plural.duplicateTitle, description: plural.duplicateDescription }),
     button("deleteRow", many === null ? copy.menu.deleteRow : plural.remove, remove, { title: plural.removeTitle, description: plural.removeDescription }),

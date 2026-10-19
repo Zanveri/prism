@@ -93,14 +93,35 @@ export function cellAccess({ readOnly, target, busy, column, row }: CellContext)
     const info = target.columns[column];
     if (info === undefined || !info.editable || table === null) return denied(info?.reason ?? copy.reasons.noRowOperations);
   }
-  if (row.kind === "new") return allowed;
-  if (row.deleted) return denied(copy.reasons.deleted);
-  if (row.truncated?.has(column) === true) return denied(copy.reasons.truncated);
-  const key = target === null || table === null ? null : keyUnknown(target, table, row);
-  if (key !== null) return denied(key);
-  if (row.generated?.has(column) === true) return denied(copy.reasons.generated);
+  const problem = rowProblem(target, table, column, row);
+  if (problem === null) return allowed;
+  if (problem.kind === "deleted") return denied(copy.reasons.deleted);
+  if (problem.kind === "truncated") return denied(copy.reasons.truncated);
+  if (problem.kind === "generated") return denied(copy.reasons.generated);
+  return denied(keyUnknown(target!, problem.table, row) ?? copy.reasons.keyTruncated);
+}
 
-  return allowed;
+/**
+ * Por que a célula não recebe um valor por causa da LINHA dela (RN-EDIT-002 e 014), na ordem em que `cellAccess` os confere: a linha marcada para exclusão, a
+ * célula cortada, a chave da tabela da coluna (cortada, gerada pelo banco num Salvar, ou nula numa junção externa) e a célula que o banco preencheu numa linha
+ * nova salva. Nulo na linha nova e quando a linha deixa. A chave só é conferida com o alvo (`table`, a tabela da coluna). A edição de várias células confere
+ * cada uma por aqui (RN-EDIT-017), com o número da linha na frase.
+ */
+export type RowProblem = { kind: "deleted" } | { kind: "truncated" } | { kind: "generated" } | { kind: "key"; problem: "truncated" | "generated" | "noRowHere"; table: number };
+
+export function rowProblem(target: EditTarget | null, table: number | null, column: number, row: RowContext): RowProblem | null {
+  if (row.kind === "new") return null;
+  if (row.deleted) return { kind: "deleted" };
+  if (row.truncated?.has(column) === true) return { kind: "truncated" };
+  const key = target === null || table === null ? null : keyProblem(target, table, row);
+  if (key !== null && table !== null) return { kind: "key", problem: key, table };
+  if (row.generated?.has(column) === true) return { kind: "generated" };
+  return null;
+}
+
+/** A tabela da coluna, como `cellAccess` a acha (numa tabela só, sempre ela; numa junção, a de onde a coluna veio). */
+export function tableOfColumn(target: EditTarget | null, column: number): number | null {
+  return target === null ? null : tableOf(target, column);
 }
 
 /** "Adicionar linha" (e "Duplicar linha", RN-EDIT-016): só num resultado de uma tabela só que se edita (`rowOperations`); numa junção, só se alteram células. */

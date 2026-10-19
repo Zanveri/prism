@@ -23,8 +23,11 @@ export type RowMark = { kind: "read" | "new"; deleted: boolean; pending: Readonl
  */
 export type HeaderSort = { applied: RecordsSort | null; reason: string | null; onSort: (column: string) => void };
 
-/** O campo de edição aberto numa célula, com o texto que está nele. */
-export type CellEditorState = GridCell & { draft: string };
+/**
+ * O campo de edição aberto numa célula, com o texto que está nele. RN-EDIT-017: `touched` diz se o texto mudou desde que o campo abriu (uma tecla, colar,
+ * apagar; começar a digitar já é mexer); `hint`, para quantas células a edição vale ("Vale para as 37 células escolhidas da coluna preco."), nula com uma só.
+ */
+export type CellEditorState = GridCell & { draft: string; touched?: boolean; hint?: string | null };
 
 /**
  * A edição que a vista Registros e a aba de consulta entregam à grade (RN-EDIT-001). A grade só desenha e avisa: quem decide o que cada célula
@@ -57,6 +60,11 @@ export type GridEditing = {
   columnHints: readonly (string | null)[] | null;
   /** As colunas que não se editam, marcadas no cabeçalho ("somente leitura", como no canvas): só na aba de consulta, com o catálogo respondido. */
   columnReadOnly?: readonly boolean[] | null;
+  /**
+   * RN-EDIT-018: as alterações da coluna inteira pendentes, por coluna (o valor e a dica do cabeçalho): a grade desenha a célula daquela coluna em cada linha
+   * lida com o valor novo e o lido riscado ao lado, e o cabeçalho ganha a marca. O MESMO mapa enquanto as pendências não mudam; nulo sem nenhuma.
+   */
+  columnPending?: ReadonlyMap<number, { value: EditValue; hint: string; uncertain: boolean }> | null;
   /** O clique numa célula: ela é a ativa e a seleção (`select`). */
   onActivate: (cell: GridCell) => void;
   /** Abrir o campo na célula: duplo clique, F2, Enter, ou começar a digitar (`initial` substitui o valor). */
@@ -238,6 +246,8 @@ export function rowMarksOf(edits: PendingEdits, rowCount: number, failedRow: num
 /** A linha da grade de uma alteração do pedido (a que falhou, para destacá-la), ou nula se ela não está mais lá. */
 export function gridRowOf(origin: ChangeOrigin, edits: PendingEdits, rowCount: number): number | null {
   if (origin.kind === "row") return origin.row;
+  // RN-EDIT-021: a coluna inteira não é de uma linha.
+  if (origin.kind === "all") return null;
   const position = edits.added.findIndex((row) => row.id === origin.id);
   return position < 0 ? null : rowCount + position;
 }
