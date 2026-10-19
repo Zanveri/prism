@@ -657,7 +657,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   coluna calculadas uma vez, da primeira página, contando caracteres (a fonte é de largura fixa). Não meça célula no DOM
   nem recalcule largura ao carregar mais: é isso que deixa "Carregar mais 200" sem redesenhar o que está na tela. A grade
   recebe `key` por execução (`state.id`), não por página. **No cabeçalho, quem cede espaço é o tipo, e o nome da coluna não cede nada**
-  (`GridHeaderCell`): a largura é calculada sem a seta da ordem, e quando a seta aparece alguém cede os 18 px dela; era o nome, e o `id`
+  (`GridHeaderCell`): a largura é calculada sem o botão de ordenar, e o espaço dele (sempre reservado, RN-GRADE-021) alguém cede; era o nome, e o `id`
   ordenado virava `integer ▲`. O nome é `shrink-0` (não encolhe) e o tipo, `min-w-0 truncate`, absorve o que falta INTEIRO, até sumir; os dois
   moram numa caixa (`flex min-w-0 overflow-hidden`) que encolhe com a célula e fica ao lado da seta, e o `max-w-full` do nome só o corta (com
   reticências, sem vazar para a coluna ao lado) quando nem ele sozinho cabe. **Não troque isso por um peso de encolhimento** (`shrink-[999]`
@@ -1325,8 +1325,9 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   abaixo) recebe a condição **como o usuário a escreve**, só sem o espaço
   das pontas: não se lê, não se escapa e não se põe entre parênteses (RN-SQL-003). `recordsSql(engine, esquema, nome, { where, sort })` monta
   o comando com cada parte numa linha própria (uma condição que termina em `--` não engole o `ORDER BY`), e a recusa de mais de um comando é
-  `filterProblem` (`statementCount`, no dialeto do banco): ela aparece no próprio campo, antes de a API ser chamada. Clicar no cabeçalho de
-  uma coluna ordena (`nextSort`: crescente, decrescente, sem ordem; outra coluna começa crescente; `aria-sort`), só nos Registros. A tela
+  `filterProblem` (`statementCount`, no dialeto do banco): ela aparece no próprio campo, antes de a API ser chamada. O botão de ordenar no
+  cabeçalho de uma coluna ordena (`nextSort`: crescente, decrescente, sem ordem; outra coluna começa crescente; `aria-sort`; ver "A coluna inteira escolhida
+  pelo cabeçalho"); o clique no nome escolhe a coluna. A tela
   mostra o comando que executou, e o filtro e a ordem em vigor ficam lembrados com a aba (`tab-memory`).
 - **O que a vista Registros decide, e o que ela FAZ com cada decisão, mora em `_lib/table-view.ts`**, em funções sem React, com as peças
   injetadas e testadas com espiões (o molde de `submitPasswordChange` e de `lock-vault.ts`): `runRecords` e `applyRunPlan` ("aplicar", "limpar",
@@ -1685,7 +1686,7 @@ desenha e avisa.
 - **O menu** (`cellMenu`, RN-GRADE-004) tem os grupos do DBeaver: Copiar (Ctrl+C), Copiar com cabeçalho, o submenu "Copiar avançado" e Colar; Filtrar (F11),
   Ordenar e Ir para o registro referenciado; Editar célula, Definir como nulo e Desfazer alteração; Adicionar, Duplicar e Excluir linha(s); Exportar dados… e
   o submenu "Gerar SQL"; Atualizar (F5) e Atualizar automaticamente. Cada grupo e cada item de fonte aparece só quando quem usa a edição o entrega: `sort`
-  (`GridSortSource`: nos Registros, `orderRecords`, o caminho do clique no cabeçalho; na aba de consulta, o campo de filtro do resultado com `withOrder`; não
+  (`GridSortSource = { applied, apply }`: nos Registros, `orderRecords`, o caminho do botão de ordenar do cabeçalho; na aba de consulta, o campo de filtro do resultado com `withOrder`; não
   nas abas guardadas do script), `follow` (`GridFollowSource`, só os Registros, pelas chaves estrangeiras da grade), `copyAs` e `generateSql`.
   "Desfazer alteração" age nas células escolhidas (`undoWhere`, em `record-edits.ts`, que percorre as pendências e não a seleção).
 - **O contrato com as outras frentes** (seção 37: o "Copiar avançado…", os nove "Copiar como", a configuração deles e o "Gerar SQL"). `useRecordEdits`
@@ -1722,6 +1723,69 @@ desenha e avisa.
     (`GridActionDialogs`). O usuário do cofre, o somente leitura da conexão e o tipo da tabela dos Registros são lidos do cache na hora da escolha
     (`grid-action-context.ts`: `cachedUserName`, `cachedReadOnly`, `cachedObjectKind`), sem disparar consulta, e o "Abrir numa aba de consulta" chega da
     área de trabalho por `onOpenQuery` (`workbench-tabs.tsx` → `TableTabPanel` → `RecordsView`, e → `QueryTabPanel`), estável como o `onOpenTable`.
+
+## A coluna inteira escolhida pelo cabeçalho (seção 38: RN-GRADE-021 a 023)
+
+A seção 38 da especificação manda; o que segue diz onde ficam as peças e **o contrato que a frente da edição de várias células (RN-EDIT-017 a 022) usa**. Vale
+nas duas grades, como a seção 37. A edição de várias células e o Salvar da coluna inteira NÃO estão aqui: as ações de edição fazem o que faziam, e só as de
+linha ganharam o motivo de quando há colunas inteiras.
+
+- **O cabeçalho** (RN-GRADE-021; `GridHeaderCell`, em `result-grid.tsx`): o nome é um `<button data-colheader={coluna} tabIndex={-1}>` (fora do Tab, com o
+  nome como rótulo e "Escolher a coluna inteira" no `aria-describedby`; a dica diz o Ctrl ou o Cmd, `chooseColumnHint(mac)`) e, quando a edição entrega a
+  ordem, o botão de ordenar (`data-sort`, 24 px, `aria-disabled` com o motivo na dica, "Indisponível: …") num espaço **sempre reservado** (`w-6 flex-none`,
+  antes da área da divisa): sem ordem ele só aparece com o mouse sobre o cabeçalho (`invisible group-hover/header:visible`), com ordem fica a seta da
+  direção (`ArrowUpIcon`/`ArrowDownIcon`; a de duas pontas, `ArrowsUpDownIcon`, é a sem ordem). Os dois têm `preventDefault` no `mousedown` (o foco fica na
+  grade, o texto não é escolhido), lido por delegação no `mousedown` do corpo da grade, como o número da linha, com qualquer botão do mouse (o direito
+  também: senão o nome tomaria o foco, e o menu o devolveria a ele ao fechar); o clique do leitor de tela (`detail` 0) chega pelo `onClick` do nome. O gesto
+  no nome não rola a grade na vertical até a linha da ativa (`heldRow`, `followsActiveRow`): só a coluna vem à vista, e o teclado, o clique numa célula ou
+  no número e o campo que abre voltam a rolar até ela. O `columnheader` tem `aria-sort` quando a grade ordena e `aria-selected` quando a coluna está escolhida inteira. A divisa, o
+  duplo clique que ajusta e as larguras de saída não mudaram: a largura é contada com o espaço do botão (`sortArrowWidth`, 16 px em `grid-columns.ts`: os
+  24 do botão e os 4 até a divisa, menos o respiro da direita que o nome deixa de ter), e quem cede é o tipo, como antes.
+- **Quem ordena** é a edição: `GridEditing.sort?: HeaderSort = { applied, reason, onSort(coluna) }` (em `grid-editing.ts`), montado em `useRecordEdits` só
+  quando quem a usa entrega `sort` (`GridSortSource = { applied(), apply(sort) }`: nos Registros, `applied` é a ordem em vigor e `apply` o caminho do
+  "Ordenar" do menu; na aba de consulta, a ordem escrita no campo de filtro do resultado; nas abas guardadas do script não há, e o botão não aparece).
+  `onSort` é `nextSort(applied(), coluna)` (crescente, decrescente, sem ordem) pelo mesmo `apply` do menu, com a pergunta das alterações não salvas.
+  O motivo é `sortReasonFor` (o mesmo do item "Ordenar" do menu, que agora também o mostra desabilitado com "Indisponível: …"): a aba ocupada, salvando, a
+  atualização automática lendo, sem resultado; na aba de consulta, também o comando que não é uma leitura (`read` falso). A `ResultGrid` não recebe mais
+  `sort`/`onSort`, nem a `ResultPanel` (o `RecordsMode` perdeu os dois).
+- **A forma nova** (RN-GRADE-022; `_lib/grid-selection.ts`): `{ kind: "columns", columns: number[] }`, as posições das colunas escolhidas em ordem, **sem
+  linhas guardadas**: as linhas são todas as da grade na hora da pergunta (`allRowsOf`/`rowSetOfSelection(selection, layout)`), então as que o "carregar
+  mais" traz entram sozinhas e a linha nova também. Os gestos: `selectColumn` (o clique no nome), `extendColumns` (Shift+clique, da âncora), `toggleColumn`
+  (Ctrl/Cmd+clique; a última que sai deixa a célula ativa), `dragColumns(base, início, coluna, layout, juntando)` (o arraste nos nomes, `startDrag` com o
+  modo `columns`), `wholeColumns` (Ctrl+Espaço, `selectsColumns` em `grid-editing.ts`: as colunas da seleção de agora), `contextColumn` (o botão direito no
+  nome: fora das escolhidas escolhe a coluna; o menu abre sobre a célula ativa, que vai para ela, por `editing.onColumnMenu(coluna, ponto)`), e o Shift com as
+  setas horizontais pelo `extendByKey` (as verticais só movem a ativa). `wholeRows` com colunas escolhe a linha da ativa; `contextRow` deixa as colunas
+  (toda linha tem uma célula escolhida, RN-GRADE-001); `afterSave` as mantém; `afterRowsRemoved(selection, layout)` acerta a ativa quando o Descartar tira linhas novas. As perguntas: `chosenWholeColumns`
+  (nulo com outra forma), `choseWholeColumns`, `wholeColumnSet` e `headerChosen` (o desenho), e `selectionSize` traz `columns`. `rowSpan` e `columnSpan`
+  são nulos com colunas (a grade desenha pela `wholeColumns` da `GridRow`, um `Set` estável por seleção); `selectedRows` são todas as da grade agora.
+- **A contagem e a pausa**: `wholeColumnsStatus` ("Coluna preco: todas as linhas", "Colunas a, b: as 1.200 linhas", "… as 200 carregadas", com o total
+  quando se sabe); a forma conta como várias células (`hasSeveralCells`), e a atualização automática fica em pausa (RN-GRADE-014). A seleção vive o mesmo que
+  as outras formas: o "carregar mais" a mantém, outra execução a esquece.
+- **As ações** (`openMenu`, `barOf`): "Duplicar linha(s)" e "Excluir linha(s)" (menu, barra e atalhos) vêm desabilitados com "Escolha as linhas pelo número
+  da linha." (depois dos motivos de só leitura e ocupado); "Copiar número de linha(s)" e o copiar carregam antes; o "Desfazer alteração" desfaz as pendências
+  das colunas escolhidas (as linhas excluídas não, porque nenhuma linha está inteira); o "Exportar dados…" abre o assistente com só as colunas escolhidas
+  marcadas (`chosenColumns()` do retorno → `checkedColumns` de `recordsSource`/`resultSource`, `initialChecked` em `export-source.ts`, e a frase
+  `fromGrid` no passo da extração), que exporta todas as linhas como sempre.
+- **Carregar as linhas que faltam** (RN-GRADE-023): `GridSelectionContext.loadRest(options?)` (com `wholeColumns`, `rowsToLoad` e `total` no contexto) pede
+  as páginas seguintes pelo `runner.loadMore` (que agora devolve `LoadMoreOutcome`: `loaded`, `end`, `busy`, `closed`, `failed` com a mensagem do banco,
+  `gone`) até o fim, e devolve `LoadRestOutcome` (`ready` com o contexto novo, `stopped`, `refused` com a frase e o `detail` do banco, `cancelled`). Recusa
+  na hora com o cursor fechado ou a aba guardada do script, a aba ocupada, a atualização automática lendo e passadas `loadRestLimit` (100.000) linhas. Sem
+  `onProgress`, a faixa sobre a grade mostra "Carregando as linhas que faltam…" com o "Cancelar" (`EditsBanner.loading`, o mesmo `onCancelFetch`) e diz as
+  recusas; o cancelar para depois da página em andamento (o cursor não é cancelado). Quem usa: o copiar (`copySelection`, com `loadedRowsMeter` de
+  `grid-copy.ts` como `keepGoing`: passado o limite de 10 MiB pela medida baixa, `cellsFloor`, para antes de ler o resto), "Copiar número de linha(s)",
+  `useCopyAs` (o direto carrega com a faixa; o diálogo do "Copiar avançado" mostra o tamanho com as linhas que faltam, `whole`, e o andamento com o
+  "Cancelar" dele, nos escopos das células e das linhas) e o "Gerar SQL" (`SqlFlowDeps.loadRows`, fase `loading`, medindo o SQL de cada página contra o 1 MB).
+- **O contrato com a edição de várias células** (RN-EDIT-017 a 022, outra frente):
+  - "Que células desta coluna estão escolhidas?" é `columnChoice(selection, layout, coluna)` (ou `activeColumnChoice(selection, layout)`, a da coluna da
+    célula ativa, nula com a ativa fora da seleção): `ColumnChoice = { column, rows, allRows }`, com `rows` as posições na grade agora (as lidas carregadas
+    e as novas, em ordem) e `allRows` verdadeiro quando a escolha é a coluna inteira, que vale também para as linhas que o cursor ainda não leu.
+  - "A escolha cobre linhas não carregadas?" é `allRows` com `context.rowsToLoad` (ou `shown.hasMore`); `context.total` diz quantas, quando se sabe.
+  - "Todas as linhas do resultado nesta coluna" é `context.loadRest()` (as linhas na grade, com a recusa já pronta) ou, para o Salvar que vale no banco
+    sem as trazer, `allRows` com `context.wholeColumns`: o comando é da outra frente.
+  - Os pontos de entrada da edição são os de hoje em `use-record-edits.ts`: `openEditor(cell)` (o "Editar célula", o F2, o duplo clique, o começar a digitar
+    e o botão "edit" da barra, `bar.onAction`), `commit(move?)` (o Enter e o Tab do campo), `applyValue(cell, valor)` (o confirmar, o "Colar" e o "Definir
+    como nulo", estes dois em `openMenu`, que hoje só valem com uma célula: `several`) e `undoSelection`. O teste das colunas inteiras é
+    `use-record-edits.columns.test.ts`.
 
 ## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-011 a 013 e RN-TABELA-011)
 
@@ -1783,8 +1847,8 @@ a RN-GRADE-011 e o F5 a RN-GRADE-012.
   limpa o filtro (`clearResultFilter`, só quando o comando vai de fato ser enviado). **O filtro é do executor da aba**: trocar o banco (RN-ARVORE-007) ou a
   conexão (RN-ARVORE-008), e o bloqueio por inatividade, dão à aba um executor novo, sem resultado, e o painel limpa o filtro ao ver o executor trocado
   (ajuste durante a renderização, `filterRunner`). Até a 0.3.0 o campo ficava à vista depois da troca do banco com o comando fixado (`pinned`) do resultado
-  anterior, e "Aplicar" o executava, com o filtro, no banco novo. A ordem pelo clique no cabeçalho não existe no resultado: a ordem vai
-  escrita no campo.
+  anterior, e "Aplicar" o executava, com o filtro, no banco novo. No resultado, o botão de ordenar do cabeçalho e o "Ordenar" do
+  menu escrevem a ordem no campo (`withOrder`), e valem só quando o comando é uma leitura.
 - **F5** (RN-GRADE-012): nos Registros é o "Atualizar"; na Estrutura e no Diagrama, o "Atualizar" da vista; na aba de consulta, o "Executar de novo"; no
   navegador, o "Atualizar" do nó escolhido, quando se aplica (`refreshesSelection`). Com algo em andamento, nada; com alterações não salvas na grade, a
   pergunta antes. Vale com o foco em qualquer ponto da aba: a aba de uma tabela trata a tecla na raiz (`refreshFromKey`, em `_lib/tab-refresh.ts`) e chama o
