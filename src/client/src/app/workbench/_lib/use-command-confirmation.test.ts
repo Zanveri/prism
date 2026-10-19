@@ -97,3 +97,32 @@ describe("useCommandConfirmation: o aviso de uma aba (RN-PROT-001)", () => {
     await expect(refused).resolves.toBe(false);
   });
 });
+
+describe("useCommandConfirmation: a pergunta que vem sempre (RN-EDIT-019)", () => {
+  const question = { kind: "wholeColumn", title: "Alterar preco em 3 linhas de loja.pedido?", lead: "", assignments: [], warnings: [], others: null, after: "", oneAtATime: null, command: null, confirm: "Alterar 3 linhas", rows: 3 } as const;
+
+  it("abre também sem a proteção, com o ambiente, a conexão e o banco da aba; a resposta resolve a promessa", async () => {
+    rt.lists.connections = [{ ...mes, protections: unprotected, folderID: null }];
+    const answer = hook().always(question);
+    const open = hook().open;
+    expect(open?.question).toBe(question);
+    expect(open?.context).toMatchObject({ connection: "MES Produção", database: "mes", level: null, from: null });
+
+    open?.onConfirm();
+    await expect(answer).resolves.toBe(true);
+  });
+
+  it("com a proteção, ela vai no contexto; Cancelar resolve falso; sem a conexão na lista, pergunta do mesmo jeito", async () => {
+    const answer = hook().always(question);
+    expect(hook().open?.context).toMatchObject({ level: "irreversible", from: fabrica });
+    hook().open?.onCancel();
+    await expect(answer).resolves.toBe(false);
+
+    rt.unmount();
+    rt.lists.connections = [];
+    const missing = hook().always(question);
+    expect(hook().open?.context).toMatchObject({ connection: "", level: null });
+    hook().open?.onConfirm();
+    await expect(missing).resolves.toBe(true);
+  });
+});
