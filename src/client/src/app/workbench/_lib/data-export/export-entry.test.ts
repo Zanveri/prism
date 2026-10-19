@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RowsState, RunnerState } from "../use-query-runner";
 import { exportBlocker, exportRows, recordsSource, resultSource, runnerExportBlocker } from "./export-entry";
+import { initialChecked } from "./export-source";
 
 const rows: RowsState = {
   status: "rows",
@@ -82,5 +83,25 @@ describe("a origem que cada entrada entrega ao assistente (RN-EXPORT-002)", () =
 
     expect(source.origin).toEqual({ kind: "result", tabTitle: "consulta-1.sql", scriptNumber: 3, sql: rows.target.sql, filter: "cliente = 'Ana'", table: { schema: "estoque", name: "pedido" } });
     expect(resultSource({ ...rows, target: { sql: "select 1", offset: 0 } }, { connectionId: "c1", tabTitle: "x", scriptNumber: null, unsavedEdits: 0, table: null }).origin).toMatchObject({ filter: null, table: null, scriptNumber: null });
+  });
+});
+
+describe("as colunas inteiras escolhidas na grade abrem marcadas na Extração (RN-EXPORT-001 e 005)", () => {
+  it("as duas origens da grade levam as posições delas; sem elas (ou vazias), nada vai, e todas vêm marcadas", () => {
+    expect(recordsSource(rows, { connectionId: "c1", schema: "estoque", name: "pedido", filter: "", unsavedEdits: 0, checkedColumns: [1] }).checkedColumns).toEqual([1]);
+    expect(resultSource(rows, { connectionId: "c1", tabTitle: "x", scriptNumber: null, unsavedEdits: 0, table: null, checkedColumns: [0] }).checkedColumns).toEqual([0]);
+    expect("checkedColumns" in recordsSource(rows, { connectionId: "c1", schema: "estoque", name: "pedido", filter: "", unsavedEdits: 0, checkedColumns: null })).toBe(false);
+    expect("checkedColumns" in resultSource(rows, { connectionId: "c1", tabTitle: "x", scriptNumber: null, unsavedEdits: 0, table: null, checkedColumns: [] })).toBe(false);
+  });
+
+  it("as caixas ao abrir: só as escolhidas; as posições fora das colunas não contam, e sem nenhuma que valha, todas", () => {
+    const columns = [
+      { name: "id", type: "int4" },
+      { name: "cliente", type: "text" },
+      { name: "total", type: "numeric" },
+    ];
+    expect(initialChecked(columns, [0, 2])).toEqual([true, false, true]);
+    expect(initialChecked(columns, [7])).toEqual([true, true, true]);
+    expect(initialChecked(columns, undefined)).toEqual([true, true, true]);
   });
 });

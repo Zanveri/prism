@@ -3,19 +3,28 @@ import { describe, expect, it } from "vitest";
 import { movementOf, moveCell } from "./grid-cursor";
 import {
   activeCell,
+  activeColumnChoice,
+  afterRowsRemoved,
   afterSave,
+  chosenWholeColumns,
+  choseWholeColumns,
   choseWholeRows,
   collapse,
+  columnChoice,
   columnSpan,
   contextCell,
+  contextColumn,
   contextRow,
+  dragColumns,
   dragRows,
   emptySelection,
   escapeCollapses,
   extend,
   extendByKey,
+  extendColumns,
   extendRows,
   hasSeveralCells,
+  headerChosen,
   isSelected,
   positionOf,
   refAt,
@@ -23,6 +32,7 @@ import {
   rowsBetween,
   select,
   selectAll,
+  selectColumn,
   selectedCells,
   selectedColumns,
   selectedRows,
@@ -30,7 +40,10 @@ import {
   selectNewRows,
   selectRow,
   sliceOf,
+  toggleColumn,
   toggleRow,
+  wholeColumnSet,
+  wholeColumns,
   wholeRows,
   type GridLayout,
   type GridSelection,
@@ -94,7 +107,7 @@ describe("os gestos com o ponteiro (RN-GRADE-001)", () => {
     expect(activeCell(selection, layout)).toEqual(at(3, 0));
     expect(selectedRows(selection, layout)).toEqual([1, 2, 3]);
     expect(selectedColumns(selection, layout)).toEqual([0, 1, 2]);
-    expect(selectionSize(selection, layout)).toEqual({ rows: 3, cells: 9, whole: false });
+    expect(selectionSize(selection, layout)).toEqual({ rows: 3, cells: 9, whole: false, columns: 0 });
     expect(extend(emptySelection, at(2, 2), layout)).toEqual(clicked(2, 2));
   });
 
@@ -157,7 +170,7 @@ describe("os gestos com o ponteiro (RN-GRADE-001)", () => {
     const all = selectAll(emptySelection, layout);
 
     expect(activeCell(all, layout)).toEqual(at(0, 0));
-    expect(selectionSize(all, layout)).toEqual({ rows: 7, cells: 28, whole: true });
+    expect(selectionSize(all, layout)).toEqual({ rows: 7, cells: 28, whole: true, columns: 0 });
     expect(activeCell(selectAll(clicked(3, 2), layout), layout)).toEqual(at(3, 2));
     expect(selectAll(emptySelection, { read: 0, added: [], columns: 4 })).toBe(emptySelection);
   });
@@ -327,7 +340,7 @@ describe("desempenho: a seleção grande custa o mesmo que uma célula (RN-GRADE
 
     const all = selectAll(emptySelection, big);
     expect(all.shape).toEqual({ kind: "rows", rows: { read: [[0, 99_999]], added: [1, 2, 3] } });
-    expect(selectionSize(all, big)).toEqual({ rows: 100_003, cells: 2_000_060, whole: true });
+    expect(selectionSize(all, big)).toEqual({ rows: 100_003, cells: 2_000_060, whole: true, columns: 0 });
     for (let row = 50_000; row < 50_040; row += 1) expect(rowSpan(all, big, row)).toEqual([0, 19]);
 
     // Linhas tiradas uma a uma pelo Ctrl+clique viram faixas, e a pergunta continua sendo uma busca nelas.
@@ -338,5 +351,194 @@ describe("desempenho: a seleção grande custa o mesmo que uma célula (RN-GRADE
     expect(rowSpan(holes, big, 1_001)).toEqual([0, 19]);
 
     expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
+
+describe("as colunas inteiras (RN-GRADE-022)", () => {
+  const column = (index: number, base: GridSelection = emptySelection, grid = layout) => selectColumn(base, index, grid);
+
+  it("o clique no nome escolhe a coluna com todas as linhas da grade; a ativa vai para ela, na linha em que estava (na primeira, sem ativa)", () => {
+    const chosen = column(2, clicked(3, 0));
+
+    expect(chosen.shape).toEqual({ kind: "columns", columns: [2] });
+    expect(activeCell(chosen, layout)).toEqual(at(3, 2));
+    expect(chosen.anchor).toEqual(chosen.active);
+    expect(activeCell(column(1), layout)).toEqual(at(0, 1));
+    expect(selectedRows(chosen, layout)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(selectedColumns(chosen, layout)).toEqual([2]);
+    // Sem linha nenhuma, a coluna fica escolhida, e não há célula ativa.
+    const empty: GridLayout = { read: 0, added: [], columns: 3 };
+    expect(column(1, emptySelection, empty)).toEqual({ active: null, anchor: null, shape: { kind: "columns", columns: [1] } });
+    // A coluna fora da grade não muda nada.
+    const start = clicked(1, 1);
+    expect(column(9, start)).toBe(start);
+  });
+
+  it("as linhas que chegam depois pelo 'carregar mais' já chegam escolhidas: a forma não guarda linha nenhuma", () => {
+    const chosen = column(1);
+
+    expect(selectedRows(chosen, loadedMore)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(isSelected(chosen, loadedMore, at(7, 1))).toBe(true);
+    expect(isSelected(chosen, loadedMore, at(7, 2))).toBe(false);
+    expect(selectionSize(chosen, loadedMore)).toEqual({ rows: 10, cells: 10, whole: false, columns: 1 });
+  });
+
+  it("Shift+clique escolhe da coluna da âncora até a clicada; Ctrl+clique acrescenta e tira; a última tirada volta à célula ativa", () => {
+    const shifted = extendColumns(column(3, clicked(2, 0)), 1, layout);
+    expect(shifted.shape).toEqual({ kind: "columns", columns: [1, 2, 3] });
+    expect(activeCell(shifted, layout)).toEqual(at(2, 1));
+
+    const added = toggleColumn(column(0), 3, layout);
+    expect(added.shape).toEqual({ kind: "columns", columns: [0, 3] });
+    expect(activeCell(added, layout)).toEqual(at(0, 3));
+    const removed = toggleColumn(added, 0, layout);
+    expect(removed.shape).toEqual({ kind: "columns", columns: [3] });
+    expect(toggleColumn(removed, 3, layout).shape).toEqual({ kind: "cell" });
+
+    // Com um retângulo ou com linhas inteiras, o Ctrl+clique é o clique: as formas não se misturam. Sem âncora, o Shift+clique também.
+    expect(toggleColumn(extend(clicked(0, 0), at(2, 2), layout), 3, layout).shape).toEqual({ kind: "columns", columns: [3] });
+    expect(toggleColumn(selectRow(emptySelection, 1, layout), 2, layout).shape).toEqual({ kind: "columns", columns: [2] });
+    expect(extendColumns(emptySelection, 2, layout)).toEqual(column(2));
+  });
+
+  it("o arraste nos nomes escolhe as do caminho; com Ctrl no começo, junta às que já estavam", () => {
+    const base = column(0);
+
+    expect(dragColumns(base, 3, 1, layout, false).shape).toEqual({ kind: "columns", columns: [1, 2, 3] });
+    expect(dragColumns(base, 2, 3, layout, true).shape).toEqual({ kind: "columns", columns: [0, 2, 3] });
+    expect(activeCell(dragColumns(base, 2, 3, layout, true), layout)).toEqual(at(0, 3));
+    expect(dragColumns(base, 2, 9, layout, false)).toBe(base);
+  });
+
+  it("Ctrl+Espaço escolhe as colunas do retângulo, a da célula ativa, ou, com linhas inteiras, a da ativa; a ativa e a âncora ficam", () => {
+    const rectangle = extend(clicked(1, 1), at(3, 2), layout);
+    const fromRectangle = wholeColumns(rectangle, layout);
+    expect(fromRectangle.shape).toEqual({ kind: "columns", columns: [1, 2] });
+    expect(fromRectangle.active).toBe(rectangle.active);
+    expect(fromRectangle.anchor).toBe(rectangle.anchor);
+
+    expect(wholeColumns(clicked(4, 3), layout).shape).toEqual({ kind: "columns", columns: [3] });
+    expect(wholeColumns(selectRow(clicked(0, 2), 3, layout), layout).shape).toEqual({ kind: "columns", columns: [2] });
+    expect(wholeColumns(emptySelection, layout)).toBe(emptySelection);
+  });
+
+  it("com colunas inteiras, o Shift com as teclas na horizontal estende as colunas, e na vertical só move a ativa", () => {
+    const chosen = column(1, clicked(2, 0));
+
+    const right = extendByKey(chosen, at(2, 3), layout, false);
+    expect(right.shape).toEqual({ kind: "columns", columns: [1, 2, 3] });
+    expect(activeCell(right, layout)).toEqual(at(2, 3));
+    const down = extendByKey(right, at(4, 3), layout, true);
+    expect(down.shape).toEqual(right.shape);
+    expect(activeCell(down, layout)).toEqual(at(4, 3));
+  });
+
+  it("Shift+Espaço com colunas inteiras escolhe a linha inteira da ativa; Esc volta à ativa; Ctrl+A escolhe todas as linhas", () => {
+    const chosen = column(2, clicked(3, 0));
+
+    expect(selectedRows(wholeRows(chosen), layout)).toEqual([3]);
+    expect(wholeRows(chosen).shape.kind).toBe("rows");
+    expect(escapeCollapses(chosen)).toBe(true);
+    expect(collapse(chosen)).toEqual({ active: chosen.active, anchor: chosen.active, shape: { kind: "cell" } });
+    expect(selectAll(chosen, layout).shape.kind).toBe("rows");
+  });
+
+  it("o botão direito no nome escolhe a coluna quando ela não está entre as escolhidas; entre elas, a seleção fica, e a ativa vai para ela", () => {
+    const two = toggleColumn(column(0, clicked(4, 0)), 2, layout);
+
+    const inside = contextColumn(two, 0, layout);
+    expect(inside.shape).toBe(two.shape);
+    expect(activeCell(inside, layout)).toEqual(at(4, 0));
+    expect(contextColumn(two, 1, layout).shape).toEqual({ kind: "columns", columns: [1] });
+    // Dentro de um retângulo, a seleção passa a ser a coluna inteira.
+    expect(contextColumn(extend(clicked(0, 0), at(2, 2), layout), 1, layout).shape).toEqual({ kind: "columns", columns: [1] });
+  });
+
+  it("o botão direito numa célula escolhida deixa as colunas, e no número da linha também: toda linha tem uma célula escolhida", () => {
+    const chosen = column(1);
+
+    expect(contextCell(chosen, at(5, 1), layout).shape).toBe(chosen.shape);
+    expect(contextCell(chosen, at(5, 2), layout).shape).toEqual({ kind: "cell" });
+    expect(contextRow(chosen, 3, layout)).toBe(chosen);
+  });
+
+  it("o desenho: as colunas como um conjunto, o cabeçalho delas destacado, e nenhuma faixa por linha (o número da linha não destaca)", () => {
+    const chosen = toggleColumn(column(0), 3, layout);
+
+    expect(wholeColumnSet(chosen, layout)).toEqual(new Set([0, 3]));
+    expect(wholeColumnSet(clicked(0, 0), layout)).toBeNull();
+    expect(headerChosen(chosen, layout, 3)).toBe(true);
+    expect(headerChosen(chosen, layout, 1)).toBe(false);
+    expect(headerChosen(extend(clicked(0, 1), at(1, 2), layout), layout, 2)).toBe(true);
+    expect(rowSpan(chosen, layout, 2)).toBeNull();
+    expect(columnSpan(chosen, layout)).toBeNull();
+    expect([...selectedCells(chosen, { read: 2, added: [], columns: 4 })]).toEqual([at(0, 0), at(0, 3), at(1, 0), at(1, 3)]);
+  });
+
+  it("conta como várias células também com uma linha só, e não vale para o Delete", () => {
+    const one: GridLayout = { read: 1, added: [], columns: 2 };
+    const chosen = column(0, emptySelection, one);
+
+    expect(hasSeveralCells(chosen, one)).toBe(true);
+    expect(choseWholeRows(chosen, one)).toBe(false);
+    expect(choseWholeColumns(chosen)).toBe(true);
+    expect(choseWholeColumns(clicked(0, 0))).toBe(false);
+    expect(chosenWholeColumns(chosen, one)).toEqual([0]);
+  });
+
+  it("o recorte das colunas inteiras: todas as linhas da grade, nas colunas escolhidas, mesmo não seguidas", () => {
+    const chosen = toggleColumn(column(0), 2, layout);
+    const columns: QueryColumn[] = ["a", "b", "c", "d"].map((name) => ({ name, type: "text", kind: "text" }));
+    const source: SliceSource = { columns, valueAt: (row, column) => `${row}.${column}`, truncatedAt: () => false, generatedAt: () => false };
+    const slice = sliceOf(chosen, { read: 2, added: [], columns: 4 }, source);
+
+    expect(slice.rows).toEqual([
+      ["0.0", "0.2"],
+      ["1.0", "1.2"],
+    ]);
+    expect(slice.positions).toEqual([0, 1]);
+    expect(slice.columnIndexes).toEqual([0, 2]);
+    expect(sliceOf(chosen, { read: 2, added: [], columns: 4 }, source, "rows").columnIndexes).toEqual([0, 1, 2, 3]);
+  });
+
+  it("o Salvar e o Descartar que tiram linhas deixam as colunas, com a ativa na linha dela ou na primeira", () => {
+    const chosen = column(1, clicked(5, 0));
+
+    const saved = afterSave(chosen, { deleted: [0], read: 5, added: [7, 9] });
+    expect(saved.shape).toBe(chosen.shape);
+    expect(saved.active).toEqual({ row: { kind: "read", row: 4 }, column: 1 });
+
+    const discarded = afterRowsRemoved(chosen, { read: 5, added: [], columns: 4 });
+    expect(discarded.shape).toBe(chosen.shape);
+    expect(discarded.active).toEqual({ row: { kind: "read", row: 0 }, column: 1 });
+    expect(afterRowsRemoved(extend(clicked(0, 0), at(1, 1), layout), layout).shape).toEqual({ kind: "cell" });
+  });
+
+  it("o que a edição de várias células pergunta: as linhas escolhidas da coluna, e se a escolha vale para todas as do resultado (RN-EDIT-017 e 018)", () => {
+    const rectangle = extend(clicked(1, 1), at(3, 2), layout);
+    expect(columnChoice(rectangle, layout, 2)).toEqual({ column: 2, rows: [1, 2, 3], allRows: false });
+    expect(columnChoice(rectangle, layout, 0)).toBeNull();
+    expect(activeColumnChoice(rectangle, layout)).toEqual({ column: 2, rows: [1, 2, 3], allRows: false });
+
+    const whole = column(1);
+    expect(activeColumnChoice(whole, layout)).toEqual({ column: 1, rows: [0, 1, 2, 3, 4, 5, 6], allRows: true });
+    expect(columnChoice(whole, layout, 3)).toBeNull();
+    expect(activeColumnChoice(clicked(2, 2), layout)).toEqual({ column: 2, rows: [2], allRows: false });
+
+    // A ativa fora da seleção (o Ctrl+clique que tirou a linha dela): a edição é só dela.
+    const rows = toggleRow(toggleRow(selectRow(emptySelection, 1, layout), 2, layout), 2, layout);
+    expect(activeColumnChoice(rows, layout)).toBeNull();
+  });
+
+  it("desempenho: escolher a coluna de um milhão de linhas custa o mesmo que uma célula", () => {
+    const huge: GridLayout = { read: 1_000_000, added: [], columns: 30 };
+    const started = performance.now();
+
+    const chosen = toggleColumn(selectColumn(emptySelection, 3, huge), 7, huge);
+    for (let row = 500_000; row < 500_100; row += 1) expect(isSelected(chosen, huge, at(row, 7))).toBe(true);
+    expect(selectionSize(chosen, huge)).toEqual({ rows: 1_000_000, cells: 2_000_000, whole: false, columns: 2 });
+    expect(hasSeveralCells(chosen, huge)).toBe(true);
+
+    expect(performance.now() - started).toBeLessThan(200);
   });
 });

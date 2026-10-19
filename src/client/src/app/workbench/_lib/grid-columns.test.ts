@@ -46,7 +46,7 @@ describe("fitWidth: o duplo clique na divisa ajusta a coluna ao maior valor carr
   });
 
   it("num cabeçalho que ordena, a seta da ordem também cabe", () => {
-    expect(fitWidth(id, 0, [["1", "a"]], "NULL", { sortable: true }) - fitWidth(id, 0, [["1", "a"]], "NULL")).toBe(18);
+    expect(fitWidth(id, 0, [["1", "a"]], "NULL", { sortable: true }) - fitWidth(id, 0, [["1", "a"]], "NULL")).toBe(16);
   });
 
   it(`um valor enorme para no teto do ajuste (${fitCap} px), e o resto continua com reticências`, () => {
@@ -134,6 +134,6 @@ describe("sem o tipo no cabeçalho (RN-CONFIG-006), a coluna não reserva lugar 
 
   it("o ajuste ao conteúdo também", () => {
     expect(fitWidth(name, 0, [["a"]], "NULL", { showType: false })).toBe(Math.ceil(4 * 7.8) + 25);
-    expect(fitWidth(name, 0, [["a"]], "NULL", { showType: false, sortable: true })).toBe(Math.ceil(4 * 7.8 + 18) + 25);
+    expect(fitWidth(name, 0, [["a"]], "NULL", { showType: false, sortable: true })).toBe(Math.ceil(4 * 7.8 + 16) + 25);
   });
 });
