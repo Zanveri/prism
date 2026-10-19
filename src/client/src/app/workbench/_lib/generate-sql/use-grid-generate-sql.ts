@@ -4,8 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { EditAccess } from "../cell-editing";
 import type { ObjectKind } from "../object-kind";
 import type { GenerateSqlSource, GridSelectionContext } from "../use-record-edits";
-import { sqlItems, type SqlItem } from "./generate-sql";
-import type { FullValuesAnswer, SqlFlowDeps } from "./generate-sql-flow";
+import { generateSql, sqlItems, type SqlItem } from "./generate-sql";
+import { readSqlOptions } from "./generate-sql-choices";
+import { sqlTextLimit, utf8Bytes, type FullValuesAnswer, type LoadedRows, type SqlFlowDeps } from "./generate-sql-flow";
 import { sqlMenuStates, sqlPlanOf } from "./sql-plan";
 import { sqlSelectionOf } from "./sql-selection";
 import { catalogReader, useGenerateSql, type GenerateSqlDeps } from "./use-generate-sql";
@@ -41,9 +42,9 @@ export function useGridGenerateSql({ connectionId, database, userName, records, 
   const queryClient = useQueryClient();
   // A grade de quando o item foi escolhido: o diálogo pergunta, busca e confere por ela até fechar.
   const chosen = useRef<GridSelectionContext | null>(null);
-  const latest = useRef({ connectionId, database, records, readOnlyConnection, openQueryTab });
+  const latest = useRef({ connectionId, database, records, readOnlyConnection, openQueryTab, userName });
   useEffect(() => {
-    latest.current = { connectionId, database, records, readOnlyConnection, openQueryTab };
+    latest.current = { connectionId, database, records, readOnlyConnection, openQueryTab, userName };
   });
 
   const deps: GenerateSqlDeps = {
@@ -67,6 +68,34 @@ export function useGridGenerateSql({ connectionId, database, userName, records, 
       return id === null ? Promise.resolve({ kind: "failed", message: null }) : catalogReader(queryClient, id, db)(table, signal);
     },
     stillCurrent: () => chosen.current === null || !chosen.current.moved(),
+    // RN-GRADE-023: com colunas inteiras, todas as linhas do resultado: as que faltam vêm antes, pelo carregar da grade, e param quando o texto passaria de
+    // 1 MB (a conta é a do texto de cada página, com as opções lembradas; o texto final é medido de novo, exato). Depois, a grade do diálogo é a das linhas
+    // que chegaram.
+    loadRows: async (request, plan, signal, progress): Promise<LoadedRows | null> => {
+      const context = chosen.current;
+      if (context === null || context.wholeColumns === null || !context.rowsToLoad || request.item === "create") return null;
+      const item = request.item;
+      const options = { ...readSqlOptions(latest.current.userName) };
+      let bytes = 0;
+      const outcome = await context.loadRest({
+        signal,
+        onProgress: progress,
+        keepGoing: (rows, from) => {
+          const positions = from === 0 ? context.rows : Array.from({ length: rows.rows.length - from }, (_, index) => from + index);
+          const page = sqlSelectionOf(rows, context.pending, positions).rows;
+          if (page.length === 0) return true;
+          const text = generateSql(item, plan, page, options, sqlTextLimit);
+          if (text.tooLarge === true) return false;
+          bytes += utf8Bytes(text.text);
+          return bytes <= sqlTextLimit;
+        },
+      });
+      if (outcome.kind === "stopped") return { kind: "tooLarge" };
+      if (outcome.kind === "refused") return { kind: "refused", reason: outcome.reason, detail: outcome.detail };
+      if (outcome.kind === "cancelled") return { kind: signal.aborted ? "cancelled" : "changed" };
+      chosen.current = outcome.context;
+      return { kind: "rows", ...sqlSelectionOf(outcome.context.shown, outcome.context.pending, outcome.context.rows) };
+    },
     // RN-GRADE-014: a atualização automática fica em pausa enquanto o diálogo está aberto.
     hold: () => chosen.current?.hold() ?? (() => {}),
     openQueryTab: (sql) => {

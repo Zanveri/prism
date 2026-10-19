@@ -7,6 +7,7 @@ import type { EditAccess } from "../cell-editing";
 import type { TargetAnswer } from "../generate-sql/generate-sql-flow";
 import type { DocumentFormat } from "../grid-export/document";
 import { activeCell, type SelectionSlice } from "../grid-selection";
+import { cellsFloor, loadedRowsMeter } from "../grid-copy";
 import { gridSelectionCopy } from "../grid-selection.copy";
 import type { CopyAsSource, GridSelectionContext } from "../use-record-edits";
 import { copyScopes, runCopyAs, targetOf, type CopyDeps, type CopyOutcome, type CopyPhase, type CopyRequest, type CopyScope, type CopySource } from "./copy-as";
@@ -28,13 +29,18 @@ export type CopyAdvancedDialogProps = {
   initial: CopyAsChoices;
   /** O formato com que o diálogo abre no lugar do lembrado: o do "Copiar como SQL" ou "Copiar como DbUnit" sem tabela conhecida (RN-GRADE-016). */
   initialFormat?: DocumentFormat;
+  /**
+   * RN-GRADE-022 e 023: com colunas inteiras escolhidas, "As células escolhidas" e "As linhas inteiras da seleção" são todas as linhas do resultado: o tamanho
+   * diz "todas as linhas" (com o total, quando se sabe), e, com linhas a carregar, a prévia diz que tem só as carregadas e a cópia as carrega antes.
+   */
+  whole?: { total: number | null; rowsToLoad: boolean };
   /** O foco nasce no campo da tabela de destino (o mesmo caso). */
   focusTable?: boolean;
   /**
    * Copia (o `runCopyAs` da tela, que busca os valores completos e avisa "3 linhas copiadas em CSV." quando copiou). O diálogo passa o sinal do "Cancelar a
    * busca" e quer saber a fase, para mostrar a busca nele.
    */
-  onCopy: (request: CopyRequest, control: { signal: AbortSignal; onPhase: (phase: CopyPhase) => void }) => Promise<CopyOutcome>;
+  onCopy: (request: CopyRequest, control: { signal: AbortSignal; onPhase: (phase: CopyPhase) => void; onProgress: (text: string) => void }) => Promise<CopyOutcome>;
   /** Lembra o formato e as opções (`writeCopyAsChoices`), no clique em "Copiar": são as do "Copiar como" daquele formato também (RN-GRADE-017). */
   onRemember: (choices: CopyAsChoices) => void;
   onClose: () => void;
@@ -151,6 +157,29 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
   );
 
   /**
+   * RN-GRADE-023: com colunas inteiras e linhas a carregar, carrega as que faltam (com o limite de 10 MiB contado a cada página) e devolve o contexto e o
+   * recorte com todas as linhas; sem nada a carregar, os de agora. A recusa volta como o desfecho da cópia: o limite, a frase de por que as linhas não
+   * vieram (com a mensagem do banco, como veio), ou o cancelamento. Sem `onProgress`, o andamento e as recusas das linhas vão à faixa sobre a grade.
+   */
+  const withAllRows = useCallback(
+    async (
+      context: GridSelectionContext,
+      scope: Exclude<CopyScope, "loaded">,
+      control: { signal?: AbortSignal; onProgress?: (text: string) => void; onPhase?: (phase: CopyPhase) => void } = {},
+    ): Promise<{ context: GridSelectionContext; slice: SelectionSlice } | CopyOutcome> => {
+      const slice = context.slice(scope);
+      if (context.wholeColumns === null || !context.rowsToLoad) return { context, slice };
+      control.onPhase?.("loading");
+      const loaded = await context.loadRest({ keepGoing: loadedRowsMeter(slice.columnIndexes, cellsFloor(slice.rows)), signal: control.signal, onProgress: control.onProgress });
+      if (loaded.kind === "stopped") return { kind: "tooLarge", message: copyAsCopy.notice.tooLarge };
+      if (loaded.kind === "refused") return control.onProgress === undefined ? { kind: "cancelled" } : { kind: "failed", message: loaded.detail === null ? loaded.reason : `${loaded.reason} ${loaded.detail}` };
+      if (loaded.kind === "cancelled") return { kind: "cancelled" };
+      return { context: loaded.context, slice: loaded.context.slice(scope) };
+    },
+    [],
+  );
+
+  /**
    * Abre o "Copiar avançado…" com as três origens; `release` é a pausa já segura por quem abre, que passa a ser do diálogo. `focus` é o formato do "Copiar
    * como SQL" ou DbUnit sem tabela conhecida, com o foco no campo da tabela.
    */
@@ -161,9 +190,14 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
         sources,
         initial: readCopyAsChoices(latest.current.userName(), targetOf(sources.cells)),
         ...(focus === undefined ? {} : { initialFormat: focus, focusTable: true }),
+        // RN-GRADE-022: o total das colunas inteiras soma as linhas novas ainda não salvas, que a cópia leva, como a contagem da barra.
+        ...(context.wholeColumns === null ? {} : { whole: { total: context.total === null ? null : context.total + context.layout.added.length, rowsToLoad: context.rowsToLoad } }),
         onCopy: async (request, control) => {
           const scope = copyScopes.find((candidate) => sources[candidate] === request.source) ?? "cells";
-          const outcome = await runCopyAs(request, { ...depsOf(context, slices[scope], origin), signal: control.signal, onPhase: control.onPhase });
+          // RN-GRADE-023: com colunas inteiras, as linhas que faltam vêm antes, com o andamento no diálogo; a recusa aparece no alto dele.
+          const loaded = scope === "loaded" || context.wholeColumns === null || !context.rowsToLoad ? { context, slice: slices[scope] } : await withAllRows(context, scope, { signal: control.signal, onProgress: control.onProgress, onPhase: control.onPhase });
+          if ("kind" in loaded) return loaded;
+          const outcome = await runCopyAs(loaded.slice === slices[scope] ? request : { ...request, source: copySourceOf(loaded.slice, origin) }, { ...depsOf(loaded.context, loaded.slice, origin), signal: control.signal, onPhase: control.onPhase });
           // No diálogo, a recusa aparece no alto dele, que fica aberto (RN-GRADE-003): só o copiado vira aviso.
           if (outcome.kind === "copied") tell(outcome);
           return outcome;
@@ -173,7 +207,7 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
       };
       show({ kind: "advanced", props }, release);
     },
-    [depsOf, tell, close, show],
+    [depsOf, tell, close, show, withAllRows],
   );
 
   /** RN-GRADE-003: o "Copiar avançado…" e o Ctrl+Shift+C. O alvo é perguntado antes, quando a tela não o tem e a aba está livre. */
@@ -206,9 +240,12 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
       const release = context.hold();
       let handed = false;
       try {
-        const slice = context.slice("cells");
         const { records } = latest.current;
         const answer = await targetFor(context, format === "sql" || (format === "dbUnit" && records === null));
+        // RN-GRADE-023: com colunas inteiras, as linhas que faltam vêm antes, com o andamento e as recusas na faixa sobre a grade.
+        const loaded = await withAllRows(context, "cells");
+        if ("kind" in loaded) return tell(loaded);
+        const { slice } = loaded;
         const origin = copyOriginOf(engine, records, answer);
         const source = copySourceOf(slice, origin);
         const { options } = readCopyAsChoices(latest.current.userName(), targetOf(source));
@@ -217,12 +254,12 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
         const done = context.copying(controller);
         let outcome: CopyOutcome;
         try {
-          outcome = await runCopyAs({ format, options, source }, { ...depsOf(context, slice, origin), signal: controller.signal });
+          outcome = await runCopyAs({ format, options, source }, { ...depsOf(loaded.context, slice, origin), signal: controller.signal });
         } finally {
           done();
         }
         if (outcome.kind === "needsTable") {
-          showAdvanced(context, { cells: slice, rows: context.slice("rows"), loaded: context.slice("loaded") }, origin, release, format);
+          showAdvanced(loaded.context, { cells: slice, rows: loaded.context.slice("rows"), loaded: loaded.context.slice("loaded") }, origin, release, format);
           handed = true;
           return;
         }
@@ -231,7 +268,7 @@ export function useCopyAs({ records, userName, writeText = browserClipboard }: P
         if (!handed) release();
       }
     },
-    [targetFor, depsOf, showAdvanced, tell],
+    [targetFor, depsOf, showAdvanced, tell, withAllRows],
   );
 
   /** RN-GRADE-017: "Configurar comandos 'Copiar como'…": as opções lembradas de cada formato; "Salvar" grava, avisa e fecha. */
