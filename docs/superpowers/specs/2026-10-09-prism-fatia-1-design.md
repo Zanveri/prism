@@ -8612,9 +8612,10 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
       subconsulta do `IN` são recusados (-944 e -201), e por isso o `<Q>` vai sempre numa tabela derivada, nunca
       direto no `IN`. O `LIMIT`, o `OFFSET` e o `FETCH` do fim do comando só valem no nível de fora: dentro de uma
       tabela derivada são recusados (-201).
-  - **No Informix, o comando com `LIMIT`, `OFFSET` ou `FETCH` no nível de fora** (pelo leitor do comando; também o
-    `LIMIT` logo depois do `SELECT`, `SELECT LIMIT 5 * …`, que a sonda não separou do `FIRST`) não cabe numa tabela
-    derivada, e a API faz a contagem e a alteração pelas chaves lidas:
+  - **No Informix, o comando com `LIMIT`, `OFFSET` ou `FETCH` no fim, no nível de fora** (pelo leitor do comando) não
+    cabe numa tabela derivada, e a API faz a contagem e a alteração pelas chaves lidas. O `LIMIT` logo depois do
+    `SELECT` (`SELECT LIMIT 5 * …`) é como o `FIRST`: a tabela derivada o aceita, e ele vai pela forma pela chave.
+    *Alterada em 2026-10-19 pela sonda S-COL-1: o `LIMIT` da cabeça saiu do caminho por lotes.* O caminho por lotes:
     - a contagem executa o comando como está, na sessão, e lê só as colunas da chave de cada linha (pela posição
       delas no resultado, o `key` do alvo): o número de linhas lidas é a contagem. O limite do comando já diz quantas
       linhas são, e a leitura custa pouco;
@@ -8639,21 +8640,22 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
     1.000 chaves, de 2,4 a 18,3 s, por isso só no caso acima.
   - A forma é da API, e não da tela: a tela manda a alteração da coluna inteira (RN-EDIT-023), e a API escolhe a
     forma pelo comando e pelo banco.
-  - Falta provar, na sonda S-COL-1, nos três bancos (no Informix, com log e sem log), antes de a coluna inteira entrar
-    na tela:
-    - a forma da chave de várias colunas com o apelido `"u"` e a tabela com o esquema (ou o dono), como está acima;
+  - A sonda S-COL-1 foi feita em 2026-10-19 pelos testes de integração da API, nos três bancos (no Informix, com log e
+    sem log), e provou:
+    - a forma da chave de várias colunas com o apelido `"u"` e a tabela com o esquema (ou o dono), como está acima:
+      vale nos três;
     - o `UPDATE` que altera a coluna que a condição do `<Q>` usa (`WHERE n > 1` com `SET n = 0`), na forma direta e
-      na forma pela chave, com a tabela derivada sobre a mesma tabela: tem de alterar as linhas que o `<Q>` devolvia
-      antes do `UPDATE`, e no Informix sem log um resultado errado fica gravado;
+      na forma pela chave, com a tabela derivada sobre a mesma tabela: altera as linhas que o `<Q>` devolvia antes do
+      `UPDATE`, nos três;
     - o `<Q>` com nomes repetidos em colunas que não são da chave (`SELECT id, nome, nome FROM t`) na tabela
-      derivada do Db2 e do Informix, na contagem e no `UPDATE`: a recusa do banco é segura, mas a faixa precisa
-      explicar o motivo;
-    - o `LIMIT … OFFSET` do Db2 dentro da tabela derivada do `UPDATE` (a sonda só o provou na contagem) e o `LIMIT`
-      logo depois do `SELECT` do Informix numa tabela derivada;
-    - o cancelamento de um `UPDATE` da coluna inteira no Commit manual do Db2 e do Informix, que tem de desfazer só o
-      ponto de salvamento do "Salvar" (as sondas S-DB2-7 e S-IFX-5 da seção 22).
+      derivada: os três aceitam, na contagem e no `UPDATE`;
+    - o `LIMIT … OFFSET` do Db2 dentro da tabela derivada do `UPDATE`: vale; o `LIMIT` logo depois do `SELECT` do
+      Informix numa tabela derivada: vale (e por isso ele vai pela forma pela chave, acima), e o `LIMIT`, o
+      `OFFSET` e o `FETCH` do fim continuam recusados (-201).
 
-    Até lá, o que o banco recusar na contagem ou no `UPDATE` é a recusa dele (422 `SQL_EXECUTION_FAILED`, nada
+    Falta provar, quando o Commit manual entrar: o cancelamento de um `UPDATE` da coluna inteira no Commit manual do
+    Db2 e do Informix, que tem de desfazer só o ponto de salvamento do "Salvar" (as sondas S-DB2-7 e S-IFX-5 da seção
+    22). Até lá, o que o banco recusar na contagem ou no `UPDATE` é a recusa dele (422 `SQL_EXECUTION_FAILED`, nada
     gravado, menos no Informix sem log, RN-EDIT-021), e a forma que a sonda contrariar sai para a forma pela chave
     ou para o caminho por lotes.
 
