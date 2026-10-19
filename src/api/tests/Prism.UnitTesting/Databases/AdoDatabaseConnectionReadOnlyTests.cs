@@ -154,7 +154,7 @@ public sealed partial class AdoDatabaseConnectionTests
         _sent.Clear();
 
         //Act
-        var applied = await connection.ApplyEditsAsync(new EditTables([], []), oneAtATime: true, _ => Result.Failure<IReadOnlyList<EditCommand>, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditInvalid, "nada a gravar")), CancellationToken.None);
+        var applied = await connection.ApplyEditsAsync(new EditTables([], []), oneAtATime: true, wholeColumn: false, _ => Result.Failure<EditPlan, DatabaseFailure>(new DatabaseFailure(EDatabaseFailure.EditInvalid, "nada a gravar")), CancellationToken.None);
 
         //Assert
         Assert.Equal(EDatabaseFailure.EditInvalid, applied.Error.Kind);

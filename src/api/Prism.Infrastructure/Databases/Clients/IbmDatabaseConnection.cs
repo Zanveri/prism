@@ -101,6 +101,18 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
         return await command.ExecuteReaderAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// RN-SQL-010 e RN-EDIT-021: o comando interrompido dentro da transação do driver (a do "Salvar" e a da carga) às vezes chega sem o
+    /// erro da interrupção (57014 no Db2, -213 no Informix): o driver lança a exceção sem nenhum erro ("ERROR - no error information
+    /// available"). No Db2 a sonda da trava da coluna inteira mostrou quando: com o `Cancel` em dobro (o do registro do `CancellationToken`
+    /// no `ExecuteReaderAsync` do ADO.NET e o do <see cref="AdoDatabaseConnection.Cancel"/>), dentro da transação, em 3 de 40
+    /// cancelamentos; com um `Cancel` só na transação, e com os dois em auto-commit, nunca (40 de 40 vieram com o 57014). Depois dela o
+    /// banco já tinha encerrado o comando (a espera sumiu do `SYSIBMADM.MON_LOCKWAITS`, com a trava ainda presa pela outra sessão), o que
+    /// a transação tinha antes dele continuava nela, e o `ROLLBACK` do fim passava.
+    /// </summary>
+    protected override bool CameWithoutErrorInformation(Exception exception)
+        => exception is DB2Exception { Errors.Count: 0 };
+
     /// <summary>Não há tentativa em transação só de leitura para o banco recusar.</summary>
     protected override bool IsWriteRefusal(DatabaseFailure failure)
         => false;

@@ -845,17 +845,40 @@ public sealed partial class DatabaseSessionServiceTests
         public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
             => Task.FromResult(UnitResult.Success<DatabaseFailure>());
 
+        /// <summary>RN-EDIT-021: a coluna inteira de cada "Salvar" que chegou à conexão com uma, e se ele pediu a transação do retrato.</summary>
+        public List<(WholeColumnPlan Plan, bool WholeColumn)> SavedWholeColumns { get; } = [];
+
+        /// <summary>RN-EDIT-019: as contagens da coluna inteira que chegaram à conexão, e o que elas respondem.</summary>
+        public List<WholeColumnPlan> Counted { get; } = [];
+
+        public long WholeColumnRows { get; set; }
+
         /// <summary>Como a base: o "Salvar" é um comando na conexão e fecha o cursor aberto; o plano roda com o catálogo de dentro da transação.</summary>
-        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
+        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, bool wholeColumn, Func<IReadOnlyList<EditCatalogTable?>, Result<EditPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
         {
             HasOpenCursor = false;
             var planned = plan(Catalog ?? throw new NotSupportedException());
             if (planned.IsFailure)
                 return Task.FromResult(Result.Failure<int, DatabaseFailure>(planned.Error));
 
-            Saved.Add(planned.Value);
+            Saved.Add(planned.Value.Commands);
+            if (planned.Value.WholeColumn is { } whole)
+                SavedWholeColumns.Add((whole, wholeColumn));
 
-            return Task.FromResult(Result.Success<int, DatabaseFailure>(planned.Value.Count));
+            return Task.FromResult(Result.Success<int, DatabaseFailure>(planned.Value.Commands.Count + (planned.Value.WholeColumn is null ? 0 : 1)));
+        }
+
+        /// <summary>Como a base: a contagem é um comando na conexão e fecha o cursor aberto; o plano roda com o catálogo da própria sessão.</summary>
+        public Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(EditTables tables, Func<IReadOnlyList<EditCatalogTable?>, Result<WholeColumnPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
+        {
+            HasOpenCursor = false;
+            var planned = plan(Catalog ?? throw new NotSupportedException());
+            if (planned.IsFailure)
+                return Task.FromResult(Result.Failure<long, DatabaseFailure>(planned.Error));
+
+            Counted.Add(planned.Value);
+
+            return Task.FromResult(Result.Success<long, DatabaseFailure>(WholeColumnRows));
         }
 
         public Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken)

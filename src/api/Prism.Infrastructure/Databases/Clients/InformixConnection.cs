@@ -410,9 +410,15 @@ internal sealed class InformixConnection(ConnectionSettings settings, ILogger lo
     /// <summary>
     /// RN-SQL-010: o Informix diz que interrompeu o comando pelo erro nativo -213, e não pelo SQLSTATE, que para ele é `IX000` em quase
     /// tudo. O número não vai na mensagem nem na resposta: só a API o vê, na exceção do driver.
+    ///
+    /// RN-EDIT-021: o comando interrompido dentro da transação do driver (a do "Salvar", `BeginTransaction`) não traz o -213: o driver lança
+    /// a exceção sem nenhum erro ("no error information available"), provado na sonda da trava da coluna inteira. Ela também é a
+    /// interrupção (<see cref="IbmDatabaseConnection.CameWithoutErrorInformation"/>, a mesma regra do Db2): sem pedido de cancelamento, o
+    /// `WithTheCancelOutcome` tira o desfecho, e ela fica um erro comum; com ele, a transação é desfeita, e no banco sem log o
+    /// `ApplyEditsAsync` dá o `Unknown` ao `UPDATE` da coluna inteira. O SQLSTATE 57014 da base não vale aqui.
     /// </summary>
     protected override bool IsInterruption(Exception exception, DatabaseFailure failure)
-        => exception is DB2Exception { Errors.Count: > 0 } refusal && refusal.Errors[0].NativeError == StatementInterrupted;
+        => CameWithoutErrorInformation(exception) || exception is DB2Exception { Errors.Count: > 0 } refusal && refusal.Errors[0].NativeError == StatementInterrupted;
 
     /// <summary>
     /// As tabelas que alguém criou (`tabid` a partir de 100) vêm antes das do catálogo, que só o `informix` tem. Tabela externa
