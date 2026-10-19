@@ -147,7 +147,10 @@ public sealed partial class AdoDatabaseConnectionTests
             if (_catalog.TryGetValue(command.Object.CommandText, out var rows))
                 return Task.FromResult(CreateCatalogReader(rows));
 
-            return Task.FromResult(command.Object.CommandText is ReadQuery or WriteReturningRows ? CreateReader() : CreateEmptyReader(command.Object.CommandText == CountedCommand ? 3 : -1));
+            if (_readers(command.Object.CommandText) is { } custom)
+                return Task.FromResult(custom);
+
+            return Task.FromResult(command.Object.CommandText is ReadQuery or WriteReturningRows ? CreateReader() : CreateEmptyReader(_affected.TryGetValue(command.Object.CommandText, out var affected) ? affected : command.Object.CommandText == CountedCommand ? 3 : -1));
         });
 
         return command.Object;
