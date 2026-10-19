@@ -48,9 +48,12 @@ internal static class EditPlanner
         return new EditPreview(statements, target.OneAtATime);
     }
 
-    /// <summary>A ordem da RN-EDIT-005, estável dentro de cada grupo, com a posição de cada alteração no pedido.</summary>
+    /// <summary>
+    /// A ordem da RN-EDIT-005, estável dentro de cada grupo, com a posição de cada alteração no pedido. A coluna inteira não passa por aqui: ela é
+    /// de <see cref="WholeColumnSql"/>, e vai antes de todas (RN-EDIT-021).
+    /// </summary>
     private static IEnumerable<(EditChange Change, int Index)> Ordered(IReadOnlyList<EditChange> changes)
-        => changes.Select((change, index) => (change, index)).OrderBy(item => item.change.Kind switch
+        => changes.Select((change, index) => (change, index)).Where(item => item.change.Kind != EEditKind.UpdateAll).OrderBy(item => item.change.Kind switch
         {
             EEditKind.Delete => 0,
             EEditKind.Update => 1,
@@ -130,14 +133,14 @@ internal static class EditPlanner
         return (sql, writer.Parameters, writer.Unwritten);
     }
 
-    private static string Quote(string name)
+    internal static string Quote(string name)
         => $"\"{name.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
     /// <summary>
     /// Escreve cada valor no lugar dele, na ordem do texto: no comando, o marcador do parâmetro (e o valor convertido vai para a lista);
     /// no "Ver SQL", o literal, ou `?` com o valor ao lado quando ele não tem literal.
     /// </summary>
-    private sealed class Writer(ESqlDialect dialect, bool preview)
+    internal sealed class Writer(ESqlDialect dialect, bool preview)
     {
         private readonly List<EditParameter> _parameters = [];
         private readonly List<string?> _unwritten = [];
