@@ -83,6 +83,8 @@ export const dataExportCopy = {
     loadFailed: "Não foi possível ler as colunas da tabela.",
     retry: "Tentar de novo",
     noneChecked: "Marque ao menos uma coluna.",
+    // RN-EXPORT-005: aberto pela grade com colunas inteiras escolhidas (RN-GRADE-022).
+    fromGrid: "Marcadas as colunas escolhidas na grade.",
     checked: (checked: number, total: number) => `${formatCount(checked)} de ${formatCount(total)} ${plural(total, "coluna marcada", "colunas marcadas")}`,
     count: "Contar as linhas antes, para mostrar o progresso",
     countHint: "A origem é lida duas vezes: uma para contar, outra para exportar.",
