@@ -1646,7 +1646,7 @@ desenha e avisa.
   - **As perguntas**: `activeCell`, `selectedRows` (as linhas da seleção, as que têm uma célula escolhida, pela posição, em ordem: é sobre elas que agem o
     copiar, o "Gerar SQL", "Duplicar/Excluir linhas" e "Copiar número de linha(s)"), `selectedColumns`, `selectedCells` (um gerador, linha a linha),
     `rowSpan` e `columnSpan` (o que a grade desenha em cada linha à vista e no cabeçalho), `isSelected`, `selectionSize` (`{ rows, cells, whole }`, a
-    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar"/"Definir como nulo" de uma célula só) e `choseWholeRows` (o Delete).
+    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `choseWholeRows` (o Delete).
   - **O recorte** (`sliceOf(selection, layout, source, scope)`, `scope` `cells` (o padrão), `rows` ou `loaded`, os três do "O que copiar" da RN-GRADE-003):
     um `SelectionSlice`, que é o `GridSlice` dos formatos (`grid-export`) com `positions` e `columnIndexes` (de volta à grade), `newRows` (as linhas novas
     ainda não salvas, pelo índice no recorte: não têm número na grade, e o "Copiar como SQL" as deixa de fora) e `generated` (as células "gerado pelo
@@ -1726,9 +1726,8 @@ desenha e avisa.
 
 ## A coluna inteira escolhida pelo cabeçalho (seção 38: RN-GRADE-021 a 023)
 
-A seção 38 da especificação manda; o que segue diz onde ficam as peças e **o contrato que a frente da edição de várias células (RN-EDIT-017 a 022) usa**. Vale
-nas duas grades, como a seção 37. A edição de várias células e o Salvar da coluna inteira NÃO estão aqui: as ações de edição fazem o que faziam, e só as de
-linha ganharam o motivo de quando há colunas inteiras.
+A seção 38 da especificação manda; o que segue diz onde ficam as peças e **o contrato que a edição de várias células (RN-EDIT-017 a 022) usa**. Vale nas duas
+grades, como a seção 37. A edição de várias células e o Salvar da coluna inteira estão na seção seguinte, "Editar várias células e a coluna inteira".
 
 - **O cabeçalho** (RN-GRADE-021; `GridHeaderCell`, em `result-grid.tsx`): o nome é um `<button data-colheader={coluna} tabIndex={-1}>` (fora do Tab, com o
   nome como rótulo e "Escolher a coluna inteira" no `aria-describedby`; a dica diz o Ctrl ou o Cmd, `chooseColumnHint(mac)`) e, quando a edição entrega a
@@ -1783,9 +1782,83 @@ linha ganharam o motivo de quando há colunas inteiras.
   - "Todas as linhas do resultado nesta coluna" é `context.loadRest()` (as linhas na grade, com a recusa já pronta) ou, para o Salvar que vale no banco
     sem as trazer, `allRows` com `context.wholeColumns`: o comando é da outra frente.
   - Os pontos de entrada da edição são os de hoje em `use-record-edits.ts`: `openEditor(cell)` (o "Editar célula", o F2, o duplo clique, o começar a digitar
-    e o botão "edit" da barra, `bar.onAction`), `commit(move?)` (o Enter e o Tab do campo), `applyValue(cell, valor)` (o confirmar, o "Colar" e o "Definir
-    como nulo", estes dois em `openMenu`, que hoje só valem com uma célula: `several`) e `undoSelection`. O teste das colunas inteiras é
-    `use-record-edits.columns.test.ts`.
+    e o botão "edit" da barra, `bar.onAction`), `commit(move?)` (o Enter e o Tab do campo), `applyValue(cell, valor)` (o confirmar e o "Colar", que continua
+    com uma célula só: `several`) e `undoSelection`. O teste das colunas inteiras é `use-record-edits.columns.test.ts`.
+
+## Editar várias células e a coluna inteira (seção 38: RN-EDIT-017 a 022)
+
+A seção 38 da especificação manda (as regras, as frases e o contrato da API); o que segue diz onde ficam as peças. Vale nas duas grades e nas abas guardadas
+do script. As decisões são puras, com teste: `_lib/multi-edit.ts` (para quem a edição vale, a conferência das linhas, o leitor do limite e do sorteio, o
+literal da faixa), `_lib/record-edits.ts` (o grupo, a coluna inteira e o pedido do Salvar), `_lib/whole-column-question.ts` (a pergunta) e os textos em
+`_lib/multi-edit.copy.ts`; quem liga é `use-record-edits.ts`.
+
+- **Para quem a edição vale** (`editScopeOf(selection, layout)`, sobre o `activeColumnChoice` da seção anterior): `one` (sem outras escolhidas na coluna da
+  ativa, ou com a ativa fora da seleção; o duplo clique escolhe antes, e por isso edita só a célula), `cells` (as posições escolhidas da coluna da ativa: num
+  retângulo de várias colunas, só a dela) ou `all` (a coluna escolhida inteira). O F2, o Enter, o começar a digitar, o "Editar célula" do menu e da barra e o
+  "Definir como nulo" passam por `whenScopeEditable`; o "Colar" continua com uma célula só. Com o escopo de uma célula, é o `whenEditable` de sempre.
+- **A conferência antes de abrir** (RN-EDIT-017): primeiro o que vale para a ativa SEM a linha dela (`accessOf(cell, alvo, null)`: o resultado, a aba ocupada,
+  a tabela e a coluna, os de todas); depois, com o alvo, `groupRefusal` sobre as linhas escolhidas (a primeira que não pode, na ordem da grade, com o número:
+  "linha 7", ou "linha nova 2" na linha nova já salva, pelo `sourceRows` nulo; a ordem é a de `rowProblem`, em `cell-editing.ts`, a mesma do `cellAccess`), e o
+  teto de 100.000 células (`groupLimit`). Com a coluna inteira, no lugar das linhas, `wholeColumnBlocker` (a junção ou o `rowOperations` falso, a coluna da
+  chave, a chave com o nome repetido, o `read` falso da página, o limite sem `ORDER BY` e o `TABLESAMPLE`, pelo `commandLimits`, um leitor do texto como o
+  `WholeColumnSql.Read` da API, sobre o `sqlTokens`; o `ORDER BY` do filtro do resultado conta como a ordem de fora), em "Indisponível: …". A recusa vai à
+  faixa no tom de atenção, e nada muda.
+- **O campo** guarda o escopo (`OpenScope`, as linhas do grupo pela identidade, `RowRef`: o "Carregar mais" no meio não as troca), `touched` (o `onDraft`
+  marca; começar a digitar já é mexer) e a dica (`CellEditorState.hint`, que o `CellEditor` desenha logo abaixo do campo, acima quando passaria do fim da
+  grade, medido num efeito de layout, e liga por `aria-describedby`; a linha com o campo aberto fica por cima das outras, `z-[15]`, abaixo do cabeçalho
+  preso). **Confirmar sem ter mexido não aplica nada** (também com uma célula só: antes, abrir uma célula nula e confirmar gravava o texto vazio); com várias,
+  a faixa diz por quê (`untouched`). Mexido, `applyScope`.
+- **O grupo** (`groupBuilder(edits, coluna, valor)`): as pendências viram um mapa uma vez, cada célula lida é uma pendência comum (numa junção, pela `change`,
+  uma por linha da tabela), a que volta ao valor de referência (`referenceOf`: o lido, ou o da coluna inteira) perde a pendência, e as linhas novas recebem o
+  valor; `done()` troca tudo num passo. Até `groupChunk` (5.000) células, na mesma chamada; acima, em partes com `setTimeout`, com "Aplicando o valor a N
+  células…" e o "Cancelar" na faixa (`banner.building`, `onCancelBuild`), e as outras ações de edição esperam (`latest.building`: o `accessOf`, as de linha,
+  o "Desfazer", o "Ver SQL", e os quatro botões da barra, pelo `barOf`; o "Salvar" da faixa e o Ctrl+S, pelo `saveByPerson`, que diz "Aplicando o valor às
+  células escolhidas." e deixa o grupo continuar). O `guard` (RN-EDIT-007), a troca de resultado (o `scope`), o desmonte, o Descartar e o `saveNow` de
+  quem não é a pessoa (o fechar da aba) cancelam a montagem antes. O `undoWhere` passou a uma passada só pelas chaves, como o grupo (o grupo de 100.000
+  células desfeito de uma vez).
+- **A coluna inteira** (RN-EDIT-018) é `PendingEdits.columns` (`ColumnEdit = { column, value, uncertain? }`, opcional no tipo: `columnEditsOf`), uma por
+  coluna, a última vale no lugar dela (`editWholeColumn`, que tira as pendências daquela coluna nas linhas lidas e põe o valor nas linhas novas que já
+  existem; a criada depois não o recebe). Conta como uma alteração (`pendingCount`). A grade a desenha pelo `GridEditing.columnPending` (um mapa por
+  coluna, o mesmo enquanto as pendências não mudam, `columnPendingOf`): o `GridRow` mostra, na linha lida que não está marcada para exclusão, o valor novo com
+  o lido riscado, e a célula com pendência própria com o da coluna inteira riscado; o cabeçalho ganha o ponto (`pendingHint`, com a dica e o nome para o
+  leitor de tela). O que a grade mostra a vê: `valueAt` e `valuesOf` (o copiar, o "Copiar como", o duplicar) e o `sqlSelectionOf` do "Gerar SQL". A faixa tem a
+  linha `allRowsLine` ("Em todas as linhas do resultado: preco = 10.00.", o literal do banco cortado em 60), e, no banco sem log, a frase a mais. O "Desfazer
+  alteração" com a coluna escolhida inteira é `undoWholeColumns`, com a conta no rótulo (`cellsPendingIn`); com só algumas células escolhidas que só têm ela,
+  fica desabilitado com o motivo (`undoPlan`, que o menu e a ação usam).
+- **O Salvar com a coluna inteira** (`saveWholeColumn`, RN-EDIT-019 a 021): a grade fica tomada (`saving`) da contagem à resposta, com a atualização
+  automática em pausa (`hold`), e `phase` diz à faixa em que parte está (`counting`: "Contando as linhas do resultado…"; `asking`: os botões esperam;
+  `saving`: "Salvando…", com o tempo depois de 2 s, `savingLabel`, e o "Cancelar", que manda `queries/cancel` pela sessão do resultado, `cancelSave`; o
+  "Salvando…" com o "Cancelar" vale para todo Salvar). Os passos: o alvo; o teto de 32 MiB do corpo (`bodyTooLarge`, que o preview e o Salvar sem coluna
+  inteira também conferem); `countWholeColumnOrRefuse` com só a `updateAll` (sem `rows`); o cursor fecha (`closeCursor`, pelo `runner.keepSaved` com as
+  mesmas linhas, também na falha e na pergunta cancelada, menos na recusa que a API dá antes de qualquer comando na sessão, `countReachedTheSession`: a
+  alteração inválida, só leitura, a sessão ocupada); a contagem cancelada (`outcome`) volta calada, como o "Cancelar" que chega depois de ela responder
+  (`cancelAsked`, conferido depois da contagem e depois do preview), e a recusada diz "Não foi possível contar…" com a mensagem do banco;
+  `previewEditsOrRefuse`; a pergunta (`wholeColumnQuestion`, entregue por `confirmWholeColumn`, que as vistas montam com o `always` de
+  `useCommandConfirmation`: pergunta também sem proteção, com o ambiente, e a frase da proteção quando há; o `confirmSave` da proteção não pergunta à parte);
+  e `saveEditsOrRefuse` com a `updateAll` primeiro e o `rows` contado (`changesOf(…, rows)`). A pergunta compara a contagem com o total só com o
+  resultado lido até o fim (`total` nulo com linhas a ler, também depois do "Contar total"); senão, só com as linhas lidas. O "Ver SQL" com a pergunta aberta
+  mostra os comandos que ela já tem (`askedPreview`), com a nota embaixo de cada um (`EditSqlDialog`). O `saveNow` devolve `SaveOutcome` (`saved`, `failed`,
+  `cancelled`): o "Salvar" do "Há N alterações não salvas" cancelado fecha o aviso sem seguir com a ação; o `save` de antes continua devolvendo se gravou tudo.
+- **As recusas** (`failureOf(erro, plano, semLog, nomes)`): o cancelamento pelo `outcome` (RN-SQL-010), nunca pelo texto (`canceled`, com as já gravadas sem
+  log; `unknown`); a da coluna inteira com os nomes dela (a recusa do banco, a conversão, o `EDIT_ALL_ROWS_NOT_SUPPORTED` pelo `reason`); e, no Informix sem
+  log, `whole: "written"` (o `EDIT_ROW_MISMATCH` dela com `applied` 1, ou uma alteração por linha que falhou depois dela) e `whole: "uncertain"` (a falha no
+  meio, `outcome: unknown`; o `SQL_EXECUTION_FAILED` sem `outcome` é a recusa de antes do `UPDATE`, a contagem ou a leitura das chaves no Salvar, e diz
+  "falhou. Nada foi gravado."). O `refuseSave` tira o gravado das pendências (`withoutApplied`, com a origem `all`), marca a coluna `uncertain` (a nota na
+  dica da célula e do cabeçalho), e chama `onSaved` com `partial` e a grade com o gravado (`withColumnsWritten`: a coluna e, por cima, as células das
+  alterações por linha gravadas depois dela, sem tirar nem pôr linhas).
+- **Depois do Salvar** (RN-EDIT-022): o aviso "Coluna preco atualizada em 1.234 linhas." (`multi.saved`, com as outras pelo `applied` menos um) e `onSaved` com
+  `whole` e `kept`. Os Registros leem de novo como sempre (`reread`), e com `partial` só guardam a grade (`runner.keepSaved`). A aba de consulta guarda a grade
+  e, no resultado do último comando, chama `runner.rerun()` (o F5, com o filtro e o `keep`, sem a pergunta da proteção: a da coluna inteira já disse);
+  na aba guardada do script, não lê de novo, e a nota dela ganha a frase (`keptNotes`, `KeptResultNote.note`). Com `reread` falso (o "Salvar" do aviso das
+  alterações não salvas), não lê: a ação que segue executa ou sai; a troca de aba de resultado do script não executa nada, e pede o
+  `guard(escolher, true)`, cujo "Salvar" lê de novo (`rereads`).
+- **A API** (as rotas e os códigos são os da seção 6): `POST …/queries/edits/count` `{ resultID, changes: [updateAll] }` → `{ rows }` (o `transaction` é
+  tolerado); `changes` ganhou `{ kind: "updateAll", table: 0, set, rows? }` (`ApiChange`); o preview lê o `note` de cada comando (o que não é texto vira nulo);
+  as recusas do Salvar, do preview e da contagem ganharam `EDIT_ALL_ROWS_NOT_SUPPORTED`, e a da contagem também `TRANSACTION_FAILED`; o `editErrorDetails`
+  lê o `outcome`. O endereço é `prismEndpoints.userDatabaseSessionQueriesEditsCount`.
+- **O que não foi feito**: o Commit manual (a tela não o tem: a frase das travas e o "sem commit" do aviso ficam para quando ele entrar); conferir na tela (o
+  vitest não tem DOM: a dica do campo, o ponto do cabeçalho e a pergunta foram vistos só nos testes); o teste dos Registros com o `partial` (a ligação é uma
+  linha, e o gancho tem o teste dele, `use-record-edits.multi.test.ts`).
 
 ## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-011 a 013 e RN-TABELA-011)
 
@@ -2142,7 +2215,9 @@ seção seguinte.
 - **Quando pergunta** (`_lib/command-confirmation.ts`, puro e testado): `commandQuestion` (o comando: em "Todos os comandos", sempre, com o motivo quando é
   irreversível; em "Só comandos irreversíveis", só o irreversível, e nunca na conexão somente leitura, em que a API o recusa antes do banco),
   `scriptQuestion` (uma vez, com os comandos que pedem e o número de cada um no script, e o total), `saveQuestion` (só em "Todos os comandos": cada
-  comando do Salvar é pela chave da linha, com `WHERE`) e `autoRefreshQuestion` (só em "Todos os comandos": ela só repete uma leitura). As proteções
+  comando do Salvar é pela chave da linha, com `WHERE`) e `autoRefreshQuestion` (só em "Todos os comandos": ela só repete uma leitura). A pergunta do Salvar
+  com a coluna inteira (`wholeColumn`, RN-EDIT-019) vem sempre, pelo `always` do gancho, também sem proteção (o `level` do contexto é nulo então), e é a
+  única daquele Salvar: ver "Editar várias células e a coluna inteira". As proteções
   vêm de `shownProtections` (`connections/_lib/protections.ts`): o `protections` da API, com a pasta de onde vem cada uma.
 - **Quem pergunta** (`_lib/use-command-confirmation.ts`): a aba, pela conexão e pelo banco dela, com as proteções da lista de conexões do cache
   (`connectionsQuery`): mudar a proteção vale para o comando seguinte, depois do `invalidateLists` (outra janela tem o cache dela, e relê a lista quando
