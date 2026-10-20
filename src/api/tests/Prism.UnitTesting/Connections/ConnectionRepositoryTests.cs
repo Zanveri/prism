@@ -306,6 +306,26 @@ public sealed class ConnectionRepositoryTests
     }
 
     [Trait("ConnectionRepository", "Update")]
+    [Fact(DisplayName = "OK editar, renomear e mover mantêm a origem da conexão importada (RN-DBEAVER-018)")]
+    public async Task Update_ShouldKeepTheOrigin()
+    {
+        //Arrange
+        var cancellationToken = new CancellationToken();
+        var folder = VaultFakers.CreateFolder();
+        var origin = new VaultConnectionOrigin(VaultConnectionOrigin.DbeaverSource, "General", "postgres-jdbc-1a0d49eb651-81473a4aef31708");
+        var target = VaultFakers.CreateConnection(folderID: null, name: "Antiga") with { Origin = origin };
+        var repository = CreateRepository(Document([folder], [target]));
+
+        //Act
+        var result = await repository.Update(ConnectionFakers.Create(iD: target.ID, folderID: folder.ID, name: "Nova", host: target.Host, port: target.Port, createdAt: target.CreatedAt), null, null, cancellationToken);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        var saved = Assert.Single(_saved!.Connections);
+        Assert.Equal((folder.ID, "Nova", origin), (saved.FolderID, saved.Name, saved.Origin));
+    }
+
+    [Trait("ConnectionRepository", "Update")]
     [Fact(DisplayName = "OK senha enviada troca a do documento")]
     public async Task Update_WithPassword_ShouldReplaceTheDocumentPassword()
     {
@@ -656,6 +676,23 @@ public sealed class ConnectionRepositoryTests
         Assert.Same(current.Folders, _saved.Folders);
         Assert.Same(current.Scripts, _saved.Scripts);
         VerifySavedOnce(cancellationToken);
+    }
+
+    [Trait("ConnectionRepository", "Duplicate")]
+    [Fact(DisplayName = "OK a cópia não leva a origem do DBeaver (RN-CONN-016 e RN-DBEAVER-018)")]
+    public async Task Duplicate_ShouldNotCarryTheOrigin()
+    {
+        //Arrange
+        var source = VaultFakers.CreateConnection(folderID: null, name: "Local") with { Origin = new VaultConnectionOrigin(VaultConnectionOrigin.DbeaverSource, "General", "informix-1999a18bee0-1d368a39432da0b3") };
+        var repository = CreateRepository(Document(connections: [source]));
+
+        //Act
+        var result = await repository.Duplicate(source.ID, DateTime.UtcNow, CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(_saved!.Connections[0].Origin);
+        Assert.Null(_saved.Connections[1].Origin);
     }
 
     [Trait("ConnectionRepository", "Duplicate")]
