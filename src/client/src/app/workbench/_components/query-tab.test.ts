@@ -23,6 +23,8 @@ const rt = await vi.hoisted(async () => {
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn(), sqlTargetOrRefuse: vi.fn(), countWholeColumnOrRefuse: vi.fn() },
     cells: { resultCells: vi.fn() },
+    /** As chaves estrangeiras de cada tabela, pelo nome dela (RN-TABELA-007). */
+    catalog: new Map<string, unknown>(),
     /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
     screen: { on: true },
     /**
@@ -35,7 +37,12 @@ const rt = await vi.hoisted(async () => {
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
-vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => rt.queryClient }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => rt.queryClient,
+  // As chaves estrangeiras de cada tabela de origem (RN-TABELA-007): o `rt.catalog` por nome da tabela; sem ele, o catálogo ainda não chegou.
+  useQueries: ({ queries, combine }: { queries: { queryKey: readonly unknown[] }[]; combine: (results: unknown[]) => unknown }) => combine(queries.map((query) => ({ data: rt.catalog.get(String(query.queryKey.at(-2))) }))),
+}));
 vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: true }, editor: { autocomplete: true } } }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
@@ -117,6 +124,18 @@ const target: EditTarget = {
   rowOperations: true,
   oneAtATime: false,
 };
+
+/** O alvo do SQL (`purpose: "sql"`) do mesmo resultado: `loja.pedido` é uma tabela, e `status` vem da coluna `status_id` dela (o apelido). */
+const pedidoTarget: SqlTarget = {
+  tables: [{ schema: "loja", name: "pedido", key: [0], editable: true, reason: null, kind: "table", keyColumns: ["id"] }],
+  columns: [
+    { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+    { table: 0, baseColumn: "status_id", editable: true, reason: null, nullable: true, generated: null },
+  ],
+  rowOperations: true,
+  oneAtATime: false,
+};
+const statusKey = { name: "fk_status", columns: ["status_id"], referencedSchema: "loja", referencedTable: "pedido_status", referencedColumns: ["codigo"] };
 
 function rowsState(over: Partial<RowsState> = {}): RowsState {
   return { status: "rows", id: 1, target: { sql: "select * from loja.pedido", offset: 0, engine: pg }, columns, rows: [["10", "aberta"]], truncated: new Map(), hasMore: true, totalRows: null, elapsedMs: 3, pages: 1, loadingMore: false, cancelling: false, cursorClosed: false, total: null, counting: false, resultId: "r1", readOnly: null, ...over };
@@ -228,6 +247,9 @@ beforeEach(() => {
   rt.screen.on = true;
   rt.protections = { readOnly: null, confirm: null };
   rt.asked.length = 0;
+  // RN-TABELA-007: o alvo `purpose: "sql"` que a tela pergunta em silêncio quando o resultado chega, e as chaves de cada tabela (nenhuma, até um teste dizer).
+  rt.service.sqlTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: pedidoTarget }));
+  rt.catalog.clear();
 });
 
 afterEach(() => rt.unmount());

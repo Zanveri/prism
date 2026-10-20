@@ -195,6 +195,11 @@ type ResultPanelProps = {
   /** O `flex` que o pai dá à área; sem ele ela ocupa o que sobra. */
   style?: CSSProperties;
   records?: RecordsMode;
+  /**
+   * RN-TABELA-007: as colunas do resultado de um comando que são chave estrangeira e o clique no valor delas (a aba de consulta e as abas de resultado do script, em
+   * qualquer lugar em que a área esteja). Nos Registros, quem diz é `records`.
+   */
+  follow?: Pick<RecordsMode, "links" | "onFollow" | "linkable">;
   /** O texto do valor nulo na grade (`results.nullText`, RN-CONFIG-005); sem ele, "NULL". */
   nullText?: string;
   /** Buscar a página seguinte ao rolar até o fim da grade (`results.autoLoadMore`, RN-CONFIG-005). Quem chama passa `onLoadMore` com identidade estável. */
@@ -253,7 +258,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, follow, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -408,9 +413,9 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 generated={rows.generated}
                 nullText={nullText}
                 onReachEnd={autoLoad ? onLoadMore : undefined}
-                links={records?.links}
-                onFollow={records?.onFollow}
-                linkable={records?.linkable}
+                links={(records ?? follow)?.links}
+                onFollow={(records ?? follow)?.onFollow}
+                linkable={(records ?? follow)?.linkable}
                 widths={current.widths}
                 onResize={resize}
                 showTypes={preferences.results.showColumnTypes}

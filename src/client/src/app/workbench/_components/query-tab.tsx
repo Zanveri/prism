@@ -29,7 +29,8 @@ import { recall, remember } from "../_lib/tab-memory";
 import { isPersonBusy, useQueryRunner, useScriptRun, type QueryRunner, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
 import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
 import { canClear } from "../_lib/table-view";
-import { useRecordEdits, type GridFilterSource, type GridSortSource, type SavedEdits } from "../_lib/use-record-edits";
+import { useRecordEdits, type GridFilterSource, type GridFollowSource, type GridSortSource, type SavedEdits } from "../_lib/use-record-edits";
+import { useResultLinks } from "../_lib/use-result-links";
 import { inDatabase } from "../_lib/navigator-model";
 import { useAutoRefresh } from "../_lib/use-auto-refresh";
 import { useCommandConfirmation } from "../_lib/use-command-confirmation";
@@ -333,6 +334,10 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     readOnlyConnection: () => cachedReadOnly(queryClient, tab.connectionId),
     openQueryTab: (id, sql, db) => onOpenQuery?.(id, sql, db),
   });
+  // RN-TABELA-007: o "Ir para o registro referenciado" do menu da célula, nas colunas que são link do resultado (`useResultLinks`, mais abaixo, que precisa do
+  // alvo que `useRecordEdits` guarda): a fonte tem identidade fixa e lê o que o gancho entregou na última renderização.
+  const followRef = useRef<GridFollowSource | null>(null);
+  const followSource = useMemo<GridFollowSource>(() => ({ links: (column) => followRef.current?.links(column) === true, linkable: (value) => followRef.current?.linkable(value) === true, follow: (column, value) => followRef.current?.follow(column, value) }), []);
   const edits = useRecordEdits({
     tabId: tab.id,
     runner,
@@ -351,6 +356,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     exportData: menuExport,
     engine,
     sort: kept === null && base !== null ? resultSort : undefined,
+    follow: followSource,
     copyAs: copyAs.source,
     generateSql: generateSql.source,
   });
@@ -485,6 +491,31 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [seenColumns, setSeenColumns] = useState<readonly { name: string; type: string }[]>([]);
   if (shownRows !== null && shownRows.columns !== seenColumns) setSeenColumns(shownRows.columns);
 
+  // RN-TABELA-007: o valor de uma chave estrangeira leva ao registro referenciado, como nos Registros, no resultado do último comando e nas abas guardadas do
+  // script, em qualquer lugar em que a área esteja. Abre a aba da tabela na janela da aba da consulta (é ela que guarda as abas) e, com o resultado numa janela
+  // própria (seção 39), traz essa janela à frente: o `link` do F6 e do "Instalar driver".
+  const followTable = useCallback(
+    (table: { schema: string; name: string }) => {
+      if (tab.connectionId === null) return;
+      onOpenTable(tab.connectionId, { ...table, view: "data", ...inDatabase(tab.database) });
+      if (place === "window") onFocusWindow?.(tab.id, "link");
+    },
+    [tab.id, tab.connectionId, tab.database, place, onOpenTable, onFocusWindow],
+  );
+  const resultLinks = useResultLinks({
+    shown: kept !== null ? kept.rows : shownRows,
+    connectionId: tab.connectionId,
+    database: tab.database,
+    engine,
+    connected: tab.sessionId !== null,
+    onView: resultShown && (onScreen || place === "window"),
+    sqlTarget: edits.sqlTarget,
+    onOpenTable: followTable,
+  });
+  useEffect(() => {
+    followRef.current = { links: (column) => resultLinks.links?.has(column) === true, linkable: resultLinks.linkable, follow: resultLinks.follow };
+  });
+
   // RN-ARVORE-007: trocar o banco, com alterações não salvas na grade, pergunta antes, como executar outro comando (RN-EDIT-007). O resultado na tela é do
   // banco de antes e sai com o executor dele; o texto fica. (A aba de consulta ainda não tem o Commit manual, RN-TX-001: não há transação aberta a perguntar.)
   const handleChooseDatabase = useCallback((database: string | undefined) => guard(() => onSwitchDatabase(tab.id, database)), [guard, onSwitchDatabase, tab.id]);
@@ -610,6 +641,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             // grade que ficou no fim (a rolagem fica) pediria a seguinte a cada intervalo, segurando o bloqueio por inatividade e lendo de novo à toa.
             autoLoadMore={kept === null && preferences.results.autoLoadMore && auto.state.status !== "on"}
             onLoadMore={loadMore}
+            follow={{ links: resultLinks.links, onFollow: resultLinks.follow, linkable: resultLinks.linkable }}
             onCount={() => void runner.countTotal()}
             onRerun={handleRerun}
             editing={edits.editing}
