@@ -50,7 +50,15 @@ export type StoredValue = {
   text: string;
   /** A ordem da avaliação: o contador da aba. */
   order: number;
+  /**
+   * As atribuições do mesmo nome que vieram antes desta e deram o valor que ela usou (a declaração e as reatribuições acima), na ordem do texto: a aba guarda um valor por
+   * nome, o da última, e sem isto a declaração de `let n = ...; n = n + 1` nunca estaria em dia (RN-VAR-020 e 023). Falta quando é a primeira.
+   */
+  earlier?: readonly EvaluatedAssignment[];
 };
+
+/** O que se sabe de uma atribuição já avaliada: o texto dela e a ordem da avaliação. */
+export type EvaluatedAssignment = { text: string; order: number };
 
 export type TabValues = ReadonlyMap<string, StoredValue>;
 
@@ -116,6 +124,8 @@ export class ScriptRun {
   private readonly values = new Map<string, Value>();
   private readonly stored = new Map<string, StoredValue>();
   private readonly declaredTypes = new Map<string, Type>();
+  /** A posição de cada atribuição entre as do mesmo nome (`assignmentRanks`), calculada na primeira reatribuição. */
+  private ranks: Map<number, number> | null = null;
   /** O tamanho de cada valor guardado e a soma deles, para o limite da aba conferir sem percorrer tudo a cada avaliação (RN-VAR-013). */
   private readonly sizes = new Map<string, number>();
   private tabBytes = 0;
@@ -225,6 +235,7 @@ export class ScriptRun {
       const raw = new Evaluator(this.env, meter, this.values, this.model.source).evaluate(parsed.value);
       const { value, declared } = this.coerce(item, parsed, raw);
 
+      const earlier = this.earlierOf(index, name);
       const stored: StoredValue = {
         name,
         value,
@@ -235,6 +246,7 @@ export class ScriptRun {
         ms: this.config.clock() - started,
         text: item.text,
         order: ++this.evaluations,
+        ...(earlier.length > 0 ? { earlier } : {}),
       };
       const bytes = valueBytes(value);
       this.checkTabSize(name, bytes, parsed.nameStart);
@@ -246,6 +258,14 @@ export class ScriptRun {
     } catch (error) {
       return { ok: false, error: this.failure(item, name, error) };
     }
+  }
+
+  /** As atribuições do mesmo nome acima deste item que a aba tem avaliadas, para o valor novo guardar de onde veio (`StoredValue.earlier`). */
+  private earlierOf(index: number, name: string): EvaluatedAssignment[] {
+    const previous = this.stored.get(name);
+    if (previous === undefined) return [];
+    this.ranks ??= assignmentRanks(this.model);
+    return [...(previous.earlier ?? []), { text: previous.text, order: previous.order }].slice(0, this.ranks.get(index) ?? 0);
   }
 
   private failure(item: ModelItem, name: string, error: unknown): ItemDiagnostic {
@@ -344,8 +364,21 @@ export function checkScript(model: ScriptModel, clock: Clock = () => performance
   return errors.sort((a, b) => a.offset - b.offset);
 }
 
+/** A posição de cada atribuição entre as do mesmo nome, na ordem do texto: a declaração é a 0, a primeira reatribuição a 1. */
+function assignmentRanks(model: ScriptModel): Map<number, number> {
+  const counts = new Map<string, number>();
+  const ranks = new Map<number, number>();
+  for (const item of model.items) {
+    if (item.parsed === null) continue;
+    const rank = counts.get(item.parsed.name) ?? 0;
+    ranks.set(item.index, rank);
+    counts.set(item.parsed.name, rank + 1);
+  }
+  return ranks;
+}
+
 /** As atribuições de cada nome, na ordem do texto, e a última de `name` acima de `before`. */
-function assignmentsIndex(model: ScriptModel): (name: string, before: number) => number | null {
+export function lastAssignmentAbove(model: ScriptModel): (name: string, before: number) => number | null {
   const assignmentsOf = new Map<string, number[]>();
   for (const item of model.items) {
     if (item.parsed === null) continue;
@@ -356,46 +389,92 @@ function assignmentsIndex(model: ScriptModel): (name: string, before: number) =>
   return (name, before) => {
     const list = assignmentsOf.get(name);
     if (list === undefined) return null;
-    let found: number | null = null;
-    for (const candidate of list) if (candidate < before) found = candidate;
-    return found;
+    // A lista está em ordem do texto: a busca binária da última abaixo de `before` (o script de milhares de reatribuições do mesmo nome não vira uma conta quadrática).
+    let low = 0;
+    let high = list.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (list[middle] < before) low = middle + 1;
+      else high = middle;
+    }
+    return low === 0 ? null : list[low - 1];
   };
 }
 
 /**
- * Se o valor que a aba tem serve à atribuição `at` (RN-VAR-020 e 023): o texto dela é o mesmo de quando foi avaliada e foi avaliada depois da última avaliação de cada
- * atribuição de que depende (e essas, pela mesma regra).
+ * Se o valor que a aba tem serve à atribuição `at` (RN-VAR-020 e 023): é o valor que a última avaliação do nome deu, ela e as atribuições do mesmo nome acima têm o texto de
+ * quando foram avaliadas e foram avaliadas depois da última avaliação de cada atribuição de outro nome de que dependem (e essas, pela mesma regra). A aba só tem o valor da
+ * última atribuição avaliada de cada nome: a de cima, que não é a última, não serve a quem a lê no meio do script.
  */
 function currentChecker(model: ScriptModel, tab: TabValues): (at: number) => boolean {
-  const lastAbove = assignmentsIndex(model);
+  const lastAbove = lastAssignmentAbove(model);
+  const ranks = assignmentRanks(model);
+  const byName = new Map<string, number[]>();
+  for (const item of model.items) {
+    if (item.parsed === null) continue;
+    const list = byName.get(item.parsed.name);
+    if (list === undefined) byName.set(item.parsed.name, [item.index]);
+    else list.push(item.index);
+  }
   const cache = new Map<number, boolean>();
-  const isCurrent = (at: number): boolean => {
-    const cached = cache.get(at);
-    if (cached !== undefined) return cached;
-    cache.set(at, false);
+  /** A atribuição e as do mesmo nome acima dela têm o texto e as dependências de quando foram avaliadas. */
+  const prefix = new Map<number, boolean>();
 
+  const dependenciesOf = (at: number): number[] => {
+    const found: number[] = [];
+    for (const used of variablesUsedBy(model.items[at])) {
+      const dependency = lastAbove(used, at);
+      if (dependency !== null) found.push(dependency);
+    }
+    // A atribuição do mesmo nome logo acima dá o valor de que esta partiu, a use ela ou não.
+    const rank = ranks.get(at) ?? 0;
+    if (rank > 0) found.push((byName.get(model.items[at].parsed?.name ?? "") as number[])[rank - 1]);
+    return found;
+  };
+
+  const check = (at: number): boolean => {
     const item = model.items[at];
     const parsed = item.parsed;
-    let current = false;
-    if (parsed !== null) {
-      const entry = tab.get(parsed.name);
-      current = entry !== undefined && entry.text === item.text;
-      if (current) {
-        for (const used of variablesUsedBy(item)) {
-          const dependency = lastAbove(used, at);
-          const dependencyEntry = tab.get(used);
-          if (dependency === null) continue;
-          if (dependencyEntry === undefined || !isCurrent(dependency) || dependencyEntry.order > (entry?.order ?? 0)) {
-            current = false;
-            break;
-          }
-        }
+    if (parsed === null) return false;
+    const entry = tab.get(parsed.name);
+    if (entry === undefined) return false;
+
+    const rank = ranks.get(at) ?? 0;
+    const earlier = entry.earlier ?? [];
+    const own = rank < earlier.length ? earlier[rank] : rank === earlier.length ? { text: entry.text, order: entry.order } : undefined;
+    let valid = own !== undefined && own.text === item.text;
+    if (valid && own !== undefined) {
+      if (rank > 0) valid = prefix.get((byName.get(parsed.name) as number[])[rank - 1]) === true;
+      for (const used of variablesUsedBy(item)) {
+        if (!valid) break;
+        const dependency = lastAbove(used, at);
+        if (dependency === null || used === parsed.name) continue;
+        const dependencyEntry = tab.get(used);
+        valid = dependencyEntry !== undefined && cache.get(dependency) === true && dependencyEntry.order <= own.order;
       }
     }
-    cache.set(at, current);
-    return current;
+    prefix.set(at, valid);
+    return valid && rank === earlier.length;
   };
-  return isCurrent;
+
+  return (root) => {
+    const known = cache.get(root);
+    if (known !== undefined) return known;
+
+    // Sem recursão: a cadeia de milhares de declarações, cada uma usando a anterior, estouraria a pilha. Acha as atribuições de que `root` depende e que ainda não foram
+    // conferidas e as confere das mais antigas para as mais novas (toda dependência está acima do item), de modo que cada uma já encontra as dela no cache.
+    const pending = new Set<number>([root]);
+    const stack = [root];
+    while (stack.length > 0) {
+      for (const dependency of dependenciesOf(stack.pop() as number)) {
+        if (cache.has(dependency) || pending.has(dependency)) continue;
+        pending.add(dependency);
+        stack.push(dependency);
+      }
+    }
+    for (const at of [...pending].sort((x, y) => x - y)) cache.set(at, check(at));
+    return cache.get(root) as boolean;
+  };
 }
 
 /**
@@ -422,22 +501,28 @@ export function staleNames(model: ScriptModel, tab: TabValues): Set<string> {
   return stale;
 }
 
-/** Os itens (as atribuições) que a execução deste item precisa avaliar antes (RN-VAR-020 e 023), com os valores que a aba já tem. */
-export function dependencyPlan(model: ScriptModel, index: number, tab: TabValues): number[] {
-  const lastAbove = assignmentsIndex(model);
+/**
+ * Os itens (as atribuições) que a execução destes itens precisa avaliar antes (RN-VAR-020 e 023), com os valores que a aba já tem. Vários itens (o Alt+X) dividem a
+ * mesma busca: a conta não cresce com o quadrado do script.
+ */
+export function dependencyPlan(model: ScriptModel, indexes: number | readonly number[], tab: TabValues): number[] {
+  const roots = typeof indexes === "number" ? [indexes] : indexes;
+  const lastAbove = lastAssignmentAbove(model);
   const isCurrent = currentChecker(model, tab);
 
+  // Sem recursão, pelo mesmo motivo de `currentChecker`: a cadeia longa de declarações não estoura a pilha.
   const plan = new Set<number>();
-  const visit = (at: number) => {
+  const stack = [...roots];
+  while (stack.length > 0) {
+    const at = stack.pop() as number;
     for (const used of variablesUsedBy(model.items[at])) {
       const dependency = lastAbove(used, at);
       if (dependency === null || plan.has(dependency) || isCurrent(dependency)) continue;
       plan.add(dependency);
-      visit(dependency);
+      stack.push(dependency);
     }
-  };
-  visit(index);
-  if (model.items[index].parsed !== null) plan.add(index);
+  }
+  for (const index of roots) if (model.items[index].parsed !== null) plan.add(index);
   return [...plan].sort((a, b) => a - b);
 }
 

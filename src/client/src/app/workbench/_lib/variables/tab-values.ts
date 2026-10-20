@@ -99,3 +99,32 @@ export function valuesFromTransfer(transferred: TransferredValues | undefined): 
     return emptyTabValues;
   }
 }
+
+/**
+ * O pedido de "mostrar o painel Variáveis" (RN-VAR-020 e 024): o Ctrl+Enter numa declaração traz o painel à frente com a linha dela escolhida, e o script sem
+ * comando nenhum também. É um contador (`serial`), porque o mesmo pedido de novo (o Ctrl+Enter outra vez na mesma declaração) tem de valer de novo.
+ */
+export type RevealRequest = { readonly serial: number; readonly name: string | null };
+
+export interface RevealStore {
+  getState(): RevealRequest;
+  subscribe(listener: () => void): () => void;
+  /** Pede o painel à frente, com a linha da variável `name` escolhida (nulo: só o painel). */
+  reveal(name: string | null): void;
+}
+
+export function createRevealStore(): RevealStore {
+  let current: RevealRequest = { serial: 0, name: null };
+  const listeners = new Set<() => void>();
+  return {
+    getState: () => current,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+    reveal(name) {
+      current = { serial: current.serial + 1, name };
+      for (const listener of [...listeners]) listener();
+    },
+  };
+}

@@ -41,6 +41,9 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return null;
     case "running":
       return undefined;
+    // RN-VAR-012: a lista de erros das variáveis é da tela de onde a aba sai; a janela que recebe começa limpa.
+    case "variableErrors":
+      return null;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
       const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows, filterApplied, read } = state;

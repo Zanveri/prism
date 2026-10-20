@@ -9,6 +9,9 @@ import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { allowRefusal, ApiRequestError, type ApiError, type ApiResult } from "@/lib/api/prism-api";
 
 import { createAutoRefresh, type AutoRefreshControl } from "./auto-refresh";
+import { confirmedOf, queryParamsOf, sentTextOf } from "./command-wire";
+import { commandQuestion, numberedScriptQuestion } from "./command-confirmation";
+import type { MakeQuestion } from "./use-command-confirmation";
 import { credentialsMissingField, credentialsRequests } from "./credentials-missing";
 import { closeDatabaseSession, openDatabaseSession } from "./database-sessions.service";
 import { queryOutcomeCopy } from "./query-outcome.copy";
@@ -17,9 +20,19 @@ import { scriptRunCopy } from "./script-run.copy";
 import { scriptsCopy } from "./scripts.copy";
 import { gridFilterCopy } from "./grid-filter.copy";
 import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
-import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
+import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage, type QueryParam } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
+import { bindItem, planItem, planScript, scopeBefore, usesVariables, type Plan, type ScriptDoc } from "./variable-execution";
+import { variableRunCopy } from "./variable-run.copy";
 import type { BoundCommand } from "./variables/bind";
+import { createEvaluatorHost, type Evaluator } from "./variables/evaluator-host";
+import { locate } from "./variables/errors";
+import { productionSeed } from "./variables/random";
+import type { StoredValue } from "./variables/run";
+import type { ItemDiagnostic } from "./variables/script";
+import { createRevealStore, createTabValuesStore, type RevealStore, type TabValuesSnapshot, type TabValuesStore } from "./variables/tab-values";
+import { storedToWire } from "./variables/wire";
+import { editorOffset } from "./variables/positions";
 import { workbenchCopy } from "./workbench.copy";
 
 const copy = workbenchCopy.toasts;
@@ -80,6 +93,15 @@ export type RunTarget = {
 
 /** RN-GRADE-011: a API recusou o filtro do resultado (422 `FILTER_INVALID`), sem executar nada; a frase vai ao campo, como veio. */
 export type FilterRefusal = { code: "FILTER_INVALID"; message: string };
+
+/** RN-VAR-012: um erro das variáveis, com a linha dele (a lista "Erros nas variáveis"). `offset` é a posição no texto do editor, para o cursor ir até ele. */
+export type VariableErrorLine = { line: number; column: number; message: string; offset: number };
+
+/**
+ * RN-VAR-012: a conferência de antes de executar achou erros, e nada foi executado. A área de resultado mostra "Erros nas variáveis", a lista deles, cada um com
+ * a linha e a frase. `subject` diz o que não foi executado (o script, o comando ou a declaração do Ctrl+Enter).
+ */
+export type VariableErrorsState = { status: "variableErrors"; errors: readonly VariableErrorLine[]; subject: "script" | "command" | "declaration" };
 
 export type RowsState = {
   status: "rows";
@@ -193,6 +215,7 @@ export type RunnerState =
   | CancelledState
   /** O comando não foi enviado, e a área de resultado diz por quê (RN-SQL-001: mais de um comando na seleção). */
   | { status: "notice"; message: string }
+  | VariableErrorsState
   | ErrorState;
 
 /**
@@ -243,9 +266,10 @@ function sameColumns(a: readonly QueryColumn[], b: readonly QueryColumn[]): bool
 /**
  * RN-SQL-021: as recusas da API que são do comando, e não da sessão nem da API: o script pergunta o que fazer, como no erro do banco. As outras (a sessão
  * ocupada, a conexão que não abre, a API fora do ar) param o script sem perguntar. Na conexão somente leitura, o comando que não é leitura também
- * (`CONNECTION_READ_ONLY`, RN-PROT-002).
+ * (`CONNECTION_READ_ONLY`, RN-PROT-002). RN-VAR-022: os `params` que a API recusa (`QUERY_INVALID`, `QUERY_PARAMETERS_MISMATCH`) são erros do comando, que a
+ * conferência da RN-VAR-012 deveria evitar e que chegam com a mensagem da API.
  */
-const scriptCommandRefusals = ["TRANSACTION_CONTROL_NOT_SUPPORTED", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", "CONNECTION_READ_ONLY"] as const;
+const scriptCommandRefusals = ["TRANSACTION_CONTROL_NOT_SUPPORTED", "COMMAND_NOT_ALLOWED_IN_TRANSACTION", "MULTIPLE_STATEMENTS_NOT_SUPPORTED", "CONNECTION_READ_ONLY", "QUERY_PARAMETERS_MISMATCH", "QUERY_INVALID"] as const;
 
 /** O erro de um comando do script como as Estatísticas e a pergunta o mostram (RN-SQL-009 e 021): o do banco, como veio, ou a frase da API. */
 function scriptErrorOf(error: ApiError): ScriptError {
@@ -254,7 +278,50 @@ function scriptErrorOf(error: ApiError): ScriptError {
   return { title: outcome === null || outcome === "canceled" ? resultCopy.errorTitle : outcomeCopy[outcome], message: error.detail ?? error.title, sqlState: sqlErrorDetails(error.extensions).sqlState };
 }
 
+/**
+ * RN-VAR-019 e 020: o que o editor entrega à execução com variáveis. `doc` é o texto inteiro do editor (as declarações de cima valem), e `from` a `to` o que vai:
+ * a seleção, o texto inteiro (Alt+X) ou o cursor (`from` igual a `to`, no Ctrl+Enter). O banco da aba diz como o texto é lido.
+ */
+export type DocRange = { doc: ScriptDoc; engine?: Engine; from: number; to: number };
+
+/**
+ * Os ganchos da tela na execução com variáveis. A pergunta da proteção (RN-PROT-001) vem no meio dela, depois da avaliação e com os valores calculados, e por isso
+ * a tela a entrega ao executor: `confirm` devolve `true` quando nada pergunta, ou a resposta da pessoa. `begin` roda quando a execução vai mesmo começar (o filtro
+ * do resultado sai, a área recolhida volta): cancelada a pergunta, ou recusada a execução, não roda.
+ */
+export type RunHooks = {
+  confirm?: (make: MakeQuestion) => true | Promise<boolean>;
+  begin?: () => void;
+  /** O item do texto que o Ctrl+Enter com variáveis avaliou ou vai enviar (a declaração também): o editor o destaca por um instante (RN-SQL-018, RN-VAR-025). */
+  flash?: (item: { offset: number; text: string }) => void;
+};
+
+/**
+ * RN-VAR-022: uma declaração ou reatribuição do script. `stored` é o valor que a avaliação de antes da pergunta já deu (RN-VAR-012), e o laço só o toma; sem ele
+ * (o "Tentar de novo" depois de um erro), `evaluate` a avalia agora.
+ */
+type DeclarationStep = { stored: StoredValue | null; evaluate: () => Promise<{ ok: true; stored: StoredValue } | { ok: false; error: ScriptError }> };
+
+/** O que a avaliação das declarações deu (RN-VAR-012): o valor de cada atribuição avaliada, na ordem; ou os erros, com a linha de cada um. */
+type Evaluated = { ok: true; results: Map<number, StoredValue> } | { ok: false; errors: VariableErrorLine[] };
+
+const lineOf = (error: Pick<ItemDiagnostic, "message" | "offset" | "line" | "column">): VariableErrorLine => ({ line: error.line, column: error.column, message: error.message, offset: error.offset });
+
 export type QueryRunner = {
+  /**
+   * RN-VAR-023: os valores das variáveis da aba. O executor os escreve; o painel Variáveis, o editor e a passagem da aba para outra janela os leem. Saem quando o
+   * executor é aposentado (`retire`: aba fechada, banco ou conexão trocados, bloqueio).
+   */
+  values: TabValuesStore;
+  /** RN-VAR-020 e 024: o pedido de trazer o painel Variáveis à frente (o Ctrl+Enter numa declaração, o script sem comando). */
+  reveal: RevealStore;
+  /**
+   * RN-VAR-020: o Ctrl+Enter com variáveis: o item do cursor (ou da seleção). A declaração é avaliada, com as de que depende; o comando é executado com os
+   * valores da aba, depois de avaliar o que ela não tem em dia. O resultado que estava na tela fica quando só uma declaração foi avaliada.
+   */
+  runItem: (request: DocRange, hooks?: RunHooks) => Promise<void>;
+  /** RN-VAR-019: o Alt+X com variáveis: os itens da seleção ou do texto inteiro, na ordem, com a conferência, a avaliação e a pergunta da proteção antes do primeiro. */
+  runScriptDoc: (request: DocRange, hooks?: RunHooks) => Promise<void>;
   subscribe: (listener: () => void) => () => void;
   getState: () => RunnerState;
   /**
@@ -336,7 +403,9 @@ type QueryRunnerOptions = {
    * RN-ABAS-002: a aba chegou de outra janela, com o resultado que estava na tela (parado: a aba ocupada não muda de janela) e a sessão que já tinha,
    * com o cursor aberto nela. Nada é executado: "Carregar mais" continua de onde parou.
    */
-  initial?: { state: RunnerState; sessionId: string | null };
+  initial?: { state: RunnerState; sessionId: string | null; /** RN-VAR-023: os valores das variáveis que vieram com a aba. */ values?: TabValuesSnapshot };
+  /** RN-VAR-014: quem avalia as declarações (o Worker). Sem ele, o hospedeiro do pacote, aberto no primeiro uso; os testes passam um que avalia no mesmo processo. */
+  evaluator?: Evaluator;
   /** O nome da aba agora (ela pode ter sido renomeada ou salva como script): o aviso do fim do script o diz (RN-SQL-020). Sem ele, o aviso não diz a aba. */
   title?: () => string | null;
 };
@@ -365,9 +434,16 @@ function withTruncated(current: ReadonlyMap<number, ReadonlySet<number>>, cells:
  * de transação recusado antes de executar, API fora do ar, resposta inválida) deixa o resultado e o
  * cursor dele como estavam, e avisa.
  */
-export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial, title }: QueryRunnerOptions): QueryRunner {
+export function createQueryRunner({ connectionId, database, queryClient, toast, onSession, initial, title, evaluator }: QueryRunnerOptions): QueryRunner {
   let state: RunnerState = initial?.state ?? { status: "idle" };
   const listeners = new Set<() => void>();
+  const values = createTabValuesStore(initial?.values);
+  const reveal = createRevealStore();
+  /** O hospedeiro do Worker, aberto no primeiro uso (RN-VAR-014). */
+  let host: Evaluator | null = evaluator ?? null;
+  const evaluatorHost = () => (host ??= createEvaluatorHost());
+  /** A execução com variáveis avalia e confere antes de o executor ficar "executando" (RN-VAR-019): um pedido só por vez nesse meio-tempo. */
+  let preparing = false;
 
   let sessionId: string | null = initial?.sessionId ?? null;
   /**
@@ -518,7 +594,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * do primeiro comando respondido (RN-SQL-021): a sessão que caiu fica caída, e a resposta é a da API. `handled`: as recusas que quem chama trata a mais
    * (as do comando, no script). `keep`: os resultados das abas do script que ficam na tela, e que a API continua guardando para a edição (RN-SQL-024).
    */
-  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = []): Promise<ApiResult<QueryResult> | null> {
+  async function execute(connection: string, sql: string, started: number, filter: string | undefined, reopen: boolean, handled: readonly string[] = [], keep: readonly string[] = [], params: readonly QueryParam[] = []): Promise<ApiResult<QueryResult> | null> {
     for (let reopened = false; ; reopened = true) {
       let id = sessionId;
 
@@ -550,7 +626,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       const session = id;
       // RN-PROT-002: a recusa do somente leitura é tratada no lugar, como a do controle de transação: a frase da API, e o resultado de antes fica.
       const result = await call(
-        () => executeQuery(session, sql, filter, keep),
+        () => executeQuery(session, sql, filter, keep, params),
         codes("SQL_EXECUTION_FAILED", "TRANSACTION_CONTROL_NOT_SUPPORTED", "CONNECTION_READ_ONLY", ...handled, ...(filter === undefined ? [] : ["FILTER_INVALID"]), ...(reopened ? [] : ["DATABASE_SESSION_NOT_FOUND"])),
       );
       if (started !== epoch) return null;
@@ -604,7 +680,9 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         else toast.warning(outcomeCopy[outcome]);
       }
       // RN-GRADE-011: com o filtro do resultado, o banco executou o comando que a API montou, e a posição é dele, e não do texto do editor.
-      const marked = position === null || editedSinceRun || target.filter !== undefined ? null : target.offset + utf16IndexOf(target.sql, position);
+      // RN-SQL-009: a posição é a do texto enviado; com variáveis, o mapa das posições a leva ao texto do editor.
+      const where = position === null ? null : target.sent === undefined ? target.offset + utf16IndexOf(target.sql, position) : editorOffset(target.offset, target.sent, position);
+      const marked = where === null || editedSinceRun || target.filter !== undefined ? null : where;
       return { status: "error", source: "database", title: resultCopy.errorTitle, message, sqlState, errorAt: marked };
     }
 
@@ -725,10 +803,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     await guarded(async () => {
       if (retired) return refuse("run");
       // RN-SESSAO-002: um comando por vez. A execução automática não segura o comando da pessoa (`isPersonBusy`): ele toma o lugar dela, abaixo.
-      if (auto ? isBusy() : isPersonBusy(state)) return;
+      if (auto ? isBusy() : isPersonBusy(state) || preparing) return;
 
       // RN-SQL-001: uma execução leva um comando só. O comando do cursor é sempre um; a seleção pode ter mais, ou nenhum.
-      const statements = statementCount(target.sql, target.engine);
+      const statements = statementCount(sentTextOf(target), target.engine);
       // O que está na tela: com a execução automática rodando, o resultado de antes dela.
       const previous = state.status === "running" ? state.previous : resultOf(state);
       if (statements === 0) {
@@ -768,7 +846,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
 
       // RN-SQL-024: o comando que troca os resultados do script não guarda nenhum; o F5, o filtro e a execução automática do resultado do último comando
       // guardam os das outras abas, que continuam se editando.
-      const result = await execute(connectionId, target.sql, started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script));
+      const result = await execute(connectionId, sentTextOf(target), started, target.filter, !auto, [], clearsScript ? [] : keptResultIds(script), queryParamsOf(target));
       if (result === null) return;
       // RN-GRADE-011: a API recusou o filtro antes de executar: o resultado e o cursor de antes ficam como estavam, e a frase vai ao campo de filtro.
       if (!result.ok && result.error.code === "FILTER_INVALID" && target.filter !== undefined) {
@@ -837,17 +915,20 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    * esperando, nada muda: quem chama vê a aba ocupada na mesma chamada, como antes.
    */
   function afterPausedScript<T>(sends: boolean, next: () => Promise<T>): Promise<T> {
-    const answer = deciding;
-    if (answer === null || !sends) return next();
+    if (deciding === null || !sends) return next();
+    return stopPausedScript().then(next);
+  }
 
+  /** Responde "Parar" à pergunta de erro do script que espera e devolve o fim do laço dele (RN-SQL-021). */
+  function stopPausedScript(): Promise<void> {
+    const answer = deciding;
     deciding = null;
-    answer("stop");
-    const loop = scriptLoop ?? Promise.resolve();
-    return loop.then(next);
+    answer?.("stop");
+    return scriptLoop ?? Promise.resolve();
   }
 
   /** O comando vai mesmo à API: um comando só, e a aba com conexão (o resto o executor recusa antes, só com o aviso). */
-  const sends = (target: RunTarget) => connectionId !== null && statementCount(target.sql, target.engine) === 1;
+  const sends = (target: RunTarget) => connectionId !== null && statementCount(sentTextOf(target), target.engine) === 1;
 
   const run = (target: RunTarget, options?: { keepScript?: boolean }) => afterPausedScript(sends(target), () => runWith(target, "person", options?.keepScript !== true));
 
@@ -863,7 +944,243 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
    */
   const runScript = (commands: readonly RunTarget[]): Promise<void> => afterPausedScript(connectionId !== null && commands.length > 0, () => runScriptNow(commands));
 
-  const runScriptNow = async (commands: readonly RunTarget[]): Promise<void> => {
+  /**
+   * O laço do script (RN-SQL-019 a 022). `declarations` (RN-VAR-019 e 022) diz quais itens são declarações ou reatribuições, por posição: elas não vão à API, tomam
+   * o valor que a avaliação de antes da pergunta já deu (ou o avaliam agora, no "Tentar de novo"), atualizam os valores da aba e entram nas Estatísticas. O erro
+   * numa declaração só deixa "Parar" e "Tentar de novo". `closing` roda no fim do script (o painel Variáveis vem à frente no script sem comandos).
+   */
+  /** RN-VAR-023: a atribuição avaliada deixa o valor na aba, e o painel e o editor o veem. O contador é o da avaliação. */
+  function applyStored(stored: StoredValue) {
+    const snapshot = values.snapshot();
+    const next = new Map(snapshot.values);
+    next.set(stored.name, stored);
+    values.replace(next, Math.max(snapshot.counter, stored.order));
+  }
+
+  /**
+   * RN-VAR-012: a conferência achou erros, e nada foi executado. A área de resultado mostra a lista, com a linha de cada um, e o aviso diz quantos. O script na tela
+   * sai com o resultado que este substitui; a execução automática em andamento é abandonada, como quando o comando da pessoa toma o lugar dela.
+   */
+  function refuseVariables(errors: readonly VariableErrorLine[], subject: VariableErrorsState["subject"]) {
+    // RN-SQL-021: a pergunta de erro do script que espera segue esperando, com o script na tela que a pessoa responde: a execução recusada só avisa.
+    if (deciding !== null) return void toast.error(variableRunCopy.refused[subject](errors.length));
+    if (isAutoRun(state)) {
+      autoRefresh.halt();
+      void abandonAuto();
+    }
+    dropScript();
+    set({ status: "variableErrors", errors, subject });
+    toast.error(variableRunCopy.refused[subject](errors.length));
+  }
+
+  /**
+   * RN-VAR-014: avalia as atribuições `indices` do texto lido, na ordem, no Worker, com os valores que a aba tem. Devolve o valor de cada uma, ou os erros: o da
+   * primeira que falhou (a avaliação para nela) ou o do Worker que passou do tempo ou caiu. Os valores só vão para a aba quando quem chama os aplica.
+   */
+  async function evaluateIndices(plan: Plan, doc: ScriptDoc, engine: Engine | undefined, indices: readonly number[]): Promise<Evaluated> {
+    const snapshot = values.snapshot();
+    const [a, b, c, d] = productionSeed();
+    const outcome = await evaluatorHost().evaluate({
+      source: plan.model.source,
+      engine: engine ?? null,
+      blankLines: doc.blankLines,
+      indices: [...indices],
+      tab: [...snapshot.values.values()].map(storedToWire),
+      counter: snapshot.counter,
+      seed: [a, b, c, d],
+      now: Date.now(),
+    });
+
+    const results = new Map<number, StoredValue>();
+    for (const item of outcome.items) {
+      if (item.result.ok) results.set(item.index, item.result.stored);
+      else return { ok: false, errors: [lineOf(item.result.error)] };
+    }
+    if (outcome.kind === "done") return { ok: true, results };
+
+    // O Worker passou do tempo ou caiu: a frase vai no item em que parou, ou no primeiro.
+    const at = plan.model.items[outcome.kind === "timeout" ? (outcome.index ?? indices[0]) : indices[0]]?.start ?? 0;
+    return { ok: false, errors: [{ ...locate(plan.model.source, at), message: outcome.message, offset: at }] };
+  }
+
+  /** RN-PROT-001: a pergunta da proteção com os valores já calculados. Verdadeiro quando nada pergunta ou a pessoa confirma. */
+  async function confirmed(hooks: RunHooks | undefined, make: MakeQuestion): Promise<boolean> {
+    if (hooks?.confirm === undefined) return true;
+    const answer = hooks.confirm(make);
+    return answer === true ? true : await answer;
+  }
+
+  /** Nada a executar, ou a seleção com mais de um item (RN-SQL-001 e RN-VAR-020): os avisos de sempre. */
+  function refusePlan(planned: { reason: "nothing" } | { reason: "tooMany"; count: number }) {
+    const previous = state.status === "running" ? state.previous : resultOf(state);
+    if (planned.reason === "nothing") return void toast.warning(copy.nothingToSend);
+    if (previous === null) set({ status: "notice", message: resultCopy.tooManyStatements(planned.count, platformScriptShortcut) });
+    toast.warning(copy.tooManyStatements(platformScriptShortcut));
+  }
+
+  /** RN-SCRIPT-003: sem conexão não há sessão a abrir. A aba pede uma conexão; nada foi enviado. */
+  function refuseWithoutConnection(): boolean {
+    if (connectionId !== null) return false;
+    const previous = state.status === "running" ? state.previous : resultOf(state);
+    if (previous === null) set({ status: "notice", message: scriptsCopy.toasts.noConnection });
+    toast.warning(scriptsCopy.toasts.noConnection);
+    return true;
+  }
+
+  /**
+   * RN-VAR-020: o Ctrl+Enter com variáveis. A conferência vale só para o item e para as atribuições de que ele depende; essas são avaliadas antes, as que a aba não
+   * tem em dia, na ordem do texto. A declaração só é avaliada (o resultado na tela fica, e o painel Variáveis vem à frente); o comando é trocado pelos marcadores
+   * com os valores deste ponto, passa pela pergunta da proteção e vai à API como qualquer comando.
+   */
+  const runItemNow = async (request: DocRange, hooks?: RunHooks): Promise<void> => {
+    await guarded(async () => {
+      if (retired) return refuse("run");
+      if (isPersonBusy(state) || preparing) return;
+
+      const planned = planItem(request.doc, request.engine, request.from, request.to, values.snapshot().values);
+      if (!planned.ok) return refusePlan(planned);
+      if (refuseWithoutConnection()) return;
+
+      const { plan } = planned;
+      const item = plan.items[0];
+      const subject = item.kind === "declaration" ? "declaration" : "command";
+      if (plan.errors.length > 0) return refuseVariables(plan.errors.map(lineOf), subject);
+
+      const started = epoch;
+      let evaluated: Evaluated = { ok: true, results: new Map() };
+      const indices = [...new Set([...plan.outer, ...(item.kind === "declaration" ? [item.index] : [])])].sort((x, y) => x - y);
+      if (indices.length > 0) {
+        preparing = true;
+        try {
+          evaluated = await evaluateIndices(plan, request.doc, request.engine, indices);
+        } finally {
+          preparing = false;
+        }
+      }
+      if (started !== epoch || retired) return;
+      if (!evaluated.ok) return refuseVariables(evaluated.errors, subject);
+
+      if (item.kind === "declaration") {
+        for (const stored of evaluated.results.values()) applyStored(stored);
+        reveal.reveal(plan.model.items[item.index].parsed?.name ?? null);
+        hooks?.flash?.({ offset: item.offset, text: item.text });
+        return;
+      }
+
+      const base: RunTarget = { sql: item.text, offset: item.offset, ...(request.engine === undefined ? {} : { engine: request.engine }) };
+      let target = base;
+      if (usesVariables(plan.model.items[item.index])) {
+        const scope = scopeBefore(plan.model, item.index, evaluated.results, values.snapshot().values);
+        const bound = bindItem(plan.model, item.index, scope, request.engine);
+        if (!bound.ok) return refuseVariables([lineOf(bound.error)], "command");
+        target = { ...base, sent: bound.command };
+      }
+
+      // RN-PROT-001: uma pergunta só, com o comando e os valores que já se sabem.
+      if (!(await confirmed(hooks, (protections) => commandQuestion(protections, confirmedOf(target))))) return;
+      if (started !== epoch || retired) return;
+      // RN-SQL-021: só o comando que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera; o que foi recusado até aqui a deixou esperando.
+      if (deciding !== null) {
+        await stopPausedScript();
+        if (started !== epoch || retired) return;
+      }
+      for (const stored of evaluated.results.values()) applyStored(stored);
+      hooks?.flash?.({ offset: item.offset, text: item.text });
+      hooks?.begin?.();
+      await runWith(target, "person", true);
+    });
+  };
+
+  /**
+   * RN-VAR-019: o Alt+X com variáveis, na ordem: as conferências, a avaliação do que não depende do banco (uma vez só, na ordem do texto), a pergunta da proteção
+   * com os valores calculados e então cada item na vez dele. Erro numa dessas etapas, ou a pergunta cancelada: nada roda, e a área fica como estava (com a lista
+   * dos erros, no primeiro caso).
+   */
+  const runScriptDocNow = async (request: DocRange, hooks?: RunHooks): Promise<void> => {
+    await guarded(async () => {
+      if (retired) return refuse("runScript");
+      if (isPersonBusy(state) || preparing) return;
+
+      const planned = planScript(request.doc, request.engine, request.from, request.to, values.snapshot().values);
+      if (!planned.ok) return void toast.warning(copy.nothingToSend);
+      if (refuseWithoutConnection()) return;
+
+      const { plan } = planned;
+      if (plan.errors.length > 0) return refuseVariables(plan.errors.map(lineOf), "script");
+
+      const started = epoch;
+      const indices = [...new Set([...plan.outer, ...plan.items.filter((item) => item.kind === "declaration").map((item) => item.index)])].sort((x, y) => x - y);
+      let evaluated: Evaluated = { ok: true, results: new Map() };
+      if (indices.length > 0) {
+        preparing = true;
+        try {
+          evaluated = await evaluateIndices(plan, request.doc, request.engine, indices);
+        } finally {
+          preparing = false;
+        }
+      }
+      if (started !== epoch || retired) return;
+      if (!evaluated.ok) return refuseVariables(evaluated.errors, "script");
+      const results = evaluated.results;
+
+      const engineField = request.engine === undefined ? {} : { engine: request.engine };
+      const targets: RunTarget[] = [];
+      const steps = new Map<number, DeclarationStep>();
+      const asked: (ReturnType<typeof confirmedOf> & { number: number })[] = [];
+      const bindErrors: VariableErrorLine[] = [];
+      for (const [position, item] of plan.items.entries()) {
+        const base: RunTarget = { sql: item.text, offset: item.offset, ...engineField };
+        if (item.kind === "declaration") {
+          targets.push(base);
+          steps.set(position, {
+            stored: results.get(item.index) ?? null,
+            evaluate: async () => {
+              const again = await evaluateIndices(plan, request.doc, request.engine, [item.index]);
+              const stored = again.ok ? again.results.get(item.index) : undefined;
+              if (stored !== undefined) return { ok: true, stored };
+              const error = again.ok ? null : again.errors[0];
+              return { ok: false, error: { title: variableRunCopy.errors.title, message: error?.message ?? null, sqlState: null } };
+            },
+          });
+          continue;
+        }
+
+        let target = base;
+        if (usesVariables(plan.model.items[item.index])) {
+          const bound = bindItem(plan.model, item.index, scopeBefore(plan.model, item.index, results, values.snapshot().values), request.engine);
+          if (!bound.ok) {
+            bindErrors.push(lineOf(bound.error));
+            continue;
+          }
+          target = { ...base, sent: bound.command };
+        }
+        targets.push(target);
+        asked.push({ number: position + 1, ...confirmedOf(target) });
+      }
+      if (bindErrors.length > 0) return refuseVariables(bindErrors, "script");
+
+      // RN-PROT-001: uma vez, antes do primeiro item, com a lista dos comandos que pedem confirmação e os valores já calculados.
+      if (!(await confirmed(hooks, (protections) => numberedScriptQuestion(protections, asked, plan.items.length)))) return;
+      if (started !== epoch || retired) return;
+      // RN-SQL-021: só o script que vai mesmo ao banco responde "Parar" à pergunta de erro do script que espera.
+      if (deciding !== null) {
+        await stopPausedScript();
+        if (started !== epoch || retired) return;
+      }
+
+      // As atribuições de fora do que vai (RN-VAR-019, "A seleção") aparecem no painel, e não nas Estatísticas.
+      for (const index of plan.outer) {
+        const stored = results.get(index);
+        if (stored !== undefined) applyStored(stored);
+      }
+      hooks?.begin?.();
+      await runScriptNow(targets, steps, () => {
+        if (steps.size === targets.length) reveal.reveal(null);
+      });
+    });
+  };
+
+  const runScriptNow = async (commands: readonly RunTarget[], declarations: ReadonlyMap<number, DeclarationStep> = new Map(), closing?: () => void): Promise<void> => {
     const loop = guarded(async () => {
       if (retired) return refuse("runScript");
       if (isPersonBusy(state)) return;
@@ -888,7 +1205,13 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
       editedSinceRun = false;
       truncationWarned = false;
       autoRefresh.halt();
-      publishScript(createScriptRun(++scriptSerial, commands));
+      publishScript(
+        createScriptRun(
+          ++scriptSerial,
+          commands,
+          commands.map((_, index) => (declarations.has(index) ? "declaration" : "statement")),
+        ),
+      );
       set({ status: "running", cancelling: false, previous: yielding === null ? previous : withCursorClosed(previous) });
 
       // O resultado na tela agora: o de antes do script, e depois o que cada comando deixou.
@@ -916,6 +1239,7 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
         });
         const end = script === null ? null : scriptEndToast(script, title?.() ?? null);
         if (end !== null) toast[end.tone](end.message);
+        closing?.();
       };
       // Nada chegou ao banco nem foi respondido sobre um comando: a tela volta ao que estava, com o script de antes.
       const untouched = () => {
@@ -935,9 +1259,32 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
           patch((run) => startEntry(run, index));
           set({ status: "running", cancelling: false, previous: shown });
 
+          // RN-VAR-019 e 022: a declaração toma o valor já avaliado, ou o avalia agora; não vai à API.
+          const step = declarations.get(index);
+          if (step !== undefined) {
+            const outcome = step.stored !== null ? { ok: true as const, stored: step.stored } : await step.evaluate();
+            if (started !== epoch) return;
+            if (cancelRequested) return finish("cancelled");
+            if (outcome.ok) {
+              applyStored(outcome.stored);
+              patch((run) => withEntry(run, index, { status: "ok", elapsedMs: outcome.stored.ms }));
+              index++;
+              continue;
+            }
+
+            // RN-VAR-022: só "Parar" (o padrão) e "Tentar de novo". Sem o valor, os comandos que o usam não têm como rodar.
+            step.stored = null;
+            set(shown ?? { status: "idle" });
+            patch((run) => ({ ...withEntry(run, index, { status: "error", error: outcome.error }), phase: "paused", current: index }));
+            const decision = await new Promise<ScriptChoice>((resolve) => (deciding = resolve));
+            if (started !== epoch) return;
+            if (decision === "retry") continue;
+            return finish("stopped");
+          }
+
           // RN-SQL-024: cada comando (e o "Tentar de novo") manda os resultados das abas que o script já tem: a API continua guardando o que a edição deles
           // precisa. O primeiro comando de um script novo não manda nenhum, e a API esquece os do script de antes quando ele vai ao banco.
-          const result = await execute(connectionId, target.sql, started, undefined, !answered, scriptCommandRefusals, keptResultIds(script));
+          const result = await execute(connectionId, sentTextOf(target), started, undefined, !answered, scriptCommandRefusals, keptResultIds(script), queryParamsOf(target));
           // A aba foi solta (desconectar, fechar, trocar de banco, o bloqueio): `release` já parou o script.
           if (started !== epoch) return;
           // Cancelado antes de o comando sair (a sessão abria): nada dele rodou, e o executor já voltou ao que mostrava.
@@ -1202,6 +1549,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
     const released = release();
 
     retired = true;
+    // RN-VAR-023 e RN-SEG-001: os valores saem com o executor (aba fechada, banco ou conexão trocados, bloqueio), e o Worker também.
+    values.clear();
+    host?.dispose();
+    host = null;
     truncationWarned = false;
     editedSinceRun = false;
     set({ status: "idle" });
@@ -1223,6 +1574,10 @@ export function createQueryRunner({ connectionId, database, queryClient, toast, 
   });
 
   return {
+    values,
+    reveal,
+    runItem: runItemNow,
+    runScriptDoc: runScriptDocNow,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => void listeners.delete(listener);

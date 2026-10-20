@@ -96,6 +96,7 @@ const storedValueSchema = z.object({
   ms: z.number(),
   text: z.string().max(maxSqlLength),
   order: count,
+  earlier: z.array(z.object({ text: z.string().max(maxSqlLength), order: count })).max(500).optional(),
 });
 
 const columnSchema = z.object({ name, type: name, kind: z.enum(["text", "number", "datetime", "boolean", "binary"]) });

@@ -89,3 +89,44 @@ describe("dependencyPlan", () => {
     expect(staleNames(model, run.tab).size).toBe(0);
   });
 });
+
+// A aba guarda um valor por nome, o da última atribuição avaliada: a declaração de um nome reatribuído está em dia enquanto a última avaliação partiu dela (RN-VAR-020 e 023).
+describe("a variável reatribuída", () => {
+  const reassigned = "let n = random.int(1, 1000000000)\nn = n + 1\nselect @n;";
+
+  test("depois do script, o Ctrl+Enter no comando não avalia nada e a variável não está desatualizada", () => {
+    const tab = tabAfter(reassigned);
+    expect(plan(reassigned, "select", tab)).toEqual([]);
+    const model = readScript(reassigned, undefined, { blankLines: true });
+    expect(staleNames(model, tab).size).toBe(0);
+  });
+
+  test("o texto da declaração mudou: avalia a declaração e a reatribuição de novo", () => {
+    const tab = tabAfter(reassigned);
+    expect(plan(reassigned.replace("1000000000", "5"), "select", tab)).toEqual([0, 1]);
+    const changed = readScript(reassigned.replace("1000000000", "5"), undefined, { blankLines: true });
+    expect([...staleNames(changed, tab)]).toEqual(["n"]);
+  });
+
+  test("o texto da reatribuição mudou: recomeça da declaração, porque a aba já tem o valor depois da reatribuição velha", () => {
+    const tab = tabAfter(reassigned);
+    expect(plan(reassigned.replace("n + 1", "n + 2"), "select", tab)).toEqual([0, 1]);
+  });
+
+  test("a declaração depende de outra variável avaliada de novo depois: as duas ficam desatualizadas", () => {
+    const source = "let m = 1\nlet n = m\nn = n + 1\nselect @n;";
+    const tab = new Map(tabAfter(source));
+    const model = readScript(source, undefined, { blankLines: true });
+    const run = new ScriptRun(model, config, tab, 10);
+    run.evaluate(0);
+    expect(dependencyPlan(model, 3, run.tab)).toEqual([1, 2]);
+  });
+
+  test("a mesma reatribuição avaliada de novo não faz a aba crescer sem fim", () => {
+    const model = readScript(reassigned, undefined, { blankLines: true });
+    const run = new ScriptRun(model, config);
+    for (const index of [0, 1, 1, 1]) run.evaluate(index);
+    expect(run.tab.get("n")?.earlier?.length).toBe(1);
+    expect(dependencyPlan(model, 2, run.tab)).toEqual([]);
+  });
+});

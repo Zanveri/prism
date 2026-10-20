@@ -6,7 +6,16 @@ import { sqlTokens, type SqlToken } from "./sql-statements";
  * Por que um comando é irreversível (RN-PROT-001): `drop` (de qualquer objeto), `alterDrop` (o `DROP` de dentro de um `ALTER`, como `ALTER TABLE ... DROP
  * COLUMN`), `truncate`, e `delete` e `update` sem `WHERE` no nível de fora. `target` é o objeto como foi escrito (`producao.apontamento`), quando a tela o acha.
  */
-export type Irreversible = { kind: "drop" | "alterDrop" | "truncate" | "delete" | "update"; target: string | null };
+export type Irreversible = { kind: "drop" | "alterDrop" | "truncate" | "delete" | "update" | "sqlVariable"; target: string | null };
+
+/**
+ * RN-PROT-001 e RN-VAR-019: o comando que usa uma variável `sql` conta como irreversível, na dúvida, porque o texto que entra pode tirar um `WHERE`. `target` são os
+ * nomes das variáveis (`@filtro`). O comando que não usa nenhuma é analisado pelo texto, como sempre.
+ */
+export function irreversibleOfCommand(sql: string, engine: Engine | undefined, sqlVariables: readonly string[]): Irreversible | null {
+  if (sqlVariables.length > 0) return { kind: "sqlVariable", target: [...new Set(sqlVariables)].map((name) => `@${name}`).join(", ") };
+  return irreversibleOf(sql, engine);
+}
 
 /** As palavras que podem vir entre o comando e o nome do objeto, e que não são o nome: o tipo do objeto e os modificadores. */
 const objectWords = new Set([

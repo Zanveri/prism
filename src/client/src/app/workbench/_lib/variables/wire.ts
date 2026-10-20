@@ -2,7 +2,7 @@ import type { Engine } from "@/components/ui/engine-tag";
 
 import type { DateFields, DatePrecision } from "./dates";
 import { dateValue, listValue, nullValue, numberValue, objectValue, sqlValue, stringValue, booleanValue, type Type, type Value } from "./values";
-import type { Origin, StoredValue } from "./run";
+import type { EvaluatedAssignment, Origin, StoredValue } from "./run";
 
 /*
  * Os valores e os tipos como dados puros, para atravessar o Worker (RN-VAR-014: o Worker recebe o texto e os valores como dados, e devolve dados). A cópia estruturada
@@ -27,7 +27,7 @@ export type WireType =
   | { t: "object"; f: [string, WireType][] }
   | { t: "nullable"; o: WireType };
 
-export type WireStored = { name: string; value: WireValue; type: WireType; declared: WireType; origin: Origin; at: number; ms: number; text: string; order: number };
+export type WireStored = { name: string; value: WireValue; type: WireType; declared: WireType; origin: Origin; at: number; ms: number; text: string; order: number; earlier?: { text: string; order: number }[] };
 
 export function toWire(value: Value): WireValue {
   switch (value.kind) {
@@ -136,13 +136,26 @@ export function typeFromWire(data: unknown): Type {
 const origins: ReadonlySet<string> = new Set(["literal", "expressão", "random", "consulta", "pergunta", "diálogo"]);
 
 export function storedToWire(stored: StoredValue): WireStored {
-  return { ...stored, value: toWire(stored.value), type: typeToWire(stored.type), declared: typeToWire(stored.declared) };
+  const { earlier, ...rest } = stored;
+  return { ...rest, value: toWire(stored.value), type: typeToWire(stored.type), declared: typeToWire(stored.declared), ...(earlier === undefined ? {} : { earlier: earlier.map((entry) => ({ ...entry })) }) };
 }
 
 export function storedFromWire(data: unknown): StoredValue {
   if (!isRecord(data) || typeof data.name !== "string" || typeof data.text !== "string" || typeof data.at !== "number" || typeof data.ms !== "number" || typeof data.order !== "number" || typeof data.origin !== "string" || !origins.has(data.origin))
     throw new TypeError("Valor da aba malformado.");
-  return { name: data.name, value: fromWire(data.value), type: typeFromWire(data.type), declared: typeFromWire(data.declared), origin: data.origin as Origin, at: data.at, ms: data.ms, text: data.text, order: data.order };
+  const earlier = Array.isArray(data.earlier) ? data.earlier.filter((entry): entry is EvaluatedAssignment => isRecord(entry) && typeof entry.text === "string" && typeof entry.order === "number").map((entry) => ({ text: entry.text, order: entry.order })) : [];
+  return {
+    name: data.name,
+    value: fromWire(data.value),
+    type: typeFromWire(data.type),
+    declared: typeFromWire(data.declared),
+    origin: data.origin as Origin,
+    at: data.at,
+    ms: data.ms,
+    text: data.text,
+    order: data.order,
+    ...(earlier.length > 0 ? { earlier } : {}),
+  };
 }
 
 /** O pedido de avaliação ao Worker (RN-VAR-014): o texto do script, o banco, os itens a avaliar na ordem, os valores da aba e o contador, a semente e a hora de agora. */

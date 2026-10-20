@@ -41,10 +41,18 @@ export type ScriptEntryStatus = "pending" | "running" | "ok" | "error" | "skippe
 /** O erro de um comando, como veio (RN-SQL-009): o título, a mensagem do banco ou da API e o SQLSTATE. */
 export type ScriptError = { title: string; message: string | null; sqlState: string | null };
 
+/** O que o item do script é (RN-VAR-019 e 022): um comando SQL, ou uma declaração ou reatribuição de variável. */
+export type ScriptEntryKind = "statement" | "declaration";
+
 /** Um comando do script, e o que se sabe dele. */
 export type ScriptEntry = {
-  /** O comando como vai à API, com o lugar dele no texto do editor quando o script começou (`offset`): é por ele que o erro e a marca acham o lugar. */
+  /**
+   * O comando como vai à API, com o lugar dele no texto do editor quando o script começou (`offset`): é por ele que o erro e a marca acham o lugar. No comando
+   * com variáveis, `target.sent` leva o texto enviado e os parâmetros (RN-VAR-033), que o "SQL enviado" mostra (RN-VAR-018) e "Executar este comando" repete.
+   */
   target: RunTarget;
+  /** RN-VAR-022: a declaração e a reatribuição são itens do script como os comandos, mas não vão ao banco e têm os totais delas. */
+  kind: ScriptEntryKind;
   status: ScriptEntryStatus;
   /** O comando devolveu linhas: quantas foram lidas, se havia mais a ler e, no que grava e devolve linhas (RN-SQL-013), o total. */
   rows: { read: number; more: boolean; total: number | null } | null;
@@ -71,7 +79,20 @@ export type ScriptResult = { entry: number; rows: RowsState };
  * quantas alteraram (um `WITH` que apaga mil linhas e devolve a contagem delas devolve uma), então eles não somam nas linhas alteradas, e as
  * Estatísticas dizem quantos ficaram de fora.
  */
-export type ScriptTotals = { ok: number; total: number; errors: number; changed: number; returning: number; elapsedMs: number; dropped: number };
+export type ScriptTotals = {
+  /** Os comandos SQL que deram certo e quantos o script tem (RN-VAR-022: "Comandos executados: 8 de 9" conta só os comandos). */
+  ok: number;
+  total: number;
+  /** As declarações e reatribuições avaliadas e quantas o script tem ("Declarações avaliadas: 3 de 3"; só aparece no script que as tem). */
+  declarationsOk: number;
+  declarations: number;
+  errors: number;
+  changed: number;
+  returning: number;
+  /** O tempo total soma os comandos e as avaliações, sem o tempo das perguntas. */
+  elapsedMs: number;
+  dropped: number;
+};
 
 /** Quantos comandos vão numa página do script (`ScriptRun.pages`). */
 const pageSize = 256;
@@ -102,13 +123,23 @@ export type ScriptRun = {
 /** A resposta da pergunta de erro (RN-SQL-021). */
 export type ScriptChoice = "stop" | "retry" | "skip" | "skipAll";
 
-/** O script que vai começar: todos os comandos na fila. */
-export function createScriptRun(id: number, commands: readonly RunTarget[]): ScriptRun {
+/** O script que vai começar: todos os itens na fila. `kinds` diz quais são declarações (RN-VAR-022); sem ele, todos são comandos. */
+export function createScriptRun(id: number, commands: readonly RunTarget[], kinds: readonly ScriptEntryKind[] = []): ScriptRun {
   const pages: ScriptEntry[][] = [];
   for (let start = 0; start < commands.length; start += pageSize) {
-    pages.push(commands.slice(start, start + pageSize).map((target) => ({ target, status: "pending", rows: null, affected: null, elapsedMs: null, error: null, kept: null })));
+    pages.push(commands.slice(start, start + pageSize).map((target, offset) => ({ target, kind: kinds[start + offset] ?? "statement", status: "pending", rows: null, affected: null, elapsedMs: null, error: null, kept: null })));
   }
-  return { id, pages, size: commands.length, totals: { ok: 0, total: commands.length, errors: 0, changed: 0, returning: 0, elapsedMs: 0, dropped: 0 }, results: [], live: null, phase: "running", current: null };
+  const declarations = commands.reduce((count, _, index) => count + (kinds[index] === "declaration" ? 1 : 0), 0);
+  return {
+    id,
+    pages,
+    size: commands.length,
+    totals: { ok: 0, total: commands.length - declarations, declarationsOk: 0, declarations, errors: 0, changed: 0, returning: 0, elapsedMs: 0, dropped: 0 },
+    results: [],
+    live: null,
+    phase: "running",
+    current: null,
+  };
 }
 
 /** O comando `index` do script. */
@@ -125,9 +156,11 @@ export function entriesOf(run: ScriptRun, from = 0, to = run.size): ScriptEntry[
 
 /** Os totais com o comando `entry` somado (`sign` 1) ou tirado (-1). */
 function weigh(totals: ScriptTotals, entry: ScriptEntry, sign: 1 | -1): ScriptTotals {
+  const declaration = entry.kind === "declaration";
   return {
     ...totals,
-    ok: totals.ok + (entry.status === "ok" ? sign : 0),
+    ok: totals.ok + (!declaration && entry.status === "ok" ? sign : 0),
+    declarationsOk: totals.declarationsOk + (declaration && entry.status === "ok" ? sign : 0),
     errors: totals.errors + (entry.status === "error" || entry.status === "skipped" ? sign : 0),
     // O comando para o qual o banco não conta linhas responde um número negativo (RN-SQL-008): não soma.
     changed: totals.changed + (entry.affected !== null && entry.affected > 0 ? sign * entry.affected : 0),

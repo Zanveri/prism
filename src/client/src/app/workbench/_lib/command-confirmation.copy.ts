@@ -37,6 +37,8 @@ export const commandConfirmationCopy = {
         return `Este DROP exclui ${ofTarget(target, "um objeto do banco")}, e o que ele apaga não volta.`;
       case "alterDrop":
         return `Este ALTER tem um DROP: ele apaga uma parte de ${ofTarget(target, "um objeto do banco")} que não volta.`;
+      case "sqlVariable":
+        return `Este comando usa ${ofTarget(target, "uma variável sql")}, cujo texto entra no comando como está e pode tirar um WHERE: ele pode alterar ou apagar mais linhas do que parece.`;
     }
   },
 

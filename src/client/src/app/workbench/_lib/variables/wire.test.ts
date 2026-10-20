@@ -111,6 +111,15 @@ describe("wire", () => {
     expect(() => storedFromWire(null)).toThrow();
   });
 
+  test("as atribuições de antes do mesmo nome atravessam o JSON, e o malformado é descartado (RN-VAR-023)", () => {
+    const model = readScript("let n = 1\nn = n + 1", undefined);
+    const report = evaluateScript(model, { random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 0 });
+    const entry = report.tab.get("n")!;
+    expect(entry.earlier).toEqual([{ text: "let n = 1", order: 1 }]);
+    expect(storedFromWire(through(storedToWire(entry)))).toEqual(entry);
+    expect(storedFromWire({ ...storedToWire(entry), earlier: [{ text: 1, order: "x" }, null, { text: "ok", order: 3 }] }).earlier).toEqual([{ text: "ok", order: 3 }]);
+  });
+
   test("o valor avaliado de um script atravessa o Worker sem mudar", () => {
     const model = readScript("const x = { a: 1, b: [1, 2], c: 'z', d: null, e: date.today() }", undefined);
     const report = evaluateScript(model, { random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 0 });

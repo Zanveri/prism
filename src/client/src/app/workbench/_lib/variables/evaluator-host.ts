@@ -127,3 +127,14 @@ export class EvaluatorHost {
 export function createBrowserWorker(): WorkerLike {
   return new Worker(new URL("./evaluator.worker.ts", import.meta.url), { type: "module" }) as unknown as WorkerLike;
 }
+
+/** O que o executor da aba precisa do hospedeiro: avaliar e largar o Worker. Os testes passam o deles (`inlineEvaluator`). */
+export interface Evaluator {
+  evaluate(request: Omit<EvaluateRequest, "id" | "kind">): Promise<EvaluateOutcome>;
+  dispose(): void;
+}
+
+/** O hospedeiro de verdade, com o Worker do pacote, aberto só no primeiro pedido. */
+export function createEvaluatorHost(): Evaluator {
+  return new EvaluatorHost({ createWorker: createBrowserWorker });
+}

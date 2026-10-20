@@ -70,7 +70,7 @@ describe("o pedido de POST api/user/transfers/exports (RN-EXPORT-016)", () => {
     expect(maxRequestBytes).toBe(16 * 1024 * 1024);
     const small = requestBytes(exportRequest(draft()));
     expect(requestBytes(exportRequest(draft({ origin: { ...result, sql: "é".repeat(10) } })))).toBeGreaterThan(small - 100);
-    expect(requestBytes(exportRequest(draft({ origin: { ...result, sql: "é".repeat(5_000_000) } })))).toBeGreaterThan(maxRequestBytes);
+    expect(requestBytes(exportRequest(draft({ origin: { ...result, sql: "é".repeat(9_000_000) } })))).toBeGreaterThan(maxRequestBytes);
   });
 });
 
