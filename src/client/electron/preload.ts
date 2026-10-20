@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
-import type { CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
+import type { ResultWindowFocus, ResultWindowNamed, ResultWindowRequest, ResultWindowTitle } from "./result-window-messages";
+import type { ChooseSourceRequest, CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
 import type { PeerEvent, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
@@ -27,6 +28,7 @@ export type PrismBridge = {
   getDataFolder(): Promise<string | null>;
   updates: PrismUpdates;
   windows: PrismWindows;
+  resultWindows: PrismResultWindows;
   session: PrismSession;
   verification: PrismVerification;
   workspace: PrismWorkspace;
@@ -57,7 +59,7 @@ export type PrismTransfers = {
    * RN-IMPORT-018: abre o diálogo de abrir do sistema (o título, os filtros e a pasta são do processo principal: nada vai da tela), confere o arquivo e começa
    * a cópia para a pasta `transfers` (`sourceReplySchema`: o identificador da cópia, o nome sem a pasta e o tamanho, ou o motivo da recusa).
    */
-  chooseSource(): Promise<unknown>;
+  chooseSource(request?: ChooseSourceRequest): Promise<unknown>;
   /** Como está a cópia do arquivo (`sourceStatusSchema`); só a janela que o escolheu o vê. */
   sourceStatus(request: SourceRequest): Promise<unknown>;
   /** Solta o arquivo: a cópia em andamento para, e a cópia que a API ainda não tomou é apagada. */
@@ -120,6 +122,30 @@ export type PrismWindows = {
    * fechar o app só pergunta pelo que não volta na próxima entrada (RN-ABAS-007).
    */
   onCloseRequested(listener: (request: unknown) => void): () => void;
+};
+
+/**
+ * A janela do resultado (RN-ABAS-013 e 017). Ela é uma página em branco que a tela desta janela abre pelo Chromium e onde desenha a área de resultado da aba;
+ * só o processo principal a aprova, a acompanha e a fecha, e ela mesma não tem ponte. A tela pede a concessão antes de abri-la (`request`), avisa que o
+ * resultado está desenhado nela (`ready`, e só então ela aparece) e depois pede, pelo nome, para trazê-la à frente, fechá-la e pôr o título. O processo principal
+ * confere cada pedido com o schema de `result-window-messages.ts`, e o que chega à tela (as respostas e os avisos, aqui sem tipo) a tela confere de novo.
+ * Nada aqui dá acesso ao Node, a arquivo ou a endereço.
+ */
+export type PrismResultWindows = {
+  /** Pede a concessão de uso único para abrir a janela com este nome (`resultWindowReplySchema`). */
+  request(request: ResultWindowRequest): Promise<unknown>;
+  /** O resultado está desenhado na janela, com os estilos: ela pode aparecer. */
+  ready(request: ResultWindowNamed): Promise<void>;
+  /** Traz a janela do resultado, ou a da aba que a abriu (`target`), à frente: restaurada se estava minimizada, com o foco. Responde se a janela existe. */
+  focus(request: ResultWindowFocus): Promise<unknown>;
+  /** O Prism fecha a janela (o motivo no aviso de que fechou é `host`). Responde se havia a janela. */
+  close(request: ResultWindowNamed): Promise<unknown>;
+  /** O título da barra da janela, da barra de tarefas e do Alt+Tab. */
+  title(request: ResultWindowTitle): Promise<unknown>;
+  /** A janela fechou, e quem fechou (`resultWindowClosedSchema`): a pessoa (`user`) ou o Prism (`host`). */
+  onClosed(listener: (closed: unknown) => void): () => void;
+  /** A janela minimizou ou voltou (`resultWindowStateSchema`). */
+  onState(listener: (state: unknown) => void): () => void;
 };
 
 /** O cofre é um só para todas as janelas (RN-ABAS-004): o que uma janela conta às outras, e o que as outras contaram (`peerEventSchema`). */
@@ -236,6 +262,23 @@ const bridge: PrismBridge = {
       return () => ipcRenderer.removeListener("prism:windows-close-requested", handler);
     },
   },
+  resultWindows: {
+    request: (request) => ipcRenderer.invoke("prism:result-window-request", request),
+    ready: (request) => ipcRenderer.invoke("prism:result-window-ready", request),
+    focus: (request) => ipcRenderer.invoke("prism:result-window-focus", request),
+    close: (request) => ipcRenderer.invoke("prism:result-window-close", request),
+    title: (request) => ipcRenderer.invoke("prism:result-window-title", request),
+    onClosed(listener) {
+      const handler = (_event: unknown, closed: unknown) => listener(closed);
+      ipcRenderer.on("prism:result-window-closed", handler);
+      return () => ipcRenderer.removeListener("prism:result-window-closed", handler);
+    },
+    onState(listener) {
+      const handler = (_event: unknown, state: unknown) => listener(state);
+      ipcRenderer.on("prism:result-window-state", handler);
+      return () => ipcRenderer.removeListener("prism:result-window-state", handler);
+    },
+  },
   workspace: {
     claim: () => ipcRenderer.invoke("prism:workspace-claim"),
     report: (report) => ipcRenderer.invoke("prism:workspace-report", report),
@@ -266,7 +309,7 @@ const bridge: PrismBridge = {
     copy: (request) => ipcRenderer.invoke("prism:transfer-copy", request),
     reveal: (request) => ipcRenderer.invoke("prism:transfer-reveal", request),
     release: (request) => ipcRenderer.invoke("prism:transfer-release", request),
-    chooseSource: () => ipcRenderer.invoke("prism:transfer-source"),
+    chooseSource: (request) => ipcRenderer.invoke("prism:transfer-source", request),
     sourceStatus: (request) => ipcRenderer.invoke("prism:transfer-source-status", request),
     releaseSource: (request) => ipcRenderer.invoke("prism:transfer-source-release", request),
   },

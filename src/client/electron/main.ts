@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, screen, session, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, screen, session, shell, type BrowserWindowConstructorOptions, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -12,6 +12,17 @@ import { userDataDir } from "./data-dir";
 import { permissionAllowed } from "./permissions";
 import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
+import { createResultWindowSaver, readResultWindow, resultWindowFileName, writeResultWindow, type SavedResultWindow } from "./result-window-file";
+import {
+  readyTimeoutMs,
+  resultWindowFocusSchema,
+  resultWindowNamedSchema,
+  resultWindowTitleSchema,
+  type ResultWindowClosed,
+  type ResultWindowState,
+} from "./result-window-messages";
+import { placeResultWindow, sameRect, savedPlace } from "./result-window-place";
+import { createResultWindows, type ResultWindowEntry } from "./result-windows";
 import { createSplash, splashGeometry } from "./splash";
 import { startUp } from "./startup";
 import { createTransferDesk } from "./transfer-desk";
@@ -20,7 +31,8 @@ import { installedForAllUsers } from "./update/install-scope";
 import { createHttpGet } from "./update/net-transport";
 import { resolveOrigin, updatesBlocked } from "./update/origin";
 import { createUpdater, type Updater } from "./update/updater";
-import { createWindowHub, newWindowBounds, type HubWindow, type Rect } from "./window-hub";
+import { navigationAllowed, preferencesMatch, resultWindowOptions } from "./web-lockdown";
+import { createWindowHub, newWindowBounds, type HubWindow, type Point, type Rect } from "./window-hub";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "./workspace-hub";
 import type { SavedWorkspace } from "./workspace-messages";
 import { isAppZoom, nextAppZoom, zoomFactor, zoomShortcut, type AppZoom } from "./zoom";
@@ -80,6 +92,8 @@ function changeZoom(next: AppZoom): AppZoom {
     window.webContents.setZoomFactor(zoomFactor(next));
     window.webContents.send("prism:zoom-changed", next);
   }
+  // RN-ABAS-013 e RN-ZOOM-001: as janelas do resultado também (elas não têm ponte, então não recebem o aviso: a tela da aba, que as desenha, o recebe).
+  for (const entry of resultWindows.all()) if (!entry.handle.window.isDestroyed()) entry.handle.window.webContents.setZoomFactor(zoomFactor(next));
   try {
     writeAppZoom(zoomFile, next);
   } catch (error) {
@@ -102,6 +116,202 @@ function liveWindowIds(): number[] {
 function windowIdOf(sender: WebContents): number {
   for (const [id, window] of appWindows) if (!window.isDestroyed() && window.webContents === sender) return id;
   throw new Error("Pedido de uma janela desconhecida.");
+}
+
+/**
+ * As janelas do resultado (RN-ABAS-013 e 017, `result-windows.ts`): páginas em branco que a tela de uma janela da aba abre pelo Chromium (`window.open`) e
+ * onde desenha a área de resultado da aba. Só o processo principal as aprova, as acompanha e as fecha; elas ficam numa lista própria, fora de `appWindows`, do
+ * centro das janelas e da gravação das abas, e não têm ponte (nem preload): quem fala por elas é a janela da aba que as abriu, pelos canais `prism:result-window-*`.
+ */
+type ResultBrowser = {
+  contentsId: number;
+  window: BrowserWindow;
+  /** Já foi mostrada? Antes disso ela está escondida, à espera do aviso de pronta da tela (ou dos 3 segundos). */
+  shown: boolean;
+  maximize: boolean;
+  showTimer: NodeJS.Timeout | null;
+  close(): void;
+  isDestroyed(): boolean;
+};
+
+/** O lugar lembrado (`result-window.json`, RN-ABAS-013): lido na primeira janela do resultado desta abertura; depois, o último que uma janela mudou. */
+const resultWindowFilePath = join(app.getPath("userData"), resultWindowFileName);
+let rememberedPlace: SavedResultWindow | null | undefined;
+const resultSaver = createResultWindowSaver({
+  write: (saved) => writeResultWindow(resultWindowFilePath, saved),
+  now: () => Date.now(),
+  schedule(run, ms) {
+    const timer = setTimeout(run, ms);
+    return () => clearTimeout(timer);
+  },
+  log: (message) => console.log(`[prism] ${message}`),
+});
+
+/** O Wayland não deixa ler o ponteiro fora das janelas (RN-ABAS-010): ali vale o ponto que a tela mandou. */
+const waylandSession = process.platform === "linux" && (process.env.XDG_SESSION_TYPE === "wayland" || (process.env.WAYLAND_DISPLAY ?? "") !== "");
+
+const resultWindows = createResultWindows<ResultBrowser>({
+  now: () => Date.now(),
+  isReady: (openerId) => hub.isReady(openerId),
+  // No arraste da aba do resultado o processo principal lê o ponteiro ali mesmo (`at` é o que a tela viu no `dragend`, e só vale onde ele não o lê).
+  pointOf: (at) => (at === null ? null : waylandSession ? at : screen.getCursorScreenPoint()),
+  log: (message) => console.log(`[prism] janelas: ${message}`),
+});
+
+/** O `webContents` é de uma janela do resultado? Os tratadores de permissão a reconhecem pelo `id`, e não pelo endereço (`about:blank`). */
+function isResultContents(contents: WebContents | null): boolean {
+  return contents !== null && resultWindows.isResultContents(contents.id);
+}
+
+/** A janela da aba que abriu a janela do resultado, se ainda existe. */
+function openerOf(openerId: number): BrowserWindow | undefined {
+  const opener = appWindows.get(openerId);
+  return opener === undefined || opener.isDestroyed() ? undefined : opener;
+}
+
+/** O que a tela da aba ouve da janela do resultado dela: o fechamento, com o motivo (RN-ABAS-017), e o estado (minimizada ou não, RN-ABAS-015). */
+const tellClosed = (openerId: number, closed: ResultWindowClosed) => openerOf(openerId)?.webContents.send("prism:result-window-closed", closed);
+const tellState = (openerId: number, state: ResultWindowState) => openerOf(openerId)?.webContents.send("prism:result-window-state", state);
+
+/** Traz uma janela à frente (RN-ABAS-014): restaurada se estava minimizada. Onde o sistema recusa o foco, ela vem à frente sem ele. */
+function bringForward(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+}
+
+/** As janelas do resultado nascem escondidas e aparecem prontas: `show()` e `focus()` quando a pessoa a pediu naquela hora, e `showInactive()` quando não. */
+function showResultWindow(entry: ResultWindowEntry<ResultBrowser>): void {
+  const { handle } = entry;
+  if (handle.shown || handle.window.isDestroyed()) return;
+
+  handle.shown = true;
+  if (handle.showTimer !== null) clearTimeout(handle.showTimer);
+  handle.showTimer = null;
+  handle.window.setOpacity(1);
+  if (handle.maximize) handle.window.maximize();
+  if (entry.mode === "focus") {
+    handle.window.show();
+    handle.window.focus();
+  } else handle.window.showInactive();
+  tellState(entry.openerId, { name: entry.name, minimized: handle.window.isMinimized() });
+}
+
+/** Onde a janela do resultado nasce (`placeResultWindow`): o lugar lembrado, o ponto onde a aba do resultado foi solta, a cascata. */
+function planResultWindow(openerId: number, point: Point | null): { bounds: Rect; maximized: boolean } {
+  const opener = openerOf(openerId);
+  const openerArea = (opener === undefined ? screen.getPrimaryDisplay() : screen.getDisplayMatching(opener.getBounds())).workArea;
+  rememberedPlace ??= readResultWindow(resultWindowFilePath);
+  const bounds = placeResultWindow({
+    remembered: rememberedPlace,
+    drop: point === null ? null : { at: point, workArea: screen.getDisplayNearestPoint(point).workArea },
+    openerWorkArea: openerArea,
+    workAreas: screen.getAllDisplays().map((display) => display.workArea),
+    others: resultWindows.all().flatMap((entry) => (entry.handle.shown && !entry.handle.window.isDestroyed() ? [entry.handle.window.getBounds()] : [])),
+  });
+  return { bounds, maximized: point === null && rememberedPlace?.maximized === true };
+}
+
+/** Os lugares que a aprovação decidiu, até a janela nascer (`did-create-window`), pela janela da aba e pelo nome. */
+const resultWindowPlans = new Map<string, { bounds: Rect; maximized: boolean }>();
+
+/**
+ * O `setWindowOpenHandler` de cada janela do app (RN-ABAS-017): aprova a abertura da janela do resultado, e só ela (todas as condições valem e a concessão de
+ * uso único é consumida); qualquer outra continua negada (RN-SHELL-001), também com o cofre bloqueado. As opções são só as do processo principal.
+ */
+function openHandlerOf(openerId: number) {
+  return (details: { url: string; frameName: string; features: string; disposition: string; postBody?: unknown }): { action: "deny" } | { action: "allow"; overrideBrowserWindowOptions: BrowserWindowConstructorOptions } => {
+    const grant = resultWindows.approve(openerId, { url: details.url, frameName: details.frameName, features: details.features, disposition: details.disposition, hasPostBody: details.postBody != null });
+    if (grant === null) return { action: "deny" };
+
+    const plan = planResultWindow(openerId, grant.point);
+    resultWindowPlans.set(`${openerId}:${grant.name}`, plan);
+    return { action: "allow", overrideBrowserWindowOptions: resultWindowOptions({ bounds: plan.bounds, icon: iconPath, backgroundColor: "#0E1114" }) };
+  };
+}
+
+/** As preferências com que a janela nasceu: as do Electron (`getLastWebPreferences`, que o tipo dele não declara) ou, sem elas, as opções com que foi criada. */
+function createdPreferences(child: BrowserWindow, options: BrowserWindowConstructorOptions): Record<string, unknown> | undefined {
+  const last = (child.webContents as unknown as { getLastWebPreferences?: () => Record<string, unknown> }).getLastWebPreferences;
+  return typeof last === "function" ? last.call(child.webContents) : (options.webPreferences as Record<string, unknown> | undefined);
+}
+
+/**
+ * `did-create-window` (RN-ABAS-017): confere as `webPreferences` (fecha a janela se alguma chave não bate), nega nela a abertura de outras, guarda-a na lista
+ * (pela janela que a abriu e pelo nome), aplica o zoom do programa (ali e no `dom-ready`), trata os atalhos, aplica de novo os limites e os confere, grava o
+ * tamanho e o lugar, cuida da redução de ritmo da janela que a abriu e a avisa quando a janela minimiza e volta.
+ */
+function adoptResultWindow(openerId: number, opener: BrowserWindow, child: BrowserWindow, details: { frameName: string; options: BrowserWindowConstructorOptions }): void {
+  const name = details.frameName;
+  const planKey = `${openerId}:${name}`;
+  const plan = resultWindowPlans.get(planKey);
+  resultWindowPlans.delete(planKey);
+
+  const contents = child.webContents;
+  if (plan === undefined || resultWindows.pendingGrant(openerId, name) === undefined || !preferencesMatch(createdPreferences(child, details.options))) {
+    console.log(`[prism] janela ${openerId}: a janela do resultado foi fechada: as preferências dela não são as pedidas`);
+    resultWindows.abandon(openerId, name);
+    child.destroy();
+    return;
+  }
+
+  const handle: ResultBrowser = { contentsId: contents.id, window: child, shown: false, maximize: plan.maximized, showTimer: null, close: () => child.close(), isDestroyed: () => child.isDestroyed() };
+  const entry = resultWindows.adopt(openerId, name, handle);
+  if (entry === null) {
+    child.destroy();
+    return;
+  }
+
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // O título da barra é o que a tela manda (`prism:result-window-title`); o da página em branco não o troca.
+  contents.on("page-title-updated", (event) => event.preventDefault());
+  installShortcuts(contents);
+  const applyZoom = () => {
+    if (!contents.isDestroyed()) contents.setZoomFactor(zoomFactor(appZoom));
+  };
+  applyZoom();
+  contents.on("dom-ready", applyZoom);
+
+  // Os limites, de novo e conferidos: com monitores de densidades diferentes o sistema pode ter criado a janela em outra medida (RN-ABAS-010).
+  child.setBounds(plan.bounds);
+  if (!sameRect(child.getBounds(), plan.bounds)) {
+    child.setBounds(plan.bounds);
+    if (!sameRect(child.getBounds(), plan.bounds)) console.log(`[prism] janela ${openerId}: a janela do resultado não ficou nos limites pedidos`);
+  }
+  // O `show: false` tem de valer numa janela aberta por `window.open`, que no Electron nasce visível por padrão (a sonda S-JANELA-1): se ela está à vista, fica
+  // transparente até estar pronta (no Linux o `setOpacity` não faz nada).
+  if (child.isVisible()) child.setOpacity(0);
+
+  // RN-ABAS-015: enquanto a janela da aba tem uma do resultado aberta, a redução de ritmo da página escondida sai do `webContents` dela (é nele que corre o
+  // tempo da atualização automática), e volta quando a última fecha.
+  if (resultWindows.openedBy(openerId).length === 1) opener.webContents.setBackgroundThrottling(false);
+
+  const remember = (final: boolean) => {
+    if (!handle.shown || child.isDestroyed()) return;
+    const saved = savedPlace(child.getNormalBounds(), child.isMaximized());
+    rememberedPlace = saved;
+    if (final) resultSaver.close(saved);
+    else resultSaver.change(saved);
+  };
+  child.on("move", () => remember(false));
+  child.on("resize", () => remember(false));
+  child.on("maximize", () => remember(false));
+  child.on("unmaximize", () => remember(false));
+  child.on("close", () => remember(true));
+  const minimizedChanged = () => tellState(openerId, { name, minimized: child.isMinimized() });
+  child.on("minimize", minimizedChanged);
+  child.on("restore", minimizedChanged);
+  child.on("closed", () => {
+    if (handle.showTimer !== null) clearTimeout(handle.showTimer);
+    // `host` se foi o Prism que pediu; `user` nos outros casos (o X da barra, Alt+F4, Cmd+W). A janela da aba, se ainda existe, é avisada.
+    const reason = resultWindows.closed(openerId, name);
+    if (resultWindows.openedBy(openerId).length === 0 && !opener.isDestroyed()) opener.webContents.setBackgroundThrottling(true);
+    if (reason !== null) tellClosed(openerId, { name, reason });
+  });
+
+  // Sem o aviso de pronta em 3 segundos, ela aparece assim mesmo.
+  handle.showTimer = setTimeout(() => showResultWindow(entry), readyTimeoutMs);
 }
 
 /**
@@ -208,6 +418,18 @@ function assertFromApp(event: IpcMainInvokeEvent) {
 }
 
 /**
+ * RN-ABAS-017: a janela que o diálogo do sistema prende: a janela do resultado, quando o pedido nasceu nela (o canal leva o nome), e senão a janela da aba. Nome
+ * desconhecido, ou de uma janela do resultado de outra janela da aba, vale a janela da aba.
+ */
+function dialogParent(windowId: number, resultWindow: string | undefined): BrowserWindow | undefined {
+  const own = resultWindow === undefined ? undefined : resultWindows.find(windowId, resultWindow)?.handle.window;
+  if (own !== undefined && !own.isDestroyed()) return own;
+
+  const window = appWindows.get(windowId);
+  return window === undefined || window.isDestroyed() ? undefined : window;
+}
+
+/**
  * O destino e a entrega das exportações de dados (RN-EXPORT-019 e 020, `transfer-desk.ts`): este processo abre o diálogo de salvar, guarda o caminho escolhido
  * (a tela recebe um identificador e o nome do arquivo, nunca a pasta) e, quando a API termina o arquivo na pasta `transfers` da pasta de dados, o leva ao
  * destino. Nenhum canal recebe um caminho da tela nem devolve um a ela; o arquivo pronto é achado só pelo identificador do trabalho.
@@ -216,11 +438,11 @@ const transferDesk = createTransferDesk({
   dataDir: app.getPath("userData"),
   downloadsDir: () => app.getPath("downloads"),
   platform: process.platform,
-  async showSaveDialog(windowId, options) {
-    const window = appWindows.get(windowId);
+  async showSaveDialog(windowId, options, resultWindow) {
+    const window = dialogParent(windowId, resultWindow);
     // `showOverwriteConfirmation`: no Linux o diálogo não pergunta antes de substituir sem ela (no Windows e no macOS pergunta sempre).
     const settings = { ...options, properties: ["showOverwriteConfirmation", "createDirectory"] as ("showOverwriteConfirmation" | "createDirectory")[] };
-    const result = window === undefined || window.isDestroyed() ? await dialog.showSaveDialog(settings) : await dialog.showSaveDialog(window, settings);
+    const result = window === undefined ? await dialog.showSaveDialog(settings) : await dialog.showSaveDialog(window, settings);
     return result.canceled || result.filePath === undefined ? null : result.filePath;
   },
   writeClipboard: (text) => clipboard.writeText(text),
@@ -237,11 +459,11 @@ const transferDesk = createTransferDesk({
 const transferSource = createTransferSource({
   dataDir: app.getPath("userData"),
   downloadsDir: () => app.getPath("downloads"),
-  async showOpenDialog(windowId, options) {
-    const window = appWindows.get(windowId);
+  async showOpenDialog(windowId, options, resultWindow) {
+    const window = dialogParent(windowId, resultWindow);
     // Um arquivo só, nada de pasta (RN-IMPORT-018).
     const settings = { ...options, properties: ["openFile"] as "openFile"[] };
-    const result = window === undefined || window.isDestroyed() ? await dialog.showOpenDialog(settings) : await dialog.showOpenDialog(window, settings);
+    const result = window === undefined ? await dialog.showOpenDialog(settings) : await dialog.showOpenDialog(window, settings);
     return result.canceled ? null : (result.filePaths[0] ?? null);
   },
   log: (message) => console.log(`[prism] ${message}`),
@@ -419,6 +641,44 @@ const hub = createWindowHub({
   log: (message) => console.log(`[prism] janelas: ${message}`),
 });
 
+/** Os `webContents` das janelas do app (o splash, as janelas do resultado e o que mais o Chromium criar não estão aqui): só estes podem recarregar a própria página em desenvolvimento. */
+const appContents = new Set<number>();
+
+/**
+ * RN-SHELL-001 e RN-ABAS-017: TODO `webContents` nasce travado, antes de qualquer página: não navega, não é redirecionado, não anexa `webview` e não abre janela.
+ * A única abertura que existe é a da janela do resultado, que o `setWindowOpenHandler` de cada janela do app aprova depois de um pedido (`openHandlerOf`), e a
+ * única navegação, a recarga da própria página das janelas do app em desenvolvimento. As rotas são em hash, que não navega.
+ */
+app.on("web-contents-created", (_event, contents) => {
+  const navigate = (details: { url: string; preventDefault(): void }) => {
+    if (!navigationAllowed({ url: details.url, isAppWindow: appContents.has(contents.id), devServerUrl })) details.preventDefault();
+  };
+  contents.on("will-navigate", navigate);
+  contents.on("will-frame-navigate", navigate);
+  contents.on("will-redirect", navigate);
+  contents.on("will-attach-webview", (event) => event.preventDefault());
+  contents.setWindowOpenHandler(() => ({ action: "deny" }));
+});
+
+/**
+ * RN-ZOOM-001: Ctrl +, Ctrl − e Ctrl 0 (Cmd no macOS) em qualquer tela e com o foco em qualquer lugar (`zoomShortcut`, com teste). A tecla é tratada aqui,
+ * antes da página e do menu: o editor e a grade não a veem, o menu padrão de desenvolvimento não muda o zoom por fora, e o app empacotado do Windows e
+ * do Linux, que não tem menu, tem o atalho do mesmo jeito. Vale nas janelas do app e nas do resultado (RN-ABAS-017).
+ * RN-GRADE-012 e RN-ABAS-014: F5, F6, F11 e Ctrl+R nunca chegam ao menu (`menuShortcutIgnored`, com teste): o F5 e o F6 chegam à tela (atualizar e alternar entre o
+ * editor e o resultado), e o F11 ao "Filtrar" da grade, e Ctrl+R nunca recarrega a janela (o texto das abas de SQL se perderia).
+ */
+function installShortcuts(contents: WebContents): void {
+  contents.on("before-input-event", (event, input) => {
+    const step = zoomShortcut(input, process.platform);
+    if (step !== null) {
+      event.preventDefault();
+      changeZoom(nextAppZoom(appZoom, step));
+      return;
+    }
+    contents.setIgnoreMenuShortcuts(menuShortcutIgnored(input));
+  });
+}
+
 /**
  * Cria uma janela do app escondida: quem decide quando ela aparece é quem a pediu (a primeira, `startUp`, depois de a tela estar pronta para ser
  * vista, RN-MARCA-003; as outras, assim que estão prontas). Sem `bounds`, o tamanho de sempre, no centro da tela.
@@ -446,28 +706,14 @@ function createAppWindow(bounds?: Rect) {
     },
   });
   appWindows.set(id, window);
+  appContents.add(window.webContents.id);
+  const contentsId = window.webContents.id;
 
-  // RN-SHELL-001: a janela não sai do app nem abre outra. As rotas são em hash, que não navega.
-  // Em desenvolvimento passa uma única navegação, a recarga da própria página: é como o Vite
-  // mostra uma mudança no código, e cancelada ela deixaria a tela parada na versão anterior.
-  window.webContents.on("will-navigate", (event, url) => {
-    if (devServerUrl === undefined || url.split("#")[0] !== new URL(devServerUrl).href) event.preventDefault();
-  });
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  // RN-ZOOM-001: Ctrl +, Ctrl − e Ctrl 0 (Cmd no macOS) em qualquer tela e com o foco em qualquer lugar (`zoomShortcut`, com teste). A tecla é tratada aqui,
-  // antes da página e do menu: o editor e a grade não a veem, o menu padrão de desenvolvimento não muda o zoom por fora, e o app empacotado do Windows e
-  // do Linux, que não tem menu, tem o atalho do mesmo jeito.
-  // RN-GRADE-012: F5 e Ctrl+R nunca recarregam a janela (o texto das abas de SQL se perderia), e F5 e F11 chegam à tela (atualizar e o "Filtrar" da grade):
-  // o menu, que só existe em desenvolvimento e no macOS, não recebe essas teclas (`menuShortcutIgnored`, com teste).
-  window.webContents.on("before-input-event", (event, input) => {
-    const step = zoomShortcut(input, process.platform);
-    if (step !== null) {
-      event.preventDefault();
-      changeZoom(nextAppZoom(appZoom, step));
-      return;
-    }
-    window.webContents.setIgnoreMenuShortcuts(menuShortcutIgnored(input));
-  });
+  // RN-SHELL-001: a janela não sai do app (`web-contents-created`, acima) e só abre a janela do resultado, que `openHandlerOf` aprova depois do pedido da tela
+  // (RN-ABAS-017); `did-create-window` confere a janela que nasceu.
+  window.webContents.setWindowOpenHandler(openHandlerOf(id));
+  window.webContents.on("did-create-window", (child, details) => adoptResultWindow(id, window, child, details));
+  installShortcuts(window.webContents);
   // RN-ZOOM-001: o `webPreferences.zoomFactor` é o zoom com que a janela nasceu, e o Electron o aplica de novo a cada navegação do quadro principal (a
   // recarga das outras janelas no "Reiniciar" da API, a do Vite) quando o Chromium não guarda zoom para a origem. Voltar a 100% apaga o que a origem
   // guardava (100% é o padrão dele): sem isto, a janela que nasceu em outro zoom voltaria a ele ao recarregar, e levaria junto as outras da mesma origem,
@@ -481,6 +727,8 @@ function createAppWindow(bounds?: Rect) {
     if (!details.isMainFrame || details.isSameDocument) return;
     hub.setReady(id, false);
     workspaceHub.withdraw(id);
+    // RN-ABAS-016: a janela da aba que recarrega fecha as janelas do resultado dela (pelo Prism: o lugar da aba continua o que era).
+    resultWindows.closeAllByHost(id);
     // RN-EXPORT-019: a página que recarrega não acompanha mais as exportações dela; a entrega em andamento para, e a cópia pela metade é apagada.
     // RN-IMPORT-018: e os arquivos das importações dela são soltos (a cópia em andamento para, e a cópia que a API não tomou é apagada).
     void transferDesk.releaseWindow(id);
@@ -489,6 +737,7 @@ function createAppWindow(bounds?: Rect) {
   window.webContents.on("render-process-gone", () => {
     hub.setReady(id, false);
     workspaceHub.withdraw(id);
+    resultWindows.closeAllByHost(id);
     void transferDesk.releaseWindow(id);
     void transferSource.releaseWindow(id);
   });
@@ -504,7 +753,10 @@ function createAppWindow(bounds?: Rect) {
   });
 
   window.on("closed", () => {
+    // RN-ABAS-013: as janelas do resultado fecham com a que as abriu, antes do `window-all-closed` (pelo Prism, sem perguntar nada).
+    resultWindows.closeAllByHost(id);
     appWindows.delete(id);
+    appContents.delete(contentsId);
     closeApproved.delete(id);
     hub.remove(id);
     void transferDesk.windowClosed(id);
@@ -568,7 +820,10 @@ ipcMain.handle("prism:windows-request-tab", (event, request: unknown) => {
 });
 ipcMain.handle("prism:windows-ready", (event, ready: unknown) => {
   assertFromApp(event);
-  hub.setReady(windowIdOf(event.sender), ready);
+  const id = windowIdOf(event.sender);
+  hub.setReady(id, ready);
+  // A área de trabalho desmontou (o "Sair", o login): as janelas do resultado dela fecham, pelo Prism.
+  if (ready === false) resultWindows.closeAllByHost(id);
 });
 ipcMain.handle("prism:windows-describe", (event, summary: unknown) => {
   assertFromApp(event);
@@ -579,6 +834,39 @@ ipcMain.handle("prism:windows-close", (event) => {
   const id = windowIdOf(event.sender);
   closeApproved.add(id);
   appWindows.get(id)?.close();
+});
+// RN-ABAS-013 e 017: a janela do resultado. A tela da aba pede a concessão antes de abri-la (`window.open`, que o `setWindowOpenHandler` aprova), avisa que o
+// resultado está desenhado nela e, depois, pede para trazê-la à frente, fechá-la e pôr o título. Cada pedido confere a origem e o conteúdo (o schema de
+// `result-window-messages.ts`), e o nome é conferido contra a lista das janelas do resultado DAQUELA janela da aba.
+ipcMain.handle("prism:result-window-request", (event, request: unknown) => {
+  assertFromApp(event);
+  return resultWindows.request(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:result-window-ready", (event, request: unknown) => {
+  assertFromApp(event);
+  const entry = resultWindows.find(windowIdOf(event.sender), resultWindowNamedSchema.parse(request).name);
+  if (entry !== undefined) showResultWindow(entry);
+});
+ipcMain.handle("prism:result-window-focus", (event, request: unknown) => {
+  assertFromApp(event);
+  const id = windowIdOf(event.sender);
+  const { name, target } = resultWindowFocusSchema.parse(request);
+  const window = target === "opener" ? appWindows.get(id) : resultWindows.find(id, name)?.handle.window;
+  if (window === undefined) return false;
+  bringForward(window);
+  return true;
+});
+ipcMain.handle("prism:result-window-close", (event, request: unknown) => {
+  assertFromApp(event);
+  return resultWindows.closeByHost(windowIdOf(event.sender), resultWindowNamedSchema.parse(request).name);
+});
+ipcMain.handle("prism:result-window-title", (event, request: unknown) => {
+  assertFromApp(event);
+  const { name, title } = resultWindowTitleSchema.parse(request);
+  const window = resultWindows.find(windowIdOf(event.sender), name)?.handle.window;
+  if (window === undefined || window.isDestroyed()) return false;
+  window.setTitle(title);
+  return true;
 });
 // RN-ABAS-006: as abas de cada janela, que este processo junta e grava pela API. Cada pedido confere a origem, e o centro confere o conteúdo com o schema.
 ipcMain.handle("prism:workspace-claim", (event) => {
@@ -638,9 +926,9 @@ ipcMain.handle("prism:transfer-release", (event, request: unknown) => {
 
 // RN-IMPORT-018: o arquivo das importações de dados. A escolha não recebe nada da tela; a consulta e o soltar levam só o `fileId`, que o `transferSource`
 // confere com o schema de `transfer-messages.ts`, e o arquivo é da janela que o escolheu.
-ipcMain.handle("prism:transfer-source", (event) => {
+ipcMain.handle("prism:transfer-source", (event, request: unknown) => {
   assertFromApp(event);
-  return transferSource.choose(windowIdOf(event.sender));
+  return transferSource.choose(windowIdOf(event.sender), request);
 });
 ipcMain.handle("prism:transfer-source-status", (event, request: unknown) => {
   assertFromApp(event);
@@ -682,6 +970,8 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting === "closing") return;
 
     quitting = "closing";
+    // RN-ABAS-013 e 016: o fim do app fecha as janelas do resultado, pelo Prism (o lugar da aba continua o que era).
+    for (const entry of resultWindows.all()) resultWindows.closeByHost(entry.openerId, entry.name);
     // RN-ABAS-006: as abas de todas as janelas são gravadas antes de o cofre fechar. RN-EXPORT-023: a entrega em andamento para, e a cópia pela metade é
     // apagada (o que sobrar em `transfers`, a API apaga ao encerrar ou na partida seguinte). RN-IMPORT-018: a cópia do arquivo de uma importação para, e
     // o que a API não tomou é apagado.
@@ -700,8 +990,10 @@ if (!app.requestSingleInstanceLock()) {
     console.log(`[prism] pasta de dados: ${app.getPath("userData")}`);
     if (devServerUrl === undefined) serveRenderer();
     // RN-SHELL-001 e RN-CONFIG-008: a tela só tem as permissões que usa (copiar, colar, ler as fontes do sistema), e só na origem dela.
-    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, rendererOrigin)));
-    session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, rendererOrigin));
+    // RN-ABAS-017: a janela do resultado (uma página em branco) é reconhecida pelo `webContents`, e só a área de transferência vale nela; consulta sem `webContents`
+    // vale a regra da origem.
+    session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(permissionAllowed(permission, details.requestingUrl, rendererOrigin, isResultContents(contents))));
+    session.defaultSession.setPermissionCheckHandler((contents, permission, requestingOrigin) => permissionAllowed(permission, requestingOrigin, rendererOrigin, isResultContents(contents)));
     // O atualizador nunca impede o app de abrir: se ele não nascer, só não há atualização nesta abertura.
     try {
       startUpdater();
