@@ -2433,6 +2433,93 @@ guardadas se editam").
   Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
   consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
 
+## A linguagem das variáveis (seção 41: RN-VAR-001 a 018, 020 e 036, RN-SQL-009)
+
+Parte 9, frente 1: só a linguagem, pura, em `src/app/workbench/_lib/variables/`. Ainda não há tela: nem a marca no editor, nem o painel das variáveis, nem a
+execução ligada ao `use-query-runner`; as frentes seguintes só chamam o que está aqui. A API não lê nada disto: o texto que ela recebe já vem com os
+marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
+
+- **Os arquivos.** `lexer.ts` e `parser.ts` (o leitor da gramática inteira da RN-VAR-002; o que fica para depois é lido e recusado pela conferência com as frases
+  provisórias), `ast.ts`, `catalog.ts` (nomes fechados, palavras reservadas, membros dos espaços de nomes), `values.ts` (valores e tipos), `numbers.ts`,
+  `dates.ts`, `operators.ts`, `functions.ts` (as tabelas de funções e métodos, em `Map`), `evaluate.ts` (o avaliador), `meter.ts` (os limites), `random.ts`
+  (xoshiro128**), `script.ts` e `script-items.ts` (o script em itens), `run.ts` (a execução e a conferência), `at-names.ts` e `markers.ts` (o `@nome` e os
+  marcadores que já estão no texto), `bind.ts` (a troca), `sent-sql.ts` ("SQL enviado"), `positions.ts` (o mapa das posições), `wire.ts`,
+  `evaluator-service.ts`, `evaluator.worker.ts` e `evaluator-host.ts` (o Worker), `boundary.ts` (o único lugar que escreve no console) e
+  `variables.copy.ts` (os limites, `limits`, e as frases, `phrase`).
+- **O que a execução chama, nesta ordem.**
+  1. `readScript(source, engine?, { blankLines? }): ScriptModel` divide o script em itens (comando, declaração, reatribuição, RN-VAR-019), lê cada declaração e
+     acha os `@nome` de cada comando. Os itens têm `index`, `line`, `kind`, `parsed` (a declaração lida, ou nulo) e `error` (por que não leu). O
+     `sql-statements.ts` aprendeu o item de declaração por um `DeclarationReader` injetado (`declarationReader(engine)` em `script-items.ts`; `splitScript`,
+     `scriptItemAt`, `scriptItemCount`): o leitor do SQL não importa a linguagem. A declaração vira `;` e espaços na máscara, e as posições não mudam.
+  2. `staticDiagnostics(model): ItemDiagnostic[]` são os erros que se sabem sem executar (gramática, nomes, `const` reatribuído, `@nome` antes da declaração,
+     marcador já escrito no texto). `checkScript(model, clock?, now?)` é essa conferência mais a execução em seco do que é determinístico (RN-VAR-012).
+     **A tela mostra a conferência do script inteiro**: o serviço do Worker só devolve o erro dos itens pedidos, e o item que o leitor recusou não está na
+     lista (quem usa a variável recusada ouve "x não foi declarada", e a causa vem do `staticDiagnostics`).
+  3. `dependencyPlan(model, index, tab): number[]` diz quais atribuições avaliar antes do item (a regra do Ctrl+Enter, RN-VAR-020 e 023): as de que ele depende e
+     que a aba ainda não tem em dia (o texto da atribuição é o mesmo e foi avaliada depois das de que depende).
+  4. Avaliar: `new ScriptRun(model, { engine?, random, clock, now }, tab?, counter?)` e `run.evaluate(index): AssignmentResult` (`{ ok: true, stored, steps }` ou
+     `{ ok: false, error }`), `run.tab`, `run.counter`, `run.valueOf(name)`, `run.forget(name)`. `evaluateScript(model, config, tab?, counter?)` faz o script
+     inteiro. Em produção a avaliação roda no Worker (abaixo); o `ScriptRun` direto serve aos testes e às sondas.
+  5. Trocar: `run.bind(index): BindResult` devolve `{ ok: true, command: BoundCommand }`, com `command.sql` (os marcadores do banco: `$n` no PostgreSQL, `?` no
+     Db2 e no Informix; uma lista vira marcadores separados por `, `, só entre parênteses; o `sql` entra no texto), `command.params` (`{ type, value, variable,
+     item }`, o valor sempre como texto, ou `null`) e `command.replacements` (onde estava cada `@nome` e onde ficou o que o trocou). `bindCommand(text, engine,
+     declared, scope, types?)` é a função por baixo.
+  6. `sentSql(command, engine): SentSql` é o "SQL enviado" com os literais da exportação (`scriptLiteral`, `sqlLiteral`): `text`, `header` (o comentário do alto
+     quando um valor ficou só com o marcador), `rows` (o quadro dos parâmetros), `notes` e `sqlRanges`. `parameterLiteral(engine, parameter)` é o literal de um
+     parâmetro, ou nulo.
+  7. O erro do banco: `editorOffset(statementStart, command, databasePosition)` leva a posição do erro (1 em diante, no texto enviado) ao texto do editor; dentro
+     de um marcador, de uma lista expandida ou do texto de um `sql` cai no começo do `@nome` (`originalOffset` é a parte sem o começo do comando).
+- **O Worker** (RN-VAR-013 e 014). `EvaluatorHost({ createWorker, timers?, perItemMilliseconds?, perRunMilliseconds? })` com `evaluate(request): Promise<EvaluateOutcome>` e
+  `dispose()`; `createBrowserWorker()` abre o Worker do pacote. O pedido (`EvaluateRequest`) leva o texto do script, o banco, os índices dos itens, a aba, o
+  contador, a semente e a hora, tudo como dado; a resposta vem item a item (`start`, `item`, `done`, `failed`). O host termina o Worker (`terminate()`) quando uma
+  declaração passa de 250 ms ou a execução de 5 s, devolve `{ kind: "timeout" }` com a frase e abre outro Worker no pedido seguinte. O núcleo mede os mesmos 250 ms e os
+  passos sozinho (a segunda defesa). `handleEvaluateRequest(request, post, clock?)` é o corpo do Worker, e os testes o rodam sem Worker. Os valores atravessam por
+  `toWire`/`fromWire` (e `storedToWire`/`storedFromWire`, `typeToWire`/`typeFromWire`): a cópia estruturada perderia o congelamento e o `Map`, e o dado de fora só vira
+  valor pelos construtores da linguagem, que conferem a forma.
+- **Os valores.** Registros congelados e sem protótipo, de oito espécies: `number` (o `double` e, quando veio escrito, o texto exato `exact`, com `inexact` se o
+  `double` não o escreve inteiro; a conta e a comparação recusam o inexato), `string` (até 1.000.000 de unidades UTF-16, sem U+0000 nem metade de par), `boolean`,
+  `null`, `date` (campos do calendário e precisão `day` ou `instant`; as contas passam pela hora local da máquina), `list` (até 10.000 itens do mesmo tipo, sem lista de
+  lista), `object` (até 100 campos, num `Map` congelado: a chave nunca é propriedade) e `sql`. O tipo (`Type`) tem `nullable`, `list` e `never` (a lista vazia). A frase curta
+  de um valor é `displayValue`/`inlineValue`/`typeLabel`; o texto de uma interpolação é `textOf`.
+- **Segurança do avaliador (RN-VAR-014).** Nada do texto vira nome de propriedade do JavaScript: o membro se lê por regra positiva (campo de objeto pelo `Map`,
+  `length`, os métodos das tabelas), as palavras do JavaScript que a linguagem não tem são recusadas pelo leitor, e nenhum valor é função, `Symbol`, `undefined` nem
+  `Proxy`. O teste de ataques confere que `Object.prototype`, `Array.prototype` e os globais ficam como estavam. Sem `eval` nem `new Function`: a política de conteúdo
+  do app (`default-src 'self'`, RN-SHELL-001) vale para o Worker.
+- **Os limites** (`limits`, RN-VAR-013): 100.000 passos por declaração e 1.000.000 por execução, 250 ms por declaração e 5 s por execução, aninhamento 64, texto
+  1.000.000, lista 10.000, objeto 100 campos, declaração 64 KiB, 500 declarações, 10.000 parâmetros e 4 MiB, corpo do pedido 30.000.000 de bytes, valores da aba 128
+  MiB, `sql` 10.000 caracteres. As operações longas contam passos ponderados (`weigh`, 1 passo por 1.000 unidades). O relógio entra por parâmetro (`Clock`), e os testes
+  o falseiam.
+- **O `random`** (RN-VAR-010) é o xoshiro128** de Blackman e Vigna, um por execução, com a semente do `crypto.getRandomValues` na produção (`productionRandom()`); os
+  testes dão a semente (`new Random([a, b, c, d])`). `int` usa rejeição (uma saída até 2^32; duas, de 53 bits, acima), `float` é `u / 2^32` e `uuid` usa quatro
+  saídas com os bits de versão e variante. Não serve de segredo.
+- **As frases provisórias.** O que a gramática lê e esta frente ainda não executa é recusado, na conferência, com estas frases (em `phrase`; saem quando o passo
+  de cada uma entrar): `provisionalQuery` ("A variável de consulta chega numa próxima versão."), `provisionalSample` ("`random.of` chega numa próxima versão."),
+  `provisionalColumnType` ("O tipo de coluna chega numa próxima versão.") e `provisionalNoValue(nome)` ("`nome` não tem valor: escreva `= valor` (a pergunta dos
+  valores chega numa próxima versão)."). `StoredValue.origin` já traz `consulta`, `pergunta` e `diálogo` para quando elas entrarem.
+- **O log (RN-VAR-036).** Nenhuma exceção do JavaScript que escape do leitor, do conferidor ou do avaliador chega à pessoa: vira "Erro interno do Prism ao avaliar
+  <nome>." (`reportInternalError`), e ao console de desenvolvimento vai só o nome do tipo do erro, nunca a mensagem, o texto do script nem um valor. Nenhum outro arquivo
+  da linguagem usa o `console` (um teste confere).
+- **Os testes.** Os casos de tabela são `*.cases.json` escritos à mão a partir da especificação e nunca regerados do código (`reader`, `placement`, `types`,
+  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
+  `TZ=America/Sao_Paulo`, porque as datas valem na hora local). `properties.test.ts` sorteia 10.000 textos e árvores por execução, de uma semente nova a cada vez (a de
+  `PRISM_PROPERTY_SEED`, se estiver no ambiente) que a mensagem de falha traz. A fixture compartilhada com a API é `src/test-fixtures/variables/markers.json` (a conta
+  dos marcadores de cada banco; `markers.fixture.test.ts` a lê; a API tem de contar igual, RN-VAR-017).
+- **O contrato com a API (RN-VAR-017 e 032; `api-contract.test.ts`).** O pedido leva só `{ type, value }` em cada parâmetro: `requestParams(command.params)` tira o `variable`
+  e o `item`, que ficam na tela para o "SQL enviado" (uma terceira chave é 422 `QUERY_INVALID`). A tela recusa antes, com a frase dela, o que a API recusaria: o `number` de
+  mais de 100 caracteres, o decimal de mais de 31 dígitos no Db2 e no Informix (o driver; "pelo driver" na frase do Informix), a lista de mais de 10.000 valores e os
+  valores de mais de 4 MiB. O corpo de `POST queries` vai até 30.000.000 de bytes (`limits.requestBodyBytes`), o das rotas `transfers` (exportação e cópia, `source.params`)
+  até 16 MiB (`limits.transferBodyBytes`): quem monta o pedido da exportação confere `requestBodyBytes(sql, params)` contra o segundo. O `timestamp` com fuso só vai no
+  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável, que traz esse texto, ainda não entrou). As
+  recusas voltam como `ApiError`: `QUERY_INVALID` (`errors["params[i].value"]`, `["params[i].type"]` ou `["params"]`, e o `errorCodes` do mesmo campo em `extensions`), na
+  exportação `EXPORT_OPTIONS_INVALID` e na cópia `IMPORT_OPTIONS_INVALID` em `source.params[i].value`, `QUERY_PARAMETERS_MISMATCH` com `extensions.markers` e `extensions.values`
+  (números; a tela e a API contam igual pela fixture, então ele só vem se o texto mudou no caminho) e `FILTER_INVALID` quando o filtro de um resultado com parâmetros
+  tem `$n` ou `?`. Os valores nunca vão a mensagem nenhuma.
+- **A sonda S-VAR-4** (Node 22 e Electron 44 sob Xvfb, numa VM de 4 vCPU a 2,1 GHz; o app empacotado não foi aberto): nenhuma declaração dentro dos limites passa de
+  ~45 ms (a conta mais longa que cabe em 64 KiB; o `replaceAll` sobre 1.000.000 de caracteres, 24 ms); a execução mais cara (400 declarações de 1.000 termos, 400.400
+  passos) leva 1,6 a 2,4 s dos 5 s; a troca de uma lista de 10.000 valores leva 60 a 280 ms nos três bancos; o host para um Worker que não volta em 250 ms (mais 10 a 45
+  ms) e em 5 s (mais 1 a 4 ms), e o Worker seguinte responde em 20 a 62 ms. Não exercitados: o app empacotado (a política de conteúdo e o endereço do Worker feito pelo
+  Vite), Windows e macOS, e uma chamada nativa que passe de verdade dos 250 ms.
+
 ## Proteções da conexão e da pasta (RN-PROT-001 a 006)
 
 Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
