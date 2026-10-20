@@ -51,6 +51,10 @@ seguinte (o primeiro de cada versão é o `beta.1`). A `0.2.0` estável reúne t
 um beta aparece marcado como "Pre-release". O Prism instalado só oferece beta a quem ligou "Receber versões beta" em Configurações ›
 Atualizações; com a opção desligada, quem está numa beta recebe a próxima estável.
 
+**Um beta sai para Windows e Linux; o macOS só tem pacote nas estáveis** (decisão do dono em 2026-10-20, para economizar os minutos da
+pipeline: o de macOS é o mais caro). As notas de todo beta dizem isso, e no macOS o Prism não oferece beta (a opção "Receber versões
+beta" continua lá, com a dica de que ali ela não muda nada): quem usa macOS atualiza pelas estáveis.
+
 ### O número do formato do cofre
 
 O cofre tem um número de formato próprio no cabeçalho do arquivo, **independente da versão do app**. Ele só muda
@@ -142,9 +146,9 @@ no próprio repositório, o [`cliff.toml`](../cliff.toml).
 ## 5. Como lançar uma versão
 
 **Lançar é fazer um merge**: o pull request de lançamento, `release: vX.Y.Z`, que leva a `develop` à `main`. No merge na `main`, a
-pipeline calcula a versão da vez (seção 2), vê que há commit novo desde a última estável, e faz o resto sozinha: gera os pacotes de
-todas as plataformas, cria a release como rascunho, anexa os pacotes e o `SHA256SUMS`, e publica, o que cria a tag `vX.Y.Z` no commit
-do merge. As notas são a seção `## [X.Y.Z]` do `CHANGELOG.md`, se você a levou à `develop` antes (um merge a mais, opcional); senão, o
+pipeline calcula a versão da vez (seção 2), vê que há commit novo desde a última estável, e faz o resto sozinha: gera os pacotes das
+quatro plataformas (Windows, Linux e os dois macOS: o macOS só sai nas estáveis), cria a release como rascunho, anexa os pacotes das
+plataformas que vieram inteiras e o `SHA256SUMS`, e publica, o que cria a tag `vX.Y.Z` no commit do merge. As notas são a seção `## [X.Y.Z]` do `CHANGELOG.md`, se você a levou à `develop` antes (um merge a mais, opcional); senão, o
 `git-cliff` as gera dos commits. **Ninguém cria tag à mão.** Um merge na `main` sem commit novo desde a última estável não lança nada:
 a pipeline avisa "nada novo desde a vX.Y.Z".
 
@@ -236,12 +240,14 @@ senão, o `git-cliff` com o histórico inteiro, que fala de tarefas internas: fe
 
 7. **A pipeline da `main` trabalha sozinha** ([ci.md](ci.md#a-ordem-das-etapas)): confere a versão e o changelog; verifica, testa e
    audita o código; gera os pacotes de Windows, Linux e macOS, cada um com a API da mesma plataforma e com o endereço onde o app vai
-   procurar atualização; cria a release como rascunho, anexa os onze arquivos e publica. **É a publicação que cria a tag `vX.Y.Z`**,
+   procurar atualização; cria a release como rascunho, anexa os onze arquivos (os de cada plataforma que veio inteira) e publica. **É a publicação que cria a tag `vX.Y.Z`**,
    no commit do merge. O único token que ela usa é o do próprio job.
 
 8. **Confira que deu certo.**
    - Na página de releases: a release "Prism X.Y.Z", marcada como "Latest" e como "Immutable", as notas, o bloco "Somas SHA-256" no
-     fim delas e os onze arquivos.
+     fim delas e os onze arquivos. **Se faltar o pacote de uma plataforma** (a execução da `main` mostra o aviso "Plataforma sem pacote",
+     com o job verde), as notas dizem no começo qual, e a plataforma volta na próxima versão: a release publicada não recebe arquivo
+     depois, então, se a falta for grave, lance a versão seguinte.
    - A tag, no commit do merge: `git fetch --tags origin` e `git rev-parse "vX.Y.Z^{commit}"`.
    - Um pacote: baixe-o, calcule o SHA-256 e compare com a linha dele no `SHA256SUMS` **e** nas notas da release:
 
@@ -269,7 +275,8 @@ Em resumo:
 | Onde parou | O que aconteceu | O que fazer |
 | --- | --- | --- |
 | `Conferir a versão` | a versão está fora do formato, a versão da vez não é maior que um beta já publicado, ou o título da seção do changelog cita a versão da vez fora do formato. Nada foi gerado | corrija num pull request |
-| testes, auditoria ou um pacote | nada foi publicado | corrija e faça o merge, ou repita o job |
+| testes ou auditoria | nada foi publicado | corrija e faça o merge, ou repita o job |
+| o pacote de uma plataforma (falhou, foi cancelado ou ficou sem runner) | **a versão sai com as outras plataformas**: o job `Publicar a release` termina verde, com um aviso à vista, e as notas dizem quem ficou sem o pacote | nada a fazer: a plataforma volta na próxima versão (uma release publicada não recebe arquivo depois) |
 | `Publicar a release`, antes de publicar | um rascunho, talvez com parte dos arquivos; **não há tag**: para o app e para a página de releases, a versão não existe | leia a mensagem do job, conserte a causa e repita o job |
 | `Publicar a release` diz que o plano não bate com as tags | outra coisa mudou as tags durante a execução (uma estável saiu enquanto um beta era empacotado, por exemplo: a versão da vez mudou) | rode a execução inteira de novo ("Re-run all jobs") |
 
@@ -278,7 +285,8 @@ Em resumo:
 Não há o que fazer: **cada merge na `develop` publica um beta** da versão da vez (seção 2), com o número seguinte (`v0.2.0-beta.1`,
 `v0.2.0-beta.2`…) e as notas do `git-cliff` desde a tag de versão anterior. O número conta só os betas da versão da vez: depois de uma
 estável, o primeiro beta da seguinte é o `beta.1` (`v0.1.1-beta.1`). As execuções de um ramo correm uma de cada vez, na ordem dos
-merges. Um beta não ganha seção no changelog.
+merges. Um beta não ganha seção no changelog. Ele sai com os pacotes de Windows e Linux: se o de uma delas falhar, o beta sai mesmo
+assim com a outra, e as notas dizem qual plataforma ficou sem pacote.
 
 ### Se a versão saiu errada
 
@@ -304,7 +312,10 @@ A pipeline publica; quem atualiza é o app. Ao abrir, e no máximo uma vez por d
 o pacote saiu (o endereço é gravado no pacote pela pipeline, a partir do próprio workflow). Havendo versão mais nova no canal
 escolhido (só as estáveis, ou também as betas, com "Receber versões beta" ligado), ele mostra as notas e pergunta; **só baixa se o
 usuário mandar**, confere o pacote com as duas somas (a das notas e a do `SHA256SUMS`) antes de instalar, e permite pular uma versão
-ou desligar a verificação ao abrir. No Windows, ele roda o instalador conferido; no Linux e no macOS, deixa o pacote conferido na
+ou desligar a verificação ao abrir. **Uma versão que saiu sem o pacote do sistema da pessoa não é oferecida a ela**: o Prism procura a
+mais nova que tem o pacote (o nome do arquivo precisa estar nas somas das notas), e as notas que mostra vão até essa versão; sem
+nenhuma, ele diz que está atualizado. (As versões instaladas até a `0.5.0-beta.2` não têm essa regra: nelas a versão sem o pacote
+aparece, e a atualização é recusada.) No Windows, ele roda o instalador conferido; no Linux e no macOS, deixa o pacote conferido na
 pasta de downloads e diz o que fazer. Um Prism gerado sem o endereço (o de desenvolvimento, um pacote gerado à mão) não procura
 atualização. A consulta é feita sem credencial: num repositório privado ela não acha nada.
 
