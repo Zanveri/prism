@@ -4,8 +4,8 @@ using System.Text.Json;
 namespace Prism.UnitTesting.Databases;
 
 /// <summary>
-/// RN-VAR-032: a contagem dos marcadores de parâmetro pelo leitor do texto da API. Os casos de contagem de `src/test-fixtures/variables/markers.api-draft.json`
-/// (o texto, o banco e o número de marcadores; a integração os junta ao `markers.json` da tela, e os dois leitores têm de contar igual) e o que só a API
+/// RN-VAR-032: a contagem dos marcadores de parâmetro pelo leitor do texto da API. Os casos de contagem de `src/test-fixtures/variables/markers.json`
+/// (o texto, o banco e o número de marcadores; a tela lê o mesmo arquivo, e os dois leitores têm de contar igual) e o que só a API
 /// faz: a conferência contra os valores, a troca do texto e a posição de cada marcador.
 /// </summary>
 public sealed class ParameterMarkersTests
@@ -13,9 +13,20 @@ public sealed class ParameterMarkersTests
     public static TheoryData<string, string, string, int> Fixture()
     {
         var data = new TheoryData<string, string, string, int>();
-        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "test-fixtures", "variables", "markers.api-draft.json")));
-        foreach (var item in document.RootElement.EnumerateArray())
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "test-fixtures", "variables", "markers.json")));
+        foreach (var item in document.RootElement.GetProperty("cases").EnumerateArray())
             data.Add(item.GetProperty("name").GetString()!, item.GetProperty("engine").GetString()!, item.GetProperty("text").GetString()!, item.GetProperty("count").GetInt32());
+
+        return data;
+    }
+
+    public static TheoryData<string, string, int[]> FixtureNumbers()
+    {
+        var data = new TheoryData<string, string, int[]>();
+        using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "test-fixtures", "variables", "markers.json")));
+        foreach (var item in document.RootElement.GetProperty("cases").EnumerateArray())
+            if (item.TryGetProperty("numbers", out var numbers))
+                data.Add(item.GetProperty("name").GetString()!, item.GetProperty("text").GetString()!, numbers.EnumerateArray().Select(number => number.GetInt32()).ToArray());
 
         return data;
     }
@@ -42,6 +53,18 @@ public sealed class ParameterMarkersTests
     }
 
     [Trait("ParameterMarkers", "Count")]
+    [Theory(DisplayName = "OK acha o número de cada $n do fixture do PostgreSQL, na ordem do texto")]
+    [MemberData(nameof(FixtureNumbers))]
+    public void Find_ShouldFollowTheFixtureNumbers(string name, string text, int[] expected)
+    {
+        //Act
+        var numbers = ParameterMarkers.Find(text, ESqlDialect.PostgreSql).Select(marker => marker.Number).ToArray();
+
+        //Assert
+        Assert.True(expected.SequenceEqual(numbers), $"{name}: esperado [{string.Join(", ", expected)}], achou [{string.Join(", ", numbers)}]");
+    }
+
+    [Trait("ParameterMarkers", "Count")]
     [Fact(DisplayName = "OK o fixture tem casos dos três bancos")]
     public void Fixture_ShouldCoverTheThreeEngines()
     {
@@ -50,7 +73,7 @@ public sealed class ParameterMarkersTests
 
         //Assert
         Assert.Equal(["db2", "informix", "postgresql"], engines);
-        Assert.True(Fixture().Count() >= 80);
+        Assert.True(Fixture().Count() >= 120);
     }
 
     [Trait("ParameterMarkers", "Find")]
