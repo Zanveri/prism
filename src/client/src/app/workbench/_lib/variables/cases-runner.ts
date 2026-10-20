@@ -17,6 +17,9 @@ import { numberText } from "./values";
  * `engine` (ou nulo), `input`, `seed` (ou nulo) e o que se espera: `value` e `type`, ou `error` com `line`, `column` e `message`. Os arquivos nunca se regeram a partir do código.
  */
 
+// As datas valem na hora local da máquina (RN-VAR-007): os casos fixam a de São Paulo, sem horário de verão desde 2019 e com ele em 2018 e 2019.
+process.env.TZ = "America/Sao_Paulo";
+
 export type CaseError = { line: number; column: number; message: string };
 
 export type Case = {
@@ -27,8 +30,19 @@ export type Case = {
   value?: unknown;
   type?: string;
   error?: CaseError;
+  /** Para o texto grande que não cabe escrito à mão: cada `token` de `input` troca por `text` repetido `times` vezes. */
+  expand?: { token: string; text: string; times: number } | { token: string; text: string; times: number }[];
+  /** Os milissegundos que o relógio falso anda a cada leitura (os casos dos 250 ms e dos 5 s). */
+  clockStep?: number;
+  now?: string;
   [extra: string]: unknown;
 };
+
+/** O texto do caso com o `expand` feito. */
+export function inputOf(c: Case): string {
+  const steps = c.expand === undefined ? [] : Array.isArray(c.expand) ? c.expand : [c.expand];
+  return steps.reduce((text, step) => text.replaceAll(step.token, step.text.repeat(step.times)), c.input);
+}
 
 /** Os casos de um arquivo `<grupo>.cases.json`. */
 export function loadCases<T extends Case = Case>(group: string): T[] {
@@ -68,8 +82,9 @@ export type Outcome = { value: unknown; type: string; exact?: string } | { error
 
 /** Lê, confere e avalia o script do caso; devolve o valor da última variável atribuída, ou o primeiro erro. */
 export function evaluateCase(c: Case): Outcome {
-  const model = readScript(c.input, c.engine ?? undefined, { blankLines: true });
-  const config = { engine: c.engine ?? undefined, random: new Random((c.seed ?? [1, 2, 3, 4]) as Seed), clock: () => 0, now: () => testNow(typeof c.now === "string" ? c.now : undefined) };
+  const model = readScript(inputOf(c), c.engine ?? undefined, { blankLines: true });
+  let ticks = 0;
+  const config = { engine: c.engine ?? undefined, random: new Random((c.seed ?? [1, 2, 3, 4]) as Seed), clock: () => (ticks += c.clockStep ?? 0), now: () => testNow(typeof c.now === "string" ? c.now : undefined) };
   const report = evaluateScript(model, config);
 
   const first = report.checkErrors[0];

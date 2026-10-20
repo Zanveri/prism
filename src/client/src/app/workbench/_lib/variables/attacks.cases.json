@@ -1,0 +1,1581 @@
+{
+  "rule": "RN-VAR-014: a segurança do avaliador. Cada ataque é recusado com a frase, e o ambiente (Object.prototype, Array.prototype, os globais) fica como estava.",
+  "cases": [
+    {
+      "name": "x.constructor",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.constructor",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "x.constructor.constructor('return process')()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.constructor.constructor('return process')()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "''.constructor",
+      "engine": null,
+      "input": "const r = ''.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "(1).constructor",
+      "engine": null,
+      "input": "const r = (1).constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "true.constructor",
+      "engine": null,
+      "input": "const r = true.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "[].constructor",
+      "engine": null,
+      "input": "const r = [].constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "{}.constructor",
+      "engine": null,
+      "input": "const r = {}.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "a?.constructor",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o?.constructor",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 14,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.constructor",
+      "engine": null,
+      "input": "const r = Math.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "random.constructor",
+      "engine": null,
+      "input": "const r = random.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "date.constructor",
+      "engine": null,
+      "input": "const r = date.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "Date.constructor",
+      "engine": null,
+      "input": "const r = Date.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "Number.constructor",
+      "engine": null,
+      "input": "const r = Number.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "x.__proto__",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.__proto__",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "__proto__ não pode ser lido."
+      }
+    },
+    {
+      "name": "x.prototype",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.prototype",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "prototype não pode ser lido."
+      }
+    },
+    {
+      "name": "x.__defineGetter__",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.__defineGetter__",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "__defineGetter__ não pode ser lido."
+      }
+    },
+    {
+      "name": "x.__defineSetter__",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.__defineSetter__",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "__defineSetter__ não pode ser lido."
+      }
+    },
+    {
+      "name": "x.__lookupGetter__",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.__lookupGetter__",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "__lookupGetter__ não pode ser lido."
+      }
+    },
+    {
+      "name": "x.__lookupSetter__",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.__lookupSetter__",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "__lookupSetter__ não pode ser lido."
+      }
+    },
+    {
+      "name": "x.caller",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.caller",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "caller não pode ser lido."
+      }
+    },
+    {
+      "name": "x.callee",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.callee",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "callee não pode ser lido."
+      }
+    },
+    {
+      "name": "x.arguments",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.arguments",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "arguments não pode ser lido."
+      }
+    },
+    {
+      "name": "x.toString()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.toString()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "x.valueOf()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.valueOf()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "valueOf não pode ser lido."
+      }
+    },
+    {
+      "name": "x.toLocaleString()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.toLocaleString()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "toLocaleString não pode ser lido."
+      }
+    },
+    {
+      "name": "x.hasOwnProperty('a')",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.hasOwnProperty('a')",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "hasOwnProperty não pode ser lido."
+      }
+    },
+    {
+      "name": "x.isPrototypeOf(x)",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.isPrototypeOf(x)",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "isPrototypeOf não pode ser lido."
+      }
+    },
+    {
+      "name": "x.propertyIsEnumerable('a')",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.propertyIsEnumerable('a')",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "propertyIsEnumerable não pode ser lido."
+      }
+    },
+    {
+      "name": "x.call()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.call()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "call não pode ser lido."
+      }
+    },
+    {
+      "name": "x.apply()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.apply()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "apply não pode ser lido."
+      }
+    },
+    {
+      "name": "x.bind()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.bind()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "bind não pode ser lido."
+      }
+    },
+    {
+      "name": "x.then()",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = x.then()",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 13,
+        "message": "then não pode ser lido."
+      }
+    },
+    {
+      "name": "'a'.constructor()",
+      "engine": null,
+      "input": "const r = 'a'.constructor()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "'a'.__proto__()",
+      "engine": null,
+      "input": "const r = 'a'.__proto__()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "__proto__ não pode ser lido."
+      }
+    },
+    {
+      "name": "'a'.hasOwnProperty('length')",
+      "engine": null,
+      "input": "const r = 'a'.hasOwnProperty('length')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "hasOwnProperty não pode ser lido."
+      }
+    },
+    {
+      "name": "[].constructor()",
+      "engine": null,
+      "input": "const r = [].constructor()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.max.call",
+      "engine": null,
+      "input": "const r = Math.max.call(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "call não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.max.apply",
+      "engine": null,
+      "input": "const r = Math.max.apply(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "apply não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.max.bind",
+      "engine": null,
+      "input": "const r = Math.max.bind(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "bind não pode ser lido."
+      }
+    },
+    {
+      "name": "o['constructor']",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o['constructor']",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o['con' + 'structor']",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o['con' + 'structor']",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "a chave feita num modelo",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o[`con${'structor'}`]",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o?.['__proto__']",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o?.['__proto__']",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "__proto__ não pode ser lido."
+      }
+    },
+    {
+      "name": "o['toString']",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o['toString']",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "o['hasOwnProperty']",
+      "engine": null,
+      "input": "const x = 'a'\nconst o = { a: 1 }\nconst r = o['hasOwnProperty']",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "hasOwnProperty não pode ser lido."
+      }
+    },
+    {
+      "name": "Math['max']",
+      "engine": null,
+      "input": "const r = Math['max']",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math é um nome do Prism, e não um valor: use Math.nome(…), como Math.max(…)."
+      }
+    },
+    {
+      "name": "random['int']",
+      "engine": null,
+      "input": "const r = random['int'](1, 2)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random é um nome do Prism, e não um valor: use random.nome(…), como random.int(…)."
+      }
+    },
+    {
+      "name": "constructor sozinho",
+      "engine": null,
+      "input": "const r = constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "constructor não foi declarada."
+      }
+    },
+    {
+      "name": "window sozinho",
+      "engine": null,
+      "input": "const r = window",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "window não foi declarada."
+      }
+    },
+    {
+      "name": "globalThis sozinho",
+      "engine": null,
+      "input": "const r = globalThis",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "globalThis não foi declarada."
+      }
+    },
+    {
+      "name": "self sozinho",
+      "engine": null,
+      "input": "const r = self",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "self não foi declarada."
+      }
+    },
+    {
+      "name": "document sozinho",
+      "engine": null,
+      "input": "const r = document",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "document não foi declarada."
+      }
+    },
+    {
+      "name": "process sozinho",
+      "engine": null,
+      "input": "const r = process",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "process não foi declarada."
+      }
+    },
+    {
+      "name": "arguments sozinho",
+      "engine": null,
+      "input": "const r = arguments",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "arguments não foi declarada."
+      }
+    },
+    {
+      "name": "undefined sozinho",
+      "engine": null,
+      "input": "const r = undefined",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "undefined não foi declarada."
+      }
+    },
+    {
+      "name": "NaN sozinho",
+      "engine": null,
+      "input": "const r = NaN",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "NaN não foi declarada."
+      }
+    },
+    {
+      "name": "Infinity sozinho",
+      "engine": null,
+      "input": "const r = Infinity",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Infinity não foi declarada."
+      }
+    },
+    {
+      "name": "console sozinho",
+      "engine": null,
+      "input": "const r = console",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "console não foi declarada."
+      }
+    },
+    {
+      "name": "localStorage sozinho",
+      "engine": null,
+      "input": "const r = localStorage",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "localStorage não foi declarada."
+      }
+    },
+    {
+      "name": "fetch sozinho",
+      "engine": null,
+      "input": "const r = fetch",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "fetch não foi declarada."
+      }
+    },
+    {
+      "name": "require('fs')",
+      "engine": null,
+      "input": "const r = require('fs')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "require não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "eval('1')",
+      "engine": null,
+      "input": "const r = eval('1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "eval não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "Function('return 1')",
+      "engine": null,
+      "input": "const r = Function('return 1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Function não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "Symbol()",
+      "engine": null,
+      "input": "const r = Symbol()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Symbol não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "setTimeout(1)",
+      "engine": null,
+      "input": "const r = setTimeout(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "setTimeout não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "parseInt('1')",
+      "engine": null,
+      "input": "const r = parseInt('1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "parseInt não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "alert(1)",
+      "engine": null,
+      "input": "const r = alert(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "alert não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "Array(3)",
+      "engine": null,
+      "input": "const r = Array(3)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Array não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "Object.keys(1)",
+      "engine": null,
+      "input": "const r = Object.keys(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Object não foi declarada."
+      }
+    },
+    {
+      "name": "JSON.parse('1')",
+      "engine": null,
+      "input": "const r = JSON.parse('1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "JSON não foi declarada."
+      }
+    },
+    {
+      "name": "import('x')",
+      "engine": null,
+      "input": "const r = import('x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "import não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "new Function",
+      "engine": null,
+      "input": "const r = new Function('return 1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "new só existe com Date: new Date(…)."
+      }
+    },
+    {
+      "name": "new Array(1e9)",
+      "engine": null,
+      "input": "const r = new Array(1e9)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "new só existe com Date: new Date(…)."
+      }
+    },
+    {
+      "name": "new Proxy({}, {})",
+      "engine": null,
+      "input": "const r = new Proxy({}, {})",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "new só existe com Date: new Date(…)."
+      }
+    },
+    {
+      "name": "new Date.constructor",
+      "engine": null,
+      "input": "const r = new Date.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 19,
+        "message": "Esperava ( depois de new Date: new Date(…)."
+      }
+    },
+    {
+      "name": "new.target",
+      "engine": null,
+      "input": "const r = new.target",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "new só existe com Date: new Date(…)."
+      }
+    },
+    {
+      "name": "for (;;) {}",
+      "engine": null,
+      "input": "const r = for (;;) {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "for não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "while (true) {}",
+      "engine": null,
+      "input": "const r = while (true) {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "while não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "function f() {}",
+      "engine": null,
+      "input": "const r = function f() {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "function não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "class A {}",
+      "engine": null,
+      "input": "const r = class A {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "class não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "this",
+      "engine": null,
+      "input": "const r = this",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "this não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "super",
+      "engine": null,
+      "input": "const r = super",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "super não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "do {} while (0)",
+      "engine": null,
+      "input": "const r = do {} while (0)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "do não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "if (1) 2",
+      "engine": null,
+      "input": "const r = if (1) 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "if não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "switch (1) {}",
+      "engine": null,
+      "input": "const r = switch (1) {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "switch não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "try {} catch (e) {}",
+      "engine": null,
+      "input": "const r = try {} catch (e) {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "try não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "throw 1",
+      "engine": null,
+      "input": "const r = throw 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "throw não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "return 1",
+      "engine": null,
+      "input": "const r = return 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "return não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "export 1",
+      "engine": null,
+      "input": "const r = export 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "export não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "yield 1",
+      "engine": null,
+      "input": "const r = yield 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "yield não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "await 1",
+      "engine": null,
+      "input": "const r = await 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "await não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "var x = 1",
+      "engine": null,
+      "input": "const r = var x = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "var não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "debugger",
+      "engine": null,
+      "input": "const r = debugger",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "debugger não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "() => 1",
+      "engine": null,
+      "input": "const r = () => 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "Esperava um valor, e veio )."
+      }
+    },
+    {
+      "name": "x => x",
+      "engine": null,
+      "input": "const r = x => x",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "=> não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "a = b = c",
+      "engine": null,
+      "input": "let a = 1\na = b = c",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 7,
+        "message": "O operador = não existe aqui."
+      }
+    },
+    {
+      "name": "a++",
+      "engine": null,
+      "input": "let a = 1\nconst r = a++",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 12,
+        "message": "O operador ++ não existe aqui."
+      }
+    },
+    {
+      "name": "delete a.b",
+      "engine": null,
+      "input": "const r = delete a.b",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O operador delete não existe aqui."
+      }
+    },
+    {
+      "name": "a.b = 1",
+      "engine": null,
+      "input": "const a = { b: 0 }\nconst r = a.b = 1",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 15,
+        "message": "O operador = não existe aqui."
+      }
+    },
+    {
+      "name": "a[0] = 1",
+      "engine": null,
+      "input": "const a = [0]\nconst r = a[0] = 1",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 16,
+        "message": "O operador = não existe aqui."
+      }
+    },
+    {
+      "name": "void 0",
+      "engine": null,
+      "input": "const r = void 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O operador void não existe aqui."
+      }
+    },
+    {
+      "name": "typeof x",
+      "engine": null,
+      "input": "const r = typeof x",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O operador typeof não existe aqui."
+      }
+    },
+    {
+      "name": "/a+/",
+      "engine": null,
+      "input": "const r = /a+/",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A expressão regular não existe aqui."
+      }
+    },
+    {
+      "name": "'a'.match",
+      "engine": null,
+      "input": "const r = 'a'.match('a')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "match não existe em string."
+      }
+    },
+    {
+      "name": "'a'.replace",
+      "engine": null,
+      "input": "const r = 'a'.replace('a', 'b')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "replace não existe em string."
+      }
+    },
+    {
+      "name": "'x'.repeat(1e9)",
+      "engine": null,
+      "input": "const r = 'x'.repeat(1e9)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "repeat não existe em string."
+      }
+    },
+    {
+      "name": "'a'.padStart(1e9)",
+      "engine": null,
+      "input": "const r = 'a'.padStart(1e9)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "random.string(1e9)",
+      "engine": null,
+      "input": "const r = random.string(1e9)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.string: o tamanho vai de 0 a 10.000."
+      }
+    },
+    {
+      "name": "[...Array(1e9)]",
+      "engine": null,
+      "input": "const r = [...Array(1e9)]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "Array não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "{ __proto__: { a: 1 } }",
+      "engine": null,
+      "input": "const r = { __proto__: { a: 1 } }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "__proto__ não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "{ \"__proto__\": 1 }",
+      "engine": null,
+      "input": "const r = { \"__proto__\": 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "__proto__ não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "{ constructor: 1 }",
+      "engine": null,
+      "input": "const r = { constructor: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "constructor não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "{ toString: 1 }",
+      "engine": null,
+      "input": "const r = { toString: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "toString não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "uma chave parecida com a vedada é comum",
+      "engine": null,
+      "input": "const r = { constructors: 1, proto: 2 }",
+      "seed": null,
+      "value": {
+        "constructors": 1,
+        "proto": 2
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "o campo com nome de método da lista",
+      "engine": null,
+      "input": "const r = { length: 1, at: 2 }.at",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "mil parênteses abertos",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 76,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "(",
+          "times": 1000
+        },
+        {
+          "token": "¶",
+          "text": ")",
+          "times": 1000
+        }
+      ]
+    },
+    {
+      "name": "uma lista de mil níveis",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 76,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "[",
+          "times": 1000
+        },
+        {
+          "token": "¶",
+          "text": "]",
+          "times": 1000
+        }
+      ]
+    },
+    {
+      "name": "um objeto de mil níveis",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 336,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "{ a: ",
+          "times": 1000
+        },
+        {
+          "token": "¶",
+          "text": " }",
+          "times": 1000
+        }
+      ]
+    },
+    {
+      "name": "um modelo dentro de modelo em mil níveis",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 206,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "`${",
+          "times": 1000
+        },
+        {
+          "token": "¶",
+          "text": "}`",
+          "times": 1000
+        }
+      ]
+    },
+    {
+      "name": "mil negações seguidas",
+      "engine": null,
+      "input": "const r = §true",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 76,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "!",
+          "times": 1000
+        }
+      ]
+    },
+    {
+      "name": "sessenta e quatro parênteses cabem",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "value": 1,
+      "type": "number",
+      "expand": [
+        {
+          "token": "§",
+          "text": "(",
+          "times": 64
+        },
+        {
+          "token": "¶",
+          "text": ")",
+          "times": 64
+        }
+      ]
+    },
+    {
+      "name": "a junção de um texto de 500.000 caracteres várias vezes",
+      "engine": null,
+      "input": "const s = 'x'.padStart(500000, 'x')\nconst r = s + s + s",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 17,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "a lista espalhada que passa de 10.000 itens",
+      "engine": null,
+      "input": "const l = 'x'.padStart(10000, ',').split(',')\nconst r = [...l, ...l]",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 21,
+        "message": "A lista passou de 10.000 itens."
+      }
+    },
+    {
+      "name": "a lista de 10.000 itens com mais um",
+      "engine": null,
+      "input": "const l = 'x'.padStart(10000, ',').split(',')\nconst r = [...l, 'y']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "A lista passou de 10.000 itens."
+      }
+    },
+    {
+      "name": "o includes de 1.000.000 de caracteres com um texto de 2.001 que quase casa",
+      "engine": null,
+      "input": "const s = 'a'.padStart(1000000, 'a')\nconst r = s.includes('a'.padStart(2000, 'a') + 'b')",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "o toUpperCase de 1.000.000 de ΐ",
+      "engine": null,
+      "input": "const s = 'ΐ'.padStart(1000000, 'ΐ')\nconst r = s.toUpperCase()",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "o replaceAll com o texto vazio",
+      "engine": null,
+      "input": "const r = 'abc'.replaceAll('', 'x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "replaceAll não aceita um texto vazio em de."
+      }
+    },
+    {
+      "name": "o replaceAll que passa do limite",
+      "engine": null,
+      "input": "const s = 'a'.padStart(600000, 'a')\nconst r = s.replaceAll('a', 'bb')",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "o join que passa de 1.000.000 de caracteres",
+      "engine": null,
+      "input": "const s = 'x'.padStart(100000, 'x')\nconst l = [§s]\nconst r = l.join('')",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      },
+      "expand": {
+        "token": "§",
+        "text": "s, ",
+        "times": 10
+      }
+    },
+    {
+      "name": "a soma dos valores da aba acima de 128 MiB",
+      "engine": null,
+      "input": "const s = 'x'.padStart(100000, 'x')\nconst l = [§s]",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 7,
+        "message": "Os valores da aba passaram de 128 MiB: tire uma variável grande."
+      },
+      "expand": {
+        "token": "§",
+        "text": "s, ",
+        "times": 700
+      }
+    },
+    {
+      "name": "o === entre textos de 1.000.000 de caracteres, muitas vezes",
+      "engine": null,
+      "input": "const a = 'x'.padStart(1000000, 'x')\nconst b = 'x'.padStart(1000000, 'x')\nconst r = a === b§",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 1102,
+        "message": "A expressão de r passou de 100.000 passos e foi parada."
+      },
+      "expand": {
+        "token": "§",
+        "text": " && a === b",
+        "times": 5000
+      }
+    },
+    {
+      "name": "o includes de um texto grande, muitas vezes",
+      "engine": null,
+      "input": "const s = 'x'.padStart(1000000, 'x')\nconst r = s.includes('y')§",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 1892,
+        "message": "A expressão de r passou de 100.000 passos e foi parada."
+      },
+      "expand": {
+        "token": "§",
+        "text": " || s.includes('y')",
+        "times": 200
+      }
+    },
+    {
+      "name": "o texto com U+0000",
+      "engine": null,
+      "input": "const r = 'a\\0b'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto não pode ter o caractere U+0000."
+      }
+    },
+    {
+      "name": "o texto com meio par UTF-16",
+      "engine": null,
+      "input": "const r = 'a\\uD83Db'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto tem um caractere incompleto (\\uD83D)."
+      }
+    },
+    {
+      "name": "o texto com marcas de direção vai como texto",
+      "engine": null,
+      "input": "const r = 'a\\u202Eb'",
+      "seed": null,
+      "value": "a‮b",
+      "type": "string"
+    },
+    {
+      "name": "o valor de injeção é só um texto",
+      "engine": null,
+      "input": "const r = \"'; DROP TABLE pedido; --\"",
+      "seed": null,
+      "value": "'; DROP TABLE pedido; --",
+      "type": "string"
+    },
+    {
+      "name": "o valor com $& não é padrão",
+      "engine": null,
+      "input": "const r = 'a'.replaceAll('a', '$&$&')",
+      "seed": null,
+      "value": "$&$&",
+      "type": "string"
+    }
+  ]
+}

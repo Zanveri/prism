@@ -1,0 +1,1544 @@
+{
+  "rule": "RN-VAR-001 e RN-SQL-002/018: onde a declaração vale, nos três bancos. value são os itens do script, [espécie, texto]; cursors são o item do Ctrl+Enter em cada posição.",
+  "cases": [
+    {
+      "name": "a declaração no começo do texto",
+      "engine": null,
+      "input": "let a = 1\nSELECT @a",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a declaração com ; e o comando na mesma linha",
+      "engine": null,
+      "input": "const a = 3; SELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "const a = 3;"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "depois do ; que termina um comando",
+      "engine": null,
+      "input": "SELECT 1;\nlet a = 1;\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "depois da linha em branco (ligada)",
+      "engine": null,
+      "input": "SELECT 1\n\nlet a = 1\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "depois da linha em branco (desligada)",
+      "engine": null,
+      "input": "SELECT 1\n\nlet a = 1\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false
+    },
+    {
+      "name": "a linha que começa por let termina o comando de cima sem ; e sem linha em branco",
+      "engine": null,
+      "input": "SELECT 1\nlet a = 1\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a linha que começa por const termina o comando de cima (desligada)",
+      "engine": null,
+      "input": "SELECT 1\nconst a = 1\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "const a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false
+    },
+    {
+      "name": "o let com recuo",
+      "engine": null,
+      "input": "   let a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o let com tabulação",
+      "engine": null,
+      "input": "SELECT 1\n\tlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "duas declarações na mesma linha",
+      "engine": null,
+      "input": "let a = 1; let b = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "declaration",
+          "let b = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "declaração logo depois de outra",
+      "engine": null,
+      "input": "let a = 1\nconst b = 2\nlet c: number",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "declaration",
+          "const b = 2"
+        ],
+        [
+          "declaration",
+          "let c: number"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "declaração, comando e declaração",
+      "engine": null,
+      "input": "let a = 1\nSELECT @a;\nlet b = 2\nSELECT @b",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ],
+        [
+          "declaration",
+          "let b = 2"
+        ],
+        [
+          "statement",
+          "SELECT @b"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "comando com a linha em branco no meio continua um item",
+      "engine": null,
+      "input": "SELECT *\nFROM t\n\nWHERE a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT *\nFROM t\n\nWHERE a = 1"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false
+    },
+    {
+      "name": "a reatribuição depois de outra declaração",
+      "engine": null,
+      "input": "let a = 1\na = 2\nSELECT @a",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "reassignment",
+          "a = 2"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a reatribuição depois de ;",
+      "engine": null,
+      "input": "let a = 1;\nSELECT 1;\na = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "reassignment",
+          "a = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a reatribuição no começo do texto é um item (b não declarada)",
+      "engine": null,
+      "input": "b = 2",
+      "seed": null,
+      "value": [
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a reatribuição depois de uma linha só não é item (o SET do UPDATE)",
+      "engine": null,
+      "input": "UPDATE t SET\na = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "UPDATE t SET\na = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a reatribuição depois de um comando sem ; e sem linha em branco",
+      "engine": null,
+      "input": "let a = 1\nSELECT 1\na = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 1\na = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a reatribuição depois da linha em branco com o comando de cima fechado",
+      "engine": null,
+      "input": "SELECT 1\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a reatribuição depois da linha em branco (desligada) fica no comando",
+      "engine": null,
+      "input": "SELECT 1\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\n\nb = 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false
+    },
+    {
+      "name": "o UPDATE aberto pela vírgula continua com a linha em branco",
+      "engine": null,
+      "input": "UPDATE t SET a = 1,\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "UPDATE t SET a = 1,\n\nb = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a == não é reatribuição",
+      "engine": null,
+      "input": "let a = 1\n\na == 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "a == 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a => não é reatribuição",
+      "engine": null,
+      "input": "SELECT 1;\na => 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "a => 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o // no topo é comentário",
+      "engine": null,
+      "input": "// nota\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "os // no topo antes da primeira declaração vão com ela",
+      "engine": null,
+      "input": "// os pedidos\n// de um cliente\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "// os pedidos\n// de um cliente\nlet a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o // acima da declaração vai com ela",
+      "engine": null,
+      "input": "SELECT 1;\n// o total\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "// o total\nlet a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o // acima da declaração com uma linha em branco no meio",
+      "engine": null,
+      "input": "SELECT 1;\n// um\n\n// dois\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "// um\n\n// dois\nlet a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o // entre comandos SQL é texto do SQL",
+      "engine": null,
+      "input": "SELECT 1;\n// oops\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "// oops\nSELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o // no meio do comando é texto do SQL",
+      "engine": null,
+      "input": "SELECT 1 // x\n, 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 // x\n, 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o -- acima da declaração fica fora dela",
+      "engine": null,
+      "input": "-- c\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o // no fim da declaração vai com ela",
+      "engine": null,
+      "input": "let a = 1 // trailing\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1 // trailing"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o -- depois do ; da declaração vai com ela",
+      "engine": null,
+      "input": "let a = 1; -- c\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1; -- c"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "LET em maiúsculas é SQL",
+      "engine": null,
+      "input": "LET x = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "LET x = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "Let é SQL",
+      "engine": null,
+      "input": "Let x = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "Let x = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "CONST em maiúsculas é SQL",
+      "engine": null,
+      "input": "CONST x = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CONST x = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let sem nome é SQL",
+      "engine": null,
+      "input": "let = 5",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "let = 5"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro de um texto",
+      "engine": null,
+      "input": "SELECT 'a\nlet b = 1'",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 'a\nlet b = 1'"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro de um comentário de linha",
+      "engine": null,
+      "input": "SELECT 1 -- x\n-- let a = 1\n, 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 -- x\n-- let a = 1\n, 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro de um comentário de bloco",
+      "engine": null,
+      "input": "/*\nlet a = 1\n*/ SELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "/*\nlet a = 1\n*/ SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro de um nome entre aspas",
+      "engine": null,
+      "input": "SELECT \"a\nlet b\" FROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT \"a\nlet b\" FROM t"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let no meio da linha não é declaração",
+      "engine": null,
+      "input": "SELECT 1 let a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 let a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro do $$ do PostgreSQL",
+      "engine": null,
+      "input": "DO $$\nlet x = 1\n$$",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "DO $$\nlet x = 1\n$$"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro do $tag$ do PostgreSQL",
+      "engine": null,
+      "input": "SELECT $f$\nlet x = 1\n$f$",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT $f$\nlet x = 1\n$f$"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro do BEGIN ATOMIC do PostgreSQL",
+      "engine": null,
+      "input": "CREATE FUNCTION f() RETURNS int BEGIN ATOMIC\nlet x = 1;\nSELECT 1;\nEND",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE FUNCTION f() RETURNS int BEGIN ATOMIC\nlet x = 1;\nSELECT 1;\nEND"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro do CREATE PROCEDURE do Informix",
+      "engine": 3,
+      "input": "CREATE PROCEDURE p()\n  let x = 1;\nEND PROCEDURE;",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\n  let x = 1;\nEND PROCEDURE"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro do CREATE FUNCTION do Informix",
+      "engine": 3,
+      "input": "CREATE FUNCTION f() RETURNING INT;\n  let x = 1;\nEND FUNCTION;",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE FUNCTION f() RETURNING INT;\n  let x = 1;\nEND FUNCTION"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o let depois do END PROCEDURE do Informix é declaração",
+      "engine": 3,
+      "input": "CREATE PROCEDURE p()\nEND PROCEDURE;\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\nEND PROCEDURE"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "let dentro do CREATE PROCEDURE do Db2",
+      "engine": 2,
+      "input": "CREATE PROCEDURE p()\nBEGIN\nlet x = 1;\nEND",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\nBEGIN\nlet x = 1;\nEND"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o let depois de um CREATE PROCEDURE do Db2 já está dentro dele",
+      "engine": 2,
+      "input": "CREATE PROCEDURE p() BEGIN END;\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p() BEGIN END;\nlet a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o let depois de um BEGIN do Db2 que não abre o comando não é declaração (o bloco vai até o fim)",
+      "engine": 2,
+      "input": "SELECT 1\n\nBEGIN\nlet x = 1;\nEND",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\n\nBEGIN\nlet x = 1"
+        ],
+        [
+          "statement",
+          "END"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a { } do Informix é comentário",
+      "engine": 3,
+      "input": "SELECT 1 {\nlet a = 1\n} FROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 {\nlet a = 1\n} FROM t"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o fim pela quebra de linha",
+      "engine": null,
+      "input": "let a = 1\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o operador no fim da linha continua",
+      "engine": null,
+      "input": "let a = 1 +\n2\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1 +\n2"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o operador no começo da linha de baixo continua",
+      "engine": null,
+      "input": "let a = 1\n+ 2\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1\n+ 2"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a linha de baixo com ( termina",
+      "engine": null,
+      "input": "let a = 1\n(2)",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "(2)"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a linha de baixo com [ termina",
+      "engine": null,
+      "input": "let a = 1\n[2]",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "[2]"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a linha de baixo com SELECT termina",
+      "engine": null,
+      "input": "let a = 1\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o ; dentro de um texto da declaração",
+      "engine": null,
+      "input": "let a = 'x;y'\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 'x;y'"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o modelo com ; e crase",
+      "engine": null,
+      "input": "let a = `x;${'`'}y`\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = `x;${'`'}y`"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a consulta com ) dentro de um texto",
+      "engine": null,
+      "input": "let a = (SELECT ')' FROM t)\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (SELECT ')' FROM t)"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a consulta com ) dentro de um comentário",
+      "engine": null,
+      "input": "let a = (SELECT 1 -- )\n)\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (SELECT 1 -- )\n)"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a declaração com a lista em várias linhas",
+      "engine": null,
+      "input": "let a = [\n  1,\n  2,\n]\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = [\n  1,\n  2,\n]"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "duas declarações na mesma linha sem ; é uma com erro",
+      "engine": null,
+      "input": "let a = 1 let b = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1 let b = 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o fim do texto",
+      "engine": null,
+      "input": "let a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o CRLF",
+      "engine": null,
+      "input": "let a = 1\r\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o \\r sozinho",
+      "engine": null,
+      "input": "let a = 1\rSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "E'' com barra e aspa no PostgreSQL é um texto só",
+      "engine": 1,
+      "input": "SELECT E'it\\'s; x'; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT E'it\\'s; x'"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "e'' em minúsculas no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT e'it\\'s; x'; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT e'it\\'s; x'"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a barra no Db2 não escapa a aspa",
+      "engine": 2,
+      "input": "SELECT E'it\\'s; x'; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT E'it\\'s"
+        ],
+        [
+          "statement",
+          "x'; SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a barra no Informix não escapa a aspa",
+      "engine": 3,
+      "input": "SELECT E'it\\'s; x'; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT E'it\\'s"
+        ],
+        [
+          "statement",
+          "x'; SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "NE'' não é E'' no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT NE'a\\'; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT NE'a\\'"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "a aspa dobrada continua no E''",
+      "engine": 1,
+      "input": "SELECT E'a''b; c'; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT E'a''b; c'"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o let depois de um E'' sem fecho não é declaração",
+      "engine": 1,
+      "input": "SELECT E'abc\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT E'abc\nlet a = 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o texto do JavaScript com barra e aspa não engole o SQL de baixo",
+      "engine": null,
+      "input": "let s = 'it\\'s'\nSELECT 'a;b'",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let s = 'it\\'s'"
+        ],
+        [
+          "statement",
+          "SELECT 'a;b'"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o texto do JavaScript com barra e aspa não engole a próxima declaração",
+      "engine": null,
+      "input": "let s = 'it\\'s'\nlet t = 'x'\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let s = 'it\\'s'"
+        ],
+        [
+          "declaration",
+          "let t = 'x'"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens"
+    },
+    {
+      "name": "o cursor na declaração",
+      "engine": null,
+      "input": "let a = 1\n\nSELECT 2;",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 4,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 0,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 9,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 12,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor na linha em branco depois da declaração com ;",
+      "engine": null,
+      "input": "let a = 1;\n\nSELECT 2;",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let a = 1;"
+          ]
+        },
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 1;"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor na linha em branco depois da declaração com a preferência desligada",
+      "engine": null,
+      "input": "let a = 1\n\nSELECT 2;",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false,
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor no comando depois de declarações",
+      "engine": null,
+      "input": "let a = 1\nlet b = 2\nSELECT @a, @b",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "declaration",
+          "let b = 2"
+        ],
+        [
+          "statement",
+          "SELECT @a, @b"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 14,
+          "item": [
+            "declaration",
+            "let b = 2"
+          ]
+        },
+        {
+          "offset": 25,
+          "item": [
+            "statement",
+            "SELECT @a, @b"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor na reatribuição",
+      "engine": null,
+      "input": "let a = 1\na = a + 1\nSELECT @a",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "reassignment",
+          "a = a + 1"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 12,
+          "item": [
+            "reassignment",
+            "a = a + 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor na linha em branco no começo do texto",
+      "engine": null,
+      "input": "\n\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": null
+        },
+        {
+          "offset": 3,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor em dois comandos separados por ;",
+      "engine": null,
+      "input": "SELECT 1; SELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 3,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 12,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a seleção com uma declaração e um comando tem dois itens sem ;",
+      "engine": null,
+      "input": "let a = 1\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "count": 2
+    },
+    {
+      "name": "a seleção com uma declaração só",
+      "engine": null,
+      "input": "let a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "count": 1
+    },
+    {
+      "name": "a seleção com um comando só",
+      "engine": null,
+      "input": "SELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "count": 1
+    },
+    {
+      "name": "a seleção com duas declarações",
+      "engine": null,
+      "input": "let a = 1; let b = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "declaration",
+          "let b = 2"
+        ]
+      ],
+      "type": "itens",
+      "count": 2
+    },
+    {
+      "name": "a seleção com comandos contados só pelo ;",
+      "engine": null,
+      "input": "SELECT 1\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "count": 1
+    },
+    {
+      "name": "a seleção com um bloco e uma declaração",
+      "engine": 2,
+      "input": "CREATE PROCEDURE p()\nBEGIN\nSELECT 1;\nEND\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\nBEGIN\nSELECT 1;\nEND\nlet a = 1"
+        ]
+      ],
+      "type": "itens",
+      "count": 1
+    }
+  ]
+}

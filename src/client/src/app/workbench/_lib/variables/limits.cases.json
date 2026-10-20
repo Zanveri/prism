@@ -1,0 +1,427 @@
+{
+  "rule": "RN-VAR-013: os limites, cada um na borda e um a mais, com a frase. O relógio dos casos de tempo é falso (clockStep: quanto ele anda a cada leitura).",
+  "cases": [
+    {
+      "name": "500 declarações e reatribuições cabem",
+      "engine": null,
+      "input": "let a = 0\n§",
+      "seed": null,
+      "value": 499,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "a = a + 1\n",
+        "times": 499
+      }
+    },
+    {
+      "name": "501 declarações e reatribuições passam",
+      "engine": null,
+      "input": "let a = 0\n§",
+      "seed": null,
+      "error": {
+        "line": 501,
+        "column": 1,
+        "message": "O script passou de 500 declarações."
+      },
+      "expand": {
+        "token": "§",
+        "text": "a = a + 1\n",
+        "times": 500
+      }
+    },
+    {
+      "name": "a declaração de 65.536 bytes cabe",
+      "engine": null,
+      "input": "const s = '§'\nconst n = s.length",
+      "seed": null,
+      "value": 65524,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "x",
+        "times": 65524
+      }
+    },
+    {
+      "name": "a declaração de 65.537 bytes passa",
+      "engine": null,
+      "input": "const s = '§'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "A declaração de s passou de 64 KiB."
+      },
+      "expand": {
+        "token": "§",
+        "text": "x",
+        "times": 65525
+      }
+    },
+    {
+      "name": "os bytes contam em UTF-8",
+      "engine": null,
+      "input": "const s = '§'\nconst n = s.length",
+      "seed": null,
+      "value": 21841,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "ç",
+        "times": 21841
+      }
+    },
+    {
+      "name": "os bytes em UTF-8 passam do limite",
+      "engine": null,
+      "input": "const s = '§'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "A declaração de s passou de 64 KiB."
+      },
+      "expand": {
+        "token": "§",
+        "text": "ç",
+        "times": 32768
+      }
+    },
+    {
+      "name": "o texto de 1.000.000 de caracteres cabe",
+      "engine": null,
+      "input": "const n = 'x'.padStart(1000000, 'x').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o texto de 1.000.001 caracteres passa",
+      "engine": null,
+      "input": "const n = 'x'.padStart(1000001, 'x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "a junção que dá 1.000.000 cabe",
+      "engine": null,
+      "input": "const s = 'x'.padStart(500000, 'x')\nconst n = (s + s).length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "a junção que dá 1.000.001 passa",
+      "engine": null,
+      "input": "const s = 'x'.padStart(500000, 'x')\nconst r = s + s + 'y'",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 17,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "o modelo que passa do limite",
+      "engine": null,
+      "input": "const s = 'x'.padStart(600000, 'x')\nconst r = `${s}${s}`",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 18,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "a lista de 10.000 itens cabe",
+      "engine": null,
+      "input": "const n = [§1].length",
+      "seed": null,
+      "value": 10000,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "1, ",
+        "times": 9999
+      }
+    },
+    {
+      "name": "a lista de 10.001 itens passa",
+      "engine": null,
+      "input": "const n = [§1].length",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A lista passou de 10.000 itens."
+      },
+      "expand": {
+        "token": "§",
+        "text": "1, ",
+        "times": 10000
+      }
+    },
+    {
+      "name": "o split em 10.000 pedaços cabe",
+      "engine": null,
+      "input": "const n = 'x'.padStart(10000, ',').split(',').length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "o split em 10.001 pedaços passa",
+      "engine": null,
+      "input": "const n = 'x'.padStart(10001, ',').split(',')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "split passaria de 10.000 pedaços."
+      }
+    },
+    {
+      "name": "o concat que dá 10.000 itens cabe",
+      "engine": null,
+      "input": "const l = 'x'.padStart(5000, ',').split(',')\nconst n = l.concat(l).length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "o concat que dá 10.001 itens passa",
+      "engine": null,
+      "input": "const l = 'x'.padStart(5000, ',').split(',')\nconst r = l.concat(l, ['y'])",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "A lista passou de 10.000 itens."
+      }
+    },
+    {
+      "name": "o objeto de 100 campos cabe",
+      "engine": null,
+      "input": "const o = { k1: 1, k2: 2, k3: 3, k4: 4, k5: 5, k6: 6, k7: 7, k8: 8, k9: 9, k10: 10, k11: 11, k12: 12, k13: 13, k14: 14, k15: 15, k16: 16, k17: 17, k18: 18, k19: 19, k20: 20, k21: 21, k22: 22, k23: 23, k24: 24, k25: 25, k26: 26, k27: 27, k28: 28, k29: 29, k30: 30, k31: 31, k32: 32, k33: 33, k34: 34, k35: 35, k36: 36, k37: 37, k38: 38, k39: 39, k40: 40, k41: 41, k42: 42, k43: 43, k44: 44, k45: 45, k46: 46, k47: 47, k48: 48, k49: 49, k50: 50, k51: 51, k52: 52, k53: 53, k54: 54, k55: 55, k56: 56, k57: 57, k58: 58, k59: 59, k60: 60, k61: 61, k62: 62, k63: 63, k64: 64, k65: 65, k66: 66, k67: 67, k68: 68, k69: 69, k70: 70, k71: 71, k72: 72, k73: 73, k74: 74, k75: 75, k76: 76, k77: 77, k78: 78, k79: 79, k80: 80, k81: 81, k82: 82, k83: 83, k84: 84, k85: 85, k86: 86, k87: 87, k88: 88, k89: 89, k90: 90, k91: 91, k92: 92, k93: 93, k94: 94, k95: 95, k96: 96, k97: 97, k98: 98, k99: 99, k100: 100 }\nconst n = o.k100",
+      "seed": null,
+      "value": 100,
+      "type": "number"
+    },
+    {
+      "name": "o objeto de 101 campos passa",
+      "engine": null,
+      "input": "const o = { k1: 1, k2: 2, k3: 3, k4: 4, k5: 5, k6: 6, k7: 7, k8: 8, k9: 9, k10: 10, k11: 11, k12: 12, k13: 13, k14: 14, k15: 15, k16: 16, k17: 17, k18: 18, k19: 19, k20: 20, k21: 21, k22: 22, k23: 23, k24: 24, k25: 25, k26: 26, k27: 27, k28: 28, k29: 29, k30: 30, k31: 31, k32: 32, k33: 33, k34: 34, k35: 35, k36: 36, k37: 37, k38: 38, k39: 39, k40: 40, k41: 41, k42: 42, k43: 43, k44: 44, k45: 45, k46: 46, k47: 47, k48: 48, k49: 49, k50: 50, k51: 51, k52: 52, k53: 53, k54: 54, k55: 55, k56: 56, k57: 57, k58: 58, k59: 59, k60: 60, k61: 61, k62: 62, k63: 63, k64: 64, k65: 65, k66: 66, k67: 67, k68: 68, k69: 69, k70: 70, k71: 71, k72: 72, k73: 73, k74: 74, k75: 75, k76: 76, k77: 77, k78: 78, k79: 79, k80: 80, k81: 81, k82: 82, k83: 83, k84: 84, k85: 85, k86: 86, k87: 87, k88: 88, k89: 89, k90: 90, k91: 91, k92: 92, k93: 93, k94: 94, k95: 95, k96: 96, k97: 97, k98: 98, k99: 99, k100: 100, k101: 101 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O objeto passou de 100 campos."
+      }
+    },
+    {
+      "name": "a chave repetida não conta duas vezes",
+      "engine": null,
+      "input": "const o = { a: 1, a: 2 }\nconst n = o.a",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "64 níveis de parênteses cabem",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "value": 1,
+      "type": "number",
+      "expand": [
+        {
+          "token": "§",
+          "text": "(",
+          "times": 64
+        },
+        {
+          "token": "¶",
+          "text": ")",
+          "times": 64
+        }
+      ]
+    },
+    {
+      "name": "65 níveis de parênteses passam",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 76,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "(",
+          "times": 65
+        },
+        {
+          "token": "¶",
+          "text": ")",
+          "times": 65
+        }
+      ]
+    },
+    {
+      "name": "65 níveis de objetos passam",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 336,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "{ a: ",
+          "times": 65
+        },
+        {
+          "token": "¶",
+          "text": " }",
+          "times": 65
+        }
+      ]
+    },
+    {
+      "name": "uma cadeia de 60 chamadas cabe",
+      "engine": null,
+      "input": "const r = 'a'§",
+      "seed": null,
+      "value": "a",
+      "type": "string",
+      "expand": {
+        "token": "§",
+        "text": ".trim()",
+        "times": 60
+      }
+    },
+    {
+      "name": "mil termos de uma soma não aprofundam a árvore",
+      "engine": null,
+      "input": "const r = 0§",
+      "seed": null,
+      "value": 1000,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": " + 1",
+        "times": 1000
+      }
+    },
+    {
+      "name": "99 includes de 1.000.000 de caracteres cabem em 100.000 passos",
+      "engine": null,
+      "input": "const s = 'x'.padStart(1000000, 'x')\nconst r = s.includes('y')§",
+      "seed": null,
+      "value": false,
+      "type": "boolean",
+      "expand": {
+        "token": "§",
+        "text": " || s.includes('y')",
+        "times": 98
+      }
+    },
+    {
+      "name": "100 includes passam de 100.000 passos",
+      "engine": null,
+      "input": "const s = 'x'.padStart(1000000, 'x')\nconst r = s.includes('y')§",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 1892,
+        "message": "A expressão de r passou de 100.000 passos e foi parada."
+      },
+      "expand": {
+        "token": "§",
+        "text": " || s.includes('y')",
+        "times": 99
+      }
+    },
+    {
+      "name": "12 declarações de quase 100.000 passos passam de 1.000.000 por execução",
+      "engine": null,
+      "input": "const s = 'x'.padStart(1000000, 'x')\nconst r1 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r2 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r3 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r4 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r5 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r6 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r7 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r8 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r9 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r10 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r11 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\nconst r12 = s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y') || s.includes('y')\n",
+      "seed": null,
+      "error": {
+        "line": 12,
+        "column": 298,
+        "message": "O script passou de 1.000.000 de passos e foi parado."
+      }
+    },
+    {
+      "name": "a declaração de mais de 250 ms é parada",
+      "engine": null,
+      "input": "const x = [§1]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 306,
+        "message": "A expressão de x levou mais de 250 ms e foi parada."
+      },
+      "expand": {
+        "token": "§",
+        "text": "1, ",
+        "times": 150
+      },
+      "clockStep": 300
+    },
+    {
+      "name": "a declaração de menos de 250 ms continua",
+      "engine": null,
+      "input": "const x = [§1].length",
+      "seed": null,
+      "value": 151,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "1, ",
+        "times": 150
+      },
+      "clockStep": 100
+    },
+    {
+      "name": "a declaração que passa de 250 ms no segundo controle",
+      "engine": null,
+      "input": "const x = [§1]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 606,
+        "message": "A expressão de x levou mais de 250 ms e foi parada."
+      },
+      "expand": {
+        "token": "§",
+        "text": "1, ",
+        "times": 400
+      },
+      "clockStep": 100
+    },
+    {
+      "name": "a execução de mais de 5 s é parada",
+      "engine": null,
+      "input": "const v1 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v2 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v3 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v4 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v5 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v6 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v7 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v8 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v9 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v10 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v11 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v12 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v13 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v14 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v15 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v16 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v17 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v18 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v19 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v20 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v21 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v22 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v23 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v24 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v25 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v26 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v27 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v28 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v29 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\nconst v30 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\n",
+      "seed": null,
+      "error": {
+        "line": 13,
+        "column": 308,
+        "message": "As expressões do script levaram mais de 5 s e foram paradas."
+      },
+      "clockStep": 100
+    }
+  ]
+}

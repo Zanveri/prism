@@ -1,0 +1,2695 @@
+{
+  "rule": "RN-VAR-009 e 010: cada função da lista fechada (o caso comum, cada borda e cada recusa de argumento) e o random com sementes fixas (as sequências de ouro vêm de uma implementação à parte do xoshiro128**).",
+  "cases": [
+    {
+      "name": "Math.abs(-3)",
+      "engine": null,
+      "input": "const r = Math.abs(-3)",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "Math.abs(3)",
+      "engine": null,
+      "input": "const r = Math.abs(3)",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "Math.ceil(1.2)",
+      "engine": null,
+      "input": "const r = Math.ceil(1.2)",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "Math.ceil(-1.2)",
+      "engine": null,
+      "input": "const r = Math.ceil(-1.2)",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "Math.floor(-1.2)",
+      "engine": null,
+      "input": "const r = Math.floor(-1.2)",
+      "seed": null,
+      "value": -2,
+      "type": "number"
+    },
+    {
+      "name": "Math.floor(1.9)",
+      "engine": null,
+      "input": "const r = Math.floor(1.9)",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "Math.round(2.5)",
+      "engine": null,
+      "input": "const r = Math.round(2.5)",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "Math.round(-2.5)",
+      "engine": null,
+      "input": "const r = Math.round(-2.5)",
+      "seed": null,
+      "value": -2,
+      "type": "number"
+    },
+    {
+      "name": "Math.round(0.5)",
+      "engine": null,
+      "input": "const r = Math.round(0.5)",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "Math.round(1.5)",
+      "engine": null,
+      "input": "const r = Math.round(1.5)",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "Math.round(-1.5)",
+      "engine": null,
+      "input": "const r = Math.round(-1.5)",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "Math.trunc(-1.9)",
+      "engine": null,
+      "input": "const r = Math.trunc(-1.9)",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "Math.trunc(1.9)",
+      "engine": null,
+      "input": "const r = Math.trunc(1.9)",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "Math.sign(-5)",
+      "engine": null,
+      "input": "const r = Math.sign(-5)",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "Math.sign(0)",
+      "engine": null,
+      "input": "const r = Math.sign(0)",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "Math.sign(7)",
+      "engine": null,
+      "input": "const r = Math.sign(7)",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "Math.sqrt(16)",
+      "engine": null,
+      "input": "const r = Math.sqrt(16)",
+      "seed": null,
+      "value": 4,
+      "type": "number"
+    },
+    {
+      "name": "Math.pow(2, 10)",
+      "engine": null,
+      "input": "const r = Math.pow(2, 10)",
+      "seed": null,
+      "value": 1024,
+      "type": "number"
+    },
+    {
+      "name": "Math.pow(2, -1)",
+      "engine": null,
+      "input": "const r = Math.pow(2, -1)",
+      "seed": null,
+      "value": 0.5,
+      "type": "number"
+    },
+    {
+      "name": "Math.min(3, 1, 2)",
+      "engine": null,
+      "input": "const r = Math.min(3, 1, 2)",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "Math.max(3, 1, 2)",
+      "engine": null,
+      "input": "const r = Math.max(3, 1, 2)",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "Math.min(5)",
+      "engine": null,
+      "input": "const r = Math.min(5)",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "Math.max(-1, -2)",
+      "engine": null,
+      "input": "const r = Math.max(-1, -2)",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "Math.max(...[1, 5, 2])",
+      "engine": null,
+      "input": "const r = Math.max(...[1, 5, 2])",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "Math.min(...[4, 2], 9)",
+      "engine": null,
+      "input": "const r = Math.min(...[4, 2], 9)",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "Math.PI",
+      "engine": null,
+      "input": "const r = Math.PI",
+      "seed": null,
+      "value": 3.141592653589793,
+      "type": "number"
+    },
+    {
+      "name": "Math.E",
+      "engine": null,
+      "input": "const r = Math.E",
+      "seed": null,
+      "value": 2.718281828459045,
+      "type": "number"
+    },
+    {
+      "name": "arredondar a duas casas",
+      "engine": null,
+      "input": "const r = Math.round(1.236 * 100) / 100",
+      "seed": null,
+      "value": 1.24,
+      "type": "number"
+    },
+    {
+      "name": "Math.abs sem argumento",
+      "engine": null,
+      "input": "const r = Math.abs()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.abs espera 1 argumento, e recebeu 0."
+      }
+    },
+    {
+      "name": "Math.abs com dois argumentos",
+      "engine": null,
+      "input": "const r = Math.abs(1, 2)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.abs espera 1 argumento, e recebeu 2."
+      }
+    },
+    {
+      "name": "Math.abs com texto",
+      "engine": null,
+      "input": "const r = Math.abs('a')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.abs espera number no argumento 1, e recebeu 'a'."
+      }
+    },
+    {
+      "name": "Math.max sem número nenhum",
+      "engine": null,
+      "input": "const r = Math.max(...[])",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.max espera de 1 a 10.000 argumentos, e recebeu 0."
+      }
+    },
+    {
+      "name": "Math.min com texto no segundo argumento",
+      "engine": null,
+      "input": "const r = Math.min(1, 'a')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.min espera number no argumento 2, e recebeu 'a'."
+      }
+    },
+    {
+      "name": "Math.pow com um argumento",
+      "engine": null,
+      "input": "const r = Math.pow(2)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.pow espera 2 argumentos, e recebeu 1."
+      }
+    },
+    {
+      "name": "Math.sqrt de negativo",
+      "engine": null,
+      "input": "const r = Math.sqrt(-4)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "Math.pow que estoura",
+      "engine": null,
+      "input": "const r = Math.pow(10, 400)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "Math.PI não se chama",
+      "engine": null,
+      "input": "const r = Math.PI()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.PI não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "Number('12')",
+      "engine": null,
+      "input": "const r = Number('12')",
+      "seed": null,
+      "value": 12,
+      "type": "number"
+    },
+    {
+      "name": "Number('-3.5')",
+      "engine": null,
+      "input": "const r = Number('-3.5')",
+      "seed": null,
+      "value": -3.5,
+      "type": "number"
+    },
+    {
+      "name": "Number(' 7 ')",
+      "engine": null,
+      "input": "const r = Number(' 7 ')",
+      "seed": null,
+      "value": 7,
+      "type": "number"
+    },
+    {
+      "name": "Number('.5')",
+      "engine": null,
+      "input": "const r = Number('.5')",
+      "seed": null,
+      "value": 0.5,
+      "type": "number"
+    },
+    {
+      "name": "Number('+5')",
+      "engine": null,
+      "input": "const r = Number('+5')",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "Number('007')",
+      "engine": null,
+      "input": "const r = Number('007')",
+      "seed": null,
+      "value": 7,
+      "type": "number"
+    },
+    {
+      "name": "Number('0')",
+      "engine": null,
+      "input": "const r = Number('0')",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "Number(5)",
+      "engine": null,
+      "input": "const r = Number(5)",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "Number('1e3')",
+      "engine": null,
+      "input": "const r = Number('1e3')",
+      "seed": null,
+      "value": 1000,
+      "type": "number",
+      "exact": "1e3"
+    },
+    {
+      "name": "Number('12.50') guarda o texto",
+      "engine": null,
+      "input": "const r = Number('12.50')",
+      "seed": null,
+      "value": 12.5,
+      "type": "number",
+      "exact": "12.50"
+    },
+    {
+      "name": "Number('') é erro",
+      "engine": null,
+      "input": "const r = Number('')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('') não é um número."
+      }
+    },
+    {
+      "name": "Number('12abc') é erro",
+      "engine": null,
+      "input": "const r = Number('12abc')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('12abc') não é um número."
+      }
+    },
+    {
+      "name": "Number('0x1F') é erro",
+      "engine": null,
+      "input": "const r = Number('0x1F')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('0x1F') não é um número."
+      }
+    },
+    {
+      "name": "Number('Infinity') é erro",
+      "engine": null,
+      "input": "const r = Number('Infinity')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('Infinity') não é um número."
+      }
+    },
+    {
+      "name": "Number('5.') é erro",
+      "engine": null,
+      "input": "const r = Number('5.')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('5.') não é um número."
+      }
+    },
+    {
+      "name": "Number('1_000') é erro",
+      "engine": null,
+      "input": "const r = Number('1_000')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('1_000') não é um número."
+      }
+    },
+    {
+      "name": "Number('abc') é erro",
+      "engine": null,
+      "input": "const r = Number('abc')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('abc') não é um número."
+      }
+    },
+    {
+      "name": "Number('1,5') é erro",
+      "engine": null,
+      "input": "const r = Number('1,5')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('1,5') não é um número."
+      }
+    },
+    {
+      "name": "Number('--1') é erro",
+      "engine": null,
+      "input": "const r = Number('--1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number('--1') não é um número."
+      }
+    },
+    {
+      "name": "Number(true)",
+      "engine": null,
+      "input": "const r = Number(true)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number espera string ou number no argumento 1, e recebeu true."
+      }
+    },
+    {
+      "name": "Number()",
+      "engine": null,
+      "input": "const r = Number()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number espera 1 argumento, e recebeu 0."
+      }
+    },
+    {
+      "name": "Number.isInteger(5)",
+      "engine": null,
+      "input": "const r = Number.isInteger(5)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "Number.isInteger(5.5)",
+      "engine": null,
+      "input": "const r = Number.isInteger(5.5)",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "Number.isInteger(5.0)",
+      "engine": null,
+      "input": "const r = Number.isInteger(5.0)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "Number.isInteger('5')",
+      "engine": null,
+      "input": "const r = Number.isInteger('5')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Number.isInteger espera number no argumento 1, e recebeu '5'."
+      }
+    },
+    {
+      "name": "String(5)",
+      "engine": null,
+      "input": "const r = String(5)",
+      "seed": null,
+      "value": "5",
+      "type": "string"
+    },
+    {
+      "name": "String(true)",
+      "engine": null,
+      "input": "const r = String(true)",
+      "seed": null,
+      "value": "true",
+      "type": "string"
+    },
+    {
+      "name": "String(null)",
+      "engine": null,
+      "input": "const r = String(null)",
+      "seed": null,
+      "value": "null",
+      "type": "string"
+    },
+    {
+      "name": "String([1, 2])",
+      "engine": null,
+      "input": "const r = String([1, 2])",
+      "seed": null,
+      "value": "1,2",
+      "type": "string"
+    },
+    {
+      "name": "String([1, null])",
+      "engine": null,
+      "input": "const r = String([1, null])",
+      "seed": null,
+      "value": "1,",
+      "type": "string"
+    },
+    {
+      "name": "String('a')",
+      "engine": null,
+      "input": "const r = String('a')",
+      "seed": null,
+      "value": "a",
+      "type": "string"
+    },
+    {
+      "name": "String(0.5)",
+      "engine": null,
+      "input": "const r = String(0.5)",
+      "seed": null,
+      "value": "0.5",
+      "type": "string"
+    },
+    {
+      "name": "String(10 ** 21)",
+      "engine": null,
+      "input": "const r = String(10 ** 21)",
+      "seed": null,
+      "value": "1e+21",
+      "type": "string"
+    },
+    {
+      "name": "String(date.of(2026, 10, 20))",
+      "engine": null,
+      "input": "const r = String(date.of(2026, 10, 20))",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "string"
+    },
+    {
+      "name": "String(-1.5)",
+      "engine": null,
+      "input": "const r = String(-1.5)",
+      "seed": null,
+      "value": "-1.5",
+      "type": "string"
+    },
+    {
+      "name": "String([])",
+      "engine": null,
+      "input": "const r = String([])",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "String(objeto)",
+      "engine": null,
+      "input": "const r = String({ a: 1 })",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Um objeto não vira texto: use um campo, como p.id."
+      }
+    },
+    {
+      "name": "String()",
+      "engine": null,
+      "input": "const r = String()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "String espera 1 argumento, e recebeu 0."
+      }
+    },
+    {
+      "name": "toFixed(2)",
+      "engine": null,
+      "input": "const r = (3.14159).toFixed(2)",
+      "seed": null,
+      "value": "3.14",
+      "type": "string"
+    },
+    {
+      "name": "toFixed sem casas",
+      "engine": null,
+      "input": "const r = (2.5).toFixed()",
+      "seed": null,
+      "value": "3",
+      "type": "string"
+    },
+    {
+      "name": "toFixed(20)",
+      "engine": null,
+      "input": "const r = (1).toFixed(20)",
+      "seed": null,
+      "value": "1.00000000000000000000",
+      "type": "string"
+    },
+    {
+      "name": "toFixed em variável",
+      "engine": null,
+      "input": "const n = 12.3456\nconst r = n.toFixed(1)",
+      "seed": null,
+      "value": "12.3",
+      "type": "string"
+    },
+    {
+      "name": "toFixed(21)",
+      "engine": null,
+      "input": "const r = (1).toFixed(21)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "toFixed aceita de 0 a 20 casas."
+      }
+    },
+    {
+      "name": "toFixed(-1)",
+      "engine": null,
+      "input": "const r = (1).toFixed(-1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "toFixed aceita de 0 a 20 casas."
+      }
+    },
+    {
+      "name": "toFixed(1.5)",
+      "engine": null,
+      "input": "const r = (1).toFixed(1.5)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "number.toFixed espera um número inteiro no argumento 1, e recebeu 1.5."
+      }
+    },
+    {
+      "name": "toFixed de texto",
+      "engine": null,
+      "input": "const r = '1'.toFixed(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "toFixed não existe em string."
+      }
+    },
+    {
+      "name": "'abc'.toUpperCase()",
+      "engine": null,
+      "input": "const r = 'abc'.toUpperCase()",
+      "seed": null,
+      "value": "ABC",
+      "type": "string"
+    },
+    {
+      "name": "'ß'.toUpperCase()",
+      "engine": null,
+      "input": "const r = 'ß'.toUpperCase()",
+      "seed": null,
+      "value": "SS",
+      "type": "string"
+    },
+    {
+      "name": "'ABC'.toLowerCase()",
+      "engine": null,
+      "input": "const r = 'ABC'.toLowerCase()",
+      "seed": null,
+      "value": "abc",
+      "type": "string"
+    },
+    {
+      "name": "'  a b  '.trim()",
+      "engine": null,
+      "input": "const r = '  a b  '.trim()",
+      "seed": null,
+      "value": "a b",
+      "type": "string"
+    },
+    {
+      "name": "'  a '.trimStart()",
+      "engine": null,
+      "input": "const r = '  a '.trimStart()",
+      "seed": null,
+      "value": "a ",
+      "type": "string"
+    },
+    {
+      "name": "'  a '.trimEnd()",
+      "engine": null,
+      "input": "const r = '  a '.trimEnd()",
+      "seed": null,
+      "value": "  a",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(1, 3)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(1, 3)",
+      "seed": null,
+      "value": "bc",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(-2)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(-2)",
+      "seed": null,
+      "value": "ef",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(2)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(2)",
+      "seed": null,
+      "value": "cdef",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(3, 1)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(3, 1)",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(0, -1)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(0, -1)",
+      "seed": null,
+      "value": "abcde",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(-3, -1)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(-3, -1)",
+      "seed": null,
+      "value": "de",
+      "type": "string"
+    },
+    {
+      "name": "'abcdef'.slice(10)",
+      "engine": null,
+      "input": "const r = 'abcdef'.slice(10)",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "'42'.padStart(5, '0')",
+      "engine": null,
+      "input": "const r = '42'.padStart(5, '0')",
+      "seed": null,
+      "value": "00042",
+      "type": "string"
+    },
+    {
+      "name": "'42'.padStart(1)",
+      "engine": null,
+      "input": "const r = '42'.padStart(1)",
+      "seed": null,
+      "value": "42",
+      "type": "string"
+    },
+    {
+      "name": "'42'.padStart(5)",
+      "engine": null,
+      "input": "const r = '42'.padStart(5)",
+      "seed": null,
+      "value": "   42",
+      "type": "string"
+    },
+    {
+      "name": "'ab'.padEnd(5, '*')",
+      "engine": null,
+      "input": "const r = 'ab'.padEnd(5, '*')",
+      "seed": null,
+      "value": "ab***",
+      "type": "string"
+    },
+    {
+      "name": "'ab'.padEnd(5, 'xy')",
+      "engine": null,
+      "input": "const r = 'ab'.padEnd(5, 'xy')",
+      "seed": null,
+      "value": "abxyx",
+      "type": "string"
+    },
+    {
+      "name": "'a-b-c'.replaceAll('-', '+')",
+      "engine": null,
+      "input": "const r = 'a-b-c'.replaceAll('-', '+')",
+      "seed": null,
+      "value": "a+b+c",
+      "type": "string"
+    },
+    {
+      "name": "'a-b'.replaceAll('-', '$&$&')",
+      "engine": null,
+      "input": "const r = 'a-b'.replaceAll('-', '$&$&')",
+      "seed": null,
+      "value": "a$&$&b",
+      "type": "string"
+    },
+    {
+      "name": "'aaa'.replaceAll('a', 'bb')",
+      "engine": null,
+      "input": "const r = 'aaa'.replaceAll('a', 'bb')",
+      "seed": null,
+      "value": "bbbbbb",
+      "type": "string"
+    },
+    {
+      "name": "'abc'.replaceAll('x', 'y')",
+      "engine": null,
+      "input": "const r = 'abc'.replaceAll('x', 'y')",
+      "seed": null,
+      "value": "abc",
+      "type": "string"
+    },
+    {
+      "name": "'abc'.at(0)",
+      "engine": null,
+      "input": "const r = 'abc'.at(0)",
+      "seed": null,
+      "value": "a",
+      "type": "string"
+    },
+    {
+      "name": "'abc'.at(-1)",
+      "engine": null,
+      "input": "const r = 'abc'.at(-1)",
+      "seed": null,
+      "value": "c",
+      "type": "string"
+    },
+    {
+      "name": "'abc'.includes('b')",
+      "engine": null,
+      "input": "const r = 'abc'.includes('b')",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "'abc'.includes('x')",
+      "engine": null,
+      "input": "const r = 'abc'.includes('x')",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "'abc'.includes('')",
+      "engine": null,
+      "input": "const r = 'abc'.includes('')",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "'abc'.startsWith('ab')",
+      "engine": null,
+      "input": "const r = 'abc'.startsWith('ab')",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "'abc'.startsWith('bc')",
+      "engine": null,
+      "input": "const r = 'abc'.startsWith('bc')",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "'abc'.endsWith('bc')",
+      "engine": null,
+      "input": "const r = 'abc'.endsWith('bc')",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "'abc'.endsWith('ab')",
+      "engine": null,
+      "input": "const r = 'abc'.endsWith('ab')",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "'abcabc'.indexOf('c')",
+      "engine": null,
+      "input": "const r = 'abcabc'.indexOf('c')",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "'abc'.indexOf('x')",
+      "engine": null,
+      "input": "const r = 'abc'.indexOf('x')",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "'abc'.indexOf('')",
+      "engine": null,
+      "input": "const r = 'abc'.indexOf('')",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "at fora do texto é null",
+      "engine": null,
+      "input": "const r = 'abc'.at(9)",
+      "seed": null,
+      "value": null,
+      "type": "null"
+    },
+    {
+      "name": "split por vírgula",
+      "engine": null,
+      "input": "const r = 'a,b,c'.split(',')",
+      "seed": null,
+      "value": [
+        "a",
+        "b",
+        "c"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "split com o separador vazio",
+      "engine": null,
+      "input": "const r = 'abc'.split('')",
+      "seed": null,
+      "value": [
+        "a",
+        "b",
+        "c"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "split com o separador vazio não parte o emoji",
+      "engine": null,
+      "input": "const r = 'a\\u{1F600}'.split('')",
+      "seed": null,
+      "value": [
+        "a",
+        "😀"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "split de texto vazio",
+      "engine": null,
+      "input": "const r = ''.split(',')",
+      "seed": null,
+      "value": [
+        ""
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "split sem o separador no texto",
+      "engine": null,
+      "input": "const r = 'abc'.split(',')",
+      "seed": null,
+      "value": [
+        "abc"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "split com 10.000 pedaços",
+      "engine": null,
+      "input": "const r = 'x'.padStart(10000, ',').split(',').length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "split com 10.001 pedaços",
+      "engine": null,
+      "input": "const r = 'x'.padStart(10001, ',').split(',')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "split passaria de 10.000 pedaços."
+      }
+    },
+    {
+      "name": "replaceAll com o de vazio",
+      "engine": null,
+      "input": "const r = 'abc'.replaceAll('', 'x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "replaceAll não aceita um texto vazio em de."
+      }
+    },
+    {
+      "name": "replaceAll com número",
+      "engine": null,
+      "input": "const r = 'abc'.replaceAll(1, 'x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "string.replaceAll espera string no argumento 1, e recebeu 1."
+      }
+    },
+    {
+      "name": "slice com texto",
+      "engine": null,
+      "input": "const r = 'abc'.slice('a')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "string.slice espera number no argumento 1, e recebeu 'a'."
+      }
+    },
+    {
+      "name": "includes com número",
+      "engine": null,
+      "input": "const r = 'abc'.includes(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "string.includes espera string no argumento 1, e recebeu 1."
+      }
+    },
+    {
+      "name": "trim com argumento",
+      "engine": null,
+      "input": "const r = 'abc'.trim(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "string.trim espera 0 argumentos, e recebeu 1."
+      }
+    },
+    {
+      "name": "padStart sem argumento",
+      "engine": null,
+      "input": "const r = 'a'.padStart()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "string.padStart espera de 1 a 2 argumentos, e recebeu 0."
+      }
+    },
+    {
+      "name": "padStart com três argumentos",
+      "engine": null,
+      "input": "const r = 'a'.padStart(3, 'x', 'y')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "string.padStart espera de 1 a 2 argumentos, e recebeu 3."
+      }
+    },
+    {
+      "name": "padStart acima do limite",
+      "engine": null,
+      "input": "const r = 'a'.padStart(1000001)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "padStart no limite",
+      "engine": null,
+      "input": "const r = 'a'.padStart(1000000).length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "método que não existe no texto",
+      "engine": null,
+      "input": "const r = 'a'.match('a')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "match não existe em string."
+      }
+    },
+    {
+      "name": "replace não existe",
+      "engine": null,
+      "input": "const r = 'a'.replace('a', 'b')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "replace não existe em string."
+      }
+    },
+    {
+      "name": "repeat não existe",
+      "engine": null,
+      "input": "const r = 'a'.repeat(3)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "repeat não existe em string."
+      }
+    },
+    {
+      "name": "toString é vedado",
+      "engine": null,
+      "input": "const r = 'a'.toString()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "l.at(0)",
+      "engine": null,
+      "input": "const r = [5, 6].at(0)",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "l.at(-1)",
+      "engine": null,
+      "input": "const r = [5, 6].at(-1)",
+      "seed": null,
+      "value": 6,
+      "type": "number"
+    },
+    {
+      "name": "l.includes",
+      "engine": null,
+      "input": "const r = [1, 2].includes(2)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "l.includes não converte",
+      "engine": null,
+      "input": "const r = [1, 2].includes('2')",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "l.includes de data",
+      "engine": null,
+      "input": "const r = [date.of(2026, 1, 1)].includes(new Date('2026-01-01'))",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "l.includes de null",
+      "engine": null,
+      "input": "const r = [1, null].includes(null)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "l.indexOf",
+      "engine": null,
+      "input": "const r = ['a', 'b'].indexOf('b')",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "l.indexOf que não acha",
+      "engine": null,
+      "input": "const r = ['a', 'b'].indexOf('z')",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "l.join com o padrão",
+      "engine": null,
+      "input": "const r = [1, 2, 3].join()",
+      "seed": null,
+      "value": "1,2,3",
+      "type": "string"
+    },
+    {
+      "name": "l.join com separador",
+      "engine": null,
+      "input": "const r = ['a', 'b'].join(' - ')",
+      "seed": null,
+      "value": "a - b",
+      "type": "string"
+    },
+    {
+      "name": "l.join com null",
+      "engine": null,
+      "input": "const r = [1, null, 3].join('-')",
+      "seed": null,
+      "value": "1--3",
+      "type": "string"
+    },
+    {
+      "name": "l.join de lista vazia",
+      "engine": null,
+      "input": "const l: number[] = []\nconst r = l.join(',')",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "l.join de objetos",
+      "engine": null,
+      "input": "const r = [{ a: 1 }].join(',')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Um objeto não vira texto: use um campo, como p.id."
+      }
+    },
+    {
+      "name": "l.slice(1)",
+      "engine": null,
+      "input": "const r = [1, 2, 3].slice(1)",
+      "seed": null,
+      "value": [
+        2,
+        3
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "l.slice(0, -1)",
+      "engine": null,
+      "input": "const r = [1, 2, 3].slice(0, -1)",
+      "seed": null,
+      "value": [
+        1,
+        2
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "l.slice fora",
+      "engine": null,
+      "input": "const r: number[] = [1, 2, 3].slice(5)",
+      "seed": null,
+      "value": [],
+      "type": "number[]"
+    },
+    {
+      "name": "l.slice vazio sem anotação",
+      "engine": null,
+      "input": "const r = [1, 2, 3].slice(5)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Anote o tipo da lista vazia: let r: number[] = []"
+      }
+    },
+    {
+      "name": "l.concat",
+      "engine": null,
+      "input": "const r = [1].concat([2], [3, 4])",
+      "seed": null,
+      "value": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "l.concat sem argumento",
+      "engine": null,
+      "input": "const r = [1].concat()",
+      "seed": null,
+      "value": [
+        1
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "l.concat com tipos diferentes",
+      "engine": null,
+      "input": "const r = [1].concat(['a'])",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A lista mistura number e string."
+      }
+    },
+    {
+      "name": "l.concat de um não-lista",
+      "engine": null,
+      "input": "const r = [1].concat(5)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "lista.concat espera lista no argumento 1, e recebeu 5."
+      }
+    },
+    {
+      "name": "l.at com texto",
+      "engine": null,
+      "input": "const r = [1].at('a')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "lista.at espera number no argumento 1, e recebeu 'a'."
+      }
+    },
+    {
+      "name": "método que não existe na lista",
+      "engine": null,
+      "input": "const r = [1].map(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "map não existe em number[]."
+      }
+    },
+    {
+      "name": "push não existe",
+      "engine": null,
+      "input": "const l = [1]\nconst r = l.push(2)",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "push não existe em number[]."
+      }
+    },
+    {
+      "name": "l.includes sem argumento",
+      "engine": null,
+      "input": "const r = [1].includes()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "lista.includes espera 1 argumento, e recebeu 0."
+      }
+    },
+    {
+      "name": "d.getFullYear()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getFullYear()",
+      "seed": null,
+      "value": 2026,
+      "type": "number"
+    },
+    {
+      "name": "d.getMonth()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getMonth()",
+      "seed": null,
+      "value": 9,
+      "type": "number"
+    },
+    {
+      "name": "d.getDate()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getDate()",
+      "seed": null,
+      "value": 20,
+      "type": "number"
+    },
+    {
+      "name": "d.getDay()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getDay()",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "d.getHours()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getHours()",
+      "seed": null,
+      "value": 8,
+      "type": "number"
+    },
+    {
+      "name": "d.getMinutes()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getMinutes()",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "d.getSeconds()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getSeconds()",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "d.getMilliseconds()",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 8, 5, 3, 40).getMilliseconds()",
+      "seed": null,
+      "value": 40,
+      "type": "number"
+    },
+    {
+      "name": "getDay de um domingo",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 18).getDay()",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "getDay de um sábado",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 24).getDay()",
+      "seed": null,
+      "value": 6,
+      "type": "number"
+    },
+    {
+      "name": "getDay do ano 1",
+      "engine": null,
+      "input": "const r = date.of(1, 1, 1).getDay()",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "getMonth de janeiro",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 5).getMonth()",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "getMonth de dezembro",
+      "engine": null,
+      "input": "const r = date.of(2026, 12, 5).getMonth()",
+      "seed": null,
+      "value": 11,
+      "type": "number"
+    },
+    {
+      "name": "toISOString em UTC",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20, 10, 30).toISOString()",
+      "seed": null,
+      "value": "2026-10-20T13:30:00.000Z",
+      "type": "string"
+    },
+    {
+      "name": "toISOString de dia",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20).toISOString()",
+      "seed": null,
+      "value": "2026-10-20T03:00:00.000Z",
+      "type": "string"
+    },
+    {
+      "name": "addDays",
+      "engine": null,
+      "input": "const r = date.addDays(date.of(2026, 10, 31), 1)",
+      "seed": null,
+      "value": "2026-11-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addDays negativo",
+      "engine": null,
+      "input": "const r = date.addDays(date.of(2026, 3, 1), -1)",
+      "seed": null,
+      "value": "2026-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addDays em ano bissexto",
+      "engine": null,
+      "input": "const r = date.addDays(date.of(2024, 2, 28), 1)",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addDays de 365 dias",
+      "engine": null,
+      "input": "const r = date.addDays(date.of(2026, 1, 1), 365)",
+      "seed": null,
+      "value": "2027-01-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addDays mantém a hora",
+      "engine": null,
+      "input": "const r = date.addDays(new Date('2026-10-20T10:30'), 2)",
+      "seed": null,
+      "value": "2026-10-22 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "addMonths no fim do mês",
+      "engine": null,
+      "input": "const r = date.addMonths(date.of(2026, 1, 31), 1)",
+      "seed": null,
+      "value": "2026-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addMonths no fim do mês em ano bissexto",
+      "engine": null,
+      "input": "const r = date.addMonths(date.of(2024, 1, 31), 1)",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addMonths atravessa o ano",
+      "engine": null,
+      "input": "const r = date.addMonths(date.of(2026, 11, 15), 3)",
+      "seed": null,
+      "value": "2027-02-15",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addMonths negativo",
+      "engine": null,
+      "input": "const r = date.addMonths(date.of(2026, 3, 31), -1)",
+      "seed": null,
+      "value": "2026-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addMonths de 0",
+      "engine": null,
+      "input": "const r = date.addMonths(date.of(2026, 3, 31), 0)",
+      "seed": null,
+      "value": "2026-03-31",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addYears",
+      "engine": null,
+      "input": "const r = date.addYears(date.of(2026, 5, 20), 2)",
+      "seed": null,
+      "value": "2028-05-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addYears de 29 de fevereiro",
+      "engine": null,
+      "input": "const r = date.addYears(date.of(2024, 2, 29), 1)",
+      "seed": null,
+      "value": "2025-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addYears de 29 de fevereiro por quatro",
+      "engine": null,
+      "input": "const r = date.addYears(date.of(2024, 2, 29), 4)",
+      "seed": null,
+      "value": "2028-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "addMonths com fração",
+      "engine": null,
+      "input": "const r = date.addMonths(date.of(2026, 1, 1), 1.5)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.addMonths espera um número inteiro em n."
+      }
+    },
+    {
+      "name": "addDays com texto",
+      "engine": null,
+      "input": "const r = date.addDays(date.of(2026, 1, 1), '1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.addDays espera um número inteiro em n."
+      }
+    },
+    {
+      "name": "addDays sem data",
+      "engine": null,
+      "input": "const r = date.addDays(5, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.addDays espera Date no argumento 1, e recebeu 5."
+      }
+    },
+    {
+      "name": "diffDays",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 10, 1), date.of(2026, 10, 20))",
+      "seed": null,
+      "value": 19,
+      "type": "number"
+    },
+    {
+      "name": "diffDays negativo",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 10, 20), date.of(2026, 10, 1))",
+      "seed": null,
+      "value": -19,
+      "type": "number"
+    },
+    {
+      "name": "diffDays no mesmo dia",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 10, 20), date.of(2026, 10, 20))",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "diffDays inteiros: falta uma hora",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 10, 1, 10, 0), date.of(2026, 10, 2, 9, 0))",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "diffDays inteiros: o dia completo",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 10, 1, 10, 0), date.of(2026, 10, 2, 10, 0))",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "diffDays inteiros para trás",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 10, 2, 9, 0), date.of(2026, 10, 1, 10, 0))",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "diffDays na troca do horário de verão",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2018, 11, 3), date.of(2018, 11, 5))",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "diffDays de um ano",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2026, 1, 1), date.of(2027, 1, 1))",
+      "seed": null,
+      "value": 365,
+      "type": "number"
+    },
+    {
+      "name": "diffDays de um ano bissexto",
+      "engine": null,
+      "input": "const r = date.diffDays(date.of(2024, 1, 1), date.of(2025, 1, 1))",
+      "seed": null,
+      "value": 366,
+      "type": "number"
+    },
+    {
+      "name": "startOfMonth",
+      "engine": null,
+      "input": "const r = date.startOfMonth(date.of(2026, 10, 20))",
+      "seed": null,
+      "value": "2026-10-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "startOfMonth de instante vira de dia",
+      "engine": null,
+      "input": "const r = date.startOfMonth(new Date('2026-10-20T10:30'))",
+      "seed": null,
+      "value": "2026-10-01",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "endOfMonth",
+      "engine": null,
+      "input": "const r = date.endOfMonth(date.of(2026, 10, 20))",
+      "seed": null,
+      "value": "2026-10-31",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "endOfMonth de fevereiro bissexto",
+      "engine": null,
+      "input": "const r = date.endOfMonth(date.of(2024, 2, 10))",
+      "seed": null,
+      "value": "2024-02-29",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "endOfMonth de fevereiro",
+      "engine": null,
+      "input": "const r = date.endOfMonth(date.of(2026, 2, 10))",
+      "seed": null,
+      "value": "2026-02-28",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "endOfMonth de abril",
+      "engine": null,
+      "input": "const r = date.endOfMonth(date.of(2026, 4, 1))",
+      "seed": null,
+      "value": "2026-04-30",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "date.format de instante",
+      "engine": null,
+      "input": "const r = date.format(new Date('2026-10-20T10:30:15.5'))",
+      "seed": null,
+      "value": "2026-10-20 10:30:15.500",
+      "type": "string"
+    },
+    {
+      "name": "date.today não aceita argumento",
+      "engine": null,
+      "input": "const r = date.today(1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.today espera 0 argumentos, e recebeu 1."
+      }
+    },
+    {
+      "name": "date.of com texto",
+      "engine": null,
+      "input": "const r = date.of('2026', 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.of espera um número inteiro no argumento 1, e recebeu '2026'."
+      }
+    },
+    {
+      "name": "date.of com fração",
+      "engine": null,
+      "input": "const r = date.of(2026, 1.5, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.of espera um número inteiro no argumento 2, e recebeu 1.5."
+      }
+    },
+    {
+      "name": "date.of com dois argumentos",
+      "engine": null,
+      "input": "const r = date.of(2026, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "date.of espera de 3 a 7 argumentos, e recebeu 2."
+      }
+    },
+    {
+      "name": "função que não existe em date",
+      "engine": null,
+      "input": "const r = date.tomorrow()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "tomorrow não existe em date."
+      }
+    },
+    {
+      "name": "método que não existe na data",
+      "engine": null,
+      "input": "const d = date.of(2026, 1, 1)\nconst r = d.getYear()",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "getYear não existe em Date (dia)."
+      }
+    },
+    {
+      "name": "random.int(1, 6): 20 saídas",
+      "engine": null,
+      "input": "const r = [random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6), random.int(1, 6)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        1,
+        1,
+        1,
+        1,
+        6,
+        1,
+        1,
+        2,
+        2,
+        3,
+        2,
+        6,
+        4,
+        1,
+        5,
+        5,
+        1,
+        4,
+        5,
+        4
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.int(1, 1000): 20 saídas",
+      "engine": null,
+      "input": "const r = [random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000), random.int(1, 1000)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        521,
+        1,
+        41,
+        201,
+        884,
+        493,
+        35,
+        850,
+        598,
+        805,
+        54,
+        244,
+        22,
+        319,
+        205,
+        595,
+        19,
+        404,
+        117,
+        742
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.int(-5, 5): 20 saídas",
+      "engine": null,
+      "input": "const r = [random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5), random.int(-5, 5)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        -2,
+        -5,
+        4,
+        -4,
+        -1,
+        -3,
+        -1,
+        0,
+        -3,
+        -2,
+        -4,
+        -3,
+        2,
+        5,
+        3,
+        5,
+        3,
+        -3,
+        -2,
+        -2
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.int(0, 2^40): duas saídas por sorteio",
+      "engine": null,
+      "input": "const r = [random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776), random.int(0, 1099511627776)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        21474836480,
+        335078268277,
+        220680563713,
+        235663092378,
+        764467347084,
+        392984580535,
+        448682695280,
+        980254120701,
+        66724178586,
+        1007984565194,
+        332917379679,
+        682885330366,
+        1079647245457,
+        202601611268,
+        616480399844,
+        677188315946,
+        656172966235,
+        859308883006,
+        554982207147,
+        628651746904
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.int(5, 5) gasta uma saída",
+      "engine": null,
+      "input": "const r = [random.int(5, 5), random.int(1, 1000)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        5,
+        1
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "Math.random: 20 saídas",
+      "engine": null,
+      "input": "const r = [Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random(), Math.random()]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        2.682209014892578e-06,
+        0.0,
+        0.0013799965381622314,
+        0.016488879919052124,
+        0.473047113744542,
+        0.3811985934153199,
+        0.29970869282260537,
+        0.869590055430308,
+        0.8682488922495395,
+        0.9914261298254132,
+        0.07865695585496724,
+        0.49885298195295036,
+        0.8328133311588317,
+        0.4670823267661035,
+        0.9011100521311164,
+        0.2331995856948197,
+        0.8858714760281146,
+        0.5354351371061057,
+        0.8315327847376466,
+        0.6896966930944473
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.bool: 20 saídas",
+      "engine": null,
+      "input": "const r = [random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool(), random.bool()]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        true,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true
+      ],
+      "type": "boolean[]"
+    },
+    {
+      "name": "random.decimal(0, 1, 2): 20 saídas",
+      "engine": null,
+      "input": "const r = [random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1), random.decimal(0, 1)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        0.06,
+        0.0,
+        0.57,
+        0.2,
+        0.25,
+        0.4,
+        0.94,
+        0.29,
+        0.09,
+        0.75,
+        0.11,
+        0.05,
+        0.1,
+        0.09,
+        0.14,
+        0.15,
+        0.4,
+        0.3,
+        0.6,
+        0.84
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.decimal(1.5, 9.5, 1): 20 saídas",
+      "engine": null,
+      "input": "const r = [random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1), random.decimal(1.5, 9.5, 1)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        3.3,
+        1.5,
+        4.2,
+        2.4,
+        3.2,
+        8.4,
+        9.0,
+        3.1,
+        9.4,
+        3.5,
+        1.9,
+        9.5,
+        6.3,
+        6.6,
+        6.1,
+        8.8,
+        9.0,
+        7.2,
+        5.8,
+        8.1
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.decimal(0, 100, 0): 20 saídas",
+      "engine": null,
+      "input": "const r = [random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0), random.decimal(0, 100, 0)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        6.0,
+        0.0,
+        57.0,
+        20.0,
+        25.0,
+        40.0,
+        94.0,
+        29.0,
+        9.0,
+        75.0,
+        11.0,
+        5.0,
+        10.0,
+        9.0,
+        14.0,
+        15.0,
+        40.0,
+        30.0,
+        60.0,
+        84.0
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.pick: 20 saídas",
+      "engine": null,
+      "input": "const r = [random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"]), random.pick([\"a\", \"b\", \"c\", \"d\"])]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        "a",
+        "a",
+        "a",
+        "a",
+        "d",
+        "a",
+        "c",
+        "b",
+        "b",
+        "a",
+        "b",
+        "d",
+        "b",
+        "c",
+        "a",
+        "c",
+        "c",
+        "d",
+        "a",
+        "b"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "random.string(5): 4 textos",
+      "engine": null,
+      "input": "const r = [random.string(5), random.string(5), random.string(5), random.string(5)]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        "yAaKx",
+        "E4Hzo",
+        "r3lI0",
+        "Oy3cZ"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "random.string(8, 'ab'): 3 textos",
+      "engine": null,
+      "input": "const r = [random.string(8, 'ab'), random.string(8, 'ab'), random.string(8, 'ab')]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        "aaaabaab",
+        "babbbaaa",
+        "ababaaaa"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "random.uuid: 5 saídas",
+      "engine": null,
+      "input": "const r = [random.uuid(), random.uuid(), random.uuid(), random.uuid(), random.uuid()]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        "00002d00-0000-4000-805a-708004389d80",
+        "79199d9b-6196-4b24-8cb9-b57ade9d7431",
+        "de458f35-fdce-4a54-9422-dcbd7fb4d43b",
+        "d5334125-7792-4516-a6af-25fc3bb2f7d2",
+        "e2c8791a-8912-46f3-94df-5524b08ff665"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "random.date de dia: 20 saídas",
+      "engine": null,
+      "input": "const r = [random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31)), random.date(date.of(2026, 1, 1), date.of(2026, 12, 31))]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        "2026-07-25",
+        "2026-01-01",
+        "2026-06-20",
+        "2026-03-17",
+        "2026-04-29",
+        "2026-09-10",
+        "2026-04-15",
+        "2026-06-24",
+        "2026-12-19",
+        "2026-09-02",
+        "2026-01-19",
+        "2026-11-05",
+        "2026-07-11",
+        "2026-06-23",
+        "2026-05-05",
+        "2026-05-20",
+        "2026-07-03",
+        "2026-04-19",
+        "2026-04-17",
+        "2026-03-23"
+      ],
+      "type": "Date (dia)[]"
+    },
+    {
+      "name": "random.date de instante: 10 saídas",
+      "engine": null,
+      "input": "const r = [random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0)), random.date(date.of(2026, 1, 1, 0, 0), date.of(2026, 1, 2, 0, 0))]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": [
+        "2026-01-01 00:00:11.520",
+        "2026-01-01 00:00:00",
+        "2026-01-01 01:38:47.040",
+        "2026-01-01 19:40:19.200",
+        "2026-01-01 12:22:01.860",
+        "2026-01-01 22:47:15.474",
+        "2026-01-01 21:33:59.020",
+        "2026-01-01 05:27:40.806",
+        "2026-01-01 03:51:40.554",
+        "2026-01-01 21:50:29.050"
+      ],
+      "type": "Date (instante)[]"
+    },
+    {
+      "name": "random.int com outra semente",
+      "engine": null,
+      "input": "const r = [random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100), random.int(1, 100)]",
+      "seed": [
+        4294967295,
+        305419896,
+        3735928559,
+        1
+      ],
+      "value": [
+        2,
+        25,
+        95,
+        89,
+        13,
+        49,
+        91,
+        3,
+        30,
+        1
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "random.uuid com outra semente",
+      "engine": null,
+      "input": "const r = [random.uuid(), random.uuid(), random.uuid()]",
+      "seed": [
+        4294967295,
+        305419896,
+        3735928559,
+        1
+      ],
+      "value": [
+        "99998d95-790e-4400-8ce7-d74a1e908808",
+        "593c2fc4-d9da-4084-818e-69b6cc682386",
+        "ada74cc1-4002-4b74-bbc8-15929857d2df"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "random.string com outra semente",
+      "engine": null,
+      "input": "const r = [random.string(6), random.string(6), random.string(6)]",
+      "seed": [
+        4294967295,
+        305419896,
+        3735928559,
+        1
+      ],
+      "value": [
+        "B0CEIO",
+        "Uq7UQt",
+        "SUll4J"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "random.int com min maior que max",
+      "engine": null,
+      "input": "const r = random.int(10, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.int: min (10) é maior que max (1)."
+      }
+    },
+    {
+      "name": "random.int com fração",
+      "engine": null,
+      "input": "const r = random.int(1.5, 3)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.int: min e max têm de ser números inteiros."
+      }
+    },
+    {
+      "name": "random.int sem argumentos",
+      "engine": null,
+      "input": "const r = random.int()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.int espera 2 argumentos, e recebeu 0."
+      }
+    },
+    {
+      "name": "random.int com texto",
+      "engine": null,
+      "input": "const r = random.int('a', 3)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.int espera number no argumento 1, e recebeu 'a'."
+      }
+    },
+    {
+      "name": "random.int com intervalo acima de 2^53 - 1",
+      "engine": null,
+      "input": "const r = random.int(-9007199254740991, 9007199254740991)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.int: max - min passa de 9.007.199.254.740.991."
+      }
+    },
+    {
+      "name": "random.int com intervalo de 2^53 - 1",
+      "engine": null,
+      "input": "const r = random.int(0, 9007199254740991) >= 0",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "random.decimal com casas fora da faixa",
+      "engine": null,
+      "input": "const r = random.decimal(0, 1, 11)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.decimal: casas vai de 0 a 10."
+      }
+    },
+    {
+      "name": "random.decimal com casas negativas",
+      "engine": null,
+      "input": "const r = random.decimal(0, 1, -1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.decimal: casas vai de 0 a 10."
+      }
+    },
+    {
+      "name": "random.decimal com min maior que max",
+      "engine": null,
+      "input": "const r = random.decimal(5, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.decimal: min (5) é maior que max (1)."
+      }
+    },
+    {
+      "name": "random.pick de lista vazia",
+      "engine": null,
+      "input": "const l: number[] = []\nconst r = random.pick(l)",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "random.pick recebeu uma lista vazia."
+      }
+    },
+    {
+      "name": "random.pick de não-lista",
+      "engine": null,
+      "input": "const r = random.pick(5)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.pick espera lista no argumento 1, e recebeu 5."
+      }
+    },
+    {
+      "name": "random.string com tamanho acima de 10.000",
+      "engine": null,
+      "input": "const r = random.string(10001)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.string: o tamanho vai de 0 a 10.000."
+      }
+    },
+    {
+      "name": "random.string com tamanho negativo",
+      "engine": null,
+      "input": "const r = random.string(-1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.string: o tamanho vai de 0 a 10.000."
+      }
+    },
+    {
+      "name": "random.string(0)",
+      "engine": null,
+      "input": "const r = random.string(0)",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "random.string(10000)",
+      "engine": null,
+      "input": "const r = random.string(10000).length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "random.string com letras vazias",
+      "engine": null,
+      "input": "const r = random.string(3, '')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.string: as letras vão de 1 a 256 caracteres."
+      }
+    },
+    {
+      "name": "random.string com mais de 256 letras",
+      "engine": null,
+      "input": "const r = random.string(3, 'a'.padStart(257, 'b'))",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.string: as letras vão de 1 a 256 caracteres."
+      }
+    },
+    {
+      "name": "random.date com as datas trocadas",
+      "engine": null,
+      "input": "const r = random.date(date.of(2026, 12, 1), date.of(2026, 1, 1))",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.date: a primeira data vem depois da segunda."
+      }
+    },
+    {
+      "name": "random.date com número",
+      "engine": null,
+      "input": "const r = random.date(1, 2)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.date espera Date no argumento 1, e recebeu 1."
+      }
+    },
+    {
+      "name": "random.date com as duas iguais",
+      "engine": null,
+      "input": "const r = random.date(date.of(2026, 5, 5), date.of(2026, 5, 5))",
+      "seed": null,
+      "value": "2026-05-05",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "random.constructor é vedado",
+      "engine": null,
+      "input": "const r = random.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "função que não existe em random",
+      "engine": null,
+      "input": "const r = random.gauss()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "gauss não existe em random."
+      }
+    }
+  ]
+}
