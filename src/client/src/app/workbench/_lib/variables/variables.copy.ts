@@ -20,6 +20,11 @@ export const limits = {
   parameters: 10_000,
   parameterBytes: 4 * 1024 * 1024,
   requestBodyBytes: 30_000_000,
+  /** O corpo das rotas `transfers` (a exportação e a cópia levam o comando e os parâmetros em `source`): 16 MiB. */
+  transferBodyBytes: 16 * 1024 * 1024,
+  /** Os dígitos do `DECIMAL` do Db2 e do Informix, e os caracteres de um `number` no pedido (RN-VAR-032). */
+  decimalDigits: 31,
+  numberCharacters: 100,
   tabValuesBytes: 128 * 1024 * 1024,
 } as const;
 
@@ -33,7 +38,7 @@ export const phrase = {
   declarationTooBig: (name: string) => `A declaração de ${name} passou de 64 KiB.`,
   tooDeep: (name: string) => `A expressão de ${name} passou de ${limits.depth} níveis.`,
   tooManySteps: (name: string) => `A expressão de ${name} passou de ${group(limits.stepsPerDeclaration)} passos e foi parada.`,
-  tooManyStepsInRun: () => `O script passou de ${group(limits.stepsPerRun)} passos e foi parado.`,
+  tooManyStepsInRun: () => `O script passou de ${group(limits.stepsPerRun)} de passos e foi parado.`,
   tooSlow: (name: string) => `A expressão de ${name} levou mais de ${limits.millisecondsPerDeclaration} ms e foi parada.`,
   runTooSlow: () => `As expressões do script levaram mais de ${limits.millisecondsPerRun / 1000} s e foram paradas.`,
   textTooLong: () => `O texto passou de ${group(limits.textLength)} de caracteres.`,
@@ -195,7 +200,8 @@ export const phrase = {
   markerAlreadyThere: (marker: string) => `O comando já tem um marcador de parâmetro (${marker}), e o Prism numera os das variáveis: tire o ${marker} do texto.`,
   sqlMadeSeveral: (name: string, count: number) => `O valor de ${name} (sql) fez o comando virar ${count} comandos: nada foi executado.`,
   sqlHasMarker: (name: string) => `O valor de ${name} (sql) tem um marcador de parâmetro (? ou $1), que o Prism não sabe numerar.`,
-  numberTooManyDigits: (digits: number, engine: string, max: number) => `O número tem ${digits} dígitos, e o ${engine} guarda até ${max}.`,
+  numberTooManyDigits: (digits: number, engine: "Db2" | "Informix", max: number) => `O número tem ${digits} dígitos, e o ${engine} guarda até ${max}${engine === "Informix" ? " pelo driver" : ""}.`,
+  numberTooLong: (length: number) => `O número tem ${length} caracteres, e o Prism manda até ${limits.numberCharacters}.`,
   noValue: (name: string) => `${name} não tem valor.`,
   valueNotInText: (name: string, type: string) => `${name} é ${type}, que não vai para o SQL.`,
   sentWithoutLiteral: (markers: string) => `-- Sem literal (ficam como marcador): ${markers}`,

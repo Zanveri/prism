@@ -87,8 +87,17 @@ export function dateValue(fields: DateFields, precision: DatePrecision, exact?: 
   return exact === undefined ? record({ kind: "date" as const, fields: copy, precision }) : record({ kind: "date" as const, fields: copy, precision, exact });
 }
 
+/** A lista (RN-VAR-004): até 10.000 itens, do mesmo tipo (ou o `null`), e a lista de lista não existe. */
 export function listValue(items: readonly Value[]): ListValue {
   if (items.length > limits.listItems) throw refuse(phrase.listTooLong());
+
+  let item: Type = neverType;
+  for (const value of items) {
+    if (value.kind === "list") throw refuse(phrase.listOfList());
+    const joined = unify(item, typeOfValue(value));
+    if (joined === null) throw refuse(phrase.mixedList(typeLabel(item), typeLabel(typeOfValue(value))));
+    item = joined;
+  }
   return record({ kind: "list" as const, items: Object.freeze(items.slice()) });
 }
 

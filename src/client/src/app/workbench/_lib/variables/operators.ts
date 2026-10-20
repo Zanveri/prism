@@ -1,6 +1,7 @@
 import type { ChainOperator } from "./ast";
 import { compareFields } from "./dates";
 import { expectExact } from "./functions";
+import type { Meter } from "./meter";
 import {
   booleanValue,
   displayValue,
@@ -26,7 +27,7 @@ import { limits, phrase } from "./variables.copy";
 const typeWord = (value: Value) => typeLabel(typeOfValue(value));
 
 /** O `+` : soma dois números ou junta dois textos; com um texto e um número, um booleano ou uma data, junta o texto ao texto do outro (RN-VAR-008). */
-function add(left: Value, right: Value): Value {
+function add(left: Value, right: Value, meter: Meter): Value {
   if (left.kind === "number" && right.kind === "number") return numberValue(expectExact(left) + expectExact(right));
 
   const leftText = left.kind === "string";
@@ -39,6 +40,7 @@ function add(left: Value, right: Value): Value {
     const b = rightText ? (right as StringValue).value : textOf(right);
     // O tamanho final se confere antes de montar.
     if (a.length + b.length > limits.textLength) throw refuse(phrase.textTooLong());
+    meter.weigh(a.length + b.length);
     return stringValue(a + b);
   }
   const offender = left.kind === "number" ? right : left;
@@ -64,13 +66,16 @@ function arithmetic(op: "-" | "*" | "/" | "%", left: Value, right: Value): Value
 }
 
 /** `< <= > >=`: números com números, textos com textos e datas com datas. */
-function relational(op: "<" | "<=" | ">" | ">=", left: Value, right: Value): Value {
+function relational(op: "<" | "<=" | ">" | ">=", left: Value, right: Value, meter: Meter): Value {
   let order: number;
   if (left.kind === "number" && right.kind === "number") {
     const a = expectExact(left);
     const b = expectExact(right);
     order = a < b ? -1 : a > b ? 1 : 0;
-  } else if (left.kind === "string" && right.kind === "string") order = left.value < right.value ? -1 : left.value > right.value ? 1 : 0;
+  } else if (left.kind === "string" && right.kind === "string") {
+    meter.weigh(Math.min(left.value.length, right.value.length));
+    order = left.value < right.value ? -1 : left.value > right.value ? 1 : 0;
+  }
   else if (left.kind === "date" && right.kind === "date") order = compareFields((left as DateValue).fields, (right as DateValue).fields);
   else throw refuse(phrase.compareKinds(op));
 
@@ -87,22 +92,23 @@ function relational(op: "<" | "<=" | ">" | ">=", left: Value, right: Value): Val
 }
 
 /** `===` e `!==`: como no JavaScript para os números, os textos, os booleanos e o `null`; duas datas são iguais quando são o mesmo instante; listas e objetos não se comparam. */
-function equality(op: "===" | "!==", left: Value, right: Value): Value {
+function equality(op: "===" | "!==", left: Value, right: Value, meter: Meter): Value {
   const compound = (value: Value) => value.kind === "list" || value.kind === "object";
   if ((compound(left) && right.kind !== "null") || (compound(right) && left.kind !== "null")) throw refuse(phrase.equalityKinds(op));
   if (left.kind === "number" && right.kind === "number") {
     expectExact(left);
     expectExact(right);
   }
+  if (left.kind === "string" && right.kind === "string") meter.weigh(Math.min(left.value.length, right.value.length));
   const equal = strictEquals(left, right);
   return booleanValue(op === "===" ? equal : !equal);
 }
 
 /** O operador de dois lados que não decide pelo valor do primeiro: `+ - * / % < <= > >= === !==`. Os `&& || ??` são do avaliador, que não avalia o lado que não precisa. */
-export function binary(op: Exclude<ChainOperator, "&&" | "||" | "??">, left: Value, right: Value): Value {
+export function binary(op: Exclude<ChainOperator, "&&" | "||" | "??">, left: Value, right: Value, meter: Meter): Value {
   switch (op) {
     case "+":
-      return add(left, right);
+      return add(left, right, meter);
     case "-":
     case "*":
     case "/":
@@ -112,9 +118,9 @@ export function binary(op: Exclude<ChainOperator, "&&" | "||" | "??">, left: Val
     case "<=":
     case ">":
     case ">=":
-      return relational(op, left, right);
+      return relational(op, left, right, meter);
     default:
-      return equality(op, left, right);
+      return equality(op, left, right, meter);
   }
 }
 

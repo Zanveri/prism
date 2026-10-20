@@ -14,7 +14,7 @@ import {
 } from "./dates";
 import { VariableError } from "./errors";
 import type { Environment, Meter } from "./meter";
-import { isIntegerText } from "./numbers";
+import { groupThousands, isIntegerText } from "./numbers";
 import {
   booleanValue,
   dateValue,
@@ -101,7 +101,7 @@ function conforms(kind: ParamKind, value: Value): boolean {
   }
 }
 
-const countText = (min: number, max: number): string => (min === max ? `${min} ${min === 1 ? "argumento" : "argumentos"}` : max === Infinity ? `pelo menos ${min} ${min === 1 ? "argumento" : "argumentos"}` : `de ${min} a ${max} argumentos`);
+const countText = (min: number, max: number): string => (min === max ? `${min} ${min === 1 ? "argumento" : "argumentos"}` : `de ${min} a ${groupThousands(String(max))} argumentos`);
 
 /** Confere quantos e quais argumentos a função aceita (RN-VAR-009): "<função> espera <n> argumentos, e recebeu <m>." e "<função> espera <tipo> no argumento <p>, e recebeu <valor>.". */
 function checkArguments(def: Pick<FunctionDef, "params" | "rest">, name: string, args: readonly Value[]): void {
@@ -224,12 +224,12 @@ export const functions: ReadonlyMap<string, FunctionDef> = new Map<string, Funct
         if (x.kind === "number") return x;
         const text = (x as StringValue).value.trim();
         if (!/^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$/.test(text)) throw refuse(phrase.numberNotParsed((x as StringValue).value));
-        const canonical = text.replace(/^\+/, "").replace(/^(-?)\./, "$10.").replace(/([eE])\+/, "$1");
+        const canonical = text.replace(/^\+/, "").replace(/^(-?)\./, (_, sign: string) => `${sign}0.`).replace(/([eE])\+/, "$1").replace(/^(-?)0+(?=\d)/, "$1");
         return numberValue(Number(canonical), canonical);
       },
     },
   ],
-  ["Number.isInteger", { params: required("numberAny"), run: ([x]) => booleanValue((x as NumberValue).exact !== undefined ? isIntegerText((x as NumberValue).exact as string) : Number.isInteger((x as NumberValue).value)) }],
+  ["Number.isInteger", { params: required("numberAny"), run: ([x]) => booleanValue((x as NumberValue).inexact === true ? isIntegerText((x as NumberValue).exact as string) : Number.isInteger((x as NumberValue).value)) }],
   ["String", { params: required("any"), run: ([x], { meter }) => (meter.weigh(x.kind === "list" ? x.items.length : 0), checkedText(textOf(x))) }],
   ["Date.now", { params: [], ...noRandom, run: (_, { env }) => numberResult(env.now()) }],
 

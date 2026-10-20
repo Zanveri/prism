@@ -1,6 +1,6 @@
 import { canonicalNumberText } from "./numbers";
 import { VariableError } from "./errors";
-import { phrase } from "./variables.copy";
+import { limits, phrase } from "./variables.copy";
 
 /*
  * O analisador léxico da linguagem das variáveis (RN-VAR-002 e 003). Lê o texto do script a partir de uma posição, um pedaço por vez, e para onde a declaração
@@ -54,6 +54,9 @@ export class Lexer {
   /** Até onde o analisador lê: o fim do texto, ou o fim de um `${ ... }` de um modelo. */
   readonly limit: number;
   position: number;
+  /** O nome da declaração e o nível em que o analisador está, para recusar o modelo dentro de modelo fundo demais antes de a leitura ficar funda (RN-VAR-013). */
+  declarationName = "";
+  nesting = 0;
 
   constructor(source: string, from: number, limit = source.length) {
     this.source = source;
@@ -182,7 +185,11 @@ export class Lexer {
       const code = source.charCodeAt(position);
       if (isDigit(code)) position++;
       else if (code === 95) {
-        if (!isDigit(source.charCodeAt(position - 1)) || !isDigit(source.charCodeAt(position + 1))) throw new VariableError(phrase.badUnderscore(source.slice(start, position + 1)), start);
+        if (!isDigit(source.charCodeAt(position - 1)) || !isDigit(source.charCodeAt(position + 1))) {
+          let end = position;
+          while (end < this.limit && (isDigit(source.charCodeAt(end)) || source.charCodeAt(end) === 95)) end++;
+          throw new VariableError(phrase.badUnderscore(source.slice(start, end)), start);
+        }
         position++;
       } else break;
     }
@@ -310,6 +317,9 @@ export class Lexer {
         position = inner.position;
       } else if (code === 96) {
         const inner = new Lexer(source, position, limit);
+        inner.declarationName = this.declarationName;
+        inner.nesting = this.nesting + 1;
+        if (inner.nesting > limits.depth) throw new VariableError(phrase.tooDeep(this.declarationName), position);
         inner.template(position, false);
         position = inner.position;
       } else if ((code === 45 && source.charCodeAt(position + 1) === 45) || (code === 47 && source.charCodeAt(position + 1) === 47)) {

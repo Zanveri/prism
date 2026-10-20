@@ -19,7 +19,7 @@ import {
   typeOfValue,
   unify,
   forbiddenMembers,
-  neverType,
+  nullType,
   type Type,
   type Value,
 } from "./values";
@@ -59,6 +59,8 @@ export class Evaluator {
   private readonly meter: Meter;
   private readonly scope: Scope;
   private readonly source: string;
+  /** Avaliando o lado que não vai, só para saber o tipo dele (`probe`): lá dentro não se mede de novo. */
+  private probing = false;
 
   constructor(env: Environment, meter: Meter, scope: Scope, source: string) {
     this.env = env;
@@ -74,8 +76,8 @@ export class Evaluator {
   }
 
   private visit(node: Node): Evaluated {
-    this.meter.tick();
     try {
+      this.meter.tick();
       return this.dispatch(node);
     } catch (error) {
       if (error instanceof VariableError && error.offset === noOffset) throw new VariableError(error.message, node.start);
@@ -123,7 +125,7 @@ export class Evaluator {
       case "power":
         return power(this.value(node.base), this.value(node.exponent));
       case "conditional":
-        return isFalsy(this.value(node.test)) ? this.visit(node.otherwise) : this.visit(node.then);
+        return this.conditional(node);
       case "member":
         return this.member(node);
       case "index":
@@ -179,7 +181,7 @@ export class Evaluator {
   /** A lista: os itens têm o mesmo tipo (ou o `null`), e a lista de lista não existe (RN-VAR-004). */
   private list(items: readonly Spreadable[]): Value {
     const values = this.arguments(items);
-    return checkedList(values);
+    return listValue(values);
   }
 
   private object(node: Extract<Node, { t: "object" }>): Value {
@@ -204,13 +206,17 @@ export class Evaluator {
     for (const part of node.rest) {
       switch (part.op) {
         case "&&":
-          if (isFalsy(value)) return value;
+        case "||": {
+          // Os dois lados têm de ter o mesmo tipo, ou um deles `null`, também o que não vai (RN-VAR-008).
+          const stops = part.op === "&&" ? isFalsy(value) : !isFalsy(value);
+          const left = typeOfValue(value);
+          const rightType = stops ? this.probe(part.operand) : null;
+          if (rightType !== null && unify(left, rightType) === null) throw new VariableError(phrase.logicalTypes(typeLabel(left), typeLabel(rightType)), part.start);
+          if (stops) return value;
           value = this.value(part.operand);
+          if (unify(left, typeOfValue(value)) === null) throw new VariableError(phrase.logicalTypes(typeLabel(left), typeLabel(typeOfValue(value))), part.start);
           break;
-        case "||":
-          if (!isFalsy(value)) return value;
-          value = this.value(part.operand);
-          break;
+        }
         case "??":
           if (value.kind !== "null") return value;
           value = this.value(part.operand);
@@ -218,7 +224,7 @@ export class Evaluator {
         default: {
           const right = this.value(part.operand);
           try {
-            value = binary(part.op, value, right);
+            value = binary(part.op, value, right, this.meter);
           } catch (error) {
             if (error instanceof VariableError && error.offset === noOffset) throw new VariableError(error.message, part.start);
             throw error;
@@ -227,6 +233,39 @@ export class Evaluator {
       }
     }
     return value;
+  }
+
+  /**
+   * O tipo do lado que não vai, quando ele se sabe sem efeito nenhum: sem `random`, sem a hora e só com variáveis que têm valor (RN-VAR-008). Avalia-o à parte, e
+   * qualquer erro dele é dele: o lado que não vai não falha o que vai.
+   */
+  private probe(node: Node): Type | null {
+    if (this.probing || !isDeterministic(node, (name) => this.scope.has(name))) return null;
+    this.probing = true;
+    try {
+      const value = this.visit(node);
+      return value === short ? null : typeOfValue(value);
+    } catch (error) {
+      if (error instanceof VariableError) return null;
+      throw error;
+    } finally {
+      this.probing = false;
+    }
+  }
+
+  /** `? :`: as duas saídas têm de ter o mesmo tipo, ou uma delas `null` (RN-VAR-008). */
+  private conditional(node: Extract<Node, { t: "conditional" }>): Evaluated {
+    const takeThen = !isFalsy(this.value(node.test));
+    const result = this.visit(takeThen ? node.then : node.otherwise);
+    const other = this.probe(takeThen ? node.otherwise : node.then);
+    if (other !== null) {
+      const taken = result === short ? nullType : typeOfValue(result);
+      if (unify(taken, other) === null) {
+        const [thenType, elseType] = takeThen ? [taken, other] : [other, taken];
+        throw refuse(phrase.ternaryTypes(typeLabel(thenType), typeLabel(elseType)));
+      }
+    }
+    return result;
   }
 
   private member(node: Extract<Node, { t: "member" }>): Evaluated {
@@ -302,17 +341,4 @@ export class Evaluator {
     if (result === null) throw new VariableError(phrase.memberNotInType(node.name, typeLabel(typeOfValue(receiver))), node.nameStart);
     return result;
   }
-}
-
-/** A lista de valores como valor da linguagem: sem lista dentro de lista, e os itens do mesmo tipo (ou o `null`): `[1, 'a']` é erro (RN-VAR-004). */
-export function checkedList(values: readonly Value[]): Value {
-  let item: Type = neverType;
-
-  for (const value of values) {
-    if (value.kind === "list") throw refuse(phrase.listOfList());
-    const joined = unify(item, typeOfValue(value));
-    if (joined === null) throw refuse(phrase.mixedList(typeLabel(item), typeLabel(typeOfValue(value))));
-    item = joined;
-  }
-  return listValue(values);
 }

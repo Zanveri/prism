@@ -38,8 +38,6 @@ export type Replacement = {
 /** O comando pronto para ir ao banco (RN-VAR-017 e 032): o texto com os marcadores e os parâmetros na ordem deles. */
 export type BoundCommand = { sql: string; params: BoundParameter[]; replacements: Replacement[] };
 
-const engineName = (engine: Engine | undefined) => (engine === 2 ? "Db2" : "Informix");
-
 /** O texto em UTF-8, em bytes, sem montar um buffer. */
 export function utf8Length(text: string): number {
   let bytes = 0;
@@ -72,6 +70,16 @@ function jsonBytes(text: string): number {
   return bytes;
 }
 
+/** Os bytes do pedido à API com o comando e os parâmetros (RN-VAR-032): o texto e cada `{ type, value }` escritos em JSON, mais a folga do resto do corpo. */
+export function requestBodyBytes(sql: string, params: readonly BoundParameter[]): number {
+  let body = jsonBytes(sql) + 200;
+  for (const parameter of params) body += 40 + (parameter.value === null ? 4 : jsonBytes(parameter.value));
+  return body;
+}
+
+/** Os parâmetros como a API os lê (RN-VAR-032): só `type` e `value`. Uma terceira chave (`variable`, `item`) é 422 `QUERY_INVALID`, e fica na tela, para o "SQL enviado". */
+export const requestParams = (params: readonly BoundParameter[]): { type: ParameterType; value: string | null }[] => params.map(({ type, value }) => ({ type, value }));
+
 /** O texto do número como a API o aceita (`^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`): sem zeros à esquerda. */
 function numberParameterText(value: Value & { kind: "number" }): string {
   return numberText(value).replace(/^(-?)0+(?=\d)/, "$1");
@@ -100,12 +108,13 @@ function toParameter(value: Value, variable: string, item: number | null, engine
   switch (value.kind) {
     case "number": {
       const text = numberParameterText(value);
-      // O `DECIMAL` do Db2 guarda até 31 dígitos e o do Informix até 32; o número escrito com expoente vai como `DOUBLE`.
+      // O `DECIMAL` do Db2 e o do Informix guardam até 31 dígitos pelo driver (a S-VAR-1 provou que com 32 o servidor recusa); o número escrito com expoente vai como `DOUBLE`.
       if ((engine === 2 || engine === 3) && !/[eE]/.test(text)) {
         const digits = significantDigits(text);
-        const max = engine === 2 ? 31 : 32;
-        if (digits > max) throw new VariableError(phrase.numberTooManyDigits(digits, engineName(engine), max), -1);
+        if (digits > limits.decimalDigits) throw new VariableError(phrase.numberTooManyDigits(digits, engine === 2 ? "Db2" : "Informix", limits.decimalDigits), -1);
       }
+      // A API confere o `number` até 100 caracteres (RN-VAR-032), e o PostgreSQL leva o texto como veio.
+      if (text.length > limits.numberCharacters) throw new VariableError(phrase.numberTooLong(text.length), -1);
       return { type: "number", value: text, variable, item };
     }
     case "string":
@@ -170,7 +179,7 @@ function resolve(ref: AtReference, value: Value, declared: Type | undefined): Re
     label = `@${ref.name}.${ref.field.name}`;
     targetType = declared?.tag === "object" ? declared.fields.get(ref.field.name) : undefined;
   } else if (ref.field !== null) {
-    throw fail(value.kind === "null" ? phrase.fieldOfNull(ref.name, ref.field.name) : phrase.fieldOfNonObject(ref.name, typeLabel(typeOfValue(value))));
+    throw fail(value.kind === "null" ? phrase.fieldOfNullPlain(ref.name, ref.field.name) : phrase.fieldOfNonObject(ref.name, typeLabel(typeOfValue(value))));
   }
 
   if (target.kind === "list") {
@@ -272,9 +281,7 @@ export function bindCommand(text: string, engine: Engine | undefined, declared: 
   checkSqlValues(text, sql, engine, replacements, references[0].start);
 
   // O corpo do pedido à API tem um limite (RN-VAR-032): a tela confere antes de mandar e não manda o que passa.
-  let body = jsonBytes(sql) + 200;
-  for (const parameter of params) body += 40 + (parameter.value === null ? 4 : jsonBytes(parameter.value));
-  if (body > limits.requestBodyBytes) throw new VariableError(phrase.requestTooBig(), references[0].start);
+  if (requestBodyBytes(sql, params) > limits.requestBodyBytes) throw new VariableError(phrase.requestTooBig(), references[0].start);
 
   return { sql, params, replacements };
 }

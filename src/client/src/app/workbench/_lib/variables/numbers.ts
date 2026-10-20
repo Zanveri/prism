@@ -62,7 +62,7 @@ export function groupThousands(digits: string): string {
 /** Se o texto de um número é um inteiro (sem ponto nem expoente), para escolher a frase do erro de precisão. */
 export const isIntegerText = (text: string): boolean => /^[+-]?\d+$/.test(text);
 
-/** Quantos dígitos significativos o texto de um número tem, para o limite do `DECIMAL` do Db2 (31) e do Informix (32): os zeros à esquerda da parte inteira não contam. */
+/** Quantos dígitos significativos o texto de um número tem, para o limite do `DECIMAL` do Db2 e do Informix (31): os zeros à esquerda da parte inteira não contam. */
 export function significantDigits(text: string): number {
   const match = /^[+-]?(\d*)(?:\.(\d*))?/.exec(text);
   const integer = (match?.[1] ?? "").replace(/^0+/, "");

@@ -45,7 +45,11 @@ export function declaredNameRefusal(raw: string): string | null {
 
 type Shape = "declaration" | "reassignment";
 
-const nameAtPattern = /^[\p{ID_Start}_$][\p{ID_Continue}$]*/u;
+/**
+ * O nome como a forma de um item o lê (`itemShape`): o que o analisador léxico leria como nome, e também o que ele recusa dentro de um (o escape `\u` e os caracteres
+ * de formato), para a declaração com um nome assim ser uma declaração com erro, e não SQL.
+ */
+const nameAtPattern = /^(?:[\p{ID_Start}_$]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})(?:[\p{ID_Continue}$\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})*/u;
 
 /**
  * O que o texto em `start` parece ser, só pela forma, sem ler o resto (RN-VAR-001): `let` ou `const` em minúsculas, um espaço, um nome e então `=`, `:` ou o fim da
@@ -105,6 +109,8 @@ class Parser {
     this.source = source;
     this.engine = engine;
     this.lexer = new Lexer(source, from, limit);
+    this.lexer.declarationName = name;
+    this.lexer.nesting = nesting;
     this.depth = depth;
     this.nesting = nesting;
     this.itemStart = itemStart;
@@ -193,6 +199,7 @@ class Parser {
     const nameToken = this.tok;
     const name = this.declaredName(nameToken);
     this.name = name;
+    this.lexer.declarationName = name;
     this.advance();
 
     let annotation: TypeAnnotation | null = null;
@@ -218,6 +225,7 @@ class Parser {
     const nameToken = this.tok;
     const name = normalizeName(nameToken.text);
     this.name = name;
+    this.lexer.declarationName = name;
     this.advance();
     if (!this.is("=")) throw this.unexpected(phrase.expectedEqualsOrColon(name));
     this.advance(true);
@@ -308,7 +316,8 @@ class Parser {
 
   private parseValue(): Node {
     if (this.atEnd() || this.is(";")) throw new VariableError(phrase.expectedValue(), this.previousEnd);
-    const node = this.parseExpression();
+    // O valor inteiro da declaração é o nível zero; cada parêntese, lista, objeto, modelo ou chamada de dentro conta um (RN-VAR-013).
+    const node = this.parseConditional();
 
     // A consulta e o `random.of` só podem ser o valor inteiro da declaração (RN-VAR-002).
     if (node.t !== "query" && this.firstQuery !== null) throw new VariableError(phrase.queryOnlyWhole(), this.firstQuery);
@@ -420,17 +429,15 @@ class Parser {
   private parseSequence(open: string, close: string, read: () => void): void {
     const opener = this.tok;
     this.depth++;
-    this.nest(() => {
-      this.advance(true);
-      while (!this.is(close)) {
-        read();
-        if (this.is(",")) this.advance(true);
-        else if (!this.is(close)) {
-          const line = this.lineOf(opener.start);
-          throw this.unexpected(open === "(" ? phrase.expectedClose(line) : open === "[" ? phrase.expectedCloseBracket(line) : phrase.expectedCloseBrace(line));
-        }
+    this.advance(true);
+    while (!this.is(close)) {
+      read();
+      if (this.is(",")) this.advance(true);
+      else if (!this.is(close)) {
+        const line = this.lineOf(opener.start);
+        throw this.unexpected(open === "(" ? phrase.expectedClose(line) : open === "[" ? phrase.expectedCloseBracket(line) : phrase.expectedCloseBrace(line));
       }
-    });
+    }
     this.depth--;
     this.advance();
   }
@@ -552,13 +559,10 @@ class Parser {
     }
 
     this.depth++;
-    const inner = this.nest(() => {
-      this.advance(true);
-      const node = this.parseExpression();
-      if (this.is(",")) throw new VariableError(phrase.operatorNotInLanguage(","), this.tok.start);
-      if (!this.is(")")) throw this.unexpected(phrase.expectedClose(this.lineOf(opener.start)));
-      return node;
-    });
+    this.advance(true);
+    const inner = this.parseExpression();
+    if (this.is(",")) throw new VariableError(phrase.operatorNotInLanguage(","), this.tok.start);
+    if (!this.is(")")) throw this.unexpected(phrase.expectedClose(this.lineOf(opener.start)));
     this.depth--;
     this.advance();
     return inner;
@@ -590,7 +594,6 @@ class Parser {
       if (!this.is(":")) throw this.unexpected(this.is(",") || this.is("}") ? phrase.noVarOrFunctionHere(`A forma curta { ${key} }`) : phrase.expectedColonInObject());
       this.advance(true);
       pairs.push({ key, keyStart: keyToken.start, value: this.parseExpression() });
-      if (pairs.length > limits.objectFields + 1) throw new VariableError(phrase.objectTooBig(), opener.start);
     });
     return { t: "object", pairs, start: opener.start, end: this.previousEnd };
   }

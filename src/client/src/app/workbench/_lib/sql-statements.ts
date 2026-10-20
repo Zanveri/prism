@@ -717,8 +717,9 @@ function regionStart(sql: string, at: number, floor: number): number {
   let accepted = at;
   let cursor = sql.lastIndexOf("\n", at - 1) + 1;
   while (cursor > floor) {
-    const previous = sql.lastIndexOf("\n", cursor - 2) + 1;
-    if (previous < floor) break;
+    // `lastIndexOf` com posição negativa vale 0: sem este cuidado a primeira linha do texto voltaria a si mesma.
+    const previous = cursor < 2 ? 0 : sql.lastIndexOf("\n", cursor - 2) + 1;
+    if (previous < floor || previous >= cursor) break;
     const line = sql.slice(previous, cursor - 1);
     const trimmed = line.trimStart();
     if (trimmed.startsWith("//")) accepted = previous + line.length - trimmed.length;
