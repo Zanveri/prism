@@ -1546,6 +1546,29 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   pela pessoa, nenhum valor é link** (`recordLinks`): as linhas que ficaram na tela são o retrato de antes da desconexão, e nada reconecta sem
   o clique em "Atualizar", que devolve os links. Numa chave composta cada coluna leva à sua parceira, a de mesma posição; numa coluna que está
   em duas chaves, vale a primeira do catálogo.
+- **Chave estrangeira no resultado da consulta e do script** (RN-TABELA-007, alterada a pedido do dono em 2026-10-20). A mesma grade (`links`, `onFollow` e
+  `linkable`, que o `ResultPanel` recebe em `follow` na aba de consulta, e em `records` nos Registros), em qualquer lugar do resultado (painel, aba, janela) e
+  nas abas de resultado do Executar script, as guardadas também: o `QueryTabPanel` liga `useResultLinks` (`_lib/use-result-links.ts`) às linhas à frente
+  (`kept ?? último comando`). A origem de cada coluna é o alvo `purpose: "sql"` (`edits.sqlTarget()`, o `sqlTarget(undefined, true)` do gancho: **sem** `notice`, sem a faixa "Conferindo…" e **sem aviso** se
+  falha ou é recusado, também o erro fora das recusas, como o cofre fechado ou a API sem resposta, pelo `silent` do `throughMutationCache`; os valores seguem como texto), perguntado quando o resultado chega com linhas, à vista (`resultShown`, a janela do resultado vale sem
+  `onScreen`) e com a aba conectada (`tab.sessionId`; sem sessão, nenhum valor é link: `shownResultLinks`). **Um pedido por comando**: `sqlTargetKey`
+  (`_lib/sql-target-key.ts`: conexão, banco, texto do comando com o filtro do resultado e as colunas, nome e tipo, na ordem) é a segunda chave da resposta em
+  `useRecordEdits` (a primeira é o `resultId`), e `knownSqlTarget()` cai nela; assim a atualização automática (1 s), o F5 e o "Carregar mais" não acrescentam pedido
+  nenhum, a pergunta em andamento vale para o resultado novo do mesmo comando, e o "Gerar SQL" e o "Copiar como" reaproveitam o mesmo alvo (e ele a eles). A
+  resposta que falhou não fica guardada. O mapeamento é puro (`resultLinks`, `sourceTables`, em `foreign-key-links.ts`): cada coluna do alvo (`table`, índice
+  em `tables`, e `baseColumn`) vale se a tabela é `kind: "table"` (a visão, o sinônimo, a `elsewhere` e a coluna calculada ou sem `baseColumn` não são link) e
+  se a coluna base está numa chave estrangeira DELA, pela regra de sempre (`linkOfColumn`); compara-se a coluna base, e não o nome que o resultado mostra,
+  então o apelido e a junção funcionam. As chaves de cada tabela de origem vêm de `foreignKeysQuery` por `useQueries` (o cache dos Registros, da Estrutura e do
+  Diagrama), só com o resultado à vista, e com `meta: { silent: true }` posto no gancho (e não em `foreignKeysQuery`, que a Estrutura e os Registros mostram no
+  próprio lugar): o catálogo que falha não vira aviso. **A resposta que não chegou** (`failed`) **não é guardada e é perguntada de novo na execução seguinte da
+  pessoa** (`RowsState.id`, que o F5 e o filtro mudam e a atualização automática de 1 s não; o gancho não pergunta com o alvo do comando na mão), e a `changed`
+  (a atualização automática trocou o resultado antes de a resposta pousar) é perguntada uma vez mais, e só uma por execução. **Resultado que a API marca como só
+  leitura** (`DISTINCT`, `GROUP BY`, `UNION`, subconsulta no `FROM`, filtro embrulhado: `notEditable`) **não tem link**, por decisão: é o alvo recusado (a API
+  não muda); um `SELECT DISTINCT status_id FROM t` fica com texto. O clique (`follow`) é o dos Registros (`followOf`, `filterHandoff.request` com o banco da aba e `onOpenTable`, com a
+  conexão e o banco do resultado); o valor é o da célula lida (a célula com alteração pendente não é link, e o item do menu usa o valor lido, como nos
+  Registros). Com o resultado numa janela própria, `onOpenTable` abre a aba na janela da aba da consulta e o `onFocusWindow(tab.id, "link")` a traz à frente.
+  O item "Ir para o registro referenciado" do menu entra pela `GridFollowSource` da aba (um proxy de identidade fixa, preenchido depois de `useResultLinks`, que
+  precisa do alvo que `useRecordEdits` guarda), só nas colunas que são link.
 - **O valor entra no filtro como literal do banco** (`sqlLiteral(engine, valor, tipoDaColuna)`, em `table-sql.ts`; `equalsCondition` monta
   `"coluna" = literal`). Número sem aspas só se a coluna é numérica E o valor é um número (um `007` numa coluna de texto fica entre aspas); o
   resto vai entre aspas simples, com a aspa dobrada, e a barra invertida depende do banco: no PostgreSQL o literal com barra vira `E'…'` com
@@ -1864,7 +1887,7 @@ desenha e avisa.
   Ordenar e Ir para o registro referenciado; Editar célula, Definir como nulo e Desfazer alteração; Adicionar, Duplicar e Excluir linha(s); Exportar dados… e
   o submenu "Gerar SQL"; Atualizar (F5) e Atualizar automaticamente. Cada grupo e cada item de fonte aparece só quando quem usa a edição o entrega: `sort`
   (`GridSortSource = { applied, apply }`: nos Registros, `orderRecords`, o caminho do botão de ordenar do cabeçalho; na aba de consulta, o campo de filtro do resultado com `withOrder`; não
-  nas abas guardadas do script), `follow` (`GridFollowSource`, só os Registros, pelas chaves estrangeiras da grade), `copyAs` e `generateSql`.
+  nas abas guardadas do script), `follow` (`GridFollowSource`, os Registros e o resultado da consulta e do script, nas colunas que são chave estrangeira), `copyAs` e `generateSql`.
   "Desfazer alteração" age nas células escolhidas (`undoWhere`, em `record-edits.ts`, que percorre as pendências e não a seleção).
 - **O contrato com as outras frentes** (seção 37: o "Copiar avançado…", os nove "Copiar como", a configuração deles e o "Gerar SQL"). `useRecordEdits`
   recebe `copyAs?: CopyAsSource` e `generateSql?: GenerateSqlSource`, os dois `GridMenuSource<A, S> = { access(context): S; choose(action, context) }`:
@@ -1883,7 +1906,7 @@ desenha e avisa.
     `moved()` (o resultado já não é o da seleção), `copying(controller)` (a faixa "Copiando…" passado meio segundo, com o "Cancelar" dela abortando a cópia;
     devolve quem a tira), `ensureTarget()` (o `edit-target` da edição) e o alvo do "Gerar SQL" e do "Copiar como" (abaixo).
   - **O alvo do "Gerar SQL" e do "Copiar como"** (RN-GRADE-020 e RN-EDIT-010): `sqlTarget(notice?)` é o `edit-target` com `purpose: "sql"`, o MESMO para os
-    dois, perguntado uma vez por resultado (os 32 mais recentes ficam, um por aba de resultado do script) e na sessão em que o resultado foi lido; `notice` vai à
+    dois, perguntado uma vez por resultado e uma vez por comando e colunas (`sqlTargetKey`; os 32 mais recentes de cada ficam, um por aba de resultado do script) e na sessão em que o resultado foi lido; `notice` vai à
     faixa enquanto a API responde ("Conferindo a tabela deste resultado…", do "Copiar como"; o diálogo do "Gerar SQL" diz a dele). `knownSqlTarget()` é o que
     já se sabe sem perguntar (habilitar não custa consulta): o alvo da edição, quando ele traz o `kind` e o `keyColumns` (`sqlTargetOf`); o motivo da página,
     quando ela já disse que o resultado inteiro é só leitura (a união, o `DISTINCT`, o filtro embrulhado), como `notEditable`, menos na conexão somente leitura

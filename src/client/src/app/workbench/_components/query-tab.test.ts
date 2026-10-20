@@ -23,6 +23,8 @@ const rt = await vi.hoisted(async () => {
     toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
     service: { editTargetOrRefuse: vi.fn(), saveEditsOrRefuse: vi.fn(), previewEditsOrRefuse: vi.fn(), sqlTargetOrRefuse: vi.fn(), countWholeColumnOrRefuse: vi.fn() },
     cells: { resultCells: vi.fn() },
+    /** As chaves estrangeiras de cada tabela, pelo nome dela (RN-TABELA-007). */
+    catalog: new Map<string, unknown>(),
     /** A área de trabalho é a tela mostrada (a rota); a aba à vista é a ativa com ela na tela (RN-SEG-001). */
     screen: { on: true },
     /**
@@ -35,7 +37,12 @@ const rt = await vi.hoisted(async () => {
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
-vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQueryClient: () => rt.queryClient }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => rt.queryClient,
+  // As chaves estrangeiras de cada tabela de origem (RN-TABELA-007): o `rt.catalog` por nome da tabela; sem ele, o catálogo ainda não chegou.
+  useQueries: ({ queries, combine }: { queries: { queryKey: readonly unknown[] }[]; combine: (results: unknown[]) => unknown }) => combine(queries.map((query) => ({ data: rt.catalog.get(String(query.queryKey.at(-2))) }))),
+}));
 vi.mock("@/app/settings/_lib/use-preferences", () => ({ usePreferences: () => ({ preferences: { results: { nullText: "(nulo)", autoLoadMore: true }, editor: { autocomplete: true } } }) }));
 vi.mock("@/components/ui/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui/toast")>()), useToast: () => rt.toast }));
 vi.mock("@/lib/api/mutation-cache", () => ({ throughMutationCache: (_client: unknown, work: () => Promise<unknown>) => work() }));
@@ -72,6 +79,7 @@ import { elementsOf } from "@/lib/testing/react-tree";
 import { editCell, editWholeColumn, noEdits } from "../_lib/record-edits";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
+import { filterHandoff } from "../_lib/filter-handoff";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isPersonBusy } from "../_lib/use-query-runner";
@@ -117,6 +125,18 @@ const target: EditTarget = {
   rowOperations: true,
   oneAtATime: false,
 };
+
+/** O alvo do SQL (`purpose: "sql"`) do mesmo resultado: `loja.pedido` é uma tabela, e `status` vem da coluna `status_id` dela (o apelido). */
+const pedidoTarget: SqlTarget = {
+  tables: [{ schema: "loja", name: "pedido", key: [0], editable: true, reason: null, kind: "table", keyColumns: ["id"] }],
+  columns: [
+    { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+    { table: 0, baseColumn: "status_id", editable: true, reason: null, nullable: true, generated: null },
+  ],
+  rowOperations: true,
+  oneAtATime: false,
+};
+const statusKey = { name: "fk_status", columns: ["status_id"], referencedSchema: "loja", referencedTable: "pedido_status", referencedColumns: ["codigo"] };
 
 function rowsState(over: Partial<RowsState> = {}): RowsState {
   return { status: "rows", id: 1, target: { sql: "select * from loja.pedido", offset: 0, engine: pg }, columns, rows: [["10", "aberta"]], truncated: new Map(), hasMore: true, totalRows: null, elapsedMs: 3, pages: 1, loadingMore: false, cancelling: false, cursorClosed: false, total: null, counting: false, resultId: "r1", readOnly: null, ...over };
@@ -228,6 +248,9 @@ beforeEach(() => {
   rt.screen.on = true;
   rt.protections = { readOnly: null, confirm: null };
   rt.asked.length = 0;
+  // RN-TABELA-007: o alvo `purpose: "sql"` que a tela pergunta em silêncio quando o resultado chega, e as chaves de cada tabela (nenhuma, até um teste dizer).
+  rt.service.sqlTargetOrRefuse.mockImplementation(async () => ({ ok: true, data: pedidoTarget }));
+  rt.catalog.clear();
 });
 
 afterEach(() => rt.unmount());
@@ -2025,5 +2048,145 @@ describe("QueryTabPanel: o resultado no painel, numa aba ou numa janela (seção
     Object.assign(view.props, { resultShown: true, editorShown: false, active: true });
     view.show();
     expect(hidden()).toBe(false);
+  });
+});
+
+describe("QueryTabPanel: o valor de uma chave estrangeira leva ao registro referenciado (RN-TABELA-007)", () => {
+  /** Monta a aba, deixa o alvo e as chaves chegarem e desenha de novo, como o React faria. */
+  async function ready(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
+    rt.catalog.set("pedido", [statusKey]);
+    const view = mount(runner, over);
+    view.show();
+    await settle();
+    return view;
+  }
+
+  it("a área de resultado recebe os links, o clique e o que vira link, e o clique abre a tabela referenciada com o filtro, na conexão e no banco da aba", async () => {
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })), { database: "outro" });
+    const { area } = view.show();
+
+    // O apelido não esconde a chave: a coluna `status` do resultado vem de `status_id`.
+    expect([...(area.follow?.links ?? [])]).toEqual([[1, { table: { schema: "loja", name: "pedido_status" }, column: "codigo" }]]);
+    expect(area.follow?.linkable?.("7")).toBe(true);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r1", null);
+
+    area.follow!.onFollow!(1, "7");
+
+    expect(filterHandoff.peek("c1", { schema: "loja", name: "pedido_status", database: "outro" })?.where).toBe("\"codigo\" = '7'");
+    expect(view.props.onOpenTable).toHaveBeenCalledWith("c1", { schema: "loja", name: "pedido_status", view: "data", database: "outro" });
+  });
+
+  it("com o resultado numa janela própria, a aba abre na janela da aba da consulta, que vem para a frente", async () => {
+    const onFocusWindow = vi.fn();
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    rt.catalog.set("pedido", [statusKey]);
+    const view = mount(runner);
+    Object.assign(view.props, { place: "window", onFocusWindow });
+    view.show();
+    await settle();
+
+    view.show().area.follow!.onFollow!(1, "7");
+
+    expect(view.props.onOpenTable).toHaveBeenCalledWith("c1", { schema: "loja", name: "pedido_status", view: "data" });
+    expect(onFocusWindow).toHaveBeenCalledWith("q1", "link");
+  });
+
+  it("a atualização automática (outro resultado da API, mesmo comando) não acrescenta pedido nenhum, e os links ficam os mesmos", async () => {
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    const view = await ready(runner);
+    const first = view.show().area.follow?.links;
+
+    for (const n of [2, 3, 4]) {
+      runner.state = rowsState({ id: n, resultId: `r${n}`, rows: [["10", "7"]] });
+      view.show();
+      await settle();
+    }
+
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(view.show().area.follow?.links).toBe(first);
+  });
+
+  it("outro comando pergunta de novo, e as colunas de outra forma também", async () => {
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    const view = await ready(runner);
+
+    runner.state = rowsState({ id: 2, resultId: "r2", target: { sql: "select id, status_id as status from loja.pedido", offset: 0, engine: pg }, rows: [["10", "7"]] });
+    view.show();
+    await settle();
+
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(2);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenLastCalledWith("s1", "r2", null);
+  });
+
+  it("sem sessão (a conexão desconectada), os valores são texto e nada se pergunta", async () => {
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })), { sessionId: null });
+
+    expect(view.show().area.follow?.links).toBeUndefined();
+    expect(rt.service.sqlTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("com a aba escondida (a área de trabalho fora da tela), nada se pergunta até ela voltar à vista", async () => {
+    rt.screen.on = false;
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    const view = await ready(runner);
+
+    expect(rt.service.sqlTargetOrRefuse).not.toHaveBeenCalled();
+    expect(view.show().area.follow?.links).toBeUndefined();
+
+    rt.screen.on = true;
+    view.show();
+    await settle();
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(view.show().area.follow?.links?.size).toBe(1);
+  });
+
+  it("o alvo recusado ou falho deixa os valores como texto, sem aviso", async () => {
+    rt.service.sqlTargetOrRefuse.mockResolvedValue({ ok: false, error: { status: 422, code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: null, errors: null, extensions: { reason: "união de consultas" } } });
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })));
+    const { area, banner } = view.show();
+
+    expect(area.follow?.links).toBeUndefined();
+    expect(banner?.props.notice).toBeNull();
+    expect(banner?.props.failure).toBeNull();
+  });
+
+  it("o item 'Ir para o registro referenciado' do menu da célula só aparece na coluna que é link, e leva ao registro", async () => {
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })));
+    const idsAt = async (column: number) => {
+      view.show().area.editing!.onMenu({ row: 0, column }, { x: 0, y: 0 }, false);
+      await settle();
+      return view.show().menu!.groups.flatMap(groupItems);
+    };
+
+    expect((await idsAt(0)).map((item) => item.id)).not.toContain("follow");
+    const items = await idsAt(1);
+    const follow = items.find((item) => item.id === "follow");
+    expect(follow).toBeDefined();
+    expect(follow?.disabled).toBeFalsy();
+
+    follow!.onSelect!();
+    expect(filterHandoff.peek("c1", { schema: "loja", name: "pedido_status" })?.where).toBe("\"codigo\" = '7'");
+  });
+
+  it("a aba guardada do script também tem os links, pelo alvo do resultado dela", async () => {
+    const first: RunTarget = { sql: "select * from loja.pedido where id < 5", offset: 0, engine: pg };
+    const last: RunTarget = { sql: "select * from loja.pedido", offset: 40, engine: pg };
+    const runner = fakeRunner(rowsState({ target: last }));
+    let run = createScriptRun(1, [first, last]);
+    run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
+    run = withEntry(run, 1, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    runner.scriptState = { ...finishRun(run, "done"), results: [{ entry: 0, rows: rowsState({ id: 7, target: first, rows: [["1", "9"]], hasMore: false, resultId: "r0" }) }, { entry: 1, rows: runner.state as RowsState }], live: 1 };
+    rt.catalog.set("pedido", [statusKey]);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+    view.show();
+    await settle();
+
+    const { area } = view.show();
+
+    expect(area.editing?.rows).toEqual([["1", "9"]]);
+    expect(area.follow?.links?.size).toBe(1);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
   });
 });

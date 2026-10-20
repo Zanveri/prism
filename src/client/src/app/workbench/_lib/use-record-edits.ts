@@ -95,6 +95,7 @@ import { sqlTargetAnswer, type TargetAnswer as SqlTargetAnswer } from "./generat
 import { editErrorDetails, sqlTargetOf, type ApiChange, type EditPreview, type EditTarget } from "./record-edits.schema";
 import { countWholeColumnOrRefuse, editTargetOrRefuse, previewEditsOrRefuse, saveEditsOrRefuse, sqlTargetOrRefuse } from "./record-edits.service";
 import { recordsCopy } from "./records.copy";
+import { sqlTargetKey } from "./sql-target-key";
 import { recall, remember } from "./tab-memory";
 import { nextSort, type RecordsSort } from "./table-sql";
 import { unsavedEdits } from "./unsaved-edits";
@@ -204,8 +205,8 @@ export type GridSelectionContext = {
   moved: () => boolean;
   ensureTarget: () => Promise<EditTarget | null>;
   /**
-   * RN-GRADE-020 e RN-EDIT-010: o alvo do "Gerar SQL" e do "Copiar como" do SQL e do DbUnit (`purpose: "sql"`), o mesmo para os dois, perguntado uma vez por
-   * resultado: o da edição, quando ela já o tem com o tipo e a chave pelo nome (`sqlTargetOf`); o motivo da página, quando ela já disse que o resultado
+   * RN-GRADE-020 e RN-EDIT-010: o alvo do "Gerar SQL" e do "Copiar como" do SQL e do DbUnit (`purpose: "sql"`), o mesmo para os dois e para os links de chave
+   * estrangeira do resultado (RN-TABELA-007), perguntado uma vez por resultado, e uma vez por comando e colunas (`sqlTargetKey`): o da edição, quando ela já o tem com o tipo e a chave pelo nome (`sqlTargetOf`); o motivo da página, quando ela já disse que o resultado
    * inteiro é só leitura; ou a API. Na conexão somente leitura ele vale ali e não volta à edição. `notice` vai à faixa enquanto a API responde ("Conferindo a
    * tabela deste resultado…").
    */
@@ -237,7 +238,7 @@ export type GenerateSqlSource = GridMenuSource<GenerateSqlAction, Partial<Record
  */
 export type GridSortSource = { applied: () => RecordsSort | null; apply: (sort: RecordsSort | null) => void };
 
-/** RN-TABELA-007: o "Ir para o registro referenciado" dos Registros: a coluna é chave estrangeira, o valor tem para onde ir, e o que segue. */
+/** RN-TABELA-007: o "Ir para o registro referenciado" dos Registros e do resultado: a coluna é chave estrangeira, o valor tem para onde ir, e o que segue. */
 export type GridFollowSource = { links: (column: number) => boolean; linkable: (value: string) => boolean; follow: (column: number, value: string) => void };
 
 /** O que o catálogo respondeu para um resultado: o alvo, ou o motivo de o resultado inteiro ser só leitura. */
@@ -342,7 +343,7 @@ type Params = {
   engine?: Engine;
   /** RN-GRADE-004: o "Ordenar" do menu; sem ele, o menu não o tem (as abas guardadas do script, RN-SQL-023). */
   sort?: GridSortSource;
-  /** RN-TABELA-007: o "Ir para o registro referenciado" do menu; só os Registros o têm. */
+  /** RN-TABELA-007: o "Ir para o registro referenciado" do menu; os Registros e o resultado da consulta e do script o têm (as colunas que são link). */
   follow?: GridFollowSource;
   /** Seção 37: o "Copiar avançado…", os "Copiar como" e a configuração, de outra frente; sem ele, o submenu tem só os nomes e os números. */
   copyAs?: CopyAsSource;
@@ -722,7 +723,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
   // RN-GRADE-020 e RN-EDIT-010: o alvo do "Gerar SQL" e do "Copiar como", guardado à parte do da edição (o da conexão somente leitura não serve a ela), por
   // resultado: as abas guardadas do script têm cada uma o seu, e voltar a uma não pergunta de novo. Só os mais recentes ficam (`sqlAnswersKept`).
   const sqlAnswers = useRef(new Map<string, SqlTargetAnswer>());
-  const sqlAsking = useRef<{ resultId: string; promise: Promise<SqlTargetAnswer> } | null>(null);
+  const sqlAsking = useRef<{ resultId: string; command: string | null; promise: Promise<SqlTargetAnswer> } | null>(null);
+  // RN-TABELA-007: e também pela identidade do comando (`sqlTargetKey`): a atualização automática e o F5 trazem outro resultado da API com o mesmo comando e as
+  // mesmas colunas, e o alvo que a tela já tem vale para ele (os links de chave estrangeira do resultado perguntam em silêncio, e ninguém pergunta de novo).
+  const sqlAnswersByCommand = useRef(new Map<string, SqlTargetAnswer>());
+  const commandKeyOf = useCallback((rows: RowsState | null) => (rows === null ? null : sqlTargetKey(connectionId, database, rows.target, rows.columns)), [connectionId, database]);
 
   /** O alvo do "Gerar SQL" que já se sabe deste resultado, sem perguntar: o da edição, o motivo da página, ou a resposta de antes. */
   const knownSqlTarget = useCallback((): SqlTargetAnswer | null => {
@@ -736,43 +741,57 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     const readOnlyNow = cachedReadOnly(queryClient, connectionId);
     const reason = readOnlyReasonNow(rows?.readOnly ?? null, readOnlyNow);
     if (reason !== null && !readOnlyNow) return { kind: "notEditable", reason };
-    return sqlAnswers.current.get(id) ?? null;
-  }, [queryClient, connectionId]);
+    const command = commandKeyOf(rows);
+    return sqlAnswers.current.get(id) ?? (command === null ? null : (sqlAnswersByCommand.current.get(command) ?? null));
+  }, [queryClient, connectionId, commandKeyOf]);
 
   /**
    * RN-GRADE-020: o `edit-target` com `purpose: "sql"`, uma vez por resultado, pela sessão em que ele foi lido e com a sessão da árvore da mesma conexão. A
-   * resposta que diz o alvo ou o motivo fica para o resultado; a que falhou, não (a seguinte pergunta de novo).
+   * resposta que diz o alvo ou o motivo fica para o resultado; a que falhou, não (a seguinte pergunta de novo). `silent` (os links de chave estrangeira do
+   * resultado, RN-TABELA-007): o erro que a API devolve fora das recusas (o cofre fechado, a API sem resposta) também não vira aviso.
    */
   const sqlTarget = useCallback(
-    async (notice?: string): Promise<SqlTargetAnswer> => {
+    async (notice?: string, silent = false): Promise<SqlTargetAnswer> => {
       const known = knownSqlTarget();
       if (known !== null) return known;
       const id = latest.current.resultId;
       const sessionId = sessionOfShown();
       if (id === null || sessionId === null) return { kind: "failed", message: null };
-      if (sqlAsking.current?.resultId === id) return sqlAsking.current.promise;
+      // A identidade do comando é a do resultado em que se perguntou, e não a do que estiver na tela quando a resposta chegar. A pergunta em andamento vale para
+      // o mesmo resultado e para o mesmo comando e colunas (a atualização automática trouxe outro resultado enquanto a API respondia).
+      const command = commandKeyOf(latest.current.shown);
+      if (sqlAsking.current !== null && (sqlAsking.current.resultId === id || (command !== null && sqlAsking.current.command === command))) return sqlAsking.current.promise;
 
       const catalogSessionId = connectionId === null ? null : (queryClient.getQueryData<DatabaseSession>(databaseSessionKey(connectionId, database))?.id ?? null);
       const promise = (async () => {
         if (notice !== undefined) say(notice);
-        const answer = sqlTargetAnswer(await throughMutationCache(queryClient, () => sqlTargetOrRefuse(sessionId, id, catalogSessionId)).catch(() => null));
+        const answer = sqlTargetAnswer(await throughMutationCache(queryClient, () => sqlTargetOrRefuse(sessionId, id, catalogSessionId), silent).catch(() => null));
         if (notice !== undefined) setBanner((current) => (current.resultId === id && current.notice === notice ? { ...current, notice: null } : current));
         if (answer.kind === "target" || answer.kind === "notEditable") {
           const answers = sqlAnswers.current;
           answers.delete(id);
           answers.set(id, answer);
           for (const old of answers.keys()) if (answers.size > sqlAnswersKept) answers.delete(old);
+          if (command !== null) {
+            const byCommand = sqlAnswersByCommand.current;
+            byCommand.delete(command);
+            byCommand.set(command, answer);
+            for (const old of byCommand.keys()) if (byCommand.size > sqlAnswersKept) byCommand.delete(old);
+          }
         }
         return answer;
       })();
-      sqlAsking.current = { resultId: id, promise };
+      sqlAsking.current = { resultId: id, command, promise };
       void promise.finally(() => {
         if (sqlAsking.current?.promise === promise) sqlAsking.current = null;
       });
       return promise;
     },
-    [knownSqlTarget, sessionOfShown, connectionId, database, queryClient, say],
+    [knownSqlTarget, commandKeyOf, sessionOfShown, connectionId, database, queryClient, say],
   );
+
+  /** RN-TABELA-007: o mesmo alvo, para os links de chave estrangeira do resultado: sem faixa e sem aviso de falha nenhum. */
+  const silentSqlTarget = useCallback(() => sqlTarget(undefined, true), [sqlTarget]);
 
   // RN-SQL-023: a aba guardada do script está à frente: as linhas dela são as de um resultado guardado, e não as do executor.
   const keptNow = useRef(kept !== null);
@@ -2305,6 +2324,11 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
      * nulas com outra forma.
      */
     chosenColumns,
+    /**
+     * RN-TABELA-007: o alvo `purpose: "sql"` do resultado à frente (`sqlTarget`, sem faixa e sem aviso), para os links de chave estrangeira do resultado da
+     * consulta e do script perguntarem em silêncio. Guardado por resultado e por comando e colunas, como para o "Gerar SQL" e o "Copiar como".
+     */
+    sqlTarget: silentSqlTarget,
   };
 }
 
