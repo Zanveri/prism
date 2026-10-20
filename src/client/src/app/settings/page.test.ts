@@ -309,6 +309,25 @@ describe("Editor SQL", () => {
       expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
     });
   });
+
+  describe("o valor das variáveis no fim da linha (RN-CONFIG-004 e RN-VAR-025)", () => {
+    it("é uma caixa de marcar depois da linha em branco, ligada por padrão, com a dica de que não é texto do script", () => {
+      const html = editor(render().markup);
+
+      expect(box(html, "cfg-valor-variaveis")).toContain('type="checkbox"');
+      expect(labelled(html, "cfg-valor-variaveis", "Mostrar o valor das variáveis no fim da linha")).toBe(true);
+      expect(checked(box(html, "cfg-valor-variaveis"))).toBe(true);
+      expect(html.indexOf('id="cfg-linha-em-branco"')).toBeLessThan(html.indexOf('id="cfg-valor-variaveis"'));
+      expect(html).toContain("Não é texto do script: não se seleciona, não se copia e não vai para o arquivo.");
+    });
+
+    it("mostra a escolha do usuário, sem mexer nas outras caixas", () => {
+      const html = editor(render({ editor: { showVariableValues: false } }).markup);
+
+      expect(checked(box(html, "cfg-valor-variaveis"))).toBe(false);
+      expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
+    });
+  });
 });
 
 describe("Atualizações (RN-ATUALIZA-007)", () => {
