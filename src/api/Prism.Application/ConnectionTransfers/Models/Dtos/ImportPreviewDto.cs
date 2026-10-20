@@ -17,7 +17,7 @@ public sealed record ImportPreviewDto
         => nameof(ImportPreviewDto);
 }
 
-public sealed record ImportPreviewFolderDto
+public record ImportPreviewFolderDto
 {
     public string Key { get; init; } = string.Empty;
     public string? ParentKey { get; init; }
@@ -43,7 +43,7 @@ public sealed record ImportPreviewFolderDto
         => nameof(ImportPreviewFolderDto);
 }
 
-public sealed record ImportPreviewConnectionDto
+public record ImportPreviewConnectionDto
 {
     public string Key { get; init; } = string.Empty;
     public string? FolderKey { get; init; }

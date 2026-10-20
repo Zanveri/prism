@@ -49,7 +49,11 @@ internal sealed class ImportAnalysis
     public override string ToString()
         => nameof(ImportAnalysis);
 
-    public static Result<ImportAnalysis, ApiErrorDto> Analyze(ImportedFile file)
+    /// <param name="checkDepth">
+    /// Falso na contagem do "Importar do DBeaver" (RN-DBEAVER-007): ela não confere os limites, só diz quantas conexões o Prism importa de cada projeto. Os níveis das pastas
+    /// continuam conferidos no arquivo do Prism (RN-TRANSF-010) e na prévia e na importação do DBeaver.
+    /// </param>
+    public static Result<ImportAnalysis, ApiErrorDto> Analyze(ImportedFile file, bool checkDepth = true)
     {
         var keys = new HashSet<string>(StringComparer.Ordinal);
 
@@ -66,7 +70,7 @@ internal sealed class ImportAnalysis
         if (Depths(file.Folders, folders) is not { } depths)
             return TransferErrors.FileInvalid();
 
-        if (depths.Values.Any(depth => depth > TransferLimits.MaxDepth))
+        if (checkDepth && depths.Values.Any(depth => depth > TransferLimits.MaxDepth))
             return TransferErrors.ImportLimitsExceeded();
 
         // Cada pasta depois da pasta dela: a que não passa leva junto o que está dentro dela, e o que valia na origem desce pelo caminho.
@@ -135,6 +139,9 @@ internal sealed class ImportAnalysis
 
     private static ImportConnectionItem CheckConnection(ImportedConnection connection, ImportFolderItem? folder)
     {
+        if (connection.SourceRefusal is { } sourceRefusal)
+            return new ImportConnectionItem(connection.Key, connection.FolderKey, connection, null, null, sourceRefusal);
+
         if (ConnectionRefusal(connection, out var candidate) is { } refusal)
             return new ImportConnectionItem(connection.Key, connection.FolderKey, connection, null, null, refusal);
 

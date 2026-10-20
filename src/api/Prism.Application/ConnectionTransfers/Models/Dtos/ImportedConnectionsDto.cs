@@ -5,7 +5,7 @@ namespace Prism.Application.ConnectionTransfers.Models.Dtos;
 /// gravação, cada pasta antes do que está dentro dela; `MergedFolders`, quantas pastas do arquivo entraram numa que já existia; `Renamed` e `Skipped`, quantas
 /// conexões foram com outro nome e quantas ficaram de fora. Sem nada criado, nada foi gravado.
 /// </summary>
-public sealed record ImportedConnectionsDto
+public record ImportedConnectionsDto
 {
     public IReadOnlyList<Guid> FolderIDs { get; init; } = [];
     public IReadOnlyList<Guid> ConnectionIDs { get; init; } = [];
