@@ -105,6 +105,9 @@ import type { SqlTarget } from "../_lib/record-edits.schema";
 import { CopyAdvancedDialog } from "./copy-as/copy-advanced-dialog";
 import { ConfigureCopyAsDialog } from "./copy-as/configure-copy-as-dialog";
 import { GenerateSqlDialog } from "./generate-sql/generate-sql-dialog";
+import { Random } from "../_lib/variables/random";
+import { ScriptRun as Evaluation } from "../_lib/variables/run";
+import { readScript } from "../_lib/variables/script";
 import { createRevealStore, createTabValuesStore } from "../_lib/variables/tab-values";
 
 const copy = recordsCopy.edit;
@@ -2196,3 +2199,97 @@ describe("QueryTabPanel: o valor de uma chave estrangeira leva ao registro refer
     expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
   });
 });
+
+describe("os valores da aba chegam ao editor (RN-VAR-023 e 025)", () => {
+  /** O armazém da aba com as declarações do texto avaliadas, como o executor as deixa depois do Alt+X. */
+  function evaluate(runner: ReturnType<typeof fakeRunner>, text: string) {
+    const model = readScript(text, pg, { blankLines: true });
+    const run = new Evaluation(model, { random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 1_000 });
+    for (const item of model.items) if (item.parsed !== null) run.evaluate(item.index);
+    runner.values.replace(run.tab, run.counter);
+  }
+
+  it("a aba entrega ao editor, na propriedade variables, os valores dos nomes que o texto declara; a aba de consulta e a do script são a mesma", () => {
+    const runner = fakeRunner(rowsState());
+    const text = "let dias = 30\nlet ids = [1, 2]\n\nselect * from pedido where dias = @dias";
+    const view = mount(runner, { sql: text });
+    const variables = view.show().editor.variables!;
+    expect(variables.snapshot().size).toBe(0);
+
+    evaluate(runner, text);
+    const listener = vi.fn();
+    variables.subscribe(listener);
+    const after = view.show();
+
+    expect(after.editor.variables).toBe(variables);
+    expect(listener).toHaveBeenCalled();
+    expect(variables.snapshot().get("dias")).toMatchObject({ type: "number", value: "30", short: "30", stale: false });
+    expect(variables.snapshot().get("ids")).toMatchObject({ type: "number[]", short: "[1, 2] · 2 itens" });
+  });
+
+  it("o texto que deixa de declarar a variável a tira do editor, e mudar a declaração a marca desatualizada", () => {
+    const runner = fakeRunner(rowsState());
+    const text = "let dias = 30\n\nselect @dias";
+    const view = mount(runner, { sql: text });
+    evaluate(runner, text);
+    const variables = view.show().editor.variables!;
+    expect(variables.snapshot().get("dias")?.stale).toBe(false);
+
+    Object.assign(view.props, { tab: { ...view.props.tab, sql: "let dias = 31\n\nselect @dias" } });
+    view.show();
+    expect(variables.snapshot().get("dias")?.stale).toBe(true);
+
+    Object.assign(view.props, { tab: { ...view.props.tab, sql: "select 1" } });
+    view.show();
+    expect(variables.snapshot().size).toBe(0);
+  });
+});
+
+describe("o painel Variáveis e o resultado de um comando novo (RN-VAR-024)", () => {
+  const text = "let dias = 30\n\nselect @dias";
+  function evaluated(runner: ReturnType<typeof fakeRunner>) {
+    const model = readScript(text, pg, { blankLines: true });
+    const run = new Evaluation(model, { random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 1_000 });
+    for (const item of model.items) if (item.parsed !== null) run.evaluate(item.index);
+    runner.values.replace(run.tab, run.counter);
+  }
+
+  it("o Ctrl+Enter numa declaração traz o painel à frente, e o comando seguinte volta ao resultado dele", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner, { sql: text });
+    evaluated(runner);
+    view.show();
+    expect(view.show().area.variables).toBeUndefined();
+
+    runner.reveal.reveal("dias");
+    expect(view.show().area.variables).toBeDefined();
+
+    runner.state = { status: "running", cancelling: false, previous: null };
+    expect(view.show().area.variables).toBeUndefined();
+  });
+
+  it("a lista de erros das variáveis de um comando novo também fica à frente do painel", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner, { sql: text });
+    evaluated(runner);
+    view.show();
+    runner.reveal.reveal("dias");
+    expect(view.show().area.variables).toBeDefined();
+
+    runner.state = { status: "variableErrors", errors: [{ line: 3, column: 8, message: "x", offset: 22 }], subject: "command" };
+    expect(view.show().area.variables).toBeUndefined();
+  });
+
+  it("a atualização automática, que roda sozinha, não tira o painel da frente", () => {
+    const runner = fakeRunner(rowsState());
+    const view = mount(runner, { sql: text });
+    evaluated(runner);
+    view.show();
+    runner.reveal.reveal("dias");
+    expect(view.show().area.variables).toBeDefined();
+
+    runner.state = { status: "running", cancelling: false, previous: null, auto: true } as RunnerState;
+    expect(view.show().area.variables).toBeDefined();
+  });
+});
+

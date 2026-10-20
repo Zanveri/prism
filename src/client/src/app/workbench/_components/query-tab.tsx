@@ -13,7 +13,7 @@ import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion, typ
 import { confirmedOf } from "../_lib/command-wire";
 import { goToOffset } from "../_lib/editor-goto";
 import { liveEditors } from "../_lib/live-editors";
-import { declarationOffset, useTabVariables } from "../_lib/use-tab-variables";
+import { declarationOffset, useEditorVariables, useTabVariables } from "../_lib/use-tab-variables";
 import { readScript } from "../_lib/variables/script";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
 import { useCopyAs } from "../_lib/copy-as/use-copy-as";
@@ -237,6 +237,8 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // RN-VAR-018: o "SQL enviado" aberto, do comando que levou variáveis.
   const [sentView, setSentView] = useState<RunTarget | null>(null);
   const variables = useTabVariables(runner, liveEditors.snapshot(tab.id)?.sql ?? tab.sql, engine, preferences.editor.blankLineSeparates);
+  // RN-VAR-025: os mesmos valores, para o editor (a dica do ponteiro e o valor no fim da linha).
+  const editorVariables = useEditorVariables(variables);
   // O pedido de trazer o painel à frente (o Ctrl+Enter numa declaração, o script sem comando): ajuste durante a renderização, uma vez por pedido.
   const [revealSeen, setRevealSeen] = useState(variables.reveal.serial);
   if (revealSeen !== variables.reveal.serial) {
@@ -713,6 +715,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
               onRunnableChange={setRunnable}
               onEdited={handleEdited}
               onOpenTable={openTable}
+              variables={editorVariables}
             />
           </div>
   
