@@ -165,7 +165,7 @@ export function WorkbenchTabs() {
     // RN-ABAS-013 e 017: a janela do resultado abre a pedido da pessoa, agora (o botão, o menu), e nunca por um efeito. O lugar já vale; se a janela não abrir, o
     // resultado volta para onde estava, com o aviso. A janela que deixa de ser o lugar fecha pelo Prism, e "Voltar para o painel" e o botão de lugar da janela do resultado trazem a janela da aba à frente.
     if (to === "window") {
-      void resultWindows.open(tabId, { mode: "focus", at, title: shortTitles.get(tabId) ?? tab?.title ?? "" }).then((opened) => {
+      void resultWindows.open(tabId, { mode: "focus", ...(at === null ? {} : { at }), title: shortTitles.get(tabId) ?? tab?.title ?? "" }).then((opened) => {
         if (opened) return;
         setResultPlace(tabId, from);
         toast.warning(resultPlaceCopy.windowFailed);

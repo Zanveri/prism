@@ -45,7 +45,9 @@ describe("os canais entre a tela e o processo principal", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:(?:windows|session)-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);/g)].map((match) => match[1]);
     const windowChannels = channelsOf(main, "ipcMain.handle").filter((channel) => /^prism:(windows|session)-/.test(channel));
 
-    expect(windowChannels.length).toBe(7);
+    // RN-ABAS-010: o fim do arraste da aba (`prism:windows-drag-end`) é o oitavo.
+    expect(windowChannels).toContain("prism:windows-drag-end");
+    expect(windowChannels.length).toBe(8);
     expect(handlers.sort()).toEqual(windowChannels);
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });

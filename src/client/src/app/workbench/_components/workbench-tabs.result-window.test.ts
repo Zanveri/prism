@@ -26,6 +26,7 @@ const rt = await vi.hoisted(async () => {
   const focus = { request: vi.fn(), forgetExcept: vi.fn() };
   const host = { releaseFocusIn: vi.fn(), focusResultIn: vi.fn(), resultHostOf: vi.fn(() => ({ id: "raiz" })) };
   const sendTabAway = vi.fn(() => Promise.resolve({ ok: true }));
+  const endTabDrag = vi.fn<(request: unknown) => Promise<{ action: "none" } | { action: "newWindow"; at: { x: number; y: number } | null }>>(async () => ({ action: "none" }));
   const windows = {
     open: vi.fn(async (): Promise<boolean> => true),
     close: vi.fn(async (): Promise<boolean> => true),
@@ -42,13 +43,13 @@ const rt = await vi.hoisted(async () => {
     shownTabs: () => windows.shown,
   };
 
-  return { ...createHookRuntime(), workbench, toast, focus, host, sendTabAway, windows };
+  return { ...createHookRuntime(), workbench, toast, focus, host, sendTabAway, endTabDrag, windows };
 });
 
 vi.mock("react", async (importOriginal) => ({ ...(await importOriginal<typeof import("react")>()), ...rt.hooks }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({ ...(await importOriginal<typeof import("@tanstack/react-query")>()), useQuery: () => ({ data: undefined }), useQueryClient: () => ({}) }));
 vi.mock("@/components/ui", () => ({ ConfirmDialog: () => null, useToast: () => rt.toast }));
-vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {}, resultWindowsAvailable: () => true, onResultWindowClosed: () => () => {}, onResultWindowState: () => () => {} }));
+vi.mock("@/lib/api/bridge", () => ({ currentWindowId: () => 1, endTabDrag: rt.endTabDrag, onTabWanted: () => () => {}, onWindowCloseRequested: () => () => {}, sendTabAway: rt.sendTabAway, tellWindows: () => {}, resultWindowsAvailable: () => true, onResultWindowClosed: () => () => {}, onResultWindowState: () => () => {} }));
 vi.mock("../_lib/data-export/data-exports", () => ({ exportTracker: { count: () => 0, cancelAll: async () => {} } }));
 vi.mock("../_lib/data-import/data-imports", () => ({ loadTracker: { cancelAll: async () => {} }, windowTransfers: () => ({ exports: 0, imports: 0, copies: 0 }) }));
 vi.mock("../_lib/connection-intent", () => ({ createDisconnectLog: () => ({ subscribe: () => () => {}, getSnapshot: () => new Set(), forget: () => {}, mark: () => {} }) }));
@@ -101,6 +102,37 @@ afterEach(() => {
 });
 
 describe("trocar para 'Numa janela' (RN-ABAS-013, 014 e 017)", () => {
+  it("a aba do resultado solta fora da faixa abre o resultado na janela dele, no ponto da soltura, e não leva a aba para outra janela (RN-ABAS-010)", async () => {
+    rt.workbench.tabs = [tab("a", { resultPlace: "tab" }), tab("b")];
+    rt.workbench.activeTabId = "a";
+    rt.endTabDrag.mockResolvedValueOnce({ action: "newWindow", at: { x: 420, y: 330 } });
+    const strip = stripOf(render()) as unknown as { drag: { begin: (tabId: string, kind: "result") => void; mark: (where: "veil") => void }; onDragEnd: (tabId: string, event: unknown) => void };
+
+    strip.drag.begin("a", "result");
+    strip.drag.mark("veil");
+    strip.onDragEnd("a", { effect: "move", screen: { x: 400, y: 300 }, client: { x: 300, y: 260 }, viewport: { width: 1200, height: 800 } });
+    await settle();
+
+    expect(rt.endTabDrag).toHaveBeenCalledExactlyOnceWith({ tabId: "a", kind: "result", dropped: "veil", effect: "move", at: { x: 400, y: 300 }, inPage: true });
+    expect(rt.workbench.setResultPlace).toHaveBeenCalledWith("a", "window");
+    expect(rt.windows.open).toHaveBeenCalledWith("a", { mode: "focus", at: { x: 420, y: 330 }, title: "a.sql" });
+    expect(rt.sendTabAway).not.toHaveBeenCalled();
+  });
+
+  it("a aba do resultado solta sem que o processo principal ache o que fazer (o Esc, outra janela): o resultado fica onde está", async () => {
+    rt.workbench.tabs = [tab("a", { resultPlace: "tab" })];
+    rt.workbench.activeTabId = "a";
+    const strip = stripOf(render()) as unknown as { drag: { begin: (tabId: string, kind: "result") => void }; onDragEnd: (tabId: string, event: unknown) => void };
+
+    strip.drag.begin("a", "result");
+    strip.onDragEnd("a", { effect: "none", screen: { x: 400, y: 300 }, client: { x: 300, y: 260 }, viewport: { width: 1200, height: 800 } });
+    await settle();
+
+    expect(rt.endTabDrag).toHaveBeenCalledOnce();
+    expect(rt.workbench.setResultPlace).not.toHaveBeenCalled();
+    expect(rt.windows.open).not.toHaveBeenCalled();
+  });
+
   it("pelo botão da barra: o lugar vale na hora, a janela é pedida a pedido da pessoa (com o foco), o foco vai ao botão dela e a troca é anunciada", async () => {
     rt.workbench.tabs = [tab("a")];
     rt.workbench.activeTabId = "a";
