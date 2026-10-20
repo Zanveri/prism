@@ -71,10 +71,10 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
-- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5 e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
+- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
   recarrega é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11), e o app empacotado do Windows e do
   Linux não tem menu, e o do macOS não tem Recarregar. Mesmo assim, cada janela ignora o menu para essas teclas: o `before-input-event` de
-  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5 e F11 com qualquer
+  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com qualquer
   modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
   ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
@@ -904,8 +904,8 @@ guia da API) e voltam na janela principal na próxima entrada. **Nada vai ao `lo
 suas abas ao processo principal, que junta as de todas e grava.
 
 - **O que vai e o que volta** (`_lib/saved-workspace.ts`, puro e testado). Vai, de cada aba de consulta, o texto do editor DESTE instante (`liveEditors`), a
-  conexão, o banco, o script de onde veio e a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco); de cada aba de tabela, a conexão, o banco, o esquema,
-  a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
+  conexão, o banco, o script de onde veio, a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco) e o lugar do resultado (`resultPlace`, ver
+  "O resultado no painel, numa aba ou numa janela"); de cada aba de tabela, a conexão, o banco, o esquema, a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
   o resultado, o cursor e as alterações não salvas da grade. O texto acima de 1 MB em bytes de UTF-8 não vai: a aba vai vazia com `sqlTooLarge`, e volta vazia
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
   só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), na conexão em que estava e lembrando o lugar com que o
@@ -958,6 +958,59 @@ suas abas ao processo principal, que junta as de todas e grava.
   SQL diz que o que fecha não volta na próxima entrada (`confirmClose.description`).
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
   voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
+
+## O resultado no painel, numa aba ou numa janela (seção 39: RN-ABAS-011 a 016, RN-CONFIG-010, RN-PAINEL-001)
+
+**A área de resultado de uma aba é UMA só, e o que muda com o lugar é só onde ela está na página.** Ela continua sendo desenhada pela aba de consulta
+(`QueryTabPanel`: o mesmo executor, as mesmas pendências, a mesma grade, o mesmo filtro), por um portal do React numa raiz própria (`ResultHost`,
+`_components/result-host.tsx`: um `div` criado uma vez por aba, `data-result-host`), e é essa raiz que muda de pai: o lugar do painel (um `div` da aba, abaixo do
+editor), o painel da aba do resultado (`ResultTabPanel`, em `workbench-tabs.tsx`) ou a raiz da janela do resultado (quem a abrir). Os lugares de fora do painel se
+registram em `resultSlots` (`_lib/result-slots.ts`, pelo id da aba e pelo lugar). Mudar de pai não desmonta nada: a seleção, as larguras, o zoom da grade, a aba do
+script escolhida, o filtro e as pendências ficam, e o executor nem fica sabendo. Na árvore do React a área continua dentro da aba de consulta, então as teclas dela
+(F5, Alt+X, Ctrl+S, o F6) e as da faixa (Ctrl+W, Ctrl+Shift+PageUp e PageDown) sobem até lá como subiam (por isso a área vai dentro do `div` do `onKeyDown` da
+aba). **Não troque o portal por renderizar a área num lugar ou noutro**: o React a desmontaria a cada troca (um portal com outro contêiner é outra fibra), e a
+rolagem, a seleção e as larguras sairiam junto.
+
+- **O que o elemento perde ao sair da página, a raiz devolve.** A rolagem: o Chromium zera o `scrollTop` de um elemento que sai da página e volta; a raiz guarda a
+  de cada elemento de dentro a cada `scroll` (na fase de captura, porque quando ela sai o elemento já não tem caixa para ler) e a devolve quando volta a ter
+  caixa (um `ResizeObserver` na raiz), também quando o lugar novo ainda está escondido (a aba do resultado não ativa) e só aparece depois. O foco: quem troca o
+  lugar pede o foco em `resultFocus` (o resultado, o botão, o editor), e quem desenha o lugar o leva quando pode (a raiz, depois de chegar e ter caixa; o editor, no
+  `useLayoutEffect` da aba, quando ele está à vista). O campo de edição de uma célula aberto é confirmado antes (`releaseFocusIn`: o `blur` sai pelo caminho de
+  sempre; o Chromium não avisa o `blur` de quem sai da página).
+- **O modelo** (`_lib/result-place.ts`, puro e testado): `resultPlace` é da aba de consulta (`QueryTab.resultPlace`, sem ele o painel; a aba de tabela não tem),
+  e `placeOf` diz o que vale. A aba do resultado **não é uma aba da lista**: `stripEntries` a põe na faixa logo depois da dela, e o provedor guarda só qual é a
+  entrada ativa (`resultActive`, `showEntry`; `activeTabId` continua o da aba da consulta, para a barra de status, a ativa gravada, o "Mover para a janela…" e a
+  pergunta de erro do script). Por isso o par anda junto sem código nenhum (o Ctrl+Shift+PageUp move a aba, e a do resultado é derivada), "Fechar as outras" e a
+  contagem da pergunta de fechar não a contam, e fechar a aba a leva junto. O arraste mede a aba e a do resultado como uma caixa só (`unitRects`) e o marcador
+  (`dropMarks`) nunca cai entre as duas; a aba do resultado se arrasta com outro tipo (`resultTabDragType`), que as faixas não aceitam. O foco depois de trocar
+  (`afterPlaceChange`), o F6 (`f6Action`), o resultado "à vista" da atualização automática (`resultOnView`) e os itens dos menus (`placeMenu`) também moram ali.
+- **Onde se troca**: o botão "Onde mostrar o resultado" da barra (`ResultPlaceButton`, a propriedade `placeControl` do `ResultPanel`, logo antes de `actions`:
+  no painel, antes de recolher e maximizar; numa aba, na ponta), o submenu do menu da aba da consulta (depois dos de mover) e o menu da aba do resultado ("Ir para
+  a consulta", o submenu, "Voltar para o painel"). Quem troca é `changePlace` de `WorkbenchTabs`, que anuncia a troca numa região `role="status"` (sem toast).
+  Fechar a aba do resultado (o X, o clique do meio, o Ctrl+W com ela ativa, "Voltar para o painel") é trocar para o painel, sem pergunta.
+- **O ponto da aba do resultado** (`ResultTabMark`): o comando da pessoa, o script rodando e o "Salvar" das alterações (que a aba publica em `resultActivity`, porque
+  quem salva é a edição de dentro dela) acendem; o comando que termina com ela não ativa deixa o "resultado novo" (`trackUnseen`) até ela ficar ativa; o ponto
+  vermelho do script parado na pergunta de erro fica no lugar dele. O texto vai no nome da aba, para o leitor de tela.
+- **Numa aba e numa janela** a aba da consulta mostra só o editor, sem a divisória nem o recolher e o maximizar; a divisão do painel fica guardada (`tab-memory`) e
+  volta, e executar não a mexe (no painel, executar com a área recolhida a restaura, como antes).
+- **O lugar volta e viaja**: vai no `PUT api/user/workspace` de cada aba de consulta (`savedTabOf`; o gravado antes da 0.5.0 volta no painel) e na passagem para
+  outra janela (`tabTransferSchema.tab.resultPlace`): a aba do resultado vai junto. O lugar que esta versão não conhece, na leitura das abas gravadas, vale o
+  painel (a aba volta do mesmo jeito). **Rebaixar para a 0.4.0 foi conferido** (guia da API, "Abas que voltam na próxima entrada").
+- **A preferência** (RN-CONFIG-010): `results.resultPlace`, em Configurações › Resultados, lida na hora em que a aba de consulta nasce (`openQueryTab`,
+  `openScriptTab`; as que voltam e as que chegam de outra janela ficam no lugar delas).
+- **"Numa janela" ainda não existe nesta tela.** `resultWindowAvailable()` responde falso, e então tudo é como fora do app (RN-ABAS-014 e RN-CONFIG-010): o item
+  não aparece nos menus nem em Configurações, e o lugar gravado como "Numa janela" (e a preferência) vale o painel, sem deixar de ser o gravado. **O contrato
+  para quem fizer a janela**: trocar `resultWindowAvailable` pela pergunta à ponte; registrar a raiz da janela em `resultSlots.set(tabId, "window", raiz)` (a
+  `ResultHost` leva a área para lá com `appendChild`, que adota a raiz e o que o React desenhou nela no documento da janela; que o React passe a criar os
+  elementos nesse documento e que os ouvintes dele, que estão na própria raiz, sigam valendo lá é o que a sonda S-JANELA-3 tem de provar, e não foi provado aqui) e `null` ao fechar; dar o "à vista" pela janela não minimizada
+  (`resultOnView({ windowShown })`) e o `focusWindow` do F6; pôr "Voltar para o painel" em `actions` do `ResultPanel` na janela; e o resto da RN-ABAS-017 (o
+  documento da raiz nos ouvintes da grade e nos menus, `hostClipboard`, o `ResizeObserver` da janela do elemento: a raiz cria o dela pelo `defaultView` do
+  documento em que estava ao montar, e precisa recriá-lo ao mudar de documento).
+- **Conferido sob Xvfb** (`pnpm dev`, um PostgreSQL local com 5.000 linhas): com a grade rolada a 1.500 px, "Numa aba" pelo botão levou a área ao painel da aba do
+  resultado com a rolagem igual, a aba do resultado ativa, o foco no botão e o anúncio; o F6 alternou as duas abas com o foco no editor e na grade; executar com a
+  aba da consulta à frente acendeu o "resultado novo"; o Ctrl+W voltou ao painel com a rolagem (900 px) e o foco na grade; os menus das duas abas e o submenu
+  (`menuitemradio`, o lugar marcado) trocaram como a RN-ABAS-014 diz; o clique do meio voltou ao painel; o `GET api/user/workspace` trouxe `tab`; sair e entrar
+  reabriu a aba do resultado; e "Mover para nova janela" levou a aba com a do resultado.
 
 ## Scripts salvos (RN-SCRIPT-001 a 010)
 
@@ -1606,7 +1659,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     "Copiar valor" deixaram na área de transferência os 50.000 caracteres, com o MD5 igual ao do banco, e o "Exportar CSV" gravou o texto e o
     binário inteiros (o `Blob` que a tela entrega ao download; o diálogo de salvar do sistema foi trocado no teste). Para ler a área de
     transferência pelo protocolo de depuração: `navigator.clipboard.readText()` com `userGesture: true`.
-- **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
+- **Área de resultado recolhível** (RN-PAINEL-001; o lugar do resultado, numa aba ou numa janela, está em "O resultado no painel, numa aba ou numa janela"): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
   `collapsedSummary` é o texto da barra recolhida; a divisória (`result-splitter.tsx`) é um `separator` horizontal focável e só
