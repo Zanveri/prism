@@ -125,7 +125,7 @@
       <section id="download">
         <h2>Download and install</h2>
         <p class="botoes"><a class="botao botao-principal botao-grande" href="https://github.com/Zanveri/prism/releases">Download from the releases page</a></p>
-        <p><strong>Stable or beta.</strong> The latest stable version is marked <strong>Latest</strong>: it is the recommended one. Betas come out on every merge into <code>develop</code>, are marked <strong>Pre-release</strong> and may have defects.</p>
+        <p><strong>Stable or beta.</strong> The latest stable version is marked <strong>Latest</strong>: it is the recommended one. Betas come out on every merge into <code>develop</code>, are marked <strong>Pre-release</strong> and may have defects. <strong>Betas are published for Windows and Linux only</strong>: the macOS packages come with the stable versions. If a version came out without the package for your system, the top of its notes says so.</p>
         <p>On the page, open the newest version (the top one) and, under <strong>Assets</strong>, pick the file for your system. In the names, <code>&lt;version&gt;</code> is the release version, such as <code>0.1.0</code> or <code>0.1.1-beta.1</code>.</p>
 
         <div class="tabela">
@@ -386,7 +386,8 @@
           <li>The query sends no identifier of you or your machine.</li>
           <li>Before using the file, Prism checks it against two SHA-256 checksums: the one in the release notes and the one in <code>SHA256SUMS</code>. If one is missing or doesn't match, it deletes the file and refuses the update.</li>
           <li>On Windows, “Atualizar agora” runs the verified installer, which reopens Prism. On Linux and macOS, Prism leaves the verified package in the downloads folder and tells you what to do.</li>
-          <li><strong>Beta channel.</strong> With “Receber versões beta” (Receive beta versions) off, which is the default, Prism only offers stable versions. With it on, it also offers betas, and the dialog warns that the version is a beta and may have defects.</li>
+          <li><strong>Beta channel.</strong> With “Receber versões beta” (Receive beta versions) off, which is the default, Prism only offers stable versions. With it on, it also offers betas, and the dialog warns that the version is a beta and may have defects. On macOS betas have no package, so the option changes nothing there: updates come with the stable versions.</li>
+          <li><strong>Only versions with a package for your system.</strong> If a newer version came out without the package for your system (for example, a package that failed to build), Prism does not offer it: it offers the newest one that has the package, with the notes up to it, and “Verificar atualizações” says which version came out without it.</li>
         </ul>
         <figure>
           <a href="img/configuracoes-atualizacoes.png"><img src="img/configuracoes-atualizacoes.png" width="1170" height="428" loading="lazy" alt="Settings, Updates section: check on launch (on), Receive beta versions (off), the last check, the skipped version and the Check for updates button"></a>
@@ -433,7 +434,7 @@
               <tr><td>“O cursor foi fechado.” (The cursor was closed.)</td><td>5 minutes went by without reading the result. Click “Executar de novo”.</td></tr>
               <tr><td>The text of a SQL tab is gone.</td><td>The text of the tabs is not stored. Copy to a file whatever you cannot lose.</td></tr>
               <tr><td>Prism asked for my password without me signing out.</td><td>It was the inactivity lock (10 minutes by default). Change it in Configurações › Segurança.</td></tr>
-              <tr><td>No update shows up.</td><td>Click “Verificar atualizações”. To receive betas, turn on “Receber versões beta” in Configurações › Atualizações.</td></tr>
+              <tr><td>No update shows up.</td><td>Click “Verificar atualizações”. To receive betas, turn on “Receber versões beta” in Configurações › Atualizações (on macOS there are no betas: updates come with the stable versions). A version that came out without the package for your system is not offered until the next one that has it.</td></tr>
             </tbody>
           </table>
         </div>

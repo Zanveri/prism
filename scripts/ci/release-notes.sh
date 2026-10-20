@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 # As notas de uma release (RN-VERSAO-007), em release-notes.md, seguidas das somas SHA-256 dos pacotes (o SHA256SUMS que o
-# publish-release.sh escreveu):
+# publish-release.sh escreveu, só com as plataformas que vieram inteiras):
 #  - versão ESTÁVEL: a seção dela no CHANGELOG.md, de título EXATO "## [X.Y.Z] - AAAA-MM-DD" (a que o git-cliff gerou, ou a escrita
 #    à mão, como a da 0.1.0), SE ela existir e tiver texto. Sem ela, as notas saem do git-cliff, do mesmo jeito que as do beta, com
 #    os commits desde a estável anterior (`--since <tag>`; sem ela, o histórico inteiro): uma estável sai sempre, com o changelog
 #    escrito ou sem ele (version.sh, `decide_release`);
 #  - BETA (`--beta`, X.Y.Z-beta.N): as notas do git-cliff, geradas na hora com os commits desde a tag anterior (`--since <tag>`;
 #    sem ela, o histórico inteiro), e NÃO gravadas no CHANGELOG.md.
+# AS PLATAFORMAS QUE FALTAM. A falha do pacote de uma plataforma não segura o lançamento das outras (decisão do dono, 2026-10-20), e
+# quem usa a plataforma sem pacote precisa saber por que a versão nova não chega a ele. As notas dizem, logo no começo, uma frase por
+# conjunto de plataformas que a pipeline espera daquele lançamento (packages.sh, `expected_groups`: Windows e Linux num beta, as
+# quatro numa estável) e que não está INTEIRO nas somas: Windows, Linux e o macOS (Apple Silicon e Intel juntos, numa frase só,
+# ou o que faltar de um só). A falta do macOS num beta é o esperado, e não é frase de falta: todo beta traz, no lugar dela, a
+# frase fixa de que os betas saem para Windows e Linux. O texto de uma release publicada é imutável na prática (o app lê as
+# notas da release de cada versão), então a frase de uma versão antiga continua à vista nas notas que o app mostra de várias
+# versões, e é o que explica por que ele não a oferece a quem não tem o pacote (src/client/electron/update/, `offerable`).
+#
 # O git-cliff roda com o cliff.toml do repositório, pela imagem fixada de scripts/ci/git-cliff.sh. As mensagens de commit viram
 # texto das notas: é texto de fora, e o app o desenha com o interpretador próprio (RN-ATUALIZA-004).
 #
@@ -33,6 +42,8 @@ cd "$here/../.."
 source "$here/version.sh"
 # shellcheck source=actions.sh
 source "$here/actions.sh"
+# shellcheck source=packages.sh
+source "$here/packages.sh"
 
 fail() {
   echo "release-notes: $1" >&2
@@ -69,6 +80,44 @@ if grep -qvE '^[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*$' "$sums"; then
   fail "o $sums tem linha fora do formato \"<64 dígitos hexadecimais>  <nome do arquivo>\", que é o que o atualizador do app lê."
 fi
 
+# missing_notes <beta|stable>: as frases das plataformas esperadas que não estão inteiras nas somas, cada uma seguida de uma linha em
+# branco, em `platform_notes` (vazio se nada falta), e os grupos que faltam, em `missing`.
+missing_notes() {
+  local listing present group
+  platform_notes=
+  missing=
+  listing=$(mktemp)
+  awk '{ print $2 }' "$sums" > "$listing"
+  present=" $(present_groups "$version" "$listing" | tr '\n' ' ')" || { rm -f "$listing"; fail "não consegui ler os grupos de packages.txt."; }
+  rm -f "$listing"
+  for group in $(expected_groups "$1"); do
+    case "$present" in *" $group "*) ;; *) missing="$missing $group" ;; esac
+  done
+  missing=${missing# }
+  [ -n "$missing" ] || return 0
+
+  local sentence arm intel
+  for group in win linux; do
+    case " $missing " in *" $group "*) platform_notes="${platform_notes}$(missing_sentence "$(group_label "$group")" "$(group_label "$group")")"$'\n\n' ;; esac
+  done
+  case " $missing " in *" mac-arm64 "*) arm=1 ;; *) arm=0 ;; esac
+  case " $missing " in *" mac-x64 "*) intel=1 ;; *) intel=0 ;; esac
+  sentence=
+  if [ "$arm" -eq 1 ] && [ "$intel" -eq 1 ]; then
+    sentence=$(missing_sentence "macOS (Apple Silicon e Intel)" "macOS")
+  elif [ "$arm" -eq 1 ]; then
+    sentence=$(missing_sentence "macOS (Apple Silicon)" "macOS com Apple Silicon")
+  elif [ "$intel" -eq 1 ]; then
+    sentence=$(missing_sentence "macOS (Intel)" "macOS com processador Intel")
+  fi
+  [ -z "$sentence" ] || platform_notes="${platform_notes}${sentence}"$'\n\n'
+}
+
+# missing_sentence <o pacote que faltou> <quem o usa>
+missing_sentence() {
+  printf 'Esta versão saiu sem o pacote de %s, que não foi gerado nesta execução. Quem usa %s continua na versão anterior e recebe a próxima que tiver o pacote.' "$1" "$2"
+}
+
 # cliff_notes <o que dizer sem tag anterior>: as notas do git-cliff com os commits desde $since (sem ela, o histórico inteiro), em
 # `notes`, e de onde elas partem, em `origin`. As notas são para quem usa o app: o cliff.toml só deixa entrar o que muda o que ele
 # vê, então um merge só de documentação, testes ou pipeline sai sem item, e as notas dizem isso.
@@ -97,11 +146,13 @@ if [ "$beta" -eq 1 ]; then
   [[ "$version" =~ -beta\.[0-9]+$ ]] || fail "\"$version\" não é a versão de um beta (X.Y.Z-beta.N)."
   cliff_notes "é o primeiro pré-lançamento"
   # Um parágrafo simples, e não uma citação ("> "): o app desenha a citação como parágrafo com o ">" na frente.
-  header="Versão beta (pré-lançamento), para experimentar. Abaixo, $origin."
+  header="Versão beta (pré-lançamento), para experimentar. Os betas saem para Windows e Linux; no macOS, as atualizações chegam pelas versões estáveis. Abaixo, $origin."
+  missing_notes beta
   echo "release-notes: beta $version, notas do git-cliff: $origin."
 else
   [[ "$version" =~ $stable_pattern ]] || fail "\"$version\" é um pré-lançamento: as notas dele vêm do git-cliff, não do changelog (use --beta)."
   header=
+  missing_notes stable
   notes=$(version_notes "$version")
   if [ -n "${notes//[[:space:]]/}" ]; then
     echo "release-notes: seção $version do CHANGELOG.md."
@@ -111,7 +162,9 @@ else
   fi
 fi
 
+[ -z "$missing" ] || echo "release-notes: as notas avisam que a release sai sem o pacote de: $(for group in $missing; do printf '%s; ' "$(group_label "$group")"; done | sed 's/; $//')."
 {
+  printf '%s' "$platform_notes"
   [ -z "$header" ] || printf '%s\n' "$header"
   printf '%s\n\n' "$notes"
   printf '%s\n\n%s\n' "$sums_heading" "$fence"

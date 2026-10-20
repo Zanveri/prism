@@ -953,16 +953,21 @@ a infraestrutura da Zanveri, com pacotes para todas as plataformas gerados na pi
   (PostgreSQL, Informix e Db2 em contêiner), segurança (a verificação da RN-ABERTO-003, segredos
   e auditoria de dependências) e pacote por plataforma; depois, o lançamento (RN-VERSAO-008). A
   organização dos arquivos está na seção 21.
-- **RN-ABERTO-006.** A pipeline gera pacote para todas as plataformas de desktop, cada um com a
+- **RN-ABERTO-006.** A pipeline gera pacote para as plataformas de desktop, cada um com a
   API publicada para a mesma plataforma:
   - Windows x64: instalador e versão portátil (zip).
   - Linux x64: AppImage (roda na maioria das distribuições sem instalar), `.deb`
     (Debian, Ubuntu e derivadas), `.rpm` (Fedora, RHEL, openSUSE e derivadas) e `tar.gz`.
   - macOS: `dmg` e `zip`, para Apple Silicon (arm64) e Intel (x64), as duas arquiteturas
     geradas no runner hospedado de macOS (Apple Silicon), porque o `dmg` só se gera no macOS.
+  **O macOS só é empacotado nas versões estáveis** (decisão do dono em 2026-10-20, para economizar
+  os minutos da pipeline, em que o de macOS é o mais caro): os dois jobs de macOS só rodam no merge
+  em `main`, e um beta sai com Windows e Linux. **Cada plataforma é independente:** o pacote de uma
+  que falha, é cancelada ou fica sem máquina não segura o lançamento das outras (RN-VERSAO-008).
   Nenhum pacote é assinado nesta fatia, e o README diz o que isso implica em cada sistema. Onde
   o driver da IBM não existir para a plataforma, o pacote sai sem Db2 e Informix naquela
-  plataforma, e o README e a tela dizem isso; PostgreSQL funciona em todas.
+  plataforma, e o README e a tela dizem isso; PostgreSQL funciona em todas. *Alterada a pedido do
+  dono em 2026-10-20: a falha do pacote de uma plataforma não segura o lançamento das outras.*
 - **RN-ABERTO-007.** Runner próprio: nenhum. O projeto usa só os runners hospedados pelo GitHub,
   e nenhum runner próprio é ligado ao repositório. A proteção que cabe à configuração do
   repositório fica numa lista de conferência em `docs/ci.md`: o token padrão dos workflows só de
@@ -1058,10 +1063,29 @@ com as fontes, está em os registros internos do projeto.
   - **Em `main`, cada merge lança a estável** `vX.Y.Z` da versão da vez. Só não lança quando não
     há commit novo desde a última estável (o merge está na história dela): a pipeline verifica e
     empacota, com o aviso "nada novo desde a vX.Y.Z" à vista.
-  - Lançar é, nesta ordem: gerar os pacotes de todas as plataformas; criar a release como
-    rascunho; anexar cada pacote e o `SHA256SUMS`; publicar (é a publicação que cria a tag, no
-    commit do merge). Com as releases imutáveis ligadas (RN-ABERTO-007), um pacote publicado não
-    pode ser trocado e a tag não se move; uma tentativa que falha antes de publicar não deixa tag.
+  - Lançar é, nesta ordem: gerar os pacotes de cada plataforma (um beta: Windows e Linux; uma
+    estável: também os dois macOS, RN-ABERTO-006); criar a release como rascunho; anexar os
+    pacotes das plataformas que vieram inteiras e o `SHA256SUMS`; publicar (é a publicação que
+    cria a tag, no commit do merge). Com as releases imutáveis ligadas (RN-ABERTO-007), um pacote
+    publicado não pode ser trocado e a tag não se move; uma tentativa que falha antes de publicar
+    não deixa tag.
+  - **A falha do pacote de uma plataforma não segura o lançamento das outras** (decisão do dono em
+    2026-10-20: "caso falhar o deploy específico de alguma plataforma … não interfira nas outras e
+    mande a nova versão igual"). O lançamento roda desde que a verificação e a segurança tenham
+    passado e a execução não tenha sido cancelada, mesmo com o pacote de uma plataforma em falha. A
+    release leva as plataformas que vieram inteiras (todos os arquivos de cada uma); uma plataforma
+    com arquivo faltando fica de fora com todos os arquivos dela, e nenhuma plataforma inteira é
+    recusa, sem publicar nada. O `SHA256SUMS` e as somas das notas listam só o que entrou. A
+    plataforma esperada que faltou sai à vista na execução (aviso, com o job verde) e nas notas da
+    release, logo no começo, numa frase para quem a usa: "Esta versão saiu sem o pacote de macOS
+    (Apple Silicon e Intel), que não foi gerado nesta execução. Quem usa macOS continua na versão
+    anterior e recebe a próxima que tiver o pacote." A falta do macOS num beta é o esperado, e não
+    é aviso: as notas de todo beta dizem que os betas saem para Windows e Linux e que, no macOS,
+    as atualizações chegam pelas versões estáveis. Uma release é imutável: a plataforma que faltou
+    não é acrescentada depois, e volta na próxima versão; repetir o lançamento de uma release já
+    publicada a confere contra o `SHA256SUMS` dela, e não contra a lista inteira de pacotes.
+    *Alterada a pedido do dono em 2026-10-20: a falha do pacote de uma plataforma não segura o
+    lançamento das outras.*
   - Não há ramo `release/X.Y.Z` (decisão de 2026-10-12, Ruling 127): correção de uma versão
     antiga, se um dia for preciso, é assunto de quando existir. Só o job de lançamento tem
     permissão de escrita, e só a de criar release; nenhum job envia commit nem ramo.
@@ -1213,12 +1237,24 @@ dia.
   (`vX.Y.Z-beta.N`) quando o canal beta está ligado (RN-ATUALIZA-010). Falha de rede nessa
   consulta não aparece na tela: vai para o log. O usuário pode verificar à mão a qualquer
   momento ("Verificar atualizações", junto da versão), e aí o resultado sempre aparece,
-  inclusive "o Prism está atualizado" e a falha.
+  inclusive "o Prism está atualizado" e a falha. **Uma release que saiu sem o pacote desta
+  instalação não é oferecida:** a plataforma e a arquitetura em uso, no formato da instalação
+  (RN-ATUALIZA-006), têm de ter o pacote entre as somas das notas da release (a pipeline só as
+  escreve para o que entrou, RN-VERSAO-008). A consulta pula essa release e considera a mais nova
+  que tem o pacote; sem nenhuma, o Prism está atualizado (na verificação à mão, o aviso diz qual
+  versão mais nova saiu sem o pacote deste sistema). No macOS isso quer dizer que um beta nunca é
+  oferecido, e que ele também não entra nesse aviso: a falta do pacote num beta é o esperado, não
+  uma falha. *Alterada a pedido do dono em 2026-10-20: a falha do pacote de uma plataforma não
+  segura o lançamento das outras. As versões instaladas até a 0.5.0-beta.2 não têm esta regra: nelas
+  a release sem o pacote aparece, e a atualização é recusada pela RN-ATUALIZA-005.*
 - **RN-ATUALIZA-003.** Havendo versão nova, um diálogo mostra a versão instalada, a nova, a data,
   e as notas de TODAS as versões mais novas que a instalada, da mais recente para a mais antiga
-  (são as seções do `CHANGELOG.md`, que a pipeline põe na release). As ações: "Atualizar agora",
-  "Depois", "Pular esta versão" (não avisa de novo até sair outra) e a opção "Não verificar ao
-  abrir".
+  (são as seções do `CHANGELOG.md`, que a pipeline põe na release), **até a versão oferecida**: a
+  release que saiu sem o pacote desta instalação (RN-ATUALIZA-002) não é a nova nem entra na lista,
+  e as mais antigas que ela, que a oferta inclui, entram com as notas delas. As ações: "Atualizar
+  agora", "Depois", "Pular esta versão" (não avisa de novo até sair outra) e a opção "Não verificar
+  ao abrir". *Alterada a pedido do dono em 2026-10-20: a falha do pacote de uma plataforma não
+  segura o lançamento das outras.*
 - **RN-ATUALIZA-004.** As notas vêm da rede e são tratadas como texto não confiável: são
   desenhadas por um interpretador pequeno do próprio projeto, que só entende título, lista,
   parágrafo, ênfase e código, e devolve elementos da tela. Nada delas vira HTML, imagem, link
@@ -1226,9 +1262,13 @@ dia.
 - **RN-ATUALIZA-005.** "Atualizar agora" baixa o pacote da plataforma e da arquitetura em uso,
   com progresso e cancelamento. O endereço do download é montado pelo Prism a partir da origem
   gravada, da tag e do nome de arquivo que a pipeline usa (o endereço de download de um arquivo
-  de release do GitHub); nenhum endereço vindo do conteúdo da release é seguido. Antes de qualquer uso, o SHA-256 do arquivo baixado é conferido contra
+  de release do GitHub); nenhum endereço vindo do conteúdo da release é seguido, e nunca se baixa
+  um arquivo que a release não tem: o nome do pacote da oferta está nas somas das notas
+  (RN-ATUALIZA-002). Antes de qualquer uso, o SHA-256 do arquivo baixado é conferido contra
   a soma que está nas notas da release E contra a do arquivo `SHA256SUMS` da mesma versão; se
   uma delas falta ou não bate, o arquivo é apagado e a atualização é recusada com a causa.
+  *Alterada a pedido do dono em 2026-10-20: a falha do pacote de uma plataforma não segura o
+  lançamento das outras.*
 - **RN-ATUALIZA-006.** Instalar: no Windows, o Prism roda o instalador conferido e se encerra; o
   instalador atualiza a instalação e abre o Prism de novo. No Linux e no macOS, onde instalar
   pede senha de administrador ou assinatura, e no Windows quando o Prism roda da cópia portátil
@@ -1260,7 +1300,11 @@ dia.
   pré-lançamentos, e o diálogo diz que a versão é beta e que pode ter defeitos. Desligado, só as
   estáveis — inclusive para quem já está numa beta, que recebe a próxima estável mais nova que
   ela (a `0.2.0` depois da `0.2.0-beta.3`). Ligar ou desligar não instala nada sozinho: vale a
-  partir da próxima consulta. "Pular esta versão" vale igual nos dois canais.
+  partir da próxima consulta. "Pular esta versão" vale igual nos dois canais. No macOS os betas não
+  têm pacote (RN-ABERTO-006): a opção continua, com a dica de que ali ela não muda o que é
+  oferecido, e as atualizações chegam pelas versões estáveis. *Alterada a pedido do dono em
+  2026-10-20: a falha do pacote de uma plataforma não segura o lançamento das outras; o macOS só é
+  empacotado nas versões estáveis.*
 
 Com esta seção, a RN-DRIVER-008 passa a valer assim: a API só faz chamada de saída para
 `api.nuget.org`, quando o usuário manda instalar um driver; o processo principal só faz chamada
@@ -2123,11 +2167,14 @@ que é novo.
   contribui por fork. Nenhum pull request roda pipeline (RN-ABERTO-005): quem revisa roda as
   verificações na própria máquina, com os comandos que o `CONTRIBUTING.md` lista, e a pipeline
   confirma depois do merge.
-- **RN-GITHUB-004.** Custo. Cada merge na `develop` empacota as três plataformas e publica um beta
-  (decisão do dono, sabendo do custo). Enquanto o repositório for privado, os minutos de runner
+- **RN-GITHUB-004.** Custo. Cada merge na `develop` empacota Windows e Linux e publica um beta, e só
+  o merge em `main` empacota também o macOS (decisão do dono, sabendo do custo, e em 2026-10-20, para
+  economizar minutos da pipeline). Enquanto o repositório for privado, os minutos de runner
   contam no plano da organização, e os de Windows e de macOS valem mais que os de Linux; num
   repositório público, os runners hospedados padrão não cobram. A página de releases acumula um
-  beta por merge; apagar os antigos fica para depois.
+  beta por merge; apagar os antigos fica para depois. *Alterada a pedido do dono em 2026-10-20: a
+  falha do pacote de uma plataforma não segura o lançamento das outras; o macOS só é empacotado nas
+  versões estáveis.*
 - **RN-GITHUB-005.** Origem gravada no pacote (RN-ATUALIZA-001): na hora de empacotar, a pipeline
   passa ao `pnpm dist` `PRISM_UPDATE_API` (o endereço da API do GitHub), `PRISM_UPDATE_SITE` (o
   do site), `PRISM_UPDATE_REPOSITORY` (`dono/repositório`) e `PRISM_HOMEPAGE` (a página do

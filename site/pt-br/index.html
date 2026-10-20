@@ -125,7 +125,7 @@
       <section id="baixar">
         <h2>Baixar e instalar</h2>
         <p class="botoes"><a class="botao botao-principal botao-grande" href="https://github.com/Zanveri/prism/releases">Baixar na página de releases</a></p>
-        <p><strong>Estável ou beta.</strong> A estável mais nova fica marcada como <strong>Latest</strong>: é a recomendada. Os betas saem a cada merge na <code>develop</code>, aparecem marcados como <strong>Pre-release</strong> e podem ter defeitos.</p>
+        <p><strong>Estável ou beta.</strong> A estável mais nova fica marcada como <strong>Latest</strong>: é a recomendada. Os betas saem a cada merge na <code>develop</code>, aparecem marcados como <strong>Pre-release</strong> e podem ter defeitos. <strong>Os betas saem só para Windows e Linux</strong>: os pacotes de macOS vêm com as versões estáveis. Se uma versão saiu sem o pacote do seu sistema, o começo das notas dela diz isso.</p>
         <p>Na página, abra a versão mais nova (a de cima) e, em <strong>Assets</strong>, escolha o arquivo do seu sistema. Nos nomes, <code>&lt;versão&gt;</code> é a da release, como <code>0.1.0</code> ou <code>0.1.1-beta.1</code>.</p>
 
         <div class="tabela">
@@ -386,7 +386,8 @@
           <li>A consulta não envia identificador seu nem da máquina.</li>
           <li>Antes de usar o arquivo, o Prism o confere contra duas somas SHA-256: a das notas da release e a do <code>SHA256SUMS</code>. Se uma falta ou não bate, ele apaga o arquivo e recusa a atualização.</li>
           <li>No Windows, “Atualizar agora” roda o instalador conferido, que reabre o Prism. No Linux e no macOS, o Prism deixa o pacote conferido na pasta de downloads e diz o que fazer.</li>
-          <li><strong>Canal beta.</strong> Com “Receber versões beta” desligado, que é o padrão, o Prism só oferece as versões estáveis. Ligado, oferece também os betas, e o diálogo avisa que a versão é beta e pode ter defeitos.</li>
+          <li><strong>Canal beta.</strong> Com “Receber versões beta” desligado, que é o padrão, o Prism só oferece as versões estáveis. Ligado, oferece também os betas, e o diálogo avisa que a versão é beta e pode ter defeitos. No macOS os betas não têm pacote, então a opção não muda nada ali: as atualizações vêm com as versões estáveis.</li>
+          <li><strong>Só versões com pacote para o seu sistema.</strong> Se uma versão mais nova saiu sem o pacote do seu sistema (por exemplo, um pacote que falhou ao ser gerado), o Prism não a oferece: oferece a mais nova que tem o pacote, com as notas até ela, e “Verificar atualizações” diz qual versão saiu sem ele.</li>
         </ul>
         <figure>
           <a href="../img/configuracoes-atualizacoes.png"><img src="../img/configuracoes-atualizacoes.png" width="1170" height="428" loading="lazy" alt="Configurações, seção Atualizações: verificar ao abrir (ligado), Receber versões beta (desligado), a última verificação, a versão pulada e o botão Verificar atualizações"></a>
@@ -433,7 +434,7 @@
               <tr><td>“O cursor foi fechado.”</td><td>Passaram 5 minutos sem ler o resultado. Clique em “Executar de novo”.</td></tr>
               <tr><td>O texto de uma aba de SQL sumiu.</td><td>O texto das abas não é guardado. Copie para um arquivo o que não pode perder.</td></tr>
               <tr><td>O Prism pediu a senha sem eu sair.</td><td>Foi o bloqueio por inatividade (10 minutos, por padrão). Mude em Configurações › Segurança.</td></tr>
-              <tr><td>Não aparece atualização.</td><td>Clique em “Verificar atualizações”. Para receber betas, ligue “Receber versões beta” em Configurações › Atualizações.</td></tr>
+              <tr><td>Não aparece atualização.</td><td>Clique em “Verificar atualizações”. Para receber betas, ligue “Receber versões beta” em Configurações › Atualizações (no macOS não há betas: as atualizações vêm com as versões estáveis). Uma versão que saiu sem o pacote do seu sistema não é oferecida até a próxima que o tiver.</td></tr>
             </tbody>
           </table>
         </div>

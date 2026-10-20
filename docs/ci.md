@@ -23,8 +23,8 @@ rodam igual na sua máquina.
 | [`.github/workflows/verificar.yml`](../.github/workflows/verificar.yml) | Interface (lint, typecheck e testes), API (build sem avisos e testes de unidade), os testes dos roteiros e as regras dos workflows (com o actionlint), e a **decisão do que o merge lança** (job `versao`). |
 | [`.github/workflows/integrar.yml`](../.github/workflows/integrar.yml) | Os testes de integração da API contra PostgreSQL, Informix e Db2 em contêiner. |
 | [`.github/workflows/seguranca.yml`](../.github/workflows/seguranca.yml) | O `leak-guard` (RN-ABERTO-003), a auditoria das dependências da interface e da API, e o CodeQL (só com o repositório público). |
-| [`.github/workflows/empacotar.yml`](../.github/workflows/empacotar.yml) | A API publicada para as quatro plataformas e os pacotes de Windows, Linux e macOS (RN-ABERTO-006), com a origem das atualizações gravada (RN-GITHUB-005). |
-| [`.github/workflows/lancar.yml`](../.github/workflows/lancar.yml) | A release do GitHub: rascunho, anexos e publicação, que cria a tag (RN-VERSAO-008). O único job com escrita no conteúdo. |
+| [`.github/workflows/empacotar.yml`](../.github/workflows/empacotar.yml) | A API publicada para as quatro plataformas e os pacotes de Windows e Linux e, só na `main`, de macOS (RN-ABERTO-006), com a origem das atualizações gravada (RN-GITHUB-005). Os jobs de pacote são independentes. |
+| [`.github/workflows/lancar.yml`](../.github/workflows/lancar.yml) | A release do GitHub: rascunho, anexos (as plataformas que vieram inteiras) e publicação, que cria a tag (RN-VERSAO-008). O único job com escrita no conteúdo. |
 | [`.github/workflows/paginas.yml`](../.github/workflows/paginas.yml) | O site de `site/` no GitHub Pages: um job junta os arquivos e outro os publica. Só na `develop`, sem esperar o empacotamento. Não chama roteiro: só usa actions do GitHub. O único com `pages: write` e `id-token: write`. |
 | [`.github/actions/preparar-node/`](../.github/actions/preparar-node/action.yml) | O Node 22.23.2 e o pnpm do `packageManager` de `src/client/package.json`, com o hash conferido pelo `corepack`. |
 | [`.github/actions/preparar-dotnet/`](../.github/actions/preparar-dotnet/action.yml) | O SDK do .NET 10.0.401, fixado por um `global.json` só da cópia de trabalho do runner. |
@@ -78,7 +78,8 @@ outro ramo e qualquer outro evento não disparam nada.
 
 ## A ordem das etapas
 
-A mesma nos dois ramos. O que muda entre a `develop` e a `main` é o que o job `versao` decide e o que o `lancar` publica.
+A mesma nos dois ramos. O que muda entre a `develop` e a `main` é o que o job `versao` decide, o que o `lancar` publica e que **o
+macOS só é empacotado na `main`**.
 
 ```
 pipeline.yml (push em develop ou main; uma execução por vez em cada ramo)
@@ -87,14 +88,17 @@ pipeline.yml (push em develop ou main; uma execução por vez em cada ramo)
 ├── seguranca ─ leak-guard · auditoria-interface · auditoria-api · codeql (só público)
 │        (os três em paralelo)
 ├── empacotar ─ api (as quatro APIs) ─┬─ windows
-│   (espera os três)                  ├─ linux (contêiner do electron-builder)
-│                                     └─ macos (arm64 e x64)
-├── lancar ──── publicar (só quando o plano diz que lança; espera o empacotar)
+│   (espera verificar e seguranca)    ├─ linux (contêiner do electron-builder)
+│                                     └─ macos (arm64 e x64; SÓ NA MAIN)
+├── lancar ──── publicar (só quando o plano diz que lança; espera os três, mas roda
+│                         mesmo com um pacote em falha)
 └── paginas ─── montar · publicar (só na develop; não espera ninguém, e ninguém o espera)
 ```
 
 Um job que falha para os que dependem dele: com a versão errada (job `versao`), um teste vermelho, um achado do `leak-guard` num
-repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote é gerado e nada é publicado**.
+repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote é gerado e nada é publicado**. A exceção é o pacote de
+uma plataforma: **a falha dele não segura o lançamento das outras** (decisão do dono, 2026-10-20), como descrito em [Cada plataforma é
+independente](#cada-plataforma-é-independente).
 
 ### Os jobs
 
@@ -105,7 +109,7 @@ repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote �
 | `pipeline.yml` | `integrar` | Integrar | (chama `integrar.yml`) | — | `contents: read` |
 | `pipeline.yml` | `seguranca` | Segurança | (chama `seguranca.yml`) | — | `contents: read`, `security-events: write` (só o CodeQL a usa) |
 | `pipeline.yml` | `empacotar` | Empacotar | (chama `empacotar.yml`) | verificar, seguranca | `contents: read` |
-| `pipeline.yml` | `lancar` | Lançar | (chama `lancar.yml`) | verificar, empacotar; só com o plano `lanca` | `contents: write` |
+| `pipeline.yml` | `lancar` | Lançar | (chama `lancar.yml`) | verificar, seguranca, empacotar; só com o plano `lanca`; roda mesmo com o `empacotar` em falha | `contents: write` |
 | `pipeline.yml` | `paginas` | Páginas | (chama `paginas.yml`); só na `develop` | — | `contents: read`, `pages: write`, `id-token: write` (só o `publicar` as usa) |
 | `verificar.yml` | `versao` | Conferir a versão | `ubuntu-24.04` | — | `contents: read` |
 | `verificar.yml` | `interface` | Interface | `ubuntu-24.04` | — | `contents: read` |
@@ -119,7 +123,7 @@ repositório público ou uma vulnerabilidade alta ou crítica, **nenhum pacote �
 | `empacotar.yml` | `api` | API das quatro plataformas | `ubuntu-24.04` | — | `contents: read` |
 | `empacotar.yml` | `windows` | Pacote de Windows | `windows-2025` | `api` | `contents: read` |
 | `empacotar.yml` | `linux` | Pacote de Linux | `ubuntu-24.04`, no contêiner `electronuserland/builder` | `api` | `contents: read` |
-| `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-15` | `api` | `contents: read` |
+| `empacotar.yml` | `macos` | Pacote de macOS (arm64 e x64) | `macos-15` | `api`; só na `main` | `contents: read` |
 | `lancar.yml` | `publicar` | Publicar a release | `ubuntu-24.04` | — | `contents: write` |
 | `paginas.yml` | `montar` | Montar o site | `ubuntu-24.04` | — | `contents: read`, `pages: read` |
 | `paginas.yml` | `publicar` | Publicar no GitHub Pages | `ubuntu-24.04` | `montar` | `pages: write`, `id-token: write` |
@@ -147,7 +151,9 @@ chegar ao pacote de uma release; raciocínio nosso, não da documentação).
   `id-token` do job que publica as páginas); segredo fora do passo
   do leak-guard; `run:` que não é **uma** chamada a um roteiro de `scripts/ci/` que existe, ou que tem uma expressão `${{ }}` dentro
   (o valor de fora entra por `env:`); runner fora dos três rótulos escolhidos; contêiner sem digest; checkout sem
-  `persist-credentials: false`; job sem `timeout-minutes`; concorrência que cancela; e a tabela acima fora de dia. O actionlint
+  `persist-credentials: false`; job sem `timeout-minutes`; concorrência que cancela; `always()` em qualquer expressão (o lançamento roda
+  com um pacote em falha por `!cancelled()` e pelos resultados dos `needs`, nunca por `always()`, que o rodaria até numa execução
+  cancelada); job de runner de macOS sem `if: github.ref_name == 'main'`; e a tabela acima fora de dia. O actionlint
   1.7.12 é o binário da release dele, conferido por um SHA-256 escrito no roteiro; ele ainda não conhece a chave `queue` do
   `concurrency`, e essa é a única mensagem ignorada.
 
@@ -211,7 +217,9 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   arquivo do driver da IBM** (RN-ABERTO-001; os mesmos nomes que o `PublishTests` da API procura) ou se o `deps.json` o citar. Cada
   API vai num `tar`, com os avisos de licença do .NET: o artefato do GitHub perde o bit de execução dos arquivos, e o `tar` o guarda
   ([upload-artifact, "Permission Loss"](https://github.com/actions/upload-artifact#permission-loss)).
-- **`windows`**, **`linux`** e **`macos`** (`package-desktop.sh`): cada um busca a API da sua plataforma, grava a mesma versão do plano
+- **`windows`**, **`linux`** e **`macos`** (`package-desktop.sh`): **o `macos` só roda na `main`** (o `if: github.ref_name == 'main'` do
+  job, e não um passo que pula por dentro: o runner de macOS é o mais caro e não pode ser pedido à toa; o contexto `github` de um
+  workflow reutilizável é o do que o chamou, **a confirmar** na primeira execução), então um beta sai com Windows e Linux. Cada um busca a API da sua plataforma, grava a mesma versão do plano
   e roda `pnpm dist -- <plataforma>` de `src/client`. Windows no `windows-2025` (instalador `nsis` e zip); Linux no contêiner
   `electronuserland/builder:24-05.26`, fixado por digest (AppImage, deb, rpm e tar.gz); macOS no `macos-15`, Apple Silicon, uma
   arquitetura por job (dmg e zip de `arm64`, e de `x64` pelo `--x64` do electron-builder), porque o dmg só se gera no macOS. O script
@@ -239,7 +247,9 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   cada uma validada) e as grava no `package.json` de dentro do pacote (`src/client/scripts/dist-plan.mjs`); o lado da pipeline são os
   três nomes acima, a `PRISM_HOMEPAGE` e os nomes de arquivo de `packages.txt`.
 - **Os nomes dos pacotes são contrato com o atualizador do app** (RN-ATUALIZA-005): `scripts/ci/packages.txt` e
-  `src/client/electron/update/packages.ts` têm a mesma lista, e um teste de cada lado a fixa.
+  `src/client/electron/update/packages.ts` têm a mesma lista, e um teste de cada lado a fixa. O app usa a lista também para saber se
+  uma release tem o pacote dele: o nome do arquivo precisa estar nas somas das notas ([Cada plataforma é
+  independente](#cada-plataforma-é-independente)).
 - **Os artefatos duram pouco**: a API, um dia; os pacotes, dois. Eles só levam os arquivos ao job seguinte da mesma execução, e o
   armazenamento conta na cota do plano enquanto o repositório for privado (no GitHub Free de organização, 500 MB;
   [cotas](https://docs.github.com/en/billing/reference/product-usage-included)). Repetir o job `publicar` depois de dois dias pede uma
@@ -278,7 +288,7 @@ Nos dois ramos o campo `version` de `src/client/package.json` é a **próxima ve
 | a tag estável `vX.Y.Z` já existe | **não lança**, com o aviso de que a versão precisa subir (o beta seria mais velho que a estável) |
 | um beta `vX.Y.Z-beta.K` já aponta para este commit | nada a publicar (execução repetida) |
 | o último beta saiu de um commit que este não contém | **não lança**, com o aviso (execução repetida ou fora de ordem) |
-| senão | publica `vX.Y.Z-beta.N`, **pré-lançamento**, com `N` um a mais que o maior já publicado para `X.Y.Z` (o primeiro é 1) |
+| senão | publica `vX.Y.Z-beta.N`, **pré-lançamento**, com `N` um a mais que o maior já publicado para `X.Y.Z` (o primeiro é 1), **com Windows e Linux**: o macOS só sai nas estáveis |
 
 O número do beta é procurado pelo **nome exato** de cada tag (`vX.Y.Z-beta.N`, com `N` sem zero à esquerda): uma tag-isca como
 `x/refs/tags/v0.1.0-beta.9`, um ramo chamado `refs/tags/v0.1.0-beta.9` ou `v0.1.0-beta.09` não contam. **Os pacotes de um beta levam a
@@ -297,7 +307,7 @@ o site não é publicado.
 | a tag `vX.Y.Z` aponta para este commit | nada a publicar (execução repetida) |
 | a tag `vX.Y.Z` aponta para outro commit | **não lança**, com o aviso (merge na `main` sem versão nova) |
 | sem a tag e sem a seção `## [X.Y.Z] - AAAA-MM-DD` no `CHANGELOG.md` | **não lança**, com o aviso |
-| sem a tag e com a seção | publica `vX.Y.Z`, marcada como a release mais recente; as notas são a seção do changelog e as somas |
+| sem a tag e com a seção | publica `vX.Y.Z`, marcada como a release mais recente, **com as quatro plataformas**; as notas são a seção do changelog e as somas |
 
 Em qualquer ramo, **reprova** (e nada é empacotado): a versão fora do formato ou com sufixo, a versão que regrediu (o que seria lançado
 não é maior que toda tag de versão que já existe, na ordem do SemVer) e, na `main`, um título do changelog que cita a versão fora do
@@ -311,7 +321,8 @@ Attach all associated assets to the draft release. Publish the draft release.",
 [releases imutáveis](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)):
 
 1. **As conferências de antes de escrever**: a decisão de agora é a mesma do plano (senão, os pacotes desta execução são de outra
-   versão, e nada é publicado); os dez pacotes estão lá, com a versão da tag; o `SHA256SUMS`; as notas (`release-notes.sh`); e o commit
+   versão, e nada é publicado); quais plataformas vieram **inteiras** (todos os arquivos do grupo de `packages.txt`, com a versão
+   da tag; nenhuma inteira é recusa); o `SHA256SUMS` delas; as notas (`release-notes.sh`); e o commit
    não acrescenta nem muda arquivo de `.github/workflows/` em relação ao **ramo padrão**. Esta última existe porque a API de releases diz
    que, nesse caso, criar ou publicar a release com o `GITHUB_TOKEN` responde 404: "The `GITHUB_TOKEN` available to GitHub Actions
    cannot be authorized for this" ([API de releases](https://docs.github.com/en/rest/releases/releases), "Create a release" e "Update a
@@ -320,14 +331,52 @@ Attach all associated assets to the draft release. Publish the draft release.",
 2. **O rascunho**: um rascunho com a mesma tag e este commit, deixado por uma tentativa que parou no meio, é retomado; um rascunho com
    a mesma tag e outro commit é apagado (não é público e não tem tag); senão, um rascunho novo (`draft: true`, `target_commitish` = o
    commit do merge, `prerelease` no beta). Um rascunho não cria a tag.
-3. **Os anexos**: cada pacote e o `SHA256SUMS`. O que já está no rascunho com a mesma soma é pulado; o que está pela metade (a API diz
+3. **Os anexos**: cada pacote das plataformas que entraram e o `SHA256SUMS`. O que já está no rascunho com a mesma soma é pulado; o que está pela metade (a API diz
    que um envio que falha "may leave an empty asset with a state of `starter`") ou com outros bytes é apagado e enviado de novo
-   ([API de anexos](https://docs.github.com/en/rest/releases/assets)). Depois, o rascunho é relido: os onze nomes, todos completos, cada
-   soma (`digest`) igual à do arquivo. Sem a soma, o tamanho, com um aviso.
+   ([API de anexos](https://docs.github.com/en/rest/releases/assets)). Depois, o rascunho é relido: os nomes desta execução (os pacotes
+   que entraram e o `SHA256SUMS`), todos completos, cada soma (`digest`) igual à do arquivo. Sem a soma, o tamanho, com um aviso.
 4. **A publicação** (`draft: false`; `make_latest` só na estável), que é o que cria a tag `vX.Y.Z` (ou `vX.Y.Z-beta.N`) no commit do
    merge. Logo antes, a tag é procurada no remoto pelo nome exato: se ela apareceu, nada é publicado.
-5. **A conferência**: a tag aponta para o commit do merge e a release publicada tem os onze anexos. Se a release não saiu imutável, o
-   aviso fica à vista: a garantia que o README dá (RN-ATUALIZA-009) conta com as releases imutáveis ligadas.
+5. **A conferência**: a tag aponta para o commit do merge e a release publicada tem os anexos que o **`SHA256SUMS` dela** lista, mais
+   ele, e nenhum outro (o arquivo é lido da própria release, com `Accept: application/octet-stream`, **a confirmar** no GitHub de verdade).
+   Se a release não saiu imutável, o aviso fica à vista: a garantia que o README dá (RN-ATUALIZA-009) conta com as releases imutáveis
+   ligadas.
+
+### Cada plataforma é independente
+
+Decisão do dono em 2026-10-20: **a falha do pacote de uma plataforma (ou o cancelamento, ou o runner que não chega) não segura o
+lançamento das outras.** No merge #28, os dois jobs de macOS ficaram 15 minutos sem runner e foram cancelados, duas vezes; o resto
+passou, mas o `lancar` foi pulado e a `v0.5.0-beta.3` não saiu para ninguém. Agora:
+
+- **O que é esperado.** Um beta, Windows e Linux; uma estável, as quatro plataformas (`win`, `linux`, `mac-arm64` e `mac-x64`, os
+  grupos de `packages.txt`). O macOS só é empacotado na `main`, para economizar minutos da pipeline (o de macOS é o mais caro): a falta
+  dele num beta é o esperado, e não é aviso nem falha.
+- **Quando o `lancar` roda.** Com `verificar` e `seguranca` com sucesso, o plano dizendo que lança e a execução não cancelada, **mesmo
+  com o `empacotar` em falha**:
+  `if: ${{ !cancelled() && needs.verificar.result == 'success' && needs.seguranca.result == 'success' && needs.verificar.outputs.lanca == 'true' && needs.empacotar.result != 'skipped' }}`.
+  O `!cancelled()` tira o `success()` implícito, que pularia o job por causa de um `needs` que falhou; `verificar` e `seguranca` são
+  exigidos à mão; o `empacotar` só fica de fora se foi pulado (o que o sucesso dos dois já impede). **Nunca `always()`**, que rodaria o
+  lançamento até numa execução cancelada (o `check-workflows.sh` o reprova). O resultado de um workflow reutilizável é o dos jobs
+  dele: um job de macOS que não foi marcado (o `if`) conta como pulado, e o chamado segue "success"; um que falhou ou foi cancelado
+  faz o chamado terminar em falha, e é aí que o `!cancelled()` conta. **A confirmar** na primeira execução: que um job cancelado
+  por falta de runner **não** faz `cancelled()` valer `true` (a documentação diz só "se o fluxo de trabalho foi cancelado"). Se valer,
+  o `lancar` volta a ser pulado nessa situação, e a saída é trocar a condição por `needs.empacotar.result` em vez de `!cancelled()`.
+  O `api` continua sendo pré-requisito de todos os pacotes: sem ele não há pacote nenhum e o `publicar` recusa.
+- **O que entra na release.** Os grupos de `packages.txt` que vieram inteiros. Um grupo com um arquivo só fica de fora com todos os
+  arquivos dele, e nenhum grupo inteiro é recusa, sem escrever nada. O `SHA256SUMS` e as somas das notas listam só o que entrou.
+- **O aviso.** A plataforma esperada que não veio sai no log do `publicar` e como `::warning::` (e no resumo do job), com o job verde.
+- **As notas.** Logo no começo, uma frase por conjunto que faltou (Windows, Linux, macOS Apple Silicon e Intel, os dois de macOS
+  juntos): "Esta versão saiu sem o pacote de macOS (Apple Silicon e Intel), que não foi gerado nesta execução. Quem usa macOS
+  continua na versão anterior e recebe a próxima que tiver o pacote." Todo beta traz também a frase fixa "Os betas saem para
+  Windows e Linux; no macOS, as atualizações chegam pelas versões estáveis." (`release-notes.sh` as tira das somas).
+- **A retomada.** O `publicar` repetido (com o rascunho, ou com a release já publicada) trabalha com o que **esta execução** trouxe.
+  Uma release publicada é conferida contra o `SHA256SUMS` dela, e não contra a lista inteira: uma release sem o macOS é uma release
+  completa, e os anexos que não são exatamente os que ele lista, mais ele, a recusam. Releases são imutáveis: a plataforma que faltou
+  **não é acrescentada depois**, nem que a repetição traga o pacote; ela volta na próxima versão.
+- **O app.** O atualizador (RN-ATUALIZA-002, 003 e 005) não oferece a release em que o arquivo do seu sistema (plataforma, arquitetura
+  e formato) não está nas somas das notas: oferece a mais nova que o tem, com as notas até ela; sem nenhuma, o Prism está atualizado.
+  **As versões já instaladas (até a `0.5.0-beta.2`) não têm essa regra:** nelas a release sem o pacote aparece, e a atualização é
+  recusada com a causa de hoje, a soma que falta ("As notas da versão não trazem a soma SHA-256 de …").
 
 **O bloco das somas nas notas é contrato com o atualizador do app** (RN-ATUALIZA-005): o **último** título `### Somas SHA-256`, uma
 linha em branco, uma cerca de três crases sem linguagem, as linhas do `SHA256SUMS` (64 dígitos hexadecimais, dois espaços, o nome),
@@ -346,7 +395,9 @@ apaga é repetido pelo roteiro; só as leituras, até três vezes.
 | Onde parou | Como as coisas ficam | Como retomar |
 | --- | --- | --- |
 | `versao` (versão fora do formato, regredida, título errado) | nada foi gerado | corrija num pull request; o merge seguinte decide de novo |
-| um teste, a auditoria, o leak-guard (público) ou um pacote | nada foi publicado | corrija e faça o merge; ou repita o job, se a falha foi passageira |
+| um teste, a auditoria ou o leak-guard (público) | nada foi publicado | corrija e faça o merge; ou repita o job, se a falha foi passageira |
+| o pacote de uma plataforma (falhou, foi cancelado ou ficou sem runner) | **a release sai com as outras plataformas**, com o aviso à vista e a frase nas notas | nada a retomar: a plataforma volta na próxima versão (uma release publicada não recebe anexo depois) |
+| o `api` (ou todos os pacotes) | nenhum pacote existe: o `publicar` recusa e nada é publicado | corrija e faça o merge; ou repita o job de empacotar, se a falha foi passageira, e depois o `publicar` |
 | `publicar`, antes do rascunho | nada no GitHub | repita o job |
 | `publicar`, no meio dos anexos | um rascunho (não público) com parte dos anexos; sem tag | repita o job: ele retoma o rascunho e pula o que já subiu com a mesma soma |
 | `publicar`, publicação recusada (403) | o rascunho completo; sem tag | veja a permissão (`contents: write`) e a regra de tag (item 6); repita o job |
@@ -408,7 +459,7 @@ runner próprio ligado ao repositório (RN-ABERTO-007). Os rótulos existem hoje
 | --- | --- |
 | `ubuntu-24.04` | o Ubuntu LTS que é o `ubuntu-latest` de hoje; das imagens de Linux x64 em uso geral (22.04, 24.04 e 26.04), é a que tem a frente mais longa sem ser a mais nova. Tem Docker, `gh`, `jq`, Ruby e o Bash 5 |
 | `windows-2025` | o Windows Server mais novo (o `windows-latest` de hoje); o `windows-2022` é o próximo a sair |
-| `macos-15` | o macOS Apple Silicon anterior ao `macos-26` (o `macos-latest` de hoje), também em uso geral. Trocado em 2026-10-13: por quatro execuções seguidas o GitHub não achou máquina `macos-26` ("The job was not acquired by Runner of type hosted"), e sem o pacote de macOS a release não sai. Volta para o `macos-26` quando o `macos-15` entrar em descontinuação |
+| `macos-15` | só no merge em `main`. O macOS Apple Silicon anterior ao `macos-26` (o `macos-latest` de hoje), também em uso geral. Trocado em 2026-10-13: por quatro execuções seguidas o GitHub não achou máquina `macos-26` ("The job was not acquired by Runner of type hosted"), e sem o pacote de macOS a release não sai. Volta para o `macos-26` quando o `macos-15` entrar em descontinuação |
 
 A política das imagens: no máximo duas em uso geral e uma em teste por sistema, e a mais velha entra em descontinuação quando a nova
 sai do teste, com um anúncio e uma data ([actions/runner-images](https://github.com/actions/runner-images), "Image Deprecation
@@ -425,8 +476,8 @@ Apple Silicon com 3 núcleos e 7 GB; 14 GB de disco em todos.
 da cota do plano da organização (2.000 por mês no GitHub Free e 3.000 no Team) e, passado ela, são cobrados por minuto: Linux
 US$ 0,006, Windows US$ 0,010 e macOS US$ 0,062 ([preços](https://docs.github.com/en/billing/reference/actions-runner-pricing),
 [cotas](https://docs.github.com/en/billing/reference/product-usage-included)). Sem forma de pagamento cadastrada, o uso é bloqueado
-quando a cota acaba. Cada merge na `develop` roda os três sistemas: dois jobs de macOS (o mais caro) e um de Windows, além dos de
-Linux. **Os tempos de cada job no GitHub não foram medidos** (nenhuma execução rodou); os da máquina da prova estão em
+quando a cota acaba. Cada merge na `develop` roda Windows e Linux; os dois jobs de macOS (o mais caro) só rodam no merge em `main`, a
+estável (decisão do dono, 2026-10-20). **Os tempos de cada job no GitHub não foram medidos** (nenhuma execução rodou); os da máquina da prova estão em
 [Estado da validação](#estado-da-validação). A página de releases acumula um beta por merge; apagar os antigos fica para depois.
 
 ## Lista de conferência do repositório
@@ -555,16 +606,19 @@ documentação do GitHub:
 
 Um pull request qualquer (de um ramo `chore/…`) para a `develop`, e o merge. O que ele exercita, e que nada aqui provou: os gatilhos
 (o pull request **não** pode ter rodado nada; o merge roda uma execução); a fila do `concurrency`; os workflows reutilizáveis com as
-permissões e o segredo; as actions compostas no Linux, no Windows e no macOS; o actionlint baixado; os testes de integração com o Db2 e
+permissões e o segredo; as actions compostas no Linux e no Windows (e no macOS, no merge em `main`); o actionlint baixado; os testes de integração com o Db2 e
 o Informix no runner; o leak-guard em modo privado (avisos à vista com os achados de hoje); o contêiner do electron-builder; os pacotes
-de Windows e de macOS gerados de verdade; o instalador do Windows instalado e desinstalado nos dois modos (`check-windows-installer.sh`);
-os artefatos entre os jobs; e o lançamento inteiro: o rascunho, os onze anexos, a publicação
+de Windows gerados de verdade (e os de macOS, no merge em `main`); o instalador do Windows instalado e desinstalado nos dois modos (`check-windows-installer.sh`);
+os artefatos entre os jobs; e o lançamento inteiro: o rascunho, os sete anexos de um beta (Windows, Linux e o `SHA256SUMS`; os onze de uma estável, com o macOS), a publicação
 pelo `GITHUB_TOKEN` e a tag. Com a versão `0.1.0` no `package.json` e nenhuma tag, ele publica **`v0.1.0-beta.1`**, pré-lançamento,
 com as notas do `git-cliff` do histórico inteiro (é o primeiro). Confira: a página de releases; `git ls-remote --tags <ensaio>`; o
 "Immutable" da release; o `SHA256SUMS` contra um pacote baixado (`sha256sum`); e o resumo da execução (os avisos à vista). Um segundo
 merge publica o `v0.1.0-beta.2`.
 
 ### A estável, no ensaio
+
+É no merge em `main` que os dois jobs de macOS rodam pela primeira vez: confira o `dmg` e o `zip` de `arm64` e de `x64` na release, e que a
+execução da `develop` não marcou nenhum job de macOS.
 
 No repositório de ensaio, a `0.1.0` pode ser queimada: o pull request `release: v0.1.0` para a `develop` fecha a seção da `0.1.0` no
 `CHANGELOG.md`, e o pull request da `develop` para a `main` (método **merge**) lança a `v0.1.0`

@@ -10,10 +10,10 @@ import { UpdatesSection } from "./updates-section";
 vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/components/ui")>()), useToast: () => ({ success() {}, warning() {}, error() {} }) }));
 
 const anchor = "cfg-atualizacoes";
-function render(updates?: UpdatePreferences) {
+function render(updates?: UpdatePreferences, platform?: string) {
   const client = new QueryClient();
   if (updates !== undefined) client.setQueryData(updatePreferencesQuery.queryKey, updates);
-  return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(UpdatesSection, { anchor })));
+  return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(UpdatesSection, { anchor, platform })));
 }
 
 const saved: UpdatePreferences = { checkOnStartup: true, skippedVersion: null, lastCheckedAt: null, receiveBeta: false };
@@ -51,5 +51,29 @@ describe("Configurações › Atualizações: 'Receber versões beta' (RN-ATUALI
 
   it("enquanto a ponte não respondeu, nenhuma caixa aparece", () => {
     expect(checkboxes(render())).toEqual([]);
+  });
+});
+
+describe("Configurações › Atualizações: no macOS os betas não têm pacote (o macOS só é empacotado nas estáveis)", () => {
+  const macHint = "No macOS os betas não têm pacote: as atualizações chegam pelas versões estáveis, e ligar esta opção não muda o que o Prism oferece aqui.";
+
+  it("no macOS a caixa continua, com a dica de que os betas não têm pacote, e o leitor de tela lê a dica junto", () => {
+    const markup = render(saved, "MacIntel");
+    const [, beta] = checkboxes(markup);
+
+    expect(beta.label).toBe("Receber versões beta");
+    expect(beta.attributes).not.toContain("disabled");
+    expect(markup).toContain(macHint);
+    expect(/aria-describedby="([^"]+)"/.exec(beta.attributes)?.[1]).toBe(`${anchor}-beta-hint ${anchor}-beta-mac-hint`);
+    expect(markup).toMatch(new RegExp(`<p id="${anchor}-beta-mac-hint"[^>]*>${macHint}</p>`));
+  });
+
+  it("no Windows e no Linux não há dica de macOS", () => {
+    for (const platform of ["Win32", "Linux x86_64", ""]) {
+      const markup = render(saved, platform);
+
+      expect(markup).not.toContain("No macOS os betas");
+      expect(markup).not.toContain("beta-mac-hint");
+    }
   });
 });

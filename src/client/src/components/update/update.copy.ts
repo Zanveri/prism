@@ -10,6 +10,8 @@ export const updateCopy = {
   toasts: {
     upToDate: "O Prism está atualizado.",
     upToDateDetail: (version: string) => `A versão instalada, ${version}, é a mais recente.`,
+    // Há uma versão mais nova, mas ela saiu sem o pacote deste sistema (a falha de um pacote não segura as outras plataformas).
+    upToDateWithoutPackage: (version: string, newer: string) => `A versão instalada, ${version}, é a mais recente que tem pacote para este sistema. A versão ${newer} saiu sem ele; o Prism oferece a próxima que tiver.`,
     noSource: "Este Prism não procura atualizações.",
     noSourceDetail: "Ele foi gerado sem a origem das atualizações (pacote de desenvolvimento ou gerado à mão).",
     checkFailed: "Não foi possível verificar as atualizações.",
@@ -85,6 +87,8 @@ export const updateCopy = {
     offered: "(beta)",
     warning: "Versão beta: chega antes da estável e pode ter defeitos.",
     warningDetail: "Para receber só as versões estáveis, desligue “Receber versões beta” em Configurações › Atualizações.",
+    // Os betas só saem para Windows e Linux (o macOS só é empacotado nas estáveis): no macOS a opção não muda o que é oferecido.
+    macHint: "No macOS os betas não têm pacote: as atualizações chegam pelas versões estáveis, e ligar esta opção não muda o que o Prism oferece aqui.",
   },
 
   // Linux e macOS: o que fazer com o pacote que ficou na pasta de downloads (RN-ATUALIZA-006).

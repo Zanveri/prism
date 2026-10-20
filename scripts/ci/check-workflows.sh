@@ -15,6 +15,10 @@
 #    entra por variável de ambiente, nunca colado no comando);
 #  - um job sem `timeout-minutes`, com runner que não é um dos rótulos fixos escolhidos, com contêiner sem digest, ou um checkout
 #    sem `persist-credentials: false`; a concorrência do workflow de entrada cancela o que está rodando;
+#  - uma expressão usa `always()` (em qualquer `if`, de job ou de passo, de workflow ou de action composta): ele roda o job até numa
+#    execução cancelada, e o lançamento, que roda mesmo com um pacote em falha, usa `!cancelled()` com os resultados conferidos à mão;
+#  - um job num runner de macOS não tem `if: github.ref_name == 'main'`: o macOS só é empacotado na estável (decisão do dono,
+#    2026-10-20), porque o minuto de macOS é o mais caro e um beta sai com Windows e Linux;
 #  - a lista de jobs não bate com a tabela de docs/ci.md (entre as marcas `tabela-de-jobs`).
 # O actionlint (actionlint.sh) confere o resto: que o GitHub entende o arquivo.
 #
@@ -89,6 +93,7 @@ done
 for file in "${actions[@]}"; do
   yaml_json "$file" "$tmp/action.json" || continue
   jq -e '.runs.using == "composite"' "$tmp/action.json" > /dev/null || problem "$file: a action não é composta (runs.using: composite)."
+  jq -e '[.. | strings | select(test("always\\s*\\("; "i"))] | length == 0' "$tmp/action.json" > /dev/null || problem "$file: uma action composta não usa always(): ele roda o passo até numa execução cancelada."
   jq -r '.runs.steps // [] | to_entries[] | select(.value.run != null) | "\(.key)\t\(.value.run | gsub("\n"; "\\n"))"' "$tmp/action.json" > "$tmp/runs"
   while IFS=$'\t' read -r index command; do
     printf '%s\t%s\t%s\n' "$file" "passo $index" "$command"
@@ -119,6 +124,12 @@ for file in "${workflows[@]}"; do
   fi
 
   jq -e 'has("permissions") and .permissions == {}' "$tmp/w.json" > /dev/null || problem "$file: o topo do workflow tem de ser permissions: {} (o token começa sem permissão)."
+
+  # `always()` roda o job até numa execução cancelada. O lançamento usa `!cancelled()` e os resultados dos `needs` conferidos à mão.
+  jq -e '[.. | strings | select(test("always\\s*\\("; "i"))] | length == 0' "$tmp/w.json" > /dev/null || problem "$file: o workflow usa always(): ele roda o job até numa execução cancelada; o lançamento usa !cancelled() com os resultados dos needs conferidos à mão."
+  # O macOS só é empacotado na estável (main): o `if` do job pelo ramo, e não um passo que pula por dentro.
+  jq -r '.jobs // {} | to_entries[] | select((.value["runs-on"] | type) == "string" and (.value["runs-on"] | startswith("macos-"))) | select((.value["if"] // "") | gsub("^\\$\\{\\{ *| *\\}\\}$"; "") != "github.ref_name == '"'"'main'"'"'") | .key' "$tmp/w.json" \
+    | while IFS= read -r job; do problem "$file: o job $job roda num runner de macOS e não tem if: github.ref_name == 'main': o macOS só é empacotado na estável (decisão do dono, 2026-10-20; o minuto de macOS é o mais caro), e um beta sai com Windows e Linux."; done
 
   name=$(basename "$file")
   jq -r '.jobs // {} | keys[]' "$tmp/w.json" | while IFS= read -r job; do printf '%s\t%s\n' "$name" "$job"; done >> "$tmp/jobs"

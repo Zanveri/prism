@@ -3342,6 +3342,17 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   as somas inteiros (`found`), nunca o que foi para a tela. Ao abrir, no máximo uma a cada 24 horas: a hora gravada é a da TENTATIVA (uma
   máquina sem rede não consulta a cada abertura), e uma hora no futuro vale como "nunca consultou". A falha ao abrir só vai para o
   log (`[prism] atualização: …`). A consulta manual não depende das 24 horas, de "Não verificar ao abrir" nem da versão pulada.
+- **Release sem o pacote desta instalação não é oferecida (RN-ATUALIZA-002, 003 e 005).** A pipeline publica a release com as
+  plataformas que vieram inteiras (a falha do pacote de uma plataforma não segura as outras), e o macOS só é empacotado nas estáveis:
+  um beta nunca tem o pacote de macOS. `offerable` (`releases.ts`, pura e testada) tira da consulta as releases em que o pacote que
+  `choosePackage` escolheria (plataforma, arquitetura e FORMATO da instalação em uso) não está nas somas das notas, e que são mais
+  novas que a mais nova que o tem; a oferta é essa, e a lista de notas vai até ela (as mais antigas ficam, mesmo sem o pacote:
+  as notas contam o que mudou). Nenhuma com o pacote: o Prism está atualizado (`check` responde `upToDate` com `withoutPackage`, a
+  mais nova que saiu sem ele, e o aviso a cita; no macOS os betas não entram nessa conta, porque a falta do pacote neles é o
+  esperado e não uma falha, e um Mac só com um beta mais novo vê só "o Prism está atualizado"). O sistema para o qual não existe pacote nenhum (`choosePackage` sem resposta,
+  Linux arm64) não filtra: a tela já diz que não há pacote, e baixar é recusado. As versões instaladas até a 0.5.0-beta.2 não têm
+  esta regra: nelas a release sem o pacote aparece, e a atualização é recusada com a causa de antes (a soma que falta nas notas).
+  Em Configurações › Atualizações, no macOS, "Receber versões beta" continua e ganha a dica de que os betas não têm pacote ali.
 - **Linha de comando que desliga o atualizador (RN-ATUALIZA-008).** O app empacotado aberto com `ignore-certificate-errors`,
   `ignore-certificate-errors-spki-list`, `host-resolver-rules` ou `host-rules` não consulta nem baixa nada naquela abertura
   (`updatesBlocked`, em `origin.ts`, pura e testada; o `main.ts` pergunta a `app.commandLine.hasSwitch`): os dois primeiros fazem o

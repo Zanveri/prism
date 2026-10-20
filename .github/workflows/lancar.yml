@@ -1,8 +1,12 @@
 # Lançar (RN-VERSAO-008): a release do GitHub do que este merge lança, e nada mais. Só roda quando o plano do job `versao` diz que
 # lança (o workflow de entrada condiciona o job), e o publish-release.sh decide de novo, com o estado do remoto de agora, e recusa
-# se o plano não bate. A release nasce RASCUNHO, recebe os pacotes de todas as plataformas e o SHA256SUMS, e só então é
+# se o plano não bate. A release nasce RASCUNHO, recebe os pacotes das plataformas que vieram inteiras e o SHA256SUMS, e só então é
 # publicada: é a publicação que cria a tag, no commit do merge. Na develop, o beta vX.Y.Z-beta.N, marcado como pré-lançamento; na
 # main, a estável vX.Y.Z, marcada como a mais recente.
+#
+# Ele roda mesmo quando o pacote de uma plataforma falhou (o workflow de entrada o condiciona sem esperar o `empacotar` ter sucesso):
+# os artefatos `pacote-*` que existem são os das plataformas que deram certo, e é o publish-release.sh que publica essas, avisa das
+# que faltaram (::warning::) e recusa se nenhuma veio. Um beta sai com Windows e Linux (o macOS só é empacotado na main).
 #
 # É o ÚNICO job com `contents: write` (o que permite criar a release e, com ela, a tag). Ele não envia commit nem ramo. O token é
 # o GITHUB_TOKEN do job, que o gh do runner recebe pelo ambiente; nenhum segredo a mais.
@@ -35,7 +39,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Buscar os pacotes de todas as plataformas
+      - name: Buscar os pacotes das plataformas que deram certo
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: pacote-*
