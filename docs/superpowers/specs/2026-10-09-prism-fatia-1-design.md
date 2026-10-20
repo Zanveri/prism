@@ -11355,10 +11355,10 @@ SELECT p.id, p.criado, p.valor
 
     | Valor | PostgreSQL | Db2 | Informix |
     | --- | --- | --- | --- |
-    | `number` inteiro até ±9.007.199.254.740.991, ou o texto exato de um inteiro que cabe em 64 bits | o texto, de tipo desconhecido (`unknown`), que o servidor resolve pelo lugar | `BIGINT` | `BIGINT` (`INT8`) |
-    | `number` com casas, ou inteiro maior | o texto, `unknown` | `DECIMAL`, pelo texto, até 31 dígitos; com mais, o erro "O número tem 35 dígitos, e o Db2 guarda até 31." (`DOUBLE` só para o número escrito com expoente, como `1.5e300`) | `DECIMAL`, até 32 dígitos; com mais, o mesmo erro (`FLOAT` só para o número escrito com expoente) |
+    | `number` inteiro até ±9.007.199.254.740.991, ou o texto exato de um inteiro que cabe em 64 bits | o texto, de tipo desconhecido (`unknown`), que o servidor resolve pelo lugar | `BIGINT` | `BIGINT` (`INT8`); o -9.223.372.036.854.775.808, que o `INT8` não tem, vai como decimal (a S-VAR-1) |
+    | `number` com casas, ou inteiro maior | o texto, `unknown` | `DECIMAL`, pelo texto, até 31 dígitos; com mais, o erro "O número tem 35 dígitos, e o Db2 guarda até 31." (`DOUBLE` só para o número escrito com expoente, como `1.5e300`) | `DECIMAL`, até 31 dígitos pelo driver (a S-VAR-1 provou: com 32 o `DB2Decimal` lança e o servidor recusa pela porta DRDA); com mais, "O número tem 32 dígitos, e o Informix guarda até 31 pelo driver." (`FLOAT` só para o número escrito com expoente) |
     | `string` | o texto, `unknown` | `VARCHAR`; acima de 32.672 bytes, `CLOB` | `VARCHAR` até 255 bytes; acima disso, o tipo do texto longo, como a edição já faz (o `BindEditParameter` do Informix) |
-    | `boolean` | `true` ou `false`, `unknown` | `BOOLEAN` | a definir pela S-VAR-1: o texto `t` ou `f` (o literal do Informix, RN-EXPORT-011), o `BOOLEAN` ou o `0`/`1` que a edição usa (RN-EDIT-006) |
+    | `boolean` | `true` ou `false`, `unknown` | `BOOLEAN`, pelo `bool` do driver, sem `DB2Type` (o `DB2Type.Boolean` lança) | o texto `t` ou `f` (o literal do Informix, RN-EXPORT-011): a S-VAR-1 provou que o `bool` e o `0`/`1` dão -674 no `WHERE` contra uma coluna `BOOLEAN` |
     | `Date` de dia | `aaaa-mm-dd`, `unknown` | `DATE` | `DATE` |
     | `Date` de instante | `aaaa-mm-dd hh:mm:ss.fff` seguido do deslocamento da máquina naquela data (`-03`), `unknown`; o texto exato que veio do banco volta como veio | `TIMESTAMP` | `DATETIME YEAR TO FRACTION(5)` |
     | `null` | o nulo, `unknown` | o nulo, com o tipo da variável (`VARCHAR` no tipo `null`) | o mesmo |
@@ -11366,8 +11366,9 @@ SELECT p.id, p.criado, p.valor
     No PostgreSQL, todo valor vai como o literal entre aspas de antes iria: um texto de tipo desconhecido que o
     servidor resolve pelo lugar onde está (`WHERE id = $1` vira o tipo de `id`, e o índice dela continua servindo),
     como a edição já faz (RN-EDIT-006). Onde o lugar não diz o tipo (`SELECT $1`), o valor volta como texto. No Db2 e
-    no Informix o tipo vai com o valor, porque o marcador sem tipo é recusado em vários lugares (`SELECT ?`, `? + 1`);
-    onde o banco ainda recusar, a recusa vem como veio, e o guia da API diz o contorno (`CAST(@x AS INTEGER)`). O que
+    no Informix o tipo vai com o valor (o `? + 1` e o `? || ?` passam assim, e a data e o booleano se comparam com a
+    coluna); o `SELECT ?` é recusado nos dois bancos mesmo com o tipo (SQL0418N no Db2, -201 no Informix), e onde o
+    banco recusar, a recusa vem como veio, e o guia da API diz o contorno (`CAST(@x AS INTEGER)`). O que
     cada banco aceita em cada lugar (o `WHERE`, o `IN`, o `LIKE`, o `BETWEEN`, o `LIMIT`, o `FETCH FIRST`, o `FIRST`
     e o `SKIP`, o `SELECT ?`, a conta, o `INSERT … VALUES`, o `UPDATE … SET`, a coluna de data comparada com o
     instante e o contrário) é a sonda S-VAR-1, antes de dar a parte por pronta; onde ela contrariar este quadro, o
@@ -11838,7 +11839,7 @@ SELECT p.id, p.criado, p.valor
     o texto com o tipo desconhecido do Npgsql, nos marcadores de posição (o `EnableSqlRewriting` continua desligado, e
     só o `$n` vale); no Db2 e no Informix, o valor convertido para o tipo do .NET (`long`, `double`, `string`, `bool`,
     `DateTime`) com o `DB2Type` do quadro, na ordem dos `?`. O decimal vai pelo tipo decimal do driver da IBM ou pelo
-    texto com `CAST`, porque o `System.Decimal` guarda só 28 a 29 dígitos (a S-VAR-1 decide). O valor que o tipo não
+    texto com `CAST`, porque o `System.Decimal` guarda só 28 a 29 dígitos (a S-VAR-1 decidiu: o `DB2Decimal` do driver, até 31 dígitos nos dois). O valor que o tipo não
     guarda (o expoente fora do `double`, os dígitos demais, a metade de um par UTF-16) é 422 `QUERY_INVALID` no campo,
     nunca 500.
   - Tudo o que vale para um comando vale com os parâmetros: a divisão e a recusa de mais de um comando
