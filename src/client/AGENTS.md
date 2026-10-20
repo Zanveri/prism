@@ -846,16 +846,51 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 
 - **A ordem** (`_lib/tab-order.ts`, puro e testado): `moveTab(tabs, id, insertAt)` com a posição de ANTES de a aba sair do lugar (a marca de
   soltar), `shiftTab` (Ctrl+Shift+PageUp e PageDown na aba ativa, sem dar a volta, `tabMoveShortcut`, tratado em `WorkbenchTabs` como o Ctrl+W),
-  `dropIndex` (pela metade de cada aba) e `isOutsideWindow`. O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
+  `dropIndex` (pela metade de cada aba), `dragKindOf` e os dois tipos do arraste (abaixo). O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
   "Abas que voltam na próxima entrada").
-- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`), com o tipo `application/x-prism-tab` e o dado `{ windowId, tabId }`
-  (`writeTabDrag`/`readTabDrag`, conferido: qualquer programa pode soltar algo na faixa). A faixa aceita só esse tipo, mostra a marca de soltar
-  (`data-drop` `before`/`after`, uma sombra interna da cor de destaque) e, solta, ou muda de lugar (veio desta janela) ou pede a aba à janela de
-  origem (`prism:windows-request-tab`; o centro manda `prism:windows-give-tab` a ela, e ela a leva pelo caminho de sempre, na posição pedida).
-  A janela sem abas não tem faixa: o lugar vazio dela recebe a aba solta. O fim do arrasto (`dragend`) com `dropEffect` `none` e o ponto fora da
-  janela leva a aba a uma janela nova ali. **Entre janelas o Chromium às vezes diz `none` mesmo quando a outra aceitou**: por isso o centro
-  recusa a janela nova quando o ponto está em cima de outra janela do Prism (`overWindow`, sem aviso), e quem leva a aba é o pedido da faixa de
-  lá. Solta fora da faixa de outra janela, a aba fica onde estava.
+- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`) e carrega o dado `{ windowId, tabId }` (`writeTabDrag`/`readTabDrag`,
+  conferido: qualquer programa pode soltar algo na faixa). **Os dois tipos** (`tab-order.ts`): `tabDragType` (`application/x-prism-tab`), a aba de consulta
+  e a de tabela, que a faixa e o véu de qualquer janela do Prism aceitam; e `resultTabDragType` (`application/x-prism-result-tab`), a aba do resultado
+  (RN-ABAS-012), que só a faixa e o véu da janela de origem aceitam (as outras a reconhecem e a recusam). `dragKindOf(types)` diz `"tab"`, `"result"` ou
+  `null` (texto, arquivo) já pelo `dataTransfer.types`, que o Chromium mostra no `dragenter` e no `dragover`; o conteúdo, só no `drop`. `dragTypeOf(kind)`
+  é o tipo que cada um escreve. Quem arrasta a aba do resultado (fluxos B e C) escreve o mesmo dado com `resultTabDragType`, chama `drag.begin(id, "result")` e
+  termina pelo mesmo caminho (`endTabDrag` com `kind: "result"`, `onDragEnd` do `WorkbenchTabs`).
+- **O arraste de uma aba desta janela** (`_lib/tab-drag.ts`, puro e testado): `createTabDragSession()` guarda o arraste (`begin` no `dragstart`, na hora;
+  o aviso a quem desenha sai depois, num `setTimeout` de 0, porque o Chromium cancela o arraste cujo elemento muda no próprio `dragstart`), a marca de quem
+  recebeu a soltura (`mark("strip" | "veil")`), `finish()` no `dragend` (devolve o que se sabe e solta o que esperava), `whenIdle(tabId, run)` (o
+  `detachTab` da aba que outra janela recebeu espera o fim do arraste: o Chromium não avisa o fim do arraste de um elemento que saiu da página) e
+  `subscribe`/`getSnapshot`. `veilFor({ kind, fromHere, onlyTab, available })` devolve a frase e se a soltura vale (`null`: sem véu, como a aba do resultado de
+  outra janela e o navegador de desenvolvimento); `isOnlyTab` (a aba e a do resultado dela contam como uma) e `dragEndRequest(ended, event, { windowId, onlyTab })`
+  monta o `TabDragEnd` do `dragend` (`null` na soltura na faixa, fora do Electron e na aba única). O `WorkbenchTabs` cria a sessão, passa-a à faixa (`drag`,
+  `onDragEnd`) e ao véu, e `handleDragEnd` faz: `drag.finish()`, `dragEndRequest`, `endTabDrag` (`lib/api/bridge.ts`, que devolve `{ action: "none" }` para a
+  resposta que não confere e para a ponte que não responde) e, com `newWindow`, o `latestMove` de sempre com o `at` que o processo principal leu; a aba do
+  resultado (`kind: "result"`) não vai a outra janela de abas: o `at` abre o resultado na janela dele (`changePlace(tabId, "window", "drag", at)`).
+- **O véu** (`_components/tab-drag-veil.tsx`, `TabDragVeil`): `fixed inset-0 z-40`, borda tracejada de 2 px no acento, a frase no meio da área das abas (a
+  `ref` do `section` do `WorkbenchTabs`), `aria-hidden`. A faixa é `relative z-50` e tem `data-tab-strip` (`tabStripAttribute`, `isInTabStrip`, pelo `nodeType`
+  e não pelo `instanceof`: o elemento pode ser de outro documento, RN-ABAS-017), e o que cai nela é dela. A raiz da página (`ownerDocument` da área) escuta
+  `dragenter`, `dragover`, `dragleave` e `drop` na captura e para a propagação antes do editor, da grade e dos campos (soltar a aba no `.cm-content` não escreve
+  nada); um contador de entradas e saídas evita o pisca; `dragend` e o primeiro `pointermove` depois do arraste apagam um véu que ficou. No `drop` da aba desta
+  janela o véu só marca (`mark("veil")`) e o pedido sai no `dragend`; no da aba de outra janela chama `onReceive` (`requestTab`, ela entra no fim da faixa).
+- **O fim do arraste é decidido por quem recebeu a soltura, não pelo `dropEffect`**, e o ponto é o do ponteiro lido pelo processo principal.
+  `prism:windows-drag-end` (`preload.ts`: `windows.endDrag`; `main.ts`: `hub.endDrag`) leva `tabDragEndSchema` (`tabId`, `kind`, `dropped: "veil" | "none"`,
+  `effect`, `at`, `inPage`) e responde `tabDragEndReplySchema` (`none` ou `newWindow` com `at`), ambos em `window-messages.ts`. `endDrag` (`window-hub.ts`):
+  `dropped: "veil"` abre a janela nova no ponteiro; sem soltura, com o ponteiro dentro da janela de origem ou sobre outra janela do Prism (`windowAt`),
+  nada; fora delas, abre. **A espera pela outra janela**: a aba de consulta e a de tabela esperam `dragClaimWaitMs` (200 ms) que outra janela diga que a
+  recebeu (`requestTab` grava a reivindicação por `fromId:tabId`, que vale `claimMemoryMs`, 2 s, e que o fim do arraste lê e apaga, antes ou depois da
+  espera); a aba do resultado nenhuma outra janela recebe, então não espera. `cursorPoint` (`screen.getCursorScreenPoint()`, em pixels independentes da
+  densidade), `escapeEndsWithoutEffect` e `wait` são dependências do centro (testáveis); o `moveTab` não recusa mais a janela nova sobre outra janela
+  (`overWindow` saiu) e passa `normalBounds()` da origem a `createWindow`. **O Esc**: no Linux com o X11 a sonda S-ABAS-1 mostrou que a soltura fora das
+  janelas vem com `move` e o Esc com `none` (`escapeEndsWithoutEffect`); nas outras plataformas o Esc fora das janelas vale como a soltura e abre a janela
+  nova (a alternativa, um arraste próprio pelos eventos do ponteiro, é decisão do dono, seção 39). **O Wayland** (`isWaylandSession`, `platform.ts`, com
+  teste: o `--ozone-platform` vence, depois o `--ozone-platform-hint` e a `ELECTRON_OZONE_PLATFORM_HINT`, `auto` com a sessão Wayland): `cursorPoint` devolve
+  `null`, vale o `at` do `dragend` (e `inPage` para o Esc), sem ponto a janela abre `cascade` (32 px) abaixo e à direita da de origem, e `settleBounds` não
+  reaplica os limites (o sistema escolhe o lugar). **O lugar da janela nova** (`newWindowBounds`): canto de cima à esquerda no ponto, no monitor do
+  ponteiro, no tamanho da origem sem maximizar, trazida para a área útil e nunca abaixo de `appWindowMinimum` (1024×700); `createAppWindow(bounds)` aplica os
+  limites de novo ao nascer e antes de aparecer e confere com `boundsMatch` (`settleBounds`, que registra a divergência), por causa do Windows com monitores de
+  escalas diferentes. A janela do resultado (RN-ABAS-013) tem o lugar dela (`placeResultWindow`, com o ponto da soltura da aba do resultado) e confere os limites do
+  mesmo modo, aplicando-os de novo depois de criada (`adoptResultWindow`).
+- A faixa mede 28 px (RN-ABAS-009): botões de 24 px de largura com ícones `size-3.5`, aba `h-7` com o X de 20 px (`size-5`) numa área de clique de 24 px e o
+  selo do ambiente de 16 px (`ShownEnvironmentPill` aceita `className`); as abas dos scripts e a barra do resultado seguem a mesma altura (`result-bar.ts`).
 - **O menu da aba** ganhou o grupo `moveMenu`: "Mover para nova janela" e "Mover para a janela…" (apagado sem outra janela; abre, no mesmo
   ponto, a lista das outras, pedida ao centro ao abrir o menu, com o número e o resumo que cada uma dá de si, `prism:windows-describe`). Fora do
   Electron o grupo não aparece.
@@ -1079,8 +1114,10 @@ rolagem, a seleção e as larguras sairiam junto.
   PageDown, o Ctrl+9, o Ctrl+B, o Ctrl+Shift+E e o Ctrl+, subirem pela árvore do React até a aba e a faixa. O F5, o F6, o Alt+X e o Ctrl+S sobem até a aba de
   consulta. O F6 do editor traz a janela do resultado; o dela traz a da aba (`focusOpener`), com a consulta ativa e o foco no editor. "Voltar para o painel" é
   um botão com texto na ponta direita da barra (`BackToPanelButton`); um link usado na janela traz a da aba à frente.
-- **O arraste da aba do resultado para fora da faixa** (RN-ABAS-010) é da outra parte: ele chama `resultWindows.open(tabId, { mode: "focus", at, title })`
-  (`at` é o ponto do `dragend`), pela mesma `changePlace(tabId, "window", …)`.
+- **O arraste da aba do resultado para fora da faixa** (RN-ABAS-010): a faixa o começa com `drag.begin(tabId, "result")` e o tipo `resultTabDragType`, e o
+  `dragend` segue o caminho da aba de consulta (`endTabDrag` com `kind: "result"`, sem a espera pela outra janela). A resposta `newWindow` chama
+  `changePlace(tabId, "window", "drag", at)`, que abre a janela com `resultWindows.open(tabId, { mode: "focus", at, title })` (`at` é o ponto do `dragend`, que
+  o processo principal devolve; o Wayland usa o do evento). O `PlaceVia` `drag` se comporta como o `menu`.
 - **Sondas que ficam para uma máquina de verdade** (Windows empacotado com dois monitores de escalas diferentes, macOS, Linux X11 e Wayland; nenhuma foi
   exercitada aqui, e nada disto foi dado como passando): **S-JANELA-1** (a página em branco tem a origem do app; `getLastWebPreferences` e `window.opener`;
   `show: false` vale numa janela do `window.open`, senão a transparência; a política copiada vale: uma imagem `https://` dispara
@@ -2098,6 +2135,11 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   "Contar total") recomeça o tempo, e o fim de uma EXECUÇÃO diz se ela trouxe um resultado de leitura novo (`outcomeOf`: o mesmo objeto de linhas de volta é
   "não rodou"; erro, cancelado, gravou). Sem leitura nova, ele para com o motivo (`stopped`), que a barra mostra numa nota curta até a próxima execução da
   pessoa (`ranByPerson`) ou até ligar de novo. A próxima execução só é marcada quando a anterior termina: nunca duas ao mesmo tempo.
+- **Os intervalos** (`autoRefreshChoices`): 1 s (o primeiro, seção 39), 5 s, 10 s, 30 s, 1 min e 5 min; o "Personalizado…" aceita de 1 a 3.600 segundos
+  (`customSecondsLimits`). Com um comando que demora mais que o intervalo, o real é maior (conta do fim), e o controle continua dizendo o escolhido. O
+  `running` do estado ligado (o "atualizando…" e o relógio pulsando) só acende depois de `runningShownAfterMs` (300 ms) de execução, num temporizador do
+  próprio relógio que o fim, o abandono (`yielded`) e o desligar apagam: no de 1 s a leitura costuma voltar antes, e o controle não pisca a cada segundo.
+  Quem decide se ela roda continua sendo o `firing`, que nasce na hora.
 - **A sessão que cai** (`DATABASE_SESSION_NOT_FOUND` no "Carregar mais", no "Contar total" ou na própria execução automática) a desliga com a nota "a sessão
   com o banco caiu" (`stopped: "disconnected"`): quem chama `lost()` é `sessionLost()`, só onde a sessão FICA caída, e não `setSession(null)`. A execução
   automática não reabre a sessão (`execute(…, reopen: false)`: a recusa volta calada, e as linhas de antes ficam), e o relógio confere `connected()` antes de
