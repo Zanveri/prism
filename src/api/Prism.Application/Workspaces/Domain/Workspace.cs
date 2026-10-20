@@ -26,13 +26,17 @@ internal sealed class Workspace
 
 /// <summary>
 /// Uma aba da área de trabalho (RN-ABAS-006). A de consulta guarda o texto do editor como veio, a conexão (nula na aba sem conexão, RN-SCRIPT-003), o banco, o
-/// script de onde veio e se tinha mudança não salva; `SqlTooLarge` diz que o texto passava de 1 MB e não foi gravado (a aba volta vazia, com o aviso). A de uma
-/// tabela guarda a conexão, o banco, o esquema, a tabela e a vista. O resultado, o cursor e as alterações não salvas da grade não fazem parte de aba nenhuma.
+/// script de onde veio, se tinha mudança não salva e o lugar do resultado (RN-ABAS-016: `panel`, `tab` ou `window`); `SqlTooLarge` diz que o texto passava de
+/// 1 MB e não foi gravado (a aba volta vazia, com o aviso). A de uma tabela guarda a conexão, o banco, o esquema, a tabela e a vista, e não tem lugar do
+/// resultado. O resultado, o cursor e as alterações não salvas da grade não fazem parte de aba nenhuma.
 /// </summary>
 internal sealed class WorkspaceTab
 {
     public const string QueryKind = "query";
     public const string TableKind = "table";
+
+    /// <summary>RN-ABAS-016: o lugar do resultado que vale quando a aba de consulta não diz outro, também na gravada antes da 0.5.0.</summary>
+    public const string PanelPlace = "panel";
 
     public string Kind { get; }
     public Guid? ConnectionID { get; }
@@ -44,8 +48,9 @@ internal sealed class WorkspaceTab
     public string? Schema { get; }
     public string? Table { get; }
     public string? View { get; }
+    public string? ResultPlace { get; }
 
-    private WorkspaceTab(string kind, Guid? connectionID, string? database, string? sql, Guid? scriptID, bool dirty, bool sqlTooLarge, string? schema, string? table, string? view)
+    private WorkspaceTab(string kind, Guid? connectionID, string? database, string? sql, Guid? scriptID, bool dirty, bool sqlTooLarge, string? schema, string? table, string? view, string? resultPlace)
     {
         Kind = kind;
         ConnectionID = connectionID;
@@ -57,18 +62,19 @@ internal sealed class WorkspaceTab
         Schema = schema;
         Table = table;
         View = view;
+        ResultPlace = resultPlace;
     }
 
     /// <summary>
     /// O texto fica como veio, com os espaços e as quebras de linha. Como no script (RN-SCRIPT-003), o banco só existe com a conexão e o vazio é o da própria
-    /// conexão; e só a aba de um script tem mudança não salva (RN-SCRIPT-001).
+    /// conexão; e só a aba de um script tem mudança não salva (RN-SCRIPT-001). Sem o lugar do resultado, é o painel (RN-ABAS-016).
     /// </summary>
-    public static WorkspaceTab CreateQuery(Guid? connectionID, string? database, string sql, Guid? scriptID, bool dirty, bool sqlTooLarge)
-        => new(QueryKind, connectionID, connectionID is null ? null : DatabaseOf(database), sql, scriptID, scriptID is not null && dirty, sqlTooLarge, null, null, null);
+    public static WorkspaceTab CreateQuery(Guid? connectionID, string? database, string sql, Guid? scriptID, bool dirty, bool sqlTooLarge, string? resultPlace = null)
+        => new(QueryKind, connectionID, connectionID is null ? null : DatabaseOf(database), sql, scriptID, scriptID is not null && dirty, sqlTooLarge, null, null, null, resultPlace ?? PanelPlace);
 
     /// <summary>A aba de uma tabela sempre tem a conexão dela (RN-TABELA-001); a vista é a dos Registros, da Estrutura ou do Diagrama.</summary>
     public static WorkspaceTab CreateTable(Guid connectionID, string? database, string schema, string table, string view)
-        => new(TableKind, connectionID, DatabaseOf(database), null, null, false, false, schema, table, view);
+        => new(TableKind, connectionID, DatabaseOf(database), null, null, false, false, schema, table, view, null);
 
     /// <summary>RN-LOG-001: a aba leva o SQL do usuário e os nomes do banco.</summary>
     public override string ToString()

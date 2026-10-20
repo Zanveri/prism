@@ -20,8 +20,12 @@ public sealed record VaultWorkspaceRecord(IReadOnlyList<VaultWorkspaceTabRecord>
 /// banco, o script de onde veio e se tinha mudança não salva, e `SqlTooLarge` quando o texto passava de 1 MB e não foi gravado (a aba volta vazia, com o aviso);
 /// ou `table`, a aba de uma tabela, com a conexão, o banco, o esquema, a tabela e a vista (`data`, `structure`, `diagram`). Os campos do outro tipo ficam nulos.
 /// `Database` nulo é o banco da própria conexão. O resultado, o cursor e as alterações não salvas da grade não são gravados.
+///
+/// `ResultPlace` (RN-ABAS-016: `panel`, `tab` ou `window`, só na aba de consulta) entrou na 0.5.0 sem subir o formato, no FIM do registro e com padrão nulo,
+/// como o ambiente da pasta: o cofre gravado antes não o tem, a leitura entrega nulo e a aba volta no painel; e a 0.4.0, que lê o documento com as opções
+/// padrão do `JsonSerializer` (o membro que ela não conhece é ignorado), abre o cofre gravado por esta versão e só não vê o campo.
 /// </summary>
-public sealed record VaultWorkspaceTabRecord(string Kind, Guid? ConnectionID, string? Database, string? Sql, Guid? ScriptID, bool Dirty, bool SqlTooLarge, string? Schema, string? Table, string? View)
+public sealed record VaultWorkspaceTabRecord(string Kind, Guid? ConnectionID, string? Database, string? Sql, Guid? ScriptID, bool Dirty, bool SqlTooLarge, string? Schema, string? Table, string? View, string? ResultPlace = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o texto do SQL e os nomes onde quer que o record fosse parar.</summary>
     public override string ToString()
