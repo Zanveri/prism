@@ -140,6 +140,7 @@ public sealed partial class AdoDatabaseConnectionTests
                 return Task.FromCanceled<DbDataReader>(token);
 
             _sent.Add(command.Object.CommandText);
+            _readerCommands.Add((command.Object.CommandText, [.. parameters.Items]));
 
             if (_commandFailure(command.Object.CommandText) is { } failure)
                 return Task.FromException<DbDataReader>(failure);

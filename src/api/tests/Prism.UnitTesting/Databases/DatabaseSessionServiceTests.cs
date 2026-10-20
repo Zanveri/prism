@@ -791,8 +791,15 @@ public sealed partial class DatabaseSessionServiceTests
         public Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
+        /// <summary>RN-SQL-006 e RN-VAR-033: as contagens que chegaram a esta conexão (o texto e os parâmetros do comando), na ordem.</summary>
+        public List<(string Sql, IReadOnlyList<QueryParameter>? Parameters)> Counts { get; } = [];
+
         public Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
-            => throw new NotSupportedException();
+        {
+            Counts.Add((sql, parameters));
+
+            return Task.FromResult(Result.Success<long, DatabaseFailure>(99));
+        }
 
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken)
             => throw new NotSupportedException();

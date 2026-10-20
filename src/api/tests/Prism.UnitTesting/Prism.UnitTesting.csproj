@@ -32,6 +32,7 @@
   <ItemGroup>
     <!-- RN-EXPORT-024: as fixtures de ouro da exportação de dados, fora das pastas da tela e da API, que os testes dos dois lados leem. -->
     <Content Include="../../../test-fixtures/export/*.json" Link="test-fixtures/export/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../../test-fixtures/variables/*.json" Link="test-fixtures/variables/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

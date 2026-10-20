@@ -1,0 +1,494 @@
+[
+ {
+  "name": "postgresql: um marcador",
+  "engine": "postgresql",
+  "text": "SELECT $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: três marcadores",
+  "engine": "postgresql",
+  "text": "SELECT $1, $2, $3",
+  "count": 3
+ },
+ {
+  "name": "postgresql: sem espaço",
+  "engine": "postgresql",
+  "text": "SELECT $1,$2",
+  "count": 2
+ },
+ {
+  "name": "postgresql: com cast",
+  "engine": "postgresql",
+  "text": "SELECT $1::int, $2::text",
+  "count": 2
+ },
+ {
+  "name": "postgresql: número de dois dígitos",
+  "engine": "postgresql",
+  "text": "SELECT $10",
+  "count": 1
+ },
+ {
+  "name": "postgresql: lista de IN",
+  "engine": "postgresql",
+  "text": "SELECT * FROM t WHERE a IN ($1, $2, $3)",
+  "count": 3
+ },
+ {
+  "name": "postgresql: limit e offset",
+  "engine": "postgresql",
+  "text": "SELECT * FROM t LIMIT $1 OFFSET $2",
+  "count": 2
+ },
+ {
+  "name": "postgresql: insert de duas linhas",
+  "engine": "postgresql",
+  "text": "INSERT INTO t VALUES ($1, $2, $3), ($4, $5, $6)",
+  "count": 6
+ },
+ {
+  "name": "postgresql: array",
+  "engine": "postgresql",
+  "text": "SELECT ARRAY[$1, $2]",
+  "count": 2
+ },
+ {
+  "name": "postgresql: update com comentário no fim",
+  "engine": "postgresql",
+  "text": "UPDATE t SET a = $1 WHERE b = $2 -- $3",
+  "count": 2
+ },
+ {
+  "name": "postgresql: texto simples",
+  "engine": "postgresql",
+  "text": "SELECT '$1', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto com aspa dobrada",
+  "engine": "postgresql",
+  "text": "SELECT 'it''s $1', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto padrão: a barra não escapa",
+  "engine": "postgresql",
+  "text": "SELECT 'it\\', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto E com a barra que escapa a aspa",
+  "engine": "postgresql",
+  "text": "SELECT E'it\\'s $1', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto e minúsculo",
+  "engine": "postgresql",
+  "text": "SELECT e'a\\'$1', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto U&",
+  "engine": "postgresql",
+  "text": "SELECT U&'d\\0061t\\+000061 $1', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto N",
+  "engine": "postgresql",
+  "text": "SELECT N'x $1', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: texto X",
+  "engine": "postgresql",
+  "text": "SELECT X'ab', $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: nome entre aspas",
+  "engine": "postgresql",
+  "text": "SELECT \"$1\", $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: nome entre aspas com aspa dobrada",
+  "engine": "postgresql",
+  "text": "SELECT \"a\"\"$1\", $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: apelido entre aspas",
+  "engine": "postgresql",
+  "text": "SELECT col AS \"$1\" FROM t WHERE c = $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: comentário de linha",
+  "engine": "postgresql",
+  "text": "-- $1\nSELECT $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: comentário de linha termina no retorno de carro",
+  "engine": "postgresql",
+  "text": "-- $1\r SELECT $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: comentário de linha só",
+  "engine": "postgresql",
+  "text": "SELECT 1 -- $1",
+  "count": 0
+ },
+ {
+  "name": "postgresql: comentário de bloco",
+  "engine": "postgresql",
+  "text": "/* $1 */ SELECT $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: comentário de bloco aninhado",
+  "engine": "postgresql",
+  "text": "/* /* $1 */ $2 */ SELECT $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: comentário de bloco sem fecho",
+  "engine": "postgresql",
+  "text": "SELECT 1 /* $1",
+  "count": 0
+ },
+ {
+  "name": "postgresql: texto sem fecho",
+  "engine": "postgresql",
+  "text": "SELECT 'abc $1",
+  "count": 0
+ },
+ {
+  "name": "postgresql: cifrão duplo",
+  "engine": "postgresql",
+  "text": "SELECT $$ $1 $$, $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: cifrão com marca",
+  "engine": "postgresql",
+  "text": "SELECT $tag$ $1 $tag$, $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: cifrão com marca diferente dentro",
+  "engine": "postgresql",
+  "text": "SELECT $a$ $1 $b$ $1 $a$, $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: cifrão com marca acentuada",
+  "engine": "postgresql",
+  "text": "SELECT $é$ $1 $é$, $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: cifrão sem fecho",
+  "engine": "postgresql",
+  "text": "SELECT $a$ FROM t WHERE x = $1",
+  "count": 0
+ },
+ {
+  "name": "postgresql: o $1$ é o marcador $1 e um cifrão",
+  "engine": "postgresql",
+  "text": "SELECT $1$ FROM t",
+  "count": 1
+ },
+ {
+  "name": "postgresql: nome que tem cifrão",
+  "engine": "postgresql",
+  "text": "SELECT k$1 FROM t",
+  "count": 0
+ },
+ {
+  "name": "postgresql: nome acentuado que tem cifrão",
+  "engine": "postgresql",
+  "text": "SELECT é$1 FROM t",
+  "count": 0
+ },
+ {
+  "name": "postgresql: o ? do jsonb não é marcador",
+  "engine": "postgresql",
+  "text": "SELECT '{\"a\":1}'::jsonb ? 'a'",
+  "count": 0
+ },
+ {
+  "name": "postgresql: o ? do jsonb com marcador",
+  "engine": "postgresql",
+  "text": "SELECT data ? $1 FROM t",
+  "count": 1
+ },
+ {
+  "name": "postgresql: o ?| do jsonb com marcador",
+  "engine": "postgresql",
+  "text": "SELECT data ?| $1 FROM t",
+  "count": 1
+ },
+ {
+  "name": "postgresql: o ?& do jsonb com marcador",
+  "engine": "postgresql",
+  "text": "SELECT data ?& $1 FROM t",
+  "count": 1
+ },
+ {
+  "name": "postgresql: operador de regex",
+  "engine": "postgresql",
+  "text": "SELECT x::text ~ $1",
+  "count": 1
+ },
+ {
+  "name": "postgresql: comentário depois do marcador",
+  "engine": "postgresql",
+  "text": "SELECT $1 -- $2\n, $3",
+  "count": 2
+ },
+ {
+  "name": "postgresql: sem marcadores",
+  "engine": "postgresql",
+  "text": "SELECT 1",
+  "count": 0
+ },
+ {
+  "name": "postgresql: só o cifrão",
+  "engine": "postgresql",
+  "text": "SELECT $ FROM t",
+  "count": 0
+ },
+ {
+  "name": "postgresql: marcador zero",
+  "engine": "postgresql",
+  "text": "SELECT $0",
+  "count": 1
+ },
+ {
+  "name": "db2: um marcador",
+  "engine": "db2",
+  "text": "SELECT ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: dois marcadores",
+  "engine": "db2",
+  "text": "SELECT ?, ? FROM sysibm.sysdummy1",
+  "count": 2
+ },
+ {
+  "name": "db2: values",
+  "engine": "db2",
+  "text": "VALUES (?, ?, ?)",
+  "count": 3
+ },
+ {
+  "name": "db2: in e fetch first",
+  "engine": "db2",
+  "text": "SELECT * FROM t WHERE a IN (?, ?, ?) FETCH FIRST ? ROWS ONLY",
+  "count": 4
+ },
+ {
+  "name": "db2: concatenação",
+  "engine": "db2",
+  "text": "SELECT 'a' || ? || 'b' FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: texto",
+  "engine": "db2",
+  "text": "SELECT '?', ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: texto com aspa dobrada",
+  "engine": "db2",
+  "text": "SELECT '''?', ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: a barra não escapa",
+  "engine": "db2",
+  "text": "SELECT 'it\\', ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: nome entre aspas",
+  "engine": "db2",
+  "text": "SELECT \"?\", ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: comentário de linha",
+  "engine": "db2",
+  "text": "-- ?\nSELECT ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: comentário de linha no fim",
+  "engine": "db2",
+  "text": "SELECT ? FROM sysibm.sysdummy1 -- ?",
+  "count": 1
+ },
+ {
+  "name": "db2: comentário de bloco",
+  "engine": "db2",
+  "text": "/* ? */ SELECT ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: comentário de bloco aninhado",
+  "engine": "db2",
+  "text": "/* /* ? */ ? */ SELECT ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: comentário de bloco sem fecho",
+  "engine": "db2",
+  "text": "SELECT 1 FROM sysibm.sysdummy1 /* ?",
+  "count": 0
+ },
+ {
+  "name": "db2: texto sem fecho",
+  "engine": "db2",
+  "text": "SELECT 'abc ?",
+  "count": 0
+ },
+ {
+  "name": "db2: o cifrão não é nada",
+  "engine": "db2",
+  "text": "SELECT $1, ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: cifrão duplo não é texto",
+  "engine": "db2",
+  "text": "SELECT $$ ? $$ FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: texto X",
+  "engine": "db2",
+  "text": "SELECT X'ab', ? FROM sysibm.sysdummy1",
+  "count": 1
+ },
+ {
+  "name": "db2: sem marcadores",
+  "engine": "db2",
+  "text": "SELECT 1 FROM sysibm.sysdummy1",
+  "count": 0
+ },
+ {
+  "name": "db2: update",
+  "engine": "db2",
+  "text": "UPDATE t SET a = ?, b = ? WHERE c = ?",
+  "count": 3
+ },
+ {
+  "name": "informix: um marcador",
+  "engine": "informix",
+  "text": "SELECT ? FROM systables WHERE tabid = 1",
+  "count": 1
+ },
+ {
+  "name": "informix: first e where",
+  "engine": "informix",
+  "text": "SELECT FIRST ? * FROM t WHERE a = ?",
+  "count": 2
+ },
+ {
+  "name": "informix: skip e first",
+  "engine": "informix",
+  "text": "SELECT SKIP ? FIRST ? c FROM t",
+  "count": 2
+ },
+ {
+  "name": "informix: insert",
+  "engine": "informix",
+  "text": "INSERT INTO t VALUES (?, ?)",
+  "count": 2
+ },
+ {
+  "name": "informix: texto",
+  "engine": "informix",
+  "text": "SELECT * FROM t WHERE a = ? AND b = '?' AND c = ?",
+  "count": 2
+ },
+ {
+  "name": "informix: a barra não escapa",
+  "engine": "informix",
+  "text": "SELECT 'it\\', ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: nome entre aspas",
+  "engine": "informix",
+  "text": "SELECT \"a?\", ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: comentário entre chaves",
+  "engine": "informix",
+  "text": "{ ? } SELECT ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: comentário entre chaves acaba na primeira chave",
+  "engine": "informix",
+  "text": "SELECT { a ? } ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: comentário entre chaves sem fecho",
+  "engine": "informix",
+  "text": "SELECT 1 FROM systables { ?",
+  "count": 0
+ },
+ {
+  "name": "informix: comentário de linha",
+  "engine": "informix",
+  "text": "-- ?\nSELECT ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: comentário de bloco",
+  "engine": "informix",
+  "text": "/* ? */ SELECT ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: comentário de bloco acaba no primeiro fecho",
+  "engine": "informix",
+  "text": "/* ? /* ? */ ? */ SELECT 1 FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: o cifrão não é nada",
+  "engine": "informix",
+  "text": "SELECT $1, ? FROM systables",
+  "count": 1
+ },
+ {
+  "name": "informix: banco e servidor",
+  "engine": "informix",
+  "text": "SELECT banco@servidor:t FROM x WHERE y = ?",
+  "count": 1
+ },
+ {
+  "name": "informix: texto sem fecho",
+  "engine": "informix",
+  "text": "SELECT 'abc ?",
+  "count": 0
+ },
+ {
+  "name": "informix: sem marcadores",
+  "engine": "informix",
+  "text": "SELECT 1 FROM systables",
+  "count": 0
+ }
+]

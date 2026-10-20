@@ -191,6 +191,22 @@ public sealed class CopyHandlersTests
         _transferService.Verify(service => service.StartCopy(It.IsAny<CopyJob>()), Times.Never);
     }
 
+    /// <summary>RN-VAR-032 e RN-GRADE-011: o filtro do resultado não tem marcador quando o comando leva `source.params`, como no `queries` e na exportação.</summary>
+    [Trait("StartCopyHandler", "StartCopyCommand")]
+    [Fact(DisplayName = "Erro o filtro com marcador de parâmetro, com source.params, é FILTER_INVALID, e a cópia não começa")]
+    public async Task Start_FilterWithMarkerAndParameters_ShouldBeRefused()
+    {
+        //Arrange
+        var source = new ExportSourceDto { Kind = "query", ConnectionID = _source.ID, Sql = "SELECT id FROM loja.pedido WHERE a = $1", Filter = "b = $2", Params = JsonDocument.Parse("""[{"type":"number","value":"1"},{"type":"number","value":"2"}]""").RootElement.Clone() };
+
+        //Act
+        var result = await CreateStart().Handle(Start(source: source), CancellationToken.None);
+
+        //Assert
+        Assert.Equal("FILTER_INVALID", result.Error.Type);
+        _transferService.Verify(service => service.StartCopy(It.IsAny<CopyJob>()), Times.Never);
+    }
+
     [Trait("StartCopyHandler", "StartCopyCommand")]
     [Fact(DisplayName = "Erro a tabela ocupada por outra cópia é 409")]
     public async Task Start_Busy_ShouldBeConflict()
