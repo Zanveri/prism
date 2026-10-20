@@ -111,6 +111,11 @@ export const tabTransferSchema = z.object({
   editor: z.object({ anchor: count, head: count }).nullable(),
   result: resultSchema.nullable(),
   memory: memorySchema,
+  /**
+   * RN-ABAS-016: a janela do resultado da aba não fechou a tempo (o processo principal não confirmou em 3 segundos), e a aba vai com o resultado no painel; a
+   * janela que a recebe avisa que a janela do resultado não pôde ser reaberta.
+   */
+  resultWindowLost: z.boolean().optional(),
 });
 
 export type TabTransfer = z.infer<typeof tabTransferSchema>;

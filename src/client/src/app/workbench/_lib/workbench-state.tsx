@@ -33,6 +33,7 @@ import { connectExports, exportTracker } from "./data-export/data-exports";
 import { connectLoads, loadTracker } from "./data-import/data-imports";
 import { createLockHandles } from "./workbench-lock";
 import { forgetMissingConnections, nextActiveTab, pruneWorkbench, type QueryTab, type ResultPlace, type TableView } from "./workbench-model";
+import { resultPlaceCopy } from "./result-place.copy";
 import { workbenchCopy } from "./workbench.copy";
 import { getWorkspace } from "./workspace.service";
 import { createWorkspaceReporter } from "./workspace-reporter";
@@ -504,8 +505,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const adopted = readTransfer(raw);
       if (adopted === null) return;
 
-      const { tab, selection, state, memory } = adopted;
+      const { tab, selection, state, memory, resultWindowLost } = adopted;
       if (runners.has(tab.id)) return;
+      // RN-ABAS-016: a janela do resultado da aba não fechou a tempo na janela de origem, e o resultado chegou no painel.
+      if (resultWindowLost) toast.warning(resultPlaceCopy.windowFailed);
 
       rememberTransferred(tab.id, selection === null ? memory : { ...memory, selection });
       runners.set(tab.id, createRunner(tab, { state, sessionId: tab.sessionId }));
@@ -518,7 +521,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const numbered = /^consulta-(\d+)\.sql$/.exec(tab.title);
       if (numbered !== null) nextNumber.current = Math.max(nextNumber.current, Number(numbered[1]) + 1);
     },
-    [createRunner, runners],
+    [createRunner, runners, toast],
   );
 
   // RN-ABAS-005: esta área de trabalho está montada (o cofre aberto) e pronta para receber abas; ao desmontar (sair do cofre), deixa de estar, e o

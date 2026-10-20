@@ -23,7 +23,7 @@ export type TabSnapshot = {
 };
 
 /** A aba como a janela que recebe a monta. */
-export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; state: RunnerState; memory: TransferMemory };
+export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; state: RunnerState; memory: TransferMemory; resultWindowLost: boolean };
 
 type TransferredResult = NonNullable<TabTransfer["result"]>;
 
@@ -114,7 +114,7 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
   const parsed = tabTransferSchema.safeParse(raw);
   if (!parsed.success) return null;
 
-  const { tab, editor, result, memory } = parsed.data;
+  const { tab, editor, result, memory, resultWindowLost } = parsed.data;
   const clamp = (position: number) => Math.min(position, tab.sql.length);
   // O tipo da aba é o da tela: o TypeScript confere que o schema do processo principal não divergiu dele.
   const adopted: QueryTab = {
@@ -132,5 +132,5 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
   };
   const restored: TransferMemory = memory;
 
-  return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored };
+  return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored, resultWindowLost: resultWindowLost === true };
 }

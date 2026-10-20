@@ -4,6 +4,8 @@ import { ChevronIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { controlsOf, type PaneMode } from "../_lib/result-layout";
+import { resultPlaceCopy } from "../_lib/result-place.copy";
+import { closeShortcutLabel } from "../_lib/tab-strip";
 
 /** Os ícones das duas ações, no traço dos outros (16×16, traço de 1,5): ficam aqui porque só a barra do resultado os usa. */
 function PaneIcon({ className, ...props }: ComponentProps<"svg">) {
@@ -51,6 +53,22 @@ export function ResultActions({ mode, onAction }: ResultActionsProps) {
       </button>
       <button type="button" aria-label={controls.maximize.label} title={controls.maximize.label} onClick={() => onAction(controls.maximize.action)} className={buttonClass}>
         {mode === "maximized" ? <RestoreIcon /> : <MaximizeIcon />}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * "Voltar para o painel" (RN-ABAS-013), na ponta direita da barra da área de resultado na janela do resultado, com texto: volta o resultado ao painel da aba,
+ * fecha a janela e traz à frente a janela da aba. O Ctrl+W (Cmd+W no macOS) com o foco na janela faz o mesmo, e a dica o diz.
+ */
+export function BackToPanelButton({ onClick }: { onClick: () => void }) {
+  const platform = typeof navigator === "undefined" ? "" : navigator.platform;
+
+  return (
+    <div className="flex items-center pl-1">
+      <button type="button" title={resultPlaceCopy.window.backHint(closeShortcutLabel(platform))} onClick={onClick} className="h-6 cursor-pointer rounded-sm px-2 text-xs font-medium whitespace-nowrap text-muted transition-colors hover:bg-selected hover:text-ink">
+        {resultPlaceCopy.window.back}
       </button>
     </div>
   );

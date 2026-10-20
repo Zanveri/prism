@@ -18,6 +18,7 @@ import { liveEditors } from "../_lib/live-editors";
 import { recall, recallForTransfer } from "../_lib/tab-memory";
 import { afterPlaceChange, f6Action, isF6, placeAnnouncement, placeMenu, placeOf, resultOnView, resultPanelElementId, type PlaceVia } from "../_lib/result-place";
 import { resultPlaceCopy } from "../_lib/result-place.copy";
+import { resultWindows } from "../_lib/result-windows";
 import { resultFocus, resultSlots } from "../_lib/result-slots";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
 import { stripTitles } from "../_lib/tab-titles";
@@ -132,6 +133,9 @@ export function WorkbenchTabs() {
   const [moving, setMoving] = useState<ReadonlySet<string>>(() => new Set());
   const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
   useEffect(() => resultFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
+  // RN-ABAS-015: as abas cuja janela do resultado está aberta e não minimizada: o resultado delas está à vista, qualquer que seja a aba ativa.
+  const shownWindows = useSyncExternalStore(resultWindows.subscribe, resultWindows.shownTabs, resultWindows.shownTabs);
+  const locked = useSyncExternalStore(vaultLock.subscribe, vaultLock.isLocked, vaultLock.isLocked);
 
   /**
    * Seção 39 (RN-ABAS-011, 012 e 014): troca o lugar do resultado da aba, sem executar nada (a área é a mesma, e só muda de lugar). Antes, o campo de edição
@@ -149,6 +153,21 @@ export function WorkbenchTabs() {
     if (after.show !== "keep") showEntry(tabId, after.show);
     if (after.focus !== null) resultFocus.request(tabId, after.focus);
     setAnnouncement((current) => ({ text: placeAnnouncement(to), seq: current.seq + 1 }));
+    resultWindows.forgetFailure(tabId);
+
+    // RN-ABAS-013 e 017: a janela do resultado abre a pedido da pessoa, agora (o botão, o menu), e nunca por um efeito. O lugar já vale; se a janela não abrir, o
+    // resultado volta para onde estava, com o aviso. A janela que deixa de ser o lugar fecha pelo Prism, e "Voltar para o painel" e o botão de lugar da janela do resultado trazem a janela da aba à frente.
+    if (to === "window") {
+      void resultWindows.open(tabId, { mode: "focus", title: shortTitles.get(tabId) ?? tab?.title ?? "" }).then((opened) => {
+        if (opened) return;
+        setResultPlace(tabId, from);
+        toast.warning(resultPlaceCopy.windowFailed);
+      });
+    } else if (from === "window" && via !== "windowClosed") {
+      // Quem trocou de dentro da janela do resultado (o botão dela, "Voltar para o painel") a vê fechar: o foco prometido (RN-ABAS-014) é da janela da aba, e o
+      // sistema não escolheria ela. O menu das abas é da própria janela da aba, que já está à frente.
+      void resultWindows.close(tabId).then(() => (via === "back" || via === "bar" ? void resultWindows.focus(tabId, "opener") : undefined));
+    }
   }
   const latestChangePlace = useRef(changePlace);
   useEffect(() => {
@@ -156,6 +175,58 @@ export function WorkbenchTabs() {
   });
   // O botão da barra do resultado (no painel memorizado de cada aba): a função é estável e chama a versão mais recente.
   const handlePlace = useCallback((tabId: string, place: ResultPlace) => latestChangePlace.current(tabId, place, "bar"), []);
+  // RN-ABAS-013: "Voltar para o painel" da janela do resultado (e o Ctrl+W nela): a aba da consulta fica ativa, com o foco no resultado, e a janela da aba vem à frente.
+  const handleBack = useCallback((tabId: string) => latestChangePlace.current(tabId, "panel", "back"), []);
+  // RN-ABAS-014: o F6 com o resultado numa janela. Do editor, a janela do resultado vem à frente (com o foco no resultado); do resultado, a janela da aba, com a
+  // consulta ativa e o foco no editor.
+  // `link`: um link da área de resultado abriu outra tela na janela da aba (o "Instalar driver"), e a janela da aba vem à frente.
+  function focusWindow(tabId: string, target: "result" | "opener" | "link") {
+    if (target === "opener") {
+      // O pedido de foco do editor só vale se a troca vai redesenhar a aba (a consulta não estava à frente): o editor que já está à vista é focado por quem pediu.
+      const switching = activeTabId !== tabId || resultActive;
+      showEntry(tabId, "query");
+      if (switching) resultFocus.request(tabId, "editor");
+    }
+    void resultWindows.focus(tabId, target === "result" ? "result" : "opener");
+  }
+  const latestFocusWindow = useRef(focusWindow);
+  useEffect(() => {
+    latestFocusWindow.current = focusWindow;
+  });
+  const handleFocusWindow = useCallback((tabId: string, target: "result" | "opener" | "link") => latestFocusWindow.current(tabId, target), []);
+
+  // RN-ABAS-013 e 017: o que o processo principal conta das janelas do resultado (o fechamento, com o motivo, e o estado), enquanto a área de trabalho está
+  // montada; ao desmontar (o "Sair"), as janelas fecham pelo Prism. A pessoa que fecha a janela pelo sistema volta o resultado ao painel, sem perguntar nada.
+  useEffect(() => resultWindows.connect(), []);
+  useEffect(() => resultWindows.onUserClosed((tabId) => latestChangePlace.current(tabId, "panel", "windowClosed")), []);
+
+  // RN-ABAS-016: as janelas que as abas pedem (a volta das abas na entrada e no desbloqueio, a aba que chegou de outra janela) abrem uma a uma, na ordem das
+  // abas e a da aba ativa por último, sem tomar o foco; as que deixaram de ser pedidas fecham, pelo Prism. O bloqueio e o "Sair" as fecham (nada do que estava
+  // aberto fica à vista), e o lugar das abas continua o que era. Quem abre por ação da pessoa é `changePlace`; isto não abre duas vezes (a abertura é idempotente).
+  const windowTabs = tabs.filter((tab) => placeOf(tab) === "window" && !moving.has(tab.id));
+  const windowKey = `${windowTabs.map((tab) => tab.id).join(",")}|${windowTabs.some((tab) => tab.id === activeTabId) ? activeTabId : ""}|${locked}`;
+  useEffect(() => {
+    if (locked) {
+      void resultWindows.closeAll();
+      return;
+    }
+    const ordered = [...windowTabs.filter((tab) => tab.id !== activeTabId), ...windowTabs.filter((tab) => tab.id === activeTabId)];
+    resultWindows.reconcile(
+      ordered.map((tab) => ({ tabId: tab.id, title: shortTitles.get(tab.id) ?? tab.title })),
+      (tabId) => {
+        // A janela não abriu: o resultado fica no painel (onde se vê), com o aviso, e o lugar guardado passa a ser o painel.
+        toast.warning(resultPlaceCopy.windowFailed);
+        latestChangePlace.current(tabId, "panel", "windowClosed");
+      },
+    );
+    // `windowKey` resume as abas pedidas, a ativa e o bloqueio; o resto vem da renderização de agora.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowKey]);
+  // O título da janela acompanha o da aba (RN-ABAS-008 e 013).
+  useEffect(() => {
+    for (const tab of tabs) if (placeOf(tab) === "window") resultWindows.setTitle(tab.id, shortTitles.get(tab.id) ?? tab.title);
+  }, [tabs, shortTitles, shownWindows]);
+
   // RN-ABAS-014: o F6 com o resultado numa aba troca a entrada ativa, com o foco no resultado ou no editor.
   const handleToggleEntry = useCallback(
     (tabId: string, view: "query" | "result") => {
@@ -293,7 +364,11 @@ export function WorkbenchTabs() {
         return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
       },
       send: async (transfer) => {
-        const reply = await sendTabAway({ target, transfer });
+        // RN-ABAS-016: a janela do resultado da aba fecha (pelo Prism) e reabre a partir da outra janela; a aba só vai depois de o processo principal confirmar.
+        // Sem a confirmação em 3 segundos, ela vai assim mesmo, com o resultado no painel, e a janela que a recebe avisa.
+        const closed = resultWindows.isOpen(tabId) ? await resultWindows.close(tabId) : true;
+        const outgoing = closed || transfer.tab.resultPlace !== "window" ? transfer : { ...transfer, tab: { ...transfer.tab, resultPlace: "panel" as const }, resultWindowLost: true };
+        const reply = await sendTabAway({ target, transfer: outgoing });
         if (reply.ok) detachTab(tabId);
         // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
         else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
@@ -408,6 +483,7 @@ export function WorkbenchTabs() {
       const host = resultHostOf(activeTabId);
       if (action === "focusResult" && host !== null) focusResultIn(host);
       else if (action === "showResult" || action === "showQuery") handleToggleEntry(activeTabId, action === "showResult" ? "result" : "query");
+      else if (action === "focusWindow" || action === "focusOpener") handleFocusWindow(activeTabId, action === "focusWindow" ? "result" : "opener");
       return;
     }
 
@@ -499,10 +575,12 @@ export function WorkbenchTabs() {
                       active={selected}
                       place={place ?? "panel"}
                       editorShown={queryShown}
-                      resultShown={resultOnView({ place: place ?? "panel", selected, resultActive })}
+                      resultShown={resultOnView({ place: place ?? "panel", selected, resultActive, windowShown: shownWindows.has(tab.id) })}
                       moving={moving.has(tab.id)}
                       onPlace={handlePlace}
                       onToggleEntry={handleToggleEntry}
+                      onBackToPanel={handleBack}
+                      onFocusWindow={handleFocusWindow}
                       onSqlChange={updateTab}
                       onEdited={markScriptEdited}
                       onSave={requestSave}

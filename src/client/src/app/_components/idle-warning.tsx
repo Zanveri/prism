@@ -1,4 +1,5 @@
 import { LockIcon } from "@/components/ui";
+import { cn } from "@/lib/utils/cn";
 
 import { dataExportCopy } from "@/app/workbench/_lib/data-export/data-export.copy";
 
@@ -13,9 +14,10 @@ const copy = lockCopy.warning;
  *
  * É só o desenho (`aria-hidden`): a contagem que muda a cada segundo não pode ser lida 60 vezes. Quem fala com o leitor de tela é o `IdleAnnouncer`.
  */
-export function IdleWarning({ secondsLeft, discardedExports = 0 }: { secondsLeft: number; discardedExports?: number }) {
+export function IdleWarning({ secondsLeft, discardedExports = 0, inResultWindow = false }: { secondsLeft: number; discardedExports?: number; inResultWindow?: boolean }) {
   return (
-    <div className="pointer-events-none fixed top-14 right-5 z-[70] w-[min(440px,calc(100vw-2.5rem))]">
+    // A janela do resultado não tem barra superior (RN-ABAS-015): o aviso fica 12 px abaixo da borda de cima, e não sob a barra.
+    <div className={cn("pointer-events-none fixed right-5 z-[70] w-[min(440px,calc(100vw-2.5rem))]", inResultWindow ? "top-3" : "top-14")}>
       <div aria-hidden="true" data-idle-warning className="flex animate-toast-in items-start gap-3 rounded-lg border border-accent/60 bg-raised py-3 pr-4 pl-4 shadow-2xl motion-reduce:animate-none">
         <LockIcon className="mt-[3px] text-accent" />
         <div className="min-w-0 flex-1">

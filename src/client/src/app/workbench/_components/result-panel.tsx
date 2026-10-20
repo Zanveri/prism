@@ -225,7 +225,8 @@ type ResultPanelProps = {
    * Seção 31 (RN-SQL-020): as abas do script, no lugar do título "Resultado". O corpo da área passa a ser o painel da aba escolhida (`role="tabpanel"`,
    * rotulado por ela).
    */
-  tabs?: { list: ReactNode; panelId: string; labelledBy: string };
+  /** `mark`: o que vai logo depois da lista (o ponto vermelho do script parado na pergunta de erro, na janela do resultado, RN-ABAS-015). */
+  tabs?: { list: ReactNode; mark?: ReactNode; panelId: string; labelledBy: string };
   /** RN-SQL-019: o comando do script em execução ("Executando 3 de 12…"), na barra, em qualquer aba e com a área recolhida, no lugar do "Executando…". */
   progress?: string | null;
   /** RN-SQL-020: as Estatísticas do script no corpo, no lugar do resultado; `summary` é o que a barra recolhida diz delas. */
@@ -316,7 +317,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
     // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
     <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running || progress !== null} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
       <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !collapsed && "border-b border-border")}>
-        {tabs === undefined ? <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2> : tabs.list}
+        {tabs === undefined ? <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2> : <>{tabs.list}{tabs.mark}</>}
         {collapsed ? (
           <span role={running || progress !== null ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
             {progress ?? statistics?.summary ?? collapsedSummary(state)}

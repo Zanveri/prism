@@ -132,6 +132,8 @@ export type PrismWindows = {
  * Nada aqui dá acesso ao Node, a arquivo ou a endereço.
  */
 export type PrismResultWindows = {
+  /** Há processo principal para abrir a janela do resultado? Fora do Electron (a ponte de desenvolvimento) não, e "Numa janela" não aparece. */
+  available: boolean;
   /** Pede a concessão de uso único para abrir a janela com este nome (`resultWindowReplySchema`). */
   request(request: ResultWindowRequest): Promise<unknown>;
   /** O resultado está desenhado na janela, com os estilos: ela pode aparecer. */
@@ -263,6 +265,7 @@ const bridge: PrismBridge = {
     },
   },
   resultWindows: {
+    available: true,
     request: (request) => ipcRenderer.invoke("prism:result-window-request", request),
     ready: (request) => ipcRenderer.invoke("prism:result-window-ready", request),
     focus: (request) => ipcRenderer.invoke("prism:result-window-focus", request),

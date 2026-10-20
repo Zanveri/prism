@@ -32,6 +32,15 @@ export const resultPlaceCopy = {
     backToPanel: "Voltar para o painel",
     f6: "F6",
   },
+  /** RN-ABAS-013: a janela do resultado. */
+  window: {
+    /** O título da barra da janela, da barra de tarefas e do Alt+Tab. */
+    title: (title: string) => `Resultado · ${title} — Prism`,
+    /** O nome do ponto de referência principal (`main`) do documento dela. */
+    mainLabel: (title: string) => `Resultado de ${title}`,
+    back: "Voltar para o painel",
+    backHint: (shortcut: string) => `Voltar para o painel (${shortcut})`,
+  },
   /** RN-CONFIG-010: em Configurações › Resultados. */
   settings: {
     label: "Onde o resultado das abas novas aparece",

@@ -1,3 +1,5 @@
+import { resultWindowsAvailable } from "@/lib/api/bridge";
+
 import { resultPlaceCopy } from "./result-place.copy";
 import type { QueryTab, ResultPlace } from "./workbench-model";
 import type { PaneMode } from "./result-layout";
@@ -11,12 +13,11 @@ const copy = resultPlaceCopy;
  */
 
 /**
- * A janela do resultado (RN-ABAS-013 e 017) ainda não existe nesta tela. Até ela existir, "Numa janela" fica como fora do app (no navegador do
- * desenvolvimento, RN-ABAS-014 e RN-CONFIG-010): o item não aparece, e o lugar gravado como "Numa janela" (de uma versão que a tenha) vale "No painel", sem
- * deixar de ser o gravado. Quem acrescentar a janela troca esta função pela pergunta à ponte (a janela do resultado só existe no Electron).
+ * A janela do resultado (RN-ABAS-013 e 017) só existe no app, onde há processo principal para aprová-la (a ponte diz). Fora dele (no navegador do
+ * desenvolvimento, RN-ABAS-014 e RN-CONFIG-010) "Numa janela" não aparece, e o lugar gravado como "Numa janela" vale "No painel", sem deixar de ser o gravado.
  */
 export function resultWindowAvailable(): boolean {
-  return false;
+  return resultWindowsAvailable();
 }
 
 /** O lugar que vale para a aba: nulo na aba de tabela (o resultado dela fica dentro dela); "Numa janela" sem a janela do resultado vale o painel. */
@@ -133,8 +134,11 @@ export function placeAnnouncement(place: ResultPlace): string {
   return copy.announcement[place];
 }
 
-/** De onde veio a troca: o botão da barra do resultado, o menu de uma das abas, ou o fechar da aba do resultado (o X, o clique do meio, o Ctrl+W, "Voltar para o painel"). */
-export type PlaceVia = "bar" | "menu" | "close";
+/**
+ * De onde veio a troca: o botão da barra do resultado, o menu de uma das abas, o fechar da aba do resultado (o X, o clique do meio, o Ctrl+W, "Voltar para o
+ * painel" do menu dela), o "Voltar para o painel" da janela do resultado (e o Ctrl+W nela), ou a pessoa fechar a janela do resultado pelo sistema.
+ */
+export type PlaceVia = "bar" | "menu" | "close" | "back" | "windowClosed";
 
 /** O que fica ativo depois da troca (`result`: a aba do resultado; `query`: a da consulta; `keep`: como está) e onde fica o foco. */
 export type AfterPlace = { show: "result" | "query" | "keep"; focus: "placeButton" | "result" | null };
@@ -146,28 +150,32 @@ export type AfterPlace = { show: "result" | "query" | "keep"; focus: "placeButto
  * - Pelo menu da aba, a ativa não muda e o foco volta à aba na faixa, que o menu devolve; mas se a aba que some era a ativa (a do resultado, com "No painel"
  *   ou "Numa janela"), a da consulta fica ativa, com o foco no botão dela.
  * - Fechar a aba do resultado a ativa deixa a da consulta ativa, com o foco no resultado (a grade, ou o botão sem grade).
+ * - "Voltar para o painel" da janela do resultado (RN-ABAS-013) deixa a aba da consulta ativa, com o foco no resultado, no painel. A pessoa que fecha a janela
+ *   pelo sistema não muda o que está ativo nem o foco: quem decide o foco é o sistema.
  */
 export function afterPlaceChange({ to, via, resultWasActive }: { to: ResultPlace; via: PlaceVia; resultWasActive: boolean }): AfterPlace {
-  if (via === "bar") return { show: to === "tab" ? "result" : "query", focus: to === "window" ? null : "placeButton" };
+  if (via === "back") return { show: "query", focus: "result" };
+  if (via === "windowClosed") return { show: "keep", focus: null };
+  if (via === "bar") return { show: to === "tab" ? "result" : "query", focus: "placeButton" };
   if (to === "tab" || !resultWasActive) return { show: "keep", focus: null };
-  return { show: "query", focus: via === "close" ? "result" : to === "window" ? null : "placeButton" };
+  return { show: "query", focus: via === "close" ? "result" : "placeButton" };
 }
 
 /** De onde vem o F6: o editor (ou a barra dele), o resultado, ou a faixa de abas. */
 export type F6From = "editor" | "result" | "strip";
 
 /** O que o F6 faz (RN-ABAS-014): leva o foco ao resultado ou ao editor, troca a aba ativa entre a da consulta e a do resultado, ou traz a janela à frente. */
-export type F6Action = "focusResult" | "focusEditor" | "showResult" | "showQuery" | "focusWindow" | null;
+export type F6Action = "focusResult" | "focusEditor" | "showResult" | "showQuery" | "focusWindow" | "focusOpener" | null;
 
 /**
  * RN-ABAS-014: o F6 alterna entre o editor e o resultado da aba, onde quer que ele esteja. No painel, do editor ao resultado (também recolhido: o botão) e de
  * volta; com o resultado maximizado o editor está escondido, e o F6 no resultado não faz nada. Numa aba, troca a aba ativa. Numa janela, do editor traz a
- * janela do resultado à frente. Da faixa, vale o lado da entrada ativa: a aba do resultado volta à consulta, e a da consulta vai ao resultado.
+ * janela do resultado à frente, e do resultado traz à frente a janela da aba, com a consulta ativa e o foco no editor. Da faixa, vale o lado da entrada ativa: a aba do resultado volta à consulta, e a da consulta vai ao resultado.
  */
 export function f6Action({ place, from, mode, resultActive }: { place: ResultPlace; from: F6From; mode: PaneMode; resultActive: boolean }): F6Action {
   const side = from === "strip" ? (resultActive ? "result" : "editor") : from;
   if (place === "tab") return side === "editor" ? "showResult" : "showQuery";
-  if (place === "window") return side === "editor" ? "focusWindow" : null;
+  if (place === "window") return side === "editor" ? "focusWindow" : "focusOpener";
   if (side === "editor") return "focusResult";
   return mode === "maximized" ? null : "focusEditor";
 }
@@ -192,4 +200,25 @@ export function withResultPlace(tabs: readonly QueryTab[], tabId: string, place:
   const tab = tabs.find((candidate) => candidate.id === tabId);
   if (tab === undefined || tab.table !== undefined || (tab.resultPlace ?? "panel") === place) return tabs as QueryTab[];
   return tabs.map((candidate) => (candidate === tab ? { ...candidate, resultPlace: place } : candidate));
+}
+
+/** O que a raiz da janela do resultado faz com uma tecla (RN-ABAS-017): `back` é o Ctrl+W ("Voltar para o painel"); `stop` são as que ela não tem e não passam à aba e à faixa. */
+export type WindowKey = "back" | "stop";
+
+/**
+ * As teclas da janela do resultado que não sobem pela árvore do React até a janela da aba (RN-ABAS-015 e 017). O Ctrl+W (Cmd+W no macOS) volta o resultado ao
+ * painel. O Ctrl+Shift+PageUp e PageDown da faixa, o Ctrl+9 da conexão, o Ctrl+B e o Ctrl+Shift+E do navegador e o Ctrl+, de Configurações são do que a janela do
+ * resultado não tem: não fazem nada. As demais (F5, F6, Alt+X, Ctrl+S, as da grade) seguem.
+ */
+export function windowKeyAction(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }): WindowKey | null {
+  if (event.altKey || !(event.ctrlKey || event.metaKey)) return null;
+
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  if (key === "w" && !event.shiftKey) return "back";
+  if ((key === "PageUp" || key === "PageDown") && event.shiftKey) return "stop";
+  if (key === "9" && !event.shiftKey) return "stop";
+  if (key === "b" && !event.shiftKey) return "stop";
+  if (key === "e" && event.shiftKey) return "stop";
+  if (key === "," && !event.shiftKey) return "stop";
+  return null;
 }
