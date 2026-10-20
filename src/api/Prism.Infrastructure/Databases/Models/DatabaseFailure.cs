@@ -56,7 +56,16 @@ public enum EDatabaseFailure
     /// RN-PROT-002: a conexão é somente leitura (por ela ou por uma pasta acima), e o comando não é uma leitura (RN-PROT-005), ou a operação é da
     /// edição de registros. Nada foi ao banco, e o resultado anterior continua.
     /// </summary>
-    ConnectionReadOnly
+    ConnectionReadOnly,
+
+    /// <summary>
+    /// RN-VAR-032: um valor dos `params` que o banco da sessão não guarda (o decimal com dígitos demais, o número que o `double` não aguenta, o instante com fuso fora do
+    /// PostgreSQL); `Field` é o campo (`params[3].value`). Nada foi ao banco, e o resultado anterior continua.
+    /// </summary>
+    QueryInvalid,
+
+    /// <summary>RN-VAR-032: os marcadores do texto não batem com os valores; `Markers` e `Values` são os dois números. Nada foi ao banco, e o resultado anterior continua.</summary>
+    ParametersMismatch
 }
 
 /// <summary>
@@ -95,4 +104,4 @@ public enum ECancelOutcome
 /// recusou, quando se sabe; e `ColumnName` é o nome da coluna da tabela que o banco diz no erro (no PostgreSQL, o campo `column`, que vem na recusa do
 /// nulo), ou nulo.
 /// </summary>
-public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null);
+public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null, string? Field = null, int? Markers = null, int? Values = null);

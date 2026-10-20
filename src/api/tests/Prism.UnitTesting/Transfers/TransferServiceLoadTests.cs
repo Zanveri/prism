@@ -711,7 +711,7 @@ public sealed partial class TransferServiceTests
         public Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken)
             => Done("READ BEGIN");
 
-        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
+        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
         {
             Calls.Add("COUNT");
             RequiredCount = required;
@@ -719,7 +719,7 @@ public sealed partial class TransferServiceTests
             return Task.FromResult(Result.Success<long?, DatabaseFailure>(Total ?? SourceRows));
         }
 
-        public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
+        public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
         {
             Calls.Add($"READ {sql}");
 
@@ -758,10 +758,10 @@ public sealed partial class TransferServiceTests
 
         public Task<UnitResult<DatabaseFailure>> PingAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null) => throw new NotSupportedException();
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null) => throw new NotSupportedException();
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null) => throw new NotSupportedException();
         public Task CloseCursorAsync() => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<SchemaInfo>, DatabaseFailure>> GetSchemasAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Result<IReadOnlyList<DatabaseObjectInfo>, DatabaseFailure>> GetObjectsAsync(string schema, string kind, CancellationToken cancellationToken) => throw new NotSupportedException();

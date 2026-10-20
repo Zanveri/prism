@@ -4,6 +4,7 @@ using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
 using Prism.Core.Mediator;
+using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
 using System.Text.Json;
@@ -41,6 +42,13 @@ public sealed record ExecuteQueryCommand : IRequest<Result<QueryResultDto, ApiEr
     /// </summary>
     public JsonElement? Keep { get; init; }
 
+    /// <summary>
+    /// RN-VAR-032: os valores dos marcadores do comando (`$1`, `$2`... ou `?`), na ordem do texto, cada um `{ type, value }` (`type` em `text`, `number`, `boolean`,
+    /// `date` ou `timestamp`; `value` um texto, ou nulo). Chega como o JSON que veio, como o `Keep`, para a forma errada ser `QUERY_INVALID` no campo
+    /// (`params[3].value`). Ausente, nulo ou vazio, o comando vai como antes, sem parâmetros. Os valores são do usuário: nunca vão ao log (RN-VAR-036).
+    /// </summary>
+    public JsonElement? Params { get; init; }
+
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e o SQL do usuário pode ter dado sensível.</summary>
     public override string ToString() => nameof(ExecuteQueryCommand);
 
@@ -65,7 +73,7 @@ internal sealed class ExecuteQueryHandler(IConnectionQueries connectionQueries, 
 
         var pageSize = request.PageSize is { ValueKind: JsonValueKind.Number } size ? size.GetInt32() : QueryPaging.DefaultPageSize;
         var filter = string.IsNullOrWhiteSpace(request.Filter) ? null : request.Filter;
-        var outcome = await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, filter, pageSize, readOnly.Value, request.KeptResults(), cancellationToken);
+        var outcome = await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, filter, pageSize, readOnly.Value, request.KeptResults(), QueryParameterRules.Read(request.Params), cancellationToken);
 
         return outcome.Map(executed => executed.ToDto()).MapError(DatabaseSessionErrors.From);
     }
