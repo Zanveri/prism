@@ -20,6 +20,7 @@ export const settingsCopy = {
     about: "Sobre",
     results: "Resultados",
     account: "Conta",
+    import: "Importar",
     transactions: "Transações",
     security: "Segurança",
   },
