@@ -2565,6 +2565,43 @@ da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017)
   provisórias da linguagem. O `sql-editor.tsx` ainda não conhece as declarações (a marca, os erros sublinhados, o valor no fim da linha, o autocompletar, e o
   `runTarget`/`scriptTargets` que as separam): com o cursor numa declaração o Ctrl+Enter só chega ao executor se o editor chamar o `onRun`.
 
+## O editor e as variáveis (seção 41: RN-VAR-025, RN-CONFIG-004)
+
+Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere, avisa e completa. Não executa nem avalia nada que fale com o banco.
+
+- **Os arquivos**, em `src/app/workbench/_lib/`. `variables-analysis.ts` é puro: `analyze(texto, banco, linhaEmBranco)` devolve as marcas (cores), os erros, as dicas, as variáveis
+  declaradas e onde cada declaração acaba (`EditorAnalysis`), sem CodeMirror. `variables-extension.ts` é a extensão: o estado (`variablesField`), a pausa
+  (`AnalysisScheduler`), a dica do ponteiro (`hoverAt`) e o valor no fim da linha. `variables-completion.ts` é o autocompletar. `variables-editor.copy.ts` tem as frases das dicas
+  (as dos erros são as da linguagem, `variables/variables.copy.ts`). `sql-keyword-case.ts` ganhou a regra das declarações. `sql-completion.ts` aceita `variables` (as fontes e a pergunta
+  que cala as palavras-chave e os nomes da árvore onde o SQL não completa).
+- **A prop.** `SqlEditor` recebe `variables?: VariablesStore` (`variables-extension.ts`): `{ snapshot(): ReadonlyMap<string, { type: string; value: string; stale: boolean }>; subscribe(listener: () => void): () => void }`.
+  É o armazém dos valores da aba (frente 3, RN-VAR-023); o editor só lê. A chave é o nome da variável. `type` é o tipo como o painel o escreve (`number`, `string[]`, `Date (dia)`, `number | null`:
+  o autocompletar deduz daí os métodos); `value` é o texto do valor como o painel o escreve (`7`, `'Ana'`, `[1, 2, 3]`), que o editor só corta (200 caracteres na dica do ponteiro, 60 com `…` no
+  fim da linha); `stale` é o valor de antes de a declaração mudar, que não aparece no fim da linha e na dica leva "desatualizado". **Quem avisa a mudança do texto da declaração é o armazém**: ele
+  marca `stale` quando a declaração (ou uma de que ela depende) muda, e `subscribe` avisa. O editor também esconde, por conta própria, o valor da declaração que a pessoa acabou de mexer
+  (até a leitura seguinte), mas é o `stale` que o mantém escondido depois. O editor não conhece a origem nem a hora da avaliação: a dica do ponteiro mostra "nome: tipo = valor" (a especificação
+  diz também a origem e a hora; o armazém da frente 3 não as entrega por esta prop).
+- **A leitura em segundo plano.** `analyze` roda 300 ms depois da última tecla (a primeira, ao abrir o editor, sem espera), e o atraso cresce com o que a leitura custou (quatro vezes o custo, de
+  300 ms a 2 s), então um script grande é lido menos vezes. Entre uma leitura e outra as marcas só acompanham a edição (`RangeSet.map`): a tecla nunca espera pela leitura. Texto sem `let`, `const`, `@` nem `//` não
+  é lido; acima de 300.000 caracteres (`analysisMaxChars`; medido: 0,4 a 0,5 ms por 1.000 caracteres, e a leitura do script é o custo) não é lido e o editor fica sem as marcas. A execução em seco do
+  `checkScript` (os erros de tipo que se sabem sem o banco) tem 40 ms (`dryRunBudgetMs`): passado o tempo, o que só ela acharia é descartado, e os erros da leitura (`staticDiagnostics`) ficam. O
+  `readScript` não tem versão incremental: o orçamento é a pausa, o atraso adaptativo e o teto. Os testes que leem a árvore do `lang-sql` usam `freezeParseBudget`.
+- **O que cada coisa usa.** O realce e os erros vêm de `readScript` e `checkScript`; o `@nome` e a dica dele, de `findAtReferences` (`at-names.ts`); o corpo de rotina, de `statementHasBody`. Os textos entre aspas
+  duplas e as crases das declarações são pintados como texto (o `lang-sql` os leria como nome entre aspas), e o `//` como comentário, só nos lugares da RN-VAR-001 (dentro das declarações e entre os itens); o
+  `//` dentro de um comando é SQL, e a dica diz. As marcas ficam por dentro das cores do `lang-sql` (`Prec.highest`) e, por garantia, a cor vale também para os pedaços que o `lang-sql` pintou por dentro.
+  O comentário colado ao valor (`i--`, `a //2`) só leva a dica quando o `--` ou o `//` está sem espaço antes dele, ou o resto da linha é só um número ou o nome de uma variável: `let x = 5 // nota` é um comentário
+  comum e não leva dica (a especificação cita `a // b`, que não se distingue de um comentário no fim da linha).
+- **A cor da variável** é a ficha `--color-syntax-variable` (a especificação a chama de `--editor-variable`: o nome segue as outras fichas de sintaxe, e o teste de contraste a confere em cada um dos temas (os seis do canvas e o Kanagawa)
+  sobre as cinco superfícies, como as quatro de sintaxe). O `@nome` de uma variável `sql` leva o sublinhado pontilhado no tom do acento.
+- **O valor no fim da linha** é um `Decoration.widget` (não é texto do documento: não se seleciona, não se copia, não entra no `getText` nem no Ctrl+S) com `aria-hidden`. A preferência é
+  `editor.showVariableValues` (Configurações › Editor SQL, ligada por padrão; efeito `setShowVariableValues`).
+- **O autocompletar** lê o script de novo a cada versão do texto (o nome que a pessoa acabou de declarar tem de aparecer, e a leitura em segundo plano pode não ter rodado), até 200.000 caracteres. Depois de `@`
+  completa os declarados acima do comando; dentro do valor de uma declaração, os declarados acima, a lista fechada (`closedNames`), os membros de `Math.`/`random.`/`date.`/`Date.`/`Number.` e, depois de
+  `.`, os métodos da espécie do valor (`methodNames`), quando o tipo se sabe pelo armazém ou pela anotação. Não completa no nome, na anotação, em texto nem em comentário. Dentro das declarações e depois do `@` de uma variável
+  as palavras-chave e os nomes da árvore se calam. Segue a chave "Autocompletar ao digitar".
+- **A caixa das palavras-chave** (`keywordCase(banco, linhaEmBranco)`) não converte dentro de uma declaração ou reatribuição: pergunta ao `scriptItemAt`, e só quando o texto tem `let` ou `const`.
+- **O que muda de `SqlEditor`**: a prop `variables`; as preferências `blankLineSeparates` e o banco da aba disparam uma leitura nova (`reanalyzeVariables`).
+
 ## Proteções da conexão e da pasta (RN-PROT-001 a 006)
 
 Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
