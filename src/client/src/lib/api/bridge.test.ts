@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { chooseExportDestination, chooseImportSource, claimVerification, copyExport, currentAppZoom, deliverExport, finishVerification, importSourceStatus, onAppZoomChanged, onVerificationPeer, onWindowCloseRequested, readDataFolder, releaseExportDestination, releaseImportSource, requestAppZoom, revealExport, transfersAvailable } from "./bridge";
+import { chooseExportDestination, chooseImportSource, claimVerification, closeResultWindow, copyExport, currentAppZoom, deliverExport, finishVerification, importSourceStatus, focusResultWindow, onAppZoomChanged, onResultWindowClosed, onResultWindowState, onVerificationPeer, onWindowCloseRequested, readDataFolder, releaseExportDestination, releaseImportSource, requestAppZoom, requestResultWindow, resultWindowsAvailable, revealExport, setResultWindowTitle, tellResultWindowReady, transfersAvailable } from "./bridge";
 
 /** A ponte com só o que a pasta de dados usa: o resto não importa aqui. */
 const bridgeAnswering = (reply: () => Promise<unknown>) => vi.stubGlobal("window", { prism: { getDataFolder: reply } });
@@ -269,5 +269,124 @@ describe("o arquivo das importações de dados (RN-IMPORT-018), do lado da tela"
     expect(calls).toEqual([{ fileId }]);
     vi.stubGlobal("window", {});
     await expect(releaseImportSource(fileId)).resolves.toBeUndefined();
+  });
+});
+
+describe("a janela do resultado (RN-ABAS-013 e 017)", () => {
+  const name = "prism-result-0b9f2c1e-8a4d-4f6b-9c3e-1d2a3b4c5d6e";
+
+  /** A ponte da janela do resultado, com o que cada teste responde. */
+  const bridge = (over: Record<string, unknown> = {}) => {
+    const resultWindows = { available: true, request: vi.fn(async () => ({ ok: true })), ready: vi.fn(async () => {}), focus: vi.fn(async () => true), close: vi.fn(async () => true), title: vi.fn(async () => true), onClosed: vi.fn(() => () => {}), onState: vi.fn(() => () => {}), ...over };
+    vi.stubGlobal("window", { prism: { resultWindows } });
+    return resultWindows;
+  };
+
+  it("só há janela do resultado onde o processo principal diz que há (o app); fora do Electron, ou com uma ponte antiga, não", () => {
+    bridge();
+    expect(resultWindowsAvailable()).toBe(true);
+
+    bridge({ available: false });
+    expect(resultWindowsAvailable()).toBe(false);
+
+    vi.stubGlobal("window", { prism: {} });
+    expect(resultWindowsAvailable()).toBe(false);
+
+    vi.stubGlobal("window", {});
+    expect(resultWindowsAvailable()).toBe(false);
+  });
+
+  it("o pedido leva o nome, o modo e o ponto, e só `ok: true` abre; a recusa, a resposta fora do formato e a falha da ponte são 'não'", async () => {
+    const resultWindows = bridge();
+    await expect(requestResultWindow({ name, mode: "focus", at: null })).resolves.toBe(true);
+    expect(resultWindows.request).toHaveBeenCalledWith({ name, mode: "focus", at: null });
+
+    bridge({ request: async () => ({ ok: false }) });
+    await expect(requestResultWindow({ name, mode: "background", at: { x: 1, y: 2 } })).resolves.toBe(false);
+
+    bridge({ request: async () => "sim" });
+    await expect(requestResultWindow({ name, mode: "focus", at: null })).resolves.toBe(false);
+
+    bridge({
+      request: async () => {
+        throw new Error("Pedido de origem desconhecida.");
+      },
+    });
+    await expect(requestResultWindow({ name, mode: "focus", at: null })).resolves.toBe(false);
+
+    vi.stubGlobal("window", {});
+    await expect(requestResultWindow({ name, mode: "focus", at: null })).resolves.toBe(false);
+  });
+
+  it("pronta, trazer à frente, fechar e o título passam o nome; a falha da ponte não chega à tela", async () => {
+    const resultWindows = bridge();
+
+    tellResultWindowReady(name);
+    setResultWindowTitle(name, "Resultado · a.sql — Prism");
+    await expect(focusResultWindow({ name, target: "opener" })).resolves.toBe(true);
+    await expect(closeResultWindow(name)).resolves.toBe(true);
+
+    expect(resultWindows.ready).toHaveBeenCalledWith({ name });
+    expect(resultWindows.title).toHaveBeenCalledWith({ name, title: "Resultado · a.sql — Prism" });
+    expect(resultWindows.focus).toHaveBeenCalledWith({ name, target: "opener" });
+    expect(resultWindows.close).toHaveBeenCalledWith({ name });
+
+    bridge({
+      focus: async () => {
+        throw new Error("x");
+      },
+      close: async () => "talvez",
+      ready: async () => {
+        throw new Error("x");
+      },
+    });
+    await expect(focusResultWindow({ name })).resolves.toBe(false);
+    await expect(closeResultWindow(name)).resolves.toBe(false);
+    expect(() => tellResultWindowReady(name)).not.toThrow();
+
+    vi.stubGlobal("window", {});
+    await expect(focusResultWindow({ name })).resolves.toBe(false);
+    expect(() => setResultWindowTitle(name, "x")).not.toThrow();
+  });
+
+  function listening(channel: "onClosed" | "onState") {
+    let fire: (raw: unknown) => void = () => {};
+    bridge({ [channel]: (listener: (raw: unknown) => void) => ((fire = listener), () => {}) });
+    return (raw: unknown) => fire(raw);
+  }
+
+  it("o fechamento que o processo principal conta diz quem fechou; o que não confere é ignorado", () => {
+    const fire = listening("onClosed");
+    const heard: unknown[] = [];
+    onResultWindowClosed((closed) => heard.push(closed));
+
+    fire({ name, reason: "user" });
+    fire({ name, reason: "host" });
+    fire({ name, reason: "sistema" });
+    fire({ name: "outra", reason: "user" });
+    fire(null);
+
+    expect(heard).toEqual([
+      { name, reason: "user" },
+      { name, reason: "host" },
+    ]);
+  });
+
+  it("o estado (minimizada ou não) também é conferido", () => {
+    const fire = listening("onState");
+    const heard: unknown[] = [];
+    onResultWindowState((state) => heard.push(state));
+
+    fire({ name, minimized: true });
+    fire({ name, minimized: "talvez" });
+
+    expect(heard).toEqual([{ name, minimized: true }]);
+  });
+
+  it("sem a ponte dos avisos, ligar o ouvinte não derruba nada", () => {
+    vi.stubGlobal("window", {});
+
+    expect(() => onResultWindowClosed(() => {})()).not.toThrow();
+    expect(() => onResultWindowState(() => {})()).not.toThrow();
   });
 });

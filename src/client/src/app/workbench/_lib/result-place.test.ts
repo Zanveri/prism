@@ -16,6 +16,7 @@ import {
   resultOnView,
   resultTabTitle,
   resultWindowAvailable,
+  windowKeyAction,
   stripEntries,
   trackUnseen,
   unitRects,
@@ -156,14 +157,23 @@ describe("afterPlaceChange: o foco depois de trocar (RN-ABAS-012 e 014)", () => 
   it("pelo botão da barra, o foco vai com o resultado, no botão", () => {
     expect(afterPlaceChange({ to: "tab", via: "bar", resultWasActive: false })).toEqual({ show: "result", focus: "placeButton" });
     expect(afterPlaceChange({ to: "panel", via: "bar", resultWasActive: true })).toEqual({ show: "query", focus: "placeButton" });
-    expect(afterPlaceChange({ to: "window", via: "bar", resultWasActive: true })).toEqual({ show: "query", focus: null });
+    // Numa janela, ela vem à frente com o foco no botão dela, e a aba da consulta fica ativa na janela da aba.
+    expect(afterPlaceChange({ to: "window", via: "bar", resultWasActive: true })).toEqual({ show: "query", focus: "placeButton" });
+    expect(afterPlaceChange({ to: "window", via: "bar", resultWasActive: false })).toEqual({ show: "query", focus: "placeButton" });
   });
 
   it("pelo menu, a ativa não muda; a aba do resultado ativa que some deixa a da consulta ativa, com o foco no botão", () => {
     expect(afterPlaceChange({ to: "tab", via: "menu", resultWasActive: false })).toEqual({ show: "keep", focus: null });
     expect(afterPlaceChange({ to: "panel", via: "menu", resultWasActive: false })).toEqual({ show: "keep", focus: null });
     expect(afterPlaceChange({ to: "panel", via: "menu", resultWasActive: true })).toEqual({ show: "query", focus: "placeButton" });
-    expect(afterPlaceChange({ to: "window", via: "menu", resultWasActive: true })).toEqual({ show: "query", focus: null });
+    expect(afterPlaceChange({ to: "window", via: "menu", resultWasActive: true })).toEqual({ show: "query", focus: "placeButton" });
+  });
+
+  it("'Voltar para o painel' da janela do resultado deixa a aba da consulta ativa, com o foco no resultado; fechar a janela pelo sistema não mexe em nada (RN-ABAS-013)", () => {
+    expect(afterPlaceChange({ to: "panel", via: "back", resultWasActive: false })).toEqual({ show: "query", focus: "result" });
+    expect(afterPlaceChange({ to: "panel", via: "back", resultWasActive: true })).toEqual({ show: "query", focus: "result" });
+    expect(afterPlaceChange({ to: "panel", via: "windowClosed", resultWasActive: false })).toEqual({ show: "keep", focus: null });
+    expect(afterPlaceChange({ to: "panel", via: "windowClosed", resultWasActive: true })).toEqual({ show: "keep", focus: null });
   });
 
   it("fechar a aba do resultado ativa deixa a da consulta ativa, com o foco no resultado; a não ativa não mexe em nada", () => {
@@ -188,8 +198,10 @@ describe("f6Action: o F6 alterna entre o editor e o resultado (RN-ABAS-014)", ()
     expect(f6Action({ place: "panel", from: "strip", mode: "split", resultActive: false })).toBe("focusResult");
   });
 
-  it("numa janela, do editor traz a janela à frente", () => {
+  it("numa janela, do editor traz a janela do resultado à frente e, dela, traz a janela da aba", () => {
     expect(f6Action({ place: "window", from: "editor", mode: "split", resultActive: false })).toBe("focusWindow");
+    expect(f6Action({ place: "window", from: "result", mode: "split", resultActive: false })).toBe("focusOpener");
+    expect(f6Action({ place: "window", from: "strip", mode: "split", resultActive: false })).toBe("focusWindow");
   });
 
   it("é o F6 sem modificador", () => {
@@ -237,5 +249,27 @@ describe("preferencePlaces: as escolhas de Configurações › Resultados (RN-CO
       ["tab", false],
       ["window", true],
     ]);
+  });
+});
+
+describe("windowKeyAction: o que a raiz da janela do resultado faz com as teclas (RN-ABAS-015 e 017)", () => {
+  const key = (over: Partial<{ key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ key: "", ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, ...over });
+
+  it("o Ctrl+W (Cmd+W no macOS) volta o resultado ao painel", () => {
+    expect(windowKeyAction(key({ key: "w" }))).toBe("back");
+    expect(windowKeyAction(key({ key: "W" }))).toBe("back");
+    expect(windowKeyAction(key({ key: "w", ctrlKey: false, metaKey: true }))).toBe("back");
+  });
+
+  it("as teclas do que a janela não tem (a faixa, a conexão, o navegador, Configurações) não passam à aba", () => {
+    for (const stopped of [key({ key: "PageUp", shiftKey: true }), key({ key: "PageDown", shiftKey: true }), key({ key: "9" }), key({ key: "b" }), key({ key: "E", shiftKey: true }), key({ key: "," })]) {
+      expect(windowKeyAction(stopped)).toBe("stop");
+    }
+  });
+
+  it("as demais seguem: F5, Alt+X, Ctrl+S, Ctrl+C, as setas, e as mesmas teclas com outro modificador", () => {
+    for (const passing of [key({ key: "F5", ctrlKey: false }), key({ key: "x", ctrlKey: false, altKey: true }), key({ key: "s" }), key({ key: "c" }), key({ key: "ArrowDown", ctrlKey: false }), key({ key: "PageUp" }), key({ key: "w", shiftKey: true }), key({ key: "w", altKey: true }), key({ key: "e" }), key({ key: "b", shiftKey: true }), key({ key: "w", ctrlKey: false })]) {
+      expect(windowKeyAction(passing)).toBeNull();
+    }
   });
 });
