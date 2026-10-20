@@ -16,21 +16,25 @@ const tableTab = (id: string, name: string, extra: Partial<QueryTab> = {}): Quer
 const noLive = () => null;
 
 describe("o que vai para o cofre (RN-ABAS-006)", () => {
-  it("da aba de consulta: o texto, a conexão, o banco, o script e a mudança não salva; da de tabela: a conexão, o banco, o esquema, a tabela e a vista; nada de sessão nem de título", () => {
+  it("da aba de consulta: o texto, a conexão, o banco, o script, a mudança não salva e o lugar do resultado (o painel sem ele); da de tabela: a conexão, o banco, o esquema, a tabela e a vista; nada de sessão nem de título", () => {
     const tabs = [
       queryTab("a", "SELECT 1", { database: "vendas", script: { id: s1, name: "Relatório", savedSql: "SELECT 0", dirty: true } }),
       tableTab("b", "pedidos", { database: "vendas", table: { schema: "loja", name: "pedidos", view: "structure" } }),
-      queryTab("c", "SELECT 3", { connectionId: null }),
+      queryTab("c", "SELECT 3", { connectionId: null, resultPlace: "tab" }),
     ];
 
     expect(toSavedWorkspace(tabs, "b", noLive)).toEqual({
       tabs: [
-        { kind: "query", connectionID: c1, database: "vendas", sql: "SELECT 1", scriptID: s1, dirty: true, sqlTooLarge: false },
+        { kind: "query", connectionID: c1, database: "vendas", sql: "SELECT 1", scriptID: s1, dirty: true, sqlTooLarge: false, resultPlace: "panel" },
         { kind: "table", connectionID: c1, database: "vendas", schema: "loja", table: "pedidos", view: "structure" },
-        { kind: "query", connectionID: null, database: null, sql: "SELECT 3", scriptID: null, dirty: false, sqlTooLarge: false },
+        { kind: "query", connectionID: null, database: null, sql: "SELECT 3", scriptID: null, dirty: false, sqlTooLarge: false, resultPlace: "tab" },
       ],
       activeIndex: 1,
     } satisfies SavedWorkspace);
+  });
+
+  it("RN-ABAS-016: 'Numa janela' vai como está, também enquanto esta tela não abre a janela do resultado: o gravado não se perde", () => {
+    expect(savedTabOf(queryTab("a", "SELECT 1", { resultPlace: "window" }), null)).toMatchObject({ resultPlace: "window" });
   });
 
   it("o texto é o do editor DESTE instante, e a mudança não salva do script segue esse texto", () => {
@@ -110,12 +114,18 @@ describe("o que volta na próxima entrada (RN-ABAS-006)", () => {
     const restored = restoreWorkspace({ tabs: [query("SELECT 1", { database: "vendas" }), table("pedidos", { view: "diagram", database: "vendas" }), query("SELECT 2")], activeIndex: 1 }, context());
 
     expect(restored.tabs).toEqual([
-      { id: "nova-1", title: "consulta-7.sql", connectionId: c1, database: "vendas", sessionId: null, sql: "SELECT 1" },
+      { id: "nova-1", title: "consulta-7.sql", connectionId: c1, database: "vendas", sessionId: null, sql: "SELECT 1", resultPlace: "panel" },
       { id: "nova-2", title: "vendas.loja.pedidos", connectionId: c1, database: "vendas", sessionId: null, sql: "", table: { schema: "loja", name: "pedidos", view: "diagram" } },
-      { id: "nova-3", title: "consulta-8.sql", connectionId: c1, sessionId: null, sql: "SELECT 2" },
+      { id: "nova-3", title: "consulta-8.sql", connectionId: c1, sessionId: null, sql: "SELECT 2", resultPlace: "panel" },
     ] satisfies QueryTab[]);
     expect(restored.activeTabId).toBe("nova-2");
     expect(restored.tableConnections).toEqual(new Set([c1]));
+  });
+
+  it("RN-ABAS-016: cada aba de consulta volta no lugar do resultado dela; a gravada sem ele (antes da 0.5.0, ou nulo), no painel", () => {
+    const restored = restoreWorkspace({ tabs: [query("SELECT 1", { resultPlace: "tab" }), query("SELECT 2", { resultPlace: "window" }), query("SELECT 3"), query("SELECT 4", { resultPlace: null })], activeIndex: 0 }, context());
+
+    expect(restored.tabs.map((tab) => tab.resultPlace)).toEqual(["tab", "window", "panel", "panel"]);
   });
 
   it("a aba que veio de um script volta ligada a ele, com o nome e a marca de mudança não salva; a do script excluído volta como consulta comum", () => {

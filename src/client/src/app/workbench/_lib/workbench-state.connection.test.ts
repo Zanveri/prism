@@ -104,7 +104,7 @@ describe("WorkbenchProvider.switchConnection: a aba de consulta passa a outra co
     expect(before.retire).toHaveBeenCalledOnce();
     expect(rt.sessions.close).toHaveBeenCalledWith("s-erp");
     expect(after.run).not.toHaveBeenCalled();
-    expect(value.tabs[0]).toEqual({ id: tab.id, title: tab.title, connectionId: "c2", sessionId: null, sql: "select * from pedido" });
+    expect(value.tabs[0]).toEqual({ id: tab.id, title: tab.title, connectionId: "c2", sessionId: null, sql: "select * from pedido", resultPlace: "panel" });
   });
 
   it("o texto que fica é o do editor deste instante (o da aba chega com atraso)", () => {

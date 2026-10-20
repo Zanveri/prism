@@ -39,6 +39,14 @@ describe("a leitura das abas gravadas (GET api/user/workspace, RN-ABAS-006)", ()
     expect(fake.mock.calls[0][0]).toBe(`${base}/api/user/workspace`);
   });
 
+  it("RN-ABAS-016: a aba de consulta traz o lugar do resultado; o nulo da de tabela sai; um lugar desconhecido (de uma versão mais nova) vale nulo, e a aba volta", async () => {
+    fetchAnswers(json({ tabs: [{ ...apiQuery("SELECT 1"), resultPlace: "tab" }, { ...apiTable("pedidos"), resultPlace: null }, { ...apiQuery("SELECT 2"), resultPlace: "flutuante" }], activeIndex: 0 }));
+
+    const read = await getWorkspace();
+    expect(read).toMatchObject({ ok: true, data: { tabs: [{ kind: "query", resultPlace: "tab" }, { kind: "table" }, { kind: "query", sql: "SELECT 2", resultPlace: null }] } });
+    expect(read.ok && read.data.tabs[1]).not.toHaveProperty("resultPlace");
+  });
+
   it("nada gravado é a lista vazia", async () => {
     fetchAnswers(json({ tabs: [], activeIndex: null }));
 
