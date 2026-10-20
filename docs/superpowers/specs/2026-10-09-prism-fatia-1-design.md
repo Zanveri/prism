@@ -1348,8 +1348,9 @@ Só da tela:
   formato, é o "Exportar…" ao lado dele (RN-EXPORT-001), que, com os padrões do CSV, escreve o mesmo
   texto (RN-EXPORT-007). *Alterada a pedido do dono em 2026-10-16 (seção 35): entrou o "Exportar…", e o
   "Exportar CSV" continua com as linhas carregadas.*
-- **RN-TABELA-007.** Chave estrangeira: na grade de registros, o valor de uma coluna que é chave
-  estrangeira leva à tabela referenciada, já filtrada por aquele valor (o filtro aparece no
+- **RN-TABELA-007.** Chave estrangeira: na grade de registros e no resultado da consulta e do script
+  (no painel, numa aba, numa janela e nas abas de resultado do Executar script, também nas guardadas), o
+  valor de uma coluna que é chave estrangeira leva à tabela referenciada, já filtrada por aquele valor (o filtro aparece no
   campo da RN-TABELA-005). O valor entra no filtro como literal do banco: número só se for
   número, o resto entre aspas simples com a aspa dobrada; nulo não tem para onde ir. A barra
   invertida vai como está no Db2 e no Informix, onde dentro de aspas simples ela é caractere comum
@@ -1360,6 +1361,28 @@ Só da tela:
   estiver ocupada, o filtro espera até 15 segundos por ela e, passado isso, a tela avisa para
   clicar de novo. Se a aba de destino tem alterações não salvas, o salto pergunta antes
   (RN-EDIT-007).
+  - No resultado da consulta e do script, a coluna é link quando vem de uma coluna de uma **tabela** do
+    `FROM` (não uma visão, um sinônimo ou o resto, que não têm chave estrangeira no catálogo do Prism) que
+    está numa chave estrangeira dessa tabela, comparando a coluna de origem (`baseColumn`) e não o nome que
+    o resultado mostra: o apelido (`AS status`) e a junção (cada coluna da sua tabela) funcionam. A
+    origem vem do alvo `purpose: sql` (RN-GRADE-020), que a tela pergunta em silêncio quando o resultado
+    chega com linhas, com a aba à vista e conectada, e reaproveita enquanto o texto do comando executado, a
+    conexão, o banco e as colunas (nome e tipo, na ordem) forem os mesmos: a atualização automática
+    (RN-GRADE-014), o F5 e o "Carregar mais" não perguntam de novo, e o "Gerar SQL" e o "Copiar como" que
+    já pediram o alvo daquele resultado o reaproveitam. As chaves de cada tabela de origem vêm do mesmo
+    catálogo dos Registros e da Estrutura. Enquanto a origem não chega, os valores são texto. Coluna
+    calculada, origem desconhecida, alvo recusado ou falho: não é link, sem aviso. Alvo recusado é também o
+    do resultado que a API marca como só leitura (`DISTINCT`, `GROUP BY`, `UNION`, subconsulta no `FROM`,
+    filtro do resultado embrulhado): um `SELECT DISTINCT status_id FROM t` não tem link. Se o alvo falhou
+    (o catálogo caiu), a execução seguinte da pessoa (o F5, o filtro) pergunta de novo; a atualização
+    automática não. O salto abre, ou traz à
+    frente, a aba da tabela referenciada na mesma conexão e no mesmo banco do resultado; com o resultado
+    numa janela própria (seção 39), a aba abre na janela da aba da consulta, que vem para a frente. O valor
+    que vai ao filtro é o valor lido, como nos Registros: a célula com alteração pendente não é link, e o
+    item do menu leva o valor lido, e não o pendente. Mesmas exceções: nulo, valor cortado, valor que não
+    cabe no filtro e conexão desconectada.
+  - *Alterada a pedido do dono em 2026-10-20: o valor da chave estrangeira leva ao registro referenciado
+    também no resultado da consulta e do script.*
 - **RN-TABELA-008.** Estrutura: "DDL aproximado", um `CREATE TABLE` montado pelo Prism a partir
   do catálogo já carregado (colunas, tipos, nulo, chave primária, chaves estrangeiras, índices),
   com o aviso de que não é o DDL do banco (padrões, restrições de conferência e opções de
@@ -1731,8 +1754,9 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
      células;
   2. o submenu "Filtrar" (F11, RN-GRADE-013); o submenu "Ordenar", com "Crescente", "Decrescente" e "Sem ordem" para
      a coluna da célula ativa, a ordem em uso marcada, pelo mesmo caminho do botão de ordenar do cabeçalho
-     (RN-GRADE-021, RN-TABELA-010 e RN-GRADE-011); e, numa coluna de chave estrangeira dos Registros, "Ir para o registro referenciado"
-     (RN-TABELA-007);
+     (RN-GRADE-021, RN-TABELA-010 e RN-GRADE-011); e, numa coluna de chave estrangeira dos Registros e do resultado, "Ir para o registro referenciado"
+     (RN-TABELA-007; *alterada a pedido do dono em 2026-10-20: o valor da chave estrangeira leva ao registro referenciado também no
+     resultado da consulta e do script*);
   3. "Editar célula" (F2), "Definir como nulo" e "Desfazer alteração" (RN-EDIT-001 e 004); com várias células
      escolhidas na coluna da célula ativa, "Definir como nulo" diz para quantas vale ("Definir as 37 células como
      nulo", "Definir a coluna inteira como nulo", RN-EDIT-017);
@@ -1748,7 +1772,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
     para a esquerda, como o "Filtrar".
   - O que não se aplica no estado de agora aparece desabilitado, com o motivo, e não some. O item que não existe num
     lugar não aparece: nas abas guardadas do script, o "Filtrar", o "Ordenar", o "Atualizar" e o "Atualizar
-    automaticamente" (RN-SQL-023); fora dos Registros, o "Ir para o registro referenciado".
+    automaticamente" (RN-SQL-023); e, na coluna que não é link (RN-TABELA-007), o "Ir para o registro referenciado".
   - O botão direito numa célula fora da seleção a escolhe antes; dentro dela, a seleção fica (RN-GRADE-001). Cada
     item age sobre o que a RN-GRADE-001 diz dele.
   - Não entram os itens do menu do DBeaver que o Prism não tem: "Colar avançado…" (Ctrl+Shift+V), "Navegar",
