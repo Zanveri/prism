@@ -1,0 +1,548 @@
+{
+  "rule": "RN-EXPORT-007 e RN-TABELA-006: um campo do CSV. Na tela, csvFieldOf (csv.ts) com os padrões e a célula do toDelimited (to-delimited.ts); na API, ExportText.CsvField.",
+  "notes": [
+    "value e expected são texto, null (o nulo) ou { codePoints: [...] }, que cada lado monta ponto de código por ponto de código.",
+    "quoting: auto é 'Só quando precisa' nos dois lados; all é 'Em todos os valores' (always na tela). 'Em todos os textos' está em csv-field-text.json. A tela confere também o csvField (to-csv.ts), o campo do CSV da exportação que o \"Copiar como CSV\" escreve.",
+    "O par substituto solto fica no campo como veio: quem o troca por U+FFFD é o UTF-8 do arquivo."
+  ],
+  "cases": [
+    {
+      "name": "texto simples",
+      "kind": "text",
+      "value": "Ana",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "Ana"
+    },
+    {
+      "name": "separador",
+      "kind": "text",
+      "value": "a;b",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"a;b\""
+    },
+    {
+      "name": "aspa dobrada",
+      "kind": "text",
+      "value": "diz \"oi\"",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"diz \"\"oi\"\"\""
+    },
+    {
+      "name": "quebra de linha LF",
+      "kind": "text",
+      "value": "linha1\nlinha2",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"linha1\nlinha2\""
+    },
+    {
+      "name": "quebra de linha CRLF",
+      "kind": "text",
+      "value": "linha1\r\nlinha2",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"linha1\r\nlinha2\""
+    },
+    {
+      "name": "retorno de carro",
+      "kind": "text",
+      "value": "a\rb",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"a\rb\""
+    },
+    {
+      "name": "fórmula =",
+      "kind": "text",
+      "value": "=1+1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'=1+1"
+    },
+    {
+      "name": "fórmula +",
+      "kind": "text",
+      "value": "+55 11",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'+55 11"
+    },
+    {
+      "name": "fórmula @",
+      "kind": "text",
+      "value": "@SUM(A1)",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'@SUM(A1)"
+    },
+    {
+      "name": "fórmula depois de espaços",
+      "kind": "text",
+      "value": "  =A1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'  =A1"
+    },
+    {
+      "name": "fórmula depois de tabulação",
+      "kind": "text",
+      "value": "\t=A1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'\t=A1"
+    },
+    {
+      "name": "fórmula depois de retorno de carro, entre aspas",
+      "kind": "text",
+      "value": "\r=A1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"'\r=A1\""
+    },
+    {
+      "name": "fórmula com separador",
+      "kind": "text",
+      "value": "=a;b",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"'=a;b\""
+    },
+    {
+      "name": "número negativo simples",
+      "kind": "text",
+      "value": "-1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "-1"
+    },
+    {
+      "name": "número negativo com vírgula",
+      "kind": "text",
+      "value": "-1,5",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "-1,5"
+    },
+    {
+      "name": "número negativo com expoente",
+      "kind": "text",
+      "value": "-1e5",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "-1e5"
+    },
+    {
+      "name": "conta não é número simples",
+      "kind": "text",
+      "value": "-1+1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'-1+1"
+    },
+    {
+      "name": "sinal de mais não é número simples",
+      "kind": "text",
+      "value": "+1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'+1"
+    },
+    {
+      "name": "hífen sozinho",
+      "kind": "text",
+      "value": "-",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "'-"
+    },
+    {
+      "name": "número na coluna de número",
+      "kind": "number",
+      "value": "12.5",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "12.5"
+    },
+    {
+      "name": "nulo vazio",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": ""
+    },
+    {
+      "name": "nulo com texto",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": "NULL"
+      },
+      "expected": "NULL"
+    },
+    {
+      "name": "nulo com fórmula não leva apóstrofo",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": "-"
+      },
+      "expected": "-"
+    },
+    {
+      "name": "nulo com separador vai entre aspas",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": "a;b"
+      },
+      "expected": "\"a;b\""
+    },
+    {
+      "name": "todos os valores entre aspas",
+      "kind": "text",
+      "value": "Ana",
+      "options": {
+        "delimiter": ";",
+        "quoting": "all",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"Ana\""
+    },
+    {
+      "name": "todos os valores: número entre aspas",
+      "kind": "number",
+      "value": "12.5",
+      "options": {
+        "delimiter": ";",
+        "quoting": "all",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"12.5\""
+    },
+    {
+      "name": "todos os valores: nulo vazio sem aspas",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "all",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": ""
+    },
+    {
+      "name": "todos os valores: fórmula com apóstrofo",
+      "kind": "text",
+      "value": "=1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "all",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"'=1\""
+    },
+    {
+      "name": "sem proteção contra fórmula",
+      "kind": "text",
+      "value": "=1+1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": false,
+        "nullText": ""
+      },
+      "expected": "=1+1"
+    },
+    {
+      "name": "vírgula como separador",
+      "kind": "text",
+      "value": "1,5",
+      "options": {
+        "delimiter": ",",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"1,5\""
+    },
+    {
+      "name": "ponto e vírgula com vírgula como separador",
+      "kind": "text",
+      "value": "a;b",
+      "options": {
+        "delimiter": ",",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "a;b"
+    },
+    {
+      "name": "tabulação como separador",
+      "kind": "text",
+      "value": "a\tb",
+      "options": {
+        "delimiter": "\t",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"a\tb\""
+    },
+    {
+      "name": "barra vertical como separador",
+      "kind": "text",
+      "value": "a|b",
+      "options": {
+        "delimiter": "|",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"a|b\""
+    },
+    {
+      "name": "fim de CDATA",
+      "kind": "text",
+      "value": "]]>",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "]]>"
+    },
+    {
+      "name": "script",
+      "kind": "text",
+      "value": "<script>alert(1)</script>",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "<script>alert(1)</script>"
+    },
+    {
+      "name": "U+0000 fica",
+      "kind": "text",
+      "value": "a\u0000b",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "a\u0000b"
+    },
+    {
+      "name": "U+202E fica",
+      "kind": "text",
+      "value": "abc\u202edef",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "abc\u202edef"
+    },
+    {
+      "name": "U+FEFF fica",
+      "kind": "text",
+      "value": "\ufefftexto",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\ufefftexto"
+    },
+    {
+      "name": "U+FFFE fica",
+      "kind": "text",
+      "value": "a\ufffeb",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "a\ufffeb"
+    },
+    {
+      "name": "emoji e ideogramas",
+      "kind": "text",
+      "value": "😀 漢字",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "😀 漢字"
+    },
+    {
+      "name": "par substituto solto fica",
+      "kind": "text",
+      "value": {
+        "codePoints": [
+          55357,
+          97
+        ]
+      },
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": {
+        "codePoints": [
+          55357,
+          97
+        ]
+      }
+    },
+    {
+      "name": "_x0041_ já escrito",
+      "kind": "text",
+      "value": "_x0041_",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "_x0041_"
+    },
+    {
+      "name": "barra invertida",
+      "kind": "text",
+      "value": "a\\b",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "a\\b"
+    },
+    {
+      "name": "número seguido de quebra de linha não é número simples",
+      "kind": "text",
+      "value": "-1\n",
+      "options": {
+        "delimiter": ";",
+        "quoting": "auto",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"'-1\n\""
+    }
+  ]
+}

@@ -45,6 +45,11 @@ export function commandWillRun(target: { sql: string; engine?: Engine }, busy: b
   return !busy && statementCount(target.sql, target.engine) === 1;
 }
 
+/** RN-SQL-019: se o executor vai rodar o script: algum comando, e a aba livre. Como `commandWillRun`, decide se a área recolhida volta e se a pergunta das alterações não salvas vem antes. */
+export function scriptWillRun(targets: readonly unknown[], busy: boolean): boolean {
+  return !busy && targets.length > 0;
+}
+
 /**
  * As teclas da divisória (RN-PAINEL-001), como num separador de janela: para cima o resultado cresce, para baixo encolhe;
  * Home vai ao menor e End ao maior. `null` para qualquer outra tecla, que segue o caminho dela (o Tab, por exemplo).

@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Folders.Features.GetFolders;
 using Prism.Infrastructure.Vault.Models;
 using Prism.Infrastructure.Vault.Services;
@@ -20,7 +21,7 @@ public sealed class GetFoldersHandlerTests
         var beta = VaultFakers.CreateFolder(name: "beta");
         var alfa = VaultFakers.CreateFolder(name: "Alfa");
         var delta = VaultFakers.CreateFolder(parentID: beta.ID, name: "Delta");
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [beta, delta, alfa], [], [], VaultWorkspaceRecord.Empty)));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [beta, delta, alfa], [], [], VaultWorkspaceRecord.Empty, [])));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act
@@ -42,7 +43,7 @@ public sealed class GetFoldersHandlerTests
     public async Task Handle_ShouldBeOK_Empty()
     {
         //Arrange
-        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], VaultWorkspaceRecord.Empty)));
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [], [], [], VaultWorkspaceRecord.Empty, [])));
         var handler = new GetFoldersHandler(_vault.Object);
 
         //Act
@@ -77,5 +78,28 @@ public sealed class GetFoldersHandlerTests
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
         _vault.Verify(v => v.Read(), Times.Once);
         _vault.VerifyNoOtherCalls();
+    }
+
+    /// <summary>RN-PROT-004: cada pasta leva as proteções próprias e as que valem, das pastas acima na mesma leitura.</summary>
+    [Trait("GetFoldersHandler", "GetFoldersCommand")]
+    [Fact(DisplayName = "OK cada pasta leva as proteções próprias e as que valem, com a pasta acima que as impõe")]
+    public async Task Handle_ShouldReturnTheProtections()
+    {
+        //Arrange
+        var factory = VaultFakers.CreateFolder(name: "Fábrica") with { ReadOnly = true, ConfirmCommands = "irreversible" };
+        var line = VaultFakers.CreateFolder(parentID: factory.ID, name: "Linha 1") with { ConfirmCommands = "all" };
+        _vault.Setup(v => v.Read()).Returns(Result.Success<VaultDocument, EVaultError>(new VaultDocument("marina.costa", [factory, line], [], [], VaultWorkspaceRecord.Empty, [])));
+        var handler = new GetFoldersHandler(_vault.Object);
+
+        //Act
+        var result = await handler.Handle(new GetFoldersCommand(), CancellationToken.None);
+
+        //Assert
+        var ofFactory = result.Value.Single(folder => folder.ID == factory.ID);
+        var ofLine = result.Value.Single(folder => folder.ID == line.ID);
+        Assert.Equal(("irreversible", true), (ofFactory.ConfirmCommands, ofFactory.ReadOnly));
+        Assert.Equal(new ProtectionsDto { ReadOnly = true, ConfirmCommands = "irreversible" }, ofFactory.Protections);
+        Assert.Equal(("all", false), (ofLine.ConfirmCommands, ofLine.ReadOnly));
+        Assert.Equal(new ProtectionsDto { ReadOnly = true, ReadOnlyFolderID = factory.ID, ConfirmCommands = "all" }, ofLine.Protections);
     }
 }

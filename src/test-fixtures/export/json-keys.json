@@ -1,0 +1,66 @@
+{
+  "rule": "RN-EXPORT-010: as chaves de cada objeto. Na tela, jsonKeys (to-json.ts); na API, ExportText.UniqueKeys (também as chaves do PHP e os atributos do DbUnit).",
+  "cases": [
+    {
+      "name": "nomes diferentes ficam",
+      "names": [
+        "id",
+        "cliente"
+      ],
+      "expected": [
+        "id",
+        "cliente"
+      ]
+    },
+    {
+      "name": "repetidos ganham sufixo",
+      "names": [
+        "id",
+        "id",
+        "id_2",
+        "id"
+      ],
+      "expected": [
+        "id",
+        "id_2",
+        "id_2_2",
+        "id_3"
+      ]
+    },
+    {
+      "name": "vazios repetidos",
+      "names": [
+        "",
+        ""
+      ],
+      "expected": [
+        "",
+        "_2"
+      ]
+    },
+    {
+      "name": "nomes que um objeto do JavaScript trataria de outro jeito",
+      "names": [
+        "__proto__",
+        "2",
+        "10"
+      ],
+      "expected": [
+        "__proto__",
+        "2",
+        "10"
+      ]
+    },
+    {
+      "name": "maiúsculas diferentes são nomes diferentes",
+      "names": [
+        "ID",
+        "id"
+      ],
+      "expected": [
+        "ID",
+        "id"
+      ]
+    }
+  ]
+}

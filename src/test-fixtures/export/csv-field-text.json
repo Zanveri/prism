@@ -1,0 +1,125 @@
+{
+  "rule": "RN-EXPORT-007: 'Em todos os textos' (quoting: text). Na tela, csvField (to-csv.ts); na API, ExportText.CsvField: todo valor de coluna que não é de número, e os nomes das colunas (kind text), entre aspas; o número só quando precisa; o nulo nunca, a não ser que o texto dele precise.",
+  "cases": [
+    {
+      "name": "texto entre aspas",
+      "kind": "text",
+      "value": "Ana",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"Ana\""
+    },
+    {
+      "name": "número sem aspas",
+      "kind": "number",
+      "value": "12.5",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "12.5"
+    },
+    {
+      "name": "número com o separador vai entre aspas",
+      "kind": "number",
+      "value": "1,5",
+      "options": {
+        "delimiter": ",",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"1,5\""
+    },
+    {
+      "name": "número negativo sem apóstrofo",
+      "kind": "number",
+      "value": "-1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "-1"
+    },
+    {
+      "name": "booleano entre aspas",
+      "kind": "boolean",
+      "value": "true",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"true\""
+    },
+    {
+      "name": "data entre aspas",
+      "kind": "datetime",
+      "value": "2024-01-15 10:30:00",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"2024-01-15 10:30:00\""
+    },
+    {
+      "name": "binário entre aspas",
+      "kind": "binary",
+      "value": "0xDEADBEEF",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"0xDEADBEEF\""
+    },
+    {
+      "name": "nulo sem aspas",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": ""
+    },
+    {
+      "name": "nulo com texto sem aspas",
+      "kind": "text",
+      "value": null,
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": "NULL"
+      },
+      "expected": "NULL"
+    },
+    {
+      "name": "fórmula com apóstrofo e aspas",
+      "kind": "text",
+      "value": "=1",
+      "options": {
+        "delimiter": ";",
+        "quoting": "text",
+        "formulaGuard": true,
+        "nullText": ""
+      },
+      "expected": "\"'=1\""
+    }
+  ]
+}

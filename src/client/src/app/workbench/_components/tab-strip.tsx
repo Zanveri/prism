@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
@@ -11,11 +11,14 @@ import type { TabMoveTarget, WindowEntry } from "../../../../electron/window-mes
 
 import { ignoresContextMenu } from "../_lib/navigator-menu";
 import { dropIndex, isOutsideWindow, readTabDrag, tabDragType, writeTabDrag } from "../_lib/tab-order";
+import { scriptIconOf } from "../_lib/saved-scripts";
 import { scriptsCopy } from "../_lib/scripts.copy";
+import type { ScriptSummary } from "../_lib/scripts.schema";
 import { closeShortcutLabel, moveMenu, overflowOf, revealOffset, scrollStep, stripKeyTarget, tabListLabels, tabMenu, tabTitleOf, wheelScroll, type CloseScope } from "../_lib/tab-strip";
 import { stripTitles } from "../_lib/tab-titles";
 import type { QueryTab } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { ScriptIconView } from "./script-icon";
 
 const copy = workbenchCopy.tabs;
 
@@ -32,6 +35,8 @@ type TabStripProps = {
   connectionOf: (connectionId: string | null) => Connection | undefined;
   /** O ambiente que a conexão da aba mostra (RN-CONN-015 e RN-PASTA-005): o próprio, ou o herdado da pasta. */
   environmentOf: (connectionId: string | null) => ShownEnvironment | null;
+  /** RN-SCRIPT-006: o script da aba, como a lista o tem, para o ícone e a cor dele. Sem ele (a lista por chegar, o script excluído), o ícone de documento. */
+  scriptOf?: (scriptId: string) => Pick<ScriptSummary, "icon" | "color"> | undefined;
   onSelect: (tabId: string) => void;
   /** Fecha o que o fechamento pede a partir da aba dada (`tabsToClose`). */
   onClose: (scope: CloseScope, tabId: string) => void;
@@ -43,6 +48,8 @@ type TabStripProps = {
   onMove: (tabId: string, target: TabMoveTarget) => void;
   /** RN-ABAS-003: uma aba de outra janela foi solta nesta faixa. */
   onReceive: (fromWindowId: number, tabId: string, insertAt: number) => void;
+  /** RN-SQL-021: o que a aba mostra do estado dela, depois do nome: a marca do script que parou num erro e espera a resposta (`ScriptWaitingMark`). */
+  markOf?: (tabId: string) => ReactNode;
 };
 
 /** Os botões das pontas e o da lista: 28 px de largura e a altura da faixa. */
@@ -57,7 +64,7 @@ const stripButton = "flex h-10 w-7 flex-none cursor-pointer items-center justify
  * Os botões das pontas acendem por atributos (`data-left` e `data-right` da moldura) e não por estado: rolar não redesenha a faixa.
  * Os botões de rolar e o da lista são para o mouse; o teclado tem as setas, que trazem a aba à vista, e a tecla de menu.
  */
-export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSelect, onClose, windowId, onReorder, onMove, onReceive }: TabStripProps) {
+export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scriptOf, onSelect, onClose, windowId, onReorder, onMove, onReceive, markOf }: TabStripProps) {
   const frame = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<StripMenu | null>(null);
@@ -262,6 +269,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSel
         {tabs.map((tab, index) => {
           const selected = tab.id === activeTabId;
           const label = tabTitleOf(tab);
+          const script = tab.script === undefined ? undefined : scriptOf?.(tab.script.id);
 
           return (
             <div
@@ -300,7 +308,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSel
                 onKeyDown={(event) => handleKeyDown(event, tab, index)}
                 className="flex h-10 cursor-pointer items-center gap-2 pr-1 pl-3.5"
               >
-                {tab.table ? <TableIcon /> : <DocumentIcon />}
+                {tab.table ? <TableIcon /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} /> : <DocumentIcon />}
                 <span className="max-w-[240px] truncate">{titles.get(tab.id) ?? tab.title}</span>
                 {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
                 {label.unsaved ? (
@@ -309,6 +317,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, onSel
                     <span className="sr-only">{scriptsCopy.tab.unsaved}</span>
                   </>
                 ) : null}
+                {markOf?.(tab.id) ?? null}
                 <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} />
               </button>
               <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="mr-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-subtle transition-colors hover:bg-selected hover:text-ink">

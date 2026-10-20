@@ -39,7 +39,12 @@ public sealed class UserFoldersController(IMediator mediator) : ControllerBase
         return Created("/api/user/folders", result.Value);
     }
 
-    /// <summary>Renomear e mover são a mesma rota: o corpo leva `id`, `name` e `parentID` (nulo é a raiz).</summary>
+    /// <summary>
+    /// Renomear, mover e editar são a mesma rota: o corpo leva a pasta por inteiro, `id`, `name`, `parentID` (nulo é a raiz), o ambiente
+    /// (`environmentName` e `environmentColor`, RN-PASTA-005), a cor (`color`, RN-PASTA-007) e as proteções (`confirmCommands` e `readOnly`,
+    /// RN-PROT-001 e 002), mais `userPassword`, a senha do usuário que a mudança do somente leitura pede (RN-PROT-003: 422 `USER_PASSWORD_REQUIRED` ou
+    /// `INVALID_PASSWORD`, e 401 `VAULT_LOCKED` no quinto erro seguido).
+    /// </summary>
     [HttpPatch]
     public async Task<IActionResult> UpdateFolder([FromBody] UpdateFolderCommand command, CancellationToken cancellationToken)
     {

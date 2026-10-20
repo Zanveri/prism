@@ -50,11 +50,62 @@ describe("os canais entre a tela e o processo principal", () => {
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
 
+  it("o zoom do programa (RN-ZOOM-001): os dois pedidos conferem a origem, o pedido de outro zoom só vale com um dos passos, e o aviso vai a todas as janelas", () => {
+    expect(channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:zoom-"))).toEqual(["prism:zoom-get", "prism:zoom-set"]);
+    expect(main).toMatch(/ipcMain\.handle\("prism:zoom-get", \(event\) => \{\s*assertFromApp\(event\);\s*return appZoom;\s*\}\);/);
+    expect(main).toMatch(/ipcMain\.handle\("prism:zoom-set", \(event, zoom: unknown\) => \{\s*assertFromApp\(event\);\s*if \(!isAppZoom\(zoom\)\) throw new Error\([^)]*\);\s*return changeZoom\(zoom\);\s*\}\);/);
+    expect(main).toMatch(/for \(const window of liveWindows\(\)\) \{\s*window\.webContents\.setZoomFactor\(zoomFactor\(next\)\);\s*window\.webContents\.send\("prism:zoom-changed", next\);/);
+  });
+
   it("as abas que voltam (RN-ABAS-006): cada pedido confere a origem e passa ao centro da área de trabalho, que confere o relato com o schema", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:workspace-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?workspaceHub\.[a-zA-Z]+\(/g)].map((match) => match[1]);
     const workspaceChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:workspace-"));
 
     expect(workspaceChannels).toEqual(["prism:workspace-claim", "prism:workspace-flush", "prism:workspace-report", "prism:workspace-withdraw"]);
     expect(handlers.sort()).toEqual(workspaceChannels);
+  });
+
+  it("o destino e a entrega das exportações de dados (RN-EXPORT-019 e 020): cinco pedidos, sem dígito no nome, cada um confere a origem e passa ao `transferDesk`, que confere o schema e a janela; nenhum devolve aviso à tela", () => {
+    const transferChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:transfer-") && !channel.startsWith("prism:transfer-source"));
+    const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:transfer-[a-z-]+)", \(event, request: unknown\) => \{\s*assertFromApp\(event\);\s*(?:return )?transferDesk\.[a-zA-Z]+\((?:windowIdOf\(event\.sender\), )?request\);\s*\}\);/g)].map((match) => match[1]);
+
+    expect(transferChannels).toEqual(["prism:transfer-copy", "prism:transfer-deliver", "prism:transfer-destination", "prism:transfer-release", "prism:transfer-reveal"]);
+    expect(handlers.sort()).toEqual(transferChannels);
+    // O destino, a entrega, o "Mostrar na pasta" e o soltar são da janela que os pediu: o processo principal passa o número dela, e não o que a tela diz.
+    for (const channel of ["prism:transfer-destination", "prism:transfer-deliver", "prism:transfer-reveal", "prism:transfer-release"]) {
+      expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*(?:return )?transferDesk\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));
+    }
+    // A ponte só repassa o pedido, sem caminho: cada canal leva um argumento, o objeto que o schema do processo principal confere.
+    for (const channel of transferChannels) expect(preload).toMatch(new RegExp(`\\(request\\) => ipcRenderer\\.invoke\\("${channel}", request\\)`));
+    expect(channelsOf(main, "webContents.send").some((channel) => channel.startsWith("prism:transfer-"))).toBe(false);
+    expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
+  });
+
+  it("o arquivo das importações de dados (RN-IMPORT-018): três pedidos, sem dígito no nome, cada um confere a origem e passa ao `transferSource` com o número da janela; a escolha não recebe nada da tela, e nenhum devolve aviso", () => {
+    const sourceChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:transfer-source"));
+
+    expect(sourceChannels).toEqual(["prism:transfer-source", "prism:transfer-source-release", "prism:transfer-source-status"]);
+    for (const channel of sourceChannels) expect(channel).toMatch(/^prism:[a-z-]+$/);
+    // A escolha: o diálogo, o título, os filtros e a pasta são do processo principal; a tela não manda nada.
+    expect(main).toMatch(/ipcMain\.handle\("prism:transfer-source", \(event\) => \{\s*assertFromApp\(event\);\s*return transferSource\.choose\(windowIdOf\(event\.sender\)\);\s*\}\);/);
+    expect(preload).toMatch(/chooseSource: \(\) => ipcRenderer\.invoke\("prism:transfer-source"\)/);
+    // A consulta e o soltar levam só o pedido, que o `transferSource` confere com o schema, e o número da janela que o processo principal sabe.
+    for (const channel of ["prism:transfer-source-status", "prism:transfer-source-release"]) {
+      expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*return transferSource\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));
+      expect(preload).toMatch(new RegExp(`\\(request\\) => ipcRenderer\\.invoke\\("${channel}", request\\)`));
+    }
+    // A janela que recarrega, cai ou fecha solta os arquivos dela, e a saída e o reinício do serviço soltam todos.
+    expect(main.match(/transferSource\.releaseWindow\(id\)/g)).toHaveLength(3);
+    expect(main.match(/transferSource\.releaseAll\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
+  });
+
+  it("a vez da verificação periódica (RN-VERIF-002): os dois pedidos conferem a origem e passam ao centro das janelas, que os confere com o schema", () => {
+    const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:verification-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?hub\.[a-zA-Z]+Verification\(windowIdOf\(event\.sender\), /g)].map((match) => match[1]);
+    const verificationChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:verification-"));
+
+    expect(verificationChannels).toEqual(["prism:verification-claim", "prism:verification-finish"]);
+    expect(handlers.sort()).toEqual(verificationChannels);
+    expect(channelsOf(hub, "window.send")).toContain("prism:verification-peer");
   });
 });

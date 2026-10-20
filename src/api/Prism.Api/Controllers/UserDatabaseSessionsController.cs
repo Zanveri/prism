@@ -5,6 +5,7 @@ using Prism.Application.DatabaseSessions.Features.ApplyEdits;
 using Prism.Application.DatabaseSessions.Features.CancelQuery;
 using Prism.Application.DatabaseSessions.Features.CloseDatabaseSession;
 using Prism.Application.DatabaseSessions.Features.CountQuery;
+using Prism.Application.DatabaseSessions.Features.CountWholeColumn;
 using Prism.Application.DatabaseSessions.Features.ExecuteQuery;
 using Prism.Application.DatabaseSessions.Features.FetchNextPage;
 using Prism.Application.DatabaseSessions.Features.GetDatabases;
@@ -37,6 +38,13 @@ namespace Prism.Api.Controllers;
 [Route("api/user/database-sessions")]
 public sealed class UserDatabaseSessionsController(IMediator mediator) : ControllerBase, IActionFilter
 {
+    /// <summary>
+    /// RN-EDIT-023: o teto do corpo das três rotas da edição (`edits`, `edits/preview` e `edits/count`), que cobre as 100.000 células de um grupo
+    /// (RN-EDIT-017) com folga; o padrão do Kestrel é de 30 MB. Acima dele a requisição é recusada antes de o handler rodar, como nas outras rotas
+    /// que leem corpo.
+    /// </summary>
+    public const long MaxEditRequestBytes = 32L * 1024 * 1024;
+
     /// <summary>O corpo leva `connectionID` e, para outro banco do mesmo servidor, `database` (RN-ARVORE-006). O `Location` aponta para a sessão, que se fecha por essa rota.</summary>
     [HttpPost]
     public async Task<IActionResult> OpenDatabaseSession([FromBody] OpenDatabaseSessionCommand command, CancellationToken cancellationToken)
@@ -217,8 +225,9 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
         return Ok(result.Value);
     }
 
-    /// <summary>RN-EDIT-005 e 012: o "Salvar". O corpo leva `resultID` e `changes`; a resposta é `{ applied }`.</summary>
+    /// <summary>RN-EDIT-005, 012 e 021: o "Salvar". O corpo leva `resultID` e `changes` (com a coluna inteira, `updateAll`, até uma); a resposta é `{ applied }`.</summary>
     [HttpPost("{id:guid}/queries/edits")]
+    [RequestSizeLimit(MaxEditRequestBytes)]
     public async Task<IActionResult> ApplyEdits(Guid id, [FromBody] ApplyEditsCommand command, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
@@ -230,7 +239,20 @@ public sealed class UserDatabaseSessionsController(IMediator mediator) : Control
 
     /// <summary>RN-EDIT-008: o "Ver SQL" das mesmas alterações, sem executar nada.</summary>
     [HttpPost("{id:guid}/queries/edits/preview")]
+    [RequestSizeLimit(MaxEditRequestBytes)]
     public async Task<IActionResult> PreviewEdits(Guid id, [FromBody] PreviewEditsCommand command, CancellationToken cancellationToken)
+    {
+        var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
+        if (result.IsFailure)
+            return result.ToIActionResult();
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>RN-EDIT-019 e 023: a contagem da coluna inteira, antes da pergunta do "Salvar". O corpo leva `resultID` e `changes`, só com a `updateAll`; a resposta é `{ rows }`.</summary>
+    [HttpPost("{id:guid}/queries/edits/count")]
+    [RequestSizeLimit(MaxEditRequestBytes)]
+    public async Task<IActionResult> CountWholeColumn(Guid id, [FromBody] CountWholeColumnCommand command, CancellationToken cancellationToken)
     {
         var result = await mediator.Send(command with { SessionID = id }, cancellationToken);
         if (result.IsFailure)

@@ -33,8 +33,19 @@ export function isTableTab(tab: QueryTab): tab is TableTab {
  * status: a conexão tem sessão aberta na API, seja a da árvore, seja a de alguma aba (RN-SESSAO-001).
  * Com a árvore fechada e uma aba que já executou, ainda há sessão para desconectar.
  */
-export function isConnected(connectionId: string | null, tabs: QueryTab[], treeSessionOpen: boolean): boolean {
+export function isConnected(connectionId: string | null, tabs: readonly QueryTab[], treeSessionOpen: boolean): boolean {
   return treeSessionOpen || tabs.some((tab) => tab.connectionId === connectionId && tab.sessionId !== null);
+}
+
+/**
+ * As conexões conectadas (`isConnected`), na ordem recebida: a conta e o filtro "Só as conectadas" do navegador (RN-NAV-013), a lista da troca da conexão
+ * da aba, que as põe primeiro (RN-ARVORE-008), e o script genérico, que abre na única que houver (RN-SCRIPT-005). `treeSessionOpen` diz se a árvore abriu a
+ * sessão da conexão (a consulta da sessão tem dado). `notConnected` são as que a verificação periódica achou sem sessão na API (`notConnectedIds`, o "Sem
+ * sessão aberta" da RN-VERIF-003): a sessão da árvore em cache e a das abas ainda estão lá, mas morreram, e elas só voltam a contar quando uma sessão nova
+ * abre (a próxima ação na árvore ou na aba).
+ */
+export function connectedConnectionIds(connectionIds: readonly string[], tabs: readonly QueryTab[], treeSessionOpen: (connectionId: string) => boolean, notConnected: ReadonlySet<string>): string[] {
+  return connectionIds.filter((connectionId) => !notConnected.has(connectionId) && isConnected(connectionId, tabs, treeSessionOpen(connectionId)));
 }
 
 /** O que a área de trabalho guarda e que aponta para conexões: as abas e os nós abertos da árvore. */

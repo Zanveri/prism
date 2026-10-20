@@ -17,7 +17,7 @@ namespace Prism.UnitTesting.Databases;
 /// não deixa provocar na hora certa: a limpeza da transação que falha com a conexão viva e o cancelamento que chega enquanto o `BEGIN`
 /// da tentativa ainda está indo ao banco. O comportamento com o PostgreSQL de verdade é dos fixtures de integração.
 /// </summary>
-public sealed class AdoDatabaseConnectionTests
+public sealed partial class AdoDatabaseConnectionTests
 {
     private const string ReadQuery = "SELECT numero FROM tabela";
 
@@ -112,13 +112,24 @@ public sealed class AdoDatabaseConnectionTests
         command.SetupProperty(mock => mock.CommandText, string.Empty);
         command.SetupProperty(mock => mock.CommandTimeout);
 
-        // As consultas de catálogo levam o esquema e a tabela como parâmetro.
-        var parameters = new Mock<DbParameterCollection>();
+        // As consultas de catálogo levam o esquema e a tabela como parâmetro; os comandos da carga, os valores, que o banco de mentira anota.
+        var parameters = new FakeParameters();
+        DbTransaction? transaction = null;
+        command.Protected().SetupSet<DbTransaction?>("DbTransaction", ItExpr.IsAny<DbTransaction?>()).Callback(value => transaction = value);
+        command.Protected().SetupGet<DbTransaction?>("DbTransaction").Returns(() => transaction);
         command.Protected().Setup<DbParameter>("CreateDbParameter").Returns(() => new Mock<DbParameter>().SetupAllProperties().Object);
-        command.Protected().SetupGet<DbParameterCollection>("DbParameterCollection").Returns(parameters.Object);
+        command.Protected().SetupGet<DbParameterCollection>("DbParameterCollection").Returns(parameters);
+        command.Setup(mock => mock.PrepareAsync(It.IsAny<CancellationToken>())).Returns(() =>
+        {
+            _prepared++;
+
+            return Task.CompletedTask;
+        });
         command.Setup(mock => mock.ExecuteNonQueryAsync(It.IsAny<CancellationToken>())).Returns((CancellationToken token) =>
         {
             _sent.Add(command.Object.CommandText);
+            _sentValues.Add([.. parameters.Values]);
+            _sentInTransaction.Add(command.Object.Transaction is not null);
 
             return _nonQuery(command.Object.CommandText, token);
         });
@@ -136,7 +147,10 @@ public sealed class AdoDatabaseConnectionTests
             if (_catalog.TryGetValue(command.Object.CommandText, out var rows))
                 return Task.FromResult(CreateCatalogReader(rows));
 
-            return Task.FromResult(command.Object.CommandText is ReadQuery or WriteReturningRows ? CreateReader() : CreateEmptyReader(command.Object.CommandText == CountedCommand ? 3 : -1));
+            if (_readers(command.Object.CommandText) is { } custom)
+                return Task.FromResult(custom);
+
+            return Task.FromResult(command.Object.CommandText is ReadQuery or WriteReturningRows ? CreateReader() : CreateEmptyReader(_affected.TryGetValue(command.Object.CommandText, out var affected) ? affected : command.Object.CommandText == CountedCommand ? 3 : -1));
         });
 
         return command.Object;
@@ -1806,6 +1820,257 @@ public sealed class AdoDatabaseConnectionTests
         Assert.Equal(EDatabaseFailure.ExecutionFailed, properties.Error.Kind);
         Assert.Equal("the connection was closed", properties.Error.Message);
         Assert.Equal(["PROPERTIES A", "PROPERTIES B"], _sent);
+    }
+
+    /// <summary>
+    /// RN-SQL-007: no fim de cada operação o registro de sessões pergunta à conexão se o cursor que ele vigia continua aberto
+    /// (<see cref="IDatabaseConnection.HasOpenCursor"/>), e é pela resposta que separa a operação que não chegou ao cursor (ele segue
+    /// vigiado pelo temporizador de ociosidade) da que o fechou (o temporizador para). Aqui a resposta é a do leitor aberto entre
+    /// páginas: a página com mais linhas o deixa aberto, e uma conexão sem comando nenhum não tem cursor.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "OK página com mais linhas deixa o cursor aberto")]
+    public async Task HasOpenCursor_ShouldBeTrue_AfterAPageWithMoreRows()
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        var openBefore = connection.HasOpenCursor;
+
+        //Act
+        var outcome = await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+
+        //Assert
+        Assert.False(openBefore);
+        Assert.True(outcome.IsSuccess);
+        Assert.True(outcome.Value.Page!.HasMore);
+        Assert.True(connection.HasOpenCursor);
+    }
+
+    /// <summary>
+    /// A recusa que não vai ao banco (o controle de transação escrito no texto, RN-SQL-003) não toca no cursor: o leitor continua
+    /// aberto, e é isso que a conexão responde. Se fechasse junto, o registro de sessões daria o cursor por fechado e pararia o
+    /// temporizador de um cursor que ainda está aberto no banco.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "Erro controle de transação recusado antes de ir ao banco mantém o cursor aberto")]
+    public async Task HasOpenCursor_ShouldStayTrue_AfterARefusalThatSendsNothingToTheDriver()
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+
+        //Act
+        var refused = await connection.ExecuteAsync("BEGIN", CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(refused.IsFailure);
+        Assert.Equal(EDatabaseFailure.TransactionControlNotSupported, refused.Error.Kind);
+        Assert.True(connection.HasOpenCursor);
+        Assert.Equal(["BEGIN READ ONLY", ReadQuery], _sent);
+    }
+
+    /// <summary>
+    /// A outra recusa que não vai ao banco: no banco cujo driver executaria os comandos de um envio um por um (os da IBM, sem
+    /// transação só de leitura), o envio com mais de um comando é recusado antes de ser enviado (RN-SQL-001), e o cursor aberto segue
+    /// aberto.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "Erro envio com mais de um comando recusado antes de ir ao banco mantém o cursor aberto")]
+    public async Task HasOpenCursor_ShouldStayTrue_AfterSeveralStatementsAreRefused()
+    {
+        //Arrange
+        var connection = await OpenWithoutTransactionsAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+
+        //Act
+        var refused = await connection.ExecuteAsync($"{CountedCommand}; BEGIN WORK", CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(refused.IsFailure);
+        Assert.Equal(EDatabaseFailure.MultipleStatementsNotSupported, refused.Error.Kind);
+        Assert.True(connection.HasOpenCursor);
+        Assert.Equal([ReadQuery], _sent);
+    }
+
+    /// <summary>
+    /// O banco recusa o "carregar mais" com o leitor aberto: a base abandona o cursor (e desfaz a transação da leitura), e a conexão
+    /// responde que não há mais cursor. O registro de sessões para o temporizador.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "Erro falha do banco no carregar mais fecha o cursor")]
+    public async Task HasOpenCursor_ShouldBeFalse_AfterADatabaseError()
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+        _rowFailure = row => row == 220 ? new FakeDatabaseException("division by zero", "22012") : null;
+
+        //Act
+        var next = await connection.FetchNextAsync(CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(next.IsFailure);
+        Assert.Equal("22012", next.Error.SqlState);
+        Assert.False(connection.HasOpenCursor);
+        Assert.Equal(["BEGIN READ ONLY", ReadQuery, "ROLLBACK"], _sent);
+        Assert.True(connection.IsOpen);
+    }
+
+    /// <summary>O cancelamento da requisição chega com o "carregar mais" no meio da página: o cursor é abandonado, e a conexão responde que ele fechou.</summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "Erro cancelamento da requisição no carregar mais fecha o cursor")]
+    public async Task HasOpenCursor_ShouldBeFalse_AfterACanceledToken()
+    {
+        //Arrange
+        using var canceled = new CancellationTokenSource();
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+        _rowFailure = row =>
+        {
+            if (row != 220)
+                return null;
+
+            canceled.Cancel();
+
+            return new OperationCanceledException("texto do .NET");
+        };
+
+        //Act
+        var next = await connection.FetchNextAsync(canceled.Token);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(next.IsFailure);
+        Assert.Equal("O comando foi cancelado.", next.Error.Message);
+        Assert.Equal(ECancelOutcome.Canceled, next.Error.Outcome);
+        Assert.False(connection.HasOpenCursor);
+        Assert.True(connection.IsOpen);
+    }
+
+    /// <summary>A conexão cai no meio do "carregar mais": o cursor não existe mais, e a conexão responde isso junto com o <see cref="IDatabaseConnection.IsOpen"/> falso.</summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "Erro conexão que cai no carregar mais fecha o cursor")]
+    public async Task HasOpenCursor_ShouldBeFalse_AfterADroppedConnection()
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+        _rowFailure = row =>
+        {
+            if (row != 220)
+                return null;
+
+            _state = ConnectionState.Closed;
+
+            return new FakeDatabaseException("the connection was closed");
+        };
+
+        //Act
+        var next = await connection.FetchNextAsync(CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(next.IsFailure);
+        Assert.Equal("the connection was closed", next.Error.Message);
+        Assert.False(connection.HasOpenCursor);
+        Assert.False(connection.IsOpen);
+    }
+
+    /// <summary>
+    /// Todo comando que vai ao banco abandona o cursor anterior antes de ser enviado. O que volta sem linhas (a contagem do que
+    /// alterou, o comando utilitário) não abre outro: a conexão fica sem cursor.
+    /// </summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Theory(DisplayName = "OK comando sem linhas que substitui o cursor aberto o fecha")]
+    [InlineData(CountedCommand)]
+    [InlineData(UtilityCommand)]
+    public async Task HasOpenCursor_ShouldBeFalse_AfterACommandWithoutRows(string command)
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+
+        //Act
+        var outcome = await connection.ExecuteAsync(command, CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(outcome.IsSuccess);
+        Assert.Null(outcome.Value.Page);
+        Assert.False(connection.HasOpenCursor);
+    }
+
+    /// <summary>O comando que grava e devolve linhas roda até o fim (RN-SQL-013), e o leitor dele não fica aberto entre páginas: o cursor anterior foi abandonado, e não há outro.</summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "OK comando que substitui o cursor e é lido até o fim o deixa fechado")]
+    public async Task HasOpenCursor_ShouldBeFalse_AfterAReplacingCommandThatReadToTheEnd()
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+
+        //Act
+        var outcome = await connection.ExecuteAsync(WriteReturningRows, CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(outcome.IsSuccess);
+        Assert.False(outcome.Value.Page!.HasMore);
+        Assert.Equal(250, outcome.Value.Page.TotalRows);
+        Assert.False(connection.HasOpenCursor);
+    }
+
+    /// <summary>A leitura que substitui o cursor aberto e também tem mais linhas deixa um cursor aberto, o dela, e o anterior foi desfeito antes.</summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "OK leitura que substitui o cursor e tem mais linhas deixa o cursor aberto")]
+    public async Task HasOpenCursor_ShouldBeTrue_AfterAReplacingCommandWhosePageHasMoreRows()
+    {
+        //Arrange
+        var connection = await OpenAsync();
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var openBefore = connection.HasOpenCursor;
+
+        //Act
+        var outcome = await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+
+        //Assert
+        Assert.True(openBefore);
+        Assert.True(outcome.IsSuccess);
+        Assert.True(outcome.Value.Page!.HasMore);
+        Assert.True(connection.HasOpenCursor);
+        Assert.Equal(["BEGIN READ ONLY", ReadQuery, "ROLLBACK", "BEGIN READ ONLY", ReadQuery], _sent);
+    }
+
+    /// <summary>RN-SQL-007: o cursor aberto é o de uma leitura com mais páginas; lida até o fim, ele fecha.</summary>
+    [Trait("AdoDatabaseConnection", "HasOpenCursor")]
+    [Fact(DisplayName = "OK há cursor aberto só enquanto a leitura tem mais páginas")]
+    public async Task HasOpenCursor_ShouldFollowTheCursor()
+    {
+        //Arrange
+        _rows = 250;
+        var connection = await OpenAsync();
+
+        //Act
+        var before = connection.HasOpenCursor;
+        await connection.ExecuteAsync(ReadQuery, CancellationToken.None);
+        var withMore = connection.HasOpenCursor;
+        await connection.FetchNextAsync(CancellationToken.None);
+        var atTheEnd = connection.HasOpenCursor;
+
+        //Assert
+        Assert.False(before);
+        Assert.True(withMore);
+        Assert.False(atTheEnd);
     }
 
     /// <summary>A recusa de um banco de mentira, com o SQLSTATE quando o teste o dá.</summary>

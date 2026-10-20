@@ -1,0 +1,339 @@
+{
+  "rule": "RN-EXPORT-008: a tabela de texto do DBeaver, para um lote só (até 200 linhas). Na tela, txtWriter (to-txt.ts); na API, TxtExportWriter. cutValues é quantos valores foram cortados na largura máxima.",
+  "notes": [
+    "columns são os nomes; rows são texto ou null; options são as da rota (lineBreak crlf ou lf)."
+  ],
+  "cases": [
+    {
+      "name": "padrões",
+      "columns": [
+        "id",
+        "nome",
+        "criado"
+      ],
+      "rows": [
+        [
+          "1",
+          "Bruna",
+          "2024-01-15"
+        ],
+        [
+          "2",
+          "Ana",
+          "2024-02-20"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|id |nome |criado    |\n|---|-----|----------|\n|1  |Bruna|2024-01-15|\n|2  |Ana  |2024-02-20|\n",
+      "cutValues": 0
+    },
+    {
+      "name": "CRLF",
+      "columns": [
+        "id"
+      ],
+      "rows": [
+        [
+          "1"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "crlf"
+      },
+      "expected": "|id |\r\n|---|\r\n|1  |\r\n",
+      "cutValues": 0
+    },
+    {
+      "name": "sem barras nas pontas",
+      "columns": [
+        "id",
+        "nome",
+        "criado"
+      ],
+      "rows": [
+        [
+          "1",
+          "Bruna",
+          "2024-01-15"
+        ],
+        [
+          "2",
+          "Ana",
+          "2024-02-20"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": false,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "id |nome |criado    \n---|-----|----------\n1  |Bruna|2024-01-15\n2  |Ana  |2024-02-20\n",
+      "cutValues": 0
+    },
+    {
+      "name": "sem linha sob o cabeçalho",
+      "columns": [
+        "id"
+      ],
+      "rows": [
+        [
+          "1"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": false,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|id |\n|1  |\n",
+      "cutValues": 0
+    },
+    {
+      "name": "sem cabeçalho",
+      "columns": [
+        "id",
+        "nome"
+      ],
+      "rows": [
+        [
+          "1",
+          "Bruna"
+        ]
+      ],
+      "options": {
+        "header": false,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|1  |Bruna|\n",
+      "cutValues": 0
+    },
+    {
+      "name": "nulo vazio e NULL",
+      "columns": [
+        "id",
+        "obs"
+      ],
+      "rows": [
+        [
+          "1",
+          null
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|id |obs|\n|---|---|\n|1  |   |\n",
+      "cutValues": 0
+    },
+    {
+      "name": "mostrar NULL",
+      "columns": [
+        "id",
+        "obs"
+      ],
+      "rows": [
+        [
+          "1",
+          null
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": true,
+        "lineBreak": "lf"
+      },
+      "expected": "|id |obs |\n|---|----|\n|1  |NULL|\n",
+      "cutValues": 0
+    },
+    {
+      "name": "largura mínima",
+      "columns": [
+        "a"
+      ],
+      "rows": [
+        [
+          "1"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 5,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|a    |\n|-----|\n|1    |\n",
+      "cutValues": 0
+    },
+    {
+      "name": "largura máxima corta valor e nome",
+      "columns": [
+        "descricao"
+      ],
+      "rows": [
+        [
+          "Bruna Souza"
+        ],
+        [
+          "Ana"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 4,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|desc|\n|----|\n|Brun|\n|Ana |\n",
+      "cutValues": 1
+    },
+    {
+      "name": "controles viram espaço",
+      "columns": [
+        "texto"
+      ],
+      "rows": [
+        [
+          "a\nb\tc\r\nd"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|texto   |\n|--------|\n|a b c  d|\n",
+      "cutValues": 0
+    },
+    {
+      "name": "separador de linha e de parágrafo viram espaço",
+      "columns": [
+        "linha\u2028nome"
+      ],
+      "rows": [
+        [
+          "a\u2028b\u2029c"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|linha nome|\n|----------|\n|a b c     |\n",
+      "cutValues": 0
+    },
+    {
+      "name": "ideograma e emoji contam um",
+      "columns": [
+        "n"
+      ],
+      "rows": [
+        [
+          "漢字😀"
+        ]
+      ],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|n  |\n|---|\n|漢字😀|\n",
+      "cutValues": 0
+    },
+    {
+      "name": "sem linhas, só o cabeçalho",
+      "columns": [
+        "id",
+        "nome",
+        "criado"
+      ],
+      "rows": [],
+      "options": {
+        "header": true,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "|id |nome|criado|\n|---|----|------|\n",
+      "cutValues": 0
+    },
+    {
+      "name": "sem linhas e sem cabeçalho, vazio",
+      "columns": [
+        "id",
+        "nome",
+        "criado"
+      ],
+      "rows": [],
+      "options": {
+        "header": false,
+        "headerLine": true,
+        "edgeDelimiters": true,
+        "minWidth": 3,
+        "maxWidth": 0,
+        "showNull": false,
+        "lineBreak": "lf"
+      },
+      "expected": "",
+      "cutValues": 0
+    }
+  ]
+}

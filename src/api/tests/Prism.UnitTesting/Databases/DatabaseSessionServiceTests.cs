@@ -16,7 +16,7 @@ namespace Prism.UnitTesting.Databases;
 /// volta (rede morta) e o temporizador que dispara fora de hora. O comportamento com o banco de verdade é do fixture de integração
 /// de mesmo nome.
 /// </summary>
-public sealed class DatabaseSessionServiceTests
+public sealed partial class DatabaseSessionServiceTests
 {
     private static readonly ConnectionSettings Settings = new(EDatabaseEngine.PostgreSql, "banco.local", 5432, "producao", "operador", "senha-de-teste");
 
@@ -24,8 +24,9 @@ public sealed class DatabaseSessionServiceTests
     private readonly ManualTimers _clock = new();
     private readonly FakeConnection _connection = new();
 
-    private DatabaseSessionService CreateService()
-        => new([new FakeClient(_connection)], _vault.Object, _clock, Logger.None);
+    /// <param name="clock">Sem ele, o relógio de temporizadores na mão do teste (`_clock`); com um `FakeTimeProvider`, eles disparam na hora marcada.</param>
+    private DatabaseSessionService CreateService(TimeProvider? clock = null)
+        => new([new FakeClient(_connection)], _vault.Object, clock ?? _clock, Logger.None);
 
     private static async Task<DatabaseSessionInfo> OpenAsync(DatabaseSessionService service)
         => (await service.OpenAsync(Guid.NewGuid(), Settings, 0, CancellationToken.None)).Value;
@@ -233,6 +234,119 @@ public sealed class DatabaseSessionServiceTests
         Assert.True(page.IsSuccess);
         Assert.True(_connection.Disposed);
         Assert.Equal(EDatabaseFailure.SessionNotFound, afterwards.Error.Kind);
+    }
+
+    /// <summary>
+    /// RN-SQL-007 e RN-GRADE-011: a recusa do filtro não vai ao banco, e o cursor do resultado anterior continua aberto na conexão (o
+    /// "carregar mais" segue funcionando). Ele continua vigiado: fecha aos cinco minutos da última leitura, e não fica aberto (no
+    /// PostgreSQL, dentro da transação só de leitura) até o próximo comando ou o fim da sessão.
+    /// </summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK depois da recusa do filtro o cursor aberto fecha aos cinco minutos da última leitura")]
+    public async Task IdleTimer_ShouldCloseTheCursorFiveMinutesAfterTheLastRead_WhenTheFilterIsRefused()
+    {
+        //Arrange
+        var clock = new FakeTimeProvider();
+        var service = CreateService(clock);
+        var session = await OpenAsync(service);
+        _connection.Outcomes.Enqueue(new QueryOutcome(OnePage(hasMore: true), null, 0));
+        await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(2));
+
+        //Act
+        var refused = await service.ExecuteAsync(session.ID, "SELECT * FROM loja.pedido", "a = 1; DELETE FROM loja.pedido", QueryPaging.DefaultPageSize, CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(3));
+
+        //Assert
+        Assert.Equal(EDatabaseFailure.FilterInvalid, refused.Error.Kind);
+        Assert.Equal(1, _connection.CloseCursorCalls);
+        Assert.False(_connection.HasOpenCursor);
+    }
+
+    /// <summary>
+    /// RN-SQL-007: a recusa da conexão antes de ir ao banco (controle de transação, mais de um comando) não é leitura. Um minuto depois
+    /// da leitura, ela não adia o prazo: o cursor fecha aos cinco minutos da leitura, e não aos cinco da recusa.
+    /// </summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Theory(DisplayName = "OK a recusa da conexão antes de ir ao banco não adia o fechamento do cursor ocioso")]
+    [InlineData(EDatabaseFailure.TransactionControlNotSupported)]
+    [InlineData(EDatabaseFailure.MultipleStatementsNotSupported)]
+    public async Task IdleTimer_ShouldKeepTheDeadlineOfTheLastRead_WhenTheConnectionRefusesBeforeRunning(EDatabaseFailure refusal)
+    {
+        //Arrange
+        var clock = new FakeTimeProvider();
+        var service = CreateService(clock);
+        var session = await OpenAsync(service);
+        _connection.NextPageHasMore = true;
+        await service.FetchNextAsync(session.ID, CancellationToken.None);
+        _connection.Refusal = new DatabaseFailure(refusal, "Recusado antes de ir ao banco.");
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        //Act
+        var refused = await service.ExecuteAsync(session.ID, "COMMIT", CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(4) - TimeSpan.FromMilliseconds(1));
+        var closedBeforeFiveMinutes = _connection.CloseCursorCalls;
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+
+        //Assert
+        Assert.Equal(refusal, refused.Error.Kind);
+        Assert.Equal(0, closedBeforeFiveMinutes);
+        Assert.Equal(1, _connection.CloseCursorCalls);
+    }
+
+    /// <summary>
+    /// RN-SQL-007: o aviso do temporizador que chega enquanto uma recusa tem a vez da sessão desiste, contando com ela. Com o prazo da
+    /// última leitura vencido, é a recusa, ao terminar, quem fecha o cursor: deixar o temporizador como estava o deixaria aberto.
+    /// </summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Fact(DisplayName = "OK o aviso que chega durante uma recusa não se perde: ela fecha o cursor cujo prazo venceu")]
+    public async Task IdleTimer_ThatFiresDuringARefusal_ShouldHaveTheRefusalCloseTheCursor()
+    {
+        //Arrange
+        var service = CreateService();
+        var session = await OpenAsync(service);
+        _connection.NextPageHasMore = true;
+        await service.FetchNextAsync(session.ID, CancellationToken.None);
+        _connection.Refusal = new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, "Recusado antes de ir ao banco.");
+        _connection.WhileRefusing = _clock.FireTimers;
+        _clock.Advance(TimeSpan.FromMinutes(5));
+
+        //Act
+        var refused = await service.ExecuteAsync(session.ID, "COMMIT", CancellationToken.None);
+
+        //Assert
+        Assert.Equal(EDatabaseFailure.TransactionControlNotSupported, refused.Error.Kind);
+        Assert.Equal(1, _connection.CloseCursorCalls);
+    }
+
+    /// <summary>
+    /// RN-SQL-007: o comando que foi ao banco fechou o cursor anterior antes de ser enviado, tenha ele falhado no banco, sido cancelado
+    /// ou deixado uma transação que a base desfez (`executed`). Sem cursor, o temporizador para, como sempre: nada fecha depois.
+    /// </summary>
+    [Trait("DatabaseSessionService", "ExecuteAsync")]
+    [Theory(DisplayName = "OK a falha de um comando que foi ao banco fechou o cursor, e o temporizador para")]
+    [InlineData(EDatabaseFailure.ExecutionFailed, null, false)]
+    [InlineData(EDatabaseFailure.ExecutionFailed, ECancelOutcome.Canceled, false)]
+    [InlineData(EDatabaseFailure.TransactionControlNotSupported, null, true)]
+    public async Task IdleTimer_ShouldStop_WhenAFailedCommandClosedTheCursor(EDatabaseFailure kind, ECancelOutcome? outcome, bool executed)
+    {
+        //Arrange
+        var clock = new FakeTimeProvider();
+        var service = CreateService(clock);
+        var session = await OpenAsync(service);
+        _connection.NextPageHasMore = true;
+        await service.FetchNextAsync(session.ID, CancellationToken.None);
+        _connection.Failure = new DatabaseFailure(kind, "Falhou depois de ir ao banco.", Outcome: outcome, Executed: executed);
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        //Act
+        var failed = await service.ExecuteAsync(session.ID, "SELECT 1 / 0", CancellationToken.None);
+        clock.Advance(TimeSpan.FromMinutes(10));
+
+        //Assert
+        Assert.Equal(kind, failed.Error.Kind);
+        Assert.False(_connection.HasOpenCursor);
+        Assert.Equal(0, _connection.CloseCursorCalls);
     }
 
     private static readonly QueryColumn[] CutColumns = [new("id", "integer", "number"), new("corpo", "text", "text")];
@@ -528,7 +642,8 @@ public sealed class DatabaseSessionServiceTests
 
     /// <summary>
     /// A conexão de mentira: executar nunca volta (a não ser que o teste dê o desfecho), e carregar mais devolve uma página vazia com o
-    /// `HasMore` que o teste pediu (ou a página que ele deu).
+    /// `HasMore` que o teste pediu (ou a página que ele deu). O cursor segue a base: a página com mais linhas o deixa aberto, toda
+    /// operação que vai ao banco o fecha, e a recusa antes de ir ao banco (`Refusal`) não o toca.
     /// </summary>
     private sealed class FakeConnection : IDatabaseConnection
     {
@@ -559,16 +674,82 @@ public sealed class DatabaseSessionServiceTests
         /// <summary>Os comandos que chegaram a executar, na ordem.</summary>
         public List<string> Executed { get; } = [];
 
-        /// <summary>A recusa do banco que executar responde, quando o teste a dá.</summary>
+        /// <summary>A recusa do banco que executar responde, quando o teste a dá. O comando foi ao banco, e o cursor anterior fechou.</summary>
         public DatabaseFailure? Failure { get; set; }
+
+        /// <summary>A recusa antes de ir ao banco (controle de transação, mais de um comando), que não toca no cursor.</summary>
+        public DatabaseFailure? Refusal { get; set; }
+
+        /// <summary>Roda durante a recusa, com a vez da sessão tomada: é onde o teste faz o temporizador avisar "no meio" dela.</summary>
+        public Action? WhileRefusing { get; set; }
+
+        /// <summary>RN-PROT-002: os comandos que chegaram pelo caminho da conexão somente leitura, na ordem.</summary>
+        public List<string> ExecutedReadOnly { get; } = [];
+
+        /// <summary>
+        /// RN-SQL-007: há um cursor aberto na conexão. Segue o da base: a página com mais linhas o abre, e todo comando que chega à conexão, o
+        /// fim da leitura e o fechamento por ociosidade o fecham; a recusa antes de ir ao banco (<see cref="Refusal"/>) não o toca. O teste
+        /// pode dar o que quiser.
+        /// </summary>
+        public bool HasOpenCursor { get; set; }
+
+        /// <summary>RN-VERIF-002: as consultas de verificação que chegaram (nula é a do banco), na ordem.</summary>
+        public List<string?> Verified { get; } = [];
+
+        /// <summary>O que a verificação responde; sem ele, sucesso. Com <see cref="VerificationGate"/>, ela só volta quando o teste o completa.</summary>
+        public DatabaseFailure? VerificationFailure { get; set; }
+
+        public TaskCompletionSource? VerificationGate { get; set; }
+
+        /// <summary>A conexão cai na verificação, como a que o administrador derrubou.</summary>
+        public bool ClosesItselfOnVerify { get; set; }
 
         public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
         {
+            if (Refusal is { } refusal)
+            {
+                WhileRefusing?.Invoke();
+
+                return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(refusal));
+            }
+
             Executed.Add(sql);
+            HasOpenCursor = false;
             if (Failure is { } failure)
                 return Task.FromResult(Result.Failure<QueryOutcome, DatabaseFailure>(failure));
 
-            return Outcomes.TryDequeue(out var outcome) ? Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome)) : new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+            return Respond();
+        }
+
+        public Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
+        {
+            ExecutedReadOnly.Add(sql);
+            HasOpenCursor = false;
+
+            return Respond();
+        }
+
+        /// <summary>O desfecho que o teste deu, com o cursor aberto quando a página tem mais linhas; sem ele, o comando nunca volta.</summary>
+        private Task<Result<QueryOutcome, DatabaseFailure>> Respond()
+        {
+            if (!Outcomes.TryDequeue(out var outcome))
+                return new TaskCompletionSource<Result<QueryOutcome, DatabaseFailure>>().Task;
+
+            HasOpenCursor = outcome.Page?.HasMore ?? false;
+
+            return Task.FromResult(Result.Success<QueryOutcome, DatabaseFailure>(outcome));
+        }
+
+        public async Task<UnitResult<DatabaseFailure>> VerifyAsync(string? sql, CancellationToken cancellationToken)
+        {
+            Verified.Add(sql);
+            if (VerificationGate is { } gate)
+                await gate.Task;
+
+            if (ClosesItselfOnVerify)
+                IsOpen = false;
+
+            return VerificationFailure is { } failure ? UnitResult.Failure(failure) : UnitResult.Success<DatabaseFailure>();
         }
 
         public Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken)
@@ -576,12 +757,16 @@ public sealed class DatabaseSessionServiceTests
             if (ClosesItselfOnFetch)
                 IsOpen = false;
 
-            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(NextPage ?? new QueryPage([], [], NextPageHasMore, 0, [])));
+            var page = NextPage ?? new QueryPage([], [], NextPageHasMore, 0, []);
+            HasOpenCursor = page.HasMore;
+
+            return Task.FromResult(Result.Success<QueryPage, DatabaseFailure>(page));
         }
 
         public Task CloseCursorAsync()
         {
             CloseCursorCalls++;
+            HasOpenCursor = false;
             if (ClosesItselfOnCloseCursor)
                 IsOpen = false;
 
@@ -635,15 +820,103 @@ public sealed class DatabaseSessionServiceTests
             => throw new NotSupportedException();
 
         public Task<Result<IReadOnlyList<DatabaseInfo>, DatabaseFailure>> GetDatabasesAsync(CancellationToken cancellationToken)
-            => Task.FromResult(Result.Success<IReadOnlyList<DatabaseInfo>, DatabaseFailure>([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)]));
+        {
+            HasOpenCursor = false;
+
+            return Task.FromResult(Result.Success<IReadOnlyList<DatabaseInfo>, DatabaseFailure>([new DatabaseInfo("producao", true), new DatabaseInfo("historico", false)]));
+        }
+
+        /// <summary>RN-EDIT-010: o que o catálogo da edição responde; sem ele, a edição não é esperada no teste.</summary>
+        public IReadOnlyList<EditCatalogTable?>? Catalog { get; set; }
+
+        /// <summary>Quantas vezes o catálogo da edição foi consultado nesta conexão.</summary>
+        public int DescribeCalls { get; private set; }
+
+        /// <summary>RN-EDIT-005: os comandos de cada "Salvar" que chegou à conexão, na ordem.</summary>
+        public List<IReadOnlyList<EditCommand>> Saved { get; } = [];
 
         public Task<Result<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>> DescribeEditTablesAsync(EditTables tables, CancellationToken cancellationToken)
-            => throw new NotSupportedException();
+        {
+            DescribeCalls++;
+
+            return Task.FromResult(Catalog is { } catalog ? Result.Success<IReadOnlyList<EditCatalogTable?>, DatabaseFailure>(catalog) : throw new NotSupportedException());
+        }
 
         public Task<UnitResult<DatabaseFailure>> LimitLockWaitAsync(CancellationToken cancellationToken)
+            => Task.FromResult(UnitResult.Success<DatabaseFailure>());
+
+        /// <summary>RN-EDIT-021: a coluna inteira de cada "Salvar" que chegou à conexão com uma, e se ele pediu a transação do retrato.</summary>
+        public List<(WholeColumnPlan Plan, bool WholeColumn)> SavedWholeColumns { get; } = [];
+
+        /// <summary>RN-EDIT-019: as contagens da coluna inteira que chegaram à conexão, e o que elas respondem.</summary>
+        public List<WholeColumnPlan> Counted { get; } = [];
+
+        public long WholeColumnRows { get; set; }
+
+        /// <summary>Como a base: o "Salvar" é um comando na conexão e fecha o cursor aberto; o plano roda com o catálogo de dentro da transação.</summary>
+        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, bool wholeColumn, Func<IReadOnlyList<EditCatalogTable?>, Result<EditPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
+        {
+            HasOpenCursor = false;
+            var planned = plan(Catalog ?? throw new NotSupportedException());
+            if (planned.IsFailure)
+                return Task.FromResult(Result.Failure<int, DatabaseFailure>(planned.Error));
+
+            Saved.Add(planned.Value.Commands);
+            if (planned.Value.WholeColumn is { } whole)
+                SavedWholeColumns.Add((whole, wholeColumn));
+
+            return Task.FromResult(Result.Success<int, DatabaseFailure>(planned.Value.Commands.Count + (planned.Value.WholeColumn is null ? 0 : 1)));
+        }
+
+        /// <summary>Como a base: a contagem é um comando na conexão e fecha o cursor aberto; o plano roda com o catálogo da própria sessão.</summary>
+        public Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(EditTables tables, Func<IReadOnlyList<EditCatalogTable?>, Result<WholeColumnPlan, DatabaseFailure>> plan, CancellationToken cancellationToken)
+        {
+            HasOpenCursor = false;
+            var planned = plan(Catalog ?? throw new NotSupportedException());
+            if (planned.IsFailure)
+                return Task.FromResult(Result.Failure<long, DatabaseFailure>(planned.Error));
+
+            Counted.Add(planned.Value);
+
+            return Task.FromResult(Result.Success<long, DatabaseFailure>(WholeColumnRows));
+        }
+
+        public Task<Result<ImportCatalog?, DatabaseFailure>> DescribeImportTargetAsync(string schema, string table, CancellationToken cancellationToken)
             => throw new NotSupportedException();
 
-        public Task<Result<int, DatabaseFailure>> ApplyEditsAsync(EditTables tables, bool oneAtATime, Func<IReadOnlyList<EditCatalogTable?>, Result<IReadOnlyList<EditCommand>, DatabaseFailure>> plan, CancellationToken cancellationToken)
+        public Task<Result<IReadOnlyList<IReadOnlyList<string?>>, DatabaseFailure>> CheckImportCastsAsync(IReadOnlyList<string> types, IReadOnlyList<IReadOnlyList<object?>> values, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        /// <summary>RN-EXPORT-017: a leitura da exportação é de uma conexão à parte, que o registro de sessões nunca usa.</summary>
+        public Task<UnitResult<DatabaseFailure>> BeginExportAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<Result<ExportBatch, DatabaseFailure>> ReadExportRowsAsync(ExportReadPlan plan, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        /// <summary>RN-IMPORT-015: o carregador da importação e da cópia é de uma conexão à parte, que o registro de sessões nunca usa.</summary>
+        public Task<UnitResult<DatabaseFailure>> BeginLoadAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public int LoadRowsPerCommand(int columns)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> BeginLoadTransactionAsync(CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> EmptyTableAsync(string schema, string table, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> InsertRowsAsync(LoadTarget target, IReadOnlyList<IReadOnlyList<EditParameter>> rows, CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
+        public Task<UnitResult<DatabaseFailure>> CommitLoadAsync()
             => throw new NotSupportedException();
     }
 }

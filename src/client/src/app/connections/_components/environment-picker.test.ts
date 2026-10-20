@@ -11,12 +11,12 @@ import { EyedropperIcon } from "@/components/ui";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
 
 import { connectionsCopy } from "../_lib/connections.copy";
-import type { Folder } from "../_lib/connections.schema";
+import { unprotected, type Folder } from "../_lib/connections.schema";
 import { EnvironmentPicker, type EnvironmentPickerProps } from "./environment-picker";
 
 const copy = connectionsCopy.form.environment;
 const now = "2026-10-13T12:00:00Z";
-const fabrica: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: "Produção", environmentColor: "#FF8A7A", color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 
 const base: EnvironmentPickerProps = { idPrefix: "cx", defaultName: "", color: null, onColorChange: () => {}, errors: {}, hint: copy.connectionHint };
 

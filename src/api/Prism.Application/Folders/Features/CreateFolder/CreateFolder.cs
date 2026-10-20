@@ -10,13 +10,24 @@ using Prism.Core.Mediator;
 
 namespace Prism.Application.Folders.Features.CreateFolder;
 
-/// <summary>`ParentID` nulo cria na raiz (RN-PASTA-001). O ambiente é opcional (RN-PASTA-005): sem nome, a pasta não tem ambiente.</summary>
+/// <summary>
+/// `ParentID` nulo cria na raiz (RN-PASTA-001). O ambiente é opcional (RN-PASTA-005): sem nome, a pasta não tem ambiente. A cor da pasta também
+/// (RN-PASTA-007): sem ela, o ícone da pasta é o neutro. As proteções também (RN-PROT-001 e 002): sem elas, a pasta não impõe nada; criar uma pasta
+/// já somente leitura não pede a senha do usuário (RN-PROT-003).
+/// </summary>
 public sealed record CreateFolderCommand : IRequest<Result<FolderDto, ApiErrorDto>>
 {
     public string Name { get; init; } = string.Empty;
     public Guid? ParentID { get; init; }
     public string? EnvironmentName { get; init; }
     public string? EnvironmentColor { get; init; }
+    public string? Color { get; init; }
+
+    /// <summary>RN-PROT-001: `none`, `irreversible` ou `all`; ausente, nulo ou vazio é `none`.</summary>
+    public string? ConfirmCommands { get; init; }
+
+    /// <summary>RN-PROT-002: ausente é falso.</summary>
+    public bool ReadOnly { get; init; }
 }
 
 internal sealed class CreateFolderHandler(IFolderQueries folderQueries, IFolderRepository folderRepository, TimeProvider timeProvider) : IRequestHandler<CreateFolderCommand, Result<FolderDto, ApiErrorDto>>
@@ -31,12 +42,13 @@ internal sealed class CreateFolderHandler(IFolderQueries folderQueries, IFolderR
         if (await folderQueries.Exists(name, request.ParentID, cancellationToken))
             return Result.Failure<FolderDto, ApiErrorDto>(FolderErrors.AlreadyExists(name));
 
-        var folder = Folder.Create(name, request.ParentID, request.EnvironmentName, request.EnvironmentColor, timeProvider.GetUtcNow().UtcDateTime);
+        var folder = Folder.Create(name, request.ParentID, request.EnvironmentName, request.EnvironmentColor, request.Color, request.ConfirmCommands, request.ReadOnly, timeProvider.GetUtcNow().UtcDateTime);
 
+        // As proteções que valem (RN-PROT-004) saem do documento que a gravação escreveu, com as pastas acima.
         var inserted = await folderRepository.Insert(folder, cancellationToken);
         if (inserted.IsFailure)
             return Result.Failure<FolderDto, ApiErrorDto>(inserted.Error);
 
-        return Result.Success<FolderDto, ApiErrorDto>(FolderMappings.ToDto(folder));
+        return Result.Success<FolderDto, ApiErrorDto>(folder.ToDto(inserted.Value));
     }
 }

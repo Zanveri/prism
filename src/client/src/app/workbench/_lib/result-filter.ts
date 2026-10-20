@@ -1,5 +1,5 @@
 import { conditionOf } from "./table-sql";
-import { isBusyState, type FilterRefusal, type RunnerState, type RunTarget } from "./use-query-runner";
+import { isPersonBusy, type FilterRefusal, type RunnerState, type RunTarget } from "./use-query-runner";
 
 /**
  * O filtro do resultado da aba de consulta (RN-GRADE-011), em funções sem React, com as peças injetadas (no molde de `table-view.ts`): o que a aba DECIDE e o
@@ -36,11 +36,12 @@ export type ResultFilterDeps = {
  * junta ao comando. O texto do editor não muda. Vazio, o comando vai sem filtro. `draft` é o que o campo passa a mostrar (o do menu é o texto já junto; o de
  * "Limpar", vazio).
  *
- * Com a aba ocupada nada muda (o executor recusaria). Enviado, o filtro passa a ser o em vigor e o comando fica fixado (um erro do banco no comando filtrado
+ * Com a aba ocupada pela pessoa nada muda (o executor recusaria); a execução da atualização automática não segura o filtro, que toma o lugar dela
+ * (`isPersonBusy`, RN-GRADE-014). Enviado, o filtro passa a ser o em vigor e o comando fica fixado (um erro do banco no comando filtrado
  * deixa o campo à vista para a correção). A recusa da API (`FILTER_INVALID`) volta ao campo com a frase dela, e o filtro em vigor volta a ser o de antes.
  */
 export async function applyResultFilter(base: RunTarget | null, draft: string, applied: string, state: RunnerState, deps: ResultFilterDeps): Promise<void> {
-  if (base === null || isBusyState(state)) return;
+  if (base === null || isPersonBusy(state)) return;
 
   const filter = conditionOf(draft);
   deps.setDraft(draft);

@@ -1,0 +1,93 @@
+{
+  "rule": "RN-EXPORT-009: a célula da tabela do GitHub. Na tela, a célula do to-markdown.ts; na API, ExportText.MarkdownCell.",
+  "notes": [
+    "value e expected são texto ou { codePoints: [...] }."
+  ],
+  "cases": [
+    {
+      "name": "texto simples",
+      "value": "Ana",
+      "expected": "Ana"
+    },
+    {
+      "name": "barra vertical",
+      "value": "a|b",
+      "expected": "a\\|b"
+    },
+    {
+      "name": "barra invertida",
+      "value": "a\\b",
+      "expected": "a\\\\b"
+    },
+    {
+      "name": "formatação",
+      "value": "*negrito* _it_ `code` ~til~ [link]",
+      "expected": "\\*negrito\\* \\_it\\_ \\`code\\` \\~til\\~ \\[link\\]"
+    },
+    {
+      "name": "HTML vira entidade",
+      "value": "<script>alert(1)</script>",
+      "expected": "&lt;script>alert(1)&lt;/script>"
+    },
+    {
+      "name": "e comercial",
+      "value": "a & b",
+      "expected": "a &amp; b"
+    },
+    {
+      "name": "quebras de linha nas três formas",
+      "value": "l1\nl2\r\nl3\rl4",
+      "expected": "l1<br>l2<br>l3<br>l4"
+    },
+    {
+      "name": "fim de CDATA",
+      "value": "]]>",
+      "expected": "\\]\\]>"
+    },
+    {
+      "name": "aspas ficam",
+      "value": "diz \"oi\" e 'tchau'",
+      "expected": "diz \"oi\" e 'tchau'"
+    },
+    {
+      "name": "_x0041_ já escrito",
+      "value": "_x0041_",
+      "expected": "\\_x0041\\_"
+    },
+    {
+      "name": "U+0000 fica",
+      "value": "a\u0000b",
+      "expected": "a\u0000b"
+    },
+    {
+      "name": "U+202E fica",
+      "value": "abc\u202edef",
+      "expected": "abc\u202edef"
+    },
+    {
+      "name": "U+FEFF fica",
+      "value": "\ufefftexto",
+      "expected": "\ufefftexto"
+    },
+    {
+      "name": "emoji e ideogramas",
+      "value": "😀 漢字",
+      "expected": "😀 漢字"
+    },
+    {
+      "name": "par substituto solto fica",
+      "value": {
+        "codePoints": [
+          55357,
+          97
+        ]
+      },
+      "expected": {
+        "codePoints": [
+          55357,
+          97
+        ]
+      }
+    }
+  ]
+}

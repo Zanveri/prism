@@ -64,6 +64,12 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(roundTrip(serializeTab(snapshot({ state: filtered })))?.state).toEqual(filtered);
   });
 
+  it("o resultado de leitura leva o `read` da página (RN-EXPORT-002): o \"Exportar…\" continua valendo na outra janela", () => {
+    const read: RowsState = { ...rows, read: true };
+
+    expect(roundTrip(serializeTab(snapshot({ state: read })))?.state).toEqual(read);
+  });
+
   it("as células cortadas voltam como mapa de conjuntos, e o resultado volta parado (sem carregar, contar nem cancelar)", () => {
     const state = roundTrip(serializeTab(snapshot()))?.state as RowsState;
     expect(state.truncated.get(1)?.has(1)).toBe(true);
@@ -110,7 +116,7 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
   });
 
   it("a aba de um script leva o id, o nome e o texto salvo; o ponto da mudança não salva é refeito pelo texto do editor (RN-SCRIPT-001)", () => {
-    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", dirty: false };
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedConnectionId: tab.connectionId!, dirty: false };
     const edited = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script }, editor: { sql: "select 2", anchor: 0, head: 0 } })));
     const same = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script: { ...script, dirty: true } }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
 
@@ -120,13 +126,40 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
   });
 
   it("a aba que trocou de banco leva o banco novo, e o script leva o banco em que foi salvo: o ponto continua aceso do outro lado (RN-ARVORE-007)", () => {
-    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedDatabase: "mes2", dirty: true };
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedConnectionId: tab.connectionId!, savedDatabase: "mes2", dirty: true };
     const moved = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", database: "vendas", sessionId: null, script }, sessionId: null, editor: { sql: "select 1", anchor: 0, head: 0 } })));
     const back = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", database: "mes2", script }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
 
     expect(moved?.tab.database).toBe("vendas");
     expect(moved?.tab.script).toEqual(script);
     expect(back?.tab.script).toEqual({ ...script, dirty: false });
+  });
+
+  it("o script leva a conexão em que foi salvo, e o genérico vai genérico: o ponto do outro lado conta a conexão da aba, menos no genérico (RN-SCRIPT-003 e 005)", () => {
+    const other = "0199c3a0-0000-7000-8000-0000000000c2";
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedConnectionId: other, dirty: true };
+    const moved = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+    const generic = { id: script.id, name: "Fechamento", savedSql: "select 1", generic: true as const, dirty: false };
+    const movedGeneric = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script: generic }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+
+    expect(moved?.tab.script).toEqual(script);
+    expect(movedGeneric?.tab.script).toEqual(generic);
+    // Só `true` diz genérico: outro valor no lugar dele é aba fora do formato.
+    const good = serializeTab(snapshot({ tab: { ...tab, script } }))!;
+    expect(readTransfer({ ...good, tab: { ...good.tab, script: { ...good.tab.script, generic: false } } })).toBeNull();
+  });
+
+  it("o script leva a pasta que a aba lembra, e sem ela vai sem; o que não é um id é aba fora do formato (RN-SCRIPT-010)", () => {
+    const folderId = "0199ec00-0000-7000-8000-000000000001";
+    const script = { id: "0199c3a0-0000-7000-8000-000000000001", name: "Fechamento", savedSql: "select 1", savedConnectionId: tab.connectionId!, folderId, dirty: false };
+    const moved = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+    const withoutFolder = { id: script.id, name: script.name, savedSql: script.savedSql, savedConnectionId: script.savedConnectionId, dirty: false };
+    const unknown = roundTrip(serializeTab(snapshot({ tab: { ...tab, title: "Fechamento", script: withoutFolder }, editor: { sql: "select 1", anchor: 0, head: 0 } })));
+
+    expect(moved?.tab.script).toEqual(script);
+    expect(unknown?.tab.script).not.toHaveProperty("folderId");
+    const good = serializeTab(snapshot({ tab: { ...tab, script } }))!;
+    expect(readTransfer({ ...good, tab: { ...good.tab, script: { ...good.tab.script, folderId: "../pasta" } } })).toBeNull();
   });
 
   it("a aba sem conexão (o script cuja conexão sumiu, RN-SCRIPT-003) passa sem conexão", () => {

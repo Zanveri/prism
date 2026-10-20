@@ -1,0 +1,680 @@
+{
+  "rule": "RN-IMPORT-010 e 028: a data, a data e hora e a hora de cada formato (aaaa-mm-dd e dd/mm/aaaa), com o texto canônico esperado ou a recusa, o fuso, as casas de fração do Db2 e do Informix e os campos depois do último do DATETIME YEAR TO DAY, HOUR e MINUTE do Informix. Só da API (ImportValues.Convert), pronta para quando a tela converter.",
+  "notes": [
+    "Os campos são os de import-value-order.json."
+  ],
+  "cases": [
+    {
+      "name": "a data",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "2024-01-15",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "a data com um dígito no mês",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "2024-1-15",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-1-15» não é uma data no formato aaaa-mm-dd."
+    },
+    {
+      "name": "a data que não existe",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "2024-02-31",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-02-31» não é uma data válida."
+    },
+    {
+      "name": "a data com hora zero numa coluna de data",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "2024-01-15 00:00:00",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "a data com hora numa coluna de data",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "criado",
+      "value": "2024-01-15 10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30» tem hora, e a coluna criado é só data."
+    },
+    {
+      "name": "a data com fuso numa coluna de data",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "2024-01-15 00:00:00-03",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 00:00:00-03» tem fuso, e a coluna não guarda fuso."
+    },
+    {
+      "name": "a data e hora sem segundos",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "2024-01-15 10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00"
+    },
+    {
+      "name": "a data e hora com o T do ISO 8601 e a fração",
+      "engine": "postgresql",
+      "type": "timestamp(3) without time zone",
+      "column": "valor",
+      "value": "2024-01-15T10:30:00.123456",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00.123456"
+    },
+    {
+      "name": "a data sem hora é a meia-noite",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "2024-01-15",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 00:00:00"
+    },
+    {
+      "name": "a hora sem data não é uma data e hora",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«10:30» não é uma data e hora."
+    },
+    {
+      "name": "o fuso numa coluna sem fuso",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "2024-01-15 10:30:00-03",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30:00-03» tem fuso, e a coluna não guarda fuso."
+    },
+    {
+      "name": "o fuso numa coluna com fuso",
+      "engine": "postgresql",
+      "type": "timestamp with time zone",
+      "column": "valor",
+      "value": "2024-01-15 10:30:00-03",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00-03"
+    },
+    {
+      "name": "o fuso com minutos, do ISO 8601",
+      "engine": "postgresql",
+      "type": "timestamp with time zone",
+      "column": "valor",
+      "value": "2024-01-15T10:30:00.5-03:00",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00.5-03:00"
+    },
+    {
+      "name": "o Z",
+      "engine": "postgresql",
+      "type": "timestamp with time zone",
+      "column": "valor",
+      "value": "2024-01-15T10:30:00Z",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00Z"
+    },
+    {
+      "name": "a hora",
+      "engine": "postgresql",
+      "type": "time without time zone",
+      "column": "valor",
+      "value": "10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "10:30:00"
+    },
+    {
+      "name": "a hora com fração",
+      "engine": "postgresql",
+      "type": "time without time zone",
+      "column": "valor",
+      "value": "10:30:00.123",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "10:30:00.123"
+    },
+    {
+      "name": "a hora que não existe",
+      "engine": "postgresql",
+      "type": "time without time zone",
+      "column": "valor",
+      "value": "25:00",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«25:00» não é uma hora válida."
+    },
+    {
+      "name": "a hora com fuso numa coluna com fuso",
+      "engine": "postgresql",
+      "type": "time with time zone",
+      "column": "valor",
+      "value": "10:30:00+05:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "10:30:00+05:30"
+    },
+    {
+      "name": "a hora com fuso numa coluna sem fuso",
+      "engine": "postgresql",
+      "type": "time without time zone",
+      "column": "valor",
+      "value": "10:30:00+05:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«10:30:00+05:30» tem fuso, e a coluna não guarda fuso."
+    },
+    {
+      "name": "dd/mm/aaaa: a data",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "15/01/2024",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "dd/mm/aaaa: um dígito no dia e no mês",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "5/1/2024",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-05"
+    },
+    {
+      "name": "dd/mm/aaaa: o ano com dois dígitos",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "15/01/24",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "refusal": "O ano tem de ter 4 dígitos: «15/01/24»."
+    },
+    {
+      "name": "dd/mm/aaaa: a data que não existe",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "31/02/2024",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "refusal": "«31/02/2024» não é uma data válida."
+    },
+    {
+      "name": "dd/mm/aaaa: o ISO não vale",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "2024-01-15",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "refusal": "«2024-01-15» não é uma data no formato dd/mm/aaaa."
+    },
+    {
+      "name": "dd/mm/aaaa: a data e hora",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "15/01/2024 10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-15 10:30:00"
+    },
+    {
+      "name": "dd/mm/aaaa: o T só vale no ISO",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "15/01/2024T10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "refusal": "«15/01/2024T10:30» não é uma data e hora no formato dd/mm/aaaa hh:mm:ss."
+    },
+    {
+      "name": "a data do XLSX já vem no ISO, também com dd/mm/aaaa",
+      "engine": "postgresql",
+      "type": "timestamp without time zone",
+      "column": "valor",
+      "value": "2024-01-15 10:30:00.5",
+      "source": "canonical",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-15 10:30:00.5"
+    },
+    {
+      "name": "Informix: as casas de fração a mais",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO FRACTION(5)",
+      "column": "criado",
+      "value": "2024-01-15 10:30:00.123456",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30:00.123456» tem mais casas de fração que as 5 da coluna criado."
+    },
+    {
+      "name": "Informix: as casas a mais que são zero saem",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO FRACTION(5)",
+      "column": "valor",
+      "value": "2024-01-15 10:30:00.123450",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00.12345"
+    },
+    {
+      "name": "Informix: o YEAR TO SECOND não guarda fração",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO SECOND",
+      "column": "criado",
+      "value": "2024-01-15 10:30:00.5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30:00.5» tem casas de fração, e a coluna criado não guarda nenhuma."
+    },
+    {
+      "name": "Informix: o YEAR TO DAY recusa a hora que não é zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO DAY",
+      "column": "criado",
+      "value": "2024-01-15 10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30» tem hora, e a coluna criado é só data."
+    },
+    {
+      "name": "Informix: o YEAR TO DAY recusa também a fração que não é zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO DAY",
+      "column": "criado",
+      "value": "2024-01-15 00:00:00.5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 00:00:00.5» tem hora, e a coluna criado é só data."
+    },
+    {
+      "name": "Informix: o YEAR TO DAY tira a hora zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO DAY",
+      "column": "valor",
+      "value": "15/01/2024 00:00:00.000",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "Informix: o YEAR TO DAY recebe a data sem hora",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO DAY",
+      "column": "valor",
+      "value": "2024-01-15",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "Informix: o YEAR TO HOUR recusa os minutos que não são zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO HOUR",
+      "column": "criado",
+      "value": "2024-01-15 10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30» tem minutos, e a coluna criado guarda só até a hora."
+    },
+    {
+      "name": "Informix: o YEAR TO HOUR recusa os segundos que não são zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO HOUR",
+      "column": "criado",
+      "value": "2024-01-15 10:00:45",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:00:45» tem segundos, e a coluna criado guarda só até a hora."
+    },
+    {
+      "name": "Informix: o YEAR TO HOUR recusa a fração que não é zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO HOUR",
+      "column": "criado",
+      "value": "2024-01-15T10:00:00.25",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15T10:00:00.25» tem casas de fração, e a coluna criado guarda só até a hora."
+    },
+    {
+      "name": "Informix: o YEAR TO HOUR tira os minutos e os segundos zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO HOUR",
+      "column": "valor",
+      "value": "2024-01-15 10:00:00.000",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10"
+    },
+    {
+      "name": "Informix: o YEAR TO MINUTE recusa os segundos que não são zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO MINUTE",
+      "column": "criado",
+      "value": "2024-01-15 10:30:45",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30:45» tem segundos, e a coluna criado guarda só até os minutos."
+    },
+    {
+      "name": "Informix: o YEAR TO MINUTE recusa a fração que não é zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO MINUTE",
+      "column": "criado",
+      "value": "2024-01-15 10:30:00.000001",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30:00.000001» tem casas de fração, e a coluna criado guarda só até os minutos."
+    },
+    {
+      "name": "Informix: o YEAR TO MINUTE tira os segundos zero",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO MINUTE",
+      "column": "valor",
+      "value": "15/01/2024 10:30:00",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-15 10:30"
+    },
+    {
+      "name": "Informix: o YEAR TO MINUTE recebe a data sem hora como a meia-noite",
+      "engine": "informix",
+      "type": "DATETIME YEAR TO MINUTE",
+      "column": "valor",
+      "value": "2024-01-15",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 00:00"
+    },
+    {
+      "name": "Informix: a hora",
+      "engine": "informix",
+      "type": "DATETIME HOUR TO SECOND",
+      "column": "valor",
+      "value": "10:30",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "10:30:00"
+    },
+    {
+      "name": "Db2: as 12 casas do TIMESTAMP(12)",
+      "engine": "db2",
+      "type": "TIMESTAMP(12)",
+      "column": "valor",
+      "value": "2024-01-15 10:30:00.123456789012",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15 10:30:00.123456789012"
+    },
+    {
+      "name": "Db2: o TIMESTAMP guarda 6",
+      "engine": "db2",
+      "type": "TIMESTAMP",
+      "column": "criado",
+      "value": "2024-01-15 10:30:00.1234567",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«2024-01-15 10:30:00.1234567» tem mais casas de fração que as 6 da coluna criado."
+    },
+    {
+      "name": "Db2: a hora com fração zero",
+      "engine": "db2",
+      "type": "TIME",
+      "column": "valor",
+      "value": "10:30:00.000",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "10:30:00"
+    },
+    {
+      "name": "Db2: a data dd/mm/aaaa",
+      "engine": "db2",
+      "type": "DATE",
+      "column": "valor",
+      "value": "15/01/2024",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "dayMonthYear"
+      },
+      "expected": "2024-01-15"
+    },
+    {
+      "name": "Db2: a data com hora zero",
+      "engine": "db2",
+      "type": "DATE",
+      "column": "valor",
+      "value": "2024-01-15 00:00",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "2024-01-15"
+    }
+  ]
+}

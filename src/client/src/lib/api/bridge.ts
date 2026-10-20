@@ -1,9 +1,41 @@
 import { z } from "zod";
 
 import type { PrismBridge, PrismWorkspace } from "../../../electron/preload";
-import { peerEventSchema, tabDeliverySchema, tabGiveSchema, tabMoveReplySchema, windowCloseRequestSchema, windowListSchema, type PeerEvent, type TabDelivery, type TabGive, type TabMoveReply, type TabMoveRequest, type WindowCloseRequest, type WindowEntry } from "../../../electron/window-messages";
+import {
+  copyReplySchema,
+  deliverReplySchema,
+  destinationReplySchema,
+  sourceReplySchema,
+  sourceStatusSchema,
+  type CopyReply,
+  type DeliverReply,
+  type DeliverRequest,
+  type DestinationReply,
+  type DestinationRequest,
+  type SourceReply,
+  type SourceStatus,
+} from "../../../electron/transfer-messages";
+import {
+  peerEventSchema,
+  tabDeliverySchema,
+  tabGiveSchema,
+  tabMoveReplySchema,
+  verificationPeerSchema,
+  windowCloseRequestSchema,
+  windowListSchema,
+  type PeerEvent,
+  type TabDelivery,
+  type TabGive,
+  type TabMoveReply,
+  type TabMoveRequest,
+  type VerificationDone,
+  type VerificationPeer,
+  type WindowCloseRequest,
+  type WindowEntry,
+} from "../../../electron/window-messages";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "../../../electron/workspace-hub";
 import type { SavedWorkspace } from "../../../electron/workspace-messages";
+import { isAppZoom, type AppZoom } from "../../../electron/zoom";
 
 declare global {
   interface Window {
@@ -28,6 +60,39 @@ export async function readDataFolder(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * O zoom do programa inteiro (RN-ZOOM-001), que o processo principal guarda e aplica. A ponte é a fronteira de confiança: só um dos passos (`isAppZoom`) é
+ * resposta. Sem zoom (`null`) quando a ponte não existe (a tela fora do Electron, onde o zoom é o do próprio navegador), não responde ou responde outra
+ * coisa: a tela passa sem o controle.
+ */
+export async function currentAppZoom(): Promise<AppZoom | null> {
+  try {
+    const zoom = await getBridge().zoom.get();
+    return isAppZoom(zoom) ? zoom : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Pede outro zoom; a resposta é o que ficou valendo, ou `null` se o pedido não valeu. Nunca lança. */
+export async function requestAppZoom(zoom: AppZoom): Promise<AppZoom | null> {
+  try {
+    const applied = await getBridge().zoom.set(zoom);
+    return isAppZoom(applied) ? applied : null;
+  } catch {
+    return null;
+  }
+}
+
+/** O zoom mudou: por um atalho, nesta ou noutra janela, ou pelas Configurações de outra. O aviso que não é um dos passos é ignorado. */
+export function onAppZoomChanged(listener: (zoom: AppZoom) => void): () => void {
+  return listen(() =>
+    getBridge().zoom.onChanged((raw) => {
+      if (isAppZoom(raw)) listener(raw);
+    }),
+  );
 }
 
 /**
@@ -56,6 +121,9 @@ function devWorkspaceBridge(api: { baseUrl: string; token: string }): PrismWorks
   };
   return devWorkspace;
 }
+
+const outsideElectron = "Exportar só funciona no app do Prism.";
+const importOutsideElectron = "Importar só funciona no app do Prism.";
 
 /**
  * A ponte com o processo principal. Só em desenvolvimento, com a tela aberta num navegador comum
@@ -106,7 +174,26 @@ export function getBridge(): PrismBridge {
         onCloseRequested: () => () => {},
       },
       session: { share: async () => {}, onPeer: () => () => {} },
+      // Uma janela só: a vez da verificação é sempre dela (RN-VERIF-002), e não há a quem contar a resposta.
+      verification: { claim: async () => true, finish: async () => {}, onPeer: () => () => {} },
       workspace: devWorkspaceBridge({ baseUrl: url.replace(/\/$/, ""), token }),
+      // Fora do Electron o zoom é o do navegador: não há o do programa (RN-ZOOM-001), e a tela passa sem o controle.
+      zoom: { get: async () => null, set: async () => null, onChanged: () => () => {} },
+      // RN-EXPORT-019: fora do Electron não há processo principal para escolher o destino nem a área de transferência do sistema: o "Exportar" do assistente
+      // diz que só funciona no app do Prism e não pede nada à API. Nenhum destes é chamado (a tela confere `available` antes); se for, recusa.
+      transfers: {
+        available: false,
+        chooseDestination: () => Promise.reject(new Error(outsideElectron)),
+        deliver: () => Promise.reject(new Error(outsideElectron)),
+        copy: () => Promise.reject(new Error(outsideElectron)),
+        reveal: async () => {},
+        release: async () => {},
+        // RN-IMPORT-001 e 018: fora do Electron não há o diálogo de abrir nem quem copie o arquivo: "Escolher arquivo…" diz que importar só funciona no app,
+        // sem pedir nada. A consulta não acha arquivo nenhum, e soltar não tem o que soltar.
+        chooseSource: () => Promise.reject(new Error(importOutsideElectron)),
+        sourceStatus: async () => ({ status: "missing" }),
+        releaseSource: async () => {},
+      },
     };
   }
 
@@ -218,6 +305,47 @@ export function onPeerEvent(listener: (kind: PeerEvent["kind"]) => void): () => 
 }
 
 /**
+ * RN-VERIF-002: a vez da verificação de uma conexão, do lado da tela. O processo principal a dá a uma janela por vez, e não de novo antes do intervalo
+ * (`window-hub.ts`). Sem a ponte das janelas (fora do Electron, ou uma ponte antiga) há uma janela só, e a vez é dela; a resposta que não é `true` é "não".
+ */
+export async function claimVerification(connectionId: string, intervalMs: number): Promise<boolean> {
+  let verification: PrismBridge["verification"] | undefined;
+  try {
+    verification = getBridge().verification;
+  } catch {
+    return true;
+  }
+  if (verification === undefined) return true;
+
+  try {
+    return (await verification.claim({ connectionId, intervalMs })) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** A verificação que esta janela fez terminou: a resposta vai às outras janelas (ou, nula, só a vez fica livre). Nunca lança. */
+export function finishVerification(done: VerificationDone): void {
+  try {
+    void getBridge()
+      .verification.finish(done)
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há outras janelas.
+  }
+}
+
+/** A resposta da verificação que outra janela fez (conferida com o schema): o que não confere é ignorado. */
+export function onVerificationPeer(listener: (peer: VerificationPeer) => void): () => void {
+  return listen(() =>
+    getBridge().verification.onPeer((raw) => {
+      const parsed = verificationPeerSchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data);
+    }),
+  );
+}
+
+/**
  * As abas que voltam na próxima entrada (RN-ABAS-006), do lado da tela. Sem a ponte (a tela num teste, ou uma ponte antiga) nada é gravado e nada volta, e
  * nenhuma falha chega à tela: gravar com o cofre fechado, ou sem processo principal, não é erro que a pessoa precise ver.
  */
@@ -259,5 +387,104 @@ export async function flushWorkspace(): Promise<void> {
     await getBridge().workspace.flush();
   } catch {
     // Sem a ponte, ou a gravação falhou: o processo principal já registrou, e a tela segue.
+  }
+}
+
+/**
+ * O destino e a entrega das exportações de dados (RN-EXPORT-019 e 020), do lado da tela. A ponte é a fronteira de confiança: cada resposta do processo
+ * principal é conferida com o schema que ele também usa (`electron/transfer-messages.ts`). Nada aqui lança: a ponte que falta, o pedido recusado e a resposta
+ * fora do formato voltam como valor, e quem chama decide o que dizer.
+ */
+
+/** Há processo principal para o destino e a entrega? Fora do Electron (ou com uma ponte sem `transfers`), não: o "Exportar" diz que só funciona no app. */
+export function transfersAvailable(): boolean {
+  try {
+    return getBridge().transfers?.available === true;
+  } catch {
+    return false;
+  }
+}
+
+/** O diálogo de salvar do sistema, aberto pelo processo principal. `error`: a ponte recusou o pedido ou respondeu fora do formato. */
+export async function chooseExportDestination(request: DestinationRequest): Promise<DestinationReply | { status: "error" }> {
+  try {
+    const parsed = destinationReplySchema.safeParse(await getBridge().transfers.chooseDestination(request));
+    return parsed.success ? parsed.data : { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/** A entrega do arquivo pronto ao destino. A falha da ponte vira a entrega que falhou, sem motivo conhecido (`other`). */
+export async function deliverExport(request: DeliverRequest, fallback: string): Promise<DeliverReply> {
+  try {
+    const parsed = deliverReplySchema.safeParse(await getBridge().transfers.deliver(request));
+    return parsed.success ? parsed.data : { status: "failed", reason: "other", message: fallback };
+  } catch {
+    return { status: "failed", reason: "other", message: fallback };
+  }
+}
+
+/** O texto pronto para a área de transferência. A falha da ponte vira `failed`, com a frase dada. */
+export async function copyExport(transferId: string, fallback: string): Promise<CopyReply> {
+  try {
+    const parsed = copyReplySchema.safeParse(await getBridge().transfers.copy({ transferId }));
+    return parsed.success ? parsed.data : { status: "failed", message: fallback };
+  } catch {
+    return { status: "failed", message: fallback };
+  }
+}
+
+/** "Mostrar na pasta" do aviso de sucesso. Nunca lança: se não deu, nada acontece (o arquivo está onde a pessoa o pôs). */
+export function revealExport(deliveryId: string): void {
+  try {
+    void getBridge()
+      .transfers.reveal({ deliveryId })
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há o que mostrar.
+  }
+}
+
+/** Solta o destino (a entrega em andamento para). Espera a resposta, para um "Salvar como…" poder escolher o mesmo arquivo logo depois. Nunca lança. */
+export async function releaseExportDestination(destinationId: string): Promise<void> {
+  try {
+    await getBridge().transfers.release({ destinationId });
+  } catch {
+    // Sem a ponte, ou o destino já não existe: não há o que soltar.
+  }
+}
+
+/**
+ * O arquivo de uma importação de dados (RN-IMPORT-018), do lado da tela. Cada resposta do processo principal é conferida com o schema que ele também usa;
+ * nada aqui lança, e nenhum caminho chega à tela: só o identificador da cópia, o nome do arquivo sem a pasta e o tamanho.
+ */
+
+/** O diálogo de abrir do sistema e a cópia que começa. `error`: a ponte recusou o pedido ou respondeu fora do formato. */
+export async function chooseImportSource(): Promise<SourceReply | { status: "error" }> {
+  try {
+    const parsed = sourceReplySchema.safeParse(await getBridge().transfers.chooseSource());
+    return parsed.success ? parsed.data : { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/** Como está a cópia. A ponte que falha, ou a resposta fora do formato, vale `missing`: a tela pede o arquivo de novo. */
+export async function importSourceStatus(fileId: string): Promise<SourceStatus> {
+  try {
+    const parsed = sourceStatusSchema.safeParse(await getBridge().transfers.sourceStatus({ fileId }));
+    return parsed.success ? parsed.data : { status: "missing" };
+  } catch {
+    return { status: "missing" };
+  }
+}
+
+/** Solta o arquivo (a cópia em andamento para, e a cópia que a API não tomou é apagada). Espera a resposta. Nunca lança. */
+export async function releaseImportSource(fileId: string): Promise<void> {
+  try {
+    await getBridge().transfers.releaseSource({ fileId });
+  } catch {
+    // Sem a ponte, ou o arquivo já foi solto: não há o que soltar.
   }
 }

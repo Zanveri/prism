@@ -17,6 +17,9 @@ internal static class CellFormatter
 
     private const string DateTimeFormat = "yyyy-MM-dd HH:mm:ss.ffffff";
 
+    /// <summary>RN-IMPORT-026: a data e hora no texto canônico da cópia, com as 7 casas de fração que o `DateTime` guarda.</summary>
+    private const string CopyDateTimeFormat = "yyyy-MM-dd HH:mm:ss.fffffff";
+
     /// <param name="truncated">A célula foi cortada, e a tela precisa avisar (RN-SQL-011).</param>
     public static string? Format(object? value, out bool truncated)
     {
@@ -48,6 +51,23 @@ internal static class CellFormatter
     /// </summary>
     public static FullCellValue Full(object value)
         => value is byte[] bytes ? FullCellValue.Binary(bytes) : FullCellValue.Text(ToText(value));
+
+    /// <summary>RN-EXPORT-002 e 017: a célula da exportação, inteira e sem o corte da grade: o texto no mesmo formato, ou os bytes do binário.</summary>
+    public static ExportCell ForExport(object value)
+        => value is byte[] bytes ? ExportCell.FromBytes(bytes) : ExportCell.FromText(ToText(value));
+
+    /// <summary>
+    /// RN-IMPORT-026: a célula da cópia para outro banco, como a da exportação, menos a data e hora (e a hora), que vai com as 7 casas de fração do driver
+    /// (a grade e os arquivos ficam com as 6 de sempre).
+    /// </summary>
+    public static ExportCell ForCopy(object value)
+        => value switch
+        {
+            DateTime dateTime => ExportCell.FromText(dateTime.ToString(CopyDateTimeFormat, CultureInfo.InvariantCulture)),
+            DateTimeOffset dateTimeOffset => ExportCell.FromText(dateTimeOffset.ToString(CopyDateTimeFormat + "zzz", CultureInfo.InvariantCulture)),
+            TimeOnly time => ExportCell.FromText(time.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture)),
+            _ => ForExport(value)
+        };
 
     /// <summary>`text`, `number`, `datetime`, `boolean` ou `binary`, pelo tipo que o driver diz que a coluna entrega.</summary>
     public static string KindOf(Type type)

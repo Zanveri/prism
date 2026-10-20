@@ -33,6 +33,13 @@ public enum EDatabaseFailure
     /// <summary>RN-EDIT-005: um comando do "Salvar" afetou zero linhas ou mais de uma; o "Salvar" foi desfeito (menos no Informix sem log, RN-EDIT-012).</summary>
     EditRowMismatch,
 
+    /// <summary>
+    /// RN-EDIT-018, 020 e 023: a coluna inteira não se altera naquele resultado (a junção, a coluna da chave, a chave com o nome repetido, o comando
+    /// que não é leitura, o limite de linhas sem ordem, o sorteio, mais de 1.000.000 de chaves no caminho por lotes); o motivo vai em `Reason`. Nada
+    /// foi ao banco, ou só a leitura das chaves.
+    /// </summary>
+    EditAllRowsNotSupported,
+
     /// <summary>RN-SQL-017: o resultado de que se pedem os valores completos não é mais o da sessão (outro comando rodou), ou nunca foi.</summary>
     ResultNotFound,
 
@@ -43,7 +50,13 @@ public enum EDatabaseFailure
     /// RN-GRADE-011: o filtro do resultado não se junta ao comando com segurança (`;`, aspas ou comentário sem fechar, comentário no fim,
     /// parênteses sem par, mais de um `ORDER BY`); nada foi ao banco. Pela rota, quem recusa antes é o validator, com o mesmo código.
     /// </summary>
-    FilterInvalid
+    FilterInvalid,
+
+    /// <summary>
+    /// RN-PROT-002: a conexão é somente leitura (por ela ou por uma pasta acima), e o comando não é uma leitura (RN-PROT-005), ou a operação é da
+    /// edição de registros. Nada foi ao banco, e o resultado anterior continua.
+    /// </summary>
+    ConnectionReadOnly
 }
 
 /// <summary>
@@ -77,5 +90,9 @@ public enum ECancelOutcome
 /// Na edição (RN-EDIT-005 e 012): `Reason` é o motivo de o resultado ser só leitura; `Change` é a posição, no pedido, da alteração que
 /// falhou, e `Column` a da coluna do resultado; `RowsAffected` é quantas linhas o comando dela afetou; `Applied` só vem no banco sem log
 /// de transação, e diz quantas alterações já estavam gravadas, na ordem de execução, antes da que falhou.
+///
+/// Na carga da importação e da cópia (RN-IMPORT-016): `Change` é a posição, entre as linhas mandadas num comando (ou num lote), da linha que o banco
+/// recusou, quando se sabe; e `ColumnName` é o nome da coluna da tabela que o banco diz no erro (no PostgreSQL, o campo `column`, que vem na recusa do
+/// nulo), ou nulo.
 /// </summary>
-public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null);
+public sealed record DatabaseFailure(EDatabaseFailure Kind, string Message, string? SqlState = null, int? Position = null, string? DriverID = null, ECancelOutcome? Outcome = null, bool Executed = false, string? Reason = null, int? Change = null, int? Column = null, long? RowsAffected = null, int? Applied = null, string? ColumnName = null);

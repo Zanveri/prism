@@ -1,25 +1,27 @@
 import type { ComponentProps, CSSProperties, KeyboardEvent, ReactNode } from "react";
 
+import { ReadOnlyMark } from "@/app/connections/_components/read-only-mark";
 import { ShownEnvironmentPill } from "@/app/connections/_components/shown-environment-pill";
 import { engineOption, type Connection } from "@/app/connections/_lib/connections.schema";
 import type { ShownEnvironment } from "@/app/connections/_lib/environment";
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
-import { Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon } from "@/components/ui";
+import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
+import { AlertIcon, Button, ChevronIcon, ColumnsIcon, DatabaseIcon, DocumentIcon, EngineTag, EyeIcon, FolderIcon, ForeignKeyIcon, IndexIcon, PowerIcon, RefreshIcon, RoutineIcon, TableIcon, iconColorStyle } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { checkView, type CheckState } from "../_lib/connection-checks";
+import { connectionChecksCopy } from "../_lib/connection-checks.copy";
+import { credentialsHint } from "../_lib/credentials-missing";
+import { actionsWidth as actionsWidthOf, navigatorMetrics, rowIndent } from "../_lib/navigator-density";
 import { clickEffect, tableTargetOf, type NavKind, type NavNode } from "../_lib/navigator-model";
 import type { MatchRange } from "../_lib/navigator-search";
 import { isRefreshable } from "../_lib/navigator-toolbar";
 import { navigatorCopy } from "../_lib/navigator.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { CheckDot } from "./connection-check";
 
 const copy = workbenchCopy.navigator;
-
-/** O recuo do canvas: 10 px na raiz e 16 px a mais por nível. */
-export const rowHeight = 30;
-const baseIndent = 10;
-const levelIndent = 16;
 
 export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "failed";
 
@@ -62,7 +64,7 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
 
 function ActionButton({ label, className, children, ...props }: { label: string } & ComponentProps<"button">) {
   return (
-    <button type="button" aria-label={label} title={label} className={cn("flex size-6 flex-none cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-border hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", className)} {...props}>
+    <button type="button" aria-label={label} title={label} className={cn("flex flex-none cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-border hover:text-ink disabled:cursor-not-allowed disabled:opacity-50", className)} {...props}>
       {children}
     </button>
   );
@@ -70,6 +72,8 @@ function ActionButton({ label, className, children, ...props }: { label: string 
 
 export type NavigatorRowProps = {
   node: NavNode;
+  /** A densidade do navegador (RN-NAV-011): a altura da linha, o recuo e o tamanho dos botões de ação. Sem ela, a confortável, a do canvas. */
+  density?: NavigatorDensity;
   index: number;
   open: boolean;
   /** A linha que o Tab alcança (a da última seleção); as outras só se alcançam pelas setas. */
@@ -82,7 +86,18 @@ export type NavigatorRowProps = {
    * pasta (`environmentLookup`). Sem ela, nada.
    */
   environment?: ShownEnvironment | null;
+  /** RN-PASTA-007: a cor da pasta, só na linha dela; pinta o ícone, aberta ou fechada, ajustada ao contraste do tema (`iconColorStyle`). Sem ela, o neutro. */
+  folderColor?: string | null;
+  /** RN-PROT-002: na linha da conexão somente leitura, a dica do cadeado (`readOnlyHintOf`), que diz de onde ele vem; sem ela, nada. */
+  readOnly?: string | null;
   status?: ConnectionStatus;
+  /**
+   * RN-VERIF-003: o que a verificação periódica diz da conexão conectada, no lugar do ponto de conectada; sem ela (desligada, ou desconectada), o ponto de
+   * sempre. A dica dele vai também na dica da linha: com o mouse em cima, as ações cobrem o ponto.
+   */
+  check?: CheckState | null;
+  /** A falha da verificação num clique (RN-VERIF-003): o botão das ações da linha, só quando ela não respondeu. */
+  onCheckFailure?: (node: NavNode) => void;
   busy?: boolean;
   onSelect: (node: NavNode) => void;
   onToggle: (node: NavNode) => void;
@@ -108,12 +123,13 @@ export type NavigatorRowProps = {
  * filhos do React, nunca como HTML (RN-SHELL-002). As ações do nó aparecem ao passar o mouse ou
  * receber o foco, sobre o fim da linha; o ponto de estado da conexão fica sob elas.
  */
-export function NavigatorRow({ node, index, open, tabbable, selected, connection, environment, status, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
-  const paddingLeft = baseIndent + node.depth * levelIndent;
+export function NavigatorRow({ node, density = "comfortable", index, open, tabbable, selected, connection, environment, folderColor = null, readOnly = null, status, check = null, onCheckFailure, busy = false, match, onSelect, onToggle, onRetry, onRefresh, onNewQuery, onDisconnect, onOpenTable, onContextMenu, onKeyDown }: NavigatorRowProps) {
+  const metrics = navigatorMetrics[density];
+  const paddingLeft = rowIndent(metrics, node.depth);
 
   if (node.kind === "loading") {
     return (
-      <div style={{ paddingLeft: paddingLeft + 22 }} className="flex h-[30px] items-center pr-3 text-sm text-subtle italic">
+      <div style={{ paddingLeft: paddingLeft + 22 }} className={cn("flex items-center pr-3 text-sm text-subtle italic", metrics.rowClass)}>
         {node.label}
       </div>
     );
@@ -151,12 +167,17 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
   const name = node.label;
   const hasDetail = Boolean(node.detail) && !isConnection;
   const canRefresh = isRefreshable(node, connected);
+  // RN-VERIF-003: o indicador da verificação, só na conexão conectada com ela ligada; a falha ganha o botão que a mostra.
+  const view = isConnection && connected && check !== null ? checkView(check) : null;
+  const failed = view?.tone === "failed" && onCheckFailure !== undefined;
   // Com o mouse ou o foco na linha, o fim dela é das ações; o conteúdo se afasta delas em vez de ficar escondido.
-  const actionsWidth = (Number(isConnection && connection !== undefined) + Number(canRefresh) + Number(isConnection && connected)) * 26 + 8;
+  const actionsWidth = actionsWidthOf(metrics, Number(isConnection && connection !== undefined) + Number(canRefresh) + Number(isConnection && connected) + Number(failed));
   const opensTab = tableTargetOf(node) !== null;
   const hint = opensTab ? (node.kind === "view" ? copy.openHint.view : copy.openHint.table) : null;
-  // A conexão mostra na dica o que a lista da tela de Conexões trazia embaixo do nome e a árvore não mostra: o banco e o endereço (RN-NAV-003).
-  const tip = isConnection && connection ? `${name}\n${navigatorCopy.row.connectionHint(engineOption(connection.engine).label, connection.host, connection.port, connection.database)}` : node.detail ? `${name} — ${node.detail}` : name;
+  // A conexão mostra na dica o que a lista da tela de Conexões trazia embaixo do nome e a árvore não mostra: o banco e o endereço (RN-NAV-003), e a última
+  // verificação (RN-VERIF-003).
+  // RN-TRANSF-015: a conexão que chegou sem usuário e senha diz isso no fim da linha do endereço, sem marca na árvore.
+  const tip = isConnection && connection ? `${name}\n${navigatorCopy.row.connectionHint(engineOption(connection.engine).label, connection.host, connection.port, connection.database)}${credentialsHint(connection)}${view === null ? "" : `\n${view.tip}`}` : node.detail ? `${name} — ${node.detail}` : name;
 
   return (
     <div
@@ -166,7 +187,7 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
         // que guarda de onde veio; e só se o menu abre, senão um pedido ignorado tiraria o foco do menu que já está aberto.
         if (onContextMenu(node, { x: event.clientX, y: event.clientY })) event.currentTarget.querySelector<HTMLElement>("[data-row-toggle]")?.focus({ preventScroll: true });
       }}
-      className={cn("group relative flex h-[30px] items-center", selected ? "bg-selected" : "hover:bg-selected")}
+      className={cn("group relative flex items-center", metrics.rowClass, selected ? "bg-selected" : "hover:bg-selected")}
     >
       <button
         type="button"
@@ -191,31 +212,43 @@ export function NavigatorRow({ node, index, open, tabbable, selected, connection
         ) : (
           <span aria-hidden className="size-4 flex-none" />
         )}
-        {isConnection && connection ? <EngineTag engine={connection.engine} /> : <span className="flex-none text-subtle [&>svg]:text-current">{icons[node.kind]}</span>}
+        {isConnection && connection ? (
+          <EngineTag engine={connection.engine} />
+        ) : (
+          <span style={node.kind === "folder" && folderColor !== null ? { color: iconColorStyle(folderColor) } : undefined} className="flex-none text-subtle [&>svg]:text-current">
+            {icons[node.kind]}
+          </span>
+        )}
         {/* O nome tem a prioridade: o detalhe ocupa só o que sobra, encolhe primeiro e some antes de o nome ser cortado. */}
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           <span className={cn("truncate", monoKinds.has(node.kind) && "font-mono", hasDetail ? ["shrink-0", node.badge ? "max-w-[calc(100%-2.5rem)]" : "max-w-full"] : "min-w-0")}>{match === undefined ? name : <Highlighted text={name} range={match} />}</span>
           <ShownEnvironmentPill environment={environment} />
+          {isConnection ? <ReadOnlyMark hint={readOnly} /> : null}
           {node.badge ? <span className="flex-none text-[11px] font-semibold text-accent">{node.badge}</span> : null}
           {hasDetail ? <span className={cn("min-w-0 flex-1 truncate text-right text-xs text-subtle", node.kind !== "group" && "font-mono")}>{node.detail}</span> : null}
         </span>
-        {isConnection && status ? <StatusDot status={status} /> : null}
+        {isConnection && status ? view === null ? <StatusDot status={status} /> : <CheckDot view={view} className="ml-auto" /> : null}
       </button>
 
       {/* Sobre o fim da linha, no lugar do ponto de estado e dos detalhes: só enquanto o mouse ou o foco estão na linha. */}
       <div className="absolute inset-y-0 right-1 hidden items-center gap-0.5 bg-selected pl-1 group-focus-within:flex group-hover:flex">
+        {failed ? (
+          <ActionButton label={connectionChecksCopy.failure.open(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onCheckFailure?.(node)} className={cn("text-danger", metrics.actionClass)}>
+            <AlertIcon />
+          </ActionButton>
+        ) : null}
         {isConnection && connection ? (
-          <ActionButton label={copy.newQuery(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onNewQuery(node)}>
+          <ActionButton label={copy.newQuery(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onNewQuery(node)} className={metrics.actionClass}>
             <DocumentIcon />
           </ActionButton>
         ) : null}
         {canRefresh ? (
-          <ActionButton label={copy.refresh(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onRefresh(node)}>
+          <ActionButton label={copy.refresh(name)} tabIndex={tabbable ? 0 : -1} onClick={() => onRefresh(node)} className={metrics.actionClass}>
             <RefreshIcon />
           </ActionButton>
         ) : null}
         {isConnection && connected ? (
-          <ActionButton label={copy.disconnect(name)} tabIndex={tabbable ? 0 : -1} disabled={busy} onClick={() => onDisconnect(node)}>
+          <ActionButton label={copy.disconnect(name)} tabIndex={tabbable ? 0 : -1} disabled={busy} onClick={() => onDisconnect(node)} className={metrics.actionClass}>
             <PowerIcon />
           </ActionButton>
         ) : null}

@@ -322,6 +322,33 @@ public sealed class DatabaseSessionErrorsTests
         Assert.Equal((object?)1, oneAtATime.Extensions["applied"]);
     }
 
+    /// <summary>RN-EDIT-018 e 023: a coluna inteira que não se altera naquele resultado, com o motivo da regra, a alteração e, quando é de uma coluna, a dela.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK EditAllRowsNotSupported vira 422 EDIT_ALL_ROWS_NOT_SUPPORTED com change, reason e column quando vem")]
+    public void From_EditAllRowsNotSupported_Is422_WithChangeReasonAndColumn()
+    {
+        //Act
+        var key = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.EditAllRowsNotSupported, "A coluna inteira não se altera neste resultado: id é da chave de pedido.", Reason: "id é da chave de pedido", Change: 2, Column: 0));
+        var join = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.EditAllRowsNotSupported, "A coluna inteira não se altera neste resultado: num resultado de junção.", Reason: "num resultado de junção", Change: 0));
+
+        //Assert
+        Assert.Equal(("EDIT_ALL_ROWS_NOT_SUPPORTED", HttpStatusCode.UnprocessableEntity, (object?)2, (object?)0, (object?)"id é da chave de pedido"), (key.Type, key.StatusCode, key.Extensions["change"], key.Extensions["column"], key.Extensions["reason"]));
+        Assert.Equal("A coluna inteira não se altera neste resultado: id é da chave de pedido.", key.Detail);
+        Assert.False(join.Extensions.ContainsKey("column"));
+    }
+
+    /// <summary>RN-EDIT-021: o "Salvar" sem log que falhou no meio da coluna inteira leva `outcome: unknown` e `applied` juntos.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK o SQL_EXECUTION_FAILED da coluna inteira que falhou no meio leva change, outcome unknown e applied")]
+    public void From_ExecutionFailedOfAWholeColumn_CarriesTheOutcomeAndApplied()
+    {
+        //Act
+        var failed = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "mensagem do banco", Outcome: ECancelOutcome.Unknown, Change: 0, Applied: 0));
+
+        //Assert
+        Assert.Equal(("SQL_EXECUTION_FAILED", (object?)"unknown", (object?)0, (object?)0), (failed.Type, failed.Extensions["outcome"], failed.Extensions["change"], failed.Extensions["applied"]));
+    }
+
     /// <summary>RN-EDIT-005: a recusa do banco num comando do "Salvar" é o `SQL_EXECUTION_FAILED` de sempre, com a mensagem dele e a alteração que falhou.</summary>
     [Trait("DatabaseSessionErrors", "From")]
     [Fact(DisplayName = "OK ExecutionFailed de um Salvar leva change, e applied no banco sem log")]
@@ -360,5 +387,20 @@ public sealed class DatabaseSessionErrorsTests
 
         //Assert
         Assert.IsType<NotImplementedException>(exception);
+    }
+
+    /// <summary>RN-PROT-002: nada foi ao banco, e a recusa não leva `executed`: o resultado anterior continua.</summary>
+    [Trait("DatabaseSessionErrors", "From")]
+    [Fact(DisplayName = "OK ConnectionReadOnly vira 422 CONNECTION_READ_ONLY com o motivo e sem executed")]
+    public void From_ConnectionReadOnly_Is422ConnectionReadOnly()
+    {
+        //Act
+        var error = DatabaseSessionErrors.From(new DatabaseFailure(EDatabaseFailure.ConnectionReadOnly, "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco."));
+
+        //Assert
+        Assert.Equal("CONNECTION_READ_ONLY", error.Type);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, error.StatusCode);
+        Assert.Equal("A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco.", error.Detail);
+        Assert.Empty(error.Extensions);
     }
 }

@@ -1,5 +1,8 @@
 import { formatCount, formatElapsed } from "@/lib/utils/format";
 
+/** A frase com a primeira letra em minúscula, para entrar no meio de outra ("Somente leitura" vira "somente leitura"). */
+const lowerFirst = (text: string) => `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+
 /** Os textos da área de trabalho, num lugar só (RN-AVISO-002 a 005, RN-SESSAO-005, RN-ARVORE-003, RN-SQL-004 a 009). */
 export const workbenchCopy = {
   navigator: {
@@ -10,8 +13,8 @@ export const workbenchCopy = {
     loadingList: "Carregando as conexões…",
     loadFailed: "Não foi possível carregar as conexões.",
     retry: "Tentar de novo",
-    empty: { title: "Nenhuma conexão salva.", hint: "Salve a primeira em Conexões para ver os objetos do banco aqui." },
-    emptyAction: "Ir para Conexões",
+    // RN-NAV-007: a dica embaixo é a do navegador (`navigatorCopy.empty`), que aponta o "Nova conexão" da barra dele: a tela de Conexões não existe mais.
+    empty: { title: "Nenhuma conexão salva." },
 
     // As linhas que o modelo cria no lugar de um nível ainda sem filhos.
     loading: "Carregando…",
@@ -52,8 +55,9 @@ export const workbenchCopy = {
       copyName: "Copiar nome",
       copyQualifiedName: "Copiar nome qualificado",
       newSubfolder: "Nova subpasta",
-      // RN-PASTA-006: o diálogo da pasta tem o nome e o ambiente.
-      renameFolder: "Editar pasta…",
+      // RN-NAV-009: o Renomear (F2) muda só o nome; RN-PASTA-006: o Editar pasta…, sem atalho, tem o nome, a cor e o ambiente.
+      renameFolder: "Renomear",
+      editFolder: "Editar pasta…",
       moveFolder: "Mover",
       deleteFolder: "Excluir",
       // RN-AVISO-002 e 003: o resultado de copiar. Quando a área de transferência recusa, o texto continua na tela para a pessoa copiar.
@@ -119,13 +123,45 @@ export const workbenchCopy = {
       loading: "Carregando os bancos…",
       locked: "No Db2, a conexão usa um banco só.",
     },
+    // RN-ARVORE-008: a conexão da aba, antes do banco, e a lista que a troca (o clique ou Ctrl+9, como no DBeaver).
+    connection: {
+      // O nome acessível começa pelo que o botão mostra (a sigla, o nome e o ambiente, na ordem da tela), e diz depois o que ele é: quem usa comando de voz
+      // diz o que vê, e o leitor de tela ouve o ambiente, que é o aviso da conexão.
+      // RN-PROT-002: a dica do cadeado vai no nome acessível, depois do ambiente ("Somente leitura, herdado da pasta Fábrica"). RN-VERIF-003: o indicador
+      // da verificação vai depois dele, como na tela, em que o ponto fica na ponta, como na árvore ("…, respondeu na última verificação").
+      label: (engine: string, name: string, environment: string | null, readOnly: string | null = null, check: string | null = null) =>
+        `${engine} ${name}${environment === null ? "" : ` ${environment}`}${readOnly === null ? "" : `, ${lowerFirst(readOnly)}`}${check === null ? "" : `, ${lowerFirst(check)}`}, conexão desta aba`,
+      none: "Sem conexão",
+      noneLabel: "Sem conexão, escolher a conexão desta aba",
+      // A lista de conexões ainda não chegou.
+      loading: "…",
+      loadingLabel: "Conexão desta aba, carregando",
+      shortcut: "Ctrl+9",
+      shortcutMac: "Cmd+9",
+      // A dica do botão: o servidor e o usuário, e o atalho.
+      title: (host: string, port: number, userName: string, shortcut: string) => `${host}:${port}\nUsuário: ${userName}\n${shortcut} troca a conexão desta aba`,
+      noneTitle: (shortcut: string) => `${shortcut} escolhe a conexão desta aba`,
+      list: "Conexões",
+      search: "Buscar conexão",
+      searchPlaceholder: "Nome, pasta ou servidor",
+      connected: "Conectadas",
+      others: "Desconectadas",
+      connectedMark: "conectada",
+      current: "a desta aba",
+      root: "Sem pasta",
+      noMatch: (query: string) => `Nenhuma conexão encontrada para “${query}”.`,
+      empty: "Não há conexão cadastrada. Crie uma pelo “Nova conexão” da barra do navegador.",
+      busy: "Espere o comando terminar, ou cancele-o, para trocar a conexão.",
+      reveal: "Mostrar no navegador",
+    },
   },
 
   result: {
     label: "Resultado da consulta",
     title: "Resultado",
     empty: "Nenhum comando executado nesta aba.",
-    emptyHint: "Ctrl+Enter executa o texto selecionado ou, sem seleção, o comando onde está o cursor.",
+    // RN-SQL-001 e 019: os dois jeitos de executar; `script` é o atalho do script na plataforma (Alt+X, ou Cmd+Option+X no macOS).
+    emptyHint: (script: string) => `Ctrl+Enter executa o texto selecionado ou, sem seleção, o comando onde está o cursor. ${script} executa os comandos da seleção ou do texto inteiro, um depois do outro.`,
     running: "Executando…",
     grid: "Linhas do resultado",
     rowNumber: "#",
@@ -136,8 +172,9 @@ export const workbenchCopy = {
     // RN-SQL-013: o comando gravou, foi até o fim e devolveu `total` linhas; a tela recebeu as primeiras.
     returnedRows: (received: number, total: number, elapsedMs: number) =>
       `${received < total ? `${received.toLocaleString("pt-BR")} de ` : ""}${formatCount(total, "linha devolvida", "linhas devolvidas")} · comando concluído · ${formatElapsed(elapsedMs)}`,
-    // RN-SQL-001: uma execução leva um comando só.
-    tooManyStatements: (count: number) => `A seleção tem ${count.toLocaleString("pt-BR")} comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele.`,
+    // RN-SQL-001: uma execução leva um comando só; quem executa vários é o script (RN-SQL-019).
+    tooManyStatements: (count: number, script: string) =>
+      `A seleção tem ${count.toLocaleString("pt-BR")} comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${script}).`,
     // RN-SQL-008. Há comando (DDL) para o qual o banco não conta linhas, e o driver responde um número negativo.
     affected: (count: number, elapsedMs: number) => `${count < 0 ? "Comando executado" : formatCount(count, "linha afetada", "linhas afetadas")} · ${formatElapsed(elapsedMs)}`,
     loadedHint: (count: number) => `Linhas 1 a ${count.toLocaleString("pt-BR")} carregadas. As próximas linhas e o total só são buscados quando você pedir.`,
@@ -148,12 +185,19 @@ export const workbenchCopy = {
     count: "Contar total",
     counting: "Contando…",
     total: (total: number) => `Total: ${formatCount(total, "linha", "linhas")}`,
+    // RN-SQL-006 (issue #10): com o total contado, o mesmo botão conta outra vez; o total de antes fica à vista, marcado, até chegar o novo.
+    recount: "Contar de novo",
+    recounting: "contando de novo…",
     // RN-SQL-007.
     cursorClosed: "O cursor foi fechado. Execute de novo para continuar.",
     rerun: "Executar de novo",
     null: "NULL",
-    // RN-TABELA-005: a dica do cabeçalho que ordena diz o que o próximo clique faz.
-    sortTitle: (name: string, direction: "asc" | "desc" | null) => (direction === null ? `Ordenar por ${name} (crescente)` : direction === "asc" ? `Ordenar por ${name} (decrescente)` : `Tirar a ordem por ${name}`),
+    // RN-GRADE-021: a dica e o nome do botão de ordenar do cabeçalho dizem o que o próximo clique faz; desabilitado, com o motivo depois.
+    sortTitle: (name: string, direction: "asc" | "desc" | null) => (direction === null ? `Ordenar por ${name}, crescente` : direction === "asc" ? `Ordenar por ${name}, decrescente` : `Tirar a ordem de ${name}`),
+    sortUnavailable: (title: string, reason: string) => `${title}. Indisponível: ${reason}.`,
+    // RN-GRADE-021: o nome da coluna é o botão que escolhe a coluna inteira (RN-GRADE-022), fora do Tab; a dica diz o atalho do teclado.
+    chooseColumn: "Escolher a coluna inteira",
+    chooseColumnHint: (mac: boolean) => `Clique para escolher a coluna inteira (${mac ? "Control+Espaço" : "Ctrl+Espaço"}).`,
     // RN-SQL-011: a dica da célula que chegou cortada.
     truncated: "Valor cortado",
     // RN-SQL-010: o comando que o usuário cancelou. Não é erro do banco.
@@ -276,6 +320,8 @@ export const workbenchCopy = {
     // A conexão e o banco da aba ativa (RN-ARVORE-006 e 007): o banco acompanha a troca na barra do editor.
     place: (connection: string, database: string) => `${connection} / ${database}`,
     autoCommit: "Auto-commit",
+    // RN-PROT-002: a conexão da aba é somente leitura (a dica diz de onde vem).
+    readOnly: "Somente leitura",
     vaultOpen: (userName: string) => `Cofre de ${userName} aberto`,
   },
 
@@ -288,8 +334,8 @@ export const workbenchCopy = {
     commandExecuted: (rowsAffected: number) => (rowsAffected < 0 ? "Comando executado." : `Comando executado. ${formatCount(rowsAffected, "linha afetada", "linhas afetadas")}.`),
     // RN-AVISO-002 e RN-SQL-013: comando que grava e devolve linhas, já confirmado no banco.
     commandCompleted: (totalRows: number) => `Comando executado. ${formatCount(totalRows, "linha devolvida", "linhas devolvidas")}.`,
-    // RN-AVISO-003 e RN-SQL-001: a seleção tem mais de um comando, e nada foi enviado.
-    tooManyStatements: "A seleção tem mais de um comando. Nada foi executado.",
+    // RN-AVISO-003 e RN-SQL-001: a seleção tem mais de um comando, e nada foi enviado; o script executa todos (RN-SQL-019).
+    tooManyStatements: (script: string) => `A seleção tem mais de um comando. Nada foi executado: para executar todos, use Executar script (${script}).`,
     // Ctrl+Enter sem comando no cursor nem na seleção (só espaços, `;` e comentários).
     nothingToSend: "Não há comando para executar.",
     // O mesmo texto do aviso central para o que não é recusa da API: o que a rede de segurança da aba pegou.

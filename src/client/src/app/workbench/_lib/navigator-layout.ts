@@ -1,35 +1,52 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
 /**
  * O navegador retrátil (RN-NAV-008): esconder e mostrar pelo botão da barra de ações, pelo botão da barra superior (sempre à vista), por
  * Ctrl+B, e Ctrl+Shift+E mostra e leva o foco à busca. O que decide é daqui, em funções puras; a página (`workbench/page.tsx`) só executa.
  *
  * A escolha é lembrada por usuário, numa chave própria do `localStorage` (`prism:navigator:<usuário>`): o arquivo de preferências é de outra
  * frente, e o jeito de guardar é o mesmo dele (leitura tolerante, memória da sessão quando o armazenamento falta ou recusa). Nada de segredo
- * nem de dado de conexão passa por aqui.
+ * nem de dado de conexão passa por aqui. Na mesma chave fica se a seção Scripts está recolhida (RN-NAV-012): é a mesma espécie de escolha, o jeito
+ * de o navegador se mostrar, e volta do mesmo jeito na próxima entrada.
  */
 
-export type NavigatorLayout = { readonly hidden: boolean };
+export type NavigatorLayout = {
+  readonly hidden: boolean;
+  /** RN-NAV-012: a seção Scripts recolhida. Aberta é o padrão. */
+  readonly scriptsCollapsed: boolean;
+};
 
-const shown: NavigatorLayout = Object.freeze({ hidden: false });
-const hiddenLayout: NavigatorLayout = Object.freeze({ hidden: true });
+const defaultLayout: NavigatorLayout = Object.freeze({ hidden: false, scriptsCollapsed: false });
 
 /** O nome como a API o grava (RN-COFRE-010), como as preferências fazem: sem espaços nas pontas e em minúsculas. */
 export function navigatorLayoutKey(userName: string): string {
   return `prism:navigator:${userName.trim().toLowerCase()}`;
 }
 
-/** O que está gravado pode ser qualquer coisa (editado à mão, cortado): nunca lança, e o que não confere é o padrão (à mostra). */
+/**
+ * O que está gravado pode ser qualquer coisa (editado à mão, cortado, de antes da seção Scripts): nunca lança, e cada campo que não é `true` é o padrão
+ * dele (à mostra, aberta).
+ */
 export function parseNavigatorLayout(raw: string | null): NavigatorLayout {
-  if (raw === null) return shown;
+  if (raw === null) return defaultLayout;
 
   try {
     const value: unknown = JSON.parse(raw);
-    return typeof value === "object" && value !== null && (value as { hidden?: unknown }).hidden === true ? hiddenLayout : shown;
+    if (typeof value !== "object" || value === null) return defaultLayout;
+
+    const { hidden, scriptsCollapsed } = value as { hidden?: unknown; scriptsCollapsed?: unknown };
+    return hidden !== true && scriptsCollapsed !== true ? defaultLayout : Object.freeze({ hidden: hidden === true, scriptsCollapsed: scriptsCollapsed === true });
   } catch {
-    return shown;
+    return defaultLayout;
   }
 }
 
 export type NavigatorLayoutStorage = Pick<Storage, "getItem" | "setItem">;
+
+/** Os campos do pedido sobre os de `base`; o que o pedido não traz fica como está. */
+function mergeLayout(base: NavigatorLayout, change: Partial<NavigatorLayout>): NavigatorLayout {
+  return Object.freeze({ hidden: change.hidden ?? base.hidden, scriptsCollapsed: change.scriptsCollapsed ?? base.scriptsCollapsed });
+}
 
 /**
  * O armazenamento da escolha. `getStorage` é chamado a cada acesso e pode devolver `null` ou lançar: nos dois casos, e quando ler ou gravar
@@ -66,14 +83,23 @@ export function createNavigatorLayoutStore(getStorage: () => NavigatorLayoutStor
     return layout;
   }
 
-  function set(userName: string, next: NavigatorLayout): void {
-    if (get(userName).hidden === next.hidden) return;
+  /**
+   * Muda os campos do pedido; os outros ficam como estão. O mesmo valor não grava nem avisa.
+   *
+   * Cada janela do app tem o seu armazém, que não ouve as outras (a janela aberta fica como está; a que abre depois começa como a última escolha). Por
+   * isso o que vai para o armazenamento é o pedido sobre o que está gravado AGORA, e não sobre o que esta janela leu: com duas janelas, recolher a seção
+   * Scripts numa e esconder o navegador na outra guarda as duas escolhas, em vez de uma desfazer a outra com o valor velho que tinha.
+   */
+  function set(userName: string, change: Partial<NavigatorLayout>): void {
+    const current = get(userName);
+    const layout = mergeLayout(current, change);
+    if (layout.hidden === current.hidden && layout.scriptsCollapsed === current.scriptsCollapsed) return;
 
     const key = navigatorLayoutKey(userName);
-    const layout = next.hidden ? hiddenLayout : shown;
     cache.set(key, layout);
     try {
-      storage()?.setItem(key, JSON.stringify(layout));
+      const target = storage();
+      target?.setItem(key, JSON.stringify(mergeLayout(parseNavigatorLayout(target.getItem(key)), change)));
     } catch {
       // Cota cheia ou acesso bloqueado: a escolha vale até fechar o app.
     }
@@ -124,7 +150,7 @@ export function hideFocusTarget(origin: "toolbar" | "toggle" | "shortcut", { foc
 
 /** Os atalhos como a plataforma os escreve, para as dicas dos botões: Cmd no macOS, Ctrl nas outras (`navigator.platform`). */
 export function navigatorShortcutLabels(platform: string): { toggle: string; reveal: string } {
-  const mod = /mac|iphone|ipad/i.test(platform) ? "Cmd" : "Ctrl";
+  const mod = isMacPlatform(platform) ? "Cmd" : "Ctrl";
   return { toggle: `${mod}+B`, reveal: `${mod}+Shift+E` };
 }
 

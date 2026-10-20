@@ -10,11 +10,17 @@ import { vaultLock } from "@/lib/api/vault-lock";
 import type { TabMoveTarget } from "../../../../electron/window-messages";
 
 import { createDisconnectLog } from "../_lib/connection-intent";
+import { exportTracker } from "../_lib/data-export/data-exports";
+import { loadTracker, windowTransfers } from "../_lib/data-import/data-imports";
+import { exitQuestion, totalOf, type ExitQuestion } from "../_lib/data-import/transfer-exits";
+import { windowCloseStep } from "../_lib/data-export/export-exits";
 import { liveEditors } from "../_lib/live-editors";
 import { recallForTransfer } from "../_lib/tab-memory";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
+import { scriptsQuery } from "../_lib/scripts.service";
+import { handOffTab } from "../_lib/tab-handoff";
 import { serializeTab } from "../_lib/tab-transfer";
 import type { TableRef } from "../_lib/table-diagram";
 import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
@@ -25,6 +31,7 @@ import { isTableTab, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
 import { UnsavedScriptsDialog } from "./script-dialogs";
+import { ScriptWaitingMark } from "./script-tabs";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
 import { TableTabPanel } from "./table-tab/table-tab";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
@@ -51,13 +58,15 @@ const askEverything = closeAsks({ closesTheApp: false });
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, assignConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
   const folders = useQuery(foldersQuery);
   // RN-PASTA-005: o ambiente que a conexão de cada aba mostra, o próprio ou o herdado da pasta; o mesmo objeto enquanto as pastas não mudam.
   const environments = useMemo(() => environmentLookup(folders.data ?? []), [folders.data]);
+  // RN-SCRIPT-006: o ícone e a cor da aba de um script vêm da lista dos scripts, que se atualiza depois do "Editar script…".
+  const scripts = useQuery(scriptsQuery);
   const queryClient = useQueryClient();
 
   // RN-SCRIPT-001: Ctrl+S e Ctrl+Shift+S da aba de consulta, e o diálogo do nome. A função é estável: o painel memorizado de cada aba a recebe.
@@ -82,15 +91,25 @@ export function WorkbenchTabs() {
 
   // `openTableTab` muda de identidade a cada mudança da lista de abas (ele a consulta), e o painel memorizado de cada tabela perderia o
   // `memo`. Ele recebe sempre esta mesma função, que chama a versão mais recente.
-  // O mesmo com a troca do banco da aba de consulta (RN-ARVORE-007), que também consulta a lista de abas.
+  // O mesmo com a troca do banco (RN-ARVORE-007) e da conexão (RN-ARVORE-008) da aba de consulta, que também consultam a lista de abas.
   const latestOpenTable = useRef(openTableTab);
+  const latestOpenQuery = useRef(openQueryTab);
   const latestSwitchDatabase = useRef(switchDatabase);
+  const latestSwitchConnection = useRef(switchConnection);
+  // A lista de abas da última renderização, para o que roda depois de uma espera (a ida para outra janela, o fechamento da janela).
+  const latestTabs = useRef(tabs);
   useEffect(() => {
     latestOpenTable.current = openTableTab;
+    latestOpenQuery.current = openQueryTab;
     latestSwitchDatabase.current = switchDatabase;
+    latestSwitchConnection.current = switchConnection;
+    latestTabs.current = tabs;
   });
   const handleOpenTable = useCallback((connectionId: string, table: TableRef & { view?: TableView; database?: string }) => latestOpenTable.current(connectionId, table), []);
+  // RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL", nos Registros e no resultado.
+  const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
+  const handleSwitchConnection = useCallback((tabId: string, connectionId: string) => latestSwitchConnection.current(tabId, connectionId), []);
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -180,29 +199,45 @@ export function WorkbenchTabs() {
   /**
    * Manda a aba para outra janela (RN-ABAS-002 e 003): o texto e a seleção do editor DESTE instante, o resultado, a sessão e o que a tela lembrava.
    * Só quando o processo principal a levou ela sai daqui, sem fechar a sessão (que agora é da outra janela). Com comando em andamento não vai: a
-   * resposta chegaria aqui, à aba que já saiu.
+   * resposta chegaria aqui, à aba que já saiu. A atualização automática fica suspensa durante a ida, e a execução automática em andamento termina antes
+   * de a aba ser lida (`handOffTab`, RN-GRADE-014). Por essa espera, a aba que vai é a da lista DE AGORA (`latestTabs`), e não a da renderização em que a
+   * pessoa pediu: o título, o banco e o script dela podem ter mudado, e a aba que fechou nesse meio-tempo não vai, sem aviso.
    *
    * `saved`: a aba acabou de salvar as alterações para poder ir (RN-EDIT-007). Nos Registros, as linhas na tela são as de antes de salvar, e o Salvar
    * lê os registros de novo (RN-EDIT-005): a aba vai sem elas, e a janela que a recebe lê os registros na mesma sessão, já com o que foi gravado. A aba
    * de consulta já está com a grade salva (RN-EDIT-009), e vai com ela, sem executar nada.
    */
   async function sendTab(tabId: string, target: TabMoveTarget, saved = false) {
-    const tab = tabs.find((candidate) => candidate.id === tabId);
-    if (tab === undefined) return;
+    const tabNow = () => latestTabs.current.find((candidate) => candidate.id === tabId);
+    const asked = tabNow();
+    if (asked === undefined) return;
 
     const runner = runnerOf(tabId);
-    const current = runner.getState();
-    const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
-    const transfer = isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
-    if (transfer === null) {
-      toast.warning(copy.moveBusy);
-      return;
-    }
-
-    const reply = await sendTabAway({ target, transfer });
-    if (reply.ok) detachTab(tabId);
-    // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
-    else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
+    const outcome = await handOffTab(runner, {
+      // Enquanto a execução automática terminava, a aba pode ter fechado (ela saiu da lista, e o executor também: `runnerOf` lança) ou trocado de executor
+      // (outro banco, outra conexão): nada vai.
+      alive: () => {
+        try {
+          return tabNow() !== undefined && runnerOf(tabId) === runner;
+        } catch {
+          return false;
+        }
+      },
+      prepare: (current) => {
+        // `alive` acabou de achá-la na lista de agora.
+        const tab = tabNow() ?? asked;
+        const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
+        return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
+      },
+      send: async (transfer) => {
+        const reply = await sendTabAway({ target, transfer });
+        if (reply.ok) detachTab(tabId);
+        // Solta em cima de outra janela, fora da faixa dela: a aba fica onde estava, sem aviso (na faixa, quem a leva é a outra janela).
+        else if (reply.reason !== "overWindow") toast.error(copy.moveFailed);
+        return reply.ok;
+      },
+    });
+    if (outcome === "busy") toast.warning(copy.moveBusy);
   }
 
   function handleMove(tabId: string, target: TabMoveTarget) {
@@ -246,28 +281,44 @@ export function WorkbenchTabs() {
   // RN-ABAS-006: a janela que fecha segura as abas dela no que volta (`holdForWindowClose`: fechar a última janela é o app saindo, e as abas voltam na
   // próxima entrada); a pergunta cancelada deixa a janela aberta e solta (`releaseWindowClose`), e o que fechou até ali sai do que volta.
   const [windowClosing, setWindowClosing] = useState(false);
+  // RN-EXPORT-023 e RN-IMPORT-021: a pergunta das transferências começadas nesta janela, que vem antes das outras; `last`: a janela é a última, e fechá-la
+  // fecha o Prism.
+  const [transferQuestion, setTransferQuestion] = useState<{ last: boolean; question: ExitQuestion } | null>(null);
   const finishWindow = useCallback(() => {
     setWindowClosing(false);
-    void releaseWindow().finally(() => tellWindows((windows) => windows.close()));
+    // RN-EXPORT-023 e RN-IMPORT-021: as transferências desta janela são canceladas só aqui, depois da última resposta (nada se cancela antes), e os destinos
+    // das exportações soltos; só então a janela fecha. Sem nenhuma, não há o que esperar.
+    void Promise.all([exportTracker.cancelAll(), loadTracker.cancelAll()])
+      .then(() => releaseWindow())
+      .finally(() => tellWindows((windows) => windows.close()));
   }, [releaseWindow]);
-  const latestTabs = useRef(tabs);
   const latestHandleClose = useRef(handleClose);
   useEffect(() => {
-    latestTabs.current = tabs;
     latestHandleClose.current = handleClose;
   });
+  /** As abas fecham pelo caminho de "Fechar todas"; sem nenhuma, a janela fecha. */
+  const closeWindowTabs = useCallback(
+    (last: boolean) => {
+      const open = latestTabs.current;
+      if (open.length === 0) return finishWindow();
+
+      holdForWindowClose();
+      setWindowClosing(true);
+      // RN-ABAS-007: a última janela fecha o app, e só pergunta pelo que não volta na próxima entrada (as alterações não salvas da grade).
+      latestHandleClose.current("all", open[0].id, closeAsks({ closesTheApp: last }));
+    },
+    [finishWindow, holdForWindowClose],
+  );
   useEffect(
     () =>
       onWindowCloseRequested(({ last }) => {
-        const open = latestTabs.current;
-        if (vaultLock.isLocked() || open.length === 0) return finishWindow();
-
-        holdForWindowClose();
-        setWindowClosing(true);
-        // RN-ABAS-007: a última janela fecha o app, e só pergunta pelo que não volta na próxima entrada (as alterações não salvas da grade).
-        latestHandleClose.current("all", open[0].id, closeAsks({ closesTheApp: last }));
+        const counts = windowTransfers();
+        const step = windowCloseStep({ locked: vaultLock.isLocked(), transfers: totalOf(counts), tabs: latestTabs.current.length });
+        if (step === "finish") finishWindow();
+        else if (step === "askTransfers") setTransferQuestion({ last, question: exitQuestion(counts, last ? "app" : "window") });
+        else closeWindowTabs(last);
       }),
-    [finishWindow, holdForWindowClose],
+    [finishWindow, closeWindowTabs],
   );
   useEffect(() => {
     if (windowClosing && tabs.length === 0) finishWindow();
@@ -299,6 +350,7 @@ export function WorkbenchTabs() {
     const connection = connectionOf(connectionId);
     return connection === undefined ? null : environments.connection(connection);
   };
+  const scriptOf = (scriptId: string) => scripts.data?.find((script) => script.id === scriptId);
 
   const question = confirm === null ? null : closeConfirmationText(confirm.total, confirm.withSql);
 
@@ -306,7 +358,21 @@ export function WorkbenchTabs() {
     <>
       <section onKeyDown={handleKeyDown} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tabs.length === 0 ? null : (
-          <TabStrip tabs={tabs} activeTabId={activeTabId} connectionOf={connectionOf} environmentOf={environmentOf} onSelect={setActiveTab} onClose={handleClose} windowId={windowId} onReorder={reorderTab} onMove={handleMove} onReceive={receive} />
+          <TabStrip
+            tabs={tabs}
+            activeTabId={activeTabId}
+            connectionOf={connectionOf}
+            environmentOf={environmentOf}
+            scriptOf={scriptOf}
+            onSelect={setActiveTab}
+            onClose={handleClose}
+            windowId={windowId}
+            onReorder={reorderTab}
+            onMove={handleMove}
+            onReceive={receive}
+            // RN-SQL-021: a aba cujo script espera a resposta da pergunta de erro, que só aparece na aba à vista.
+            markOf={(tabId) => <ScriptWaitingMark runner={runnerOf(tabId)} />}
+          />
         )}
 
         {tabs.length === 0 ? (
@@ -334,9 +400,9 @@ export function WorkbenchTabs() {
             return (
               <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
                 {isTableTab(tab) ? (
-                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} />
+                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
                 ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onAssignConnection={assignConnection} onOpenTable={handleOpenTable} onSwitchDatabase={handleSwitchDatabase} />
+                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onSwitchConnection={handleSwitchConnection} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} onSwitchDatabase={handleSwitchDatabase} />
                 )}
               </div>
             );
@@ -380,6 +446,23 @@ export function WorkbenchTabs() {
       )}
 
       {saveDialog}
+
+      {/* RN-EXPORT-023: "Continuar exportando" tem o foco e o Esc, e deixa a janela aberta; confirmado, seguem as perguntas das abas. */}
+      {transferQuestion === null ? null : (
+        <ConfirmDialog
+          open
+          tone="danger"
+          title={transferQuestion.question.title}
+          description={transferQuestion.question.description}
+          confirmLabel={transferQuestion.question.confirm}
+          cancelLabel={transferQuestion.question.keep}
+          onConfirm={() => {
+            setTransferQuestion(null);
+            closeWindowTabs(transferQuestion.last);
+          }}
+          onCancel={() => setTransferQuestion(null)}
+        />
+      )}
 
       {/* Fora do `section`: o teclado do diálogo não passa pelo Ctrl+W da faixa. */}
       {confirm === null || question === null ? null : (

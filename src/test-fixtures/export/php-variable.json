@@ -1,0 +1,71 @@
+{
+  "rule": "RN-EXPORT-010, Código fonte: o nome da variável a partir do nome da origem, sem o $. Na tela, phpVariable (to-source-code.ts); na API, ExportText.PhpVariable. removed é quantos caracteres de direção saíram.",
+  "cases": [
+    {
+      "name": "nome simples",
+      "value": "pedido",
+      "expected": "pedido",
+      "removed": 0
+    },
+    {
+      "name": "sublinhado fica",
+      "value": "v_pedido",
+      "expected": "v_pedido",
+      "removed": 0
+    },
+    {
+      "name": "espaço vira sublinhado",
+      "value": "nota fiscal",
+      "expected": "nota_fiscal",
+      "removed": 0
+    },
+    {
+      "name": "hífen e ponto viram sublinhado",
+      "value": "pedido-item.x",
+      "expected": "pedido_item_x",
+      "removed": 0
+    },
+    {
+      "name": "cifrão vira sublinhado",
+      "value": "$x",
+      "expected": "_x",
+      "removed": 0
+    },
+    {
+      "name": "começa por dígito",
+      "value": "1pedido",
+      "expected": "_1pedido",
+      "removed": 0
+    },
+    {
+      "name": "acentos ficam",
+      "value": "ação",
+      "expected": "ação",
+      "removed": 0
+    },
+    {
+      "name": "emoji fica",
+      "value": "😀",
+      "expected": "😀",
+      "removed": 0
+    },
+    {
+      "name": "caractere de direção sai",
+      "value": "pedido\u202e",
+      "expected": "pedido",
+      "removed": 1
+    },
+    {
+      "name": "vazio",
+      "value": "",
+      "expected": "resultado",
+      "removed": 0
+    },
+    {
+      "name": "só direção",
+      "value": "\u202e",
+      "expected": "resultado",
+      "removed": 1
+    }
+  ]
+}

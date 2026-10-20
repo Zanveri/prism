@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { InstallDriverLink } from "@/app/drivers/_components/install-driver-link";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
-import { Button, DownloadIcon, RefreshIcon, StopIcon } from "@/components/ui";
+import { Button, DownloadIcon, RefreshIcon, StopIcon, UploadIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import type { GridZoom } from "@/app/settings/_lib/preferences";
@@ -10,13 +10,17 @@ import type { GridZoom } from "@/app/settings/_lib/preferences";
 import type { ColumnLink } from "../_lib/foreign-key-links";
 import type { GridEditing } from "../_lib/grid-editing";
 import { noSizing, sizingFor, withWidth, type ColumnSizing } from "../_lib/grid-columns";
+import { dataExportCopy } from "../_lib/data-export/data-export.copy";
+import { dataImportCopy } from "../_lib/data-import/data-import.copy";
 import { autoLoadArmed } from "../_lib/result-paging";
+import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
-import type { RecordsSort } from "../_lib/table-sql";
-import type { RowsState, RunnerState } from "../_lib/use-query-runner";
+import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
+import { EditBar } from "./edit-bar";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
+import { KeptResultNote } from "./script-tabs";
 
 const copy = workbenchCopy.result;
 
@@ -28,6 +32,94 @@ function PanelButton({ children, ...props }: { children: ReactNode; onClick: () 
     </Button>
   );
 }
+
+/**
+ * RN-SQL-006: "Contar total" e, com o total já contado, "Contar de novo" (issue #10). É UM botão só, no mesmo lugar da barra, que troca o que mostra: o
+ * texto antes da primeira contagem, o ícone com a dica depois. Clicado, ele continua na página e com o foco, e o F5 da aba segue valendo (antes, o
+ * botão virava o texto do total e o foco caía no `body`, fora da aba). Ocupado (`busy`: contando, carregando mais, outro comando da pessoa rodando) ele
+ * não se desabilita de verdade, só por `aria-disabled`: o botão `disabled` perde o foco. Quando ele sai da página com o foco (o resultado novo não tem o
+ * que contar), avisa `onFocusLost`, e quem desenha a área leva o foco para dentro dela.
+ */
+export function CountButton({ rows, busy, onCount, onFocusLost }: { rows: RowsState; busy: boolean; onCount: () => void; onFocusLost?: () => void }) {
+  const recount = rows.total !== null;
+  const lost = useRef(onFocusLost);
+  useLayoutEffect(() => {
+    lost.current = onFocusLost;
+  });
+  // A limpeza da ref (React 19) roda quando o botão sai, com ele ainda na página: é aí que se sabe se ele tinha o foco. Estável, para não rodar a cada
+  // renderização.
+  const watchFocus = useCallback((button: HTMLButtonElement | null) => {
+    if (button === null) return;
+    return () => {
+      if (button.ownerDocument.activeElement === button) lost.current?.();
+    };
+  }, []);
+
+  return (
+    <Button
+      ref={watchFocus}
+      type="button"
+      variant="secondary"
+      size="compact"
+      aria-disabled={busy || undefined}
+      aria-label={recount ? copy.recount : undefined}
+      title={recount ? copy.recount : undefined}
+      onClick={() => {
+        if (!busy) onCount();
+      }}
+      className={cn("h-7 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50", recount ? "w-7 px-0" : "px-2.5")}
+    >
+      {recount ? <RefreshIcon className={cn(rows.counting && "animate-spin")} /> : rows.counting ? copy.counting : copy.count}
+    </Button>
+  );
+}
+
+/**
+ * Um botão de entrada de assistente do rodapé ou da barra: está sempre lá, e o que não se aplica fica desabilitado sem sair do caminho do Tab
+ * (`aria-disabled`, como o "Contar total"), com o motivo na dica e para o leitor de tela.
+ */
+function EntryButton({ icon, label, blocker, hint, onOpen }: { icon: ReactNode; label: string; blocker: string | null; hint: string; onOpen: () => void }) {
+  const reasonId = useId();
+  const blocked = blocker !== null;
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="compact"
+        aria-disabled={blocked || undefined}
+        aria-describedby={reasonId}
+        title={blocker ?? hint}
+        onClick={() => {
+          if (!blocked) onOpen();
+        }}
+        className="h-7 px-2.5 text-xs aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+      >
+        {icon}
+        {label}
+      </Button>
+      <span id={reasonId} className="sr-only">
+        {blocker ?? hint}
+      </span>
+    </>
+  );
+}
+
+/** RN-EXPORT-001: "Exportar…", que abre o assistente "Exportar dados" com a origem desta área. Está sempre lá, também sem resultado. */
+export function ExportButton({ exporter, hint }: { exporter: ExportEntry; hint: string }) {
+  return <EntryButton icon={<DownloadIcon />} label={dataExportCopy.entry.button} blocker={exporter.blocker} hint={hint} onOpen={exporter.onExport} />;
+}
+
+/** RN-IMPORT-001: "Importar…", nos Registros de uma tabela, logo depois de "Exportar…": abre o assistente "Importar dados" com a tabela da aba. */
+export function ImportButton({ importer }: { importer: ImportEntry }) {
+  return <EntryButton icon={<UploadIcon />} label={dataImportCopy.entry.button} blocker={importer.blocker} hint={dataImportCopy.entry.recordsHint} onOpen={importer.onImport} />;
+}
+
+/** O "Importar…" dos Registros (RN-IMPORT-001): o motivo de não valer (a conexão somente leitura, a visão; nulo quando vale) e o que abre o assistente. */
+export type ImportEntry = { blocker: string | null; onImport: () => void };
+
+/** O "Exportar…" da área (RN-EXPORT-001): o motivo de não valer agora (nulo quando vale) e o que abre o assistente. */
+export type ExportEntry = { blocker: string | null; onExport: () => void };
 
 /**
  * RN-SQL-004: o que está na tela e o tempo do comando. Sem mais linhas a ler, o que está na tela é
@@ -46,7 +138,8 @@ function summaryOf(rows: RowsState): string {
  * roda sobre um resultado, a barra diz que roda: é a notícia que importa.
  */
 export function collapsedSummary(state: RunnerState): string {
-  if (state.status === "running") return copy.running;
+  // A execução da atualização automática (RN-GRADE-014) não é notícia: a barra segue com o resultado que está lá.
+  if (state.status === "running") return state.auto === true && state.previous !== null ? collapsedSummary(state.previous) : copy.running;
   if (state.status === "rows") return state.total === null ? summaryOf(state) : `${summaryOf(state)} · ${copy.total(state.total)}`;
   if (state.status === "affected") return copy.affected(state.rowsAffected, state.elapsedMs);
   if (state.status === "cancelled") return copy.cancelled;
@@ -65,9 +158,6 @@ type RecordsMode = {
   name: string;
   onRefresh: () => void;
   onCancel: () => void;
-  /** A ordem em vigor e quem a muda ao clicar num cabeçalho (RN-TABELA-005). Com algo em andamento a grade não ordena: o executor recusaria. */
-  sort: RecordsSort | null;
-  onSort: (column: string) => void;
   /** "Exportar CSV" (RN-TABELA-006): grava as linhas carregadas num arquivo. Só vale com linhas na tela. */
   onExport: () => void;
   /** As colunas que são chave estrangeira e o clique no valor delas (RN-TABELA-007). */
@@ -108,7 +198,11 @@ type ResultPanelProps = {
    * lembradas por ele (`tab-memory.ts`) e voltam com a vista. A área da aba de consulta não desmonta com a aba aberta, e as guarda só no próprio estado.
    */
   tabId?: string;
-  /** RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros e na aba de consulta). */
+  /**
+   * RN-EDIT-001 a 004: a edição das células, entregue à grade (nos Registros, na aba de consulta e nas abas guardadas do script, RN-SQL-023). Com ela vem a
+   * barra de edição (RN-EDIT-013), que a área desenha só com a grade na tela: no rodapé dos Registros, logo depois de "Exportar CSV", e, no resultado de um
+   * comando, numa linha própria entre a grade e os rodapés dela (também acima da nota da aba guardada).
+   */
   editing?: GridEditing;
   /** A faixa da edição (as pendências, o erro do Salvar, o motivo de só leitura), acima da grade. */
   banner?: ReactNode;
@@ -117,6 +211,34 @@ type ResultPanelProps = {
    * filtrado na tela, para a pessoa corrigir o filtro; recolhida a área, recolhe com ela.
    */
   filter?: ReactNode;
+  /**
+   * RN-GRADE-014: a atualização automática (`AutoRefreshControl`), ao lado de "Atualizar": nos Registros, no rodapé, logo depois do botão; na aba de
+   * consulta, que não tem o botão (o F5 e "Executar" fazem a vez dele), na barra, antes do zoom, que fica também com a área recolhida.
+   */
+  autoRefresh?: ReactNode;
+  /**
+   * Seção 31 (RN-SQL-020): as abas do script, no lugar do título "Resultado". O corpo da área passa a ser o painel da aba escolhida (`role="tabpanel"`,
+   * rotulado por ela).
+   */
+  tabs?: { list: ReactNode; panelId: string; labelledBy: string };
+  /** RN-SQL-019: o comando do script em execução ("Executando 3 de 12…"), na barra, em qualquer aba e com a área recolhida, no lugar do "Executando…". */
+  progress?: string | null;
+  /** RN-SQL-020: as Estatísticas do script no corpo, no lugar do resultado; `summary` é o que a barra recolhida diz delas. */
+  statistics?: { body: ReactNode; summary: string };
+  /**
+   * RN-SQL-020 e 023: uma aba guardada do script. As linhas lidas, que se editam como as do último comando (a faixa e a edição, com a barra dela, vêm de
+   * quem usa a área), sem contar, sem "Carregar mais", sem filtro nem atualização automática, e a nota dela (`KeptResultNote`), com "Executar este comando",
+   * no lugar do rodapé do cursor. `busy`: há comando da pessoa em andamento na aba (o `state` desta área é a cópia guardada, que não sabe disso), e o botão
+   * não executa.
+   */
+  kept?: { busy: boolean; onRunAlone: () => void; note?: string | null };
+  /**
+   * RN-EXPORT-001: "Exportar…". Nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, na barra da área (que fica à vista com a
+   * área recolhida), depois do zoom da grade e antes de recolher e maximizar.
+   */
+  exporter?: ExportEntry;
+  /** RN-IMPORT-001: "Importar…", só nos Registros, no rodapé, logo depois de "Exportar…". */
+  importer?: ImportEntry;
 };
 
 /**
@@ -124,13 +246,16 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter }: ResultPanelProps) {
-  const running = state.status === "running";
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
+  // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
+  // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
+  const running = state.status === "running" && state.auto !== true;
   // O que está na tela: o estado ou, enquanto um comando novo roda, o resultado que já estava lá
   // (linhas, linhas afetadas ou um erro de SQL). Só a API aceitar o comando novo o substitui;
   // recusado antes disso, ele continua valendo.
   const shown = state.status === "running" ? state.previous : state;
-  const rows = shown?.status === "rows" ? shown : null;
+  // As Estatísticas do script (RN-SQL-020) tomam o corpo: nem grade, nem resumo das linhas na barra.
+  const rows = statistics === undefined && shown?.status === "rows" ? shown : null;
   // O que a grade mostra por gosto do usuário, lido aqui e não passado por quem usa a área: vale nas duas grades (a da consulta e a dos Registros), na hora.
   const { preferences, update } = usePreferences();
   // O zoom da grade (RN-GRADE-010): uma preferência só, a mesma para as duas grades, que os botões da barra e o Ctrl+roda sobre a grade mudam.
@@ -149,55 +274,112 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
   }, [tabId, sizing]);
   // Identidade estável: a grade é memorizada.
   const resize = useCallback((index: number, width: number) => setSizing((held) => withWidth(held, index, width)), []);
-  // "Carregar mais" e a contagem também ocupam a sessão (RN-SESSAO-002) e se cancelam (RN-SQL-010).
-  const busy = running || (state.status === "rows" && (state.loadingMore || state.counting));
+  // "Carregar mais" e a contagem também ocupam a sessão (RN-SESSAO-002) e se cancelam (RN-SQL-010). A execução da atualização automática (RN-GRADE-014) não
+  // ocupa a área para a pessoa: "Atualizar" não vira "Cancelar" e "Exportar CSV" segue valendo (o comando dela toma o lugar). O botão de ordenar do cabeçalho
+  // é da edição (`editing.sort`, RN-GRADE-021), que diz quando ele não vale.
+  const busy = isPersonBusy(state);
   const cancelling = (state.status === "running" || state.status === "rows") && state.cancelling;
   // RN-CONFIG-005: a grade só avisa que chegou ao fim; quem decide se a página seguinte pode vir é esta conta.
-  const autoLoad = autoLoadArmed(state, { enabled: autoLoadMore, connected });
+  const autoLoad = kept === undefined && autoLoadArmed(state, { enabled: autoLoadMore, connected });
   const loadedHint = autoLoadMore ? copy.loadedHintAuto : copy.loadedHint;
   const exportHintId = useId();
 
+  // RN-SQL-006: o botão de contar que sai da página com o foco (o resultado novo não tem o que contar) não o deixa cair no `body`, fora da aba, onde o F5
+  // não vale: o foco vai para a grade ou, sem ela (ou com ela recolhida), para a própria área. O mesmo com "Executar este comando", de uma aba guardada do
+  // script (RN-SQL-020), que sai com os resultados do script.
+  const section = useRef<HTMLElement>(null);
+  const focusLost = useRef(false);
+  const rescueFocus = useCallback(() => {
+    focusLost.current = true;
+  }, []);
+  useLayoutEffect(() => {
+    if (!focusLost.current) return;
+    focusLost.current = false;
+    const area = section.current;
+    const page = area?.ownerDocument;
+    if (area === null || page === undefined || (page.activeElement !== null && page.activeElement !== page.body)) return;
+    area.querySelector<HTMLElement>('[role="grid"], [role="table"]')?.focus();
+    if (page.activeElement === null || page.activeElement === page.body) area.focus();
+  });
+
+  // RN-EDIT-013 e 014: a barra de edição, onde a grade tem a edição (também numa aba guardada do script, RN-SQL-023) e com a grade na tela. Depois do
+  // botão, o foco volta à grade, como volta quando o botão que o tinha sai da tela; o "Editar célula" abre o campo, que o toma.
+  const focusGrid = useCallback(() => section.current?.querySelector<HTMLElement>('[role="grid"]')?.focus({ preventScroll: true }), []);
+  const editBar = rows === null || editing === undefined ? null : <EditBar buttons={editing.bar.buttons} onAction={editing.bar.onAction} onDone={focusGrid} />;
+
   return (
-    <section id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
+    // `tabIndex={-1}`: a área recebe o foco quando o botão que o tinha sai da página (`rescueFocus`), sem entrar no Tab.
+    <section ref={section} tabIndex={-1} id={id} aria-label={records ? copy.recordsLabel(records.name) : copy.label} aria-busy={running || progress !== null} style={style} className="flex min-h-0 flex-1 flex-col border-t border-border bg-panel">
       <div className={cn("flex flex-none flex-wrap items-center gap-x-1 px-3", !collapsed && "border-b border-border")}>
-        <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2>
+        {tabs === undefined ? <h2 className="mr-auto flex h-9 items-center border-b-2 border-accent px-2.5 font-semibold text-ink">{records ? copy.recordsTitle : copy.title}</h2> : tabs.list}
         {collapsed ? (
-          <span role={running ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
-            {collapsedSummary(state)}
+          <span role={running || progress !== null ? "status" : undefined} className="min-w-0 truncate px-2 text-xs text-muted">
+            {progress ?? statistics?.summary ?? collapsedSummary(state)}
           </span>
-        ) : running ? (
-          // Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo.
-          shown === null ? null : (
-            <span role="status" className="px-2 text-xs text-muted">
-              {copy.running}
-            </span>
-          )
-        ) : rows === null ? null : (
+        ) : null}
+        {/*
+          As linhas na tela, também enquanto outro comando roda sobre elas (esmaecidas): o resumo, o total e o botão de contar ficam no lugar, com
+          "Executando…" depois. O botão, clicado, tem o foco, e não sai da página quando a pessoa executa de novo (RN-SQL-006).
+        */}
+        {collapsed || rows === null ? null : (
           <>
             <span className="px-2 text-xs text-muted">{summaryOf(rows)}</span>
             {/*
+              RN-GRADE-001: com mais de uma célula escolhida, quantas, ao lado do resumo ("3 linhas escolhidas", "12 células escolhidas"). O lugar fica na página
+              também vazio, para o leitor de tela anunciar a mudança; ela vem quando a seleção para de mudar (ao soltar o botão ou a tecla).
+            */}
+            {editing === undefined ? null : (
+              <span role="status" className={cn("text-xs text-ink", editing.status !== null && "px-2")}>
+                {editing.status ?? ""}
+              </span>
+            )}
+            {/*
               RN-SQL-006: o total só é contado quando a pessoa pede, e só há o que contar quando há linhas
               que a tela não leu (`hasMore`, com o cursor aberto ou já fechado). Com o resultado inteiro na
-              tela, o total é o número do resumo, sem ir ao banco.
+              tela, o total é o número do resumo, sem ir ao banco. O total contado se conta de novo (issue #10):
+              enquanto isso, o de antes fica à vista, marcado. O botão vem sempre depois do total, no mesmo lugar
+              da árvore com ou sem ele: é o mesmo elemento, e o foco fica nele.
             */}
-            {rows.total !== null ? (
-              <span className="px-2 text-xs text-ink">{copy.total(rows.total)}</span>
-            ) : connected && rows.hasMore ? (
-              <PanelButton onClick={onCount} disabled={rows.counting || rows.loadingMore}>
-                {rows.counting ? copy.counting : copy.count}
-              </PanelButton>
-            ) : null}
+            {rows.total === null ? null : (
+              <span className={cn("px-2 text-xs", rows.counting ? "text-muted" : "text-ink")}>
+                {copy.total(rows.total)}
+                {rows.counting ? ` · ${copy.recounting}` : null}
+              </span>
+            )}
+            {connected && kept === undefined && (rows.hasMore || rows.total !== null) ? <CountButton rows={rows} busy={busy} onCount={onCount} onFocusLost={rescueFocus} /> : null}
           </>
         )}
+        {/* Sem resultado na tela, "Executando…" ocupa a área de resultado, logo abaixo. O script diz qual comando roda (RN-SQL-019). */}
+        {!collapsed && progress !== null ? (
+          <span role="status" className="px-2 text-xs text-muted">
+            {progress}
+          </span>
+        ) : !collapsed && running && shown !== null ? (
+          <span role="status" className="px-2 text-xs text-muted">
+            {copy.running}
+          </span>
+        ) : null}
+        {records || kept !== undefined || statistics !== undefined ? null : (autoRefresh ?? null)}
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
         {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} /> : null}
+        {records || exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.resultHint} />}
         {actions}
       </div>
 
       {/* Recolhida, `inert` tira o corpo da ordem do Tab e da leitura de tela sem desmontá-lo. */}
-      <div inert={collapsed} className={cn("flex min-h-0 flex-1 flex-col", collapsed && "h-0 flex-none overflow-hidden")}>
-        {filter ?? null}
-        {shown === null ? (
+      <div
+        inert={collapsed}
+        role={tabs === undefined ? undefined : "tabpanel"}
+        id={tabs?.panelId}
+        aria-labelledby={tabs?.labelledBy}
+        // As Estatísticas não têm nada que receba o foco: o painel entra no Tab, como pede a lista de abas.
+        tabIndex={statistics === undefined ? undefined : 0}
+        className={cn("flex min-h-0 flex-1 flex-col", collapsed && "h-0 flex-none overflow-hidden")}
+      >
+        {kept !== undefined || statistics !== undefined ? null : (filter ?? null)}
+        {statistics !== undefined ? (
+          statistics.body
+        ) : shown === null ? (
           // `flex-1`: na vista Registros o rodapé (com "Cancelar") fica no fim da área, e não colado à frase.
           <p role="status" className="flex-1 p-4 text-muted">
             {copy.running}
@@ -215,8 +397,6 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 generated={rows.generated}
                 nullText={nullText}
                 onReachEnd={autoLoad ? onLoadMore : undefined}
-                sort={records?.sort}
-                onSort={records === undefined || busy ? undefined : (column) => records.onSort(column.name)}
                 links={records?.links}
                 onFollow={records?.onFollow}
                 linkable={records?.linkable}
@@ -229,7 +409,13 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
               />
             </div>
 
-            {running || records ? null : rows.cursorClosed ? (
+            {/* RN-EDIT-013: no resultado de um comando, a barra de edição numa linha própria, alinhada à esquerda, entre a grade e os rodapés dela. */}
+            {records || editBar === null ? null : <div className="flex flex-none items-center border-t border-border bg-panel px-3 py-1.5">{editBar}</div>}
+
+            {kept !== undefined ? (
+              // O botão sai da página com o foco quando o comando executado troca os resultados do script: o foco vai à grade nova (RN-SQL-006).
+              <KeptResultNote busy={kept.busy} onRunAlone={kept.onRunAlone} onFocusLost={rescueFocus} note={kept.note ?? null} />
+            ) : running || records ? null : rows.cursorClosed ? (
               // RN-SQL-007: o cursor fechou; o que resta é executar de novo.
               <div className="flex flex-none flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-raised px-3 py-1.5 text-xs">
                 <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
@@ -272,7 +458,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
               ) : (
                 <div className="flex flex-col gap-1">
                   <p className="text-body">{copy.empty}</p>
-                  <p className="text-muted">{copy.emptyHint}</p>
+                  <p className="text-muted">{copy.emptyHint(platformScriptShortcut)}</p>
                 </div>
               )
             ) : shown.status === "affected" ? (
@@ -319,6 +505,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 {copy.refresh}
               </PanelButton>
             )}
+            {autoRefresh ?? null}
             {/* RN-TABELA-006: exporta as linhas carregadas; a dica diz quantas são e que as outras não entram. */}
             {rows === null ? null : (
               <>
@@ -331,6 +518,13 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 </span>
               </>
             )}
+            {/* RN-EXPORT-001: todas as linhas, com o filtro e a ordem da aba, pelo assistente; sempre lá, também sem resultado. */}
+            {exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.recordsHint} />}
+            {/* RN-IMPORT-001: logo depois de "Exportar…", no mesmo desenho, com a seta para cima. */}
+            {importer === undefined ? null : <ImportButton importer={importer} />}
+            {/* RN-EDIT-013: nos Registros, a barra de edição logo depois de "Exportar CSV", "Exportar…" e "Importar…", antes das linhas carregadas e do
+                "Carregar mais". */}
+            {editBar}
             {rows === null || running ? null : rows.cursorClosed ? (
               <span className="flex items-baseline gap-2 text-ink">
                 <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />

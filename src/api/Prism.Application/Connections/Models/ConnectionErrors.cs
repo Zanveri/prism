@@ -28,6 +28,30 @@ internal static class ConnectionErrors
         => PasswordRequired("Para testar com outro host ou outra porta, informe a senha da conexão.");
 
     /// <summary>
+    /// RN-TRANSF-015: o `PATCH` sem usuário numa conexão que tem um. O usuário vazio só passa na conexão gravada já sem usuário (a que a importação trouxe
+    /// sem ele); tirar o de uma que tem continua sendo a recusa do formulário, com a mesma frase, no campo.
+    /// </summary>
+    public static ApiErrorDto UserNameRequired()
+        => ApiErrorDto.CreateUnprocessableEntityOnField("Erro ao enviar dados para a API.", "CONNECTION_INVALID", "UserName", "Informe o usuário do banco.");
+
+    /// <summary>
+    /// RN-TRANSF-016: abrir uma sessão com a conexão gravada sem usuário (campo `UserName`), ou com o usuário e sem a senha (campo `Password`), é recusado
+    /// antes do driver. Sem a recusa, o driver tentaria o usuário vazio (o do PostgreSQL usaria o do sistema operacional), e a mensagem do banco não diria o
+    /// que fazer. Na forma do erro de campo: é o campo que diz à tela qual falta, e ela abre o "Editar conexão" com o foco nele.
+    /// </summary>
+    public static ApiErrorDto CredentialsMissingToConnect(bool userNameMissing)
+        => userNameMissing
+            ? CredentialsMissing("UserName", "A conexão não tem usuário gravado. Preencha o usuário e a senha em \"Editar conexão\" para conectar.")
+            : CredentialsMissing("Password", "A conexão não tem senha gravada. Preencha a senha em \"Editar conexão\" para conectar.");
+
+    /// <summary>RN-TRANSF-016 e RN-CONN-013: o "Testar conexão" de uma conexão gravada sem senha, sem a senha no pedido, em vez de testar com a senha vazia.</summary>
+    public static ApiErrorDto CredentialsMissingToTest()
+        => CredentialsMissing("Password", "Esta conexão não tem senha gravada. Informe a senha do banco para testar.");
+
+    private static ApiErrorDto CredentialsMissing(string field, string message)
+        => ApiErrorDto.CreateUnprocessableEntityOnField("Conexão sem usuário ou sem senha.", "CONNECTION_CREDENTIALS_MISSING", field, message);
+
+    /// <summary>
     /// 422 `CONNECTION_INVALID` na forma do filtro de validação (`errors` e `errorCodes` por campo): a tela mostra a mensagem no campo da
     /// senha, que é onde a pessoa resolve. A senha gravada nunca vai a outro servidor: sem esta regra, apontar a conexão para ele entregaria a
     /// senha que a RN-CONN-002 só mostra a quem redigita a senha do Prism.

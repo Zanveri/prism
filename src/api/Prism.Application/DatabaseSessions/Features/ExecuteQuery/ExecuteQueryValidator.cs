@@ -24,8 +24,16 @@ public sealed class ExecuteQueryValidator : AbstractValidator<ExecuteQueryComman
             if (databaseSessionService.FilterRefusal(context.InstanceToValidate.SessionID, filter) is { } refusal)
                 context.AddFailure(new ValidationFailure(nameof(ExecuteQueryCommand.Filter), refusal) { ErrorCode = "FILTER_INVALID" });
         });
+
+        // RN-SQL-024: uma lista de até 20 identificadores de resultado, ou nada (a sessão esquece os guardados). Mais que isso, ou uma entrada que
+        // não é um identificador (nula, texto qualquer, número), é o mesmo `QUERY_INVALID`, no campo, como o `pageSize` fora da forma: nada vai ao banco.
+        RuleFor(request => request.Keep).Must(BeAbsentOrAList).WithMessage("Informe em keep uma lista de identificadores de resultado (resultID).").WithErrorCode("QUERY_INVALID");
+        RuleFor(request => request.Keep).Must(keep => keep is not { ValueKind: JsonValueKind.Array } list || list.GetArrayLength() <= QueryPaging.MaxKeptResults).WithMessage($"Guarde no máximo {QueryPaging.MaxKeptResults} resultados (keep).").WithErrorCode("QUERY_INVALID");
     }
 
     private static bool BeAbsentOrAnAcceptedPageSize(JsonElement? pageSize)
         => pageSize is null or { ValueKind: JsonValueKind.Null } || (pageSize.Value.ValueKind == JsonValueKind.Number && pageSize.Value.TryGetInt32(out var size) && size is >= QueryPaging.MinPageSize and <= QueryPaging.MaxPageSize);
+
+    private static bool BeAbsentOrAList(JsonElement? keep)
+        => keep is null or { ValueKind: JsonValueKind.Null } || (keep.Value.ValueKind == JsonValueKind.Array && keep.Value.EnumerateArray().All(entry => entry.ValueKind == JsonValueKind.String && entry.TryGetGuid(out _)));
 }

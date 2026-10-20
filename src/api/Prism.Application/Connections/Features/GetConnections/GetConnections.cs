@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Common.Protections;
 using Prism.Application.Common.Vault;
 using Prism.Application.Connections.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -19,8 +20,10 @@ internal sealed class GetConnectionsHandler(IVaultService vaultService) : IReque
         if (read.IsFailure)
             return Task.FromResult(Result.Failure<IReadOnlyList<ConnectionDto>, ApiErrorDto>(VaultErrors.From(read.Error)));
 
-        // Pelo nome, sem diferenciar maiúsculas; o ID (Guid v7, que cresce com o tempo) desempata nomes iguais de pastas diferentes.
-        IReadOnlyList<ConnectionDto> connections = [.. read.Value.Connections.OrderBy(connection => connection.Name, StringComparer.OrdinalIgnoreCase).ThenBy(connection => connection.ID).Select(connection => connection.ToDto())];
+        // Pelo nome, sem diferenciar maiúsculas; o ID (Guid v7, que cresce com o tempo) desempata nomes iguais de pastas diferentes. As proteções que
+        // valem (RN-PROT-004) saem das pastas da mesma leitura.
+        var folders = ProtectionRules.FoldersOf(read.Value);
+        IReadOnlyList<ConnectionDto> connections = [.. read.Value.Connections.OrderBy(connection => connection.Name, StringComparer.OrdinalIgnoreCase).ThenBy(connection => connection.ID).Select(connection => connection.ToDto(ProtectionRules.Of(folders, connection.FolderID, connection.ReadOnly == true, connection.ConfirmCommands)))];
 
         return Task.FromResult(Result.Success<IReadOnlyList<ConnectionDto>, ApiErrorDto>(connections));
     }

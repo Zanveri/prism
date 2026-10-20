@@ -242,6 +242,50 @@ public sealed class EditableSqlTests
         Assert.Equal(EditableSql.UnknownOrigin, postgres.Reason);
     }
 
+    /// <summary>
+    /// RN-SQL-024: o comando que pode trocar o esquema atual da sessão no Db2 e no Informix começa, depois dos comentários, dos `;` soltos e dos
+    /// parênteses de abertura, por `SET`, `CALL` ou `EXECUTE` e, só no Informix, por `DATABASE`. A palavra dentro de texto, de comentário ou mais
+    /// adiante no comando não conta.
+    /// </summary>
+    [Trait("EditableSql", "MayChangeTheCurrentSchema")]
+    [Theory(DisplayName = "OK SET, CALL, EXECUTE e o DATABASE do Informix podem trocar o esquema atual, e o resto não")]
+    [InlineData("SET SCHEMA LOJA", "Db2", true)]
+    [InlineData("set current schema = 'LOJA'", "Db2", true)]
+    [InlineData("SET CURRENT SQLID = 'LOJA'", "Db2", true)]
+    [InlineData("SET SESSION AUTHORIZATION operador", "Informix", true)]
+    [InlineData("  -- troca o esquema\n/* antes */ SET SCHEMA LOJA;", "Db2", true)]
+    [InlineData(";\n(CALL LOJA.TROCA())", "Db2", true)]
+    [InlineData("CALL troca()", "Informix", true)]
+    [InlineData("EXECUTE PROCEDURE troca_dono()", "Informix", true)]
+    [InlineData("{ comentário } EXECUTE FUNCTION f()", "Informix", true)]
+    [InlineData("DATABASE outro", "Informix", true)]
+    [InlineData("DATABASE outro", "Db2", false)]
+    [InlineData("SELECT * FROM pedido", "Db2", false)]
+    [InlineData("UPDATE pedido SET status = 'x'", "Informix", false)]
+    [InlineData("SETTINGS", "Db2", false)]
+    [InlineData("'SET SCHEMA x'", "Db2", false)]
+    [InlineData("-- SET SCHEMA x\nSELECT 1 FROM SYSIBM.SYSDUMMY1", "Db2", false)]
+    [InlineData("", "Informix", false)]
+    public void MayChangeTheCurrentSchema_ShouldReadTheFirstWord(string sql, string dialect, bool changes)
+        => Assert.Equal(changes, EditableSql.MayChangeTheCurrentSchema(sql, Enum.Parse<ESqlDialect>(dialect)));
+
+    /// <summary>
+    /// RN-SQL-024: no Db2 o comentário de bloco aninhado é lido como o banco o lê e como o driver o lê, e basta uma das leituras começar pelo
+    /// comando que troca o esquema: na dúvida, conta.
+    /// </summary>
+    [Trait("EditableSql", "MayChangeTheCurrentSchema")]
+    [Fact(DisplayName = "OK no Db2 basta uma das duas leituras do comentário aninhado ver o SET")]
+    public void MayChangeTheCurrentSchema_InDb2_ShouldReadTheCommentBothWays()
+    {
+        //Act
+        var nested = EditableSql.MayChangeTheCurrentSchema("/* a /* b */ SET SCHEMA LOJA */ SELECT 1 FROM SYSIBM.SYSDUMMY1", ESqlDialect.Db2);
+        var asTheDatabase = EditableSql.MayChangeTheCurrentSchema("/* a /* b */ c */ SET SCHEMA LOJA", ESqlDialect.Db2);
+
+        //Assert
+        Assert.True(nested);
+        Assert.True(asTheDatabase);
+    }
+
     /// <summary>A tabela como a leitura a guardou: `[esquema.]nome [apelido]`.</summary>
     private static string Written(FromTable table)
         => $"{(table.Name.Schema is null ? string.Empty : $"{table.Name.Schema}.")}{table.Name.Name}{(table.Alias is null ? string.Empty : $" {table.Alias}")}";

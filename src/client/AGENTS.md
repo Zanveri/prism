@@ -13,7 +13,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
@@ -41,6 +41,8 @@ configuração).
 
 Para ver a tela sem olhar a janela: `pnpm dev --remoteDebuggingPort 9222` e o protocolo de
 depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, capturar a tela).
+Numa cópia de trabalho cujo `node_modules/electron` não tem o `dist/` (o binário não foi baixado), o `electron-vite` falha com "Electron
+uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electron pnpm dev …` usa o binário de outra cópia, da mesma versão.
 
 ## Processo principal
 
@@ -76,14 +78,46 @@ depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, ca
   modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
   ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
+- **O zoom do programa inteiro** (RN-ZOOM-001; `zoom.ts`, puro e sem Node, porque a tela também o importa, e `zoom-file.ts`, com o disco; os dois com
+  teste). É **desta instalação**, e não do usuário: `zoom.json` (`{ "zoom": 110 }`) na pasta de dados, fora do cofre, lido uma vez ao carregar o `main.ts`
+  (depois do `setPath`) com leitura tolerante (o que não é um dos passos vale 100%) e gravado de forma atômica, como `update-preferences.json`; gravar que
+  falha só vai para o log. Os passos são os do zoom da grade (`appZoomSteps`). **Onde vale**: o splash nasce nele (`splashGeometry`, em `splash.ts`: a
+  janela de 640×400 cresce junto, até caber na área útil da tela, e a página `data:` recebe o `zoomFactor`); cada janela do app nasce nele pelo
+  `webPreferences.zoomFactor`; e a mudança (`changeZoom`) chama `setZoomFactor` em todas as vivas e manda `prism:zoom-changed`. O Chromium guarda o zoom
+  **por origem** (as janelas do app são todas de `app://prism`, ou do servidor do Vite): conferido no Electron, o `setZoomFactor` de uma janela vale nas
+  outras da mesma origem e passa por cima do `webPreferences.zoomFactor` das que nascem depois, e a página `data:` do splash fica à parte. Por isso o
+  valor é um só, e todo lugar recebe o mesmo. **Cuidado com 100%**: é o padrão do Chromium, e ir a ele APAGA o zoom guardado para a origem; e o Electron
+  reaplica o `webPreferences.zoomFactor` (o zoom com que a janela nasceu) a cada navegação do quadro principal quando a origem não guarda zoom. Sem
+  mais nada, a janela nascida em 125% voltava a 125% ao recarregar depois de ir a 100% (o "Reiniciar" da API recarrega as outras janelas; o Vite recarrega
+  em desenvolvimento), levava as outras da mesma origem junto, e o `zoom.json` e Configurações continuavam dizendo 100% (conferido sob Xvfb no `pnpm dev`:
+  aberto em 125%, Ctrl+0 e `location.reload()` voltavam a 1,25 sem a correção, e ficam em 1). Por isso cada janela recebe o zoom de agora também no
+  `did-navigate` (as rotas em hash não passam por ele), o que cobre ainda o zoom mudado enquanto uma janela nova carregava. **Os atalhos** são tratados
+  no `before-input-event` de `createAppWindow`, ANTES do `menuShortcutIgnored`:
+  `zoomShortcut` (Ctrl+= e Ctrl++, o + do teclado numérico, Ctrl+- e Ctrl+0; Cmd no macOS; sem Alt, que é o AltGr) chama `event.preventDefault()`, e a
+  tecla não chega à página (o editor e a grade não a veem: nenhum caractere entra no editor) nem ao menu (o Zoom do menu padrão de desenvolvimento não
+  muda o zoom por fora). A tecla é o caractere (`key`), menos o + e o - do teclado numérico (`code`); o 0 vai pelo caractere, porque com o Num Lock
+  desligado aquela tecla é o Insert, e Ctrl+Insert é o copiar do Windows e do Linux, que tem de chegar à página (conferido sob Xvfb: `xdotool key
+  ctrl+KP_Insert` chega à página como `Insert`/`Numpad0` e o zoom não muda). Ctrl+roda do mouse continua sendo só o zoom da grade: o
+  Electron não muda o zoom pela roda. **Conferido sob Xvfb** (`xdotool key`, teclas de verdade: o `Input.dispatchKeyEvent` do protocolo de depuração NÃO
+  passa pelo `before-input-event`): o login abriu em 125% com o `zoom.json` já gravado, o splash em 800×500 com a página em 640×400, Ctrl+- e Ctrl+=,
+  Ctrl++ e o + numérico andaram um passo cada com o foco no editor (o texto dele não mudou), Ctrl+0 voltou a 100%, o controle de Configurações
+  acompanhou o atalho, e a janela nova de "Mover para nova janela" nasceu no zoom de então e mudou junto com a primeira.
 - Sair do app, pela última janela fechada ou por `app.quit()`, passa por `before-quit`: grava as abas de todas as janelas (`workspaceHub.flush`, RN-ABAS-006,
   no máximo 5 s), e então `closeVaultAndStop` chama `DELETE api/public/sessions` com o token (RN-COFRE-008), espera no
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
+  Os três (o `before-quit`, o `stopApi` e o "Reiniciar") soltam antes os destinos das exportações de dados (`transferDesk.releaseAll`), o que interrompe a
+  entrega em andamento e apaga a cópia pela metade (RN-EXPORT-023), e os arquivos das importações de dados (`transferSource.releaseAll`), o que interrompe a
+  cópia do arquivo e apaga o que a API ainda não tomou (RN-IMPORT-018).
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
-  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas") e `workspace` (ver "Abas que voltam na
-  próxima entrada"). Os canais da API são
+  `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
+  periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
+  próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
+  exportações de dados e o arquivo das importações, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
-  os das janelas, `prism:windows-*` e `prism:session-*`; os das abas que voltam, `prism:workspace-*`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
+  passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
+  `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`; os do arquivo das importações de dados, `prism:transfer-source`,
+  `prism:transfer-source-status` e `prism:transfer-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -103,6 +137,41 @@ depuração do Chromium em `http://127.0.0.1:9222/json` (avaliar expressões, ca
   negado, mesmo para o app. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
   ou falha calada. Conferido no Electron sob Xvfb: `local-fonts` sai `granted` sem gesto da pessoa (quem responde é o tratador da consulta, e a API não precisa pedir), copiar e
   colar funcionam, e `geolocation` e `notifications` saem `denied`.
+- **O destino das exportações de dados** (RN-EXPORT-019 e 020; `electron/transfer-desk.ts`, sem Electron, com teste em pastas temporárias de
+  verdade; as mensagens em `electron/transfer-messages.ts`, `zod` dos dois lados). **O processo principal é o dono do destino: nenhum caminho vem da
+  tela, e nenhum vai a ela.** `prism:transfer-destination` recebe só `{ suggestedName, extension }` (a extensão de uma lista fixa, `exportExtensions`), passa
+  o nome de novo por `safeFileBase` (`electron/file-name.ts`, a mesma regra do "Exportar CSV"), abre o diálogo de salvar sobre a janela que pediu (os
+  filtros, "Todos os arquivos" e `showOverwriteConfirmation` escritos aqui; a pasta é a última desta abertura do app, ou Downloads), confere que a pasta
+  existe e aceita gravação (um arquivo de prova `.prism-<id>.tmp`, criado e apagado), recusa a pasta de dados do Prism e o destino já reservado por outra
+  exportação, e responde `chosen` com um identificador e o nome do arquivo, `canceled`, `notWritable` ou `inUse`. O destino é de uso único e da janela
+  que o pediu. `prism:transfer-deliver` (`{ transferId, destinationId, reveal }`) acha o `.ready` na pasta `transfers` só pelo id conferido como `Guid`
+  minúsculo, move-o (`rename`; entre unidades, a cópia em fluxo para um `.<nome>.<id>.part` escondido ao lado e o `rename` dele), numera o nome (`pedido
+  (2).csv`) quando um arquivo apareceu lá depois da escolha sem a pessoa ter confirmado a troca, e responde `delivered` (com um `deliveryId` para o
+  "Mostrar na pasta"), `missing`, `canceled` (o destino foi solto no meio) ou `failed` com o motivo (`diskFull`, `notWritable`, `folderMissing`,
+  `inUse`, `other`) e a frase; o destino que falhou fica reservado para o "Salvar como…". **O diálogo só perguntou pelo nome que devolveu**: com a
+  extensão posta pelo processo principal (o nome escolhido sem nenhuma), o `pedido.csv` que já existia conta como não confirmado e é numerado, e nunca
+  substituído. O arquivo renomeado ganha o modo da prova de gravação da pasta (`chmod`, fora do Windows), e não o 0600 do temporário da API, como o
+  copiado entre unidades; o gerenciador de arquivos que não abre depois da entrega fica no log, e a entrega continua `delivered`.
+  `prism:transfer-copy` lê o `.ready` (até 10 MiB, `tooLarge` acima) para a área de transferência; `prism:transfer-reveal` abre a pasta de uma
+  entrega; `prism:transfer-release` solta um destino. A janela que recarrega, cai ou fecha solta os dela (`releaseWindow`, `windowClosed`), e o diálogo
+  de salvar que ela tinha aberto, quando volta, responde `canceled` sem registrar o destino. O log leva só ids e tamanhos. A ponte de desenvolvimento tem
+  `transfers.available: false`, e as chamadas que gravam recusam com "Exportar só funciona no app do Prism." (RN-EXPORT-019).
+- **O arquivo das importações de dados** (RN-IMPORT-017 e 018; `electron/transfer-source.ts`, sem Electron, com teste em pastas temporárias de verdade; as
+  mensagens em `electron/transfer-messages.ts`, `zod` dos dois lados). **O processo principal é o dono do caminho, como no destino das exportações.**
+  `prism:transfer-source` não recebe nada: abre o diálogo de abrir sobre a janela que pediu, com o título "Importar dados", os filtros escritos aqui
+  (`sourceDialogFilters`) e a pasta da última importação desta abertura do app (na primeira, Downloads); confere o arquivo (comum, seguindo o atalho: um FIFO
+  prenderia a cópia; até 2 GiB; legível, aberto e fechado; a pasta `transfers` criada com 0700 quando falta e aceitando gravação, pela prova de nome
+  aleatório; o espaço livre para o arquivo e mais 64 MiB, pelo `statfs`) e responde `chosen` com um `fileId` novo (a forma de um id da API), o nome sem a
+  pasta e o tamanho, ou `canceled`, `notAFile`, `tooLarge`, `notWritable`, `noSpace` e `unreadable` (a frase pelo código do sistema, `unreadableReason`,
+  nunca pelo texto dele, que traz o caminho). Então copia em segundo plano para `transfers/<fileId>.in.part` (`wx`, 0600), em fluxo com um `AbortSignal`,
+  parando ao passar de 2 GiB (o teto é um parâmetro do `defaultCopy`, e o teste o baixa para 1 MiB para a parada correr na cópia de verdade), e, no
+  fim, `fsync` e renomeia para `<fileId>.in`. `prism:transfer-source-status` (`{ fileId }`, que a tela consulta a cada
+  250 ms) responde `copying`, `ready`, `failed` (`diskFull`, `tooLarge`, `unreadable`, `other`, com a frase, sem caminho) ou `missing`;
+  `prism:transfer-source-release` interrompe a cópia e apaga o `.part` e o `.in` que a API ainda não tomou (ela os renomeia ao começar a importação, e aí
+  o processo principal não os acha mais, e não precisa). O arquivo é da janela que o escolheu: a consulta e o soltar de outra janela, ou com um id
+  desconhecido, respondem `missing`. A janela que recarrega, cai ou fecha solta os dela; a saída e o reinício, todos. O log leva só o `fileId`, o
+  tamanho e a duração. A tela confere cada resposta com o mesmo schema (`chooseImportSource`, `importSourceStatus`, `releaseImportSource`, em
+  `lib/api/bridge.ts`), e a ponte de desenvolvimento responde que importar só funciona no app.
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -241,6 +310,10 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `toast-queue.ts`; `toast.tsx` só desenha.
 - Resultado de ação é aviso; o que precisa ficar até ser resolvido é estado na tela (`FormMessage`,
   `FieldError`, a área de resultado).
+- **O aviso pode ter um botão de ação** (RN-AVISO-006): o terceiro argumento de `success`, `warning` e `error` é `{ label, run }` (`ToastAction`); o
+  botão roda a ação e fecha o aviso. O aviso com ação fica `actionToastDurationMs` (8 s), também no tom de sucesso, e pausa com o foco, como no hover;
+  dois avisos iguais com ações diferentes não se juntam. A ação nunca é o único caminho (o "Mostrar na pasta" da exportação tem a opção "Mostrar na
+  pasta ao terminar", RN-EXPORT-014).
 - **A pilha de avisos fica acima do rodapé do resultado** (`bottom-20`, em `toast.tsx`). Ela é do canto inferior direito, o mesmo
   do "Carregar mais 200" e do "Executar de novo" do rodapé do resultado: com `bottom-5` o aviso de erro que acabava de sair
   cobria o botão e engolia o clique por 8 s (e sem prazo com o mouse em cima, porque o cartão pausa no hover; Marco B, D3).
@@ -261,11 +334,13 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   `SQL_EXECUTION_FAILED` de uma execução vira o aviso curto "O comando falhou. Veja o erro no resultado." e a mensagem do
   banco, com o SQLSTATE, fica na área de resultado (RN-AVISO-005); o `TRANSACTION_CONTROL_NOT_SUPPORTED` (`BEGIN`,
   `COMMIT` e afins, RN-SQL-003) tem o mesmo aviso, com a frase da API (`title` e `detail`) na área de resultado, ou,
-  havendo linhas na tela (que ficam), a frase da API vai no próprio aviso. Depois de "Cancelar", o comando que terminou por
+  havendo linhas na tela (que ficam), a frase da API vai no próprio aviso; a recusa do somente leitura (`CONNECTION_READ_ONLY`, RN-PROT-002)
+  é tratada do mesmo jeito (ver "Proteções da conexão e da pasta"). Depois de "Cancelar", o comando que terminou por
   causa disso é "Comando cancelado." (ver "Uma coisa por vez"), e **não** gera o aviso de falha.
 - **Avisos dos scripts** (`scripts.copy.ts`): gravar por cima um script com o SQL grande demais vira o aviso de erro com a frase da tela, porque não há
   diálogo aberto para mostrá-lo (a tela confere o tamanho antes de enviar, e o `SCRIPT_TOO_LARGE` da API só chega se as duas contas divergirem); salvar, renomear
-  e excluir dão o aviso de sucesso, e abrir um script cuja conexão sumiu dá o de atenção.
+  e excluir dão o aviso de sucesso, e abrir um script cuja conexão sumiu dá o de atenção. "Tornar genérico" e "Vincular à conexão da aba" (RN-SCRIPT-005) dão o
+  de sucesso (`madeGeneric`, `bound`); a recusa deles vai ao aviso central.
 - **Avisos da tela de Drivers** (`drivers.copy.ts`): (1) o remover que a API recusa com `DRIVER_IN_USE` passa por `allowRefusal` e
   vira o aviso de erro com a frase da tela ("Feche as conexões desse banco antes de remover o driver.", pedida pelo dono), no lugar do
   `title` da API; (2) o aviso de que o download falhou (com a causa, `error.detail`) **não** é de chamada que falhou: é a lista que
@@ -273,7 +348,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   que falha várias vezes seguidas avisa só na primeira (`driversErrorMeta`) e para na terceira; (3) "Testar
   conexão" aceita também `DRIVER_NOT_INSTALLED` por `allowRefusal` (`runConnectionTest`), além do que já aceitava.
 - **Avisos do editor** (`use-query-runner.ts`, frases em `workbench.copy.ts`): sucesso para comando sem linhas e para o que
-  grava e devolve linhas (RN-SQL-013); atenção para cursor fechado, comando cancelado, valores cortados (uma vez por resultado), sessão
+  grava e devolve linhas (RN-SQL-013); atenção para cursor fechado, comando cancelado, valores cortados (uma vez por resultado, e nunca na
+  execução da atualização automática, RN-GRADE-014), sessão
   reaberta, seleção com mais de um comando e Ctrl+Enter sem comando para enviar. `SELECT` com linhas não gera aviso. O resto
   (falha ao abrir a sessão, "Contar total" recusado, API fora do ar) é o aviso central, com o `title` e o `detail` da API.
 
@@ -287,6 +363,12 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   (`CONNECTION_INVALID`, `FOLDER_NAME_INVALID`) no campo, e `INVALID_PASSWORD` no diálogo de revelar. As recusas de
   regra (`FOLDER_NOT_EMPTY`, `FOLDER_CYCLE`, `*_ALREADY_EXISTS`) seguem para o aviso central, que escreve o
   `title` e o `detail` da API: a frase da regra é da API, não da tela.
+- **Os textos da conexão e da pasta** (RN-CONN-010 e RN-PASTA-001, seção 34): o nome, o host, o banco de dados, o usuário e o nome do ambiente recusam o
+  caractere de controle e o de direção do texto (`withoutControl`, em `connections.schema.ts`: `\p{Cc}`, U+200E, U+200F, U+202A a U+202E e U+2066 a U+2069),
+  com "<campo> não pode ter caractere de controle nem de direção do texto."; nos nomes (`asName`) a conferência é depois da normalização da API, que junta
+  os espaços (a tabulação e a quebra de linha viram espaço e passam), e no host, no banco e no usuário, depois de aparados. O host tem até 255 caracteres,
+  o banco de dados e o usuário até 128, e a senha até 1.024, contada como veio. São as regras da importação (RN-TRANSF-014), para o arquivo que o Prism
+  exporta voltar por ela; a API confere do mesmo jeito.
 - **Revelar senha** (`reveal-password-dialog.tsx`): `gcTime: 0` e `mutation.reset()` assim que a resposta chega, para
   nem a senha do usuário nem a da conexão ficarem no cache. A senha da conexão vai ao estado do formulário aberto
   (`ConnectionForm`) e sai com ele: a página o remonta (`key`) a cada conexão e a cada gravação. O `VAULT_LOCKED`
@@ -297,7 +379,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **Mover pasta** oferece todas as pastas, a própria e as de dentro dela: o ciclo é recusa da API (RN-PASTA-003), e o
   aceite pede que ela apareça como aviso.
 - **A seção Ambiente** (`environment-picker.tsx`, RN-CONN-015, RN-CONN-017 e RN-PASTA-005) é uma só, no formulário da conexão e nos
-  diálogos de nova pasta e de "Editar pasta" (também pelo F2); mover pasta não a mostra. Os ids vêm do `idPrefix` (`cx` e `folder`), e a
+  diálogos de nova pasta e de "Editar pasta…"; mover e renomear pasta não a mostram. Os ids vêm do `idPrefix` (`cx` e `folder`), e a
   explicação de baixo, do `hint` (`connectionHint`, `folderHint`). **A cor é uma fileira de botões**: as seis do canvas (clicar na escolhida
   a tira) e, por último, "Outra cor", com o `EyedropperIcon`, a ÚNICA que abre o seletor do sistema, pelo `showPicker` do
   `<input type="color">` (sem ele, o `click`). O defeito de antes era um `<label>` em volta do input: clicar em qualquer ponto da linha
@@ -338,13 +420,75 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   o formulário não muda nada sozinho. Sem ambiente nenhum, nem o grupo nem a `<datalist>` aparecem. **Conferido sob Xvfb** (a API de
   desenvolvimento, sem banco): o grupo aparece no "Editar pasta" e na "Nova conexão", e a etiqueta escolhida pelo clique preenche o nome e a
   cor e fica marcada.
-- **"Editar pasta…"** (RN-PASTA-006) é o antigo "Renomear" da pasta: o item do menu (F2, lápis) e o modo `edit` do `FolderDialog` (título
-  "Editar pasta", "Salvar", aviso "Pasta alterada.", `editFolderSchema` com o nome e o ambiente). A ação do menu continua `renameFolder`
-  (`keyActionFor` e `menuFor`), e o navegador a leva ao modo `edit` (`folderActionTypes`). Pôr só o ambiente numa pasta que já existia é o
-  `PATCH` com o nome e a pasta pai como estavam (`folderInputOf`; conferido sob Xvfb pelo `GET api/user/folders`).
-- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente inclusive: o corpo de cada modo do diálogo sai do `folderInputOf` (o que o
-  modo não perguntou vai como a pasta já tem, senão mover tiraria o ambiente dela). As recusas do ambiente da pasta são 422
-  `FOLDER_NAME_INVALID` no campo (`environmentName`, `environmentColor`), que o diálogo já mostra no lugar.
+- **"Renomear" (F2) e "Editar pasta…"** (RN-NAV-009 e RN-PASTA-006, seção 28: a issue #8 desfez o "Editar pasta…" no F2). O menu da pasta
+  tem os dois, lado a lado, com o lápis. "Renomear" (`renameFolder`, o do F2 pelo `keyActionFor`) abre o `RenameFolderDialog`, só com o
+  nome, no molde do "Renomear conexão": grava pelo `PATCH` com a pasta como está (`renamedFolderInput`, em `_lib/rename-folder.ts`, sobre o
+  `folderInputOf`: a cor e o ambiente ficam), e o nome repetido (`FOLDER_ALREADY_EXISTS`) e o 422 do nome ficam no campo
+  (`renameFolderRefusalFields`); o 422 de outro campo vai ao aviso pelo título. "Editar pasta…" (`editFolder`, sem atalho) é o modo `edit` do
+  `FolderDialog` (título "Editar pasta", "Salvar", aviso "Pasta alterada.", `editFolderSchema` com o nome, a cor e o ambiente). O navegador
+  leva cada ação ao diálogo dela (`folderActionTypes`: `rename`, `edit`, `move`, `delete`, no `FolderActionDialogs`). Pôr só o ambiente numa
+  pasta que já existia é o `PATCH` com o nome, a pasta pai e a cor como estavam (`folderInputOf`; conferido sob Xvfb pelo `GET api/user/folders`).
+- **A cor da pasta** (RN-PASTA-007): `folderSchema.color` (exigida, nula sem cor), que pinta o ícone da linha da pasta no navegador, aberta ou
+  fechada (`NavigatorRow.folderColor`, do mapa `folderColors` que o `Navigator` monta das pastas com cor; o esquema, que usa o mesmo desenho,
+  fica neutro). Não é o ambiente: não passa às subpastas nem às conexões, e não entra no `environmentLookup` nem nos ambientes do usuário
+  (testes em `environment.test.ts` e `user-environments.test.ts`). Escolhe-se em "Cor da pasta", antes da seção Ambiente, na nova pasta e no
+  "Editar pasta…": o `ColorField` (`_components/color-field.tsx`), a fileira do ambiente com **"Sem cor" na frente** (o traço na diagonal,
+  `NoColorIcon`, escolhido quando não há cor), as seis do canvas (clicar na escolhida a tira) e "Outra cor", a única que abre o seletor do
+  sistema, nas regras da RN-CONN-017; a cor vai ao `FormData` pelo campo escondido `color`. O `EnvironmentPicker` usa as peças da bolinha
+  dele (`swatchClassName`, `chosenClassName`, `pickerStart`, `openSystemPicker`) e continua sem o "Sem cor".
+- **O ícone colorido passa em 3:1 em todos os temas** (RN-CONFIG-003; a cor da pasta e a do script, RN-SCRIPT-006): quem pinta passa pelo
+  `iconColorStyle` (`components/ui/icon-color.ts`), que devolve `light-dark(<variante dos temas claros>, <variante dos escuros>)` como a marca
+  faz, e o `color-scheme` do tema escolhe sem JavaScript (o "seguir o sistema" inclusive). A variante (`readableIconColor`, pura) é a própria cor
+  quando ela já passa sobre as superfícies do esquema (`iconSurfaces`: o fundo, o painel, a elevada e a linha selecionada de cada tema; o
+  `icon-color.test.ts` confere que são as fichas do `globals.css`), e senão a mistura com o preto (claros) ou o branco (escuros) com a menor
+  parte, de 1 em 1%, que passa. As seis do canvas são claras: nos escuros ficam como são, e nos claros escurecem (o Âmbar dá 1,7:1 sobre o
+  fundo do Prism Claro). A gravada, e a das bolinhas, é a escolhida. Tema novo: as superfícies dele entram em `iconSurfaces`, e o teste avisa.
+- **O `PATCH` da pasta grava a pasta por inteiro**, o ambiente, a cor e as proteções inclusive: o corpo de cada diálogo sai do `folderInputOf` (o que o
+  diálogo não perguntou vai como a pasta já tem, senão mover ou renomear tirariam o ambiente e a cor dela, voltariam a confirmação a "Não" e tirariam
+  o somente leitura, com a API pedindo a senha). As recusas do ambiente e da cor da pasta são 422 `FOLDER_NAME_INVALID` no campo (`environmentName`,
+  `environmentColor`, `color`), que o diálogo já mostra no lugar.
+- **O `PATCH` da conexão também grava a conexão por inteiro** (seção 32): as proteções próprias (`confirmCommands`, `readOnly`) e a verificação
+  (`verificationEnabled`, `verificationInterval`, `verificationQuery`) vão sempre. Renomear e mover mandam as da conexão (`movedConnectionInput`, que
+  o `renamedConnectionInput` usa, com o `verificationOf`); o formulário manda as proteções pelos campos escondidos da seção Proteções e a verificação
+  pelo painel "Sessão da conexão" (abaixo), que nasce com a gravada (na nova, o `newVerification`). As herdadas (`protections`) nunca vão: elas
+  mudam com a pasta. O `connectionSchema` e o `folderSchema` exigem os campos: a resposta sem eles, ou com uma confirmação que a tela não conhece, é
+  recusada, em vez de o PATCH seguinte gravar a proteção mais fraca sem ninguém pedir (o `none` da API vale nulo, "Não"). Os testes dos corpos
+  (`folder-input`, `move-connection`, `rename-connection`, `rename-folder`) conferem que renomear e mover levam as proteções e a verificação, e os dos
+  diálogos, com os ganchos simulados (`connection-dialog.save`, `folder-dialog.save`, `move-connection-dialog`, `rename-connection-dialog`,
+  `rename-folder-dialog.save`), o `PATCH` que cada um manda de fato, por inteiro, e quando a senha é pedida. **Quem passar a gravar uma conexão ou uma
+  pasta por outro caminho** (o arrastar na árvore, que a especificação cita e a árvore ainda não tem, ou um atalho que troque só a cor) monta o corpo
+  pelo `movedConnectionInput` ou pelo `folderInputOf` e trata o `USER_PASSWORD_REQUIRED` pelo `passwordAsked`, como o "Mover".
+- **O painel "Sessão da conexão"** (`session-section.tsx`, RN-VERIF-001), só no formulário da conexão, logo depois dos campos e antes do Ambiente: a
+  ordem de leitura do canvas (`Conexoes.dc.html`), que põe a sessão embaixo dos campos, na coluna da esquerda, e o Ambiente e as Proteções na da direita.
+  "Verificar a cada [N] segundos" é estado do diálogo (`verifying`) e vai pelo campo escondido `verificationEnabled`, como o somente leitura; o intervalo
+  (`verificationInterval`, de 5 a 3.600, com a frase da API) e a "Consulta de verificação" (`verificationQuery`, um `<textarea>`, aparada, até 1.000
+  caracteres, sem caractere de controle nem de direção do texto fora a tabulação, a quebra de linha e o retorno de carro, `queryWithoutControl`, emenda
+  de 2026-10-17 da RN-VERIF-001, com as frases da API, e nula em branco) são campos não controlados do `FormData`, no `connectionFields`. O intervalo não se desabilita com a caixa desmarcada:
+  desabilitado, ele sairia do `FormData`. A dica da consulta é a do banco escolhido (`engineOptions[].verificationQuery`, as `PingSql` da API), e que ela
+  seja uma leitura só quem diz é a API: a recusa (`CONNECTION_INVALID` no `verificationQuery`, com o motivo) vai ao campo, com o foco, como as outras; o
+  `readForm` serve a gravar e a testar, então o "Testar conexão" leva a consulta digitada (RN-CONN-013), e não a gravada. À direita da linha da caixa vai o
+  indicador da última verificação da conexão aberta, como no canvas (`checkIndicator`, que a página da área de trabalho passa: o `ConnectionCheckLabel`,
+  ver "Verificação periódica e Só as conectadas"). O "Encerrar a conexão após N minutos sem uso" do canvas não é desenhado: o encerramento por ociosidade
+  continua fora (seção 13), e o teste confere que ele não aparece.
+- **A seção Proteções** (`protections-section.tsx`, RN-PROT-001 a 004), a mesma no formulário da conexão e nos diálogos de nova pasta e de "Editar
+  pasta…", depois da seção Ambiente (o "Mover" não a mostra), como no canvas, com a escolha de três no lugar da caixa: "Confirmar antes de executar"
+  ("Não", "Só comandos irreversíveis", "Todos os comandos", rádios) e "Somente leitura" (caixa, com o cadeado). As escolhas PRÓPRIAS são estado do
+  diálogo e vão por dois campos escondidos (`confirmCommands`: `none`, `irreversible` ou `all`; `readOnly`: `true` ou `false`), e os controles
+  mostram o que vale. **A herdada não se afrouxa**: `inheritedProtections(folders, pasta)` (`_lib/protections.ts`, pura e testada) diz o que a pasta
+  impõe a quem está dentro dela, pelo `protections` que a API devolve de cada pasta (as dela e as de cima, com a origem); na conexão é a pasta
+  escolhida no campo (antes de gravar, como o ambiente herdado), na pasta é a pasta pai. O somente leitura herdado fica marcado e desabilitado, as
+  escolhas abaixo da confirmação herdada ficam desabilitadas, e as duas dizem "Herdado da pasta X" e por que não se afrouxa ali. A herdada não vira
+  própria: o campo escondido continua com a própria, e sair da pasta tira a proteção junto.
+- **A senha do somente leitura** (RN-PROT-003, `user-password-dialog.tsx`, no molde do de revelar a senha): marcar ou desmarcar "Somente leitura"
+  numa conexão ou numa pasta que já existe abre "Confirme a sua senha" ao salvar (`readOnlyChange`), com o que muda ("Desmarcar “Somente leitura” de
+  MES Produção") e o aviso de que cinco senhas erradas seguidas fecham o cofre, e o mesmo `PATCH` vai com `userPassword` (`updateConnection` e
+  `updateFolder` só põem a chave quando ela veio). O 422 `USER_PASSWORD_REQUIRED` que a tela não previu (mover a conexão, ou a pasta acima dela,
+  para fora de uma pasta somente leitura: pelo formulário, pelo "Mover" da conexão ou pelo "Mover" da pasta; a árvore não se arrasta) abre o mesmo diálogo (`passwordAsked`)
+  e grava de novo; o Renomear não pede, e a recusa que chegasse nele iria ao aviso central. No diálogo, a senha errada (`INVALID_PASSWORD`) e a que
+  faltou ficam no campo, que volta vazio; o 401 `VAULT_LOCKED` do quinto erro dá o aviso de atenção na `onSuccess` da própria mutação, e o
+  `VaultGuard` leva ao login; o resto volta a quem abriu (`onDone`: o 422 dos campos vai a eles; `null` quando a falha já foi ao aviso central). A
+  senha não fica guardada (`gcTime: 0` e `reset`). Não há transação aberta a avisar: a tela ainda não tem o Commit manual (RN-TX-001). O diálogo
+  fica fora do `<form>` de quem o abre, como o de revelar.
 - Em desenvolvimento o `StrictMode` roda o efeito do `Dialog` duas vezes e o foco cai no painel, não no campo com
   `autoFocus`; sem o `StrictMode` cai no campo (conferido em dev; o app empacotado não foi aberto).
 - **`?connection=<id>`** (o "Editar conexão" do navegador de bancos): a página abre aquela conexão no formulário ao chegar,
@@ -359,6 +503,11 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 
 ## Área de trabalho (`src/app/workbench`)
 
+- **O texto da área de trabalho é 13/20** (RN-CONFIG-009, a escala do canvas): a raiz de `WorkbenchPage` leva `text-sm`, e só ela; tudo de dentro herda
+  dali (a árvore, a busca e as mensagens do navegador, a seção Scripts, a barra de abas, as barras e os painéis das abas). Até a 0.3.0 a árvore, a busca e
+  as abas herdavam o 14/22 do `body`. Os diálogos abrem num portal no `<body>` e continuam no 14/22 dos formulários, como a tela de login e as
+  Configurações; o editor (o tamanho em Configurações › Editor SQL), a grade (o zoom dela) e as etiquetas têm tamanho próprio. Peça nova da área de
+  trabalho não escreve `text-sm` nem `text-base` para "voltar ao normal": herda (o `page.test.ts` confere a raiz).
 - **O estado fica dentro do guard do cofre e acima das telas de dentro.** Em `routes.tsx`, o `VaultGuard` é a rota de fora
   e o `WorkbenchProvider` (`_lib/workbench-state.tsx`) é uma rota sem caminho dentro dele, com Conexões, Drivers e Configurações
   como filhas. **A área de trabalho não é uma rota filha**: o `WorkbenchSlot` (`app/_components/workbench-slot.tsx`) a mantém MONTADA
@@ -372,7 +521,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   aqui dentro mede 0x0**: quem observa tamanho tem de tratar o zero como "sem medida" (ver "Lista virtual que MEDE as linhas", abaixo). **O provedor não pode subir para fora do guard**:
   ele consulta `api/user/connections`, e montado com o cofre fechado cada abertura do app receberia 401 `VAULT_LOCKED`
   antes do login e mostraria o aviso "Cofre fechado" (`routes.test.ts` confere a posição). Guarda `tabs` (`QueryTab`, em `workbench-model.ts`: `id`, `title`,
-  `connectionId` (nulo só na aba de um script cuja conexão sumiu, ver "Scripts salvos"), `sessionId`, `sql`, na aba de uma tabela `table` (esquema, nome e a
+  `connectionId` (nulo só na aba de consulta: a de um script cuja conexão sumiu, a do script genérico sem uma só conexão conectada e a que voltou na entrada
+  sem a conexão dela, ver "Scripts salvos"), `sessionId`, `sql`, na aba de uma tabela `table` (esquema, nome e a
   vista; `isTableTab` estreita o tipo para `TableTab`, que sempre tem a conexão) e, na aba de um script, `script`), `activeTabId`, os nós abertos
   (`expanded`, sem as pastas, que são só do navegador e começam abertas) e "Desconectar". `openQueryTab(connectionId, sql?)` abre
   uma consulta (com `sql`, o editor já nasce com esse texto e nada é executado); `openTableTab(connectionId, { schema, name, view? })`
@@ -390,7 +540,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   sessão: sem isso, o comando que rodava receberia `DATABASE_SESSION_NOT_FOUND` e abriria outra sessão, que ficaria órfã.
 - **As chamadas da aba passam pelo cache de mutações** (`throughMutationCache`, sem hook): a recusa que a aba não trata no
   lugar lança e chega ao aviso central, como em qualquer `mutationFn`. As que ela trata (`SQL_EXECUTION_FAILED`,
-  `TRANSACTION_CONTROL_NOT_SUPPORTED`, `NO_OPEN_CURSOR`, `DATABASE_SESSION_NOT_FOUND`) voltam como valor por `allowRefusal`.
+  `TRANSACTION_CONTROL_NOT_SUPPORTED`, `CONNECTION_READ_ONLY`, `NO_OPEN_CURSOR`, `DATABASE_SESSION_NOT_FOUND`) voltam como valor por `allowRefusal`.
   **Um `MutationObserver` usado fora de hook tem de ser solto** (`observer.reset()` num `finally`): `mutate()` prende o
   observador à mutação, e presa ela nunca sai do cache, nem com `gcTime: 0`. Cada execução ficaria guardada com as linhas
   da resposta e o SQL até o cofre fechar. Há teste do cache vazio depois de cada tipo de chamada.
@@ -426,7 +576,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
 - **Comando que grava e devolve linhas** (RN-SQL-013): a página traz `totalRows`. O resultado mostra as linhas recebidas e
   "200 de N linhas devolvidas · comando concluído", sem "Carregar mais" (não há cursor) e sem "Contar total".
 - **"Contar total" só aparece quando há o que contar**: com linhas que a tela não leu (`hasMore`, com o cursor aberto ou
-  já fechado). No resultado que veio inteiro, o total é o número do resumo, e a API não é chamada.
+  já fechado). No resultado que veio inteiro, o total é o número do resumo, e a API não é chamada. **O total contado se conta de novo**
+  (RN-SQL-006, issue #10): ver "Contar de novo e atualizar automaticamente", abaixo.
 - **O texto de SQL vive no editor** (CodeMirror 6, `sql-editor.tsx`), e não no estado do React. O provedor o recebe por
   `updateTab(tabId, { sql })` 400 ms depois da última tecla, quando o editor perde o foco e quando é desmontado (sair do cofre; ir a
   outra tela não o desmonta): nunca a cada tecla, porque cada mudança no provedor redesenha o navegador e refaz a poda. `tab.sql` só
@@ -436,16 +587,67 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   inteira fica montada por baixo (`WorkbenchSlot`), e o texto, o resultado, o comando em andamento e o histórico de desfazer continuam.
   Só sair do cofre os desmonta; o bloqueio por inatividade mantém as abas e o texto, mas dá a cada aba um executor novo (ver "Bloqueio
   por inatividade").
-- **"Executar"** envia a seleção ou, sem seleção, `statementAt(texto, cursor, banco)` (`sql-statements.ts`). Uma execução
+- **"Executar"** envia a seleção ou, sem seleção, `statementAt(texto, cursor, banco, { blankLines })` (`sql-statements.ts`; quem monta
+  é o `runTarget` de `sql-editor.tsx`, com teste, e `blankLines` é a preferência `editor.blankLineSeparates`, lida na hora: ver "A linha
+  em branco separa o comando do cursor", abaixo). Uma execução
   leva um comando só (RN-SQL-001): quem confere é o `run`, com `statementCount`, e a seleção com mais de um não é enviada
   (aviso de atenção; e o estado `notice`, quando não há linhas na tela). Trecho só com comentários não é comando. O botão
   pergunta "há o que enviar?" a cada tecla com `hasStatement`, que para no primeiro caractere de comando: não separe os
-  comandos a cada tecla. Ctrl+Enter é registrado com `Prec.highest`, porque o mapa padrão do CodeMirror usa a mesma tecla
+  comandos a cada tecla. O "Executar script" (Alt+X), que manda vários, é outro caminho: ver "Executar script", mais abaixo. Ctrl+Enter é registrado com `Prec.highest`, porque o mapa padrão do CodeMirror usa a mesma tecla
   para abrir uma linha.
 - **O separador conhece o banco da aba** (RN-SQL-002): o editor manda o banco junto do texto (`RunTarget.engine`). No
   PostgreSQL o comentário de bloco aceita outro dentro dele e existe o bloco `$tag$`; no Db2 e no Informix o primeiro `*/`
   fecha o comentário e `$` é um caractere qualquer; no Informix `{ ... }` também é comentário. Sem o banco, vale o
   PostgreSQL.
+- **A linha em branco separa o comando do cursor** (RN-SQL-018, issue #7; `blankLineCuts` em `sql-statements.ts`, testes em
+  `sql-statements.blank-line.test.ts`). Com a preferência ligada (o padrão), sem seleção, a linha em branco (só espaços) também termina o
+  comando, como o "Smart" do DBeaver. A regra é **"na dúvida, não separa"**: só a conexão que pede confirma o comando irreversível (RN-PROT-001), e
+  separar onde não devia executa a metade de um comando (`DELETE FROM t`, a linha em branco e `WHERE id = 1`), enquanto não separar só faz o banco
+  recusar o texto inteiro. Separa só quando as duas condições valem: o pedaço logo depois da linha em branco começa um comando
+  (`startsCommand`: `commandWords`, mais os casos que olham a palavra seguinte, `WITH` com `nome [ ( … ) ] AS (` em `opensQueries`, `ALTER`
+  e `DROP` com o tipo do objeto em `objectKinds`, `COMMENT ON`, `LOCK TABLE`, `REFRESH MATERIALIZED|TABLE` e `DO` com o corpo) e o comando
+  de cima está fechado (`commandAbove`: parênteses em zero; o fim não é vírgula, operador nem palavra de `continuationWords`, com as
+  exceções de valor `SET … ON`, `DEFAULT VALUES` e o `ON COMMIT` que pede o `DELETE ROWS`; e nada espera o resto: o `INSERT` antes do
+  `VALUES`/`SELECT`/`EXECUTE`, o `WITH` antes do comando principal, o `EXPLAIN` antes do comando, e o `CREATE TRIGGER` e o `CREATE SCHEMA`,
+  que só o `;` termina, em `untilSemicolon`: o esquema traz os objetos dele, `CREATE TABLE`, `GRANT`…, sem `;` entre eles, e separá-lo criaria
+  a tabela fora dele). `SET` e `BEGIN` não começam comando de propósito, e dentro de um `ALTER` nem `ALTER`, `DROP`, `GRANT` e `REVOKE`
+  (são cláusulas dele). Dentro de um bloco com `;` no corpo nunca separa: o corpo é o `dialect.body()` do `statementCount`, recomeçado só no `;` que
+  fecha e no corte (no Db2, depois do bloco, até o fim do texto). Esse corpo só vê o bloco nas primeiras palavras do comando, e o `BEGIN` não
+  começa comando: no Db2 (`beginBlock`), o primeiro `begin` em qualquer lugar do texto para os cortes até o fim, porque com `SELECT …`, a linha
+  em branco e `BEGIN … END` (ou `nome: BEGIN`, ou `ALTER MODULE … ADD PROCEDURE`) o primeiro `;` do bloco recomeçaria o corpo, e a linha em
+  branco depois de `purge: LOOP` mandaria sozinho o `DELETE` de dentro do laço. A coluna chamada `BEGIN` também para os cortes (na dúvida,
+  não separa). **Palavra nova que começa comando**: só se nenhuma cláusula de outro comando pode começar com ela depois de um texto que
+  parece completo (o `LOCK MODE ROW` do `CREATE TABLE` do Informix e o `DROP STORAGE` do `TRUNCATE` são os exemplos); na dúvida, peça a
+  palavra seguinte, como o `LOCK` faz. O corte é posicional: `blankLineCuts` devolve
+  o começo da primeira linha em branco entre os dois comandos (e o da última, quando há comentário entre elas: o comentário separado do
+  comando de baixo por uma linha em branco não vai com ele), e o `scan` fecha o comando de cima no `\n` antes dela, que é também o
+  `boundary` do cursor; o `scan` marca esse comando com `cut`. **O cursor numa linha em branco** fora de um comando (`statementAt`) dá
+  `null` quando acima dele não há comando nenhum, no começo do texto ou só com comentários acima ("se não há nada acima, nada abaixo
+  também", do dono, como no DBeaver: nem o `DELETE` de baixo vai; o executor diz "Não há comando para executar.", e o botão continua
+  habilitado, porque o `hasStatement` não separa os comandos). Com um comando acima, só muda de resposta onde a regra cortou
+  (`onBlankLineCut`: a linha dele está na mesma sequência de linhas em branco de um corte) e foi o corte que terminou o de cima (`cut`): fica
+  com ele. Depois de um comando terminado no `;` vale a resposta de antes, o comando seguinte: **o `;` não muda de resposta com a
+  preferência ligada** (com `DELETE …;`, a linha em branco e `SELECT …;`, o cursor na linha em branco é o `SELECT`, e não o `DELETE` de
+  novo). Um teste confere isso posição a posição, com a preferência ligada e desligada, nos textos em que a linha em branco não corta nada
+  e que não começam por linhas em branco (essas, com a preferência, não executam nada). A seleção e o
+  `statementCount` não mudam: a conta é sempre só pelo `;`. Custa uma leitura dos pedaços do texto por execução (por volta de 100 ms num
+  texto de 1 MB); o `hasStatement` de cada tecla não passa por aqui.
+- **O destaque do comando enviado** (RN-SQL-018; `_lib/run-flash.ts`, com teste): ao executar sem seleção (Ctrl+Enter ou o botão), o
+  `sendFrom` de `sql-editor.tsx` entrega ao `onRun`, junto com o alvo, o `flash` que manda `flashRun(de, até)` com o trecho que `flashRangeOf`
+  deu no instante da tecla, exatamente o texto enviado; a seleção e o "sem comando" não piscam. **Quem acende é a aba, e só quando o comando
+  vai mesmo ao banco**: o `handleRun` de `query-tab.tsx` chama o `flash` dentro do `go()`, com `commandWillRun` (um comando, a aba livre) e
+  com conexão, depois da pergunta das alterações não salvas (RN-EDIT-007) quando ela vem; com um comando em andamento o executor larga o
+  Ctrl+Enter calado, e o destaque nessa hora diria que algo rodou. Se o texto mudou entre a tecla e o envio, nada pisca (`flashEffect`). A
+  marca `.cm-run-flash` (um `StateField`) usa o acento do tema, translúcido, numa animação de 700 ms (`runFlashMs`); um `ViewPlugin` a
+  apaga no fim e leva o relógio junto quando o editor desmonta, e qualquer edição a apaga antes. Cada destaque tem um
+  número (`data-run`): é outra marca, o CodeMirror a redesenha e a animação recomeça mesmo no mesmo trecho. Com `prefers-reduced-motion`,
+  a marca aparece parada e some de uma vez. A cor está no `baseTheme` da extensão, e não no `editorTheme`: a animação não precisa ser refeita
+  a cada troca de fonte. **Conferido sob Xvfb** (`pnpm dev`, uma conexão para um host que não existe, a tecla e o clique pelo protocolo de
+  depuração): o comando do cursor, o `DELETE` com a linha em branco antes do `WHERE` e o cursor na linha em branco piscam, no tema escuro e no
+  claro, a marca sai do DOM antes de um segundo, e desligar a preferência faz o texto inteiro piscar, sem recriar o editor. Depois da
+  revisão, também: com o comando em andamento (o Cancelar na barra, a conexão tentando abrir para um endereço que não responde, como o
+  `192.0.2.1` da faixa de documentação; ele tem de descartar o pacote, e não recusar, ou a falha chega na hora), o Ctrl+Enter não pisca
+  nada; e com `DELETE …;`, a linha em branco e `SELECT …;`, o cursor na linha em branco pisca e envia o `SELECT`.
 - **A posição do erro vale para o texto que foi enviado, e é em caracteres.** O PostgreSQL conta caracteres (de 1 em diante) e
   o editor conta unidades UTF-16: cada emoji antes do erro valeria dois para o editor e um para o banco, e a marca cairia um
   caractere antes por emoji. `utf16IndexOf` (`sql-statements.ts`, com teste) converte; acento comum não precisa. O editor avisa cada alteração (`onEdited`, sem atraso): a marca
@@ -455,7 +657,7 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   coluna calculadas uma vez, da primeira página, contando caracteres (a fonte é de largura fixa). Não meça célula no DOM
   nem recalcule largura ao carregar mais: é isso que deixa "Carregar mais 200" sem redesenhar o que está na tela. A grade
   recebe `key` por execução (`state.id`), não por página. **No cabeçalho, quem cede espaço é o tipo, e o nome da coluna não cede nada**
-  (`GridHeaderCell`): a largura é calculada sem a seta da ordem, e quando a seta aparece alguém cede os 18 px dela; era o nome, e o `id`
+  (`GridHeaderCell`): a largura é calculada sem o botão de ordenar, e o espaço dele (sempre reservado, RN-GRADE-021) alguém cede; era o nome, e o `id`
   ordenado virava `integer ▲`. O nome é `shrink-0` (não encolhe) e o tipo, `min-w-0 truncate`, absorve o que falta INTEIRO, até sumir; os dois
   moram numa caixa (`flex min-w-0 overflow-hidden`) que encolhe com a célula e fica ao lado da seta, e o `max-w-full` do nome só o corta (com
   reticências, sem vazar para a coluna ao lado) quando nem ele sozinho cabe. **Não troque isso por um peso de encolhimento** (`shrink-[999]`
@@ -468,7 +670,9 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   (`1,3 s`), em minutos e segundos até uma hora (`1 min 10 s`) e em horas e minutos daí em diante (`2 h 5 min`); a unidade é a do valor já
   arredondado, e o que não é um tempo (não finito, ou negativo) sai como um traço.
 - **"Conectada" tem uma definição só**, `isConnected` (`workbench-model.ts`): a árvore abriu a sessão da conexão, ou
-  alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status.
+  alguma aba tem a sua. Vale para o ponto e o "Desconectar" do navegador e para a barra de status. As listas das conectadas
+  (`connectedConnectionIds`: a conta e o "Só as conectadas" do navegador, a lista do botão da conexão da aba e o script genérico) tiram dela a que a
+  verificação periódica achou sem sessão na API (`notConnectedIds`, o "Sem sessão aberta"; ver "Verificação periódica e Só as conectadas").
 - **Aba à vista (RN-SEG-001): só ela fala com o banco.** `visible` é "a aba é a ativa E a área de trabalho é a tela mostrada"
   (`selected && useWorkbenchOnScreen()`, em `workbench-tabs.tsx`; o `useWorkbenchOnScreen` usa a regra do `WorkbenchSlot`: a rota é
   `/workbench`). Chega ao `TableTabPanel` e dali à vista Registros (`needsFirstRun(estado, { engine, visible, disconnected })`: a primeira
@@ -580,8 +784,8 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   no Tab. A largura do navegador é ajustável (arrastar a divisória ou setas nela, de 200 a 640 px; 320 px de saída, para os nomes de
   coluna caberem inteiros).
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
-  na barra do editor, "Explicar plano", "Formatar", a troca da conexão da aba e a transação (a barra tem Executar e Cancelar,
-  seção 9 da especificação, e o banco da aba, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (o "Exportar CSV" só existe
+  na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
+  seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
   nos Registros de uma tabela, RN-TABELA-006). A edição de célula já existe nas duas grades: ver "Edição das células", abaixo.
   O canvas pinta em rosa a função do banco (`now`); a gramática do `lang-sql` não a distingue de um nome.
 - **Conferir na tela sem a API ter as rotas**: o `pnpm dev --remoteDebuggingPort 9222` sobe a API de verdade só para a
@@ -655,8 +859,9 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   (`liveEditors`, `_lib/live-editors.ts`: cada editor se registra pelo id da aba; o `tab.sql` chega com 400 ms de atraso), a sessão do executor
   (`sessionOf`, e não a cópia da aba), o resultado parado (o mapa das células cortadas vira pares) e o que a tela lembrava
   (`recallForTransfer`: divisão, diagrama, filtro dos Registros, seção da Estrutura, larguras; **não** as alterações não salvas). A aba leva o banco em que
-  roda (`database`, o de agora, depois de uma troca pela barra do editor). A aba de um script leva o id, o nome, o SQL salvo e o banco em que foi salvo
-  (`savedDatabase`; o ponto é refeito na janela que recebe, pelo texto que chegou e pelo banco da aba), e a aba sem conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
+  roda (`database`, o de agora, depois de uma troca pela barra do editor). A aba de um script leva o id, o nome, o SQL salvo e o lugar em que foi salvo
+  (`savedConnectionId` e `savedDatabase`, ou `generic`; o ponto é refeito na janela que recebe, pelo texto que chegou e pela conexão e o banco da aba), e a aba sem
+  conexão passa sem conexão (`connectionId` nulo no schema). Com comando em
   andamento (executar, carregar mais, contar) não passa: a tela avisa `moveBusy`. `readTransfer` confere e devolve a aba, a seleção (cortada no
   fim do texto), o estado e a memória.
 - **A janela de origem** só tira a aba depois do `ok` do centro, por `detachTab`: o executor sai de cena (`retire`) e a sessão **não** fecha (é a
@@ -671,6 +876,8 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 - **Fechar a janela** (`WorkbenchTabs`): o aviso do processo principal começa o "Fechar todas" da janela, com as perguntas dele (na última janela, só a da grade, RN-ABAS-007); cancelar uma
   pergunta deixa a janela aberta; quando a última aba fechou, `releaseWindow` espera os fechamentos de sessão a caminho e fecha as sessões da
   árvore DESTA janela, e só então a janela fecha. Com o cofre bloqueado fecha direto (a API já fechou as sessões).
+- **A vez da verificação periódica** (RN-VERIF-002): o centro das janelas também diz qual janela verifica cada conexão conectada em mais de uma, e repassa
+  a resposta às outras (`claimVerification`, `finishVerification`); ver "Verificação periódica e Só as conectadas".
 - **O cofre é um só** (RN-ABAS-004). O que uma janela conta às outras (`prism:session-share`, `peerEventSchema`: `activity`, `lock`, `unlock`,
   `signOut`, `signIn`, só o tipo) o centro repassa a todas as outras, também às que estão no login, e cada uma decide com `peerAction`
   (`app/_lib/peer-session.ts`, puro e testado). A atividade vai no máximo uma vez por segundo (`shouldShareActivity`), e a cada conferência
@@ -697,12 +904,15 @@ guia da API) e voltam na janela principal na próxima entrada. **Nada vai ao `lo
 suas abas ao processo principal, que junta as de todas e grava.
 
 - **O que vai e o que volta** (`_lib/saved-workspace.ts`, puro e testado). Vai, de cada aba de consulta, o texto do editor DESTE instante (`liveEditors`), a
-  conexão, o banco, o script de onde veio e a marca de mudança não salva (`isScriptDirty`, pelo texto); de cada aba de tabela, a conexão, o banco, o esquema,
+  conexão, o banco, o script de onde veio e a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco); de cada aba de tabela, a conexão, o banco, o esquema,
   a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
   o resultado, o cursor e as alterações não salvas da grade. O texto acima de 1 MB em bytes de UTF-8 não vai: a aba vai vazia com `sqlTooLarge`, e volta vazia
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
-  só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), a de um script excluído como consulta comum, a de consulta
-  cuja conexão foi excluída sem conexão (`NoConnectionBarView` com `forScript` falso: "A conexão desta aba não existe mais"; aviso `restoredWithoutConnection`),
+  só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), na conexão em que estava e lembrando o lugar com que o
+  script está gravado (o da lista de scripts, por `scriptPlace(...).saved`: a conexão e o banco, o genérico, ou nada se a conexão dele não existe mais; a aba
+  que trocou de conexão volta nela, marcada, e o Ctrl+S grava a conexão nova; a pasta do script que a aba lembrava, `folderId`, não volta, RN-SCRIPT-010),
+  a de um script excluído como consulta comum, a de consulta
+  cuja conexão foi excluída sem conexão (`NoConnectionBarView` com `reason` `restored`: "A conexão desta aba não existe mais"; aviso `restoredWithoutConnection`),
   e a de tabela cuja conexão foi excluída **não volta**, e a entrada avisa (a regra, RN-ABAS-006: a aba de uma tabela sempre tem a conexão dela; aviso
   `restoredTablesDropped`). A ativa que não voltou
   passa à vizinha. O schema é um só, `electron/workspace-messages.ts`, com os nomes da API (`connectionID`, `scriptID`), conferido no processo principal (o
@@ -749,44 +959,195 @@ suas abas ao processo principal, que junta as de todas e grava.
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
   voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
 
-## Scripts salvos (RN-SCRIPT-001 a 004)
+## Scripts salvos (RN-SCRIPT-001 a 010)
 
-Seção 23 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
+Seções 23, 27, 28 e 33 da especificação. Os scripts moram no cofre do usuário, cifrados (rotas `api/user/scripts`, ver o guia da API); a tela tem a lista em cache
 (`scriptsQuery`, sem o SQL: o schema recusa a lista que o traga) e lê o SQL só para abrir e para copiar, pela rota do item, pelo cache de mutações (não fica
 guardado). As regras que a tela confere antes de enviar (`saved-scripts.ts`, puro e testado) são as da API: o nome normalizado como a API o grava, de 1 a 200
 caracteres, sem caractere de controle, único sem diferenciar maiúsculas; o SQL de até 1 MB em bytes de UTF-8. Os textos estão em `scripts.copy.ts`.
 
 - **Ctrl+S e Ctrl+Shift+S** (`saveShortcut`, tratado no painel da aba de consulta, com o foco em qualquer lugar dela; o Cmd do macOS vale o Ctrl) passam pelo
   `useScriptSaving` (`_components/use-script-saving.tsx`, usado pelo `WorkbenchTabs`). O texto é o do editor DESTE instante (`liveEditors`). A aba que já é um
-  script grava por cima (`PATCH` com o SQL e o lugar da aba: a conexão e o banco); a que não é, e o "Salvar como", pedem o nome (`ScriptNameDialog`), com a
-  sugestão: o primeiro "Script N" livre, ou, no "Salvar como" de um script, o nome dele com "(2)", "(3)"… (`copyName`). Gravar por cima de um script que outra
+  script grava por cima (`PATCH` com o SQL e o lugar da aba: a conexão e o banco; o script genérico, com `generic: true`, e continua genérico); a que não é, e o
+  "Salvar como", pedem o nome (`ScriptNameDialog`), com a sugestão: o primeiro "Script N" livre, ou, no "Salvar como" de um script, o nome dele com "(2)",
+  "(3)"… (`copyName`), e a caixa "Script genérico (sem conexão)" (a propriedade `generic` do diálogo: marcada no "Salvar como" de um genérico, e presa marcada,
+  com o motivo, na aba sem conexão; renomear não a tem). Marcada, o `POST` vai sem conexão nem banco. Gravar por cima de um script que outra
   janela excluiu (404) pede o nome, como na primeira vez. O "Salvar como" faz da aba o script novo. As recusas do nome e do tamanho ficam no campo
-  (`refusalProblem`); o resto vai ao aviso central. As chamadas têm o prazo das ações da pessoa.
+  (`refusalProblem`); o resto vai ao aviso central. As chamadas têm o prazo das ações da pessoa. A ligação (o que vai à API, como a caixa nasce e o lugar que a
+  aba guarda) é testada com os ganchos simulados (`use-script-saving.test.ts`).
+- **O campo "Pasta" ao salvar** (RN-SCRIPT-010, seção 33). O diálogo do nome do primeiro Ctrl+S e do "Salvar como" tem o campo "Pasta" depois do nome e antes
+  da caixa do genérico (a propriedade `folder` do `ScriptNameDialog`, controlada por quem chama; renomear não o tem): o `Select` com "Sem pasta" (o
+  placeholder, de valor vazio: a raiz) e as pastas com o caminho, na ordem da árvore (`scriptFolderOptions`), lidas pelo `useQuery(scriptFoldersQuery)` do
+  `useScriptSaving`. A pasta que ele traz é a do `initialSaveFolder` (`_lib/script-tree.ts`): no "Salvar como", a do script de onde a aba veio, como está na
+  lista; no Ctrl+S do script que outra janela excluiu (o 404 que pede o nome de novo), a que a aba lembra (`ScriptRef.folderId`, posto pelo `openScriptTab`
+  com a pasta do script aberto e pelo `setTabScript` com a da resposta da gravação; não vai ao cofre, a aba que voltou numa entrada nova não a sabe, e a
+  que passa para outra janela a leva, no `folderId` opcional do `tabTransferSchema`); "Sem pasta" no resto e quando a pasta não está mais na lista. O `POST`
+  leva `folderID` (nulo na raiz). A pasta que outra janela excluiu antes de gravar (404 `SCRIPT_FOLDER_NOT_FOUND`, que o `createScriptOrRefuse` devolve como
+  valor) fica no campo dela ("A pasta escolhida não existe mais.", num `FieldError` com `role="alert"`: o foco está no nome, e o alerta a anuncia), a lista
+  das pastas é lida de novo, e nada se grava. Depois disso o `Select` mostra "Sem pasta" (não acha a escolhida entre as opções), mas o valor continua o da
+  pasta excluída: o "Salvar" seguinte, e o de uma escolha que saiu da lista lida de novo sozinha, recusa no campo do mesmo jeito sem ir à API, até a pessoa
+  escolher de novo (a escolha tira o erro). O aviso do script novo numa pasta diz
+  onde ele ficou (`savedIn`: "Script X salvo em Fechamento / Mensal."); na raiz, e no Ctrl+S que grava por cima, o "Script X salvo." de sempre. Gravar por cima
+  não muda a pasta, e a árvore não abre a pasta nem tira o foco do editor.
 - **A aba de um script** tem o nome dele como título e, com mudança não salva, um ponto na faixa (desenho; o leitor de tela ouve "alterações não salvas", e o
   `title` diz o mesmo: `tabTitleOf`). Só a aba de um script tem o ponto e a pergunta: a consulta que nunca foi salva fecha como antes. O ponto acende na
   primeira tecla (`markScriptEdited`, pelo `onEdited` do editor, sem atraso; as teclas seguintes devolvem a mesma lista de abas e não redesenham nada) e é
-  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga. **Mudança não salva é o texto OU o banco**
-  (`isScriptDirty`): o `ScriptRef` guarda o banco em que o script foi salvo ou aberto (`savedDatabase`, sem ele o da conexão), e a aba que trocou de banco
-  (RN-ARVORE-007) fica com o ponto até o Ctrl+S gravar o banco novo, ou até voltar ao banco salvo com o texto salvo. `setTabScript` recebe o banco que foi
-  gravado (o da aba quando o Ctrl+S saiu).
+  recalculado quando o texto chega com o atraso de sempre (`withEditedSql`): desfazer até o texto salvo o apaga. **Mudança não salva é o texto, a conexão OU o
+  banco** (`isScriptDirty`, com `placeChanged`; RN-SCRIPT-003): o `ScriptRef` guarda o lugar em que o script foi salvo ou aberto (`savedConnectionId` e
+  `savedDatabase`, sem ele o da conexão), e a aba que trocou de conexão (RN-ARVORE-008) ou de banco (RN-ARVORE-007) fica com o ponto até o Ctrl+S gravar o lugar
+  novo, ou até voltar ao lugar salvo com o texto salvo. Sem `savedConnectionId` (o script salvo numa conexão que não existe mais) a referência é "sem conexão": a
+  aba abre sem ponto, e dar uma conexão a ela acende. **No script genérico só o texto conta** (`generic` no `ScriptRef`, RN-SCRIPT-005). `setTabScript` recebe
+  o lugar que foi gravado (`savedPlaceOfTab`: o da aba quando o Ctrl+S saiu, ou o genérico) e refaz o ponto pelo texto do editor deste instante.
 - **Fechar** (uma aba, as outras, todas, a janela): primeiro a pergunta dos Registros, depois a dos scripts com mudança não salva entre as que fecham
   (`scriptsToAsk`, `UnsavedScriptsDialog`: um script, Salvar, Descartar e Cancelar; vários, Salvar todos), depois a do SQL digitado, que deixa de contar as abas de
   script (`closeConfirmation`). Salvar grava cada um, em ordem, e só então segue; um que não gravou (cancelou o nome, a API recusou) para tudo, e a janela fica
   aberta. Mover a aba para outra janela não pergunta: o texto vai com ela.
-- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a lista é `ScriptsListView`, sem estado, testada sem DOM), abaixo da árvore e recolhível: em ordem de
-  nome, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem, F2 renomeia, Delete exclui (com a confirmação), Shift+F10 e a tecla de menu abrem o
-  menu (Abrir; Renomear e Copiar SQL; Excluir). Renomear muda o título das abas do script; excluir deixa as abas com o texto, como consultas sem script.
-- **Abrir** (`openScriptTab`): uma aba por script (abrir de novo volta para ela), na conexão e no banco em que foi salvo (`scriptPlace`). Se a conexão não existe
-  mais, a aba abre **sem conexão** (`connectionId` nulo), com aviso: o texto já está no editor, a faixa acima dele (`NoConnectionBarView`) pede uma conexão, e
-  "Usar esta conexão" (`assignConnection`) dá à aba um executor novo, na conexão escolhida e no banco dela. Sem conexão o executor não abre sessão nem chama a
+- **A seção "Scripts" do navegador** (`scripts-section.tsx`; a árvore é `ScriptsTreeView`, sem estado, testada sem DOM; ver também "Pastas de scripts",
+  abaixo), abaixo da árvore das conexões e recolhível
+  (**lembra se ficou recolhida**, RN-NAV-012: `useScriptsCollapsed`, na chave `prism:navigator:<usuário>` ao lado do navegador escondido, `NavigatorLayout`
+  com `hidden` e `scriptsCollapsed`; a loja muda só o campo pedido, e o gravado antes, só com `hidden`, vale com a seção aberta. Cada janela tem o seu
+  armazém, que não ouve as outras (a janela aberta fica como está, a que abre depois começa como a última escolha): por isso o `set` grava o pedido sobre o
+  que está gravado AGORA, e não sobre o que a janela leu, senão o Ctrl+B numa janela desfazia a seção recolhida na outra, e o contrário): uma árvore, com as
+  pastas de scripts e os scripts, uma linha só no Tab, setas, Home e End; duplo clique e Enter abrem o script, F2 renomeia, Delete exclui (com a confirmação),
+  Shift+F10 e a tecla de menu abrem o menu (Abrir; Renomear, Editar script…, Mover para…, Copiar SQL e o lugar; Excluir). Renomear muda o título das abas do
+  script; excluir deixa as abas com o texto, como consultas sem script.
+  O lugar (RN-SCRIPT-005, `scriptMenu`): o script com conexão oferece "Tornar genérico" (`PATCH` com `generic`); o genérico, "Vincular à conexão da aba" (a
+  conexão e o banco da aba aberta com ele nesta janela; sem ela, ou com ela sem conexão, o item fica apagado com o motivo). Os dois passam por
+  `changeScriptPlace` (`scripts.service.ts`), e as abas do script guardam o lugar novo (`setScriptPlace`, sobre `withSavedPlace`). O genérico (`connectionID`
+  nulo na lista) tem a marca discreta "genérico" à direita do nome, e a dica da linha o diz. Abrir o genérico lê as conectadas deste instante (a sessão da
+  árvore em cache e as abas com sessão) para `scriptPlace`. Essa ligação e a do lugar têm teste com os ganchos simulados (`scripts-section.wiring.test.ts`).
+- **O ícone e a cor** (RN-SCRIPT-006, seção 28, issue #8). Cada script tem um ícone da lista fechada `scriptIcons` (`saved-scripts.ts`: `document`, o padrão,
+  o de antes, `code`, `database`, `table`, `chart`, `clock`, `lightning`, `bug`, `wrench`, `star`, `flag`), **a mesma da API** (`ScriptRules.Icons`, na mesma
+  ordem; o `saved-scripts.test.ts` lê o `ScriptRules.cs` da API e confere a lista e a ordem: ícone novo entra nas duas), e uma cor opcional. Os desenhos são
+  os do app (`components/ui/icons.tsx`: os novos no mesmo traço, 16×16 e linha de 1,5), e `ScriptIconView` (`_components/script-icon.tsx`) os pinta com a
+  cor pelo `iconColorStyle` (o contraste de 3:1 em todos os temas, ver "Conexões"); sem cor, o `currentColor` de sempre. O ícone aparece em cada linha da seção e na aba do script, no lugar do documento: a
+  faixa o lê da lista dos scripts (`TabStrip.scriptOf`, do `scriptsQuery` no `WorkbenchTabs`; sem a lista ou com o script excluído, o documento), e o
+  `ScriptRef` da aba não o guarda (as abas que voltam e as que mudam de janela não mudam). O schema aceita o ícone como texto, e `scriptIconOf` troca o que
+  esta versão não conhece pelo padrão, sem derrubar a lista. **"Editar script…"** (a ação `edit` do `scriptMenu`, logo depois do Renomear, sem atalho: o F2
+  continua só renomeando) abre o `EditScriptDialog` (`script-dialogs.tsx`, com estado: o ícone e a cor), com o nome, os ícones (botões com `aria-pressed` e o
+  nome de cada um em `scriptsCopy.icons`, desenhados já na cor escolhida) e a "Cor do ícone" (o `ColorField` da cor da pasta). Gravar passa pela conferência
+  do nome do renomear; sem mudança (`appearanceChanged`) o diálogo fecha sem chamar a API; senão `editScriptOrRefuse` manda o `PATCH` (`editedScriptInput`: o
+  nome normalizado, o ícone, e a cor, com "sem cor" como texto vazio, porque o nulo do `PATCH` fica). O nome repetido e o inválido voltam ao campo do nome,
+  e o `SCRIPT_ICON_INVALID` traz a frase de cada campo em `errors` ("Escolha um dos ícones da lista.", "Use uma cor no formato #RRGGBB."), que vai à lista
+  dos ícones (um `FieldError` abaixo dela, ligado ao grupo por `aria-describedby`) ou à "Cor do ícone" (`editScriptErrors`, `_lib/edit-script-errors.ts`, com
+  teste; só a recusa sem erro de campo leva o `title` da API, à cor); o nome novo vai ao título das abas (`renameScript`), e a lista se atualiza. O script novo nasce com o padrão e sem
+  cor. **Conferido sob Xvfb** (a API de desenvolvimento, sem banco): as pastas com cor no ícone (a subpasta neutra, a etiqueta do ambiente ao lado), as
+  variantes escuras no tema claro (`getComputedStyle`), o menu da pasta com "Renomear F2" e "Editar pasta…", a cor trocada pelo "Editar pasta…" e mantida
+  pelo F2 (`GET api/user/folders`), e o "Editar script…" que trocou o ícone e a cor da linha e da aba aberta em seguida.
+- **Abrir** (`openScriptTab`): uma aba por script (abrir de novo volta para ela), na conexão e no banco em que foi salvo (`scriptPlace`, que também dá o lugar
+  salvo que a aba guarda). Se a conexão não existe mais, a aba abre **sem conexão** (`connectionId` nulo), com aviso: o texto já está no editor, a faixa acima
+  dele (`NoConnectionBarView`) pede uma conexão, e "Usar esta conexão" passa pelo mesmo `switchConnection` do botão da conexão (ver "A conexão da aba de
+  consulta"): a aba ganha um executor novo, na conexão escolhida e no banco dela. **O script genérico** (RN-SCRIPT-005) abre na única conexão conectada
+  (`scriptPlace` recebe as conectadas deste instante: `connectedConnectionIds` sobre o cache das sessões da árvore, as abas e a foto da verificação); com mais de uma, ou nenhuma, abre
+  sem conexão, sem aviso, e a faixa pergunta com a frase dele. A frase da faixa vem do `reason` (`scriptMissing`, `generic`, `restored`), e as opções dela
+  vêm na ordem da lista do botão da conexão (`connectionChoices`: as conectadas primeiro, com o caminho de pastas e a marca "conectada"); nada vem escolhido. Sem conexão o executor não abre sessão nem chama a
   API (`run` avisa e, sem resultado na tela, diz por quê), a poda da conexão excluída não tira a aba, a barra de status diz "Sem conexão", e gravar por cima
   mantém o lugar antigo (o `PATCH` sem `connectionID`). **O editor segue o banco da aba com ele montado** (a gramática, o separador de comandos, as maiúsculas e o
   completar, por compartimentos): a aba que recebe uma conexão de outro banco não recria o editor, e o texto e o desfazer ficam.
 
+## Pastas de scripts (RN-SCRIPT-007 a 010)
+
+Seção 33 da especificação. As pastas da seção Scripts são as da API `api/user/script-folders` (ver o guia da API), à parte das pastas de conexões: não têm
+cor, ambiente nem proteções. A tela tem a lista em cache (`scriptFoldersQuery`, chave `["script-folders"]`, em `_lib/script-folders.service.ts`), e cada script
+da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de uma API anterior é recusada). O que a tela decide é puro e testado, em
+`_lib/script-tree.ts`; os textos estão em `scripts.copy.ts` (`folders`).
+
+- **A árvore** (`buildScriptTree`): em cada nível as subpastas e depois os scripts, por nome, com o `byName` da árvore das conexões (o português, sem caixa
+  nem acento); a pasta ou o script cuja pasta não está na lista vai à raiz até a leitura seguinte, e as pastas em ciclo não aparecem. As chaves levam o tipo
+  (`folder:<id>`, `script:<id>`), porque uma pasta e um script podem ter o mesmo nome no mesmo lugar, e cada pasta sabe o que tem direto dentro
+  (`contents`, a conta da API). `visibleScriptRows` dá as linhas à vista: as pastas começam abertas, e as fechadas são estado da `ScriptsSection`
+  (`closedFolders`), desta janela, sem gravar; a pasta vazia não tem a seta nem o `aria-expanded`. O `ScriptsTreeView` desenha `role="tree"` ("Scripts
+  salvos") com `treeitem`s planos, cada um com o `aria-level`, a altura e o recuo da densidade (RN-NAV-011), o ícone de pasta neutro ou o do script
+  (RN-SCRIPT-006) e a marca do genérico.
+- **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
+  aberta, vai à primeira linha de dentro; a esquerda fecha a aberta e, na fechada ou no script, vai à pasta pai. Enter e o duplo clique abrem e fecham a pasta
+  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha.
+- **Os menus** (`scriptFolderMenu` e `scriptMenu`, em `saved-scripts.ts`): o botão direito no título da seção ou no espaço vazio dela (a seção tem a altura
+  do que mostra, até 40% do navegador: o espaço vazio é a faixa sob a lista e as margens das linhas, e o texto da seção vazia), e Shift+F10 ou a tecla
+  de menu no título, dão "Nova pasta" (na raiz); a pasta, "Nova subpasta", "Renomear" (F2), "Mover para…" e "Excluir" (Delete), este desabilitado na pasta que
+  tem alguma coisa dentro, com o motivo ("A pasta tem 2 subpastas e 3 scripts: mova ou exclua antes o que está dentro dela.", `folders.notEmpty`, no singular
+  e só com a parte que existe; a especificação o escreve entre parênteses, em minúscula e sem ponto, e aqui ele vale sozinho, na dica e no aviso, e vai como
+  frase, como as outras dicas e avisos), e o Delete nela dá esse mesmo aviso de erro sem perguntar; o script ganha "Mover para…" logo depois do "Editar script…".
+- **Os diálogos e as chamadas** (`useScriptFolderActions`, `_components/use-script-folder-actions.tsx`, que a `ScriptsSection` monta; as vistas sem estado
+  em `script-folder-dialogs.tsx`). "Nova pasta" e "Nova subpasta" (`ScriptFolderNameDialog`, com o lugar na descrição: "Na raiz da seção Scripts." ou
+  "Dentro de Fechamento / Mensal.") e o "Renomear" da pasta (o mesmo nome, com as mesmas maiúsculas, fecha sem gravar; mudar só as maiúsculas grava, com a
+  pasta pai que ela tem: o `PATCH` é a pasta inteira) conferem o nome antes (`scriptFolderNameProblem`: as regras da API, e o repetido entre as irmãs na
+  lista) e mostram as recusas do nome no campo (`scriptFolderRefusal`, para o `SCRIPT_FOLDER_NAME_INVALID` e o `SCRIPT_FOLDER_ALREADY_EXISTS` da API, que voltam
+  por `allowRefusal`). "Mover para…" (`MoveToFolderDialog`: "Sem pasta" e as pastas, com a de agora escolhida; a da pasta sem ela nem as subpastas dela) não
+  chama a API para o mesmo destino, e o do script manda `folderID` ou `root: true` (`moveScript`). As recusas de regra (a pasta pai ou a de destino que outra
+  janela excluiu, o nome repetido no destino, o ciclo) lançam e vão ao aviso central com o detalhe da API, o diálogo fica aberto e as duas listas são lidas
+  de novo (`afterRefusal`): o destino que saiu da lista volta a "Sem pasta" (o que o campo já mostrava; o "Mover" seguinte faz o que ele diz, em vez de
+  mandar de novo a pasta excluída), e o diálogo do item que outra janela excluiu (renomear ou mover a pasta, mover o script) fecha, porque a regra só o deixa
+  aberto pela pasta pai e pela de destino. O `PATCH` da pasta (a pasta inteira) leva o nome e a pasta pai da lista mais recente (`currentOf`), e não os de
+  quando o diálogo abriu: a janela cuja lista já foi lida de novo não desfaz o "Mover" da outra (a que ainda não leu continua na consequência aceita da
+  especificação). "Excluir" na pasta vazia pergunta (`ConfirmDialog`, no tom de perigo, "Excluir pasta"); a recusa `SCRIPT_FOLDER_NOT_EMPTY` (outra janela pôs algo
+  nela) fecha a pergunta, vai ao aviso central e as listas são lidas de novo. Os avisos de sucesso: "Pasta criada.", "Pasta renomeada.", "Pasta movida.",
+  "Script movido." e "Pasta excluída.".
+- **A linha à vista** (RN-SCRIPT-008): depois de criar, renomear ou mover uma pasta ou um script (o renomear do script também), a `ScriptsSection` lê as
+  listas de novo, abre as pastas acima dele (`ancestorKeys`, sobre a lista que acabou de chegar), abre a seção recolhida e escolhe a linha. A linha que já
+  está na página (nada acima dela a abrir, a seção aberta) ganha o foco na hora (pelo id, `scriptRowDomId`): sem estado novo não haveria renderização, e um
+  pedido armado esperaria uma renderização qualquer depois (a primeira tecla no editor) para tirar o foco de lá. A que ainda vai aparecer fica numa
+  referência; um efeito sem dependências, depois de cada renderização, dá o foco a ela quando ela está na página e esquece a chave. Uma referência, e não um
+  estado, porque o `setState` num efeito é recusado pelo lint (renderizações em cascata).
+- **A barra de ações do navegador é da árvore das conexões** (RN-NAV-002): o nome dela diz isso ("Ações da árvore de conexões"), e nada nela age sobre a
+  seção Scripts, que tem os menus dela.
+- **Testes**: `script-tree.test.ts` (a árvore, as linhas, o teclado, o nome, o caminho, as escolhas e a pasta do diálogo do nome), `script-folders.service.test.ts`
+  (as rotas e as recusas), `scripts-section.test.ts` (a vista), `scripts-section.folders.test.ts` (a ligação, com os ganchos simulados: os menus, os
+  diálogos, o que vai à API, as recusas e a linha escolhida depois), `script-folder-dialogs.test.ts`, e, no salvar, `use-script-saving.test.ts`,
+  `script-dialogs.test.ts`, `tab-transfer.test.ts` e `workbench-state.connection.test.ts`. O que não tem teste: o foco de verdade na linha depois de criar
+  (o vitest não tem DOM; o efeito sai cedo sem `document`), e o app não foi aberto nesta mudança.
+
+## A conexão da aba de consulta (RN-ARVORE-008)
+
+Seção 27 da especificação (issue #9 do repositório público: ao reabrir um script, não se sabia em qual servidor ele ia rodar). A barra do editor mostra, depois de
+Executar e antes do banco, o botão da conexão da aba, que o canvas desenhava ("Conexão e esquema desta aba"; o banco fica na lista ao lado e o esquema não
+aparece, seção 9), e deixa trocá-la.
+
+- **O botão** (`ConnectionPicker`, `_components/connection-picker.tsx`; o desenho é `ConnectionButtonView`, testado sem DOM): a sigla do banco (`EngineTag`), o
+  nome e a etiqueta do ambiente (`ShownEnvironmentPill`, o próprio ou o herdado da pasta); a dica (`title`) é `host:porta`, o usuário e o atalho. O nome
+  acessível começa pelo que se vê, na ordem da tela, e só depois diz o que o botão é (WCAG 2.5.3: quem usa comando de voz diz o que vê, e o leitor de tela
+  ouve o ambiente): "IFX ERP Informix Produção, conexão desta aba", "Sem conexão, escolher a conexão desta aba"; com `aria-haspopup="dialog"` e
+  `aria-keyshortcuts`. Na aba sem conexão, "Sem conexão" com o ícone da tomada. Ele lê só as consultas das conexões e das pastas: montado em cada aba de
+  consulta, não redesenha a cada mudança das abas.
+- **A lista** abre pelo clique ou por **Ctrl+9** (Cmd+9 no macOS; `connectionShortcut`, pela tecla `Digit9`: abre e fecha). Quem abre é o painel da aba,
+  como o Ctrl+S; aberta, o foco está nela e o teclado dela não sobe à aba, então o segundo Ctrl+9 é tratado no `onKeyDown` da própria lista, que fecha e
+  devolve o foco como o Esc (com o foco no botão, que fica na aba, o painel da aba fecha). Vai num portal `position: fixed` em `document.body`, como a do
+  `Select` (`role="dialog"`), com 400 px de largura, presa à janela, e abre para cima quando não cabe embaixo. A posição nasce nula a cada abertura, e só por isso o efeito que guarda quem tinha o foco (o botão, ou o editor no Ctrl+9) roda
+  antes de o campo de busca existir e pegar o foco. O campo é o combobox da lista (`ConnectionListView`, testado sem DOM): as setas marcam (`choiceKeyTarget`,
+  sem dar a volta), Enter escolhe, Esc fecha e devolve o foco; o clique fora fecha sem mexer no foco, e o foco que sai da lista também fecha. O teclado da
+  lista não sobe à aba (`stopPropagation` no painel): o F5, o Ctrl+S e o Ctrl+W da aba não valem enquanto se digita a busca. O clique numa opção não tira o
+  foco do campo (`preventDefault` no `mousedown` da lista). **O foco volta na hora e antes da troca** (`focusBack`, sem `requestAnimationFrame`): escolher
+  fecha a lista, devolve o foco e só então chama a troca, porque a troca com alterações não salvas abre a pergunta (`UnsavedEditsDialog`), e o `Dialog` guarda
+  quem tem o foco ao abrir para devolvê-lo ao fechar. Adiado, o foco chegava depois do "Cancelar" dela e ia para trás do diálogo, e a pergunta guardava o
+  campo de busca, que já saiu da página. O `Select` faz o mesmo (o foco no controle antes do `onChange`): é a troca do banco. Testado com os ganchos simulados
+  (`connection-picker.focus.test.ts`, que exporta o `ConnectionListPanel`, e `components/ui/select.test.ts`).
+- **O que a lista mostra** (`connectionChoices`, `_lib/tab-connection.ts`, puro e testado): as conectadas primeiro, num grupo com título ("Conectadas" e
+  "Desconectadas", só quando há alguma conectada), e em cada grupo por nome (`Intl.Collator` do pt-BR, sem caixa nem acento, com os números pela grandeza); cada
+  conexão com a sigla, o nome, o ambiente e o caminho de pastas (`folderPathOf`, "Sem pasta" na raiz), e a da aba marcada (`aria-selected` e o visto). A busca
+  acha o pedaço no nome, no caminho e no `host`. "Conectada" é a das listas (`connectedConnectionIds`), pelo `useConnectedIds` (`_lib/use-connected-ids.ts`: as consultas das
+  sessões da árvore com `enabled: false`, que nunca abrem sessão, as abas e as que a verificação achou sem sessão, `useNotConnectedIds`, numa chave de texto
+  que só muda com elas): só a lista aberta e a faixa da aba sem conexão o usam. No fim, "Mostrar no navegador" pede ao navegador a
+  conexão da aba (`connectionReveal`, o mesmo do formulário de conexão): ele abre as pastas acima dela, a escolhe, lhe dá o foco e aparece se estava escondido.
+- **A troca** (`switchConnection` no provedor, sobre `withConnection`, puro e testado; substitui o antigo `assignConnection`): passa pela pergunta das alterações
+  não salvas da grade (o `guard` da edição, como a troca do banco), e então a aba ganha um executor novo na conexão escolhida, no banco padrão dela; o de antes
+  sai de cena (`retire`) e a sessão dele fecha em segundo plano (`endInBackground`). Nada executa, o texto fica (o do editor deste instante) e o resultado sai.
+  A mesma conexão, a aba de uma tabela e a aba com um comando da pessoa em andamento (`isPersonBusy`) não trocam; com ele a lista abre, mas as conexões ficam
+  desabilitadas (`aria-disabled`) com o motivo numa região viva, e "Mostrar no navegador" continua. A execução da atualização automática (RN-GRADE-014) não
+  segura a troca: o `retire()` do executor de antes a desliga, e a sessão dela fecha com ele (o teste espelha o da troca do banco). A aba sem conexão recebe a escolhida pelo mesmo caminho (a faixa dela também). A barra de
+  status, a etiqueta da faixa, o editor (a gramática do banco novo, sem recriar) e a lista dos bancos (`DatabasePicker` com `key` pela conexão) acompanham.
+- **Conferido sob Xvfb** (a API de desenvolvimento, sem banco: as conexões apontam para servidores que não existem): o botão com a sigla, o nome, o ambiente
+  herdado da pasta e a dica; a lista aberta com o foco na busca, a busca pelo servidor, o Enter que troca (a barra de status e o botão acompanham), Ctrl+9 e
+  Esc que devolve o foco ao editor, "Mostrar no navegador" escolhendo a linha; o ponto da aba de um script ao trocar de conexão, o Ctrl+S que grava a conexão
+  nova (`GET api/user/scripts`) e o apaga, "Tornar genérico" pelo menu, a aba do genérico que troca de conexão sem ponto, e o genérico aberto sem conexão
+  conectada com a faixa que pergunta. Numa árvore de trabalho sem o binário do Electron (o `pnpm dev` falha com "Electron uninstall"), `ELECTRON_EXEC_PATH`
+  aponta para o de outra instalação. Depois do foco na hora: o nome acessível com o ambiente herdado da pasta; a escolha pelo teclado com a lista aberta pelo
+  clique devolve o foco ao botão, e a escolha pelo clique com a lista aberta pelo Ctrl+9 o devolve ao editor, que recebe o que se digita. A pergunta das
+  alterações não salvas por cima da troca não foi vista na tela: a grade editável precisa de um banco de verdade.
+
 ## Trocar o banco da aba de consulta (RN-ARVORE-007)
 
-Seção 24 da especificação (issue 1 do repositório público). A barra do editor da aba de consulta mostra, depois de Executar, o banco em que a aba roda
-("Banco", um `Select` com rótulo visível ligado a ele) e deixa trocá-lo. A aba sem conexão não tem a lista (a faixa pede a conexão antes).
+Seção 24 da especificação (issue 1 do repositório público). A barra do editor da aba de consulta mostra, depois da conexão da aba (RN-ARVORE-008), o banco em
+que a aba roda ("Banco", um `Select` com rótulo visível ligado a ele) e deixa trocá-lo. A aba sem conexão não tem a lista (a faixa pede a conexão antes).
 
 - **A lista é a da árvore** (RN-ARVORE-006): a mesma consulta e o mesmo cache (`["tree", conexão, "databases"]`, `databaseNodes`), sem rota nova. O
   `DatabasePicker` (`_components/database-picker.tsx`; o desenho é `DatabasePickerView`, testado sem DOM) só LÊ o cache: a consulta dele é a `treeQuery`
@@ -804,7 +1165,8 @@ Seção 24 da especificação (issue 1 do repositório público). A barra do edi
   próxima execução, como a aba aberta pela "Nova consulta" do banco), e o de antes sai de cena (`retire`) antes de a sessão dele fechar na API (pelo mesmo
   caminho de fechar a aba, `endInBackground`, que a janela que fecha espera). **Nada é executado, o texto fica** (o do editor deste instante, `liveEditors`),
   e **o resultado que estava na tela sai**: era do banco anterior, e o cursor dele fecha com a sessão (como ao dar uma conexão à aba de um script sem
-  conexão). O mesmo banco, a aba de uma tabela, a aba sem conexão e a aba ocupada não trocam. O editor segue o banco com ele montado: o completar e os
+  conexão). O mesmo banco, a aba de uma tabela, a aba sem conexão e a aba com um comando da pessoa em andamento não trocam (a execução da atualização
+  automática não segura a troca: o `retire()` a desliga, RN-GRADE-014). O editor segue o banco com ele montado: o completar e os
   links de tabela leem o cache da árvore do banco novo.
 - **Pergunta antes** com alterações não salvas na grade (RN-EDIT-007): a troca passa pelo `guard` da edição, o mesmo diálogo de executar outro comando
   ("Salvar" grava pela sessão de antes e só então troca; "Descartar" troca sem elas; "Cancelar" fica no banco). A aba de consulta ainda não tem o Commit manual
@@ -857,11 +1219,14 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   copiar."), "Copiar nome" copia o nome cru, e "Copiar nome qualificado" o que o "Gerar SELECT" escreve depois do `FROM`: `"esquema"."nome"`,
   pelo mesmo `quoteIdentifier` do `table-sql.ts` (**a regra única das aspas**: duas aspas duplas sempre, nos três bancos, com a aspa de
   dentro dobrada); "Editar conexão" usa `editConnectionTo` (ver "Conexões"); a pasta reaproveita o `FolderDialog` e o
-  `DeleteFolderDialog` da tela de Conexões (`folder-action-dialogs.tsx` só escolhe qual).
+  `DeleteFolderDialog` da tela de Conexões (`folder-action-dialogs.tsx` só escolhe qual). Exportar e importar conexões (RN-TRANSF-001) têm um grupo
+  próprio antes de "Copiar nome" na conexão e na pasta, e um depois de "Nova conexão" e "Nova pasta" no espaço vazio (`backgroundMenu(temItens)`): ver
+  "Exportar e importar conexões".
 - **F2, Renomear e Duplicar conexão** (RN-NAV-009 e RN-CONN-016). O F2 sem modificador na linha da pasta ou da conexão é `keyActionFor`
-  (`_lib/navigator-menu.ts`, pura), que devolve a MESMA `MenuAction` do item do menu que mostra o atalho F2 ("Editar pasta…" na pasta,
-  RN-PASTA-006; "Renomear" na conexão), e a árvore a executa pelo `runMenuAction`, como se viesse do menu; nas outras linhas, e com Shift,
-  Ctrl, Alt ou Cmd, não faz nada. A pasta abre o `FolderDialog` no modo `edit` (o nome e o ambiente; ver "Conexões"). A conexão abre o `RenameConnectionDialog` (`connections/_components`), só com o nome: grava pelo
+  (`_lib/navigator-menu.ts`, pura), que devolve a MESMA `MenuAction` do item do menu que mostra o atalho F2 (o "Renomear" da pasta e o da
+  conexão), e a árvore a executa pelo `runMenuAction`, como se viesse do menu; nas outras linhas, e com Shift, Ctrl, Alt ou Cmd, não faz nada.
+  O "Editar pasta…" (RN-PASTA-006) não tem atalho, e nenhuma tecla o abre (há teste). A pasta abre o `RenameFolderDialog`, só com o nome (ver
+  "Conexões"). A conexão abre o `RenameConnectionDialog` (`connections/_components`), só com o nome: grava pelo
   mesmo `PATCH` do formulário com a conexão como está e o nome novo (`renamedConnectionInput`, em `_lib/rename-connection.ts`, sobre o
   `movedConnectionInput`: senha nula, que a API mantém), e o nome repetido (`CONNECTION_ALREADY_EXISTS`) e o 422 do nome ficam no campo
   (`renameRefusalFields`); o 422 de outro campo vai ao aviso pelo título. "Duplicar conexão" chama `POST api/user/connections/{id}/duplicate`
@@ -883,6 +1248,21 @@ Seção 18 da especificação (RN-TABELA-001, RN-MENU-001 e RN-BUSCA-001). O que
   `connectionReveal`, como a busca). A árvore vazia pelo filtro diz "Nenhuma conexão em X." (ou "sem ambiente") numa região viva, e não é o
   primeiro uso. **Conferido sob Xvfb**: Develop mostra a pasta Desenvolvimento com a conexão que herda e a conexão da raiz com o próprio; com
   "MES" no campo fica só a da raiz; "Sem ambiente" deu a frase; a inicial "p" escolhe Produção com a lista fechada; o `x` volta a todas.
+- **Densidade** (RN-NAV-011; `_lib/navigator-density.ts`, com teste). `navigatorMetrics` tem as medidas de cada uma, com as classes escritas por inteiro
+  para o Tailwind as achar: a confortável é a de sempre (linha de 30 px, recuo de 10 px e 16 por nível, botões de ação de 24 px); a compacta tem linha de
+  22 px, recuo de 6 px e 12 por nível e botões de 20 px. A árvore da seção Scripts (RN-SCRIPT-008) usa a mesma linha (`rowClass`) e o mesmo recuo
+  (`rowIndent`): até a seção 33 a lista de scripts tinha a linha de 28 px na confortável (`scriptRowClass`, que saiu). O texto é o 13/20 nas
+  duas, e as etiquetas (18 px) e o ponto de estado cabem (conferido sob Xvfb: as 16 linhas de uma árvore de teste e os 8 scripts à vista numa janela de
+  900 px, com os três botões de ação dentro da linha). O `Navigator` lê a preferência e a passa à `NavigatorList` e a cada `NavigatorRow` (`density`;
+  sem ela, a confortável), e a `ScriptsSection` à `ScriptsTreeView`. A lista virtual estima a linha pela densidade e, quando ela muda (em
+  Configurações, com a árvore escondida por baixo, ou noutra janela, com ela à mostra: as preferências chegam pelo evento `storage`), **esquece as
+  alturas medidas na outra e mede de novo as desenhadas** (`remeasureRendered`, em `_lib/row-measure.ts`, num `useLayoutEffect` que só roda na troca):
+  as linhas que rolaram para fora não se medem de novo, e ficariam com a altura antiga. Só `virtualizer.measure()` não basta: a linha de erro não muda
+  de caixa com a densidade (a altura vem da mensagem e do botão), o `ResizeObserver` não a avisa e o `ref` não é chamado de novo, e ela ficava com a
+  estimativa, com as linhas de baixo por cima da mensagem até sair de vista. `remeasureRendered` lê as linhas (`getVirtualItems`, que refaz as
+  posições com as estimativas) ANTES de medir: medida logo depois de `measure()`, a linha de erro mede o mesmo que a posição ainda guardada, e a
+  biblioteca não grava medida igual. O `row-measure.test.ts` reproduz a troca com o `Virtualizer` de verdade (e as duas causas), e **reprova a lista
+  que mede as linhas e esquece as medidas só com `.measure()`**; a grade, que não mede, continua com `measure()`.
 - **`ContextMenu`** (`components/ui/context-menu.tsx`) é genérico. Portal `position: fixed` em `document.body`; `role="menu"` com
   `menuitem` e `separator`; o item desabilitado é `aria-disabled` e continua na ordem das setas; as setas dão a volta, Home e End,
   Enter e Espaço (o clique do botão), Esc e Tab fecham, e clique fora, rolar e trocar o foco da janela também. `placeMenu` (abre com
@@ -945,8 +1325,9 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   abaixo) recebe a condição **como o usuário a escreve**, só sem o espaço
   das pontas: não se lê, não se escapa e não se põe entre parênteses (RN-SQL-003). `recordsSql(engine, esquema, nome, { where, sort })` monta
   o comando com cada parte numa linha própria (uma condição que termina em `--` não engole o `ORDER BY`), e a recusa de mais de um comando é
-  `filterProblem` (`statementCount`, no dialeto do banco): ela aparece no próprio campo, antes de a API ser chamada. Clicar no cabeçalho de
-  uma coluna ordena (`nextSort`: crescente, decrescente, sem ordem; outra coluna começa crescente; `aria-sort`), só nos Registros. A tela
+  `filterProblem` (`statementCount`, no dialeto do banco): ela aparece no próprio campo, antes de a API ser chamada. O botão de ordenar no
+  cabeçalho de uma coluna ordena (`nextSort`: crescente, decrescente, sem ordem; outra coluna começa crescente; `aria-sort`; ver "A coluna inteira escolhida
+  pelo cabeçalho"); o clique no nome escolhe a coluna. A tela
   mostra o comando que executou, e o filtro e a ordem em vigor ficam lembrados com a aba (`tab-memory`).
 - **O que a vista Registros decide, e o que ela FAZ com cada decisão, mora em `_lib/table-view.ts`**, em funções sem React, com as peças
   injetadas e testadas com espiões (o molde de `submitPasswordChange` e de `lock-vault.ts`): `runRecords` e `applyRunPlan` ("aplicar", "limpar",
@@ -966,8 +1347,10 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   e valor cujo primeiro caractere, depois de espaços, tabulação ou retorno de carro, é `=`, `+`, `-` ou `@` com um apóstrofo na frente, para a
   planilha não o executar. **O número simples, inclusive o negativo (`-12,50`), sai como está, sem apóstrofo** (`simpleNumber`, em `csv.ts`: é o
   que a especificação diz, e a coluna segue somando na planilha). A entrega é `saveText` (`_lib/save-file.ts`): o download do próprio navegador,
-  um `Blob` e um link com `download`, que no Electron abre o diálogo de salvar do sistema. **Não há canal novo, e a ponte não grava arquivo.** O
-  nome proposto (`csvFileName`) é `esquema.tabela.csv` sem o que o sistema de arquivos recusa: saem os caracteres de controle, os de direção de
+  um `Blob` e um link com `download`, que no Electron abre o diálogo de salvar do sistema. **O "Exportar CSV" não usa canal nenhum, e a ponte não
+  grava arquivo**; exportar TODAS as linhas é o "Exportar…" ao lado dele (seção 35, ver "Exportar dados"), que vai pela API e pelo destino do
+  processo principal. O nome proposto (`csvFileName`, pela regra de `electron/file-name.ts`, que o processo principal também aplica) é
+  `esquema.tabela.csv`, cortado em 120 pontos de código (um emoji não se parte ao meio), sem o que o sistema de arquivos recusa: saem os caracteres de controle, os de direção de
   texto e os invisíveis (o espaço de largura zero, os separadores de linha e de parágrafo, a marca de ordem de bytes, o juntador de palavras e o
   hífen opcional); o que o Windows não aceita vira `_`; e o nome de
   dispositivo do Windows antes do primeiro ponto (`con`, `prn`, `aux`, `nul`, `com0` a `com9`, `lpt0` a `lpt9`, `conin$`, `conout$`, também
@@ -1059,20 +1442,22 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   `record-edits.ts` (as pendências, `PendingEdits`: células de linha lida, numa junção com a linha da tabela, `change`; exclusões e linhas novas, cada lista na ordem em que foi feita; uma
   alteração por comando do Salvar, `pendingCount`; o pedido do Salvar na ordem exclusões, alterações, linhas novas, com a chave que a grade leu,
   `changesOf`; o que o banco sem log já gravou sai, `withoutApplied`; a recusa na faixa, com a mensagem do banco como veio, `failureOf`),
-  `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"), `cell-menu.ts` (o menu da
-  célula: Copiar valor, Colar, Editar célula, Definir como nulo, Desfazer alteração; Linha nova e Excluir linha, os rótulos da RN-EDIT-001; o que não se aplica vem desabilitado,
-  com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, Tab) e `grid-editing.ts` (as linhas e as
-  marcas que a grade desenha). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
+  `cell-editing.ts` (o que a célula, a linha nova e a exclusão permitem, com o motivo já na frase "Somente leitura: …"; `deleteRowsAccess`, a exclusão das
+  linhas da seleção), `cell-menu.ts` (o menu da grade nos grupos do DBeaver, RN-GRADE-004: ver "A seleção da grade", abaixo; os rótulos da RN-EDIT-001 (até
+  a seção 33, "Adicionar linha" se chamava "Linha nova"; as marcas da linha nova na grade continuam com esse nome); o que não se aplica vem desabilitado,
+  com o motivo no `hint` do `ContextMenuItem`, embaixo do rótulo), `grid-cursor.ts` (setas, Home, End, PageUp, PageDown, Tab) e `grid-editing.ts` (as linhas e as
+  marcas que a grade desenha, e as teclas). As rotas são `record-edits.service.ts` (`allowRefusal` com as recusas que a faixa mostra; o resto vai ao aviso
   central pelo cache de mutações) e os esquemas, `record-edits.schema.ts`. A página traz `resultID` e o motivo de só leitura (`QueryPage.resultId` e
   `readOnly`, que o executor guarda nas linhas), e o executor dá a sessão da aba (`sessionOf`).
   - **Quem liga tudo é `_lib/use-record-edits.ts`** (na vista Registros e na aba de consulta): o estado (as pendências, que ficam na memória da aba, espaço `edits`, pelo
     resultado; o alvo do catálogo, perguntado na primeira tentativa de editar, pela sessão da árvore da mesma conexão quando ela existe; a célula
     ativa e o campo aberto, do resultado; a faixa, o menu, o "Ver SQL" e a pergunta). A grade (`ResultGrid` com `editing`) passa a `role="grid"`,
     com `gridcell`, `aria-activedescendant` e a posição em `data-row`/`data-col`, que o clique, o duplo clique e o botão direito leem por
-    delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: setas, Home e End (com Ctrl,
-    da grade), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
+    delegação na caixa da grade (a linha memorizada não ganha um manipulador por célula). Teclado com o foco na grade: as teclas da seleção (ver "A seleção
+    da grade", abaixo), F2 e Enter abrem o campo, começar a digitar o abre com o que foi digitado, Shift+F10 e a tecla de menu abrem o menu, Ctrl+S salva
     as alterações quando há alguma (`savesEdits`; sem nenhuma, ou com Shift, a tecla segue para o script da aba de consulta, RN-SCRIPT-001),
-    Alt+Insert cria a linha. A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
+    Alt+Insert adiciona a linha, Ctrl+Alt+Insert duplica e Alt+Delete exclui as linhas da seleção (ver "A barra de edição, o duplicar e os atalhos da linha",
+    abaixo). A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
@@ -1086,14 +1471,15 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     Cancelar o tira da passagem; fechar abas pergunta pelo registro `unsaved-edits.ts` (`unsavedQuestion`: uma aba oferece Salvar; várias, ou a aba
     com a vista Registros desmontada, só Descartar e Cancelar), antes da pergunta do SQL digitado. O provedor esquece o registro das abas que
     fecham, como a memória da aba.
-  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; copiar (Ctrl+C e
-    "Copiar valor") leva o valor completo da célula cortada (ver "Valor completo das células cortadas", abaixo); colar vira pendência
-    da célula, como a edição.
+  - **Copiar e colar** usam a área de transferência do navegador (`navigator.clipboard`), como o "Copiar nome" do navegador; copiar (Ctrl+C, "Copiar" e
+    "Copiar com cabeçalho") leva a seleção, com o valor completo das células cortadas (ver "A seleção da grade" e "Valor completo das células cortadas",
+    abaixo); colar vira pendência da célula ativa, como a edição, e só com uma célula escolhida.
   - **Na aba de consulta** (`query-tab.tsx`, `subject: "result"`, que muda só as frases da conferência do catálogo): executar outro comando (o botão
     e o Ctrl+Enter) e "Executar de novo" passam por `guard` quando o executor vai de fato enviar o comando (`commandWillRun`; o que ele recusaria
     só avisa). O Salvar que gravou tudo NÃO executa de novo (RN-EDIT-009): `savedResultOf` (`record-edits.ts`) monta a grade que fica (os valores
     salvos, as excluídas fora, a linha nova no fim com o que foi digitado) e `runner.keepSaved` a põe no executor, com `cursorClosed` quando havia
-    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"). As colunas da linha nova que a
+    mais linhas (salvar é um comando na sessão e fecha o cursor; "Carregar mais" dá lugar a "Executar de novo"; numa aba guardada do script, a cópia
+    dela fica com o que foi salvo, e o cursor que fecha é o do último, RN-SQL-023). As colunas da linha nova que a
     pessoa não preencheu ficam em `RowsState.generated` ("gerado pelo banco — execute de novo para ver", em itálico e `text-subtle`): a célula não
     se edita e, com a chave entre elas, a linha também não (`cellAccess`, `deleteRowAccess`). `generated` viaja com a aba para outra janela
     (`tab-transfer.ts`), e a aba de consulta que salvou para ir vai com a grade salva (`sendTab`). Os diálogos e o menu ficam fora da caixa que
@@ -1103,7 +1489,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     ficam como estavam): o `edit-target` diz a tabela de cada coluna (`columns[].table`) e a chave de cada tabela, e cada coluna se edita na
     tabela de onde veio (`cell-editing.ts`: `cellAccess` olha a tabela DA COLUNA, e numa tabela só, sempre a 0, como antes; a chave cortada,
     gerada ou NULA vale por tabela, e a nula é a junção externa sem linha ali, "<tabela> não tem linha aqui (junção externa)", pelos valores
-    da linha em `RowContext.values`). "Linha nova" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
+    da linha em `RowContext.values`). "Adicionar linha", "Duplicar linha" e "Excluir linha" ficam desabilitados com "num resultado de junção só se alteram células"
     (`isJoin`: mais de uma tabela). **A linha repetida** (a mesma linha de uma tabela em várias linhas da grade): a célula alterada guarda
     `change`, a linha da tabela (`changeKeyOf`: a tabela e os textos da chave, em JSON), e `editCell`/`undoCell` com `change` acham a pendência
     por ela em qualquer linha que a mostre; `linkedCells` repete a pendência nas outras linhas para a grade, o valor da célula, o menu e a
@@ -1119,6 +1505,70 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     `pallets_items` do pedido): o SELECT do dono (`pallets_items.*` numa junção de três) com `id` "somente leitura" e "Linha nova"/"Excluir
     linha" desabilitados no menu; uma junção com colunas de duas tabelas, a edição de uma célula de cada (a descrição do item repetido mudou nas
     duas linhas dele), o "Ver SQL" com os dois `UPDATE`, o Salvar ("2 alterações salvas.") e a releitura com os valores novos.
+  - **A barra de edição, o duplicar e os atalhos da linha** (seção 33, RN-EDIT-013 a 016; o canvas não desenha a barra, seção 9). As decisões são puras, com
+    teste: `edit-bar.ts` (`editBar`: os quatro botões, "Editar célula", "Adicionar linha", "Duplicar linha" e "Excluir linha", cada um com o atalho da
+    plataforma e o motivo de não valer, o primeiro na ordem da RN-EDIT-014: o resultado inteiro só leitura, pelo `resultReadOnly` (a página, a conexão
+    somente leitura e o catálogo que diz que nenhuma tabela se edita: os três são "o resultado inteiro só leitura" da regra, e desabilitam os quatro com o
+    motivo da barra do resultado, também sem célula ativa, em vez de "Editar célula" pedir uma célula); a aba ocupada (o Salvar também) e a atualização automática; o `rowOperations` falso para os três
+    de linha (`newRowAccess`); a célula ativa para "Editar célula" (`cellAccess`); a chave que não se sabe e a linha já marcada para "Excluir linha"
+    (`deleteRowAccess`, que passou a recusar a linha riscada, também sem o alvo); e, por último, a grade sem linhas e a falta de célula ativa, que não são de
+    só leitura e vêm sem o "Somente leitura:"), `duplicate-row.ts` (`duplicatePlan`: o que a duplicada copia, o que fica com o padrão e a chave copiada) e
+    `grid-editing.ts` (`rowShortcut` e `editShortcuts`). **Habilitar não custa consulta** (RN-EDIT-010): sem o alvo, o que depende do catálogo (a tabela, a
+    coluna, a chave, o `rowOperations`) vale, e a primeira tentativa pergunta, como o menu; a recusa vai à faixa e, com o alvo guardado, o botão passa a
+    dizê-la. O que a linha já diz não espera o catálogo (RN-EDIT-014: "desde o começo, com o motivo, quando ele já é sabido"): `cellAccess` recusa sem o
+    alvo a linha marcada para exclusão, a célula cortada e a que o banco preencheu numa linha nova salva, e `deleteRowAccess`, a linha já marcada. A barra é desenhada pelo contrato da edição
+    (`GridEditing.bar`: os botões e a ação), que `useRecordEdits` monta a cada renderização (`barOf`, sobre o estado da tela, com a célula ativa só numa
+    linha que existe); quem a põe na tela é a `ResultPanel`, só onde a grade recebe a edição e com a grade no corpo (também sem nenhuma linha, e com outro
+    comando rodando, desabilitada): nos Registros, no rodapé, logo depois de "Exportar CSV"; no resultado de um comando, numa linha própria (`border-t`,
+    alinhada à esquerda) entre a grade e os rodapés ("Carregar mais", o cursor fechado, a nota da aba guardada). A aba guardada do script recebe a
+    edição (`kept`, RN-SQL-023), e a barra vem com ela, antes da nota. Recolhida, a área esconde a barra com o corpo (`inert`).
+    - **O componente** (`edit-bar.tsx`, `EditBar`): `role="toolbar"` com o nome "Edição da grade", uma parada de tabulação só (o último botão com o foco,
+      de começo "Editar célula") e as setas, Home e End pelo `stripKeyTarget`, como a barra de ações do navegador. Os botões são os da área de resultado
+      (`Button` `secondary` `compact`, `h-7 px-2.5 text-xs`), com o ícone do traço do canvas (`PencilIcon`, `PlusIcon`, `DuplicateIcon` e o `CloseIcon` em
+      `text-danger`) e o texto; o que não vale usa `aria-disabled` (fica nas setas e com o foco), com a dica `"<botão> (<atalho>). <motivo>"` e o motivo num
+      `sr-only` ligado por `aria-describedby`; cada um declara `aria-keyshortcuts`. Depois do clique o foco volta à grade (`onDone`, que a área liga ao
+      `[role="grid"]` dela); no "Editar célula" o campo nasce com o foco e o devolve à grade ao fechar. Clicar com o campo aberto o confirma antes (o campo
+      confirma ao perder o foco, no `mousedown` do botão).
+    - **O que cada botão faz** é o item de mesmo nome do menu (`bar.onAction`): `openEditor` na célula ativa, `newRow`, e `duplicateRows` e `removeRows` nas
+      linhas da seleção (RN-EDIT-014, seção 37), com a mesma pausa da atualização automática desde o começo (`hold`) e o mesmo descarte quando o resultado
+      mudou no meio (`moved`). Com mais de uma linha, os rótulos vão ao plural ("Duplicar linhas", "Excluir linhas"), e a dica e a descrição para o leitor
+      de tela dizem quantas ("Excluir as 3 linhas escolhidas (Alt+Delete)", `EditBarButton.description`). Tiradas linhas novas, a seleção passa a ser a
+      célula ativa, que vai para a linha que ficou no lugar da primeira tirada, ou para a de cima quando não ficou nenhuma depois dela, e some sem linha
+      nenhuma. As linhas são seguidas pela identidade (`refsOf`/`positionsOf`, a lida pela posição, a nova pelo id), e não pela posição: dois "Excluir linha"
+      seguidos enquanto o alvo é perguntado (o duplo clique), o "Descartar" ou o "Carregar mais" no meio mudam a linha daquela posição, e a segunda
+      exclusão não tira a linha nova que passou ao lugar da primeira. Uma linha da seleção cuja chave não se sabe não deixa excluir nenhuma, com o número
+      dela no motivo (`deleteRowsAccess`: "a chave da linha 7 chegou cortada"); a já marcada fica como está. As linhas saem numa passada só
+      (`deleteRows` para as lidas e `removeNewRows` para as novas, pelos conjuntos, em `record-edits.ts`): o Ctrl+A com 50.000 linhas carregadas não faz uma
+      cópia da lista por linha (com `deleteRow` em laço, eram 15 s de tela parada).
+    - **Os atalhos** (`rowShortcut`, conferido no `handleKeyDown` da grade antes das setas): Alt+Insert adiciona, Ctrl+Alt+Insert duplica (a mesma tecla, o
+      Ctrl decide: antes o ramo do Alt+Insert casava também o Ctrl+Alt+Insert e o Shift+Alt+Insert) e Alt+Delete exclui a linha da célula ativa, com os
+      modificadores exatos; com Shift, nada. O AltGr do ABNT2 chega como Ctrl+Alt: com ele o Insert duplica e o Delete não faz nada. No macOS
+      (`navigator.platform`, pelo `isMacPlatform` de `src/lib/utils/platform.ts`, a conferência que todos os atalhos e dicas da tela usam) o Option faz o
+      papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
+      tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
+      `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
+      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) exclui as linhas inteiras escolhidas, e só elas
+      (`choseWholeRows`): com um retângulo, também o que cobre todas as colunas, ou só com a célula ativa, não faz nada (RN-EDIT-015).
+    - **Duplicar linha(s)** (`duplicateRows`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), até 1.000 linhas de uma
+      vez (`duplicateLimit`), uma linha nova no fim da grade para cada linha da seleção, na ordem da grade (`addRow` com as colunas copiadas; a busca dos
+      valores completos é uma só, para todas; o que não vem não duplica nenhuma, com a coluna e o número da linha na frase do plural; depois, a seleção é das
+      cópias, inteiras, `selectNewRows`), com o valor que a tela mostra de cada coluna da tabela que se edita (a pendência também, o nulo como nulo; na
+      linha marcada para exclusão, o lido; numa linha nova de origem, só o que ela tinha). Não copia a que o banco gera, "sempre" ou "por padrão"
+      (`generated`, que no PostgreSQL a API passou a dar também ao `serial`), a que não se edita e, na linha nova já salva, a que o banco preencheu; a
+      calculada no comando não é da tabela e não entra na lista. A coluna da tabela que o resultado traz duas vezes (`SELECT id, id AS copia`) se copia uma
+      vez, pela primeira que se copia, e a repetição não entra na lista: o `INSERT` não leva a mesma coluna duas vezes (o `EditPlanner` da API recusa). A
+      célula cortada vai com o valor completo (`completeValues`, a faixa com "Buscando os valores completos…" e "Cancelar"); o valor que não vem (o teto, a
+      sessão que caiu, `RESULT_NOT_FOUND`) e a busca cancelada não duplicam nada, e a faixa diz por quê ("Atualize os registros" nos Registros,
+      `subject: "table"`; "Execute o comando de novo" no resultado). A busca de um "Duplicar linha" seguinte (o duplo clique no botão) cancela a do
+      anterior, que sai calado (`duplicating`): só o "Cancelar" da pessoa diz que a busca foi cancelada. Depois da busca valem as
+      pendências e as linhas de AGORA (a grade ficou livre). A célula ativa vai à primeira coluna editável, ou, com a chave copiada inteira, à coluna dela
+      mais à esquerda. **Os avisos da faixa** (a chave copiada e as colunas que ficaram com o padrão) e as recusas do duplicar usam o tom de atenção
+      (`say(…, "warning")`, `EditsBanner.noticeTone`: o triângulo `AlertIcon` no lugar do cadeado, que fica para os motivos de só leitura) e duram até a
+      próxima ação de edição, o Salvar ou o Descartar (o "Desfazer alteração" passou a limpar o recado, como as outras ações).
+    - **Não conferido na tela**: nada disto foi visto numa janela (não há Xvfb nem banco nesta máquina), só nos testes. A linha da barra no resultado de um
+      comando fica ACIMA do rodapé ("Carregar mais", "Executar de novo"), entre 69 e 110 px da borda de baixo da janela, e a pilha de avisos (`bottom-20`, 380 px
+      à direita) começa a 80 px: numa janela estreita um aviso pode cobrir "Duplicar linha" ou "Excluir linha" enquanto dura. Medir com o
+      `document.elementFromPoint`, como em "Avisos e mensagens", e, se cobrir, subir a pilha quando a barra está na tela.
 - **Valor completo das células cortadas** (RN-SQL-017, RN-GRADE-002): a grade continua mostrando o valor cortado (RN-SQL-011), e copiar e
   exportar levam o completo, que a API guarda em memória e devolve por `POST .../results/{resultID}/cells` (`full-values.service.ts`,
   `resultCells`: nunca lança, e acha cada valor pela posição que a resposta diz). As decisões são de `_lib/full-values.ts`, pura, com teste:
@@ -1129,11 +1579,25 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   busca nova cancela a anterior. `RESULT_NOT_FOUND`, `DATABASE_SESSION_NOT_FOUND` e `CELLS_INVALID` deixam as células cortadas sem aviso
   central; o resto (a API fora do ar) passa pelo cache de mutações (RN-AVISO-004). O valor sem completo vai cortado, e o aviso diz quantos
   (`recordsCopy.edit.menu.copiedCut` na cópia, `workbenchCopy.tableTab.records.exportedCut` no CSV).
-  - **Onde vale**: Ctrl+C com o foco na grade copia a célula ativa (`copiesCell`, em `grid-editing.ts`; com Shift é o copiar avançado e segue),
-    "Copiar valor" do menu da célula, e "Exportar CSV" dos Registros (as cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora,
-    como antes). Vale na aba de consulta e nos Registros, que usam a mesma edição. **O copiar avançado (RN-GRADE-003) e o diálogo de exportar
-    nos oito formatos (RN-GRADE-007) ainda não existem na tela**: só a biblioteca `_lib/grid-export/`. Quem os ligar monta o `GridSlice` e o
-    passa por `completeSlice` (`grid-slice.ts`) com o que `completeValues` achou, antes do formato.
+  - **Onde vale**: Ctrl+C com o foco na grade, "Copiar" e "Copiar com cabeçalho" copiam a seleção (`copySelection`, ver "A seleção da grade", abaixo:
+    só as cortadas que vão no texto, e a busca para quando o texto passa de 10 MiB, `fetchFullValues` com `keepGoing`), "Exportar CSV" dos Registros (as
+    cortadas das linhas carregadas; sem nenhuma, o arquivo sai na hora, como antes) e "Duplicar linha(s)" (as cortadas das colunas que ela copia; o que não
+    vem não duplica nada, RN-EDIT-016). Vale na aba de consulta e nos Registros, que usam a mesma edição. **Os "Copiar como" e o "Copiar avançado…"
+    (RN-GRADE-003 e 016)** pedem o recorte da seleção ao contexto (`GridSelectionContext.slice`) e o completam por `complete`, que passa por
+    `completeValues` e por `completeSlice` (`grid-slice.ts`); o `runCopyAs` só pede as cortadas que o documento escreve com o valor (`cutCellsToFetch`) e
+    para a busca quando o texto passa de 10 MiB (ver "Copiar como e Copiar avançado", abaixo). O "Gerar SQL" pede só as células cortadas que o item usa (`cutCellsFor`), pela posição na grade (`fullValues`).
+  - **As fixtures de ouro da exportação** (RN-EXPORT-024): a API escreve a exportação de todas as linhas (seção 35) com os mesmos valores e escapes
+    desta biblioteca, e os dois lados leem as mesmas fixtures, em `src/test-fixtures/export/` (fora de `src/client` e de `src/api`), escritas à mão e
+    conferidas por inteiro. Aqui quem as lê é o `_lib/grid-export/export-fixtures.test.ts`, pelo caminho a partir da raiz do repositório: o campo do CSV
+    (`toDelimited` com as opções, e o `csvFieldOf` nos padrões do "Exportar CSV"; a aspa "Em todos os valores" é `always` aqui e `all` na API), o texto
+    do HTML, a célula do Markdown (`markdownCell`), o valor e as chaves do JSON (`jsonValue` e `jsonKeys`), o literal do SQL (`sqlLiteral` e
+    `scriptLiteral`), o texto e o atributo do XML com o `isXmlChar`, e a planilha (`xlsxText`, `spreadsheetNumber`, `sheetNameOf` e `withinCell`).
+    `jsonValue`, `markdownCell` e `withinCell` são exportados só por isso. **Mudar um escape destas funções é mudar a fixture**, e a API falha até
+    seguir a regra nova (o `ExportFixturesTests` dela lê os mesmos arquivos); a fixture nunca se regera a partir do código. Os casos com o par
+    substituto solto vêm como `{ "codePoints": [...] }`, montados por `String.fromCharCode` (o par solto) e `String.fromCodePoint`. Desde a seção 37 a
+    tela lê também as que eram só da API (o "Em todos os textos" do CSV, o TXT, o PHP, a data em ISO 8601, o literal do binário, o `INSERT` de várias
+    linhas, o nome do XML e o DbUnit), a `document.json` (o documento inteiro de cada formato de texto, dos dois lados) e a `copy-as.json` (só da tela):
+    ver "Copiar como e Copiar avançado".
   - **A linha do resultado na API** é a da grade, salvo depois de um Salvar da aba de consulta que tirou ou pôs linhas sem executar de novo
     (RN-EDIT-009): `savedResultOf` devolve `sourceRows` (a linha de antes de cada uma, nula na nova; um segundo Salvar continua a conta), o
     executor a guarda (`RowsState.sourceRows`, por `keepSaved`) e ela viaja com a aba para outra janela (`window-messages.ts`). Sem ela, a cópia de
@@ -1159,6 +1623,242 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
   (`returnByValue` falha com "Object reference chain is too long"). No Linux, sob Xvfb: `xvfb-run -a pnpm dev --remoteDebuggingPort <porta>
   --noSandbox -- --user-data-dir=<descartável>` (o `--` leva o argumento ao Electron, e a pasta de dados fica fora da sua); a conexão de teste
   pode ser criada pela própria página, com `window.prism.getApiConfig()` e um `POST api/user/connections`, e um `location.reload()` a mostra no navegador.
+
+## A seleção da grade, o copiar e o menu (seção 37: RN-GRADE-001 a 004, 014 e 015, RN-EDIT-004 e 013 a 016)
+
+A seção 37 da especificação manda; o que segue diz onde ficam as peças e **o contrato que as frentes do "Copiar avançado" e do "Gerar SQL" usam**. Vale nas
+duas grades (os Registros e o resultado da aba de consulta, também nas abas guardadas do script): a seleção é da edição (`useRecordEdits`), e a grade só
+desenha e avisa.
+
+- **O modelo é puro** (`_lib/grid-selection.ts`, com teste, sem React e sem DOM). `GridSelection = { active, anchor, shape }`: a célula ativa e a âncora
+  são `CellRef` (`{ row: RowRef, column }`), e a forma é `cell` (só a ativa), `cells` (um retângulo: `rows: RowSet` e as colunas `from` a `to`) ou `rows`
+  (linhas inteiras: `rows: RowSet`). **As linhas são guardadas pela identidade**: `RowRef` é `{ kind: "read", row }` (a posição no resultado) ou
+  `{ kind: "new", id }` (o `NewRow.id`), e `RowSet = { read: [de, até][], added: id[] }` são faixas e uma lista, **nunca célula por célula**: o Ctrl+A em 100
+  mil linhas é uma faixa, e a pergunta "esta linha está escolhida?" é uma busca binária (o teste de desempenho confere). O "carregar mais" põe as lidas
+  que chegam antes das novas: guardadas assim, a seleção fica nas mesmas linhas, e as lidas que chegam depois de um Ctrl+A não entram nele.
+  `GridLayout = { read, added, columns }` é a grade de agora (as lidas, os ids das novas na ordem, as colunas); toda posição que entra e sai (`GridCell`,
+  `row`) é a da grade agora.
+  - **Os gestos** (devolvem a seleção nova): `select` (o clique, as teclas sem Shift, o Tab do campo), `extend` (Shift+clique, o arraste), `extendByKey`
+    (Shift com as teclas: com linhas inteiras, a vertical estende as linhas e a horizontal só move a ativa), `selectRow`, `extendRows` e `toggleRow` (o
+    número da linha: clique, Shift, Ctrl/Cmd; com um retângulo, o Ctrl+clique é o clique), `dragRows` (o arraste no número, com Ctrl no começo juntando),
+    `selectAll` (Ctrl+A e o canto), `collapse` (Esc, e o Salvar/Descartar/Excluir que tiram linhas), `wholeRows` (Shift+Espaço), `contextCell` e
+    `contextRow` (o botão direito), `selectNewRows` (as cópias do "Duplicar linhas") e `afterSave` (o Salvar da aba de consulta, que não executa de novo).
+  - **As perguntas**: `activeCell`, `selectedRows` (as linhas da seleção, as que têm uma célula escolhida, pela posição, em ordem: é sobre elas que agem o
+    copiar, o "Gerar SQL", "Duplicar/Excluir linhas" e "Copiar número de linha(s)"), `selectedColumns`, `selectedCells` (um gerador, linha a linha),
+    `rowSpan` e `columnSpan` (o que a grade desenha em cada linha à vista e no cabeçalho), `isSelected`, `selectionSize` (`{ rows, cells, whole }`, a
+    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `choseWholeRows` (o Delete).
+  - **O recorte** (`sliceOf(selection, layout, source, scope)`, `scope` `cells` (o padrão), `rows` ou `loaded`, os três do "O que copiar" da RN-GRADE-003):
+    um `SelectionSlice`, que é o `GridSlice` dos formatos (`grid-export`) com `positions` e `columnIndexes` (de volta à grade), `newRows` (as linhas novas
+    ainda não salvas, pelo índice no recorte: não têm número na grade, e o "Copiar como SQL" as deixa de fora) e `generated` (as células "gerado pelo
+    banco", que vêm nulas). `rowNumbers` é o número da grade (de 1 em diante). A célula cortada vem com o que a grade tem e a marca em `truncated`.
+- **Quem guarda é `useRecordEdits`**: a seleção é da execução que está na tela (a chave é `id` mais `resultId`: o "carregar mais" a mantém; outra execução,
+  o F5, o filtro, a ordem, a atualização automática e a troca de aba de resultado do script a esquecem, com a célula ativa, na mesma renderização, e voltar
+  à aba de antes não a traz). `updateSelection(change)` aplica um gesto e já põe o resultado no `latest` (as ações depois de um `await` o leem); `putEdits`
+  põe lá também a grade de agora, para a linha nova acrescentada ser achada antes da renderização seguinte. A célula ativa que as ações usam (`active`) é
+  `activeCell` da seleção. Abrir, confirmar e cancelar o campo mantêm a seleção.
+- **O que a grade recebe** (`GridEditing`): `selection` e `layout` (para desenhar), `onSelection(change)` (cada gesto, pela função pura), `onSelecting(on)`
+  (o arraste e a tecla com Shift presa: a contagem só muda quando a seleção para), `status` (a contagem, "3 linhas escolhidas" ou "12 células escolhidas",
+  nula com uma célula ou nenhuma; a `ResultPanel` a põe ao lado do resumo, num `role="status"` que fica na página também vazio), `onCopy()` (a seleção),
+  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho) e `onRowMenu(row, point)` (o botão direito no
+  número da linha). `onActivate(cell)` continua sendo o clique (`select`), e `onMenu` escolhe antes a célula de fora da seleção.
+- **A grade** (`result-grid.tsx`): `aria-multiselectable`, `aria-selected` em cada célula desenhada (escolhida, e não só a ativa), o fundo de escolha
+  (`bg-selected`, o do item escolhido do navegador; a pendente escolhida, `bg-accent/35`), o número da linha (`data-rowheader`, que o clique e o botão direito
+  leem por delegação) e o cabeçalho das colunas da seleção destacados. A linha memorizada recebe as colunas escolhidas como dois números (`selectedFrom`,
+  `selectedTo`), e não a seleção: rolar e desenhar custam o mesmo que sem ela. O canto (o "#") é um `columnheader` com um botão "Escolher todas as linhas" fora
+  do Tab (`tabIndex={-1}`, sem roubar o foco no `mousedown`). **O arraste** segue o ponteiro na janela (`mousemove`/`mouseup` no `window`, também fora da
+  grade) e, passado da borda, rola sozinho a cada 50 ms (`grid-pointer.ts`, puro: `cellAtPoint`, pela caixa, pela rolagem e pelas larguras desenhadas, e
+  `edgeScroll`), lendo a cada passo as linhas, as larguras e o zoom da renderização de agora (`geometry`, uma ref): com "buscar mais linhas ao rolar", a
+  rolagem sozinha traz a página seguinte no meio do arraste, e a célula sob o ponteiro entra nela; o `mousedown` numa célula ou no número tem `preventDefault` (o texto da página não é escolhido) e devolve o foco à grade. **As teclas**:
+  `movementOf` (`grid-cursor.ts`) diz se a tecla é de movimento, se estende e se é vertical; o PageUp e o PageDown andam `pageRows` linhas e, com Ctrl, Alt ou
+  Cmd, não são da grade (o Ctrl+Shift+PageUp/PageDown move a aba, RN-ABAS-001); `selectsAll`, `selectsRows` (Shift+Espaço, antes do "começar a digitar"),
+  `copiesAdvanced` e `deletesRows` estão em `grid-editing.ts`; o Esc é da grade quando a seleção não é só a célula ativa (`escapeCollapses`, pela forma, e não
+  pela contagem: a linha inteira de uma coluna só é uma célula, e o Delete a excluiria), e com a célula ativa só segue para quem está acima. O cabeçalho e o
+  número da linha, presos, são o `scrollPaddingStart` dos dois virtualizadores: o `scrollToIndex` da célula ativa (Ctrl+Home, PageUp, Home) a deixa logo
+  depois deles, e não por baixo. Nada disto foi conferido numa janela:
+  o vitest não tem DOM, e o arraste, a rolagem sozinha e o foco são para conferir sob Xvfb.
+- **O copiar** (RN-GRADE-002; `_lib/grid-copy.ts`, puro: `copyField`, `buildCopyText`, `copyCeiling`, `copiedNotice`, `utf8Length`, `wellFormed`). O texto é
+  montado em partes de `copyChunk` células, cedendo a vez à tela (`setTimeout`), com o tamanho em UTF-8 somado no caminho e o limite de `clipboardLimit`
+  (10 MiB); passado meio segundo, a faixa diz "Copiando…" com o "Cancelar" (o mesmo `onCancelFetch`, que desiste também da cópia). Com célula cortada, o teto
+  sem montar (`copyCeiling`) quase sempre basta; acima do limite, mede o exato antes de buscar nada. A cópia é da foto de quando começou (as linhas, as
+  pendências, a seleção), e a atualização automática fica em pausa até o texto ir para a área de transferência (`hold`). "Copiar nome da(s) coluna(s)" e
+  "Copiar número de linha(s)" (RN-GRADE-015) são `columnNamesText` (o `sqlName` do autocompletar, por tabulação; por isso `useRecordEdits` recebe `engine`) e
+  `rowNumbersOf`. Os textos estão em `_lib/grid-selection.copy.ts`.
+- **O menu** (`cellMenu`, RN-GRADE-004) tem os grupos do DBeaver: Copiar (Ctrl+C), Copiar com cabeçalho, o submenu "Copiar avançado" e Colar; Filtrar (F11),
+  Ordenar e Ir para o registro referenciado; Editar célula, Definir como nulo e Desfazer alteração; Adicionar, Duplicar e Excluir linha(s); Exportar dados… e
+  o submenu "Gerar SQL"; Atualizar (F5) e Atualizar automaticamente. Cada grupo e cada item de fonte aparece só quando quem usa a edição o entrega: `sort`
+  (`GridSortSource = { applied, apply }`: nos Registros, `orderRecords`, o caminho do botão de ordenar do cabeçalho; na aba de consulta, o campo de filtro do resultado com `withOrder`; não
+  nas abas guardadas do script), `follow` (`GridFollowSource`, só os Registros, pelas chaves estrangeiras da grade), `copyAs` e `generateSql`.
+  "Desfazer alteração" age nas células escolhidas (`undoWhere`, em `record-edits.ts`, que percorre as pendências e não a seleção).
+- **O contrato com as outras frentes** (seção 37: o "Copiar avançado…", os nove "Copiar como", a configuração deles e o "Gerar SQL"). `useRecordEdits`
+  recebe `copyAs?: CopyAsSource` e `generateSql?: GenerateSqlSource`, os dois `GridMenuSource<A, S> = { access(context): S; choose(action, context) }`:
+  - `access` é chamado ao abrir o menu e devolve o estado dos itens: no `copyAs`, `CopyAsAccess = { dialog, formats?: Partial<Record<CopyAsFormat,
+    EditAccess>>, configure }`; no `generateSql`, `Partial<Record<GenerateSqlKind, EditAccess>>`. O que não vem vale. Sem a fonte, o submenu "Copiar
+    avançado" tem só os nomes e os números, e o "Gerar SQL" não aparece (o item que não existe não aparece).
+  - `choose` recebe a ação (`copyAdvanced`, `copyAs:<formato>` e `copyAsConfigure`, com `copyAsFormats` na ordem do print: `csv`, `sourceCode`,
+    `dbUnit`, `html`, `json`, `markdown`, `sql`, `txt`, `xml`; e `sql:<item>`, com `generateSqlKinds`: `selectEquals`, `selectIn`, `insert`, `update`, `delete`
+    e `create`), já com o menu fechado, e o contexto de agora. O Ctrl+Shift+C chama `copyAs.choose("copyAdvanced", context)` quando o `dialog` vale.
+  - `GridSelectionContext` (também em `RecordEdits.selectionContext()`, para os diálogos relerem): `resultId`, `shown` (as linhas na tela), `engine`,
+    `subject`, `target` (o alvo da edição que já se sabe), `selection`, `layout`, `rows` e `columns` (as da seleção), `pending` (as pendências como a grade
+    as mostra, com as linhas marcadas para exclusão), `busy` (a aba ocupada, ou `"refresh"` com a atualização automática lendo), `slice(scope)`,
+    `complete(slice, keepGoing?, signal?)` (o valor completo das cortadas, pela faixa com o "Cancelar"; nulo quando a pessoa cancelou, também pelo `signal` de
+    quem pediu, como o "Cancelar a busca" do diálogo; `stopped` quando `keepGoing` mandou parar), `fullValues(cells, signal?)` (o mesmo, pela posição na
+    grade, para quem não monta um recorte), `hold()` (a pausa da atualização automática: quem abre um diálogo a segura até fechá-lo, RN-GRADE-014),
+    `moved()` (o resultado já não é o da seleção), `copying(controller)` (a faixa "Copiando…" passado meio segundo, com o "Cancelar" dela abortando a cópia;
+    devolve quem a tira), `ensureTarget()` (o `edit-target` da edição) e o alvo do "Gerar SQL" e do "Copiar como" (abaixo).
+  - **O alvo do "Gerar SQL" e do "Copiar como"** (RN-GRADE-020 e RN-EDIT-010): `sqlTarget(notice?)` é o `edit-target` com `purpose: "sql"`, o MESMO para os
+    dois, perguntado uma vez por resultado (os 32 mais recentes ficam, um por aba de resultado do script) e na sessão em que o resultado foi lido; `notice` vai à
+    faixa enquanto a API responde ("Conferindo a tabela deste resultado…", do "Copiar como"; o diálogo do "Gerar SQL" diz a dele). `knownSqlTarget()` é o que
+    já se sabe sem perguntar (habilitar não custa consulta): o alvo da edição, quando ele traz o `kind` e o `keyColumns` (`sqlTargetOf`); o motivo da página,
+    quando ela já disse que o resultado inteiro é só leitura (a união, o `DISTINCT`, o filtro embrulhado), como `notEditable`, menos na conexão somente leitura
+    agora (`cachedReadOnly`), em que a página de toda leitura diz "a conexão é somente leitura" e o alvo vale ali (RN-PROT-002): quem diz se há outro motivo é a
+    API; ou a resposta de antes. O motivo da página só vale enquanto a conexão é somente leitura (`readOnlyReasonNow`, em `grid-action-context.ts`, também
+    para a edição): desmarcada depois da leitura, a página é como a sem motivo, e a edição e o "Gerar SQL" perguntam à API; marcada depois, nada muda na
+    página, e a API recusa. O texto do motivo só se compara com o valor fixo que a rota escreve (`connectionReadOnlyReason`, o `ReadOnlySql.ResultReason`
+    da API), porque a página não diz a proteção de outro jeito; quem decide é a proteção de agora. A
+    resposta guarda o alvo ou a recusa de que o resultado não se edita; a falha não, e a seguinte pergunta de novo. **O alvo do "Gerar SQL" nunca volta à
+    edição**: o da conexão somente leitura vem todo só leitura e não serve ao Salvar, e a edição pergunta o dela (o contrário vale: o da edição serve aqui).
+  - **A ligação** (seção 37): as fontes são `useCopyAs` (`_lib/copy-as/use-copy-as.ts`, ver "Copiar como e Copiar avançado") e `useGridGenerateSql`
+    (`_lib/generate-sql/use-grid-generate-sql.ts`, ver "Gerar SQL"), montadas em `records-view.tsx` (com a tabela da aba como origem) e em `query-tab.tsx` (no
+    resultado do último comando e em cada aba guardada do script, que usam a mesma edição); os diálogos entram por `resultEditDialogs(edits, actions)`
+    (`GridActionDialogs`). O usuário do cofre, o somente leitura da conexão e o tipo da tabela dos Registros são lidos do cache na hora da escolha
+    (`grid-action-context.ts`: `cachedUserName`, `cachedReadOnly`, `cachedObjectKind`), sem disparar consulta, e o "Abrir numa aba de consulta" chega da
+    área de trabalho por `onOpenQuery` (`workbench-tabs.tsx` → `TableTabPanel` → `RecordsView`, e → `QueryTabPanel`), estável como o `onOpenTable`.
+
+## A coluna inteira escolhida pelo cabeçalho (seção 38: RN-GRADE-021 a 023)
+
+A seção 38 da especificação manda; o que segue diz onde ficam as peças e **o contrato que a edição de várias células (RN-EDIT-017 a 022) usa**. Vale nas duas
+grades, como a seção 37. A edição de várias células e o Salvar da coluna inteira estão na seção seguinte, "Editar várias células e a coluna inteira".
+
+- **O cabeçalho** (RN-GRADE-021; `GridHeaderCell`, em `result-grid.tsx`): o nome é um `<button data-colheader={coluna} tabIndex={-1}>` (fora do Tab, com o
+  nome como rótulo e "Escolher a coluna inteira" no `aria-describedby`; a dica diz o Ctrl ou o Cmd, `chooseColumnHint(mac)`) e, quando a edição entrega a
+  ordem, o botão de ordenar (`data-sort`, 24 px, `aria-disabled` com o motivo na dica, "Indisponível: …") num espaço **sempre reservado** (`w-6 flex-none`,
+  antes da área da divisa): sem ordem ele só aparece com o mouse sobre o cabeçalho (`invisible group-hover/header:visible`), com ordem fica a seta da
+  direção (`ArrowUpIcon`/`ArrowDownIcon`; a de duas pontas, `ArrowsUpDownIcon`, é a sem ordem). Os dois têm `preventDefault` no `mousedown` (o foco fica na
+  grade, o texto não é escolhido), lido por delegação no `mousedown` do corpo da grade, como o número da linha, com qualquer botão do mouse (o direito
+  também: senão o nome tomaria o foco, e o menu o devolveria a ele ao fechar); o clique do leitor de tela (`detail` 0) chega pelo `onClick` do nome. O gesto
+  no nome não rola a grade na vertical até a linha da ativa (`heldRow`, `followsActiveRow`): só a coluna vem à vista, e o teclado, o clique numa célula ou
+  no número e o campo que abre voltam a rolar até ela. O `columnheader` tem `aria-sort` quando a grade ordena e `aria-selected` quando a coluna está escolhida inteira. A divisa, o
+  duplo clique que ajusta e as larguras de saída não mudaram: a largura é contada com o espaço do botão (`sortArrowWidth`, 16 px em `grid-columns.ts`: os
+  24 do botão e os 4 até a divisa, menos o respiro da direita que o nome deixa de ter), e quem cede é o tipo, como antes.
+- **Quem ordena** é a edição: `GridEditing.sort?: HeaderSort = { applied, reason, onSort(coluna) }` (em `grid-editing.ts`), montado em `useRecordEdits` só
+  quando quem a usa entrega `sort` (`GridSortSource = { applied(), apply(sort) }`: nos Registros, `applied` é a ordem em vigor e `apply` o caminho do
+  "Ordenar" do menu; na aba de consulta, a ordem escrita no campo de filtro do resultado; nas abas guardadas do script não há, e o botão não aparece).
+  `onSort` é `nextSort(applied(), coluna)` (crescente, decrescente, sem ordem) pelo mesmo `apply` do menu, com a pergunta das alterações não salvas.
+  O motivo é `sortReasonFor` (o mesmo do item "Ordenar" do menu, que agora também o mostra desabilitado com "Indisponível: …"): a aba ocupada, salvando, a
+  atualização automática lendo, sem resultado; na aba de consulta, também o comando que não é uma leitura (`read` falso). A `ResultGrid` não recebe mais
+  `sort`/`onSort`, nem a `ResultPanel` (o `RecordsMode` perdeu os dois).
+- **A forma nova** (RN-GRADE-022; `_lib/grid-selection.ts`): `{ kind: "columns", columns: number[] }`, as posições das colunas escolhidas em ordem, **sem
+  linhas guardadas**: as linhas são todas as da grade na hora da pergunta (`allRowsOf`/`rowSetOfSelection(selection, layout)`), então as que o "carregar
+  mais" traz entram sozinhas e a linha nova também. Os gestos: `selectColumn` (o clique no nome), `extendColumns` (Shift+clique, da âncora), `toggleColumn`
+  (Ctrl/Cmd+clique; a última que sai deixa a célula ativa), `dragColumns(base, início, coluna, layout, juntando)` (o arraste nos nomes, `startDrag` com o
+  modo `columns`), `wholeColumns` (Ctrl+Espaço, `selectsColumns` em `grid-editing.ts`: as colunas da seleção de agora), `contextColumn` (o botão direito no
+  nome: fora das escolhidas escolhe a coluna; o menu abre sobre a célula ativa, que vai para ela, por `editing.onColumnMenu(coluna, ponto)`), e o Shift com as
+  setas horizontais pelo `extendByKey` (as verticais só movem a ativa). `wholeRows` com colunas escolhe a linha da ativa; `contextRow` deixa as colunas
+  (toda linha tem uma célula escolhida, RN-GRADE-001); `afterSave` as mantém; `afterRowsRemoved(selection, layout)` acerta a ativa quando o Descartar tira linhas novas. As perguntas: `chosenWholeColumns`
+  (nulo com outra forma), `choseWholeColumns`, `wholeColumnSet` e `headerChosen` (o desenho), e `selectionSize` traz `columns`. `rowSpan` e `columnSpan`
+  são nulos com colunas (a grade desenha pela `wholeColumns` da `GridRow`, um `Set` estável por seleção); `selectedRows` são todas as da grade agora.
+- **A contagem e a pausa**: `wholeColumnsStatus` ("Coluna preco: todas as linhas", "Colunas a, b: as 1.200 linhas", "… as 200 carregadas", com o total
+  quando se sabe); a forma conta como várias células (`hasSeveralCells`), e a atualização automática fica em pausa (RN-GRADE-014). A seleção vive o mesmo que
+  as outras formas: o "carregar mais" a mantém, outra execução a esquece.
+- **As ações** (`openMenu`, `barOf`): "Duplicar linha(s)" e "Excluir linha(s)" (menu, barra e atalhos) vêm desabilitados com "Escolha as linhas pelo número
+  da linha." (depois dos motivos de só leitura e ocupado); "Copiar número de linha(s)" e o copiar carregam antes; o "Desfazer alteração" desfaz as pendências
+  das colunas escolhidas (as linhas excluídas não, porque nenhuma linha está inteira); o "Exportar dados…" abre o assistente com só as colunas escolhidas
+  marcadas (`chosenColumns()` do retorno → `checkedColumns` de `recordsSource`/`resultSource`, `initialChecked` em `export-source.ts`, e a frase
+  `fromGrid` no passo da extração), que exporta todas as linhas como sempre.
+- **Carregar as linhas que faltam** (RN-GRADE-023): `GridSelectionContext.loadRest(options?)` (com `wholeColumns`, `rowsToLoad` e `total` no contexto) pede
+  as páginas seguintes pelo `runner.loadMore` (que agora devolve `LoadMoreOutcome`: `loaded`, `end`, `busy`, `closed`, `failed` com a mensagem do banco,
+  `gone`) até o fim, e devolve `LoadRestOutcome` (`ready` com o contexto novo, `stopped`, `refused` com a frase e o `detail` do banco, `cancelled`). Recusa
+  na hora com o cursor fechado ou a aba guardada do script, a aba ocupada, a atualização automática lendo e passadas `loadRestLimit` (100.000) linhas. Sem
+  `onProgress`, a faixa sobre a grade mostra "Carregando as linhas que faltam…" com o "Cancelar" (`EditsBanner.loading`, o mesmo `onCancelFetch`) e diz as
+  recusas; o cancelar para depois da página em andamento (o cursor não é cancelado). Quem usa: o copiar (`copySelection`, com `loadedRowsMeter` de
+  `grid-copy.ts` como `keepGoing`: passado o limite de 10 MiB pela medida baixa, `cellsFloor`, para antes de ler o resto), "Copiar número de linha(s)",
+  `useCopyAs` (o direto carrega com a faixa; o diálogo do "Copiar avançado" mostra o tamanho com as linhas que faltam, `whole`, e o andamento com o
+  "Cancelar" dele, nos escopos das células e das linhas) e o "Gerar SQL" (`SqlFlowDeps.loadRows`, fase `loading`, medindo o SQL de cada página contra o 1 MB).
+- **O contrato com a edição de várias células** (RN-EDIT-017 a 022, outra frente):
+  - "Que células desta coluna estão escolhidas?" é `columnChoice(selection, layout, coluna)` (ou `activeColumnChoice(selection, layout)`, a da coluna da
+    célula ativa, nula com a ativa fora da seleção): `ColumnChoice = { column, rows, allRows }`, com `rows` as posições na grade agora (as lidas carregadas
+    e as novas, em ordem) e `allRows` verdadeiro quando a escolha é a coluna inteira, que vale também para as linhas que o cursor ainda não leu.
+  - "A escolha cobre linhas não carregadas?" é `allRows` com `context.rowsToLoad` (ou `shown.hasMore`); `context.total` diz quantas, quando se sabe.
+  - "Todas as linhas do resultado nesta coluna" é `context.loadRest()` (as linhas na grade, com a recusa já pronta) ou, para o Salvar que vale no banco
+    sem as trazer, `allRows` com `context.wholeColumns`: o comando é da outra frente.
+  - Os pontos de entrada da edição são os de hoje em `use-record-edits.ts`: `openEditor(cell)` (o "Editar célula", o F2, o duplo clique, o começar a digitar
+    e o botão "edit" da barra, `bar.onAction`), `commit(move?)` (o Enter e o Tab do campo), `applyValue(cell, valor)` (o confirmar e o "Colar", que continua
+    com uma célula só: `several`) e `undoSelection`. O teste das colunas inteiras é `use-record-edits.columns.test.ts`.
+
+## Editar várias células e a coluna inteira (seção 38: RN-EDIT-017 a 022)
+
+A seção 38 da especificação manda (as regras, as frases e o contrato da API); o que segue diz onde ficam as peças. Vale nas duas grades e nas abas guardadas
+do script. As decisões são puras, com teste: `_lib/multi-edit.ts` (para quem a edição vale, a conferência das linhas, o leitor do limite e do sorteio, o
+literal da faixa), `_lib/record-edits.ts` (o grupo, a coluna inteira e o pedido do Salvar), `_lib/whole-column-question.ts` (a pergunta) e os textos em
+`_lib/multi-edit.copy.ts`; quem liga é `use-record-edits.ts`.
+
+- **Para quem a edição vale** (`editScopeOf(selection, layout)`, sobre o `activeColumnChoice` da seção anterior): `one` (sem outras escolhidas na coluna da
+  ativa, ou com a ativa fora da seleção; o duplo clique escolhe antes, e por isso edita só a célula), `cells` (as posições escolhidas da coluna da ativa: num
+  retângulo de várias colunas, só a dela) ou `all` (a coluna escolhida inteira). O F2, o Enter, o começar a digitar, o "Editar célula" do menu e da barra e o
+  "Definir como nulo" passam por `whenScopeEditable`; o "Colar" continua com uma célula só. Com o escopo de uma célula, é o `whenEditable` de sempre.
+- **A conferência antes de abrir** (RN-EDIT-017): primeiro o que vale para a ativa SEM a linha dela (`accessOf(cell, alvo, null)`: o resultado, a aba ocupada,
+  a tabela e a coluna, os de todas); depois, com o alvo, `groupRefusal` sobre as linhas escolhidas (a primeira que não pode, na ordem da grade, com o número:
+  "linha 7", ou "linha nova 2" na linha nova já salva, pelo `sourceRows` nulo; a ordem é a de `rowProblem`, em `cell-editing.ts`, a mesma do `cellAccess`), e o
+  teto de 100.000 células (`groupLimit`). Com a coluna inteira, no lugar das linhas, `wholeColumnBlocker` (a junção ou o `rowOperations` falso, a coluna da
+  chave, a chave com o nome repetido, o `read` falso da página, o limite sem `ORDER BY` e o `TABLESAMPLE`, pelo `commandLimits`, um leitor do texto como o
+  `WholeColumnSql.Read` da API, sobre o `sqlTokens`; o `ORDER BY` do filtro do resultado conta como a ordem de fora), em "Indisponível: …". A recusa vai à
+  faixa no tom de atenção, e nada muda.
+- **O campo** guarda o escopo (`OpenScope`, as linhas do grupo pela identidade, `RowRef`: o "Carregar mais" no meio não as troca), `touched` (o `onDraft`
+  marca; começar a digitar já é mexer) e a dica (`CellEditorState.hint`, que o `CellEditor` desenha logo abaixo do campo, acima quando passaria do fim da
+  grade, medido num efeito de layout, e liga por `aria-describedby`; a linha com o campo aberto fica por cima das outras, `z-[15]`, abaixo do cabeçalho
+  preso). **Confirmar sem ter mexido não aplica nada** (também com uma célula só: antes, abrir uma célula nula e confirmar gravava o texto vazio); com várias,
+  a faixa diz por quê (`untouched`). Mexido, `applyScope`.
+- **O grupo** (`groupBuilder(edits, coluna, valor)`): as pendências viram um mapa uma vez, cada célula lida é uma pendência comum (numa junção, pela `change`,
+  uma por linha da tabela), a que volta ao valor de referência (`referenceOf`: o lido, ou o da coluna inteira) perde a pendência, e as linhas novas recebem o
+  valor; `done()` troca tudo num passo. Até `groupChunk` (5.000) células, na mesma chamada; acima, em partes com `setTimeout`, com "Aplicando o valor a N
+  células…" e o "Cancelar" na faixa (`banner.building`, `onCancelBuild`), e as outras ações de edição esperam (`latest.building`: o `accessOf`, as de linha,
+  o "Desfazer", o "Ver SQL", e os quatro botões da barra, pelo `barOf`; o "Salvar" da faixa e o Ctrl+S, pelo `saveByPerson`, que diz "Aplicando o valor às
+  células escolhidas." e deixa o grupo continuar). O `guard` (RN-EDIT-007), a troca de resultado (o `scope`), o desmonte, o Descartar e o `saveNow` de
+  quem não é a pessoa (o fechar da aba) cancelam a montagem antes. O `undoWhere` passou a uma passada só pelas chaves, como o grupo (o grupo de 100.000
+  células desfeito de uma vez).
+- **A coluna inteira** (RN-EDIT-018) é `PendingEdits.columns` (`ColumnEdit = { column, value, uncertain? }`, opcional no tipo: `columnEditsOf`), uma por
+  coluna, a última vale no lugar dela (`editWholeColumn`, que tira as pendências daquela coluna nas linhas lidas e põe o valor nas linhas novas que já
+  existem; a criada depois não o recebe). Conta como uma alteração (`pendingCount`). A grade a desenha pelo `GridEditing.columnPending` (um mapa por
+  coluna, o mesmo enquanto as pendências não mudam, `columnPendingOf`): o `GridRow` mostra, na linha lida que não está marcada para exclusão, o valor novo com
+  o lido riscado, e a célula com pendência própria com o da coluna inteira riscado; o cabeçalho ganha o ponto (`pendingHint`, com a dica e o nome para o
+  leitor de tela). O que a grade mostra a vê: `valueAt` e `valuesOf` (o copiar, o "Copiar como", o duplicar) e o `sqlSelectionOf` do "Gerar SQL". A faixa tem a
+  linha `allRowsLine` ("Em todas as linhas do resultado: preco = 10.00.", o literal do banco cortado em 60), e, no banco sem log, a frase a mais. O "Desfazer
+  alteração" com a coluna escolhida inteira é `undoWholeColumns`, com a conta no rótulo (`cellsPendingIn`); com só algumas células escolhidas que só têm ela,
+  fica desabilitado com o motivo (`undoPlan`, que o menu e a ação usam).
+- **O Salvar com a coluna inteira** (`saveWholeColumn`, RN-EDIT-019 a 021): a grade fica tomada (`saving`) da contagem à resposta, com a atualização
+  automática em pausa (`hold`), e `phase` diz à faixa em que parte está (`counting`: "Contando as linhas do resultado…"; `asking`: os botões esperam;
+  `saving`: "Salvando…", com o tempo depois de 2 s, `savingLabel`, e o "Cancelar", que manda `queries/cancel` pela sessão do resultado, `cancelSave`; o
+  "Salvando…" com o "Cancelar" vale para todo Salvar). Os passos: o alvo; o teto de 32 MiB do corpo (`bodyTooLarge`, que o preview e o Salvar sem coluna
+  inteira também conferem); `countWholeColumnOrRefuse` com só a `updateAll` (sem `rows`); o cursor fecha (`closeCursor`, pelo `runner.keepSaved` com as
+  mesmas linhas, também na falha e na pergunta cancelada, menos na recusa que a API dá antes de qualquer comando na sessão, `countReachedTheSession`: a
+  alteração inválida, só leitura, a sessão ocupada); a contagem cancelada (`outcome`) volta calada, como o "Cancelar" que chega depois de ela responder
+  (`cancelAsked`, conferido depois da contagem e depois do preview), e a recusada diz "Não foi possível contar…" com a mensagem do banco;
+  `previewEditsOrRefuse`; a pergunta (`wholeColumnQuestion`, entregue por `confirmWholeColumn`, que as vistas montam com o `always` de
+  `useCommandConfirmation`: pergunta também sem proteção, com o ambiente, e a frase da proteção quando há; o `confirmSave` da proteção não pergunta à parte);
+  e `saveEditsOrRefuse` com a `updateAll` primeiro e o `rows` contado (`changesOf(…, rows)`). A pergunta compara a contagem com o total só com o
+  resultado lido até o fim (`total` nulo com linhas a ler, também depois do "Contar total"); senão, só com as linhas lidas. O "Ver SQL" com a pergunta aberta
+  mostra os comandos que ela já tem (`askedPreview`), com a nota embaixo de cada um (`EditSqlDialog`). O `saveNow` devolve `SaveOutcome` (`saved`, `failed`,
+  `cancelled`): o "Salvar" do "Há N alterações não salvas" cancelado fecha o aviso sem seguir com a ação; o `save` de antes continua devolvendo se gravou tudo.
+- **As recusas** (`failureOf(erro, plano, semLog, nomes)`): o cancelamento pelo `outcome` (RN-SQL-010), nunca pelo texto (`canceled`, com as já gravadas sem
+  log; `unknown`); a da coluna inteira com os nomes dela (a recusa do banco, a conversão, o `EDIT_ALL_ROWS_NOT_SUPPORTED` pelo `reason`); e, no Informix sem
+  log, `whole: "written"` (o `EDIT_ROW_MISMATCH` dela com `applied` 1, ou uma alteração por linha que falhou depois dela) e `whole: "uncertain"` (a falha no
+  meio, `outcome: unknown`; o `SQL_EXECUTION_FAILED` sem `outcome` é a recusa de antes do `UPDATE`, a contagem ou a leitura das chaves no Salvar, e diz
+  "falhou. Nada foi gravado."). O `refuseSave` tira o gravado das pendências (`withoutApplied`, com a origem `all`), marca a coluna `uncertain` (a nota na
+  dica da célula e do cabeçalho), e chama `onSaved` com `partial` e a grade com o gravado (`withColumnsWritten`: a coluna e, por cima, as células das
+  alterações por linha gravadas depois dela, sem tirar nem pôr linhas).
+- **Depois do Salvar** (RN-EDIT-022): o aviso "Coluna preco atualizada em 1.234 linhas." (`multi.saved`, com as outras pelo `applied` menos um) e `onSaved` com
+  `whole` e `kept`. Os Registros leem de novo como sempre (`reread`), e com `partial` só guardam a grade (`runner.keepSaved`). A aba de consulta guarda a grade
+  e, no resultado do último comando, chama `runner.rerun()` (o F5, com o filtro e o `keep`, sem a pergunta da proteção: a da coluna inteira já disse);
+  na aba guardada do script, não lê de novo, e a nota dela ganha a frase (`keptNotes`, `KeptResultNote.note`). Com `reread` falso (o "Salvar" do aviso das
+  alterações não salvas), não lê: a ação que segue executa ou sai; a troca de aba de resultado do script não executa nada, e pede o
+  `guard(escolher, true)`, cujo "Salvar" lê de novo (`rereads`).
+- **A API** (as rotas e os códigos são os da seção 6): `POST …/queries/edits/count` `{ resultID, changes: [updateAll] }` → `{ rows }` (o `transaction` é
+  tolerado); `changes` ganhou `{ kind: "updateAll", table: 0, set, rows? }` (`ApiChange`); o preview lê o `note` de cada comando (o que não é texto vira nulo);
+  as recusas do Salvar, do preview e da contagem ganharam `EDIT_ALL_ROWS_NOT_SUPPORTED`, e a da contagem também `TRANSACTION_FAILED`; o `editErrorDetails`
+  lê o `outcome`. O endereço é `prismEndpoints.userDatabaseSessionQueriesEditsCount`.
+- **O que não foi feito**: o Commit manual (a tela não o tem: a frase das travas e o "sem commit" do aviso ficam para quando ele entrar); conferir na tela (o
+  vitest não tem DOM: a dica do campo, o ponto do cabeçalho e a pergunta foram vistos só nos testes); o teste dos Registros com o `partial` (a ligação é uma
+  linha, e o gancho tem o teste dele, `use-record-edits.multi.test.ts`).
 
 ## Filtrar como no DBeaver, o filtro do resultado e o F5 (RN-GRADE-011 a 013 e RN-TABELA-011)
 
@@ -1217,8 +1917,11 @@ a RN-GRADE-011 e o F5 a RN-GRADE-012.
   nulo); o embrulhado é só leitura, com o motivo da API ou, sem ele, `gridFilterCopy.result.wrapped`, que a faixa mostra. O 422 `FILTER_INVALID` (só com
   filtro) volta de `runner.run` como valor (`FilterRefusal`): nada é executado, o resultado e o cursor de antes ficam, sem aviso, e a frase da API vai ao
   campo (`problem: { message }`). O erro do banco num comando filtrado não marca o editor (a posição é a do comando que a API montou). Executar pelo editor
-  limpa o filtro (`clearResultFilter`, só quando o comando vai de fato ser enviado). A ordem pelo clique no cabeçalho não existe no resultado: a ordem vai
-  escrita no campo.
+  limpa o filtro (`clearResultFilter`, só quando o comando vai de fato ser enviado). **O filtro é do executor da aba**: trocar o banco (RN-ARVORE-007) ou a
+  conexão (RN-ARVORE-008), e o bloqueio por inatividade, dão à aba um executor novo, sem resultado, e o painel limpa o filtro ao ver o executor trocado
+  (ajuste durante a renderização, `filterRunner`). Até a 0.3.0 o campo ficava à vista depois da troca do banco com o comando fixado (`pinned`) do resultado
+  anterior, e "Aplicar" o executava, com o filtro, no banco novo. No resultado, o botão de ordenar do cabeçalho e o "Ordenar" do
+  menu escrevem a ordem no campo (`withOrder`), e valem só quando o comando é uma leitura.
 - **F5** (RN-GRADE-012): nos Registros é o "Atualizar"; na Estrutura e no Diagrama, o "Atualizar" da vista; na aba de consulta, o "Executar de novo"; no
   navegador, o "Atualizar" do nó escolhido, quando se aplica (`refreshesSelection`). Com algo em andamento, nada; com alterações não salvas na grade, a
   pergunta antes. Vale com o foco em qualquer ponto da aba: a aba de uma tabela trata a tecla na raiz (`refreshFromKey`, em `_lib/tab-refresh.ts`) e chama o
@@ -1232,6 +1935,792 @@ a RN-GRADE-011 e o F5 a RN-GRADE-012.
   o autocompletar desligado só abriu com Ctrl+Espaço; F5 na grade, no campo, na Estrutura e no nó da conexão pediu de novo o que cada um mostra. O filtro do
   resultado da aba de consulta só foi conferido com a API simulada (`use-query-runner.filter.test.ts` e `query-tab.test.ts`): a parte da API é de outra
   tarefa; na tela, o campo aparece acima da grade do resultado.
+
+## Contar de novo e atualizar automaticamente (RN-SQL-006 e RN-GRADE-014)
+
+Seção 29 da especificação (issues #10 e #11), com as correções da revisão de 2026-10-15. Vale nas duas grades, os Registros e o resultado da aba de
+consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRecordEdits`).
+
+- **Contar de novo.** O executor não recusa mais a contagem com o total na tela (conta de novo também com as linhas todas carregadas), e a contagem que
+  falha ou é cancelada deixa o total de antes (`patchRows` sem `total`). Na barra, "Contar total" e "Contar de novo" são **UM botão** (`CountButton`, em
+  `result-panel.tsx`), sempre depois do total, no mesmo lugar dos filhos com ou sem ele: clicado, ele continua na página e com o foco. Antes ele virava o
+  `<span>` do total, o foco caía no `body`, fora da aba, e o F5 da aba parava de valer. Ocupado (contando, carregando mais) ele usa `aria-disabled`, e não
+  `disabled`: o botão desabilitado perde o foco. Enquanto conta de novo, o total de antes fica, em `text-muted`, com "contando de novo…". Enquanto outro
+  comando da pessoa roda sobre as linhas na tela, o resumo, o total e o botão **ficam** (o botão ocupado pelo `busy` da área), com "Executando…" depois:
+  antes eles davam lugar a "Executando…", e o F5 seguinte achava o foco no `body`. Quando o botão sai da página com o foco (o resultado novo cabe numa
+  página), a limpeza da ref dele (React 19) avisa `onFocusLost`, e a área leva o foco para a grade ou, sem ela, para a própria `<section>` (`tabIndex={-1}`,
+  num `useLayoutEffect`). O `result-panel.count.test.ts` confere o tipo e a posição do botão nos estados (é o que o React compara para reaproveitar o
+  elemento) e o foco que volta; a runtime de ganchos (`lib/testing/react-hooks.ts`) trata `useLayoutEffect` como `useEffect`.
+- **O relógio é do executor** (`runner.autoRefresh`, montado por `createAutoRefresh` em `_lib/auto-refresh.ts`, sem React, com os temporizadores e o relógio
+  injetáveis e com teste de temporizadores falsos). Por ser do executor, ele sobrevive a trocar de aba, de vista e de tela, e o que tira o executor de cena
+  o desliga sem mais nada: `release()` (desconectar) e `retire()` (fechar a aba, trocar de banco ou de conexão, ir para outra janela, o bloqueio, sair do cofre) chamam
+  `halt()`. Ele **observa** o executor (`subscribe`), e não o contrário: o fim de qualquer ocupação da aba (a execução automática, o F5, "Carregar mais",
+  "Contar total") recomeça o tempo, e o fim de uma EXECUÇÃO diz se ela trouxe um resultado de leitura novo (`outcomeOf`: o mesmo objeto de linhas de volta é
+  "não rodou"; erro, cancelado, gravou). Sem leitura nova, ele para com o motivo (`stopped`), que a barra mostra numa nota curta até a próxima execução da
+  pessoa (`ranByPerson`) ou até ligar de novo. A próxima execução só é marcada quando a anterior termina: nunca duas ao mesmo tempo.
+- **A sessão que cai** (`DATABASE_SESSION_NOT_FOUND` no "Carregar mais", no "Contar total" ou na própria execução automática) a desliga com a nota "a sessão
+  com o banco caiu" (`stopped: "disconnected"`): quem chama `lost()` é `sessionLost()`, só onde a sessão FICA caída, e não `setSession(null)`. A execução
+  automática não reabre a sessão (`execute(…, reopen: false)`: a recusa volta calada, e as linhas de antes ficam), e o relógio confere `connected()` antes de
+  executar. O comando da pessoa continua reabrindo uma vez: o mesmo comando (o F5) que reabre e executa a mantém ligada, e a sessão que não reabre a desliga
+  com a nota.
+- **Só liga sobre uma leitura** (`autoRefreshBlocker`): o motivo sai do resultado que está na tela, sem ler o SQL de novo: `totalRows` (o comando que gravou e
+  devolveu linhas, RN-SQL-013, que no PostgreSQL é o banco quem decide pela transação só de leitura) e as linhas afetadas são "grava"; sem linhas, a aba
+  ocupada e a aba sem sessão (nada reconecta sozinho, RN-SESSAO-004) também recusam. Ligada, nada a impede de trocar o intervalo ou desligar.
+- **O comando da pessoa**: `run` avisa o relógio antes de enviar (`ranByPerson`, só depois das recusas da tela: dois comandos na seleção não a desligam).
+  Outro comando (`sameCommand`: outro texto ou outro filtro do resultado) a desliga, sem nota; o mesmo (F5, "Atualizar", "Executar de novo", o "Atualizar"
+  dos Registros depois do Salvar) a mantém. `runWith(target, kind)` tem três tipos: `person` (`run`: o editor, os Registros, o filtro do resultado),
+  `again` (`rerun`, o F5: o comando das linhas na tela) e `auto` (o estado `running` leva `auto: true`). Só `person` zera `editedSinceRun`: o F5 e a
+  execução automática repetem o comando com o lugar no texto de quando ele foi enviado, e o erro deles não marca o texto que a pessoa já mudou.
+- **A execução automática não toma a aba da pessoa.** Há dois "ocupados": `isBusyState` (tudo, inclusive ela: o relógio e o executor, que mandam um comando
+  por vez na sessão) e `isPersonBusy` (sem ela: a tela e o bloqueio por inatividade). Tudo o que a pessoa vê e aciona usa `isPersonBusy`: a barra do editor
+  ("Executar" não vira "Cancelar"), o seletor de banco e `switchDatabase`, o botão da conexão e `switchConnection`, o rodapé dos Registros ("Atualizar" e "Exportar CSV"), o campo de filtro, a ordem
+  pelo cabeçalho, o F5 das duas abas, os planos dos Registros (`table-view.ts`; o `isBusy` de `result-paging.ts` saiu) e `applyResultFilter`. O que a
+  pessoa pede enquanto ela roda é atendido: o comando da pessoa (`run`, `rerun`) **a abandona** (`abandonAuto`: `epoch++`, então a resposta dela não muda a
+  tela nem avisa; `yielded()` no relógio, que não conta o desfecho dela; e o cancelamento à API, calado), mostra o comando da pessoa rodando desde já (o
+  resultado de antes com `cursorClosed`, porque o banco executou a automática) e só o envia quando a resposta dela e a do cancelamento chegaram
+  (`autoBusy`), para o cancelamento não o alcançar; Cancelar nesse meio-tempo não envia nada. **Desligar** (o X, "Desligar") com ela rodando também a
+  abandona (`stopAuto`, o `stop` que o executor entrega): o resultado de antes volta na hora, com `cursorClosed`, e o próximo comando, da pessoa ou da
+  atualização ligada de novo, espera `autoBusy`; antes ela seguia sem nada na tela dizer, e o resultado ou o erro chegavam depois de desligada.
+  "Carregar mais", "Contar total" e "Exportar CSV" esperam por
+  ela (`afterAuto`, `autoRunSettled`) e seguem sobre o resultado novo (o de antes já não está na API); o executor aposentado durante a espera (a troca do
+  banco ou da conexão, que a desliga) faz o "Carregar mais" e o "Contar total" desistirem calados (`retiredWhileWaiting`), sem o registro do `refuse`, que
+  fica para o pedido que chega a um executor já aposentado. A edição da célula não começa: `cellAccess` recebe
+  `busy: "refresh"`, com o motivo "a atualização automática está lendo as linhas de novo" na faixa, e o alvo não é perguntado à API por um resultado que vai
+  mudar; o resto do menu ("Atualizar", "Filtrar") segue `isPersonBusy`. A aba que vai para outra janela passa por `handOffTab` (`_lib/tab-handoff.ts`):
+  a pausa `moving` desde o começo, a espera da execução em andamento, e a pausa tirada no fim (a aba que foi é solta, e isso a desliga). **Depois da espera
+  vale a lista de abas DE AGORA**: `sendTab` relê a aba de `latestTabs` (o título, o banco e o script podem ter mudado; a que fechou não vai, sem aviso), e
+  `detachTab` a tira da lista de agora (`setTabs` funcional, a vizinha escolhida pela lista da última renderização): com a lista da renderização em que a
+  pessoa pediu, a aba aberta durante a espera sumia (e a sessão dela ficava aberta) e a fechada voltava sem executor (`workbench-state.detach.test.ts` e
+  `workbench-tabs.move.test.ts`).
+- **O que a execução automática não faz**: não esmaece a grade nem diz "Executando…" (o `running` do `ResultPanel` exclui `auto`); não repete o aviso de
+  valores cortados (`truncationWarned` só é zerado pelo comando da pessoa: o "Carregar mais" depois dela também não avisa de novo o resultado que já avisou);
+  com as mesmas colunas, fica com o `id` de antes (a chave da grade: a grade não é refeita, e a rolagem fica); ligada, a grade não busca a página seguinte
+  sozinha (`autoLoadMore` desligado pela aba enquanto o relógio está ligado: a rolagem que ficou no fim pediria a seguinte a cada intervalo); e **não segura
+  o bloqueio por inatividade** (`isPersonBusy`, que `anyRunnerBusy` usa): sem isso, uma consulta a cada 5 s recomeçaria a contagem do bloqueio a cada
+  execução, porque o tempo conta do fim do último comando. O que conta como atividade continua sendo só tecla, ponteiro e roda de verdade (`watchActivity`).
+- **As pausas** (`pause("hidden" | "editing" | "moving", on)`): `useAutoRefresh` (`_lib/use-auto-refresh.ts`) põe a de fora de vista com a aba escondida e com a vista
+  desmontada (a aba de consulta lê `useWorkbenchOnScreen` ela mesma, para não mexer em `workbench-tabs.tsx`; a de tabela recebe `visible`); `useRecordEdits`
+  põe a da edição com alteração não salva, célula aberta, menu da célula, "Filtrar por valor…" ou o campo do "Personalizado" abertos, mais de uma célula
+  escolhida (RN-GRADE-001) e a cópia em andamento (RN-GRADE-002); `handOffTab` põe a da
+  ida para outra janela. Ao sair da pausa, executa na hora se o prazo passou. **A pausa da edição vale desde o começo da ação**: o duplo clique, o menu, a
+  linha nova, "Duplicar linha" (também durante a busca dos valores completos), "Excluir linha" e o "Colar" (com a leitura da área de transferência), pelo
+  menu, pela barra de edição ou pelo atalho (seção 33), perguntam o alvo à API (`ensureTarget`) antes de agir, e a execução que
+  saísse nesse meio-tempo trocava as linhas e a ação caía em OUTRA linha do banco. `hold()` põe a pausa na hora e a solta por um estado (`released`), numa
+  renderização em que o campo ou o menu já contam, sem um instante livre; depois da pergunta, `moved(from)` (a última renderização e o executor lido na
+  hora) descarta a ação se o resultado mudou; `ensureTarget` não põe o alvo de um resultado que saiu no `latest`; e o menu é do resultado em que abriu
+  (`menuState.resultId`, como o campo): a execução que já rodava quando ele abriu e troca as linhas o fecha, e a escolha sobre a célula não age. A pausa da
+  edição sai do executor de antes num efeito próprio, ao desmontar a vista ou trocar o executor. O `records-view.test.ts` tem a pergunta do alvo presa
+  (`slowTarget`) e o resultado trocado no meio.
+- **A tela**: o submenu é `autoRefreshMenuItem` (`_lib/auto-refresh-menu.ts`, com os intervalos em `autoRefreshGroups`, os mesmos do menu da barra), logo
+  depois do "Atualizar" (F5) em `cellMenu`. O intervalo em uso vem marcado: o `ContextMenu` ganhou `checked` (`menuitemradio` com `aria-checked` e a marca no
+  lugar do ícone; as setas e o foco acham os dois papéis pelo `itemSelector`, por `firstItemOf` e `moveFocus`, exportados para o teste sem DOM). O controle é `AutoRefreshControl` (`_components/auto-refresh-control.tsx`),
+  ao lado de "Atualizar": nos Registros, no rodapé, logo depois do botão (o menu abre para cima, `opensUp`); na aba de consulta, que não tem o botão, na
+  barra, antes do zoom (fica também com a área recolhida). O botão do relógio (`TimerIcon`) está **sempre** lá: desabilitado por `aria-disabled` com o
+  motivo no nome e na dica (depois de um DDL ou de um UPDATE, "o comando grava no banco"; sem resultado, "não há linhas"), ou, ligada, "Atualiza a cada 10 s
+  · última às 14:32:05" (`onText`) com o X. **O botão do relógio é o mesmo elemento ligada ou não** (`data-auto-refresh-opener`): escolher um intervalo devolve o foco a ele, e o X,
+  que sai da página, passa o foco a ele: pelo clique e, quando ela para sozinha com o foco no X (o erro depois de um F5 dado no X), pela limpeza da ref
+  (`keepFocusInBar`, no módulo para ser estável, o mesmo cuidado do `CountButton`). Nada ali é região viva. O "Personalizado…" é `AutoRefreshDialog` (só desenha; quem confere o texto é
+  `customInterval`, pelo `submitCustom` do gancho). Os textos estão em `_lib/auto-refresh.copy.ts`.
+- **O que não foi feito**: a marca na faixa de abas da aba com a atualização ligada (fica para depois na seção 29), e ela não viaja com a aba para outra
+  janela (o executor de lá nasce com ela desligada).
+- **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55431): `select * from loja.fila` com 500
+  linhas; "Contar total" deu 500 e o foco ficou no botão, agora "Contar de novo"; 12 linhas inseridas pelo `psql` e o clique (no mesmo elemento) deram 512.
+  Na barra, o relógio abriu o menu com os seis `menuitemradio`; "A cada 5 s" ligou, o foco voltou ao relógio, e a linha inserida pelo `psql` apareceu sozinha
+  ("Atualiza a cada 5 s · última às …"). O menu da célula mostrou "Atualizar automaticamente" depois de "Atualizar" (F5), com "A cada 5 s" marcado, e a
+  barra disse "em pausa" com o menu aberto. A tabela renomeada no `psql` deu o erro do banco uma vez, com a nota "A atualização automática parou: o comando
+  deu erro." A vista Registros usa a mesma barra e o mesmo menu, e foi conferida só pelos testes (`records-view.test.ts`). Depois das correções da revisão
+  (mesmo arranjo, porta 55461, `CDP` por um roteiro de `Input.*` e `Runtime.evaluate`): com uma consulta que dorme 2 s (`(select pg_sleep(2))`) e "A cada
+  5 s", durante a execução automática o botão seguiu "Executar" e a grade não esmaeceu; Ctrl+Enter com `select 42` nesse meio-tempo executou na hora (a
+  automática foi cancelada, sem aviso), e a atualização automática desligou sem nota; depois de um `UPDATE` o relógio ficou na barra, desabilitado, com "o
+  comando grava no banco…"; nos Registros de `loja.fila` o relógio ficou no rodapé, entre "Atualizar" e "Exportar CSV", o menu abriu para cima, e ligada
+  ele disse "Atualiza a cada 5 s · última às …" ali (com o texto longo, o rodapé quebra em duas linhas a 1400 px). Depois da segunda revisão (mesmo arranjo,
+  porta 55471; o usuário criado pela tela e a conexão por `fetch` à API com `window.prism.getApiConfig()`, que só aparece no navegador depois de Sair e
+  Entrar): com "A cada 5 s" sobre uma consulta que dorme 1,5 s, o X durante "atualizando…" voltou na hora ao resultado de antes, com "O cursor foi fechado"
+  e "Executar de novo", sem aviso depois, e o relógio habilitado; com o foco no X, a tabela renomeada no `psql` e F5, o comando deu erro, ela parou com a
+  nota, e o foco ficou no relógio, de onde o F5 seguinte (com linhas na tela) executou. A corrida do alvo da edição e a sessão reaberta pelo F5 foram
+  conferidas só pelos testes. **Para um PostgreSQL sem
+  Docker**: o `initdb` e o `pg_ctl` rodam como `postgres` (`runuser -u postgres --`), que não atravessa a pasta da sessão (é do root, 700): o cluster vai numa
+  pasta do `postgres` (`/var/lib/postgresql/<nome>`), com porta e soquete próprios, e sai no fim. Encerre só os PID que você iniciou: um `pkill -f` com o
+  caminho da árvore mata também o shell que o roda, e outra frente pode ter um Xvfb e um `pnpm dev` de pé ao lado.
+
+## Executar script (RN-SQL-019 a 024)
+
+Seção 31 da especificação, pedido do dono em 2026-10-15 ("igual a do dbeaver do alt + x"): os comandos do editor um depois do outro, uma aba por
+resultado, as Estatísticas e a pergunta no erro. Cada comando é um `POST …/queries`, como no Ctrl+Enter, com o `keep` da seção 33 (abaixo, "As abas
+guardadas se editam").
+
+- **Onde mora cada parte.** `_lib/script-run.ts` (puro, com teste): o atalho (`scriptShortcut`, `scriptShortcutLabel`, e `platformScriptShortcut`
+  para os textos que o ensinam), o estado do script (`ScriptRun`, `ScriptEntry`, as funções que o mudam, `entryAt` e `entriesOf`), os totais, as
+  linhas das Estatísticas enquanto ele roda (`statisticsRange`), a aba à frente (`shownScriptTab`), as setas nas abas, o aviso do fim, o `keep` de cada
+  execução (`keptResultIds`) e a aba guardada que fica com o que foi salvo (`withSavedResult`); os textos em
+  `script-run.copy.ts` (não confundir com `scripts.copy.ts`, que é o dos scripts salvos). A divisão é `scriptStatements` em `sql-statements.ts`; o
+  executor é o `runScript` de `use-query-runner.ts`; a tela é `script-tabs.tsx` (as abas, a nota da aba guardada e a marca da faixa de abas,
+  `ScriptWaitingMark`), `script-statistics.tsx` (com `useCoalescedRun`), `script-error-dialog.tsx`, a marca do editor (`_lib/script-mark.ts`) e as
+  propriedades `tabs`, `progress`, `statistics` e `kept` do `ResultPanel` (o `kept` é `{ busy, onRunAlone }`: quem desenha a nota é a área, que tem o
+  resgate do foco).
+- **O atalho é Alt+X, e no macOS Cmd+Option+X.** Lá o Option+X escreve um caractere (`≈` no teclado americano, outros em outros), e o atalho o tiraria
+  do editor. A tecla vale pelo caractere ou pela posição (`code === "KeyX"`: no macOS o Option muda o caractere), e nunca com Ctrl (o AltGr do Windows
+  chega como Ctrl+Alt) nem com Shift. Quem trata é o `onKeyDown` do `QueryTabPanel`, e não um mapa do CodeMirror: assim vale no editor e em qualquer
+  ponto da aba (a barra, a grade, o campo de filtro); o campo de edição da célula para a propagação e fica com as teclas dele. Nada mais usa a tecla: o
+  mapa padrão do CodeMirror tem `Alt-l`, `Alt-u` e `Alt-A` (Shift), mas não `Alt-x`; o `before-input-event` do Electron só pega Ctrl (zoom, F5, Ctrl+R);
+  o menu de desenvolvimento não tem mnemônico X, e o app empacotado do Windows e do Linux não tem menu. O botão escreve o atalho da plataforma
+  (`aria-keyshortcuts`). Segurar as teclas repete o evento (`event.repeat`): a repetição só é consumida, e o script começa uma vez, no primeiro (com a
+  pergunta de erro à espera o executor não está ocupado, e a repetição a responderia e começaria outro).
+- **A divisão é o leitor do Ctrl+Enter** (`scan`), com uma peça a mais: os `;` que estão no corpo de um bloco não separam (`innerSemicolons`, com o
+  mesmo `dialect.body()` do `statementCount`, recomeçado no `;` que fecha e em cada corte da linha em branco; o corpo que chega aberto ao fim prende os
+  `;`, menos com o `extra` do Informix, a rotina sem `END PROCEDURE`, em que todo `;` separa). O `splitStatements` e o `statementAt` seguem separando
+  em todo `;`, como antes. A garantia que o teste confere em textos dos três bancos: cada pedaço conta 1 no `statementCount` (a conta da API, que
+  repete a conferência e recusaria o pedaço com `MULTIPLE_STATEMENTS_NOT_SUPPORTED`), e o número de pedaços é a conta do texto inteiro. No script a
+  linha em branco divide também a seleção (no Ctrl+Enter a seleção vai inteira). No Db2 o bloco vai até o fim do texto, como na conta.
+- **O executor** (`runScript`). O estado do script é um observável à parte (`runner.script`, com `useScriptRun`), e não um estado novo do `RunnerState`:
+  o resto da tela (a barra, o bloqueio, a ida para outra janela, a troca do banco e da conexão) continua lendo só o estado do executor. Ele fica
+  `running` do primeiro ao último comando (ocupado para a pessoa e para o bloqueio por inatividade), com o `previous` sendo o que o comando anterior
+  deixou, e termina com o do último. **A pergunta de erro não ocupa**: o estado é o do comando que falhou (o editor marca a posição do erro, pelo
+  `offset` do comando no texto inteiro, como no Ctrl+Enter), e o bloqueio pode vir; ele aposenta o executor (`retire`), que responde "Parar" à
+  pergunta (`deciding`) e tira o script. `release` (Desconectar) para o script: o comando em andamento fica "cancelado". **Uma execução nova na aba com
+  a pergunta à espera** (`run`, `runScript`, `runCommand` e `rerun`: o caminho não passa pela tela, em que o diálogo cobre a aba, mas o executor o aceita)
+  é a resposta "Parar" (`afterPausedScript`), como a RN-SQL-020 manda trocar os resultados do script por uma execução nova: o script para com o que já
+  rodou e o aviso do fim, e o comando novo só sai depois de o laço dele terminar (`scriptLoop`); antes, a promessa do script ficava esperando para sempre, e
+  uma resposta atrasada o retomava por cima do comando novo. O que o executor recusaria antes de enviar (`sends`: mais de um comando, nada a enviar, a aba
+  sem conexão; o F5 sem resultado de linhas na tela) não mexe na pergunta, e sem pergunta à espera nada muda (quem chama vê a aba ocupada na mesma chamada). Cada comando passa por
+  `execute`, com as recusas do comando a mais (`scriptCommandRefusals`: o controle de transação, o comando que não roda em transação, mais de um
+  comando e, na conexão somente leitura, o que não é leitura, `CONNECTION_READ_ONLY`), que perguntam como o erro do banco, sem o aviso central; o resto (a sessão ocupada, a API fora do ar, a sessão que caiu) para o script
+  sem perguntar. A sessão que cai só é reaberta antes da primeira resposta (`!answered`): depois, o que os comandos de antes deixaram nela se perdeu.
+  **Sem resposta sobre comando nenhum** (a conexão que não abre, o cancelamento antes do primeiro), a tela fica como estava: o script de antes volta
+  (`untouched`), e o executor faz o que o Ctrl+Enter faria. O `failed` ganhou `notify`: no script os avisos de cada comando calam, e sai um no fim
+  (`scriptEndToast`), com o nome da aba (o `title` de `createQueryRunner`, lido no fim: a aba pode ter sido renomeada ou salva como script enquanto ele
+  rodava; o `WorkbenchProvider` o tira de um mapa guardado por `useState`, e não de uma ref, porque o `createRunner` vai ao `createLockHandles` durante
+  a renderização e o lint do React não deixa a ref ir junto); o de valores cortados, um por script. Os avisos da seleção com mais de um comando
+  (`tooManyStatements`, o da área e o do canto) e a área vazia (`emptyHint`) ensinam o atalho.
+- **Um script de milhares de comandos** (uma carga de `INSERT`, o caso que leva ao Alt+X em vez do Ctrl+Enter) custa o mesmo por comando do começo ao
+  fim. O script muda duas vezes por comando, e três coisas cresciam com o tamanho dele: (1) a lista dos comandos era copiada inteira a cada mudança
+  (`withEntry` e `startEntry`); agora ela vai em páginas de 256 (`ScriptRun.pages`, lida por `entryAt` e `entriesOf`), e mudar um comando copia a
+  página dele e a lista das páginas; (2) os totais percorriam o script a cada desenho; agora vão no próprio script (`totals`), acertados a cada
+  mudança (o teste confere que dão o mesmo que contar tudo de novo); (3) as Estatísticas, à frente enquanto ele roda, refaziam, mediam e pintavam a
+  tabela inteira a cada comando; agora, enquanto ele roda, só os 50 comandos em volta do que está em execução (`statisticsRange`, com ele perto do
+  alto e duas linhas dizendo quantos ficaram antes e quantos estão na fila), a tabela inteira uma vez no fim, e o redesenho no máximo a cada 250 ms
+  (`useCoalescedRun`: o relógio conta da última troca, e não do último comando; a pergunta, o fim e um script novo vêm na hora). As publicações do
+  executor e o `set` dele no mesmo trecho síncrono (o fim de um comando e o começo do seguinte) já saem num desenho só: o React junta as atualizações
+  de `useSyncExternalStore` numa microtarefa. Medido na tela (abaixo): antes, 3.000 comandos levavam 115 s no app de produção com as Estatísticas à
+  frente (contra 23 s com uma aba de resultado à frente), com a janela parada por até 27 s.
+- **O começo do comando** nas abas e nas Estatísticas (`commandHead(target)`) pula os espaços e os comentários de cima pelo leitor do projeto, no banco do
+  comando (`commandStart` de `sql-statements.ts`: o comentário de bloco aninhado do PostgreSQL e do Db2, o primeiro fecho no Informix, o `{ … }` só no
+  Informix, o `--` que no PostgreSQL acaba também no retorno de carro), e não por uma expressão regular, que lia o aninhado errado e tomava `{` por
+  comentário em todo banco. **"Linhas alteradas"** soma só as linhas afetadas dos comandos que não devolvem linhas: o que grava e devolve linhas (RN-SQL-013)
+  traz da API o total devolvido (`totalRows`), e não o de alteradas, e fica de fora, contado em `ScriptTotals.returning`, que o total diz ("Linhas
+  alteradas: 12 (sem contar 1 comando que gravou e devolveu linhas)"); a especificação diz por quê.
+- **As abas e o cursor.** Cada comando que devolve linhas guarda a página dele (`results`, até `scriptResultCap`, 20); no fim, o do último comando
+  executado, quando devolveu linhas, fica sempre (`live`), também depois do limite: é o do cursor aberto (RN-SQL-007: um por sessão, e cada comando
+  novo fecha o anterior), e a aba dele desenha o **estado do executor**, e não a cópia guardada, com tudo o que vale num resultado. As outras desenham a
+  cópia (`kept`), que se edita (ver "As abas guardadas se editam"), sem contar, sem "Carregar mais", sem filtro nem atualização
+  automática, e a nota com "Executar este comando" (`runCommand`: o "executar de novo" do comando, com o lugar no texto de quando o script rodou, que
+  troca os resultados do script). Com um comando em andamento na aba o botão fica `aria-disabled`, com o porquê na dica (o executor recusaria calado),
+  e o `handleRunAlone` só pergunta das alterações, limpa o filtro e abre a área quando o comando vai rodar (`commandWillRun`, como os outros caminhos);
+  quando o comando troca os resultados do script, o botão sai da página com o foco, e a área o leva à grade nova (`onFocusLost` e `rescueFocus`, o
+  mesmo do botão de contar, RN-SQL-006). A aba à frente: as Estatísticas enquanto roda, a do último no fim, e a que a pessoa escolheu enquanto ela existe
+  (pelo `id` do script; o seguinte volta às Estatísticas). Cada executor numera os scripts dele desde o 1, e o painel continua montado quando a aba
+  ganha outro (o banco, a conexão, o bloqueio): a escolha sai junto com o filtro, no ajuste do `filterRunner`. O F5 só executa de novo com a aba do
+  último à frente, e a atualização automática espera (`hidden`) com outra aba do script à frente.
+- **A pergunta de erro se fecha só pelo Esc**, que é o "Parar" da especificação (`dismissible="escape"` do `Dialog`: sem o X e sem o clique fora, que
+  paravam o script calados; `canClose` diz por qual caminho, o Esc, o fundo ou o X).
+- **A pergunta de erro só na aba à vista** (`active && onScreen`, como a atualização automática). O `Dialog` vai por portal ao `body`, fora do `hidden`
+  da aba e do `inert` da área de trabalho escondida: sem isso, o script de uma aba de trás abria a pergunta por cima da aba da frente, ou de
+  Configurações, tirava o foco de quem digitava (um Espaço ou Enter caía no "Parar") e dois scripts empilhavam dois diálogos iguais. O de outra aba
+  espera; a faixa de abas mostra a marca dele (`markOf` do `TabStrip`, que o `WorkbenchTabs` preenche com `ScriptWaitingMark`, um ponto vermelho com
+  o texto para o leitor de tela), e a pergunta aparece quando a pessoa vai até ela.
+- **Quem troca os resultados do script**: o comando aceito do `run` (o Ctrl+Enter), o `runCommand` e outro `runScript`. O filtro do resultado manda
+  `run(…, { keepScript: true })`, e o F5 e a execução automática não trocam: mudam só o resultado do último. A recusa antes de executar (a sessão
+  ocupada, o controle de transação sem `executed`) deixa o script, como deixa o resultado (`next !== shown`), e a API também não esquece os
+  guardados nela (RN-SQL-024: a recusa antes do banco não aplica o `keep`).
+- **A barra e o leitor de tela.** "Executando 3 de 12…" é o `progress` da barra (um `role="status"` só, em qualquer aba e com a área recolhida); as
+  Estatísticas marcam a linha do comando com `aria-current="step"` e não repetem o progresso. As abas são uma lista de abas (`role="tablist"`, só a
+  escolhida no Tab, setas com a volta, Home e End, o foco vai à escolhida); o corpo da área é o `tabpanel` dela, e entra no Tab nas Estatísticas, que
+  não têm o que focar. As abas dos resultados rolam numa caixa só delas, e a escolhida vem à vista a cada troca (`revealOffset`, o mesmo da faixa de
+  abas, e um `ResizeObserver` para a faixa que estava sem largura); "Estatísticas" fica fora da rolagem, na ponta direita. Sem isso, com umas oito
+  abas, a do último comando, que vem à frente sozinha no fim, e as Estatísticas ficavam fora da faixa. Cada linha das Estatísticas é memorizada: o
+  script publica um estado novo a cada comando, e só a linha que mudou é outro objeto.
+- **As abas guardadas se editam** (seção 33, RN-SQL-023 e 024). A API guardava um resultado só por sessão; agora ela guarda o que a edição precisa
+  dos resultados que a tela lista em `keep` no `POST …/queries` (`executeQuery`, que só põe o campo no corpo com a lista cheia), e as rotas da edição
+  aceitam o `resultID` deles. **Quem manda o quê** (`runWith` e `runScriptNow`, pelo `keptResultIds`): cada comando do script manda os das abas que o
+  script já tem (enquanto ele roda não há `live`, e vão todas, a do comando anterior também), e o "Tentar de novo" a mesma lista; o F5, "Executar de
+  novo", o filtro e a execução automática do resultado do último (`clearsScript` falso) mandam os das outras abas, menos a do `live`, que eles
+  substituem; o Ctrl+Enter, "Executar este comando" e o primeiro comando de outro script não mandam nenhum, e a API esquece os guardados. A lista
+  nunca passa de 20: a aba do último que passou do limite (`live` além dos 20) não vai. **A edição** é a mesma `useRecordEdits` da aba, com `kept` (as
+  linhas da aba guardada à frente, no lugar das do executor) e `scriptBusy` (o script roda ou espera a pergunta de erro: com a pergunta, o executor
+  não está ocupado, e a edição está, em todas as abas); o `moved` de uma aba guardada confere se o script ainda a tem, e não o resultado do executor (a
+  cópia do `live` em `results` guarda o `resultID` de antes do F5, e por isso a aba do último segue conferindo pelo executor). O menu da aba guardada não
+  tem "Filtrar", "Atualizar" nem "Atualizar automaticamente" (a aba de consulta não passa `filter`, `refresh` nem `autoRefresh`), e a área mostra a faixa
+  e passa a edição à grade também com `kept`, e com ela a barra de edição (RN-EDIT-013), entre a grade e a nota; a barra e o menu têm o "Duplicar
+  linha", e os quatro botões ficam ocupados com o mesmo motivo enquanto o script roda (`personBusy` conta o `scriptBusy`). Copiar a célula cortada
+  leva o valor cortado, com o aviso: a rota das células responde 404 para um guardado, que `cellRefusals` já tratava; pela mesma resposta, duplicar
+  a linha que tem célula cortada numa coluna que se copia não duplica nada, e a faixa diz "Execute o comando de novo para duplicá-la." (RN-EDIT-016).
+  **O Salvar** passa pelo `onSaved` de sempre: `runner.keepSaved` acha o resultado na cópia guardada
+  (`withSavedResult`, sem mexer nas Estatísticas, que continuam com as linhas que cada comando leu) e, como o Salvar foi um comando na sessão, fecha o
+  cursor do resultado do executor (`cursorClosed`, calado, como no Salvar dele mesmo). **Trocar de aba** (`chooseScriptTab`) com alterações não
+  salvas pergunta antes, pelo `guard` (a pendência é uma só por aba de consulta, a do resultado à frente): a aba que já está à frente não pergunta, e
+  `ScriptTabs` leva o foco à escolhida na hora quando `onChoose` não devolve `false`; a troca pelo teclado que espera a pergunta fica guardada
+  (`awaiting`), e o foco vai à escolhida quando a pergunta troca de aba ("Salvar" ou "Descartar"), num efeito sobre `shown` que roda depois de o diálogo
+  devolver o foco à aba de antes (que já saiu da ordem do Tab); "Cancelar" não troca a aba, e outra escolha a esquece. A sessão que caiu responde como no
+  resultado do último ("Não foi possível saber o que se edita neste resultado." com o motivo da API). **Cada resultado lembra a sessão em que foi lido**
+  (`RowsState.sessionId`), e a edição dele pergunta e grava nela (`sessionOfShown`, em `use-record-edits.ts`; sem ela, a da aba): depois de o F5 ou o
+  filtro reabrirem a sessão que caiu, a sessão nova não conhece os guardados da de antes, e a aba guardada responde que a sessão com o banco não existe
+  mais, como a que caiu, e não o 409 de "outro comando foi executado nela depois dele". Levar a aba para outra janela pergunta pelo
+  registro `unsaved-edits.ts`, que conta as pendências da aba guardada também.
+- **O que não foi feito**: levar a aba para outra janela leva só o resultado do último comando (o resto fica, como diz a especificação); guardar as
+  pendências de várias abas do script ao mesmo tempo e o valor completo das células cortadas nas abas guardadas, o script que é uma transação só e
+  continuar o script a partir de um comando escolhido ficam para depois (seções 31 e 33). Não há atalho para "Cancelar": o botão da barra.
+- **Conferido na tela** (Xvfb, `pnpm dev` com a API desta árvore, PostgreSQL 16 local num cluster próprio na porta 55481, o usuário e a conexão criados
+  por `fetch` à API com `window.prism.getApiConfig()`, o login pelo formulário): com um script de cinco comandos separados por `;` e por linha em
+  branco, o Alt+X de verdade (`xdotool key alt+x`, no `pnpm dev` com o menu padrão do Electron) rodou os três primeiros e parou no `SELECT * FORM
+  pedido` com a pergunta (o erro do PostgreSQL como veio, o SQLSTATE 42601, "Parar" com o foco) e o `FORM` marcado no texto inteiro; "Pular" seguiu,
+  o último ficou à frente com o filtro, o relógio da atualização automática e o zoom, a aba do primeiro mostrou as 200 linhas com a nota, as
+  Estatísticas mostraram o pulado com o erro na linha de baixo e os totais, e o aviso disse "Script executado com 1 erro: 4 de 5 comandos
+  executados.". Com `pg_sleep`, a barra disse "Executando 2 de 3…", o editor marcou o segundo comando, a barra do editor mostrou "Cancelar", e o
+  "Cancelar" deixou o segundo cancelado e o terceiro não executado, com "Script cancelado: 1 de 3 comandos executados."; as setas andaram nas abas, e
+  o Ctrl+Enter seguinte trocou as abas pelo resultado dele. No macOS e no Windows o atalho não foi aberto: só os testes.
+- **Conferido na tela depois da revisão** (Xvfb a 1440×900, PostgreSQL 16 local num cluster próprio na porta 55491 com `cliente` de 3.000 linhas, o
+  usuário e a conexão por `fetch`, o login pelo formulário, o texto posto no editor pela `EditorView` que o CodeMirror pendura no `.cm-content`
+  (`cmTile.view`), o tempo do clique em "Executar script" até o aviso do fim, medido na página, com a maior pausa entre dois `requestAnimationFrame`):
+  `update cliente set nome = nome where id = N;` repetido. No `pnpm dev`, com as Estatísticas à frente (antes do redesenho a cada 250 ms): 300
+  comandos em 4,2 s, 1.000 em 16,2 s, 2.000 em 28,7 s e 3.000 em 37,9 s (a revisão tinha medido 27,8 s e 98,4 s para 1.000 e 2.000). No app de
+  produção (`pnpm build` e o Electron na pasta, com `--remote-debugging-port`), 3.000 comandos: com as Estatísticas à frente, 29,5 s antes do redesenho
+  a cada 250 ms e 26,1 s e 22,7 s depois; com uma aba de resultado à frente (o mesmo script com `select 1 as a;` antes, e a aba 1 clicada), 20,9 s e
+  22,9 s. A maior pausa da janela foi de 330 a 370 ms, a tabela inteira desenhada uma vez no fim (era de 27 s). No meio dos 3.000, as Estatísticas
+  tinham 52 linhas ("510 comandos antes destes, que aparecem quando o script terminar.", "Mais 2.440 comandos na fila."), a barra dizia "Executando
+  525 de 3.000…", e "Cancelar" parou o script em 0,3 s ("Script cancelado na aba consulta-1.sql: 525 de 3.000 comandos executados."). Com 12
+  `select n`, a faixa de 706 px rolou até a aba "12 · select 12 as n12", e as Estatísticas ficaram à vista; "Executar este comando" na aba 1, com o
+  foco nele, levou o foco à grade do resultado novo ("Linhas do resultado"). Um script parado no erro com a área de trabalho por baixo de
+  Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
+  consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
+
+## Proteções da conexão e da pasta (RN-PROT-001 a 006)
+
+Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou
+pasta que o usuário desejar", e a conexão "apenas readonly, ou seja, permite apenas select"). Quem impõe o somente leitura é a API, que recusa o que não é
+leitura antes de ir ao banco; a confirmação é da tela, que pergunta antes de enviar. A seção Proteções do formulário, a senha do somente leitura e o PATCH
+que leva tudo estão em "Conexões", acima. O painel "Sessão da conexão" está lá também, e a verificação periódica e o "Só as conectadas" do navegador, na
+seção seguinte.
+
+- **O que é irreversível** (`_lib/irreversible.ts`, `irreversibleOf`, com teste nos três bancos). Lido pelo leitor único do projeto (`sqlTokens`): texto,
+  nomes entre aspas, comentários de cada banco (o `{ … }` do Informix, o aninhado do PostgreSQL e do Db2) e `$tag$` não contam. É irreversível o `DROP`
+  de qualquer objeto, o `ALTER` com um `DROP` dentro (`ALTER TABLE … DROP COLUMN`, também `DROP DEFAULT`: na dúvida, pergunta), o `TRUNCATE`, e o
+  `DELETE` e o `UPDATE` sem `WHERE` no nível de fora: o `WHERE` de uma subconsulta não conta (o `UPDATE t SET a = (SELECT … WHERE …)` altera todas as
+  linhas), e quem diz o nível é a profundidade de parênteses do comando. Contam as palavras que podem começar um comando: a primeira, a de depois de um
+  `;`, de um `BEGIN` ou de um `ATOMIC` (o bloco do Db2), e, para `DELETE` e `UPDATE`, a de depois de `(` e de `)`: o comando principal depois do `WITH`,
+  o `DELETE` de dentro das consultas dele (o `WITH` que grava, do PostgreSQL) e o `FINAL TABLE (UPDATE …)` do Db2. Na dúvida, pergunta: a coluna
+  `update` sem aspas logo depois de um parêntese conta. Não contam: o `CREATE` (criar uma rotina ou um gatilho não executa o corpo dele), o `EXPLAIN`
+  sem `ANALYZE` (só planeja; com `ANALYZE` vale o comando explicado), o `UPDATE STATISTICS` do Informix, o `ON CONFLICT DO UPDATE`, o `FOR UPDATE`, o
+  `GRANT … UPDATE` e o `THEN UPDATE` do `MERGE`, que não começam um comando. O motivo volta com o objeto como foi escrito (`producao.apontamento`, com as
+  aspas), que o aviso usa na frase ("Este DELETE não tem WHERE: ele apaga todas as linhas de producao.apontamento.").
+- **Quando pergunta** (`_lib/command-confirmation.ts`, puro e testado): `commandQuestion` (o comando: em "Todos os comandos", sempre, com o motivo quando é
+  irreversível; em "Só comandos irreversíveis", só o irreversível, e nunca na conexão somente leitura, em que a API o recusa antes do banco),
+  `scriptQuestion` (uma vez, com os comandos que pedem e o número de cada um no script, e o total), `saveQuestion` (só em "Todos os comandos": cada
+  comando do Salvar é pela chave da linha, com `WHERE`) e `autoRefreshQuestion` (só em "Todos os comandos": ela só repete uma leitura). A pergunta do Salvar
+  com a coluna inteira (`wholeColumn`, RN-EDIT-019) vem sempre, pelo `always` do gancho, também sem proteção (o `level` do contexto é nulo então), e é a
+  única daquele Salvar: ver "Editar várias células e a coluna inteira". As proteções
+  vêm de `shownProtections` (`connections/_lib/protections.ts`): o `protections` da API, com a pasta de onde vem cada uma.
+- **Quem pergunta** (`_lib/use-command-confirmation.ts`): a aba, pela conexão e pelo banco dela, com as proteções da lista de conexões do cache
+  (`connectionsQuery`): mudar a proteção vale para o comando seguinte, depois do `invalidateLists` (outra janela tem o cache dela, e relê a lista quando
+  ganha o foco). `confirm(monta, segue, cancelou)` monta a pergunta na hora do pedido; **sem pergunta, `segue` roda na mesma chamada**, e tudo fica como
+  era sem a proteção (o destaque do comando, os testes que esperam o envio na hora). Com ela, o aviso abre (`open`), e só "Executar mesmo assim" chama
+  `segue`. Um aviso por vez: o pedido novo cancela o de antes; desmontar a vista cancela o que esperava. `confirmed` é o mesmo como valor (verdadeiro na
+  hora, ou a promessa da resposta), para o Salvar, que espera. Sem a conexão na lista, nada pergunta.
+- **Onde** (`query-tab.tsx`): depois da pergunta das alterações não salvas (RN-EDIT-007) e logo antes de o comando sair, só quando o executor vai mesmo
+  enviar (`commandWillRun`, `scriptWillRun`: com mais de um comando, ou a aba ocupada, ele só avisa, e nada pergunta). No "Executar" e no Ctrl+Enter
+  (o destaque do comando acende só quando ele sai), no "Executar este comando", no "Executar script" (confirmado, roda inteiro, também o "Tentar de
+  novo" da pergunta de erro), no F5, no "Executar de novo" e no "Atualizar" do menu da grade (pelo comando das linhas na tela, `rowsTargetOf`), no
+  filtro e na ordem do resultado (pelo comando com o filtro junto; cancelado, o campo e o filtro em vigor ficam), no Salvar da grade (`confirmSave` de
+  `useRecordEdits`, que espera a resposta e segue só se o resultado ainda é o mesmo; também nos Registros, que montam o aviso deles) e ao ligar a
+  atualização automática (`confirmStart` de `useAutoRefresh`, só com ela desligada e livre para ligar: trocar o intervalo não pergunta). Os Registros
+  (com o filtro e a ordem deles), a Estrutura, os diagramas, "Carregar mais" e "Contar total" não perguntam: é o que o Prism monta para mostrar o que a
+  pessoa abriu.
+- **O aviso** (`confirm-command-dialog.tsx`, o `ConfirmarComando` do canvas): um `alertdialog`, com a faixa do ambiente (o próprio ou o herdado) na cor
+  dele e o texto em contraste (`environmentTextColor`), com a conexão e o banco da aba; sem ambiente, a faixa neutra. O título é "Executar comando
+  irreversível?" quando ele é (também em "Todos os comandos": dizer que é irreversível é mais do que dizer que vai executar), senão "Executar
+  comando?"; no script, "Executar script com comandos irreversíveis?" ou "Executar script?"; no Salvar, "Salvar as alterações?", com quantas vão e o "Ver
+  SQL", que abre os comandos (`EditSqlDialog`) por cima do aviso; ao ligar, "Ligar a atualização automática?". O comando vai em código, que rola, com o
+  filtro do resultado embaixo quando há; no script, a lista. Embaixo, por que o aviso aparece: a proteção da conexão, ou a herdada da pasta, com o nome
+  dela. Os botões são os do canvas: "Executar mesmo assim" ("Executar script", "Salvar mesmo assim", "Ligar mesmo assim") só com o contorno do erro, e
+  "Cancelar" cheio, com o foco. Esc, o X e o clique fora cancelam. O leitor de tela ouve, com o título, o que o comando faz e o comando (o
+  `aria-describedby` do canvas, pelo `describedBy` do `Dialog` e os ids de `describedIds`), e não só o título e o "Cancelar"; no script e no Salvar, o
+  resumo ("2 comandos de 12 são irreversíveis…"), sem a lista, que ele percorre no corpo. O script de um comando só em "Todos os comandos" diz "O comando do
+  script pede confirmação", e não "Todos os 1 comando".
+- **O somente leitura na tela** (RN-PROT-002). O cadeado do canvas (`ReadOnlyMark`) fica ao lado do nome da conexão na árvore (`NavigatorRow.readOnly`,
+  do mapa que o `Navigator` monta), no botão da conexão da aba e na lista dele (`ConnectionButtonView.readOnly`, `ConnectionListView.readOnlyOf`), e a
+  barra de status diz "Somente leitura". A dica é `readOnlyHintOf` ("Somente leitura" ou "Somente leitura, herdado da pasta Fábrica"), que é também o
+  nome acessível do cadeado e entra no do botão da conexão. A grade não se edita: a página já vem com `editable: { known: true, reason: "a conexão é
+  somente leitura" }`, e os itens ficam desabilitados com "Somente leitura: a conexão é somente leitura."; a conexão que passou a ser somente leitura
+  depois do resultado responde o `edit-target` com `CONNECTION_READ_ONLY`, tratado como o resultado só leitura, com o mesmo motivo
+  (`recordsCopy.edit.reasons.connectionReadOnly`), e o Salvar recusado assim mostra a frase na faixa. Esse motivo, o da página e o da recusa, só vale
+  enquanto a conexão é somente leitura: `useRecordEdits` lê a proteção da lista das conexões em cache (`cachedReadOnly`, assinando o cache por
+  `useSyncExternalStore`) e, desmarcada (RN-PROT-003), trata a página como a que não se sabe e pergunta o `edit-target` de novo (`readOnlyReasonNow`).
+- **A recusa do comando** (`CONNECTION_READ_ONLY`, 422): o executor a trata no lugar, como o controle de transação recusado antes de executar (`failed`):
+  nada foi ao banco, então com linhas na tela elas e o cursor ficam ("Carregar mais" continua), e a frase da API vai no aviso de erro; sem resultado, ela
+  vai à área de resultado, com o aviso curto. No script, ela é o erro do comando (`scriptCommandRefusals`), e o script pergunta o que fazer.
+- **O que não foi feito**: o cadeado na faixa de abas; e a conferência na tela (só os testes).
+
+## Verificação periódica e Só as conectadas (RN-VERIF-001 a 003, RN-NAV-013)
+
+Seção 32 da especificação, pedidos do dono e de um colega em 2026-10-15 ("validar a conexão fazendo o select 1 ou o usuário se informar qual select ele
+quer fazer", "podia ter um filtro de conexões abertas"). A API já tinha a rota (`POST api/user/connections/{id}/verification`, que responde `ok`, `failed`,
+`busy` ou `notConnected`, a falha do banco como resposta 200); o painel do formulário está em "Conexões".
+
+- **Onde mora cada parte.** `_lib/connection-checks.ts` (puro, com teste): `createConnectionChecks`, a verificação de uma janela, com as dependências de
+  fora (o pedido, a vez entre as janelas, o fim, o relógio e o bloqueio), e `checkView`, o que o indicador diz; os textos em `connection-checks.copy.ts`.
+  `_lib/use-connection-checks.tsx`: a instância da janela (`connectionChecks`, de módulo, como o `vaultLock`), as conexões a verificar (`checkTargets`,
+  puro), o `ConnectionChecks` que as entrega e avisa das passagens, e os ganchos dos indicadores (`useConnectionCheck`, `useConnectionChecksSnapshot`).
+  `_components/connection-check.tsx`: o ponto (`CheckDot`), o ponto com o texto (`CheckLabel`, `ConnectionCheckLabel`) e a janela da falha
+  (`CheckFailureDialog`). A rota é o `verifyConnection` de `connections.service.ts`, com o `connectionVerificationSchema`.
+- **Um relógio por conexão conectada, numa instância por janela, e não um por componente.** Quem alimenta é o `ConnectionChecks`, montado UMA vez em
+  `routes.tsx`, dentro do `WorkbenchProvider` (ele lê as abas; montado no provedor, o arquivo do provedor e o da verificação se importariam um ao outro).
+  Ele monta os alvos a cada desenho (`checkTargets`: as conexões com a verificação ligada e conectadas nesta janela, na conta de `isConnected`, a sessão da
+  árvore em cache, lida com `enabled: false`, ou uma aba com sessão; o intervalo; e as sessões numa chave) e os entrega por um efeito com a chave em texto.
+  Os indicadores só leem: o navegador lê a foto inteira uma vez (as linhas não cabem num gancho por linha), e o botão da conexão da aba, a barra de status e
+  o formulário leem a da conexão deles (o mesmo objeto enquanto nada muda: o botão fechado de cada aba não redesenha a cada verificação).
+- **Um pedido por vez, e o intervalo conta do fim.** A conexão que entra espera um intervalo antes da primeira verificação (a sessão acabou de abrir, e a
+  abertura já respondeu; até lá o indicador diz "Conectada, ainda não verificada"); a resposta agenda a seguinte, e com o pedido a caminho não há relógio.
+  A conexão que desconecta (ou some da lista, ou desliga a verificação) sai na hora: o pedido a caminho é abandonado pelo `AbortSignal`, e a resposta dele
+  não volta ao indicador. `notConnected` para a verificação da conexão até a chave das sessões mudar (uma sessão nova abriu, pela próxima ação na árvore ou
+  na aba); a chamada que falhou (a API fora do ar) deixa o indicador como estava e tenta no intervalo seguinte. A falha nunca reconecta nada.
+- **Entre as janelas, uma verificação por intervalo** (decisão desta entrega: a especificação diz "a tela", e cada janela tem a árvore e as abas dela). A
+  conexão conectada em duas janelas seria verificada duas vezes por intervalo. Nenhuma janela fala com outra: antes de chamar a API a janela pede a vez ao
+  processo principal (`claimVerification`, `prism:verification-claim`), que a dá (`window-hub.ts`, `claimVerification`) se nenhuma outra está verificando
+  a mesma conexão e se a última verificação dela, feita por outra janela, não acabou há menos que o intervalo menos um segundo (`verificationSlackMs`). O
+  fim (`finishVerification`, `prism:verification-finish`) solta a vez e manda a resposta às outras janelas com a área de trabalho montada
+  (`prism:verification-peer`, `verificationPeerSchema`, conferido nos dois lados), que a mostram e recomeçam o relógio dela (`peer`): quem verificou por
+  último é quem verifica de novo, e as outras só a ouvem. Sem a vez, a janela não chama a API e volta a contar. A resposta de outra janela com a verificação
+  daqui a caminho, ou para uma conexão sem sessão aqui, fica de fora, e o `busy` e o `notConnected` de lá (que dizem das sessões de lá) só recomeçam o
+  relógio. A janela que fecha no meio solta a vez (`remove`), e a que travou a solta em dois minutos (`verificationClaimTtlMs`). Fora do Electron a vez é
+  sempre da janela. Só ids, o intervalo e a resposta da API passam: nada de nome, endereço ou SQL; o processo principal não chama a API.
+- **Não é atividade nem comando em andamento** (RN-SEG-001). O pedido sai pelo `apiRequest`, e não pelo cache de mutações (a falha da chamada não vira
+  aviso central) nem por um executor de aba (o bloqueio só olha a tecla, o ponteiro e os executores), então a verificação não segura o bloqueio nem o
+  adia. Bloqueado, nada sai: os alvos ficam vazios (o `ConnectionChecks` lê o `vaultLock`), o relógio que disparar antes do desenho não pede a vez
+  (`paused`), e o pedido a caminho é abandonado (a barreira dos pedidos o soltaria só no desbloqueio). Sair do cofre desmonta o `ConnectionChecks`, que
+  esvazia a verificação.
+- **O indicador** (`checkView`, RN-VERIF-003): "Respondeu na última verificação", o ponto do canvas, com "Respondeu às 14:32:05, em 3 ms" na dica (a hora
+  do relógio da máquina, `clockOf`); "Não respondeu", no tom de erro, com a hora, o SQLSTATE e a mensagem do banco na dica; `busy` deixa como estava, com
+  "Ocupada: verificada na próxima" na dica; "Sem sessão aberta" (o anel no tom do acento); antes da primeira resposta, o anel verde. Com a verificação
+  desligada não há indicador: fica o ponto de conectada de sempre. Na árvore ele fica no lugar do ponto de conectada, e a dica dele vai também na dica da
+  linha: com o mouse em cima, as ações da linha cobrem o ponto. No botão da conexão da aba (o pedido desta entrega, além da barra de status que a
+  especificação cita) ele vai na ponta, depois do cadeado, e entra no nome acessível depois dele. Na barra de status ele troca o "Conectada", com o
+  texto; no formulário, à direita da linha da caixa.
+- **A falha num clique**, como o erro de um nó da árvore (RN-ARVORE-005): na árvore, um botão das ações da linha ("Ver por que MES Produção não
+  respondeu", o `AlertIcon`), só com a conexão sem responder; na barra de status, o próprio texto "Não respondeu". Os dois abrem a `CheckFailureDialog`
+  (a hora, o tempo, a mensagem como veio, o SQLSTATE, e que o Prism não reconecta sozinho), que acompanha as respostas seguintes e fecha de vez quando a
+  conexão volta a responder (ajuste durante a renderização: a falha seguinte não a reabre sozinha).
+- **Os avisos de passagem**: de responder (ou de ainda não verificada) a não responder, um aviso de atenção ("MES Produção não respondeu à verificação"),
+  uma vez, e não de novo enquanto ela continuar sem responder; de volta, um de sucesso ("MES Produção voltou a responder à verificação"). Cada janela que
+  verifica a conexão avisa na dela, também com a resposta que veio de outra (a pessoa pode estar olhando qualquer uma). O nome é o de agora.
+- **"Só as conectadas"** (`navigator-connected-filter.tsx`, `_lib/navigator-connected.ts`, RN-NAV-013): um botão de alternar (`aria-pressed`) depois do
+  seletor de ambiente, na mesma linha do campo de busca (desce com eles no navegador estreito), com a conta das conectadas ("3 conectadas", "1
+  conectada", "Nenhuma conectada"), ligado ou não. O nome acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas", o rótulo num `sr-only`), e a
+  dica diz o que o clique faz agora. Conectada é a definição única (`connectedConnectionIds`), então a que desconecta sai na hora e a que conecta por uma
+  aba ou por um script entra. A que a verificação achou sem sessão na API (`notConnected`) também sai, e a conta não diz "conectada" ao lado do indicador
+  que diz "Sem sessão aberta": a sessão da árvore em cache e o `sessionId` das abas continuam lá, mortos, e ninguém os apaga (a próxima ação na árvore ou na
+  aba abre uma nova, a chave das sessões muda e ela volta a contar). O ponto, o "Desconectar" e a barra de status seguem com o `isConnected`: com a
+  verificação ligada o indicador já diz o estado, e "Desconectar" encerra o que ainda houver. O filtro (`filterConnected`, puro) roda sobre o que o seletor de ambiente deixou, pelo mesmo `withFolderPath` (as pastas no
+  caminho até as conexões), e a busca filtra depois; os memos do `Navigator` dependem de uma chave em texto com as conectadas, só com o filtro ligado, e a
+  árvore não se refaz com ele desligado. Ligado e vazio, `NavigatorFilteredEmpty` diz "Nenhuma conexão conectada." (com o ambiente, quando há) com "Mostrar
+  todas", que o desliga. É estado do navegador, como o ambiente: vale enquanto a janela está aberta. A conexão que o formulário acabou de salvar, ou a
+  duplicada, desliga os dois filtros quando eles a escondem.
+- **O que não foi feito**: a verificação de cada banco aberto da conexão (RN-ARVORE-006; uma sessão qualquer da conexão responde por ela, como a
+  especificação deixa para depois) e a conferência na tela (só os testes; o arrasto entre janelas sob o Xvfb não foi refeito para a vez da verificação).
+
+## Exportar e importar conexões (RN-TRANSF-001 a 016)
+
+Seção 34 da especificação, pedido do dono em 2026-10-16 ("compartilhar alguns dos bancos ou todos os bancos e eu decidir se deve ir o usuário e senha
+junto"). **Quem monta e quem lê o arquivo é a API**: a tela nunca recebe uma senha de banco (RN-CONN-001). Na exportação ela recebe o texto do arquivo já
+cifrado e o entrega ao diálogo de salvar do sistema; na importação ela lê o arquivo escolhido como texto e o manda à API, que o abre e devolve a prévia. O
+Electron não ganhou canal novo.
+
+- **Onde mora cada parte** (`src/app/connections`). `_lib/transfer.schema.ts` (o contrato das três rotas, com zod: a prévia que traga `password` é recusada
+  por inteiro, e o item que não pode ser importado vem como veio, com os textos nulos e o banco que este Prism não conhece nulo), `_lib/transfer.service.ts`
+  (as rotas, as recusas que cada diálogo mostra no lugar, `exportRefusals` e `importRefusals`, e as mutações `exportMutation`, `previewMutation` e
+  `importMutation`), `_lib/transfer.copy.ts` (todos os textos), `_lib/passphrase.ts` (a senha de exportação), `_lib/check-tree.ts` (a árvore de marcar, a
+  mesma nos dois diálogos), `_lib/export-model.ts` e `_lib/import-model.ts` (o que cada diálogo decide), todos puros e testados; e os diálogos,
+  `export-connections-dialog.tsx` e `import-connections-dialog.tsx`, com `check-tree-view.tsx` (a caixa de três estados, a linha e a busca). O navegador os
+  abre (`TransferDialog` em `navigator.tsx`, um de cada por janela).
+- **As entradas** (RN-TRANSF-001, `navigator-menu.ts`): "Exportar conexão…" na conexão (só ela marcada), "Exportar conexões…" e "Importar conexões aqui…" na
+  pasta (ela e tudo o que está dentro marcados; ela como o lugar), e, no espaço vazio, "Exportar conexões…" (nada marcado; desabilitado, com "Não há pastas
+  nem conexões para exportar.", sem pasta e sem conexão no cofre) e "Importar conexões…" (na raiz). Valem em qualquer estado da conexão. A barra de ações não
+  ganhou botão (não cabe, RN-NAV-002), e a seção Scripts não tem as entradas. Os ícones são a seta de baixar (`DownloadIcon`) e a de subir (`UploadIcon`).
+- **Nada sobra quando o diálogo fecha.** As marcas, as escolhas, as senhas digitadas, o arquivo lido e a prévia são estado do diálogo, e mais nada: nem o
+  navegador, nem as preferências, nem `localStorage`. O bloqueio e o "Sair" os fecham (o navegador guarda a época do bloqueio com o diálogo aberto e o tira
+  quando ela muda; o "Sair" desmonta tudo). **As chamadas que levam senha ou arquivo não ficam no cache de mutações**: as três mutações têm `gcTime: 0` (a
+  mutação sem observador, do diálogo que fechou antes da resposta, sai do cache quando ela chega) e o diálogo chama `reset()` assim que a resposta chega,
+  também na recusa e na falha (assinada, ela ficaria lá com `variables` e `data`). O `transfer.service.test.ts` roda as mutações num cache de verdade e
+  confere o cache vazio depois de cada chamada; os testes dos diálogos conferem o `reset()`.
+- **A árvore de marcar** (`check-tree.ts`, RN-TRANSF-002 e 011). **O que se marca são as folhas**: as conexões e as pastas vazias; na prévia, também a pasta que
+  pode ser importada e só tem dentro o que não pode (ela vai sozinha, e a API a conta marcada na prévia), que tem a caixa dela e continua com a seta de abrir e
+  fechar (`node.end > node.index + 1`, e não `!leaf`). A caixa da pasta com algo que se marca dentro mostra o estado de tudo o que está dentro dela, à vista ou
+  não (`checkStates`, de baixo para cima, de uma vez), e o clique nela marca ou desmarca esse conteúdo; com a busca, "Marcar todas", "Desmarcar todas" e a caixa
+  da pasta agem só no que a busca mostra (`visible`). **As pastas fechadas são guardadas como no navegador** (`Collapsed`, `collapsedFor` e `toggleCollapsed`,
+  RN-BUSCA-001): as fechadas sem busca e as fechadas na busca de agora, à parte; com a busca, o que casa aparece com os ancestrais abertos (a pasta fechada
+  antes dela abre), outro texto começa com tudo aberto, e limpar a busca devolve as fechadas de antes. As pastas do caminho de cada folha marcada vão sozinhas
+  (`foldersInFile`): por isso a pasta de uma conexão marcada fica mista e não há como deixá-la de fora. O que outra janela excluiu sai com a marca
+  (`validMarks`), e o que ela criou aparece desmarcado. A lista não é virtual: o Tab anda por todas as caixas e escolhas, e as linhas têm
+  `content-visibility: auto` para o navegador pular o desenho das que estão fora da vista (com 4.000 linhas, RN-TRANSF-006). A caixa mista é o `indeterminate`
+  do próprio `<input>`, posto pela referência a cada desenho (`indeterminateRef`, testada sem DOM). **Acessível**: a caixa tem o nome do item e, por
+  `aria-describedby` (um texto `hidden`, que o leitor lê pela ligação e não de novo ao percorrer a lista), o caminho de pastas (`pathOf`, "Na pasta Estoque /
+  Production PRD": as "NOMINAL" se repetem em cada ambiente), também na escolha do que vai; na prévia, também a segunda linha e cada marca com a explicação dela
+  (`rowDescription`), que na tela só está na dica do mouse. A seta da pasta tem um nome que não muda ("Conteúdo de Estoque") e o `aria-expanded`. O motivo do
+  item que não pode ser importado aparece inteiro, numa linha que quebra (`note`), e não no fim da segunda linha, que corta. **O Enter nunca envia o formulário
+  sem querer**: o botão de enviar fica no rodapé (o atributo `form`), e o navegador transformaria o Enter numa busca, numa caixa, num rádio ou em "Mostrar
+  senha" em envio. Os dois diálogos barram o Enter num `<input>` (`enterInputID`, no `onKeyDown` do formulário): na exportação, menos nos dois campos da senha,
+  onde ele exporta; na importação, sempre (importar é só o botão), e na senha de exportação, antes da prévia, ele é o "Abrir arquivo". A busca engole o Enter
+  dela também.
+- **Exportar** (RN-TRANSF-002 a 008). A árvore é a das listas do navegador, inteira, sem os filtros dele; aberto pela conexão ou pela pasta, o diálogo rola
+  até ela. Cada conexão tem a escolha do que vai ("Sem usuário e senha", o padrão; "Só o usuário"; "Usuário e senha"), só com o que ela tem gravado
+  (`credentialsOffered`) e desabilitada quando desmarcada; os botões "Para as marcadas:" põem a escolha em todas (as que a busca mostra), cada uma com o mais
+  perto que ela tem (`closestCredentials`). A senha de exportação (`passphrase.ts`): NFC antes de contar e de usar, de 12 a 128 unidades UTF-16, sem espaço
+  nas pontas pela lista da RN-TRANSF-004 (e não o `trim()`), sem caractere de controle; as duas comparadas em NFC; a mesma lista de casos de teste vale na
+  API. A ordem ao clicar "Exportar…": os limites que a tela sabe (2.000 conexões, 2.000 pastas, 32 níveis da raiz, `exceedsLimits`), as recusas da senha,
+  e só então, com alguma senha de banco no arquivo, o "Confirme a sua senha" (o `UserPasswordDialog` genérico, com o texto e o botão da exportação, na
+  mesma contagem de cinco erros); sem senha de banco, o pedido sai direto, sem `userPassword`. A recusa que não é da senha do Prism fecha o "Confirme a sua
+  senha" e volta ao diálogo: a senha de exportação igual à do Prism no campo dela (a frase é da tela), os limites acima dos botões, e o item que outra janela
+  excluiu (as listas vêm de novo, o aviso de erro diz o que fazer e o diálogo fica). Feita a exportação, o texto vai ao `saveText` (o do "Exportar CSV")
+  como `conexoes-prism-AAAA-MM-DD.prismconexoes` (a data da máquina), tipo `application/octet-stream`, e o aviso de sucesso diz o que foi; a resposta que
+  chega com o cofre bloqueado, ou depois de um bloqueio (a época mudou), é descartada.
+- **Importar** (RN-TRANSF-009 a 014). Um `<input type="file" accept=".prismconexoes">` escondido, aberto pelo botão "Escolher arquivo…"; o de mais de 5 MiB é
+  recusado antes de ser lido, e o resto é lido por `File.text()`. A senha perde os espaços das pontas (a mesma lista) e passa a NFC. "Abrir arquivo" pede a
+  prévia; trocar o arquivo ou a senha a apaga (`generation`: a resposta de um pedido de antes é ignorada), e com ela o que era dela: a busca, as pastas fechadas (as
+  chaves `f1`, `c1`… se repetem de um arquivo para outro), a escolha dos conflitos e a caixa "Manter as consultas de verificação do arquivo", que volta
+  desmarcada (o arquivo de outra pessoa não herda o "manter" do de antes); o lugar fica; trocar "Onde colocar" com ela à vista a refaz e
+  mantém as marcas, um pedido por vez (a troca durante o pedido espera e refaz uma vez, com o último lugar). As recusas da leitura vão ao campo a que se
+  referem, com a frase da tela (`readRefusal`), sem aviso: a senha recusada fica no campo, selecionada; a do arquivo leva o foco ao "Escolher arquivo…"; a
+  pasta escolhida que sumiu deixa "Onde colocar" sem escolha. As frases do arquivo e do lugar têm `role="alert"`, e a frase de cima da prévia (a que diz
+  como chegar a ela, "Abrindo…" e o resumo) é uma região `aria-live` que está sempre na tela, para o resumo ser anunciado quando chega. A prévia mostra o resumo, o aviso de conferir os servidores, a árvore do arquivo (o que não pode ser importado sem caixa que se marque, com o
+  motivo) e as marcas de cada linha (`folderTags`, `connectionTags`: "já existe", "entra como …"/"não será importada", o que a importação grava para não
+  ficar mais fraco, com a pasta do arquivo que dava a proteção na dica, e "consulta própria", com a consulta inteira); a escolha dos conflitos e a caixa
+  "Manter as consultas de verificação do arquivo" só aparecem quando há o que escolher. Importado, as listas vêm de novo (na `onSuccess` da própria
+  mutação), o aviso diz o que aconteceu (`importToast`), e o navegador abre as pastas até o que entrou e dá o foco à primeira linha importada
+  (`importRevealOf`, em `navigator-reveal.ts`, depois de as listas trazerem tudo, `importArrived`); com um filtro que a esconda, à pasta de destino ou à
+  primeira linha à vista, e os filtros ficam.
+- **A conexão sem usuário e senha** (RN-TRANSF-015 e 016, `workbench/_lib/credentials-missing.ts`). A dica da linha na árvore ganha " · sem usuário e senha"
+  ou " · sem senha" (`credentialsHint`); a linha não ganha marca. Abrir uma sessão com ela é recusado pela API com 422 `CONNECTION_CREDENTIALS_MISSING` no
+  campo que falta (`credentialsMissingField`), que não vira aviso (é erro de campo). Quem abre sessão pede o "Editar conexão" pelo `credentialsRequests` (um
+  pedido só, o último): o executor da aba pede direto (a aba fica com o resultado de antes e o comando sem sair), e as sessões da árvore (o nó, a Estrutura,
+  o Diagrama, a lista dos bancos da barra do editor, outro banco do servidor) são observadas no cache (`watchCredentialsMissing`, ligado pela página da área
+  de trabalho). O nó da conexão recusada fica fechado e desconectado, sem a linha de erro (`lacksCredentials`, em `navigator.tsx`). A página atende o
+  pedido uma vez, com a área de trabalho na tela, e não abre por cima de um diálogo de conexão já aberto. O formulário, aberto assim ou pelo menu, diz no
+  topo o que falta e põe o foco no campo (`missingCredentials`); salvar a edição de uma conexão sem senha gravada exige a senha
+  (`editWithoutPasswordSchema`), e "Testar conexão" com a senha em branco leva a recusa da API ao campo da senha.
+- **O contrato** (conferido, campo a campo, com o `UserConnectionTransfersController` e os DTOs da API desta versão): `POST api/user/connections/export` com
+  `{ folderIDs, connections: [{ id, credentials }], passphrase, userPassword? }` → `{ content, folders, connections, withUser, withPassword }`; `POST
+  api/user/connections/import/preview` com `{ content, passphrase, targetFolderID }` → `{ folders, connections }` (os campos da tabela da seção 34); `POST
+  api/user/connections/import` com `{ content, passphrase, targetFolderID, items, onConflict, keepVerificationQueries }` → `{ folderIDs, connectionIDs,
+  mergedFolders, renamed, skipped }`. As recusas de campo vêm com o nome da propriedade em PascalCase (`Passphrase`, `UserPassword`, `Content`, `Items`,
+  `UserName`, `Password`), como em toda a API, e o `apiRequest` as entrega com a primeira letra minúscula (`toFieldErrors`). Os diálogos decidem pelo código;
+  o campo diz qual falta na `CONNECTION_CREDENTIALS_MISSING`, e dá o texto da API só onde a tela não tem frase própria. `IMPORT_FILE_NEWER` é 409, e as
+  demais recusas da leitura, 422. Os testes simulam a API.
+- **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
+  salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
+
+## Copiar como e Copiar avançado (RN-GRADE-003, 016 e 017)
+
+Seção 37 da especificação. Os escritores, as escolhas lembradas e os dois diálogos são puros ou só de propriedades e estado; a ligação com a seleção da
+grade (o submenu "Copiar avançado" do menu, o Ctrl+Shift+C, a pausa da atualização automática, a busca dos completos, a área de transferência e os
+avisos) é `use-copy-as.ts` (ver "A ligação", no fim desta seção), nos Registros, no resultado da aba de consulta e em cada aba guardada do script.
+
+- **Os nove documentos de texto** (`_lib/grid-export/`: `document.ts` com os tipos, `documents.ts` com o escritor de cada formato e as duas montagens, e
+  um arquivo por formato: `to-csv.ts`, `to-txt.ts`, `to-html.ts`, `to-markdown.ts`, `to-json.ts`, `to-source-code.ts`, `to-sql.ts` e `to-xml.ts`, com o
+  XML e o DbUnit). **Cada um é o escritor da API portado linha a linha** (`Prism.Infrastructure/Transfers/Writers`): `begin`, `write` a cada linha e
+  `end`, cada um devolvendo o pedaço que escreveu, com as mesmas contagens (`DocumentCounts`: os valores cortados do TXT, os caracteres tirados, as linhas
+  comentadas do SQL, e `notWhole`, só da tela, os valores que ficaram cortados). As opções são as da exportação (`FormatOptions`, de
+  `data-export/export-options.ts`), os números ainda como o texto do campo. O texto sai com o par substituto solto como U+FFFD (`wellFormed`, a troca do
+  UTF-8 da API) e o tamanho conta em UTF-8 (`utf8Length`). `writeDocument` monta de uma vez; `buildDocument` monta em partes, cede a vez à tela a cada
+  5.000 células (`pause`), para no limite (`clipboardLimitBytes`, 10 MiB: passar recusa, chegar não) e desiste pelo sinal. O que a linha da grade tem e o
+  arquivo da API não: `number` (o da grade, que o comentário do SQL escreve; `null` na linha nova ainda não salva), `cut` e `generated` (a célula "gerado
+  pelo banco"), que viram o nulo nos formatos de dados e o comentário de frase fixa no SQL (`document.copy.ts`, RN-GRADE-016); no JSON e no Código fonte o
+  valor cortado nunca é número. O binário chega como a grade o escreve (`0x…`): o hexadecimal nos formatos de dados, o nulo com "Deixar vazio", e no SQL o
+  literal (`binaryLiteral`: o `decode('…', 'hex')` do PostgreSQL; no Db2, pelo tipo da coluna, o `BX'…'` do `BINARY` e do `VARBINARY`, o `BLOB(X'…')`
+  do `BLOB` e o `X'…'` do texto `FOR BIT DATA`, em pedaços de 16.336 bytes; e no Informix a linha comentada), como a RN-EXPORT-011 e a API dizem. **Mudar
+  uma regra de formato é mudar os dois lados e a fixture.**
+- **O nome do XML** (`xml-name.ts`) é o `XmlConvert.EncodeLocalName` do .NET, unidade UTF-16 por unidade, com o `_x` já escrito ganhando o `_x005F_`. O
+  que cabe num nome é o do XML 1.0 da **4ª** edição (o Apêndice B, do Unicode 2.0), e não o da 5ª: um caractere mais novo vira escape também no meio do
+  nome. As duas tabelas de faixas vieram do próprio .NET 10 (caractere por caractere do plano básico, uma vez, por um programa descartável) e o
+  `xml-name.test.ts` confere a forma delas; a regra, a `xml-name.json`, dos dois lados. As maiúsculas do DbUnit são as do `ToUpperInvariant`
+  (`upperInvariant`): a maiúscula simples de cada ponto de código (o `ß` e o `ﬁ` ficam), o `ı` fica (como o .NET faz com o ICU), e as formas gregas com
+  iota subscrito vão à simples (`ᾳ` → `ᾼ`); comparado em todos os pontos de código contra o .NET 10, só diferem os caracteres que o Unicode de um dos
+  dois ainda não tem (cinco do plano básico, `U+019B`, `U+0264`, `U+1C8A`, `U+A7CD` e `U+A7DB`).
+- **A prova de que os dois lados escrevem o mesmo**: as fixtures (`export-fixtures.test.ts` aqui, `ExportFixturesTests` na API), com a `document.json`
+  dos dois lados (as opções como a rota as recebe: a API as lê pelo `ExportOptionsReader`, e o binário deixado vazio chega nulo, como na leitura dela) e a
+  `copy-as.json` só daqui. Além delas, uma conferência descartável (não está no repositório) escreveu 20 mil documentos sorteados (os nove formatos, os três
+  bancos, opções sorteadas, nomes e valores hostis, lotes do TXT de mais de 200 linhas) pelos dois lados e comparou o texto e as contagens: nenhuma
+  diferença. **Para repetir depois de mudar um escritor**: um teste temporário escreve os casos e o texto da tela num JSON (as cadeias como unidades UTF-16,
+  porque o `System.Text.Json` recusa o par solto), e um programa do .NET que referencia o `Prism.Infrastructure.dll` chama `ExportFormats.Create` (é
+  `internal`: por reflexão) e compara.
+- **A origem da cópia e a cópia** (`_lib/copy-as/copy-as.ts`, puro). `CopySource` é o contrato com a seleção: o banco, o nome da origem (o da tabela nos
+  Registros, `resultSourceName` no resultado), a tabela de destino quando se sabe (a dos Registros, ou a do alvo da edição de uma tabela só, RN-GRADE-020;
+  `null` quando não) e as colunas (`CopyColumn`: o nome, o tipo do banco, o da grade e o `generated` do alvo) e as linhas (`CopyRow`: os valores como a
+  grade os mostra, com a pendência, o lido na linha excluída e o preenchido na nova; `number`, `cut` e `generated`). `pickColumns` restringe às colunas da
+  seleção. `runCopyAs(pedido, peças)` recusa no SQL, antes de tudo, a coluna repetida (`duplicateColumn`: duas das colunas que vão no `INSERT` com o mesmo
+  nome, pelo `duplicateOf` da exportação, que diz o nome que aparece primeiro, como o `GroupBy` da API, e lê só os nomes, sem montar as linhas; com a frase do "Copiar como", "O resultado tem duas colunas chamadas id: deixe uma de fora da seleção.",
+  `duplicateColumnRefusal`; a tabela de destino não a resolve, e os outros formatos copiam o nome repetido), confere a tabela do SQL e do DbUnit (`needsTable`: sem ela, `needsTable`, e a tela abre o "Copiar avançado…" no
+  formato, com `focusTable`), tira do SQL as colunas `generated: always` sem "Incluir as colunas que o banco calcula" (sem nenhuma que sobre, `noColumns`,
+  com uma frase que a especificação não escreve), e, com célula cortada que o documento escreve com o valor (`cutCellsToFetch`, RN-SQL-017: nas colunas
+  que vão, menos o binário com "Deixar vazio", ou "NULL" no SQL, que sai nulo, e o binário no SQL do Informix, que não tem literal e comenta a linha com
+  qualquer valor; o `sqlWriter` não comenta como "não pôde vir inteiro" a cortada desses dois), monta antes com o que a grade tem e recusa sem buscar o que
+  já passa do limite; depois busca os completos só dessas (`complete(origem, células, keepGoing, sinal)`, a peça da tela, que devolve a mesma origem com os
+  valores inteiros e as marcas das que não vieram e das não pedidas, e `stopped`; ou `null` cancelada). O `keepGoing` é exato (`fetchMeter`): a cada lote, as
+  linhas do começo que já têm todos os valores são escritas pelo escritor do formato, só para medir, e passado o limite a busca para (`tooLarge`); a largura
+  do TXT, o que o HTML e o XML tiram e a linha que o SQL comenta já estão na conta, e nenhuma cópia que caberia é recusada. Monta e põe na área de
+  transferência (`write`; a recusa, a promessa rejeitada e a exceção na hora, sem `navigator.clipboard`, são `failed`, "Não foi possível copiar."). As fases (`onPhase`: `writing`, `fetching`)
+  são para a faixa e o diálogo. O aviso é `copyAsNotice` ("3 linhas copiadas em JSON.", e o resumo depois do ponto, no tom de atenção). A prévia,
+  `previewOf`: o começo do texto (até 100 linhas e 64 KB, sem partir um par), escrito só com as linhas que ele precisa (no TXT, o primeiro lote inteiro,
+  para as larguras serem as de verdade), com as cortadas como a grade as tem; no SQL com a coluna repetida, vazia, com a recusa (`refusal`), que o diálogo
+  mostra no lugar do texto.
+- **As escolhas lembradas** (`copy-as-choices.ts`): `prism:copy-as:<usuário>` no `localStorage`, separada da `prism:data-export:` da exportação
+  (RN-GRADE-017), com o último formato do "Copiar avançado…" e as opções de cada formato, lidas pela mesma leitura tolerante da exportação
+  (`parseFormatOptions`, `rememberedFormatOptions` e `storedObject`, de `export-choices.ts`); a tabela de destino é da origem e não se grava
+  (`readCopyAsChoices(usuário, targetOf(origem))`). O "Copiar como" direto lê as escolhas na hora do clique.
+- **Os diálogos** (`_components/copy-as/`, só de propriedades e estado; o teste os roda com os ganchos simulados). `CopyAdvancedDialog` recebe as três
+  origens de "O que copiar" (`sources`: `cells`, `rows`, `loaded`), as escolhas, o formato e o foco iniciais, e `onCopy` (o `runCopyAs` da tela, que avisa
+  quando copiou), `onRemember` (no clique em "Copiar") e `onClose`; o "Cancelar a busca" aborta o sinal que ele passa ao `onCopy`. `ConfigureCopyAsDialog`
+  recebe as escolhas e entrega todas as opções no `onSave` (quem o abre grava, avisa "Opções do 'Copiar como' salvas." e fecha). Os dois usam a lista
+  `CopyFormatList` (a marca do formato com campo recusado também para o leitor de tela; a coluna repetida do SQL vai em `columns`, pelo `copyProblems`, e
+  desabilita "Copiar" como um campo recusado) e a `FormattingStep` da exportação, que ganhou `target` (sem a
+  tabela de destino, no configurar) e `focusTable`. O `focusTable` do "Copiar avançado…" é só do abrir: a primeira troca de formato o desliga (no evento,
+  `tableFocus`), e o campo da tabela que aparece depois, com as setas na lista passando pelo SQL ou pelo DbUnit, não tira o foco dela. O `onCopy` que lança
+  não deixa o diálogo em "Copiando…" (`try`/`finally`): a fase volta, e "Não foi possível copiar." aparece no alto. **Decisões onde a regra deixava espaço**: no configurar, "Incluir as colunas que o banco calcula"
+  aparece sempre, e as linhas por comando ficam editáveis também numa aba do Informix (as opções valem para qualquer banco; o Informix escreve sempre uma);
+  o diálogo grava as escolhas no clique em "Copiar",
+  antes de saber se copiou.
+- **A ligação** (`_lib/copy-as/use-copy-as.ts`, o gancho, e `copy-source.ts`, puro, os dois com teste). `useCopyAs({ records, userName })` devolve a fonte do
+  submenu (`CopyAsSource`, que `useRecordEdits` recebe) e as propriedades dos dois diálogos abertos (`advanced`, `configure`), que `resultEditDialogs` monta.
+  - **A origem** (`copySourceOf`, do recorte da seleção, `GridSelectionContext.slice`): as colunas da grade com o `generated` do alvo, as linhas na ordem da
+    grade com os valores que ela mostra, o número da grade (nulo na linha nova ainda não salva), as cortadas e as "gerado pelo banco". O que a origem diz
+    além das linhas é `copyOriginOf`: o nome da tabela nos Registros, sem o esquema, e `resultado` no resultado (RN-EXPORT-006); a tabela de destino, a dos
+    Registros ou a do alvo de uma tabela só (`singleTableOf`: o `tables` com um item que não é `elsewhere`, qualquer que seja o `kind`, e não o
+    `rowOperations`, RN-GRADE-020); e as colunas que o banco calcula, as que esse alvo diz da tabela.
+  - **O alvo**: o "Copiar como SQL", o "Copiar como DbUnit" do resultado e o "Copiar avançado…" usam o que a tela já sabe (`knownSqlTarget`), e, sem ele e
+    com a aba livre, perguntam o alvo do "Gerar SQL" (`sqlTarget`, o mesmo, uma vez) com "Conferindo a tabela deste resultado…" na faixa; com a aba ocupada,
+    não perguntam, e a tabela fica como não conhecida. Sem tabela, o SQL e o DbUnit abrem o "Copiar avançado…" no formato, com o foco no campo da tabela, e a
+    pausa da atualização automática passa a ser do diálogo. Os outros formatos não perguntam nada.
+  - **A cópia**: o recorte é tirado no clique, antes de qualquer espera (a cópia leva as linhas de quando começou); `runCopyAs` busca os completos pelo
+    `complete` do contexto (com o sinal do "Cancelar a busca" do diálogo) e escreve pelo `navigator.clipboard.writeText`. No "Copiar como" direto, a faixa diz
+    "Copiando…" passado meio segundo (`copying`, com o "Cancelar" dela), e a pausa vai do clique ao texto; os avisos: o copiado (`copyAsNotice`, no tom que
+    ele diz), a recusa do limite e as das colunas (nenhuma no `INSERT`, ou duas com o mesmo nome; erro) e a falha da área de transferência (atenção). No diálogo, só o copiado vira aviso: a recusa fica no
+    alto dele. As opções são lidas na hora do clique (`readCopyAsChoices`), do usuário do cofre (`cachedUserName`).
+  - **Uma frase só**: a recusa do limite de 10 MiB é a do "Copiar" (`gridSelectionCopy.copy.tooLarge`), a falha da área de transferência é a de hoje
+    (`recordsCopy.edit.menu.notCopied`), os rótulos do submenu são os do menu da grade (`gridSelectionCopy.menu`), e o limite, o tamanho em UTF-8 e o par
+    substituto solto do "Copiar" (`grid-copy.ts`) são os desta biblioteca (`grid-export/document.ts`).
+
+## Exportar dados (seção 35, RN-EXPORT-001 a 024)
+
+A seção 35 da especificação manda; o que segue diz onde ficam as peças e o que não é óbvio. A API exporta num trabalho em segundo plano
+(`api/user/transfers`, seção 6), numa conexão à parte, e escreve o arquivo na pasta `transfers` da pasta de dados; a tela acompanha o trabalho e o
+processo principal leva o arquivo pronto ao destino que a pessoa escolheu (ver "O destino das exportações de dados", em "Processo principal").
+
+- **As entradas** (RN-EXPORT-001). O "Exportar dados…" do menu da tabela e da visão no navegador (`navigator-menu.ts`, grupo próprio depois de
+  "Gerar SELECT"; a origem é a tabela inteira, e as colunas vêm do catálogo ao abrir a Extração), o "Exportar…" do rodapé dos Registros (logo depois de
+  "Exportar CSV") e da barra da área de resultado (depois do zoom, antes de recolher e maximizar, também com a área recolhida), e o "Exportar dados…" do
+  menu da célula (`cell-menu.ts`, `exportData`, grupo próprio depois do da vista). Estão sempre lá; o motivo de não valer vem de `exportBlocker`
+  (`_lib/data-export/export-entry.ts`, com teste), na ordem: as Estatísticas do script à frente, a aba ocupada (o comando da pessoa, o "Salvar", o
+  script rodando ou parado na pergunta de erro; a execução da atualização automática não conta), sem resultado, e o comando que não é só de leitura.
+  **O "só leitura" é o `read` da página do resultado** (`query.schema.ts`, nulo quando a API não o deu): `read !== true` desabilita, e o resultado que
+  gravou e devolveu linhas (`totalRows` preenchido, RN-SQL-013) também. O `read` viaja com as linhas (o executor, o script, a aba que vai para outra
+  janela). Desabilitado é `aria-disabled`, com o motivo no `title` e num `sr-only` ligado por `aria-describedby` (`ExportButton`, em `result-panel.tsx`).
+  A conexão desconectada e a tela fora do Electron não desabilitam nada.
+- **A origem** (`export-source.ts`): `table` (a do navegador), `records` (o comando que a grade dos Registros mostra, `rows.target.sql`, com o filtro
+  aplicado só para o subtítulo) ou `result` (o comando daquele resultado, com o filtro dele, o nome da aba e o número do comando no script). No resultado,
+  a tabela de destino do SQL e do DbUnit vem de `singleTable` de `useRecordEdits`, quando o alvo da edição já disse que o resultado é de uma tabela só
+  (`rowOperations`), e em branco quando não (o campo é obrigatório). As alterações não salvas da grade vão com a origem, para o aviso da Confirmação.
+- **O assistente** (`_components/data-export/export-wizard.tsx` e `export-wizard-steps.tsx`; as decisões em `_lib/data-export/export-wizard.ts`,
+  `export-options.ts`, `export-file-name.ts` e `export-request.ts`, puras e com teste). Um por janela (`openExportWizard`, em `data-exports.ts`,
+  montado por `ExportWizardHost` em `page.tsx`). As cinco etapas, as voltas só para trás, e os números dos campos como texto até o pedido. Com o
+  destino **"Banco de dados"**, as etapas são seis (ver "Importar dados e copiar para outro banco"). As escolhas lembradas
+  (`export-choices.ts`) ficam no `localStorage`, por usuário (`prism:data-export:<usuário>`), lidas campo a campo com o padrão no lugar do que não
+  confere (o que não é um objeto, também uma lista, vale o padrão inteiro); a tabela de destino e as colunas não se lembram. **O motivo que segura uma
+  etapa fica no campo**, porque o "Avançar" desabilitado não recebe o foco e a dica dele não chega ao leitor de tela: "Marque ao menos uma coluna." na
+  lista das colunas, descrevendo cada caixa (`extractionProblem`); e, nos Registros, o SQL sem "Incluir as colunas que o banco calcula" espera o catálogo
+  dizer quais são (`generatedUnknown` do contexto, `generatedProblem`: "Lendo as colunas…", ou a mensagem do banco com "Tentar de novo", no campo da
+  opção), para a coluna calculada não ir no `INSERT` sem o aviso. A linha "Conexão" da Confirmação é a do cabeçalho (`ExportConnection`). **A ordem do "Exportar"**: fora do Electron, a recusa "Exportar só funciona no app do
+  Prism." sem pedir nada; o diálogo de salvar (desistir deixa o assistente como estava); o tamanho do pedido (8 MiB, `requestBytes`); o `POST`, com as
+  recusas de `startRefusals` no lugar (`refusalsOf`: a de campo vai ao campo pelo caminho da API, em minúsculas, e o assistente pula para a etapa dele;
+  `CONNECTION_CREDENTIALS_MISSING` vira a frase de cada campo no alto da Confirmação). **A recusa de um campo que o assistente não desenha** (`source.sql`,
+  o comando de mais de 1 MB que o `queries` aceitou; `format`; `windowID`; uma opção de escolha; a opção de outro formato) vai ao alto da Confirmação
+  (`placeRefusals`, pelos campos de `fieldsShown`): sem isso ela ia para um campo que não existe, e o "Exportar" voltava sem dizer nada. Qualquer recusa
+  ou falha depois do diálogo solta o destino escolhido (`releaseExportDestination`). Aceito o 202, as escolhas são gravadas, a exportação entra no
+  acompanhamento e o assistente fecha.
+- **O acompanhamento** (`transfer-tracker.ts`, um objeto fora do React com as peças injetadas, e `exportTracker`, o desta janela, em
+  `data-exports.ts`). Uma consulta por segundo para todas as exportações da janela (um laço só, que para quando não há o que consultar); pronta, a
+  entrega (`deliverExport`) ou a cópia para a área de transferência (`copyExport`), e o aviso de sucesso com "Mostrar na pasta" (ou com a pasta aberta,
+  quando a pessoa pediu "Mostrar na pasta ao terminar"); falhou, o aviso de erro com a mensagem do banco e o SQLSTATE; cancelada pela exclusão da
+  conexão, o de atenção. A entrega que falhou fica na barra com o motivo, "Salvar como…" (solta o destino, abre o diálogo de novo e entrega o mesmo
+  arquivo pronto) e "Descartar". `TRANSFER_NOT_FOUND` tira a exportação da barra com o aviso de erro ("se perdeu antes de ser gravada"); três consultas
+  seguidas que falham a deixam na barra com "Não foi possível saber como está a exportação." e "Cancelar" (que tenta o `DELETE` de novo); ela deixa
+  de ser consultada e não segura o bloqueio. A exportação é da
+  janela, e não da aba: fechar a aba ou levá-la para outra janela não a muda. **O desmonte da área de trabalho** (`connectExports`, chamado pelo
+  `WorkbenchProvider`) cala os avisos, fecha o assistente e esquece tudo (`reset`, que solta os destinos); ao montar, os trabalhos da lista da API
+  com o número desta janela que ninguém acompanha (da página que recarregou) são cancelados.
+- **A barra de status** (`transfer-status.tsx`, RN-EXPORT-021): a exportação mais antiga, com o nome isolado em `<bdi>`, a porcentagem (com o total)
+  e "Cancelar" com o nome no `aria-label`; com mais de uma, "+N exportações" abre a lista (Esc fecha e devolve o foco ao botão, também com o foco ainda
+  nele: `closeListOnEscape` está no grupo da barra, e não na lista, que não toma o foco ao abrir). A barra de progresso tem `aria-valuetext` com as
+  linhas e o tamanho; sem o total, não tem medida.
+- **As saídas** (RN-EXPORT-023 e RN-IMPORT-021; `createTransferExits`, em `export-exits.ts`, e a instância `transferExits` com `useTransfersAhead`, em
+  `data-import/data-imports.ts`, que vê os dois acompanhamentos; os textos em `data-import/transfer-exits.ts`). A conta é da lista da API, de todas as
+  janelas e de todos os tipos (`transfersInProgress`: as exportações que rodam e as prontas não entregues, e as importações e as cópias que rodam; pela
+  conexão, as em que ela é a da origem ou a do destino), e só com a área de trabalho montada e o cofre aberto: fora disso, nenhuma, sem pedir (o pedido com
+  o cofre bloqueado esperaria o desbloqueio). "Sair" (`top-bar.tsx`) pergunta antes, com "Continuar exportando" (ou importando, copiando, transferindo) no
+  foco e no Esc; o reinício do serviço (o diálogo e a faixa, `useDriverActions`) e a instalação que encerra o Prism (só o instalador do Windows,
+  `update-dialog.tsx`) põem a frase no aviso que já existe (`canceledAheadNote`, com a conta de `useTransfersAhead`, relida a cada 3 s enquanto o aviso está
+  na tela). Com só exportações, os textos são os de antes (`exitQuestion` cai nos de `dataExportCopy.exits`). Confirmada a saída, `cancelForExit` lê a
+  lista de novo, cancela as das outras janelas pelo `DELETE` e as desta pelos acompanhamentos (o das exportações solta os destinos), e só então a saída
+  segue. **Fechar a janela** (`workbench-tabs.tsx`, `windowCloseStep` e `windowTransfers`) pergunta pelas transferências começadas nela antes das perguntas
+  das abas, com o texto de fechar o Prism quando ela é a última; nada é cancelado antes da última resposta (o cancelamento fica em `finishWindow`). O
+  diálogo de excluir a conexão diz quantas serão canceladas (`connectionDeleteNote`; quem cancela é a API). O "Bloquear" do menu do usuário ainda não existe.
+- **O que não tem teste**: o assistente montado com as consultas de verdade (as etapas e as decisões têm), o diálogo de salvar do sistema, a entrega
+  numa unidade de rede, e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato da seção 6 e da seção 35, com a
+  API simulada nos testes.
+
+## Importar dados e copiar para outro banco (seção 36, RN-IMPORT-001 a 028)
+
+A seção 36 da especificação manda; o que segue diz onde ficam as peças e o que não é óbvio. A importação lê um arquivo CSV, TSV, JSON ou XLSX e grava as
+linhas numa tabela que já existe; a cópia ("Banco de dados", no "Exportar dados") lê as linhas de uma origem da exportação e grava numa tabela que já existe,
+nesta ou em outra conexão. As duas são trabalhos da API no registro das transferências (`api/user/transfers`, `kind` `import` e `copy`), numa conexão à
+parte, com o mesmo carregador; quem lê e interpreta o arquivo é a API, e quem o escolhe e o copia para a pasta `transfers` é o processo principal (ver "O
+arquivo das importações de dados", em "Processo principal"). Tudo em `_lib/data-import/` (sem React, com teste) e `_components/data-import/`.
+
+- **As entradas** (RN-IMPORT-001). O "Importar dados…" do menu da tabela no navegador (`navigator-menu.ts`, no grupo de "Exportar dados…", logo depois
+  dele; a visão não tem o item) e o "Importar…" do rodapé dos Registros de uma tabela (`ImportButton`, em `result-panel.tsx`, logo depois de "Exportar…").
+  Os dois abrem o assistente com a tabela de destino já escolhida (`openImportWizard`). O motivo de não valer vem de `importBlockerOf` (`import-entry.ts`): a
+  conexão somente leitura (`readOnlyHintOf`, também pela pasta) e, nos Registros, a visão que as listas do navegador já mostraram (`objectKindOf`, só o
+  cache, como a Estrutura). No menu, o motivo vai na linha embaixo do rótulo (`hint` do `MenuItem`); no botão, no `title` e num `sr-only`
+  (`aria-disabled`, sem sair do Tab). A conexão desconectada, as alterações não salvas e a aba ocupada não desabilitam.
+- **O assistente "Importar dados"** (RN-IMPORT-002 a 013; `_components/data-import/import-wizard.tsx` e `import-wizard-steps.tsx`). O estado e os pedidos
+  são do `createImportFlow` (`import-flow.ts`, fora do React, criado a cada abertura por `data-imports.ts`): o arquivo e a cópia dele (a consulta a cada
+  250 ms), a leitura (`imports/read`), a prévia convertida (`imports/preview`) e o "Importar" (`imports`). A leitura e a prévia vão **um pedido de cada vez**
+  (`serial`): a mudança durante um espera e refaz uma vez, com as últimas escolhas, e a resposta de um arquivo (ou de uma leitura) de antes não muda nada
+  (as gerações `fileGeneration` e `readGeneration`). Os corpos são montados só em `import-request.ts`: a leitura manda as escolhas (`auto` inclusive, e a
+  codificação já achada neste arquivo, que é a única que percorre o arquivo inteiro); a prévia e o começo mandam o que a leitura achou (a codificação, o
+  separador, as chaves do JSON, a planilha). O mapeamento é uma escolha por coluna do arquivo (`import-mapping.ts`: o automático pelo nome ou pela
+  posição, a escolha à mão que tira a coluna de quem a tinha, o que fica com o padrão, os avisos, o comando do aviso de confirmação), e a carga é de
+  `import-load.ts` (os avisos das chaves que apontam para a tabela, o N do commit, a linha "Carga" da Confirmação). As escolhas lembradas
+  (`import-choices.ts`, `prism:data-import:<usuário>`) são lidas campo a campo; o arquivo, o formato, a planilha, o mapeamento e "Esvaziar" não se
+  lembram. "Tirar o apóstrofo da proteção contra fórmula" vem ligado, como a RN-IMPORT-004 diz ("a confirmar com o dono"). Fechar o assistente sem
+  importar (Cancelar, Esc, o X, o bloqueio, o "Sair", o desmonte da área de trabalho) solta o arquivo; aceito o 202, o arquivo é do trabalho e não é solto.
+  Com o diálogo do sistema aberto, o arquivo de antes continua do assistente: o estado é `{ status: "choosing", before }` (`heldSource`), o fechamento
+  nesse meio solta o `before`, desistir do diálogo o devolve, e o campo continua desenhando o de antes, com o mesmo botão em `aria-disabled` (o foco não
+  cai); quando o diálogo fecha e o botão sai da página (a cópia começou), o foco vai ao botão do campo. O que segura o "Avançar" no Arquivo fica à vista
+  no campo ("Escolha o arquivo a importar.", "Espere a cópia do arquivo terminar."). A prévia convertida que falha sem recusa (o 500, a rede) vira a
+  recusa da etapa com "Tentar de novo" ("Não foi possível ler as colunas de …", ou "… atualizar a prévia." com a lista na tela), e "Avançar" de novo a
+  pede. No Mapeamento, o que a etapa espera ("Lendo as colunas…", "Atualizando a prévia…", `mappingProgress`) vai à linha de estado; embaixo da lista
+  fica só a recusa do mapeamento. A lista tem os títulos das colunas, monta as opções da escolha uma vez por tabela (na cópia, uma por coluna da
+  origem), desenha cada linha num `MappingRow` com `memo` (a escolha numa linha não redesenha as outras) e com `content-visibility: auto` por linha; os
+  botões e as escolhas ocupados ficam em `aria-disabled` (o `Select` aceita `aria-disabled`: a lista não abre, e o foco fica).
+  "Importar" pergunta antes pelas proteções da conexão de destino (`loadQuestion`, em `command-confirmation.ts`: em "Só comandos irreversíveis", só com o
+  esvaziamento), com o `DELETE` e o `INSERT` como a API os escreve.
+- **O destino "Banco de dados"** (RN-IMPORT-022 a 025), no próprio "Exportar dados": `choices.database` troca as etapas (`stepsOf`, `copySteps`, em
+  `export-wizard.ts`) e guarda o formato de arquivo de antes, para a volta; a Extração é a da exportação, com "Contar as linhas antes" travada no Db2 e no
+  Informix com a origem e o destino no mesmo servidor, porta e banco (`countForcedReason`). As decisões ficam em `copy-wizard.ts` (a lista das conexões na
+  ordem do navegador, a própria origem, as classes da origem pelo tipo e pelo `kind` da coluna, os pares desabilitados e as notas da conversão, os
+  pedidos, as recusas e o comando que lê a tabela de destino); o estado, em `useCopyWizard` (`_components/data-import/use-copy-wizard.ts`): as listas da
+  "Tabela de destino" são as da árvore, nas mesmas consultas e no mesmo cache (`databaseSessionQuery` e `treeQuery`, caladas no aviso central: a falha
+  aparece na etapa), e **escolher uma conexão desconectada a conecta, como expandi-la**, e o navegador passa a mostrá-la conectada; o esquema e a tabela de
+  mesmo nome que a origem vêm escolhidos uma vez, quando a lista chega. A prévia da cópia (`copies/preview`) é pedida ao entrar no Mapeamento e vai **sem
+  o mapeamento**: a API devolve a tabela e o sugerido, e as escolhas de antes seguem pelo nome quando a tabela é a mesma (`carryTargets`), sem nunca
+  esbarrar numa recusa do mapeamento velho. O mapeamento, a carga e a Confirmação desenham com as peças da importação (`MappingStep`, `LoadStep`,
+  `ConfirmationStep`). "Copiar linhas" pergunta pelas proteções da conexão de **destino**; a origem só é lida. A cópia funciona fora do Electron (sem
+  processo principal), com o número de janela 1 quando a ponte não dá um.
+- **O acompanhamento** (RN-IMPORT-019 a 021; `load-tracker.ts`, um objeto fora do React como o das exportações, e `loadTracker`, o desta janela, em
+  `data-imports.ts`). A consulta a cada segundo; o fim lido diz o que ficou (`stayedText`, pelo `committed`, pelo `uncertain`, pela fase e pela carga),
+  avisa com "Abrir registros" (a aba da tabela nesta janela, `connectLoads` a liga ao `openTableTab` do `WorkbenchProvider`) e esquece o trabalho; a falha
+  deixa a entrada "Ver o erro" na barra, só da tela. O "Cancelar" pergunta quando algo já ficaria na tabela (`cancelQuestionOf`). A ordem das
+  transferências da janela é uma só para os dois acompanhamentos (`nextTransferSeq`, em `data-exports.ts`). Ao montar a área de trabalho, os trabalhos da
+  página de antes desta janela, de todos os tipos, são cancelados (`connectExports`, que não leva os que esta página já começou).
+- **A barra de status** (`transfer-status.tsx`, com `load-status.tsx` e as peças comuns em `transfer-progress.tsx`). As exportações, as importações e as
+  cópias numa lista só, pela ordem em que começaram (`barEntries`, em `transfer-bar.ts`); aparece a que pede ação (a entrega que falhou, a importação que
+  parou), ou a mais antiga, e o botão das outras diz o tipo ("+2 importações", "+2 transferências"). A pergunta do "Cancelar" e o diálogo "Importação
+  interrompida" moram na `TransferStatus`, e não na entrada (ela aparece duas vezes com a lista aberta), e fecham sozinhos quando a entrada some.
+- **Os Registros abertos da tabela** (RN-IMPORT-020): `markImported` sobe um número por tabela (a conexão, o banco, o esquema e o nome) quando o fim pode
+  ter deixado linhas; a vista guarda o número do começo da leitura que está na tela (`imported-note.ts`, pelo executor da aba, que sobrevive à troca para
+  a Estrutura) e mostra a nota com "Atualizar" (o da aba, que pergunta pelas alterações não salvas) até ler de novo.
+- **As fixtures da importação** (RN-IMPORT-028): a tela confere a proteção contra fórmula (`csvFieldOf`) contra `src/test-fixtures/export/import-unguard.json`
+  (`grid-export/import-fixtures.test.ts`), escrita à mão com a API, que confere a volta com os mesmos casos; sem o arquivo o teste falha, e não fica de
+  fora. As outras fixtures da importação (o campo do CSV, os números e as datas, a ordem do nulo, o `_xHHHH_` lido) são só da API.
+- **O que não tem teste**: os assistentes montados com as consultas de verdade (as decisões, as etapas e o gancho da cópia têm), o diálogo de abrir do
+  sistema, a cópia de um arquivo de 2 GiB e a conferência num app empacotado com a API desta seção. A tela foi escrita contra o contrato das seções 6 e
+  36, com a API simulada nos testes. A aba em Commit manual (o aviso da transação aberta da RN-IMPORT-013) não existe ainda na tela, e o aviso não sai.
+
+## Gerar SQL (seção 37, RN-GRADE-006 e 018 a 020)
+
+O submenu "Gerar SQL" da grade e o diálogo dele: o texto de cada item, o plano do resultado, o motivo dos itens desabilitados, o diálogo e o gancho que o
+move, e a ligação com a seleção da grade (seção 37, RN-GRADE-001), o menu (RN-GRADE-004) e o alvo que a edição já pediu (ver "A ligação", abaixo), nos
+Registros, no resultado da aba de consulta e em cada aba guardada do script. O "CREATE" é o DDL aproximado da Estrutura (`approximateDdl`, RN-TABELA-008), e
+não o `CREATE` das colunas do resultado, que a especificação deixou para depois.
+
+- **As peças** (`_lib/generate-sql/`, puras, com teste, menos o gancho):
+  - `generate-sql.ts`: o texto de cada item (`generateSql(item, plano, linhas, opções)`, RN-GRADE-019) sobre os tipos `SqlPlan` (a tabela, as colunas DELA no
+    resultado, cada uma com `at`, a posição no resultado, e `name`, o nome na tabela, e a chave: `complete`, `partial` ou `none`), `SqlRow` (por linha
+    escolhida que está no banco: `number` na grade, `values` como a grade mostra, `read` como o banco leu, `changed`, `cut` e `generated`, tudo pela posição
+    no resultado) e `SqlOptions` (`qualified`, `compact`, `excludeGenerated` e, no INSERT da tabela que o Prism não conhece, `target`). O SELECT lista as
+    colunas da tabela que estão no resultado; a condição é a chave LIDA (`read`), e os valores, os da grade (`values`); a chave com pendência entra no `SET`
+    do UPDATE. O `IN` da chave composta é a lista de linhas no PostgreSQL e o `OR` de `AND`s no Db2 e no Informix (e sem chave nos três). Sem chave, a
+    condição deixa de fora os tipos que o banco não compara com `=` (`comparable`: o tipo sem o tamanho e sem o `[]`). A linha que fica de fora vai para o
+    comentário do motivo, no fim (`rowList` faz as faixas). `valueLiteral` é o literal da exportação em SQL: `scriptLiteral` e `binaryLiteral`.
+  - `sql-plan.ts`: o plano a partir do alvo pedido com `purpose: "sql"` (`sqlPlanOf`: "de uma tabela só" é o `tables` com um item que não é `elsewhere`, e a
+    chave está inteira quando cada nome do `keyColumns` é o `baseColumn` de uma coluna do resultado daquela tabela; o `key` e o `rowOperations` não decidem),
+    `planRefusal` (o motivo do item que o plano não permite, já como frase), `sqlMenuStates` (o motivo de cada um dos seis itens no submenu, também antes do
+    alvo: sem linhas, só linhas novas, a aba ocupada, a atualização automática, a visão dos Registros), `neededColumns` e `cutCellsFor` (as células cortadas que
+    o item usa: só elas vão à rota das células, RN-SQL-017), `completeRows` (as linhas com o valor completo; a pendência já é inteira) e `optionRefusal` (o
+    que as opções impedem: a tabela de destino que falta ou que um campo recusa, as colunas de mesmo nome, o INSERT sem coluna que o banco não gere).
+  - `generate-sql-flow.ts`: o caminho do diálogo (`runSqlFlow`: "Conferindo…", "Buscando os valores completos…" com "Cancelar", "Lendo o catálogo…", o texto,
+    a recusa, a falha com "Tentar de novo", o resultado que mudou) com as peças que falam com a API injetadas (`SqlFlowDeps`: `target`, `fullValues`,
+    `catalog`, `stillCurrent`), e o que o diálogo desenha de cada fase (`sqlDialogView`: o cabeçalho, as caixas que o item tem, os campos da tabela de
+    destino, os avisos, o lugar do SQL e se as saídas valem). O teto de 1 MB é medido em UTF-8 (`utf8Bytes`, pelo `TextEncoder`); antes, o `generateSql`
+    recebe o teto (`stopAfter`) e para quando os comandos passam dele em caracteres, que em UTF-8 têm ao menos um byte cada (`tooLarge`): 100.000 linhas não
+    montam 40 MB para jogar fora.
+  - `generate-sql-choices.ts`: as três caixas, lembradas por usuário em `prism:generate-sql:<usuário>` (o `localStorage` desta instalação, como as escolhas
+    da exportação e as do "Copiar como"), lidas campo a campo; a tabela de destino não se lembra.
+  - `use-generate-sql.ts`: o gancho (`useGenerateSql({ userName, deps })` devolve `open(pedido)`, `close()`, `dialog` (as propriedades do componente, nulo
+    fechado) e `planOf(resultId)`, o plano depois da primeira resposta, para o `sqlMenuStates`; o do CREATE dos Registros, que não vem do alvo (`recordsPlan`,
+    sem colunas nem chave), não fica, e não desabilita os outros itens), e a peça do CREATE, que não depende da grade:
+    `catalogReader` (as três listas da Estrutura, pelo mesmo cache). A resposta do alvo fica guardada por resultado: a segunda escolha não pergunta de novo, e
+    o "Tentar de novo" pergunta. O `hold` das dependências segura a atualização automática do abrir ao fechar (RN-GRADE-014), e fechar interrompe o que estava em andamento.
+    A execução que troca as linhas com o diálogo aberto (`stillCurrent` falso) deixa o lugar do SQL em "O resultado mudou…", sem saídas. O `sqlDialogView`
+    é memorizado pela fase e pelas opções (`useMemo`): renderizar de novo quem mostra o diálogo não gera o texto outra vez.
+  - Os textos estão em `generate-sql.copy.ts`; os comentários do SQL são frases fixas e números.
+- **O componente** (`_components/generate-sql/generate-sql-dialog.tsx`, `GenerateSqlDialog({ dialog, engine, connection })`): o diálogo grande, com o que se
+  gera embaixo do título e a linha da conexão (`connection`: quem liga passa o `ExportConnection` do assistente da exportação, com o ambiente e o cadeado), as
+  "Opções" pelo `CheckboxRow` da exportação, os campos "Esquema" e "Tabela" com o motivo de recusa no campo, os avisos no tom de atenção e o lugar do SQL; no
+  rodapé, "Fechar" à esquerda, e "Abrir numa aba de consulta" e "Copiar" (o principal), desabilitados até o texto ficar pronto. O texto fica no
+  `SqlViewer` (`sql-viewer.tsx`): um CodeMirror só de leitura (`EditorState.readOnly`, focável, com seleção e Ctrl+C), com o realce do banco, a fonte do
+  editor e as linhas quebradas na largura (`EditorView.lineWrapping`); o foco começa nele, menos no INSERT da tabela não conhecida, em que ele apareceria no
+  meio da digitação do nome. O documento troca a cada opção sem recriar o editor. O bloqueio por inatividade fecha o diálogo pelo Esc (`closeOpenPortals`).
+- **O alvo na tela** (`record-edits.schema.ts` e `record-edits.service.ts`, RN-GRADE-020): `sqlTargetSchema` (cada tabela com `kind`, o que a tela não conhece
+  vale `other`, e `keyColumns`, os dois exigidos) e `sqlTargetOrRefuse` (com `purpose: "sql"`; o `RESULT_NOT_EDITABLE`, o `RESULT_CHANGED` e as falhas
+  voltam como valor). O `editTargetSchema` da edição ficou com os dois campos opcionais, para guardar o que vier sem exigir: `sqlTargetOf` diz se o alvo que
+  a edição já pediu serve ao "Gerar SQL" (RN-EDIT-010: o mesmo alvo, uma vez). O contrário não vale na conexão somente leitura: o alvo do "Gerar SQL" dali
+  não vai para a edição.
+- **O literal do binário** (`binaryLiteral` e `binaryDigitsOf`, em `grid-export/script-literal.ts`, ao lado do `scriptLiteral`): `decode('…', 'hex')` no
+  PostgreSQL; no Db2, pelo tipo da coluna, `BX'…'` no `BINARY` e no `VARBINARY`, `BLOB(X'…')` no `BLOB` e `X'…'` no texto `FOR BIT DATA` (o `X'…'` é um
+  texto, que o Db2 recusa numa coluna `BINARY` ou `VARBINARY`), em pedaços de 16.336 bytes; e nenhum no Informix, conferido pela fixture `sql-binary.json`,
+  que a API também lê. É o único: o `to-sql.ts` do "Copiar como" usa este (e o `binaryDigitsOf`), sem cópia, e o "Gerar SQL" e o "Copiar como SQL" passam
+  a ele o tipo da coluna como o banco o diz.
+- **A fixture de ouro** (RN-EXPORT-024): `src/test-fixtures/export/generate-sql.json`, só da tela (a API não gera estes comandos), com cada item nos três
+  bancos, com e sem chave, a chave composta, compacto e não, com e sem os nomes completos, a tabela não conhecida, o binário, a quebra de linha, o Unicode
+  fora do plano básico, os nomes hostis e as linhas de fora com os comentários; quem a lê é `generate-sql.fixtures.test.ts`. As formas de condição também
+  rodam nos três servidores, no teste de integração da API (`GeneratedSql_TheConditionsOfEachItem_FindTheRightRowsOnTheServer`, compilado, sem rodar).
+- **Saiu**: o `generate-sql.ts` antigo da `grid-export` (o `generateSql` de `SELECT *` e o `generateInsertInto`, que confiava no nome digitado) e o
+  `formats.ts` dos oito formatos, que nenhuma tela usava.
+- **A ligação** (`_lib/generate-sql/use-grid-generate-sql.ts`, o gancho, e `sql-selection.ts`, puro, os dois com teste). `useGridGenerateSql({ connectionId,
+  database, userName, records, readOnlyConnection, openQueryTab })` devolve a fonte do submenu (`GenerateSqlSource`, que `useRecordEdits` recebe) e o diálogo
+  aberto, que `resultEditDialogs` monta com a linha da conexão (`SqlDialogConnection`, a do assistente da exportação, pelas listas em cache).
+  - **O submenu** (`access`, ao abrir o menu, sem consulta): o motivo de cada item é o `sqlMenuStates`, com as linhas da grade, as da seleção que estão no
+    banco e as novas, o `busy` do contexto (a aba ocupada, ou a atualização automática lendo), o plano do alvo que a tela já sabe (`knownSqlTarget`: o da
+    edição, o do "Copiar como", o motivo da página) ou o da primeira escolha (`planOf`), e, nos Registros, a tabela da aba com o tipo que a árvore já
+    carregou (`cachedObjectKind`).
+  - **O pedido** (`choose`): as linhas da seleção daquele instante (`sqlSelectionOf`): as que estão no banco viram `SqlRow` (a lida com o valor da grade e o
+    lido, a marcada para exclusão com os lidos, a nova já salva com as células `generated`), e as novas não salvas só contam; nos Registros, `records` com a
+    tabela e o tipo; o somente leitura da conexão pelo cache (`cachedReadOnly`).
+  - **As dependências**: o alvo é o do contexto (`sqlTarget`, o mesmo do "Copiar como", uma vez por resultado, e nunca volta à edição); o valor completo pela
+    linha da grade (`fullValues`, o número da linha menos um; o resultado que mudou no meio responde `changed`); o catálogo do CREATE pelo `catalogReader`, no
+    banco da aba; `stillCurrent` e `hold` pelo contexto; e o "Abrir numa aba de consulta" pelo `onOpenQuery` da área de trabalho, com a conexão e o banco da
+    aba (a aba nova é a do "Nova consulta", à frente, com o texto no editor).
+- **Não conferido numa janela**: nada disto foi visto na tela (não há Xvfb nem banco nesta etapa), só nos testes; o `SqlViewer` não tem teste (o vitest não
+  tem DOM). Falta conferir sob Xvfb que a aba nova do "Abrir numa aba de consulta" nasce com o cursor no começo e o foco no editor (o diálogo, ao fechar,
+  devolve o foco à grade da aba de antes, que já está escondida, e o editor da nova o toma ao montar).
 
 ## Configurações (`src/app/settings`)
 
@@ -1248,8 +2737,8 @@ fechar não apaga as abas.
   ou valor fora do esquema volta ao padrão do campo, sem lançar). Se o `localStorage` falta, recusa o acesso ou lança ao gravar, elas
   vivem na memória da sessão e a tela segue. `usePreferences()` devolve `{ preferences, update, signedIn }`
   (`useSyncExternalStore`); quem só lê usa o nome do campo, em grupos (`preferences.editor.fontSize`): `theme`, `ui` (`fontFamily`, a fonte da
-  interface), `editor` (fonte,
-  tamanho, tabulação, `autocomplete` e `uppercaseKeywords`), `results` (`nullText` e `autoLoadMore`) e `security` (`lockEnabled` e `lockAfterMinutes`); `update` aceita um grupo pela metade, e o
+  interface, e `navigatorDensity`, a densidade do navegador), `editor` (fonte,
+  tamanho, tabulação, `autocomplete`, `uppercaseKeywords` e `blankLineSeparates`), `results` (`nullText` e `autoLoadMore`) e `security` (`lockEnabled` e `lockAfterMinutes`); `update` aceita um grupo pela metade, e o
   formato antigo (três campos soltos do editor) é migrado (`upgradeLegacy`). **Nunca guarde segredo nem
   dado de conexão ali**: quem apagar o `localStorage` perde só o gosto. As de atualização (verificar ao abrir, versão pulada) são
   outra coisa: moram no processo principal e a tela as lê e muda pela ponte (`window.prism.updates`).
@@ -1280,7 +2769,9 @@ fechar não apaga as abas.
   ligar uma não refazer o tema. O editor de outra aba nasce com as de agora (`initial`). **Extensão nova que depende de preferência ganha o
   próprio compartimento e a própria entrada de `initial`**, ou só vale para o editor criado depois. O padrão da tabulação é 4 (o do canvas; o
   editor usava 2). A fonte do editor é a de Configurações › Aparência (ver "Fontes"): o `themeSlot` a recebe pelas preferências, e não pela
-  variável `--font-editor`, porque reconfigurar o compartimento é o que faz o CodeMirror medir o texto de novo.
+  variável `--font-editor`, porque reconfigurar o compartimento é o que faz o CodeMirror medir o texto de novo. A preferência que não muda
+  nada no editor, só o que ele faz numa ação, não precisa de compartimento: `blankLineSeparates` (RN-SQL-018) vive numa ref
+  (`blankLinesNow`, como o `engineNow`) e é lida na hora de executar.
 - **Fontes** (RN-CONFIG-008; `_lib/fonts.ts`, `_lib/system-fonts.ts`, `_components/font-picker.tsx` e `font-sync.tsx`): Aparência tem "Fonte da
   interface" (`ui.fontFamily`, padrão IBM Plex Sans) e "Fonte do editor SQL" (`editor.fontFamily`, padrão IBM Plex Mono; o campo saiu da seção
   Editor SQL, que diz onde ele está, e a escolha da lista fixa de antes continua valendo). **O nome vira CSS**: o esquema (`fontNameSchema`) e a
@@ -1332,6 +2823,9 @@ fechar não apaga as abas.
   booleano: fora de aspas, de comentário e de nome depois de ponto. **A lista é fixa de propósito**: o dialeto do PostgreSQL marca `id`,
   `name`, `type` e `count` como palavra-chave, e converter "tudo o que o dialeto marca" reescreveria o nome das colunas do usuário. Um falso
   negativo deixa a palavra como foi digitada; um falso positivo reescreve um nome dele. O preço: `PRIMARY KEY` sai `PRIMARY key`.
+- **A linha em branco separa os comandos** (RN-SQL-018; `editor.blankLineSeparates`, ligada por padrão, a caixa `cfg-linha-em-branco`
+  depois das duas do RN-CONFIG-004; não está no canvas, seção 9 da especificação): desligada, o comando do cursor volta a ser separado só
+  pelo `;`, exatamente como antes. Ver "A linha em branco separa o comando do cursor", na área de trabalho.
 - **A navegação da tela não usa `<a href="#cfg-…">`** como o canvas: a rota é em hash, e uma âncora a trocaria. São botões que rolam
   e dão foco ao título da seção; `activeSection` (pura) decide a marcada pela rolagem.
 - **O que ainda não existe é um `ComingSoonCard`**, sem controle nenhum: o `page.test.ts` confere que ele não tem `input`, `select`,
@@ -1349,10 +2843,22 @@ fechar não apaga as abas.
   controlados (o valor sai pelo `FormData`), a mutação leva `gcTime: 0` e é esvaziada (`reset`) assim que a resposta chega, o que apaga as
   `variables` com as senhas; um campo `userName` escondido e só de leitura diz ao gerenciador de senhas e ao leitor de tela de que conta é a
   senha.
+- **Zoom do programa** (RN-ZOOM-001; `_components/app-zoom-control.tsx`, `_lib/app-zoom.ts`), em Aparência: o valor de agora (`<output>`, lido pelo leitor
+  de tela quando muda), − e + (desabilitados nos limites) e "Restaurar 100%" (desabilitado em 100%), por `aria-disabled` e não `disabled`, para o botão
+  que se desabilita ao ser usado não perder o foco (conferido sob Xvfb: Enter no "Restaurar 100%" em 110% e no − até 50% deixam o foco no botão); a
+  dica diz os atalhos na tecla da plataforma e que o zoom vale para quem entra nesta conta do computador (a pasta de dados é da conta: no Prism instalado
+  para todos os usuários do Windows, cada conta tem o seu). **Não é
+  preferência**: o valor vem do processo principal (`appZoomQuery`, relida a cada visita às Configurações, porque os atalhos o mudam com elas fechadas), o
+  pedido vai pela ponte (`requestAppZoom`, com o passo calculado por `nextAppZoom`) e o aviso `onAppZoomChanged` põe o valor novo na consulta enquanto a
+  seção está aberta; a ponte é conferida em `lib/api/bridge.ts` (`currentAppZoom`: só um dos passos é resposta). Fora do Electron (o zoom é o do
+  navegador) a resposta é `null` e o controle não aparece.
+- **Densidade do navegador** (RN-NAV-011), em Aparência, ao lado do zoom: dois botões de opção, "Confortável" (o padrão, o desenho do canvas) e
+  "Compacta", em `ui.navigatorDensity`. As medidas são do navegador (ver "Navegador: clique, menu e busca").
 - **Resultados** (RN-CONFIG-005; `results-section.tsx`): o texto do valor nulo na grade (de 1 a 12 caracteres, que não sejam só espaços nem
   tenham caractere de controle ou de direção de texto) e "buscar mais linhas ao rolar até o fim" (`autoLoadMore`, desligado de saída).
   Com ele ligado a grade pede a página seguinte sozinha (`autoLoadArmed`, em `result-paging.ts`): uma por vez, com linhas na tela, mais a
-  ler e nada em andamento (página, contagem, comando ou cancelamento), e o cursor fechado é o fim. "Linhas por busca" depende da API
+  ler e nada em andamento (página, contagem, comando ou cancelamento), e o cursor fechado é o fim; com a atualização automática do resultado
+  ligada, a aba o desliga (RN-GRADE-014). "Linhas por busca" depende da API
   (RN-SQL-016) e é "em breve". Os campos de texto e de número de Configurações usam `useDraft`: o texto válido vale na hora, sem botão de
   salvar; o inválido não muda nada, mostra o erro depois de parado (600 ms) e, ao sair do campo ou no primeiro Esc, volta ao valor que vale.
 - **Segurança** (RN-SEG-001; `security-section.tsx`): liga e desliga o bloqueio por inatividade e escolhe os minutos (de 1 a 240); com ele
@@ -1365,7 +2871,8 @@ fechar não apaga as abas.
 
 Seção 19 da especificação: **é ela que manda**, e o que segue diz onde ficam as peças e o que não é óbvio. Sem tecla nem ponteiro na janela
 por 10 minutos (1 a 240; pode ser desligado: `security.lockEnabled` e `security.lockAfterMinutes`, nas preferências) e sem comando em
-andamento em nenhuma aba, o Prism avisa 60 s antes (30 s com 1 minuto) e bloqueia: a API fecha o cofre, e a tela pede a senha do MESMO
+andamento em nenhuma aba (a execução da atualização automática não conta: `isPersonBusy`, RN-GRADE-014), o Prism avisa 60 s antes (30 s com 1
+minuto) e bloqueia: a API fecha o cofre, e a tela pede a senha do MESMO
 usuário. Desbloquear devolve as abas e o texto de SQL; os resultados são descartados; as outras telas de dentro do cofre voltam ao estado
 inicial; "Sair" encerra de verdade.
 
@@ -1378,6 +2885,15 @@ inicial; "Sair" encerra de verdade.
   cache e das abas). **A ordem dos passos e as falhas ficam em `lock-vault.ts` e no teste dele; este guia não as repete.**
 - **Com mais de uma janela** a contagem é de todas e o bloqueio também (RN-ABAS-004): `peers` do `useIdleLock`, `peerAction` e
   `closedByAnotherWindow`, descritos em "Abas que se movem e outras janelas".
+- **A exportação de dados é comando em andamento** da janela que a começou, do começo até a entrega (`exportTracker.holdsLock()`, no `isBusy` do
+  `WorkbenchProvider`), e segura também as outras janelas. A entrega que falhou e espera o "Salvar como…" não segura: o aviso de antes do bloqueio diz
+  quantas serão descartadas (`discardedExports` do `VaultLock`; o `IdleAnnouncer` diz o mesmo ao leitor de tela, junto da frase fixa, porque o desenho do
+  aviso é `aria-hidden`), e o bloqueio as descarta (`exportTracker.vaultClosed()`, que solta os destinos)
+  (RN-EXPORT-023). **A importação de dados e a cópia para outro banco também** (RN-IMPORT-021), do começo ao fim lido (`loadTracker.holdsLock()`); a
+  entrada da falha ("Ver o erro") não segura, e o bloqueio a descarta sem perguntar (`loadTracker.vaultClosed()`). O assistente "Importar dados" aberto
+  fecha no bloqueio, como os outros diálogos, e solta o arquivo copiado.
+- **A verificação periódica das conexões** (RN-VERIF-002) não é atividade nem comando em andamento: ela não passa pelos executores das abas nem pelos
+  eventos da janela, e bloqueado nada dela sai (ver "Verificação periódica e Só as conectadas").
 - **A barreira.** Bloqueado, `apiRequest` espera o desbloqueio (não falha e não avisa); só passa o pedido com `whileLocked` (`signIn` e
   `signOut`). Um 401 `VAULT_LOCKED` que chega com o app bloqueado não leva ao login (um pedido que já estava a caminho apagaria as abas), e a
   falha de consulta não vira aviso. `vaultLock.reset()` no desmonte do `VaultGuard` solta o que ficou preso: sem isso o login seguinte
@@ -1798,7 +3314,8 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   nenhuma cor fixa (`#rrggbb`, `text-white`, `fill` nomeado) entra em componente: só os tokens. As exceções são a ilustração da
   marca, a lista de cores de ambiente da conexão e o texto que a etiqueta calcula sobre ela, as prévias do tema e os `.svg` do splash.
 - A escala de texto reaproveita os nomes padrão com os tamanhos do canvas: `text-xs` 12/18,
-  `text-sm` 13/20, `text-base` 14/22 (o corpo), `text-lg` 18/24. `rounded-xl` é o raio do diálogo
+  `text-sm` 13/20 (a área de trabalho inteira, pela raiz dela: RN-CONFIG-009), `text-base` 14/22 (o corpo: formulários, diálogos, login e
+  Configurações), `text-lg` 18/24. `rounded-xl` é o raio do diálogo
   (10px) e `shadow-2xl` a sombra do que flutua.
 - O sucesso usa o mesmo verde do Db2 (`#5ED3A3` no escuro, `#097244` no Prism Claro: o `#0B7A4B` do canvas dava 4,37:1 sobre a linha
   selecionada), como a especificação pede; o canvas não tem outro.
@@ -1808,7 +3325,9 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   Prism, não do etio: ver "Navegador: clique, menu e busca"): o `Select` não tem busca nem lista mais larga
   que o controle (e tem `onOpen`, para quem busca as opções só quando a pessoa abre a lista, `aria-describedby`, e o `content` da opção, que
   a desenha no lugar do rótulo, na lista e no controle fechado: a etiqueta de ambiente do navegador; o rótulo segue sendo o da busca pela inicial), o `Dialog` não tem os tamanhos `xl` e `full`, e não há `lucide-react` (os
-  ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título. O `ConfirmDialog` é um `Dialog` com
+  ícones são SVG de `icons.tsx`, no traço do canvas). O `Dialog` aceita um `icon` ao lado do título e uma faixa no topo do painel (`banner`, a do
+  ambiente no aviso de confirmação, RN-PROT-001; com ela o painel recorta o que passa da borda arredondada), e o `describedBy`, os ids do que, no
+  corpo, o leitor de tela lê com o título (`describedByOf`: a `description` do cabeçalho vem antes, quando há). O `ConfirmDialog` é um `Dialog` com
   as duas respostas no rodapé: foco preso, Esc, clique fora e portal moram num lugar só.
 - As fontes IBM Plex vão dentro do app (`@fontsource`), nos pesos 400, 500 e 600. São o padrão e a reserva das que o usuário escolhe
   (RN-CONFIG-008): `font-sans` é a da interface, `font-editor` a do editor SQL (para SQL fora do CodeMirror) e `font-mono` a mono do app, que

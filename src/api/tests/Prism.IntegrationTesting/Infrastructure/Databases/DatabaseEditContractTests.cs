@@ -15,12 +15,13 @@ namespace Prism.IntegrationTesting.Infrastructure.Databases;
 /// comando afeta outro número de linhas ou o banco recusa. Cada banco monta um esquema só dele (no Informix, um dono, com os nomes de
 /// tabela sorteados, porque lá o nome é único no banco inteiro) e o apaga no fim.
 /// </summary>
-public abstract class DatabaseEditContractTests
+public abstract partial class DatabaseEditContractTests
 {
     private ServiceProvider _provider = null!;
     private IDatabaseSessionService _service = null!;
     private IVaultService _vault = null!;
     private IDatabaseClient _client = null!;
+    private readonly List<Guid> _sessions = [];
 
     protected ConnectionSettings Settings { get; private set; } = null!;
 
@@ -85,19 +86,36 @@ public abstract class DatabaseEditContractTests
         _vault = _provider.GetRequiredService<IVaultService>();
         _client = _provider.GetServices<IDatabaseClient>().Single(client => client.Engine == Engine);
 
-        await RunAsync(Settings, [.. Setup, .. JoinTables.Select(table => $"CREATE TABLE {Schema}.{Table(table.Name)} ({table.Columns})")]);
+        await RunAsync(Settings, [.. Setup, .. JoinTables.Concat(GeneratedSqlTables).Select(table => $"CREATE TABLE {Schema}.{Table(table.Name)} ({table.Columns})")]);
     }
 
     [OneTimeTearDown]
     public async Task StopAsync()
     {
-        await using (var connection = Value(await _client.OpenAsync(Settings, CancellationToken.None)))
+        try
         {
-            foreach (var sql in JoinTables.Select(table => $"DROP TABLE {Schema}.{Table(table.Name)}").Concat(Teardown))
+            await using var connection = Value(await _client.OpenAsync(Settings, CancellationToken.None));
+
+            foreach (var sql in JoinTables.Concat(GeneratedSqlTables).Select(table => $"DROP TABLE {Schema}.{Table(table.Name)}").Concat(Teardown))
                 await connection.ExecuteAsync(sql, CancellationToken.None);
         }
+        finally
+        {
+            await _provider.DisposeAsync();
+        }
+    }
 
-        await _provider.DisposeAsync();
+    /// <summary>
+    /// Fecha as sessões que o teste abriu: cada uma prende uma conexão até o fim, e o Informix Developer Edition aceita só 25 no
+    /// servidor inteiro, com as das outras classes de teste.
+    /// </summary>
+    [TearDown]
+    public async Task CloseSessionsAsync()
+    {
+        foreach (var session in _sessions)
+            await _service.CloseAsync(session);
+
+        _sessions.Clear();
     }
 
     [SetUp]
@@ -145,6 +163,78 @@ public abstract class DatabaseEditContractTests
         Assert.That(unique.Target.Tables[0], Has.Property(nameof(EditTable.Editable)).True);
         Assert.That(unique.Target.Tables[0].Key, Is.EqualTo(new[] { Column(unique.Page, "codigo") }));
     }
+
+    /// <summary>
+    /// RN-GRADE-020: cada tabela diz o tipo e a chave pelo nome: a da edição, ou a primeira candidata, também quando ela não está inteira no resultado; a
+    /// tabela sem chave e a visão não têm chave pelo nome.
+    /// </summary>
+    [Test]
+    public async Task EditTarget_TellsTheKindAndTheKeyColumnsOfEachTable()
+    {
+        var session = await OpenSessionAsync();
+
+        var pedido = await TargetAsync(session, "pedido");
+        var withoutKey = await TargetAsync(session, "sem_chave");
+        var unique = await TargetAsync(session, "unica");
+        var view = await TargetAsync(session, "resumo");
+        var partial = Value(await _service.ExecuteAsync(session, $"SELECT {Q(Name("status"))} FROM {Quoted("pedido")}", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+        var partialTarget = Value(await _service.GetEditTargetAsync(session, partial.ResultID!.Value, null, CancellationToken.None));
+
+        Assert.That(new[] { pedido, withoutKey, unique, view }.Select(item => item.Target.Tables[0].Kind), Is.EqualTo(new[] { EditTableKind.Table, EditTableKind.Table, EditTableKind.Table, EditTableKind.View }));
+        Assert.That(pedido.Target.Tables[0].KeyColumns, Is.EqualTo(new[] { Name("id") }));
+        Assert.That(withoutKey.Target.Tables[0].KeyColumns, Is.Empty);
+        Assert.That(unique.Target.Tables[0].KeyColumns, Is.EqualTo(new[] { Name("codigo") }));
+        Assert.That(view.Target.Tables[0].KeyColumns, Is.Empty);
+        Assert.That(partialTarget.Tables[0].Key, Is.Empty);
+        Assert.That(partialTarget.Tables[0].Editable, Is.False);
+        Assert.That(partialTarget.Tables[0].KeyColumns, Is.EqualTo(new[] { Name("id") }));
+    }
+
+    /// <summary>
+    /// RN-GRADE-020: numa visão que é a única tabela do `FROM`, cada coluna dela vem com a visão (`table` 0) e o nome dela na visão, também a de apelido, e só
+    /// leitura com o motivo da visão. No PostgreSQL quem diz é a descrição das linhas (o identificador e o número da coluna são os da visão, conferido num
+    /// PostgreSQL 16 em 2026-10-17); no Db2 e no Informix, a lista do `SELECT`.
+    /// </summary>
+    [Test]
+    public async Task EditTarget_OfAView_LinksItsColumnsByTheColumnsOfTheView()
+    {
+        var session = await OpenSessionAsync();
+        var page = Value(await _service.ExecuteAsync(session, $"SELECT {Q(Name("status"))} AS situacao, {Q(Name("id"))} FROM {Quoted("resumo")}", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+
+        var target = Value(await _service.GetEditTargetAsync(session, page.ResultID!.Value, null, CancellationToken.None));
+
+        Assert.That(target.Tables.Single().Kind, Is.EqualTo(EditTableKind.View));
+        Assert.That(target.Columns.Select(column => (column.Table, column.BaseColumn)), Is.EqualTo(new[] { ((int?)0, (string?)Name("status")), (0, Name("id")) }));
+        Assert.That(target.Columns.Select(column => (column.Editable, column.Reason)), Is.All.EqualTo((false, (string?)$"{Table("resumo")} é uma visão")));
+        Assert.That(target.RowOperations, Is.False);
+    }
+
+    /// <summary>
+    /// RN-GRADE-019: as formas de condição que o "Gerar SQL" escreve (`generate-sql.ts`, conferido pela fixture `generate-sql.json`) rodam no servidor e acham
+    /// as linhas certas: o `OR` de `AND`s da chave composta (a forma do Db2 e do Informix, que vale nos três), o `IN` da chave de uma coluna, a condição sem
+    /// chave com `IS NULL` e, só no PostgreSQL, a lista de linhas no `IN`. O texto vai como a aba de consulta o envia: sem o `;` do fim.
+    /// </summary>
+    [Test]
+    public async Task GeneratedSql_TheConditionsOfEachItem_FindTheRightRowsOnTheServer()
+    {
+        var (loja, numero, total) = (Q(Name("loja")), Q(Name("numero")), Q(Name("total")));
+        await RunAsync(Settings, [$"DELETE FROM {Quoted("composta")}", .. new[] { "1, 10, 100", "1, 11, NULL", "2, 10, 200" }.Select(values => $"INSERT INTO {Quoted("composta")} VALUES ({values})")]);
+        var session = await OpenSessionAsync();
+        var select = $"SELECT {loja}, {numero}, {total}\nFROM {Quoted("composta")}\n";
+
+        async Task<string[]> RowsOf(string where)
+            => [.. Value(await _service.ExecuteAsync(session, select + where, QueryPaging.DefaultPageSize, CancellationToken.None)).Page!.Rows.Select(row => $"{row[0]}/{row[1]}").Order()];
+
+        Assert.That(await RowsOf($"WHERE ({loja} = 1 AND {numero} = 10)\n   OR ({loja} = 1 AND {numero} = 11)"), Is.EqualTo(new[] { "1/10", "1/11" }));
+        Assert.That(await RowsOf($"WHERE {loja} IN (1, 2)"), Is.EqualTo(new[] { "1/10", "1/11", "2/10" }));
+        Assert.That(await RowsOf($"WHERE {loja} = 1 AND {numero} = 11 AND {total} IS NULL"), Is.EqualTo(new[] { "1/11" }));
+
+        if (AcceptsRowListInIn)
+            Assert.That(await RowsOf($"WHERE ({loja}, {numero}) IN (\n  (1, 10),\n  (2, 10)\n)"), Is.EqualTo(new[] { "1/10", "2/10" }));
+    }
+
+    /// <summary>RN-GRADE-019: o banco aceita uma lista de linhas no `IN` (`(a, b) IN ((1, 2), …)`): só o PostgreSQL, entre os três.</summary>
+    protected virtual bool AcceptsRowListInIn => false;
 
     /// <summary>RN-EDIT-002 e 010: a união é só leitura sem consultar o banco, na própria página; o `edit-target` diz o mesmo.</summary>
     [Test]
@@ -239,6 +329,24 @@ public abstract class DatabaseEditContractTests
 
         Assert.That(applied.Error.Kind, Is.EqualTo(EDatabaseFailure.ResultChanged));
         Assert.That(await RowsAsync("pedido", "status"), Has.Length.EqualTo(3));
+    }
+
+    /// <summary>
+    /// RN-SQL-024 (seção 33): o resultado que o comando seguinte leva em `keep`, como as abas do script, continua se editando em cada banco: o
+    /// "Salvar" dele grava pela chave, numa sessão em que outro comando já rodou, e o resultado atual continua o atual.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfAKeptResult_AreSavedAfterAnotherCommand()
+    {
+        var session = await OpenSessionAsync();
+        var page = await EditableRecordsAsync(session, "pedido");
+        var current = Value(await _service.ExecuteAsync(session, $"SELECT * FROM {Quoted("pedido")}\nORDER BY 1", null, QueryPaging.DefaultPageSize, false, [page.ResultID!.Value], CancellationToken.None)).Page!;
+
+        var applied = await _service.ApplyEditsAsync(session, page.ResultID!.Value, [new EditChange(EEditKind.Update, 0, ["1"], [new EditValue(Column(page, "status"), "guardada")])], CancellationToken.None);
+
+        Assert.That(Value(applied), Is.EqualTo(1));
+        Assert.That(await RowsAsync("pedido", "status"), Is.EqualTo(new[] { ("1", (string?)"guardada"), ("2", "aberta"), ("3", "fechada") }));
+        Assert.That(Value(await _service.GetEditTargetAsync(session, current.ResultID!.Value, null, CancellationToken.None)).RowOperations, Is.True);
     }
 
     /// <summary>
@@ -427,6 +535,12 @@ public abstract class DatabaseEditContractTests
         ("pallets_items", "id INTEGER NOT NULL PRIMARY KEY, pallet_id INTEGER NOT NULL, item_id INTEGER NOT NULL, quantity INTEGER")
     ];
 
+    /// <summary>RN-GRADE-019: a tabela de chave composta das condições do "Gerar SQL". Os tipos são os mesmos nos três bancos.</summary>
+    private static readonly (string Name, string Columns)[] GeneratedSqlTables =
+    [
+        ("composta", "loja INTEGER NOT NULL, numero INTEGER NOT NULL, total INTEGER, PRIMARY KEY (loja, numero)")
+    ];
+
     /// <summary>
     /// O palete 1 está no local 6, integrado, com o item 10 ('66903015') duas vezes e o 11 uma; o 2 não está integrado; o 3 está noutro
     /// local; o 4 não tem itens.
@@ -457,8 +571,14 @@ public abstract class DatabaseEditContractTests
     protected int Column(QueryPage page, string name)
         => page.Columns.Select(column => column.Name).ToList().IndexOf(Name(name)) is var index and >= 0 ? index : throw new AssertionException($"A coluna {name} não está no resultado.");
 
+    /// <summary>Uma sessão do registro, fechada no fim do teste.</summary>
     protected async Task<Guid> OpenSessionAsync(ConnectionSettings? settings = null, Guid? connectionID = null)
-        => Value(await _service.OpenAsync(connectionID ?? Guid.NewGuid(), settings ?? Settings, _vault.Generation, CancellationToken.None)).ID;
+    {
+        var session = Value(await _service.OpenAsync(connectionID ?? Guid.NewGuid(), settings ?? Settings, _vault.Generation, CancellationToken.None)).ID;
+        _sessions.Add(session);
+
+        return session;
+    }
 
     /// <summary>O comando dos Registros (RN-TABELA-002), em ordem pela primeira coluna.</summary>
     protected async Task<QueryPage> RecordsAsync(Guid session, string table, int pageSize = QueryPaging.DefaultPageSize)

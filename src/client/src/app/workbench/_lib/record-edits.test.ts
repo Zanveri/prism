@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ApiError } from "@/lib/api/prism-api";
 
-import { addRow, changeKeyOf, changesOf, deleteRow, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, savedResultOf, undoCell, undoDelete, undoNewCell, withoutApplied, type PendingEdits } from "./record-edits";
+import { addRow, changeKeyOf, changesOf, deleteRow, deleteRows, editCell, editNewCell, failureOf, linkedCells, noEdits, pendingCell, pendingCount, removeNewRow, removeNewRows, savedResultOf, undoCell, undoDelete, undoNewCell, undoWhere, withoutApplied, type PendingEdits } from "./record-edits";
 import type { EditTarget } from "./record-edits.schema";
 import { recordsCopy } from "./records.copy";
 
@@ -61,6 +61,35 @@ describe("as pendências da grade (RN-EDIT-004)", () => {
     expect(undoDelete(deleted, 1)).toEqual({ ...noEdits, nextId: deleted.nextId });
   });
 
+  it("excluir várias linhas de uma vez é o mesmo que uma por uma, na ordem, sem repetir as já excluídas; sem nenhuma nova, as mesmas pendências", () => {
+    const edits = deleteRow(editCell(editCell(noEdits, 1, 1, "paga", "aberta"), 3, 0, "9", "4"), 2);
+    const many = deleteRows(edits, [3, 2, 1, 3]);
+
+    expect(many).toEqual(deleteRow(deleteRow(deleteRow(edits, 3), 2), 1));
+    expect(many.deleted).toEqual([2, 3, 1]);
+    expect(many.cells).toEqual([]);
+    expect(deleteRows(many, [1, 2])).toBe(many);
+    expect(deleteRows(many, [])).toBe(many);
+  });
+
+  it("muitas linhas excluídas de uma vez custam uma passada, e não uma cópia da lista por linha (o Ctrl+A com 50.000 linhas carregadas)", () => {
+    const rows = Array.from({ length: 50_000 }, (_, row) => row);
+    const started = performance.now();
+    const many = deleteRows(noEdits, rows);
+
+    expect(many.deleted).toHaveLength(50_000);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it("tirar várias linhas novas de uma vez tira só as pedidas; sem nenhuma delas, as mesmas pendências", () => {
+    const first = addRow(noEdits);
+    const second = addRow(first.edits);
+    const third = addRow(second.edits);
+
+    expect(removeNewRows(third.edits, [first.id, third.id]).added.map((row) => row.id)).toEqual([second.id]);
+    expect(removeNewRows(third.edits, [99])).toBe(third.edits);
+  });
+
   it("desfazer uma célula tira só ela", () => {
     const edits = undoCell(editCell(editCell(noEdits, 0, 1, "paga", "aberta"), 0, 0, "9", "1"), 0, 1);
 
@@ -74,6 +103,20 @@ describe("as pendências da grade (RN-EDIT-004)", () => {
     expect(filled.added).toEqual([{ id, values: { 0: "7", 1: null } }]);
     expect(undoNewCell(filled, id, 1).added).toEqual([{ id, values: { 0: "7" } }]);
     expect(removeNewRow(filled, id).added).toEqual([]);
+  });
+});
+
+describe("a linha duplicada (RN-EDIT-016)", () => {
+  it("é uma linha nova que já vem com as colunas copiadas: conta uma alteração, e o Salvar manda um INSERT com elas e as que a pessoa preencheu depois", () => {
+    const copied = { 0: "4", 1: null };
+    const duplicated = addRow(noEdits, copied);
+    const edits = editNewCell(duplicated.edits, duplicated.id, 1, "paga");
+
+    expect(duplicated.edits.added[0].values).not.toBe(copied);
+    expect(pendingCount(edits)).toBe(1);
+    expect(changesOf(edits, rows, target).changes).toEqual([{ kind: "insert", table: 0, values: [{ column: 0, value: "4" }, { column: 1, value: "paga" }] }]);
+    // "Desfazer alteração" numa célula dela tira o valor daquela célula, que volta ao padrão da tabela, como numa linha em branco.
+    expect(undoNewCell(edits, duplicated.id, 0).added).toEqual([{ id: duplicated.id, values: { 1: "paga" } }]);
   });
 });
 
@@ -263,5 +306,27 @@ describe("as pendências numa junção (RN-EDIT-002 e 004)", () => {
     const saved = savedResultOf({ rows: joined, truncated: new Map() }, linkedCells(edits, joined, join), 4);
 
     expect(saved.rows.map((row) => row[3])).toEqual(["Ana Maria", "Ana Maria", "Bia", null]);
+  });
+});
+
+describe("\"Desfazer alteração\" nas células escolhidas (RN-EDIT-004 e RN-GRADE-001)", () => {
+  it("tira as pendências das células escolhidas, devolve as linhas escolhidas marcadas e volta ao padrão as células escolhidas das novas", () => {
+    let edits = editCell(editCell(noEdits, 0, 1, "paga", "aberta"), 1, 1, "x", "y");
+    edits = deleteRow(edits, 2);
+    const added = addRow(edits, { 0: "n0", 1: "n1" });
+    edits = added.edits;
+    const chosen = (row: number, column: number) => (row === 0 && column === 1) || row === 2 || (row === 3 && column === 1);
+
+    const next = undoWhere(edits, edits, 3, chosen, (row) => row === 0 || row === 2 || row === 3);
+
+    expect(next?.cells.map((cell) => [cell.row, cell.column])).toEqual([[1, 1]]);
+    expect(next?.deleted).toEqual([]);
+    expect(next?.added).toEqual([{ id: added.id, values: { 0: "n0" } }]);
+  });
+
+  it("nada a desfazer nas células escolhidas: nulo, e o menu deixa o item desabilitado", () => {
+    const edits = editCell(noEdits, 0, 1, "paga", "aberta");
+
+    expect(undoWhere(edits, edits, 1, (_row, column) => column === 0, () => true)).toBeNull();
   });
 });

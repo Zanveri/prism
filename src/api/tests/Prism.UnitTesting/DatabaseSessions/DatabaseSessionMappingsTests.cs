@@ -49,4 +49,23 @@ public sealed class DatabaseSessionMappingsTests
         //Assert
         Assert.Equal(text, dto.FilterApplied);
     }
+
+    /// <summary>RN-EXPORT-001 e 002: a página diz se o resultado se exporta; as linhas afetadas, nunca.</summary>
+    [Trait("DatabaseSessionMappings", "ToDto")]
+    [Theory(DisplayName = "OK a página leva read, e as linhas afetadas não")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToDto_FromQueryPage_ShouldWriteWhetherItIsRead(bool read)
+    {
+        //Arrange
+        var page = new QueryPage([new QueryColumn("id", "integer", "number")], [["1"]], false, 3, [], Read: read);
+
+        //Act
+        var dto = page.ToDto();
+        var affected = new QueryOutcome(null, 2, 3).ToDto();
+
+        //Assert
+        Assert.Equal(read, dto.Read);
+        Assert.False(affected.Read);
+    }
 }

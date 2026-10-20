@@ -20,8 +20,14 @@ export type CutCell = GridPosition & { resultRow: number };
 /** Um lote: o valor completo de cada célula, na ordem pedida (nulo na que não tem), ou nulo quando o lote não veio (recusa, API fora do ar). */
 export type FetchCells = (cells: { row: number; column: number }[], signal: AbortSignal) => Promise<(string | null)[] | null>;
 
-/** O que a busca achou, pela posição na grade, e quantas células cortadas ficaram sem o valor completo. */
-export type FullValues = { valueOf: (row: number, column: number) => string | undefined; missing: number };
+/**
+ * O que a busca achou, pela posição na grade, e quantas células cortadas ficaram sem o valor completo. `stopped`: quem pediu mandou parar entre um lote e
+ * outro (o copiar, quando o texto já passa do limite da área de transferência, RN-GRADE-002), e o que não foi pedido conta como sem valor.
+ */
+export type FullValues = { valueOf: (row: number, column: number) => string | undefined; missing: number; stopped?: boolean };
+
+/** Depois de cada lote: as células dele e o valor completo de cada uma (nulo na que não veio). Falso para de pedir. */
+export type KeepGoing = (batch: readonly { cell: CutCell; value: string | null }[]) => boolean;
 
 /** Nada a buscar: a seleção não tem célula cortada. */
 export const noFullValues: FullValues = { valueOf: () => undefined, missing: 0 };
@@ -52,9 +58,10 @@ export function allCutCells(truncated: CellMarks): GridPosition[] {
 
 /**
  * Pede os valores completos em lotes de até 10.000, um depois do outro. O lote que não veio deixa as células dele cortadas, e a contagem diz
- * quantas. Cancelado (`signal`), devolve nulo: quem pediu não copia nem grava nada.
+ * quantas. Cancelado (`signal`), devolve nulo: quem pediu não copia nem grava nada. `keepGoing`, depois de cada lote, pode mandar parar (RN-SQL-017: o
+ * copiar para de pedir quando o texto passa do limite da área de transferência).
  */
-export async function fetchFullValues(cut: readonly CutCell[], fetchCells: FetchCells, signal: AbortSignal): Promise<FullValues | null> {
+export async function fetchFullValues(cut: readonly CutCell[], fetchCells: FetchCells, signal: AbortSignal, keepGoing?: KeepGoing): Promise<FullValues | null> {
   if (cut.length === 0) return noFullValues;
 
   const found = new Map<string, string>();
@@ -70,6 +77,9 @@ export async function fetchFullValues(cut: readonly CutCell[], fetchCells: Fetch
       const value = values?.[index];
       if (typeof value === "string") found.set(keyOf(cell.row, cell.column), value);
     });
+    if (keepGoing !== undefined && start + fullValuesBatch < cut.length && !keepGoing(batch.map((cell, index) => ({ cell, value: typeof values?.[index] === "string" ? values[index] : null })))) {
+      return { valueOf: (row, column) => found.get(keyOf(row, column)), missing: cut.length - found.size, stopped: true };
+    }
   }
 
   return { valueOf: (row, column) => found.get(keyOf(row, column)), missing: cut.length - found.size };

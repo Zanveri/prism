@@ -15,11 +15,18 @@ public sealed record EditTables(IReadOnlyList<EditTableName> Names, IReadOnlyLis
 
 /// <summary>
 /// RN-EDIT-002 e 010: o que o catálogo diz de uma tabela do `FROM`, numa consulta só para a edição: o tipo dela (`table`, `view`,
-/// `materializedView`, `foreign` ou `other`), as colunas e as chaves (a primária primeiro).
+/// `materializedView`, `foreign`, `other` ou <see cref="Elsewhere"/>), as colunas e as chaves (a primária primeiro).
 /// </summary>
 /// <param name="Id">O identificador da tabela no banco, quando a resposta do comando diz de onde vem cada coluna por ele (PostgreSQL).</param>
 /// <param name="OneAtATime">RN-EDIT-012: o banco não tem log de transação.</param>
-public sealed record EditCatalogTable(string Schema, string Name, string Kind, long? Id, bool OneAtATime, IReadOnlyList<ColumnInfo> Columns, IReadOnlyList<EditKey> Keys);
+public sealed record EditCatalogTable(string Schema, string Name, string Kind, long? Id, bool OneAtATime, IReadOnlyList<ColumnInfo> Columns, IReadOnlyList<EditKey> Keys)
+{
+    /// <summary>
+    /// RN-SQL-024: a tabela que o comando leu (PostgreSQL, pelo identificador), escrita sem esquema, a que o nome não leva mais na sessão
+    /// do resultado: o caminho de busca dela mudou depois do comando. Não se edita.
+    /// </summary>
+    public const string Elsewhere = "elsewhere";
+}
 
 /// <summary>Uma chave primária, restrição única ou índice único sem condição e só de colunas, com as colunas na ordem dela.</summary>
 public sealed record EditKey(string Name, bool Primary, IReadOnlyList<string> Columns);

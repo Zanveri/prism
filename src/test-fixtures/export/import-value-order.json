@@ -1,0 +1,356 @@
+{
+  "rule": "RN-IMPORT-010 e 028: a ordem do nulo, da proteção contra fórmula e das pontas, o caractere que nenhum banco grava, o lógico e o binário. Só da API (ImportValues.Convert), pronta para quando a tela converter.",
+  "notes": [
+    "type é o tipo como o catálogo do Prism o escreve (format_type no PostgreSQL); column é o nome da coluna da tabela, que algumas recusas citam.",
+    "source: plain (o campo do CSV sem aspas), quoted (entre aspas), text (o texto do JSON e do XLSX), canonical (o número, a data e o lógico do JSON e do XLSX), null (o nulo do arquivo).",
+    "rules: as opções do CSV (nullText, emptyAsNull, trim e unguard; a que falta é vazia ou desligada), com o separador ;. Sem rules, as do JSON e do XLSX (nenhuma). Sem formats, ponto decimal e aaaa-mm-dd.",
+    "expected é o texto canônico que vai ao banco (o binário, como a prévia o mostra), ou null; refusal é a frase da recusa."
+  ],
+  "cases": [
+    {
+      "name": "o campo - com o nulo - é nulo",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "-",
+      "source": "plain",
+      "rules": {
+        "nullText": "-",
+        "unguard": true
+      },
+      "expected": null
+    },
+    {
+      "name": "o campo '- com o nulo - é o texto -",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "'-",
+      "source": "plain",
+      "rules": {
+        "nullText": "-",
+        "unguard": true
+      },
+      "expected": "-"
+    },
+    {
+      "name": "o nulo vem antes da proteção: '- com o nulo '- é nulo",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "'-",
+      "source": "plain",
+      "rules": {
+        "nullText": "'-",
+        "unguard": true
+      },
+      "expected": null
+    },
+    {
+      "name": "' NULL ' numa coluna de número é nulo (as pontas saem antes da comparação)",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": " NULL ",
+      "source": "plain",
+      "rules": {
+        "nullText": "NULL"
+      },
+      "expected": null
+    },
+    {
+      "name": "' NULL ' numa coluna de texto, sem tirar as pontas, é o texto",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": " NULL ",
+      "source": "plain",
+      "rules": {
+        "nullText": "NULL"
+      },
+      "expected": " NULL "
+    },
+    {
+      "name": "com Tirar os espaços das pontas, ' NULL ' é nulo também na de texto",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": " NULL ",
+      "source": "plain",
+      "rules": {
+        "nullText": "NULL",
+        "trim": true
+      },
+      "expected": null
+    },
+    {
+      "name": "o texto do nulo entre aspas é texto",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "NULL",
+      "source": "quoted",
+      "rules": {
+        "nullText": "NULL"
+      },
+      "expected": "NULL"
+    },
+    {
+      "name": "o texto do nulo com o separador é nulo também entre aspas",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "a;b",
+      "source": "quoted",
+      "rules": {
+        "nullText": "a;b"
+      },
+      "expected": null
+    },
+    {
+      "name": "o texto do nulo com a aspa é nulo também entre aspas",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "\"x\"",
+      "source": "quoted",
+      "rules": {
+        "nullText": "\"x\""
+      },
+      "expected": null
+    },
+    {
+      "name": "o campo vazio numa coluna de número é nulo",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": "",
+      "source": "plain",
+      "expected": null
+    },
+    {
+      "name": "o campo vazio entre aspas numa de texto é o texto vazio",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "",
+      "source": "quoted",
+      "expected": ""
+    },
+    {
+      "name": "com Campo vazio vira nulo, o vazio é nulo na de texto",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "",
+      "source": "plain",
+      "rules": {
+        "emptyAsNull": true
+      },
+      "expected": null
+    },
+    {
+      "name": "só espaços numa coluna de data é nulo (as pontas saem)",
+      "engine": "postgresql",
+      "type": "date",
+      "column": "valor",
+      "value": "  ",
+      "source": "plain",
+      "expected": null
+    },
+    {
+      "name": "o apóstrofo vem antes das pontas: ' =x é ' =x' sem o apóstrofo",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "' =x",
+      "source": "plain",
+      "rules": {
+        "unguard": true
+      },
+      "expected": " =x"
+    },
+    {
+      "name": "as pontas saem fora das colunas de texto",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": " 12 ",
+      "source": "plain",
+      "expected": "12"
+    },
+    {
+      "name": "na coluna de texto o valor vai como veio",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": " 12 ",
+      "source": "plain",
+      "expected": " 12 "
+    },
+    {
+      "name": "com Tirar os espaços das pontas, também na de texto",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "\t12 ",
+      "source": "plain",
+      "rules": {
+        "trim": true
+      },
+      "expected": "12"
+    },
+    {
+      "name": "sem a opção, o apóstrofo fica",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "'=x",
+      "source": "plain",
+      "rules": {
+        "unguard": false
+      },
+      "expected": "'=x"
+    },
+    {
+      "name": "o texto do JSON não perde o apóstrofo",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "'=x",
+      "source": "text",
+      "expected": "'=x"
+    },
+    {
+      "name": "o texto vazio do JSON numa coluna de texto é o texto vazio",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "",
+      "source": "text",
+      "expected": ""
+    },
+    {
+      "name": "o texto vazio do JSON numa coluna de número é nulo",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": "",
+      "source": "text",
+      "expected": null
+    },
+    {
+      "name": "o nulo do arquivo",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": null,
+      "source": "null",
+      "expected": null
+    },
+    {
+      "name": "o par substituto solto é recusado",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": {
+        "codePoints": [
+          97,
+          55357
+        ]
+      },
+      "source": "plain",
+      "refusal": "O valor tem um caractere inválido (U+D83D sozinho)."
+    },
+    {
+      "name": "o caractere nulo é recusado num texto",
+      "engine": "postgresql",
+      "type": "text",
+      "column": "valor",
+      "value": "a\u0000b",
+      "source": "plain",
+      "refusal": "O valor tem o caractere nulo (U+0000), que o Prism não grava num texto."
+    },
+    {
+      "name": "o lógico do Excel em português",
+      "engine": "postgresql",
+      "type": "boolean",
+      "column": "valor",
+      "value": "VERDADEIRO",
+      "source": "plain",
+      "expected": "true"
+    },
+    {
+      "name": "o lógico que o banco lê vai como veio",
+      "engine": "postgresql",
+      "type": "boolean",
+      "column": "valor",
+      "value": "yes",
+      "source": "plain",
+      "expected": "yes"
+    },
+    {
+      "name": "no Db2, o lógico que não converte",
+      "engine": "db2",
+      "type": "BOOLEAN",
+      "column": "valor",
+      "value": "sim",
+      "source": "plain",
+      "refusal": "«sim» não é um valor lógico: use true ou false."
+    },
+    {
+      "name": "no Informix, a frase da edição dele",
+      "engine": "informix",
+      "type": "BOOLEAN",
+      "column": "valor",
+      "value": "sim",
+      "source": "plain",
+      "refusal": "«sim» não é um valor lógico: use 1 ou 0."
+    },
+    {
+      "name": "o binário de 0x",
+      "engine": "postgresql",
+      "type": "bytea",
+      "column": "valor",
+      "value": "0x0aFF",
+      "source": "plain",
+      "expected": "0x0AFF"
+    },
+    {
+      "name": "o binário de \\x, no PostgreSQL",
+      "engine": "postgresql",
+      "type": "bytea",
+      "column": "valor",
+      "value": "\\x0aff",
+      "source": "plain",
+      "expected": "0x0AFF"
+    },
+    {
+      "name": "o \\x não vale no Db2",
+      "engine": "db2",
+      "type": "BLOB(1048576)",
+      "column": "valor",
+      "value": "\\x0aff",
+      "source": "plain",
+      "refusal": "Um binário vem como 0x seguido dos dígitos hexadecimais."
+    },
+    {
+      "name": "o número ímpar de dígitos",
+      "engine": "postgresql",
+      "type": "bytea",
+      "column": "valor",
+      "value": "0xabc",
+      "source": "plain",
+      "refusal": "Um binário vem como 0x seguido dos dígitos hexadecimais."
+    },
+    {
+      "name": "a recusa cita até 200 caracteres",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source": "plain",
+      "refusal": "«aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…» não é um número inteiro."
+    }
+  ]
+}

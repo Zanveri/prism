@@ -1,0 +1,610 @@
+{
+  "rule": "RN-IMPORT-010 e 028: o número de cada formato (Ponto, Vírgula, Vírgula com ponto de milhar), com o texto canônico esperado ou a recusa, e as casas do Db2 e do Informix. Só da API (ImportValues.Convert), pronta para quando a tela converter.",
+  "notes": [
+    "Os campos são os de import-value-order.json."
+  ],
+  "cases": [
+    {
+      "name": "ponto: o decimal",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1234.56",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1234.56"
+    },
+    {
+      "name": "ponto: o negativo",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "-1234.56",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "-1234.56"
+    },
+    {
+      "name": "ponto: o expoente",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.5E3",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.5E3"
+    },
+    {
+      "name": "ponto: o sinal de mais",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": "+5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "+5"
+    },
+    {
+      "name": "ponto: sem a parte inteira",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": ".5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": ".5"
+    },
+    {
+      "name": "ponto: a vírgula é recusada",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1,5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1,5» não é um número com ponto decimal. Se o arquivo usa vírgula, escolha Vírgula em Separador decimal."
+    },
+    {
+      "name": "ponto: o separador de milhar é recusado",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1,234.56",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1,234.56» não é um número com ponto decimal. Se o arquivo usa vírgula, escolha Vírgula em Separador decimal."
+    },
+    {
+      "name": "ponto: o que não é número, numa coluna de inteiro",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": "12a",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«12a» não é um número inteiro."
+    },
+    {
+      "name": "ponto: o que não é número",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "abc",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«abc» não é um número."
+    },
+    {
+      "name": "NaN no numeric do PostgreSQL",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "NaN",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "NaN"
+    },
+    {
+      "name": "-Infinity no double precision do PostgreSQL",
+      "engine": "postgresql",
+      "type": "double precision",
+      "column": "valor",
+      "value": "-Infinity",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "-Infinity"
+    },
+    {
+      "name": "infinity, sem diferenciar maiúsculas, no real",
+      "engine": "postgresql",
+      "type": "real",
+      "column": "valor",
+      "value": "infinity",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "infinity"
+    },
+    {
+      "name": "NaN num inteiro do PostgreSQL",
+      "engine": "postgresql",
+      "type": "integer",
+      "column": "valor",
+      "value": "NaN",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«NaN» não é um número inteiro."
+    },
+    {
+      "name": "NaN no Db2 é recusado",
+      "engine": "db2",
+      "type": "DOUBLE",
+      "column": "valor",
+      "value": "NaN",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«NaN» não é um número."
+    },
+    {
+      "name": "vírgula: o decimal",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "-1234,56",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "-1234.56"
+    },
+    {
+      "name": "vírgula: o expoente",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1,5E3",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.5E3"
+    },
+    {
+      "name": "vírgula: sem a parte inteira",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": ",5",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": ".5"
+    },
+    {
+      "name": "vírgula: o ponto é recusado",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.500",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1.500» tem ponto, e o separador decimal escolhido é a vírgula. Se o arquivo usa ponto decimal, escolha Ponto em Separador decimal; se escreve os milhares com ponto, ligue Aceitar o ponto como separador de milhar."
+    },
+    {
+      "name": "vírgula: três casas com ponto não viram mil vezes mais",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "12.345",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«12.345» tem ponto, e o separador decimal escolhido é a vírgula. Se o arquivo usa ponto decimal, escolha Ponto em Separador decimal; se escreve os milhares com ponto, ligue Aceitar o ponto como separador de milhar."
+    },
+    {
+      "name": "vírgula e ponto de milhar",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.234.567,89",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "expected": "1234567.89"
+    },
+    {
+      "name": "vírgula e ponto de milhar: mil e quinhentos",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.500",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "expected": "1500"
+    },
+    {
+      "name": "vírgula e ponto de milhar: sem o ponto",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1500",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "expected": "1500"
+    },
+    {
+      "name": "vírgula e ponto de milhar: o decimal",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "12,5",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "expected": "12.5"
+    },
+    {
+      "name": "vírgula e ponto de milhar: um grupo de um dígito",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.5",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "refusal": "«1.5» não é um número com vírgula decimal e ponto de milhar."
+    },
+    {
+      "name": "vírgula e ponto de milhar: o grupo que começa por 0",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "0.125",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "refusal": "«0.125» não é um número com vírgula decimal e ponto de milhar."
+    },
+    {
+      "name": "vírgula e ponto de milhar: o grupo de dois dígitos",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.23,4",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": true,
+        "dates": "iso"
+      },
+      "refusal": "«1.23,4» não é um número com vírgula decimal e ponto de milhar."
+    },
+    {
+      "name": "o número do JSON já vem com ponto, também com Vírgula",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "1.5",
+      "source": "canonical",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.5"
+    },
+    {
+      "name": "o número do JSON com 20 dígitos fica como está",
+      "engine": "postgresql",
+      "type": "numeric",
+      "column": "valor",
+      "value": "12345678901234567890.5",
+      "source": "canonical",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "12345678901234567890.5"
+    },
+    {
+      "name": "Db2: as casas a mais que não são zero",
+      "engine": "db2",
+      "type": "DECIMAL(10,2)",
+      "column": "total",
+      "value": "1.999",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1.999» tem mais casas decimais que as 2 da coluna total."
+    },
+    {
+      "name": "Db2: as casas a mais que são zero saem",
+      "engine": "db2",
+      "type": "DECIMAL(10,2)",
+      "column": "total",
+      "value": "1.500",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.50"
+    },
+    {
+      "name": "Db2: as casas contam com o expoente aplicado",
+      "engine": "db2",
+      "type": "DECIMAL(10,2)",
+      "column": "total",
+      "value": "1.5E-3",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1.5E-3» tem mais casas decimais que as 2 da coluna total."
+    },
+    {
+      "name": "Db2: o expoente que tira as casas",
+      "engine": "db2",
+      "type": "DECIMAL(10,2)",
+      "column": "total",
+      "value": "1.5E3",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1500"
+    },
+    {
+      "name": "Db2: a coluna sem casas",
+      "engine": "db2",
+      "type": "DECIMAL(10,0)",
+      "column": "total",
+      "value": "1.5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1.5» tem casas decimais, e a coluna total não guarda nenhuma."
+    },
+    {
+      "name": "Db2: a vírgula decimal convertida",
+      "engine": "db2",
+      "type": "DECIMAL(10,2)",
+      "column": "total",
+      "value": "1,5",
+      "source": "plain",
+      "formats": {
+        "decimal": "comma",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.5"
+    },
+    {
+      "name": "Db2: o DECFLOAT não tem casas fixas",
+      "engine": "db2",
+      "type": "DECFLOAT(34)",
+      "column": "valor",
+      "value": "1.5E3",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.5E3"
+    },
+    {
+      "name": "Db2: a faixa do SMALLINT",
+      "engine": "db2",
+      "type": "SMALLINT",
+      "column": "valor",
+      "value": "70000",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«70000» está fora da faixa da coluna."
+    },
+    {
+      "name": "Db2: o inteiro com casas zero",
+      "engine": "db2",
+      "type": "INTEGER",
+      "column": "valor",
+      "value": "1.0",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1"
+    },
+    {
+      "name": "Db2: o inteiro com expoente",
+      "engine": "db2",
+      "type": "INTEGER",
+      "column": "valor",
+      "value": "1.5E3",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1500"
+    },
+    {
+      "name": "Db2: o inteiro com casas",
+      "engine": "db2",
+      "type": "INTEGER",
+      "column": "valor",
+      "value": "1.5",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«1.5» não é um número inteiro."
+    },
+    {
+      "name": "Db2: o DOUBLE com expoente",
+      "engine": "db2",
+      "type": "DOUBLE",
+      "column": "valor",
+      "value": "1.5E3",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.5E3"
+    },
+    {
+      "name": "Informix: as casas do MONEY",
+      "engine": "informix",
+      "type": "MONEY(8,2)",
+      "column": "total",
+      "value": "12.345",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "refusal": "«12.345» tem mais casas decimais que as 2 da coluna total."
+    },
+    {
+      "name": "Informix: o DECIMAL sem escala não tem casas fixas",
+      "engine": "informix",
+      "type": "DECIMAL(16)",
+      "column": "valor",
+      "value": "1.23456789",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "1.23456789"
+    },
+    {
+      "name": "Informix: o zero negativo",
+      "engine": "informix",
+      "type": "INT8",
+      "column": "valor",
+      "value": "-0",
+      "source": "plain",
+      "formats": {
+        "decimal": "point",
+        "thousandsDot": false,
+        "dates": "iso"
+      },
+      "expected": "0"
+    }
+  ]
+}

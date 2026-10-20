@@ -14,11 +14,11 @@ namespace Prism.Infrastructure.Vault.Clients;
 internal static class VaultCrypto
 {
     /// <summary>
-    /// RN-VERSAO-005: o número do formato que esta versão grava. O 2 acrescentou os scripts ao documento (RN-SCRIPT-002), e o 3, a área de trabalho (as abas
-    /// que voltam na próxima entrada, RN-ABAS-006); o 1 e o 2 ainda se leem, e são migrados ao abrir (`VaultMigration`). Sobe só quando o formato muda, e a
-    /// mudança vem com a migração.
+    /// RN-VERSAO-005: o número do formato que esta versão grava. O 2 acrescentou os scripts ao documento (RN-SCRIPT-002), o 3, a área de trabalho (as abas
+    /// que voltam na próxima entrada, RN-ABAS-006), e o 4, as pastas de scripts (RN-SCRIPT-011); do 1 ao 3 ainda se leem, e são migrados ao abrir
+    /// (`VaultMigration`). Sobe só quando o formato muda, e a mudança vem com a migração.
     /// </summary>
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>RN-VERSAO-005: o formato mais antigo que ainda se lê. Abaixo dele (e o 0, o negativo e o que não é número) o arquivo é corrompido.</summary>
     public const int OldestVersion = 1;
@@ -64,7 +64,18 @@ internal static class VaultCrypto
     /// gravados: mudá-lo deixa todos ilegíveis.
     /// </summary>
     public static byte[] AssociatedData(int version, VaultKdf kdf)
-        => Encoding.UTF8.GetBytes(string.Create(CultureInfo.InvariantCulture, $"prism-vault|{version}|{kdf.Algorithm}|{kdf.MemoryKiB}|{kdf.Iterations}|{kdf.Parallelism}|{Convert.ToBase64String(kdf.Salt)}"));
+        => AssociatedData(VaultPrefix, version, kdf);
+
+    /// <summary>O começo do dado autenticado do cofre. O arquivo da exportação de conexões tem o dele (RN-TRANSF-007), e um nunca abre como o outro.</summary>
+    public const string VaultPrefix = "prism-vault";
+
+    /// <summary>
+    /// O cabeçalho como dado autenticado, com o começo de cada tipo de arquivo: `&lt;prefixo&gt;|&lt;versão&gt;|&lt;algoritmo&gt;|&lt;memória em KiB&gt;|&lt;passadas&gt;|&lt;paralelismo&gt;|&lt;sal em base64&gt;`,
+    /// em UTF-8. O cofre usa `prism-vault` (acima), e o arquivo da exportação de conexões, `prism-connections` (RN-TRANSF-007): com prefixos diferentes,
+    /// um arquivo de exportação nunca abre como cofre, nem um cofre como arquivo de exportação, mesmo com a mesma senha e o mesmo sal.
+    /// </summary>
+    public static byte[] AssociatedData(string prefix, int version, VaultKdf kdf)
+        => Encoding.UTF8.GetBytes(string.Create(CultureInfo.InvariantCulture, $"{prefix}|{version}|{kdf.Algorithm}|{kdf.MemoryKiB}|{kdf.Iterations}|{kdf.Parallelism}|{Convert.ToBase64String(kdf.Salt)}"));
 
     /// <summary>RN-COFRE-003: AES-256-GCM com nonce aleatório novo a cada chamada; a mesma chave nunca cifra duas vezes com o mesmo nonce.</summary>
     public static VaultSealedBox Seal(byte[] key, byte[] plaintext, byte[] associatedData)

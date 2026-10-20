@@ -23,6 +23,15 @@
     <EmbeddedResource Include="Vault/Samples/vault-format-1.json" LogicalName="vault-format-1.json" />
     <!-- RN-VERSAO-005 e RN-ABAS-006: um cofre do formato 2 gravado antes do formato 3, aberto em VaultFormatTwoSampleTests. -->
     <EmbeddedResource Include="Vault/Samples/vault-format-2.json" LogicalName="vault-format-2.json" />
+    <!-- RN-VERSAO-005 e RN-SCRIPT-011: um cofre do formato 3 gravado antes do formato 4, aberto em VaultFormatThreeSampleTests. -->
+    <EmbeddedResource Include="Vault/Samples/vault-format-3.json" LogicalName="vault-format-3.json" />
+    <!-- RN-TRANSF-007: um arquivo de exportação de conexões do formato 1, gerado pelo código antes de qualquer mudança do formato, aberto em ConnectionFileFormatOneSampleTests. -->
+    <EmbeddedResource Include="ConnectionTransfers/Samples/connections-format-1.prismconexoes" LogicalName="connections-format-1.prismconexoes" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- RN-EXPORT-024: as fixtures de ouro da exportação de dados, fora das pastas da tela e da API, que os testes dos dois lados leem. -->
+    <Content Include="../../../test-fixtures/export/*.json" Link="test-fixtures/export/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

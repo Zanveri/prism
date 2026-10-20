@@ -1,0 +1,164 @@
+{
+  "rule": "RN-EXPORT-012: o nome de elemento do XML e de atributo do DbUnit, pela regra do .NET (XmlConvert.EncodeLocalName), com o ToUpperInvariant antes quando upperCase. Na tela, xmlName (xml-name.ts), com o upperInvariant antes; na API, ExportText.XmlName.",
+  "notes": [
+    "value é texto ou { codePoints: [...] }; expected é o nome como sai no arquivo, cuja volta (XmlConvert.DecodeName) é o value."
+  ],
+  "cases": [
+    {
+      "name": "nome comum fica",
+      "value": "pedido",
+      "upperCase": false,
+      "expected": "pedido"
+    },
+    {
+      "name": "espaço",
+      "value": "nota fiscal",
+      "upperCase": false,
+      "expected": "nota_x0020_fiscal"
+    },
+    {
+      "name": "dígito no começo",
+      "value": "1x",
+      "upperCase": false,
+      "expected": "_x0031_x"
+    },
+    {
+      "name": "hífen e ponto no começo",
+      "value": "-a",
+      "upperCase": false,
+      "expected": "_x002D_a"
+    },
+    {
+      "name": "ponto no começo",
+      "value": ".a",
+      "upperCase": false,
+      "expected": "_x002E_a"
+    },
+    {
+      "name": "hífen e ponto no meio ficam",
+      "value": "a-b.c",
+      "upperCase": false,
+      "expected": "a-b.c"
+    },
+    {
+      "name": "dois-pontos",
+      "value": "id:x",
+      "upperCase": false,
+      "expected": "id_x003A_x"
+    },
+    {
+      "name": "aspa dupla",
+      "value": "a\"b",
+      "upperCase": false,
+      "expected": "a_x0022_b"
+    },
+    {
+      "name": "marcação",
+      "value": "<script>",
+      "upperCase": false,
+      "expected": "_x003C_script_x003E_"
+    },
+    {
+      "name": "fim de CDATA",
+      "value": "]]>",
+      "upperCase": false,
+      "expected": "_x005D__x005D__x003E_"
+    },
+    {
+      "name": "um escape já escrito ganha o dele",
+      "value": "_x0041_",
+      "upperCase": false,
+      "expected": "_x005F_x0041_"
+    },
+    {
+      "name": "o escape com X maiúsculo também",
+      "value": "_X0041_",
+      "upperCase": false,
+      "expected": "_x005F_X0041_"
+    },
+    {
+      "name": "sem o sublinhado do fim não é escape",
+      "value": "_x0041",
+      "upperCase": false,
+      "expected": "_x0041"
+    },
+    {
+      "name": "acentos ficam",
+      "value": "ação",
+      "upperCase": false,
+      "expected": "ação"
+    },
+    {
+      "name": "emoji, fora do plano básico, com oito dígitos",
+      "value": "emoji😀",
+      "upperCase": false,
+      "expected": "emoji_x0001F600_"
+    },
+    {
+      "name": "U+0000",
+      "value": "x\u0000y",
+      "upperCase": false,
+      "expected": "x_x0000_y"
+    },
+    {
+      "name": "tabulação",
+      "value": "a\tb",
+      "upperCase": false,
+      "expected": "a_x0009_b"
+    },
+    {
+      "name": "par substituto solto",
+      "value": {
+        "codePoints": [
+          120,
+          55296,
+          121
+        ]
+      },
+      "upperCase": false,
+      "expected": "x_xD800_y"
+    },
+    {
+      "name": "U+202E",
+      "value": "\u202ex",
+      "upperCase": false,
+      "expected": "_x202E_x"
+    },
+    {
+      "name": "U+FFFE",
+      "value": "\ufffe",
+      "upperCase": false,
+      "expected": "_xFFFE_"
+    },
+    {
+      "name": "em maiúsculas antes do escape",
+      "value": "nota fiscal",
+      "upperCase": true,
+      "expected": "NOTA_x0020_FISCAL"
+    },
+    {
+      "name": "em maiúsculas, o dígito do começo",
+      "value": "1a",
+      "upperCase": true,
+      "expected": "_x0031_A"
+    },
+    {
+      "name": "em maiúsculas sem cultura, com acento",
+      "value": "ação",
+      "upperCase": true,
+      "expected": "AÇÃO"
+    },
+    {
+      "name": "em maiúsculas sem cultura, o ß fica",
+      "value": "straße",
+      "upperCase": true,
+      "expected": "STRAßE"
+    },
+    {
+      "name": "em maiúsculas, o escape já escrito vira o do X maiúsculo",
+      "value": "_x0041_",
+      "upperCase": true,
+      "expected": "_x005F_X0041_"
+    }
+  ]
+}

@@ -1,12 +1,18 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Prism.Infrastructure.ConnectionFiles.Clients;
+using Prism.Infrastructure.ConnectionFiles.Models;
+using Prism.Infrastructure.ConnectionFiles.Services;
 using Prism.Infrastructure.Databases.Clients;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers;
 using Prism.Infrastructure.Drivers.Clients;
 using Prism.Infrastructure.Drivers.Services;
+using Prism.Infrastructure.Transfers.Clients;
+using Prism.Infrastructure.Transfers.Models;
+using Prism.Infrastructure.Transfers.Services;
 using Prism.Infrastructure.Vault.Clients;
 using Prism.Infrastructure.Vault.Models;
 using Prism.Infrastructure.Vault.Services;
@@ -34,6 +40,12 @@ public static class DependencyInjection
         // desligamento da API que zera a chave (RN-COFRE-008).
         services.AddSingleton<IVaultService>(provider => new VaultService(provider.GetRequiredService<IVaultFileClient>(), provider.GetRequiredService<IOptions<VaultOptions>>(), VaultCrypto.DeriveKey, VaultCrypto.NewKey, provider.GetRequiredService<ILogger>()));
 
+        // O arquivo da exportação de conexões (RN-TRANSF-007 a 010): a cifra do cofre, sem o cofre. Singleton pela fila das derivações (RN-TRANSF-008), uma
+        // por vez em toda a API e fora da trava do cofre; a derivação é a do cofre, por fábrica, como lá, para o teste trocá-la por uma barata.
+        services.AddOptions<ConnectionFileOptions>();
+        services.AddTransient<IConnectionFileClient, ConnectionFileClient>();
+        services.AddSingleton<IConnectionFileService>(provider => new ConnectionFileService(provider.GetRequiredService<IConnectionFileClient>(), provider.GetRequiredService<IOptions<ConnectionFileOptions>>(), VaultCrypto.DeriveKey));
+
         // Um client por banco, sem estado: o registro de sessões escolhe pelo `Engine` da conexão. Os do Db2 e do Informix só existem
         // nas plataformas para as quais a IBM publica o driver (RN-ABERTO-006); nas outras o registro de sessões responde que o Prism
         // daquela plataforma ainda não conecta nesses bancos.
@@ -54,6 +66,16 @@ public static class DependencyInjection
 
         // O gerenciador de drivers sob demanda (seção 16 da especificação): catálogo, instalação e estado.
         services.AddDrivers(dataDirectory);
+
+        // RN-EXPORT-016 e 018: o registro das transferências em segundo plano e a pasta `transfers` dos arquivos temporários. Singleton, como o registro
+        // de sessões: um trabalho atravessa várias requisições (decisão 3 da seção 8), e o descarte do contêiner (o desligamento da API) os cancela.
+        services.AddSingleton(TransferSettings.For(dataDirectory));
+        services.AddTransient<ITransferFileClient, TransferFileClient>();
+        services.AddSingleton<ITransferService, TransferService>();
+
+        // RN-IMPORT-007 a 011 e 017: o arquivo da importação, que o processo principal copia para a pasta `transfers`, e as prévias dele.
+        services.AddTransient<IImportFileClient, ImportFileClient>();
+        services.AddTransient<IImportPreviewService, ImportPreviewService>();
 
         return services;
     }

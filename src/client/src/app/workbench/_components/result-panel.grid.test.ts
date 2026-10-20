@@ -30,9 +30,8 @@ const rows: RowsState = { status: "rows", id: 1, target: { sql: 'SELECT * FROM "
 const links: ReadonlyMap<number, ColumnLink> = new Map([[0, { table: { schema: "loja", name: "clientes" }, column: "id" }]]);
 const onFollow = vi.fn();
 const linkable = vi.fn(() => true);
-const onSort = vi.fn();
 const onLoadMore = vi.fn();
-const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, sort: { column: "cliente_id", direction: "desc" } as const, onSort, onExport: noop, links, onFollow, linkable, waiting: false, disconnected: false };
+const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, onExport: noop, links, onFollow, linkable, waiting: false, disconnected: false };
 
 /** O que a grade recebeu da área de resultado, desenhada com este estado e estas propriedades. */
 function gridProps(state: RunnerState, props: Partial<Parameters<typeof ResultPanel>[0]> = {}): Record<string, unknown> {
@@ -58,20 +57,11 @@ describe("a área de resultado entrega à grade o que a vista Registros lhe deu 
     expect(props.linkable).toBe(linkable);
   });
 
-  it("a ordem em vigor chega à grade, e o clique no cabeçalho pede a ordem pelo NOME da coluna", () => {
+  it("RN-GRADE-021: a ordem não sai da vista para a grade: o botão de ordenar do cabeçalho é da edição (`editing.sort`), que diz quando ele vale", () => {
     const props = gridProps(rows, { records });
 
-    expect(props.sort).toEqual({ column: "cliente_id", direction: "desc" });
-    (props.onSort as (column: QueryColumn) => void)(columns[0]);
-    expect(onSort.mock.calls).toEqual([["cliente_id"]]);
-  });
-
-  it.each<[string, RunnerState]>([
-    ["um comando rodando sobre as linhas", { status: "running", cancelling: false, previous: rows }],
-    ["carregando mais linhas", { ...rows, loadingMore: true }],
-    ["contando o total", { ...rows, counting: true }],
-  ])("com algo em andamento (%s) a grade não ordena: o executor recusaria o comando", (_name, state) => {
-    expect(gridProps(state, { records }).onSort).toBeUndefined();
+    expect(props).not.toHaveProperty("sort");
+    expect(props).not.toHaveProperty("onSort");
   });
 
   it("no resultado de uma consulta não há chave, link nem ordem pelo cabeçalho", () => {
@@ -80,8 +70,6 @@ describe("a área de resultado entrega à grade o que a vista Registros lhe deu 
     expect(props.links).toBeUndefined();
     expect(props.onFollow).toBeUndefined();
     expect(props.linkable).toBeUndefined();
-    expect(props.onSort).toBeUndefined();
-    expect(props.sort).toBeUndefined();
   });
 
   it("as colunas, as linhas, os valores cortados e o texto do nulo são os do resultado e da preferência", () => {

@@ -13,8 +13,11 @@ const copy = driversCopy.restart;
  * O diálogo abre sozinho, quando a instalação termina, e o reinício fecha o cofre e as abas de SQL: o foco inicial vai para
  * "Depois", a saída que não perde nada. Com o foco em "Reiniciar agora", um Enter ou Espaço que a pessoa já ia dar a outra
  * coisa reiniciaria o serviço sem ela ter escolhido.
+ *
+ * RN-EXPORT-023: com exportações em andamento (em qualquer janela), a frase delas entra no aviso: o reinício as cancela.
  */
-export function RestartDialog({ kind, onRestart, onLater }: { kind: "installed" | "removed"; onRestart: () => void; onLater: () => void }) {
+export function RestartDialog({ kind, onRestart, onLater, exportsNote = null }: { kind: "installed" | "removed"; onRestart: () => void; onLater: () => void; exportsNote?: string | null }) {
+  const description = kind === "installed" ? copy.description : copy.removedDescription;
   return (
     <Dialog
       open
@@ -22,7 +25,7 @@ export function RestartDialog({ kind, onRestart, onLater }: { kind: "installed" 
       dismissible={false}
       icon={<RefreshIcon />}
       title={copy.title}
-      description={kind === "installed" ? copy.description : copy.removedDescription}
+      description={exportsNote === null ? description : `${description} ${exportsNote}`}
       onClose={onLater}
       footer={
         <>

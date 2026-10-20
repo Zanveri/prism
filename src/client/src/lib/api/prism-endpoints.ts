@@ -13,6 +13,11 @@ export const prismEndpoints = {
   userConnectionPasswordReveal: (id: string) => `api/user/connections/${encodeURIComponent(id)}/password/reveal`,
   userConnectionDuplicate: (id: string) => `api/user/connections/${encodeURIComponent(id)}/duplicate`,
   userConnectionsTest: "api/user/connections/test",
+  userConnectionVerification: (id: string) => `api/user/connections/${encodeURIComponent(id)}/verification`,
+  // Seção 34: exportar e importar conexões com as pastas (RN-TRANSF-008, 011 e 014).
+  userConnectionsExport: "api/user/connections/export",
+  userConnectionsImportPreview: "api/user/connections/import/preview",
+  userConnectionsImport: "api/user/connections/import",
   userDatabaseSessions: "api/user/database-sessions",
   userDatabaseSession: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}`,
   userDatabaseSessionDatabases: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/databases`,
@@ -29,13 +34,26 @@ export const prismEndpoints = {
   userDatabaseSessionQueriesEditTarget: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edit-target`,
   userDatabaseSessionQueriesEdits: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits`,
   userDatabaseSessionQueriesEditsPreview: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/preview`,
+  userDatabaseSessionQueriesEditsCount: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/queries/edits/count`,
   userDatabaseSessionResultCells: (id: string, resultId: string) => `api/user/database-sessions/${encodeURIComponent(id)}/results/${encodeURIComponent(resultId)}/cells`,
   userScripts: "api/user/scripts",
   userScript: (id: string) => `api/user/scripts/${encodeURIComponent(id)}`,
+  // RN-SCRIPT-007: as pastas da seção Scripts, à parte das pastas de conexões.
+  userScriptFolders: "api/user/script-folders",
+  userScriptFolder: (id: string) => `api/user/script-folders/${encodeURIComponent(id)}`,
   userWorkspace: "api/user/workspace",
   userDrivers: "api/user/drivers",
   userDriver: (id: string) => `api/user/drivers/${encodeURIComponent(id)}`,
   userDriverInstall: (id: string) => `api/user/drivers/${encodeURIComponent(id)}/install`,
+  // RN-EXPORT-016: os trabalhos em segundo plano (a exportação de dados), um registro só para todas as janelas.
+  userTransfers: "api/user/transfers",
+  userTransferExports: "api/user/transfers/exports",
+  userTransferImportsRead: "api/user/transfers/imports/read",
+  userTransferImportsPreview: "api/user/transfers/imports/preview",
+  userTransferImports: "api/user/transfers/imports",
+  userTransferCopiesPreview: "api/user/transfers/copies/preview",
+  userTransferCopies: "api/user/transfers/copies",
+  userTransfer: (id: string) => `api/user/transfers/${encodeURIComponent(id)}`,
 } as const;
 
 function tablePath(id: string, schema: string, table: string) {

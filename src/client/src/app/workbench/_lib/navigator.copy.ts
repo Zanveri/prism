@@ -1,11 +1,14 @@
+import { formatCount } from "@/lib/utils/format";
+
 /**
  * Os textos que o navegador ganhou quando as telas de Conexões e de Drivers passaram para a área de trabalho (seção 20 da especificação,
  * RN-NAV-001 a 008). Os que ele já tinha continuam em `workbench.copy.ts`.
  */
 export const navigatorCopy = {
-  // RN-NAV-002: a barra de ações acima da árvore. Cada botão é só um ícone: o nome é o que o leitor de tela diz e o que a dica mostra.
+  // RN-NAV-002: a barra de ações acima da árvore. Cada botão é só um ícone: o nome é o que o leitor de tela diz e o que a dica mostra. A barra é da árvore das
+  // conexões, e o nome dela o diz: a seção Scripts tem a árvore e os menus dela (RN-SCRIPT-008 e 009).
   toolbar: {
-    label: "Ações do navegador",
+    label: "Ações da árvore de conexões",
     newConnection: "Nova conexão",
     newConnectionIn: (folder: string) => `Nova conexão em ${folder}`,
     newFolder: "Nova pasta",
@@ -52,6 +55,20 @@ export const navigatorCopy = {
     clear: "Limpar o filtro de ambiente",
     nothingIn: (environment: string) => `Nenhuma conexão em ${environment}.`,
     nothingWithout: "Nenhuma conexão sem ambiente.",
+  },
+
+  // RN-NAV-013: "Só as conectadas", o botão de alternar ao lado do seletor de ambiente, que diz quantas conexões estão conectadas, ligado ou não. O nome
+  // acessível é o rótulo com a conta ("Só as conectadas: 3 conectadas"); o estado é o `aria-pressed`, e a dica diz o que o clique faz agora.
+  connectedFilter: {
+    label: "Só as conectadas",
+    count: (count: number) => (count === 0 ? "Nenhuma conectada" : formatCount(count, "conectada", "conectadas")),
+    showOnly: "Mostrar só as conexões conectadas, com as pastas no caminho até elas",
+    showAll: "Mostrar todas as conexões",
+    nothing: "Nenhuma conexão conectada.",
+    nothingIn: (environment: string) => `Nenhuma conexão conectada em ${environment}.`,
+    nothingWithout: "Nenhuma conexão conectada sem ambiente.",
+    // O que desliga o filtro na árvore vazia.
+    clear: "Mostrar todas",
   },
 
   // RN-NAV-003: os itens do menu de contexto que vieram da tela de Conexões.

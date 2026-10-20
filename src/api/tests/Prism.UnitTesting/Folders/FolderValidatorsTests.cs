@@ -7,7 +7,8 @@ namespace Prism.UnitTesting.Folders;
 
 /// <summary>
 /// RN-PASTA-001: o nome tem de 1 a 60 caracteres depois de normalizado; RN-PASTA-005: o ambiente, opcional, segue as regras do ambiente da conexão, com a
-/// recusa em `FOLDER_NAME_INVALID` no campo dele. A pasta pai e o ID inexistentes são 404 do handler, e não regra de validator.
+/// recusa em `FOLDER_NAME_INVALID` no campo dele; RN-PASTA-007: a cor da pasta, opcional, é `#RRGGBB` como a do ambiente, e a recusa vai no mesmo código, no
+/// campo dela. A pasta pai e o ID inexistentes são 404 do handler, e não regra de validator.
 /// </summary>
 public sealed class FolderValidatorsTests
 {
@@ -184,6 +185,48 @@ public sealed class FolderValidatorsTests
         result.ShouldNotHaveAnyValidationErrors();
     }
 
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK com cor da pasta #RRGGBB, em branco e sem ela")]
+    public void CreateFolder_ShouldBeOK_WithAndWithoutColor()
+    {
+        //Arrange
+        var validator = new CreateFolderValidator();
+
+        //Act
+        var with = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(color: "#7db2ff"));
+        var blank = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(color: " "));
+        var without = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid());
+
+        //Assert
+        with.ShouldNotHaveAnyValidationErrors();
+        blank.ShouldNotHaveAnyValidationErrors();
+        without.ShouldNotHaveAnyValidationErrors();
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "Erro cor da pasta fora do formato #RRGGBB")]
+    public void CreateFolder_ShouldBeError_ColorInvalid()
+    {
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(color: "azul"), "Color");
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(color: "7DB2FF"), "Color");
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(color: "#7DB2FG"), "Color");
+    }
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "Erro cor da pasta fora do formato #RRGGBB, e OK com ela válida")]
+    public void UpdateFolder_ShouldValidateTheColor()
+    {
+        //Arrange
+        var validator = new UpdateFolderValidator();
+
+        //Act
+        var valid = validator.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(color: "#B79CFF"));
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(color: "#B79"), "Color");
+    }
+
     [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
     [Fact(DisplayName = "OK nome válido")]
     public void UpdateFolder_ShouldBeOK()
@@ -228,4 +271,76 @@ public sealed class FolderValidatorsTests
     [Fact(DisplayName = "Erro nome com 61 caracteres")]
     public void UpdateFolder_ShouldBeError_NameTooLong()
         => AssertUpdateNameInvalid(new string('a', 61));
+
+    /// <summary>RN-PROT-001: a confirmação é uma da lista, e a recusa vai no código das pastas, no campo dela.</summary>
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK com as proteções, e erro na confirmação fora da lista")]
+    public void CreateFolder_ShouldValidateTheConfirmation()
+    {
+        //Arrange
+        var validator = new CreateFolderValidator();
+
+        //Act
+        var valid = validator.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(confirmCommands: "all", readOnly: true));
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        AssertCreateInvalid(FolderFakers.ReturnCreateFolderCommandValid(confirmCommands: "todos"), nameof(CreateFolderCommand.ConfirmCommands));
+    }
+
+    [Trait("UpdateFolderValidator", "UpdateFolderCommand")]
+    [Fact(DisplayName = "OK com as proteções e a senha do usuário, e erro na confirmação fora da lista")]
+    public void UpdateFolder_ShouldValidateTheConfirmation()
+    {
+        //Arrange
+        var validator = new UpdateFolderValidator();
+
+        //Act
+        var valid = validator.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(confirmCommands: "irreversible", readOnly: true, userPassword: "senha"));
+
+        //Assert
+        valid.ShouldNotHaveAnyValidationErrors();
+        AssertUpdateInvalid(FolderFakers.ReturnUpdateFolderCommandValid(confirmCommands: "Irreversible"), nameof(UpdateFolderCommand.ConfirmCommands));
+    }
+
+    /// <summary>
+    /// RN-PASTA-001 (seção 34): o nome e o ambiente da pasta não têm caractere de controle nem de direção do texto, conferido depois da normalização (que
+    /// troca a tabulação e a quebra de linha por um espaço), na criação e na alteração, com a frase de cada um: a pasta exportada com um nome desses não
+    /// voltaria pela importação.
+    /// </summary>
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Theory(DisplayName = "Erro caractere de controle ou de direção do texto no nome ou no ambiente da pasta")]
+    [InlineData("\u202E")]
+    [InlineData("\u0007")]
+    [InlineData("\u0085X\u0080")]
+    [InlineData("\u2068")]
+    [InlineData("\u200F")]
+    public void Folder_ShouldBeError_ControlOrDirectionCharacter(string escaped)
+    {
+        //Arrange
+        var character = System.Text.RegularExpressions.Regex.Unescape(escaped);
+        var create = new CreateFolderValidator();
+        var update = new UpdateFolderValidator();
+
+        //Act
+        var createdName = create.TestValidate(FolderFakers.ReturnCreateFolderCommandValid(name: $"Produ{character}ção"));
+        var updatedName = update.TestValidate(FolderFakers.ReturnUpdateFolderCommandValid(name: $"Produ{character}ção"));
+        var createdEnvironment = create.TestValidate(FolderFakers.ReturnCreateFolderCommandValid() with { EnvironmentName = $"Prod{character}uction" });
+
+        //Assert
+        createdName.ShouldHaveValidationErrorFor(command => command.Name).WithErrorCode("FOLDER_NAME_INVALID").WithErrorMessage("O nome da pasta não pode ter caractere de controle nem de direção do texto.");
+        updatedName.ShouldHaveValidationErrorFor(command => command.Name).WithErrorCode("FOLDER_NAME_INVALID").WithErrorMessage("O nome da pasta não pode ter caractere de controle nem de direção do texto.");
+        createdEnvironment.ShouldHaveValidationErrorFor(command => command.EnvironmentName).WithErrorCode("FOLDER_NAME_INVALID").WithErrorMessage("O ambiente não pode ter caractere de controle nem de direção do texto.");
+    }
+
+    [Trait("CreateFolderValidator", "CreateFolderCommand")]
+    [Fact(DisplayName = "OK tabulação e quebra de linha no nome da pasta viram espaço, e passam")]
+    public void CreateFolder_ShouldBeOK_TabAndNewLineAreNormalized()
+    {
+        //Act
+        var result = new CreateFolderValidator().TestValidate(FolderFakers.ReturnCreateFolderCommandValid(name: "Estoque\tProduction\nPRD"));
+
+        //Assert
+        result.ShouldNotHaveAnyValidationErrors();
+    }
 }

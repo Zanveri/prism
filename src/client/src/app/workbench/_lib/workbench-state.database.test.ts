@@ -12,9 +12,10 @@ const rt = await vi.hoisted(async () => {
 
   type Fake = {
     options: { connectionId: string | null; database?: string; onSession: (sessionId: string | null) => void };
-    state: { status: string };
+    /** `auto`: a execução da atualização automática (RN-GRADE-014). */
+    state: { status: string; auto?: true };
     session: string | null;
-    getState: () => { status: string };
+    getState: () => { status: string; auto?: true };
     run: ReturnType<typeof vi.fn>;
     retire: ReturnType<typeof vi.fn>;
     release: ReturnType<typeof vi.fn>;
@@ -155,6 +156,26 @@ describe("WorkbenchProvider.switchDatabase: a aba de consulta passa a outro banc
     expect(value.tabs[0].database).toBeUndefined();
   });
 
+  it("a execução da atualização automática (RN-GRADE-014) não segura a troca: o executor de antes é aposentado (o que a desliga), e a sessão dele fecha", async () => {
+    render().openQueryTab("c1", "select * from fila");
+    let value = render();
+    const tab = value.tabs[0];
+    const before = fake(value.runnerOf(tab.id));
+    before.session = "s-mes";
+    before.options.onSession("s-mes");
+    before.state = { status: "running", auto: true };
+    value = render();
+
+    value.switchDatabase(tab.id, "vendas");
+    value = render();
+    await settle();
+
+    expect(value.runnerOf(tab.id)).not.toBe(before as unknown as QueryRunner);
+    expect(before.retire).toHaveBeenCalledOnce();
+    expect(rt.sessions.close).toHaveBeenCalledWith("s-mes");
+    expect(value.tabs[0].database).toBe("vendas");
+  });
+
   it("a aba de uma tabela não troca de banco: ela é a tabela daquele banco", () => {
     render().openTableTab("c1", { schema: "loja", name: "pedido" });
     let value = render();
@@ -166,8 +187,8 @@ describe("WorkbenchProvider.switchDatabase: a aba de consulta passa a outro banc
   });
 
   it("a aba de um script fica com mudança não salva enquanto o banco não é o salvo, e o ponto apaga ao voltar a ele (RN-SCRIPT-001)", () => {
-    const script: Script = { id: "s1", name: "Fechamento", connectionID: "c1", database: "mes2", sql: "select 1", updatedAt: "2026-10-13T00:00:00Z" };
-    render().openScriptTab(script, { connectionId: "c1", database: "mes2" });
+    const script: Script = { id: "s1", name: "Fechamento", connectionID: "c1", database: "mes2", folderID: null, icon: null, color: null, sql: "select 1", updatedAt: "2026-10-13T00:00:00Z" };
+    render().openScriptTab(script, { connectionId: "c1", database: "mes2", saved: { savedConnectionId: "c1", savedDatabase: "mes2" } });
     let value = render();
     const tab = value.tabs[0];
     expect(tab.script?.dirty).toBe(false);
@@ -186,7 +207,7 @@ describe("WorkbenchProvider.switchDatabase: a aba de consulta passa a outro banc
     let value = render();
     const tab = value.tabs[0];
 
-    value.setTabScript(tab.id, { id: "s1", name: "Fechamento" }, "select 1", "vendas");
+    value.setTabScript(tab.id, { id: "s1", name: "Fechamento" }, "select 1", { savedConnectionId: "c1", savedDatabase: "vendas" });
     value = render();
     expect(value.tabs[0].script?.dirty).toBe(false);
 

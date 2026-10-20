@@ -2,7 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
-import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 
 import { treeKey, type FetchedPath } from "./database-sessions.service";
 import { childrenKey, columnNodes, databaseNodes, navKey, objectNodes, parseNavKey, schemaGroupNodes, schemaNodes, tableGroupNodes, treeNodes, type LevelState, type NavNode, type NavPath } from "./navigator-model";
@@ -100,8 +100,8 @@ describe("levelPathOf (a chave de uma consulta da árvore, de volta ao nó)", ()
 // --- a árvore de exemplo --------------------------------------------------------------------------------------------
 
 const now = "2026-10-09T12:00:00Z";
-const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
-const connection = (id: string, name: string, folderID: string | null): Connection => ({ id, folderID, name, engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, createdAt: now, updatedAt: now });
+const folder: Folder = { id: "f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
+const connection = (id: string, name: string, folderID: string | null): Connection => ({ id, folderID, name, engine: 1, host: "srv", port: 5432, database: "mes", userName: "u", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now });
 
 const base = treeNodes(buildConnectionTree([folder], [connection("c1", "MES Produção", "f1"), connection("c2", "ERP", null)]));
 const loaded = (children: NavNode[]): LevelState => ({ status: "loaded", children });

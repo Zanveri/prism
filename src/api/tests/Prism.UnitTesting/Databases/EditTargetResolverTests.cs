@@ -52,12 +52,77 @@ public sealed class EditTargetResolverTests
         Assert.False(target.OneAtATime);
     }
 
+    /// <summary>
+    /// RN-EDIT-016: no PostgreSQL o `serial` e o `bigserial` são só um padrão (`nextval(...)`), e o catálogo não os diz gerados (RN-CAT-001); o alvo
+    /// da edição os diz "por padrão", como a identidade "por padrão", para o "Duplicar linha" deixar o banco gerar o valor da linha nova.
+    /// </summary>
     [Trait("EditTargetResolver", "Resolve")]
-    [Theory(DisplayName = "OK a visão, a tabela estrangeira e o que não é tabela ficam só leitura, com o motivo em cada coluna")]
+    [Fact(DisplayName = "OK no PostgreSQL a coluna cujo padrão é nextval(...) é gerada por padrão, e continua editável")]
+    public void Resolve_ShouldTellAPostgresColumnWhoseDefaultIsNextvalIsGeneratedByDefault()
+    {
+        //Arrange
+        ColumnInfo[] columns =
+        [
+            new("id", "integer", false, true, 1, "nextval('loja.pedido_id_seq'::regclass)", null),
+            new("numero", "bigint", false, false, 2, "  NEXTVAL('pedido_numero_seq'::regclass) ", null),
+            new("status", "text", true, false, 3, "'nextval(x)'::text", null),
+            new("quantidade", "integer", false, false, 4, "0", null),
+            new("codigo", "integer", false, false, 5, null, ColumnGeneration.ByDefault),
+            new("total", "numeric(12,2)", false, false, 6, "(quantidade * 2)", ColumnGeneration.Always)
+        ];
+        var result = new[] { Origin("id", 1), Origin("numero", 2), Origin("status", 3), Origin("quantidade", 4), Origin("codigo", 5), Origin("total", 6) };
+
+        //Act
+        var target = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", columns));
+
+        //Assert
+        Assert.Equal([ColumnGeneration.ByDefault, ColumnGeneration.ByDefault, null, null, ColumnGeneration.ByDefault, ColumnGeneration.Always], target.Columns.Select(column => column.Generated));
+        Assert.Equal([true, true, true, true, true, false], target.Columns.Select(column => column.Editable));
+        Assert.True(target.RowOperations);
+    }
+
+    /// <summary>RN-EDIT-016: só o PostgreSQL tem o padrão `nextval`; no Db2 e no Informix vale o que o catálogo diz (o `SERIAL` do Informix já é "por padrão").</summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK no Db2 e no Informix o padrão não muda o que o catálogo diz da geração")]
+    public void Resolve_ShouldKeepTheGenerationTheCatalogGivesOutsidePostgres()
+    {
+        //Arrange
+        var table = new EditCatalogTable("LOJA", "PEDIDO", "table", null, false, [new("ID", "INTEGER", false, true, 1, "nextval('x')", null), new("STATUS", "VARCHAR(20)", true, false, 2, null, null)], [new EditKey("PK_PEDIDO", true, ["ID"])]);
+        var source = new ResultSource(null, [new FromTable(new EditTableName("LOJA", "PEDIDO", "\"LOJA\".\"PEDIDO\""), null)], [new SelectItem.All()]);
+
+        //Act
+        var target = Resolve(ESqlDialect.Db2, source, [Ibm("ID"), Ibm("STATUS")], table);
+
+        //Assert
+        Assert.Equal([null, null], target.Columns.Select(column => column.Generated));
+    }
+
+    /// <summary>RN-EDIT-005: o "Salvar" confere que o alvo de dentro da transação é o mesmo; a coluna `serial` sai igual nas duas consultas.</summary>
+    [Trait("EditTargetResolver", "Same")]
+    [Fact(DisplayName = "OK o alvo com a coluna serial é o mesmo quando o catálogo responde igual")]
+    public void Same_ShouldHoldForTheSameSerialColumn()
+    {
+        //Arrange
+        ColumnInfo[] columns = [new("id", "integer", false, true, 1, "nextval('loja.pedido_id_seq'::regclass)", null), new("status", "text", true, false, 2, null, null)];
+        var result = new[] { Origin("id", 1), Origin("status", 2) };
+
+        //Act
+        var before = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", columns));
+        var now = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", columns));
+        var withoutDefault = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table("table", [columns[0] with { DefaultValue = null }, columns[1]]));
+
+        //Assert
+        Assert.True(EditTargetResolver.Same(before, now));
+        Assert.False(EditTargetResolver.Same(before, withoutDefault));
+    }
+
+    [Trait("EditTargetResolver", "Resolve")]
+    [Theory(DisplayName = "OK a visão, a tabela estrangeira, o que não é tabela e a tabela a que o nome sem esquema não leva mais ficam só leitura, com o motivo em cada coluna")]
     [InlineData("view", "pedido é uma visão")]
     [InlineData("materializedView", "pedido é uma visão materializada")]
     [InlineData("foreign", "pedido é uma tabela estrangeira")]
     [InlineData("other", "pedido não é uma tabela")]
+    [InlineData(EditCatalogTable.Elsewhere, "pedido, escrita sem esquema, leva agora a outra tabela na sessão")]
     public void Resolve_ShouldKeepWhatIsNotATableReadOnly(string kind, string reason)
     {
         //Act
@@ -331,6 +396,116 @@ public sealed class EditTargetResolverTests
         Assert.Equal([(true, null), (false, "CLIENTE não é uma tabela")], target.Tables.Select(table => (table.Editable, table.Reason)));
         Assert.Equal([(false, "coluna da chave numa junção"), (true, null), (false, "CLIENTE não é uma tabela")], target.Columns.Select(column => (column.Editable, column.Reason)));
         Assert.Equal(EditableSql.UnknownOrigin, star.Error.Reason);
+    }
+
+    /// <summary>
+    /// RN-GRADE-020: o tipo de cada tabela e a chave pelo nome. A chave que a edição usa, quando ela acha uma; senão a primeira candidata, a primária antes,
+    /// também a que não está inteira no resultado e a de coluna binária (que a edição pula); vazia sem chave nenhuma.
+    /// </summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK cada tabela diz o tipo e a chave pelo nome: a da edição, ou a primeira candidata, também a que não está inteira no resultado")]
+    public void Resolve_ShouldTellTheKindAndTheKeyColumnsOfEachTable()
+    {
+        //Arrange
+        ColumnInfo[] uniqueColumns = [new("id", "integer", true, false, 1, null, null), new("codigo", "integer", false, false, 2, null, null), new("serie", "integer", false, false, 3, null, null)];
+        var unique = Table("table", uniqueColumns, [new EditKey("uq_id", false, ["id"]), new EditKey("uq_codigo_serie", false, ["codigo", "serie"])]);
+        ColumnInfo[] binaryKeyColumns = [new("hash", "bytea", false, false, 1, null, null), new("status", "text", true, false, 2, null, null)];
+        var binaryKey = Table("table", binaryKeyColumns, [new EditKey("pedido_pkey", true, ["hash"])]);
+        var twoKeys = Table("table", keys: [new EditKey("uq_codigo", false, ["codigo"]), new EditKey("pedido_pkey", true, ["id"])]);
+
+        //Act
+        var whole = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("id", 1), Origin("status", 2)], Table("table"));
+        var missing = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("status", 2)], Table("table"));
+        var byUnique = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("id", 1), Origin("codigo", 2), Origin("serie", 3)], unique);
+        var binary = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [new QueryColumn("hash", "bytea", "binary", new ColumnOrigin(TableID, 1)), Origin("status", 2)], binaryKey);
+        var withoutKey = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("id", 1)], Table("table", keys: []));
+        var codigoOnly = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("codigo", 5), Origin("status", 2)], twoKeys);
+
+        //Assert
+        Assert.Equal(EditTableKind.Table, whole.Tables[0].Kind);
+        Assert.Equal(["id"], whole.Tables[0].KeyColumns);
+        Assert.Equal([0], whole.Tables[0].Key);
+        Assert.Equal(["id"], missing.Tables[0].KeyColumns);
+        Assert.Empty(missing.Tables[0].Key);
+        Assert.False(missing.Tables[0].Editable);
+        Assert.Equal(["codigo", "serie"], byUnique.Tables[0].KeyColumns);
+        Assert.Equal(["hash"], binary.Tables[0].KeyColumns);
+        Assert.Empty(binary.Tables[0].Key);
+        Assert.Empty(withoutKey.Tables[0].KeyColumns);
+        Assert.Equal(["codigo"], codigoOnly.Tables[0].KeyColumns);
+        Assert.Equal([0], codigoOnly.Tables[0].Key);
+    }
+
+    /// <summary>
+    /// RN-GRADE-020: a visão, a visão materializada, a tabela estrangeira, a que o catálogo não acha e a que leva agora a outra na sessão dizem o tipo, e não
+    /// têm chave pelo nome; a tabela que aparece duas vezes no `FROM` continua dizendo a candidata.
+    /// </summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK a visão, a materializada, a estrangeira, o sinônimo e a que leva a outra tabela dizem o tipo, sem chave pelo nome")]
+    public void Resolve_ShouldTellTheKindOfWhatIsNotATable_WithoutKeyColumns()
+    {
+        //Arrange
+        var result = new[] { Origin("id", 1), Origin("status", 2) };
+        var twice = new ResultSource(null, [new FromTable(Pedido, "p"), new FromTable(Pedido, "q")], [new SelectItem.All()]);
+
+        //Act
+        var kinds = new[] { "view", "materializedView", "foreign", EditCatalogTable.Elsewhere, "sequence" }.Select(kind => Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), result, Table(kind)).Tables[0]).ToList();
+        var synonym = Resolve(ESqlDialect.Db2, Source(new SelectItem.All()), [new QueryColumn("ID", "INTEGER", "number")], (EditCatalogTable?)null).Tables[0];
+        var repeated = Resolve(ESqlDialect.PostgreSql, twice, result, Table("table"), Table("table")).Tables;
+
+        //Assert
+        Assert.Equal([EditTableKind.View, EditTableKind.MaterializedView, EditTableKind.Foreign, EditTableKind.Elsewhere, EditTableKind.Other], kinds.Select(table => table.Kind));
+        Assert.All(kinds, table => Assert.Empty(table.KeyColumns));
+        Assert.Equal((EditTableKind.Other, 0), (synonym.Kind, synonym.KeyColumns.Count));
+        Assert.All(repeated, table =>
+        {
+            Assert.Equal((EditTableKind.Table, false), (table.Kind, table.Editable));
+            Assert.Equal(["id"], table.KeyColumns);
+        });
+    }
+
+    /// <summary>
+    /// RN-GRADE-020: numa visão que é a única tabela do `FROM`, cada coluna dela vem com a visão (`table` 0) e o nome da coluna nela, também a que tem apelido,
+    /// e só leitura com o motivo da visão. No PostgreSQL pelo número da coluna que a resposta dá (o da visão); no Db2 e no Informix, pela lista do `SELECT`.
+    /// </summary>
+    [Trait("EditTargetResolver", "Resolve")]
+    [Fact(DisplayName = "OK as colunas de uma visão vêm com a visão e o nome nela, também a de apelido, e só leitura")]
+    public void Resolve_ShouldLinkTheColumnsOfAViewByItsOwnColumns()
+    {
+        //Arrange
+        ColumnInfo[] viewColumns = [new("id", "integer", true, false, 1, null, null), new("cliente", "text", true, false, 2, null, null)];
+        var view = new EditCatalogTable("loja", "resumo", "view", TableID, false, viewColumns, []);
+        var ibmView = new EditCatalogTable("LOJA", "RESUMO", "view", null, false, [new("ID", "INTEGER", true, false, 1, null, null), new("CLIENTE", "VARCHAR(40)", true, false, 2, null, null)], []);
+        var ibmSource = new ResultSource(null, [new FromTable(new EditTableName("LOJA", "RESUMO", "\"LOJA\".\"RESUMO\""), null)], [new SelectItem.Column([], "CLIENTE", "NOME"), new SelectItem.Column([], "ID", "ID")]);
+
+        //Act
+        var postgres = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("nome", 2), Origin("id", 1)], view);
+        var db2 = Resolve(ESqlDialect.Db2, ibmSource, [Ibm("NOME"), Ibm("ID")], ibmView);
+
+        //Assert
+        Assert.Equal([(0, "cliente", false, "resumo é uma visão"), (0, "id", false, "resumo é uma visão")], postgres.Columns.Select(column => (column.Table, column.BaseColumn, column.Editable, column.Reason)));
+        Assert.Equal([(0, "CLIENTE"), (0, "ID")], db2.Columns.Select(column => (column.Table, column.BaseColumn)));
+        Assert.Equal((EditTableKind.View, 0, false), (postgres.Tables[0].Kind, postgres.Tables[0].KeyColumns.Count, postgres.RowOperations));
+    }
+
+    /// <summary>RN-GRADE-020 e RN-PROT-002: o alvo do "Gerar SQL" numa conexão somente leitura tem tudo só leitura, com o motivo, e a chave da edição fica.</summary>
+    [Trait("EditTargetResolver", "ReadOnly")]
+    [Fact(DisplayName = "OK o alvo da conexão somente leitura diz o mesmo de uma comum, com as tabelas e as colunas só leitura e sem operações de linha")]
+    public void ReadOnly_ShouldKeepTheTablesAndKeysAndMakeEverythingReadOnly()
+    {
+        //Arrange
+        var target = Resolve(ESqlDialect.PostgreSql, Source(new SelectItem.All()), [Origin("id", 1), Origin("status", 2)], Table("table"));
+
+        //Act
+        var readOnly = EditTargetResolver.ReadOnly(target, "a conexão é somente leitura");
+
+        //Assert
+        Assert.Equal(("pedido", EditTableKind.Table, false, "a conexão é somente leitura"), (readOnly.Tables[0].Name, readOnly.Tables[0].Kind, readOnly.Tables[0].Editable, readOnly.Tables[0].Reason));
+        Assert.Equal(["id"], readOnly.Tables[0].KeyColumns);
+        Assert.Equal([0], readOnly.Tables[0].Key);
+        Assert.Equal([(0, "id", false, "a conexão é somente leitura"), (0, "status", false, "a conexão é somente leitura")], readOnly.Columns.Select(column => (column.Table, column.BaseColumn, column.Editable, column.Reason)));
+        Assert.False(readOnly.RowOperations);
+        Assert.True(target.RowOperations);
     }
 
     private static readonly EditCatalogTable IbmPedido = new("LOJA", "PEDIDO", "table", null, false, [new("ID", "INTEGER", false, true, 1, null, null), new("STATUS", "VARCHAR(20)", true, false, 2, null, null)], [new EditKey("PK_PEDIDO", true, ["ID"])]);

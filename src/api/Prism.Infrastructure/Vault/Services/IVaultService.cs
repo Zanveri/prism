@@ -87,4 +87,16 @@ public interface IVaultService
     /// a função recusa uma mudança sem custar uma regravação (e sem apagar a versão do `.bak`).
     /// </summary>
     Task<UnitResult<EVaultError>> SaveAsync(Func<VaultDocument, VaultDocument> change, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-003: o <see cref="SaveAsync"/> da alteração que pode pedir a senha do usuário. Com o semáforo tomado, numa operação só: aplica `change`
+    /// ao documento atual, pergunta a `needsPassword` (o documento de antes e o de depois) se a mudança pede a senha e, se pede, confere `password`
+    /// pelo mesmo caminho do <see cref="ReadIfPasswordMatchesAsync"/> (a mesma derivação, a mesma contagem de erros seguidos e o mesmo fechamento no
+    /// quinto, RN-CONN-003); só então grava. Quem decide se a senha é pedida é o documento mais recente, e não o que quem chama leu antes.
+    ///
+    /// `Missing` (a senha pedida não veio, nula ou vazia: nada é conferido nem contado) e `Wrong` (não conferiu: o erro é contado) não gravam nada.
+    /// A senha que vem sem ser pedida não é conferida (`NotNeeded`). `change` que devolve a mesma instância é "nada a gravar", como no
+    /// <see cref="SaveAsync"/>, e não pede senha. As falhas são as do <see cref="SaveAsync"/>, mais `Locked` no quinto erro seguido, já com o cofre fechado.
+    /// </summary>
+    Task<Result<EPasswordCheck, EVaultError>> SaveWithPasswordAsync(Func<VaultDocument, VaultDocument> change, Func<VaultDocument, VaultDocument, bool> needsPassword, string? password, CancellationToken cancellationToken);
 }

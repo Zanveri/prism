@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { chars, column, hostile, hostileValues, sliceOf } from "./test-fixtures";
-import { toHtml } from "./to-html";
+import type { GridSlice } from "./grid-slice";
+import { chars, column, documentOf, hostile, hostileValues, sliceDocument, sliceOf } from "./test-fixtures";
+
+/** O documento sem o título com o nome da origem, com os caracteres tirados. */
+function toHtml(slice: GridSlice): { text: string; removed: number } {
+  const { text, counts } = sliceDocument("html", slice, { title: false });
+  return { text, removed: counts.removedCharacters };
+}
 
 /** Todas as marcas do documento: nome e atributos. O dado nunca é marca, então tudo o que aparece aqui é do formato. */
 function tagsOf(html: string): { name: string; attributes: string[] }[] {
@@ -14,7 +20,7 @@ function tagsOf(html: string): { name: string; attributes: string[] }[] {
 
 const bodyOf = (html: string) => html.slice(html.indexOf("<body>"));
 
-describe("toHtml: um documento completo", () => {
+describe("o HTML: um documento completo", () => {
   it("tem tipo de documento, idioma, codificação, título e uma tabela com o cabeçalho em <th>", () => {
     const { text, removed } = toHtml(sliceOf([column("id", "number"), column("nome")], [["1", "Ana"]]));
 
@@ -44,20 +50,25 @@ describe("toHtml: um documento completo", () => {
     }
   });
 
-  it("recorte vazio: sem colunas e sem linhas, ou só as colunas", () => {
-    expect(bodyOf(toHtml(sliceOf([], [])).text)).toBe("<body>\n<table>\n<thead>\n</thead>\n<tbody>\n</tbody>\n</table>\n</body>\n</html>\n");
+  it("sem linhas: só o cabeçalho", () => {
     expect(bodyOf(toHtml(sliceOf([column("a")], [])).text)).toBe('<body>\n<table>\n<thead>\n<tr><th scope="col">a</th></tr>\n</thead>\n<tbody>\n</tbody>\n</table>\n</body>\n</html>\n');
   });
 
-  it("sem colunas não há linha <tr> nenhuma, nem no cabeçalho nem no corpo (uma linha sem célula não é HTML válido), e o documento segue completo", () => {
-    for (const rows of [[], [[], []]]) {
-      const { text } = toHtml(sliceOf([], rows));
+  it("com o título, o nome da origem é o <title> e uma <caption>, escapados e sem o que o documento não aceita, contado uma vez", () => {
+    const { text, counts } = documentOf("html", [column("a")], [["1"], ["2"]], {}, { sourceName: `ped<i>do${chars(0)}` });
 
-      expect(text).not.toMatch(/<(tr|td|th)[ >]/);
-      expect(text.startsWith("<!DOCTYPE html>\n")).toBe(true);
-      expect(text.endsWith("</table>\n</body>\n</html>\n")).toBe(true);
-      expect(bodyOf(text)).toBe("<body>\n<table>\n<thead>\n</thead>\n<tbody>\n</tbody>\n</table>\n</body>\n</html>\n");
-    }
+    expect(text).toContain("<title>ped&lt;i&gt;do</title>");
+    expect(text).toContain("<table>\n<caption>ped&lt;i&gt;do</caption>\n<thead>");
+    expect(counts.removedCharacters).toBe(1);
+  });
+
+  it("sem os nomes das colunas, o <thead> fica vazio", () => {
+    expect(documentOf("html", [column("a")], [["1"]], { columnNames: false }).text).toContain("<thead>\n</thead>\n<tbody>\n<tr><td>1</td></tr>\n</tbody>");
+  });
+
+  it("o binário em hexadecimal, inteiro, ou a célula nula com \"Deixar vazio\"", () => {
+    expect(documentOf("html", [column("f", "binary")], [["0xBEEF"]]).text).toContain("<tr><td>0xBEEF</td></tr>");
+    expect(documentOf("html", [column("f", "binary")], [["0xBEEF"]], { binary: "null" }).text).toContain('<tr><td class="null"></td></tr>');
   });
 
   it("o nulo é uma célula vazia marcada pela classe `null`; o texto vazio é uma célula vazia sem a classe", () => {
@@ -82,7 +93,7 @@ describe("toHtml: um documento completo", () => {
   });
 });
 
-describe("toHtml: tudo o que vem do dado é escapado", () => {
+describe("o HTML: tudo o que vem do dado é escapado", () => {
   it("& < > aspas duplas e simples, no valor e no nome da coluna", () => {
     const { text } = toHtml(sliceOf([column(`n<"&'>`)], [[`<b>"&'</b>`]]));
 
@@ -106,7 +117,7 @@ describe("toHtml: tudo o que vem do dado é escapado", () => {
   });
 
   it("o documento diz que nenhum script roda nele, ainda que o escape falhasse", () => {
-    expect(toHtml(sliceOf([], [])).text).toContain("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">");
+    expect(toHtml(sliceOf([column("a")], [])).text).toContain("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">");
   });
 
   it("a quebra de linha (\\n e \\r\\n) e a tabulação ficam no texto da célula, e a folha de estilo as preserva (white-space)", () => {
@@ -128,7 +139,7 @@ describe("toHtml: tudo o que vem do dado é escapado", () => {
   });
 });
 
-describe("toHtml: o que o HTML não aceita no documento", () => {
+describe("o HTML: o que o HTML não aceita no documento", () => {
   it("caracteres de controle, DEL, os de C1, os não-caracteres e os pares soltos são tirados, e a função diz quantos", () => {
     // NUL, SOH, BEL, ESC, DEL, NEL (C1), U+FFFE, um U+FDD0 e dois pares soltos.
     const dirty = `a${chars(0, 1, 7, 27, 127, 0x85, 0xfffe, 0xfdd0)}b${chars(0xd800)}c${chars(0xdc00)}d`;

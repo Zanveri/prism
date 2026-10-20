@@ -1,0 +1,188 @@
+import { describe, expect, it } from "vitest";
+
+import type { RowContext } from "./cell-editing";
+import { editBar, type EditBarState } from "./edit-bar";
+import type { EditTarget } from "./record-edits.schema";
+import { recordsCopy } from "./records.copy";
+
+const copy = recordsCopy.edit;
+
+/** `loja.pedido`, de uma tabela só: a chave em `id`, `status` se edita, `total` é gerada pelo banco. */
+const target: EditTarget = {
+  tables: [{ schema: "loja", name: "pedido", key: [0], editable: true, reason: null }],
+  columns: [
+    { table: 0, baseColumn: "id", editable: true, reason: null, nullable: false, generated: null },
+    { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+    { table: 0, baseColumn: "total", editable: false, reason: "gerada pelo banco", nullable: true, generated: "always" },
+  ],
+  rowOperations: true,
+  oneAtATime: false,
+};
+
+/** `pedido p JOIN cliente c`: só se alteram células. */
+const join: EditTarget = {
+  tables: [
+    { schema: "loja", name: "pedido", key: [0], editable: true, reason: null },
+    { schema: "loja", name: "cliente", key: [2], editable: true, reason: null },
+  ],
+  columns: [
+    { table: 0, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+    { table: 0, baseColumn: "status", editable: true, reason: null, nullable: true, generated: null },
+    { table: 1, baseColumn: "id", editable: false, reason: "coluna da chave numa junção", nullable: false, generated: null },
+  ],
+  rowOperations: false,
+  oneAtATime: false,
+};
+
+const readRow = (over: Partial<Extract<RowContext, { kind: "read" }>> = {}): RowContext => ({ kind: "read", truncated: undefined, deleted: false, values: ["1", "aberta", "10"], ...over });
+const at = (column: number, row: RowContext = readRow()): EditBarState["active"] => ({ cell: { row: 0, column }, row });
+const state = (over: Partial<EditBarState> = {}): EditBarState => ({ readOnly: null, target, busy: false, active: at(1), rows: 2, platform: "Win32", ...over });
+
+/** O motivo de cada botão, na ordem da barra (nulo no que se aplica). */
+const reasons = (over: Partial<EditBarState> = {}) => editBar(state(over)).map((button) => button.reason);
+
+describe("a barra de edição: os botões, na ordem, com o atalho (RN-EDIT-013)", () => {
+  it("Editar célula, Adicionar linha, Duplicar linha e Excluir linha, com a dica que escreve o atalho", () => {
+    expect(editBar(state()).map((button) => [button.id, button.label, button.title, button.shortcut.aria])).toEqual([
+      ["edit", "Editar célula", "Editar célula (F2)", "F2"],
+      ["newRow", "Adicionar linha", "Adicionar linha (Alt+Insert)", "Alt+Insert"],
+      ["duplicateRow", "Duplicar linha", "Duplicar linha (Ctrl+Alt+Insert)", "Control+Alt+Insert"],
+      ["deleteRow", "Excluir linha", "Excluir linha (Alt+Delete)", "Alt+Delete"],
+    ]);
+  });
+
+  it("no macOS a dica escreve os atalhos com o Option e o Cmd (RN-EDIT-015)", () => {
+    expect(editBar(state({ platform: "MacIntel" })).map((button) => button.title)).toEqual(["Editar célula (F2)", "Adicionar linha (Option+Insert)", "Duplicar linha (Cmd+Option+Insert)", "Excluir linha (Option+Delete)"]);
+  });
+
+  it("o botão que não se aplica leva o motivo, e a dica é a do botão seguida do motivo, como o item do menu o mostra", () => {
+    const [, add] = editBar(state({ target: join }));
+
+    expect(add.reason).toBe("Somente leitura: num resultado de junção só se alteram células.");
+    expect(add.title).toBe("Adicionar linha (Alt+Insert). Somente leitura: num resultado de junção só se alteram células.");
+  });
+});
+
+describe("quando cada botão vale (RN-EDIT-014)", () => {
+  it("sem o catálogo perguntado, os quatro ficam habilitados: a primeira tentativa pergunta (RN-EDIT-010)", () => {
+    expect(reasons({ target: null })).toEqual([null, null, null, null]);
+  });
+
+  it("sem o catálogo perguntado, \"Editar célula\" já fica desabilitado no que a linha diz: a linha marcada para exclusão, a célula cortada, a que o banco preencheu", () => {
+    expect(reasons({ target: null, active: at(1, readRow({ deleted: true })) })[0]).toBe(copy.readOnly(copy.reasons.deleted));
+    expect(reasons({ target: null, active: at(1, readRow({ truncated: new Set([1]) })) })[0]).toBe(copy.readOnly(copy.reasons.truncated));
+    expect(reasons({ target: null, active: at(1, readRow({ generated: new Set([1]) })) })[0]).toBe(copy.readOnly(copy.reasons.generated));
+    // A chave cortada, a coluna e a tabela dependem do catálogo: ficam para a primeira tentativa.
+    expect(reasons({ target: null, active: at(1, readRow({ truncated: new Set([0]) })) })[0]).toBeNull();
+    expect(reasons({ target: null, active: at(2) })[0]).toBeNull();
+    // A linha nova se edita.
+    expect(reasons({ target: null, active: at(1, { kind: "new" }) })[0]).toBeNull();
+  });
+
+  it("o resultado inteiro só leitura pela página (e a conexão somente leitura) desabilita os quatro, com o motivo da barra do resultado", () => {
+    const whole = copy.readOnly("DISTINCT");
+    expect(reasons({ readOnly: "DISTINCT", target: null })).toEqual([whole, whole, whole, whole]);
+    const connection = copy.readOnly(copy.reasons.connectionReadOnly);
+    expect(reasons({ readOnly: copy.reasons.connectionReadOnly, target: null, active: null, rows: 0 })).toEqual([connection, connection, connection, connection]);
+  });
+
+  it("com o catálogo dizendo que nenhuma tabela se edita, também os quatro, com o motivo da tabela", () => {
+    const view: EditTarget = { ...target, tables: [{ ...target.tables[0], editable: false, reason: "pedido é uma visão" }], rowOperations: false };
+    const reason = copy.readOnly("pedido é uma visão");
+
+    expect(reasons({ target: view, active: null })).toEqual([reason, reason, reason, reason]);
+  });
+
+  it("a aba ocupada desabilita os quatro; a atualização automática, com o motivo dela", () => {
+    const busy = copy.readOnly(copy.reasons.busy);
+    const refresh = copy.readOnly(copy.reasons.refreshing);
+
+    expect(reasons({ busy: true })).toEqual([busy, busy, busy, busy]);
+    expect(reasons({ busy: "refresh", target: null })).toEqual([refresh, refresh, refresh, refresh]);
+    expect(refresh).toBe("Somente leitura: a atualização automática está lendo as linhas de novo; tente outra vez em um instante.");
+  });
+
+  it("o catálogo que não aceita linha nova nem exclusão desabilita os três de linha; numa junção, com o motivo de hoje", () => {
+    const join_ = copy.readOnly(copy.reasons.joinRowOperations);
+    expect(reasons({ target: join })).toEqual([null, join_, join_, join_]);
+
+    const noRows: EditTarget = { ...target, rowOperations: false };
+    const reason = copy.readOnly(copy.reasons.noRowOperations);
+    expect(reasons({ target: noRows })).toEqual([null, reason, reason, reason]);
+  });
+
+  it("\"Editar célula\" segue a célula ativa: a coluna que não se edita, a linha marcada para exclusão, a célula cortada, a chave gerada pelo banco", () => {
+    expect(reasons({ active: at(2) })[0]).toBe(copy.readOnly("gerada pelo banco"));
+    expect(reasons({ active: at(1, readRow({ deleted: true })) })[0]).toBe(copy.readOnly(copy.reasons.deleted));
+    expect(reasons({ active: at(1, readRow({ truncated: new Set([1]) })) })[0]).toBe(copy.readOnly(copy.reasons.truncated));
+    expect(reasons({ active: at(1, readRow({ generated: new Set([0]) })) })[0]).toBe(copy.readOnly(copy.reasons.keyGenerated));
+    expect(reasons({ active: at(0, { kind: "new" }) })[0]).toBeNull();
+  });
+
+  it("\"Excluir linha\" não vale na linha cuja chave não se sabe nem na que já está marcada para exclusão; os outros seguem", () => {
+    expect(reasons({ active: at(1, readRow({ truncated: new Set([0]) })) })).toEqual([copy.readOnly(copy.reasons.keyTruncated), null, null, copy.readOnly(copy.reasons.keyTruncated)]);
+    expect(reasons({ active: at(1, readRow({ deleted: true })) })).toEqual([copy.readOnly(copy.reasons.deleted), null, null, copy.readOnly(copy.reasons.alreadyDeleted)]);
+    // Sem o alvo, a linha marcada já se sabe.
+    expect(reasons({ target: null, active: at(1, readRow({ deleted: true })) })[3]).toBe(copy.readOnly(copy.reasons.alreadyDeleted));
+  });
+
+  it("sem célula ativa, \"Editar célula\" pede uma célula e os de linha pedem uma linha; sem nenhuma linha, os três dizem que não há linhas, e \"Adicionar linha\" vale", () => {
+    expect(reasons({ active: null })).toEqual([copy.bar.chooseCell, null, copy.bar.chooseRow, copy.bar.chooseRow]);
+    expect(reasons({ active: null, rows: 0 })).toEqual([copy.bar.noRows, null, copy.bar.noRows, copy.bar.noRows]);
+    expect(editBar(state({ active: null }))[0].title).toBe("Editar célula (F2). Escolha uma célula na grade.");
+  });
+
+  it("vale só o primeiro motivo, na ordem da regra: o resultado só leitura antes da aba ocupada, a aba ocupada antes da célula, a junção antes da falta de linha", () => {
+    expect(reasons({ readOnly: "DISTINCT", busy: true, active: null })).toEqual(Array(4).fill(copy.readOnly("DISTINCT")));
+    expect(reasons({ busy: true, active: at(2), rows: 0 })).toEqual(Array(4).fill(copy.readOnly(copy.reasons.busy)));
+    expect(reasons({ target: join, active: null, rows: 0 })).toEqual([copy.bar.noRows, copy.readOnly(copy.reasons.joinRowOperations), copy.readOnly(copy.reasons.joinRowOperations), copy.readOnly(copy.reasons.joinRowOperations)]);
+  });
+});
+
+describe("com várias linhas na seleção (RN-GRADE-001, RN-EDIT-013 e 014)", () => {
+  const several = (over: Partial<NonNullable<EditBarState["selection"]>> = {}): Partial<EditBarState> => ({ selection: { rows: 3, duplicate: { editable: true }, remove: { editable: true }, ...over } });
+
+  it("\"Duplicar linhas\" e \"Excluir linhas\", com quantas na dica e na descrição para o leitor de tela; o ícone e o lugar não mudam", () => {
+    const [, , duplicate, remove] = editBar(state(several()));
+
+    expect([duplicate.label, duplicate.title, duplicate.description]).toEqual(["Duplicar linhas", "Duplicar as 3 linhas escolhidas (Ctrl+Alt+Insert)", "Duplicar as 3 linhas escolhidas"]);
+    expect([remove.label, remove.title, remove.description]).toEqual(["Excluir linhas", "Excluir as 3 linhas escolhidas (Alt+Delete)", "Excluir as 3 linhas escolhidas"]);
+  });
+
+  it("o motivo das linhas da seleção vem depois dos do resultado, da aba e do `rowOperations`, e entra na dica e na descrição", () => {
+    const limit = "Duplicar vale para até 1.000 linhas de uma vez: escolha menos linhas.";
+    const key = copy.readOnly("a chave da linha 7 chegou cortada");
+    const [, , duplicate, remove] = editBar(state(several({ duplicate: { editable: false, reason: limit }, remove: { editable: false, reason: key } })));
+
+    expect([duplicate.reason, duplicate.title]).toEqual([limit, `Duplicar as 3 linhas escolhidas (Ctrl+Alt+Insert). ${limit}`]);
+    expect([remove.reason, remove.description]).toEqual([key, `Excluir as 3 linhas escolhidas ${key}`]);
+    expect(editBar(state({ ...several({ remove: { editable: false, reason: key } }), busy: true }))[3].reason).toBe(copy.readOnly(copy.reasons.busy));
+  });
+
+  it("com uma linha só na seleção, os rótulos ficam no singular, e o motivo é o da linha dela", () => {
+    const reason = copy.readOnly(copy.reasons.alreadyDeleted);
+    const [, , duplicate, remove] = editBar(state({ selection: { rows: 1, duplicate: { editable: true }, remove: { editable: false, reason } } }));
+
+    expect([duplicate.label, duplicate.description]).toEqual(["Duplicar linha", null]);
+    expect([remove.label, remove.reason, remove.description]).toEqual(["Excluir linha", reason, reason]);
+  });
+});
+
+describe("o \"Editar célula\" com várias células escolhidas na coluna (RN-EDIT-013, 017 e 018)", () => {
+  it("a dica e a descrição dizem para quantas a edição vale", () => {
+    const edit = editBar(state({ edit: { scope: "Vale para as 37 células escolhidas da coluna status." } }))[0];
+    expect(edit.title).toBe("Editar célula (F2). Vale para as 37 células escolhidas da coluna status.");
+    expect(edit.description).toBe("Vale para as 37 células escolhidas da coluna status.");
+    expect(edit.reason).toBeNull();
+  });
+
+  it("com a coluna inteira, o que vale nela entra no lugar do que vale na célula ativa, depois do resultado e da aba", () => {
+    const reason = "Indisponível: a coluna inteira executa de novo o comando do resultado, e ele não é só de leitura.";
+    const cut = at(1, readRow({ truncated: new Set([1]) }));
+    const edit = editBar(state({ active: cut, edit: { scope: "Vale para todas as linhas do resultado (coluna status).", access: { editable: false, reason } } }))[0];
+    expect(edit).toMatchObject({ reason, title: `Editar célula (F2). Vale para todas as linhas do resultado (coluna status). ${reason}` });
+    // A célula cortada da ativa não conta: a coluna inteira não é célula a célula.
+    expect(editBar(state({ active: cut, edit: { scope: "x.", access: { editable: true } } }))[0].reason).toBeNull();
+    expect(editBar(state({ busy: true, edit: { scope: "x.", access: { editable: false, reason } } }))[0].reason).toBe(copy.readOnly(copy.reasons.busy));
+  });
+});

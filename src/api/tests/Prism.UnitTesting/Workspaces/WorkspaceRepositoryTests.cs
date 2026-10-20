@@ -20,7 +20,7 @@ public sealed class WorkspaceRepositoryTests
     private VaultDocument? _saved;
 
     private static VaultDocument Document(VaultWorkspaceRecord workspace)
-        => new("marina.costa", [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection()], [VaultFakers.CreateScript()], workspace);
+        => new("marina.costa", [VaultFakers.CreateFolder()], [VaultFakers.CreateConnection()], [VaultFakers.CreateScript()], workspace, []);
 
     private WorkspaceRepository CreateRepository(VaultDocument current, EVaultError? failure = null)
     {

@@ -39,7 +39,11 @@ export type DatabaseObject = z.infer<typeof databaseObjectSchema>;
 
 export const databaseObjectsSchema = z.array(databaseObjectSchema);
 
-export const columnSchema = z.object({ name: z.string(), type: z.string(), isNullable: z.boolean(), isPrimaryKey: z.boolean(), position: z.number().int() });
+/**
+ * `generated` (RN-CAT-001): a coluna que o banco calcula, `always` (a identidade "sempre", a calculada) ou `byDefault` (a identidade "por padrão", o
+ * `serial`); nula nas outras. O SQL da exportação de dados deixa de fora a `always` (RN-EXPORT-011). Fora do formato vale nula: a lista não cai por ela.
+ */
+export const columnSchema = z.object({ name: z.string(), type: z.string(), isNullable: z.boolean(), isPrimaryKey: z.boolean(), position: z.number().int(), generated: z.enum(["always", "byDefault"]).nullish().catch(null) });
 
 export type Column = z.infer<typeof columnSchema>;
 

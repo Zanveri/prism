@@ -68,6 +68,9 @@ public sealed class InformixEditTests : DatabaseEditContractTests
 
     protected override string? ReadOnlyClause => "FOR READ ONLY";
 
+    /// <summary>O padrão do Informix não espera pela trava de outra sessão: recusa na hora ("record is locked").</summary>
+    protected override string? WaitForLocksSql => "SET LOCK MODE TO WAIT";
+
     protected override string Name(string name)
         => name;
 
@@ -99,6 +102,33 @@ public sealed class InformixEditTests : DatabaseEditContractTests
     }
 
     /// <summary>
+    /// RN-EDIT-006: o texto de mais de 16.350 caracteres num `LVARCHAR`, que o driver da IBM mandaria como `CLOB` e o Informix recusaria ("No cast from
+    /// text to lvarchar"), é gravado inteiro.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfALongLvarchar_SaveTheWholeText()
+    {
+        var table = Table("longo");
+        await RunAsync(Settings, $"CREATE TABLE {_owner}.{table} (id INTEGER NOT NULL PRIMARY KEY, texto LVARCHAR(20000))", $"INSERT INTO {_owner}.{table} (id) VALUES (1)");
+
+        try
+        {
+            var session = await OpenSessionAsync();
+            var page = await EditableRecordsAsync(session, "longo");
+
+            var applied = await Service.ApplyEditsAsync(session, page.ResultID!.Value, [new EditChange(EEditKind.Update, 0, ["1"], [new EditValue(Column(page, "texto"), new string('x', 20_000))])], CancellationToken.None);
+
+            Assert.That(applied.IsSuccess, Is.True, applied.IsFailure ? applied.Error.Message : null);
+            var read = Value(await Service.ExecuteAsync(session, $"SELECT LENGTH(texto) FROM {Quoted("longo")}", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
+            Assert.That(read.Rows[0][0], Is.EqualTo("20000"));
+        }
+        finally
+        {
+            await RunAsync(Settings, $"DROP TABLE {_owner}.{table}");
+        }
+    }
+
+    /// <summary>
     /// RN-EDIT-012: sem log de transação, o "Salvar" grava uma alteração por vez, cada uma confirmada sozinha, e para na primeira que
     /// falha: as anteriores ficam gravadas, e a recusa diz quantas (`Applied`).
     /// </summary>
@@ -123,6 +153,104 @@ public sealed class InformixEditTests : DatabaseEditContractTests
 
             var read = Value(await Service.ExecuteAsync(session, $"SELECT * FROM {Q(_owner)}.{Q(table)} ORDER BY 1", QueryPaging.DefaultPageSize, CancellationToken.None)).Page!;
             Assert.That(read.Rows.Select(row => row[status]), Is.EqualTo(new[] { "gravada", "aberta", "aberta" }));
+        }
+        finally
+        {
+            await RunAsync(unlogged, $"DROP TABLE {_owner}.{table}");
+        }
+    }
+    /// <summary>
+    /// RN-EDIT-020: no Informix, o comando com `LIMIT` (ou `OFFSET`, `FETCH`) no fim, no nível de fora, não cabe numa tabela derivada; a contagem lê as
+    /// chaves do próprio comando, e o "Salvar" altera em lotes, pelas chaves lidas de novo dentro da transação.
+    /// </summary>
+    [Test]
+    public async Task WholeColumn_WithALimitAtTheEnd_GoesThroughTheKeys()
+    {
+        foreach (var sql in new[] { $"SELECT * FROM {Quoted("pedido")} ORDER BY 1 LIMIT 2" })
+        {
+            var session = await OpenSessionAsync();
+            var page = await EditableAsync(session, sql);
+            var status = Column(page, "status");
+            EditChange change = new(EEditKind.UpdateAll, 0, [], [new EditValue(status, "lote")]);
+
+            var preview = Value(await Service.PreviewEditsAsync(session, page.ResultID!.Value, [change], CancellationToken.None));
+            Assert.That(preview.Statements.Select(statement => (statement.Sql, statement.Note)), Is.EqualTo(new[] { (sql, (string?)CountNote), ($"UPDATE {Quoted("pedido")} SET \"status\" = 'lote' WHERE \"id\" IN (?, ?, …)", BatchNote) }), sql);
+
+            var counted = Value(await Service.CountWholeColumnAsync(session, page.ResultID.Value, [change], CancellationToken.None));
+            Assert.That(counted, Is.EqualTo(2), sql);
+            Assert.That(Value(await Service.ApplyEditsAsync(session, page.ResultID.Value, [change with { Rows = counted }], CancellationToken.None)), Is.EqualTo(1), sql);
+            Assert.That(await RowsAsync("pedido", "status"), Is.EqualTo(new[] { ("1", (string?)"lote"), ("2", "lote"), ("3", "fechada") }), sql);
+        }
+    }
+
+    /// <summary>
+    /// A sonda S-COL-1 no Informix: dentro de uma tabela derivada, o `LIMIT`, o `OFFSET` e o `FETCH` do fim são recusados pelo banco; o `LIMIT` logo depois
+    /// do `SELECT`, como o `SKIP` e o `FIRST`, não (a especificação o mandava para o caminho por lotes até a sonda decidir).
+    /// </summary>
+    [Test]
+    public async Task Probe_TheLimitAtTheEndInsideADerivedTable_IsRefused_AndTheOneAtTheHeadIsNot()
+    {
+        await using var connection = Value(await Client.OpenAsync(Settings, CancellationToken.None));
+
+        foreach (var inner in new[] { $"SELECT * FROM {Quoted("pedido")} ORDER BY 1 LIMIT 2", $"SELECT * FROM {Quoted("pedido")} ORDER BY 1 OFFSET 1", $"SELECT * FROM {Quoted("pedido")} ORDER BY 1 FETCH FIRST 2 ROWS ONLY" })
+        {
+            var counted = await connection.ExecuteAsync($"SELECT COUNT(*) FROM (\n{inner}\n) AS \"q\"", CancellationToken.None);
+            TestContext.Out.WriteLine($"{inner}: {(counted.IsSuccess ? counted.Value.Page!.Rows[0][0] : counted.Error.Message)}");
+            Assert.That(counted.IsFailure, Is.True, inner);
+        }
+
+        foreach (var (inner, rows) in new[] { ($"SELECT LIMIT 2 * FROM {Quoted("pedido")} ORDER BY 1", "2"), ($"SELECT SKIP 1 LIMIT 5 * FROM {Quoted("pedido")} ORDER BY 1", "2"), ($"SELECT SKIP 1 FIRST 5 * FROM {Quoted("pedido")} ORDER BY 1", "2") })
+        {
+            var counted = Value(await connection.ExecuteAsync($"SELECT COUNT(*) FROM (\n{inner}\n) AS \"q\"", CancellationToken.None));
+            Assert.That(counted.Page!.Rows[0][0], Is.EqualTo(rows), inner);
+        }
+    }
+
+    /// <summary>RN-EDIT-020 e a sonda S-COL-1: o `LIMIT` logo depois do `SELECT` vai pela forma pela chave, como o `FIRST`, e o `UPDATE` altera só as linhas do comando.</summary>
+    [Test]
+    public async Task WholeColumn_WithALimitAtTheHead_IsSavedByTheKey()
+    {
+        var session = await OpenSessionAsync();
+        var sql = $"SELECT LIMIT 2 * FROM {Quoted("pedido")} ORDER BY 1";
+        var page = await EditableAsync(session, sql);
+        EditChange change = new(EEditKind.UpdateAll, 0, [], [new EditValue(Column(page, "status"), "cabeça")]);
+
+        var preview = Value(await Service.PreviewEditsAsync(session, page.ResultID!.Value, [change], CancellationToken.None));
+        Assert.That(preview.Statements[0].Sql, Is.EqualTo($"SELECT COUNT(*) FROM (\n{sql}\n) AS \"q\""));
+
+        var counted = Value(await Service.CountWholeColumnAsync(session, page.ResultID.Value, [change], CancellationToken.None));
+        Assert.That(counted, Is.EqualTo(2));
+        Assert.That(Value(await Service.ApplyEditsAsync(session, page.ResultID.Value, [change with { Rows = counted }], CancellationToken.None)), Is.EqualTo(1));
+        Assert.That(await RowsAsync("pedido", "status"), Is.EqualTo(new[] { ("1", (string?)"cabeça"), ("2", "cabeça"), ("3", "fechada") }));
+    }
+
+    /// <summary>
+    /// RN-EDIT-012 e 021: sem log de transação, a contagem e o `UPDATE` da coluna inteira são comandos separados, e o `UPDATE` é gravado sozinho; a contagem
+    /// que mudou desde a pergunta não grava nada; a chave de várias colunas vai por `EXISTS`, também ali.
+    /// </summary>
+    [Test]
+    public async Task WholeColumn_InADatabaseWithoutLog_IsSavedAlone_AndTheChangedCountWritesNothing()
+    {
+        var unlogged = Settings with { Database = InformixSingleton.UnloggedDatabase };
+        var table = $"todas_{_suffix}";
+        await RunAsync(unlogged, [$"CREATE TABLE {_owner}.{table} (loja INTEGER NOT NULL, numero INTEGER NOT NULL, status VARCHAR(20), PRIMARY KEY (loja, numero))", .. new[] { "1, 1", "1, 2", "2, 1" }.Select(key => $"INSERT INTO {_owner}.{table} VALUES ({key}, 'aberta')")]);
+
+        try
+        {
+            var session = await OpenSessionAsync(unlogged);
+            var page = await EditableAsync(session, $"SELECT * FROM {Q(_owner)}.{Q(table)} WHERE loja = 1");
+            EditChange change = new(EEditKind.UpdateAll, 0, [], [new EditValue(Column(page, "status"), "sem log")]);
+
+            var counted = Value(await Service.CountWholeColumnAsync(session, page.ResultID!.Value, [change], CancellationToken.None));
+            Assert.That(counted, Is.EqualTo(2));
+
+            await RunAsync(unlogged, $"INSERT INTO {_owner}.{table} VALUES (1, 3, 'nova')");
+            var refused = await Service.ApplyEditsAsync(session, page.ResultID.Value, [change with { Rows = counted }], CancellationToken.None);
+            Assert.That((refused.Error.Kind, refused.Error.Message, refused.Error.Applied), Is.EqualTo((EDatabaseFailure.ResultChanged, CountChanged(3, 2), (int?)0)));
+
+            Assert.That(Value(await Service.ApplyEditsAsync(session, page.ResultID.Value, [change with { Rows = 3 }], CancellationToken.None)), Is.EqualTo(1));
+            var rows = await ReadAsync($"SELECT loja, numero, status FROM {_owner}.{table} ORDER BY 1, 2", unlogged);
+            Assert.That(rows.Select(row => string.Join(",", row)), Is.EqualTo(new[] { "1,1,sem log", "1,2,sem log", "1,3,sem log", "2,1,aberta" }));
         }
         finally
         {

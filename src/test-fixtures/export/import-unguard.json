@@ -1,0 +1,149 @@
+{
+  "rule": "RN-IMPORT-004 e 028: a volta da proteção contra fórmula. Na tela, csvFieldOf (csv.ts) escreve value como field (com os padrões: separador ;, aspas só quando precisa, proteção ligada); na API, o leitor do CSV lê field e ImportText.Unguard devolve back.",
+  "notes": [
+    "back é value, menos nos casos lossy: o texto que de fato começa por um apóstrofo seguido de =, +, - ou @ chega sem o apóstrofo, e é para esse arquivo que a opção se desliga.",
+    "Os caracteres invisíveis vão escritos como \\uXXXX, para quem revê os enxergar."
+  ],
+  "cases": [
+    {
+      "name": "fórmula com =",
+      "value": "=SOMA(A1)",
+      "field": "'=SOMA(A1)",
+      "back": "=SOMA(A1)"
+    },
+    {
+      "name": "telefone com +",
+      "value": "+55 11 99999-0000",
+      "field": "'+55 11 99999-0000",
+      "back": "+55 11 99999-0000"
+    },
+    {
+      "name": "+5 não é um número simples (sem o sinal de mais)",
+      "value": "+5",
+      "field": "'+5",
+      "back": "+5"
+    },
+    {
+      "name": "o número negativo não é protegido",
+      "value": "-1",
+      "field": "-1",
+      "back": "-1"
+    },
+    {
+      "name": "o número negativo com vírgula não é protegido",
+      "value": "-1,5",
+      "field": "-1,5",
+      "back": "-1,5"
+    },
+    {
+      "name": "o número negativo com ponto e expoente não é protegido",
+      "value": "-.5e3",
+      "field": "-.5e3",
+      "back": "-.5e3"
+    },
+    {
+      "name": "-1+1 é fórmula",
+      "value": "-1+1",
+      "field": "'-1+1",
+      "back": "-1+1"
+    },
+    {
+      "name": "- 1 não é um número simples",
+      "value": "- 1",
+      "field": "'- 1",
+      "back": "- 1"
+    },
+    {
+      "name": "arroba",
+      "value": "@usuario",
+      "field": "'@usuario",
+      "back": "@usuario"
+    },
+    {
+      "name": "depois de espaço",
+      "value": " =x",
+      "field": "' =x",
+      "back": " =x"
+    },
+    {
+      "name": "depois de tabulação",
+      "value": "\t+x",
+      "field": "'\t+x",
+      "back": "\t+x"
+    },
+    {
+      "name": "depois de retorno de carro, entre aspas",
+      "value": "\r=x",
+      "field": "\"'\r=x\"",
+      "back": "\r=x"
+    },
+    {
+      "name": "com o separador, entre aspas",
+      "value": "=1;2",
+      "field": "\"'=1;2\"",
+      "back": "=1;2"
+    },
+    {
+      "name": "com aspa, entre aspas",
+      "value": "=\"a\"",
+      "field": "\"'=\"\"a\"\"\"",
+      "back": "=\"a\""
+    },
+    {
+      "name": "só o sinal de igual",
+      "value": "=",
+      "field": "'=",
+      "back": "="
+    },
+    {
+      "name": "emoji depois da arroba",
+      "value": "@🙂",
+      "field": "'@🙂",
+      "back": "@🙂"
+    },
+    {
+      "name": "texto comum",
+      "value": "abc",
+      "field": "abc",
+      "back": "abc"
+    },
+    {
+      "name": "o apóstrofo antes de texto comum fica",
+      "value": "'abc",
+      "field": "'abc",
+      "back": "'abc"
+    },
+    {
+      "name": "dois apóstrofos antes de = ficam",
+      "value": "''=x",
+      "field": "''=x",
+      "back": "''=x"
+    },
+    {
+      "name": "o apóstrofo sozinho fica",
+      "value": "'",
+      "field": "'",
+      "back": "'"
+    },
+    {
+      "name": "o número com expoente não é fórmula",
+      "value": "1e5",
+      "field": "1e5",
+      "back": "1e5"
+    },
+    {
+      "name": "o apóstrofo de verdade antes de = se perde (o caso da dica)",
+      "value": "'=x",
+      "field": "'=x",
+      "back": "=x",
+      "lossy": true
+    },
+    {
+      "name": "o apóstrofo de verdade antes de - se perde",
+      "value": "'-a",
+      "field": "'-a",
+      "back": "-a",
+      "lossy": true
+    }
+  ]
+}

@@ -7,14 +7,9 @@ import type { FieldErrors } from "@/lib/utils/form";
 import { connectionsCopy } from "../_lib/connections.copy";
 import type { ShownEnvironment } from "../_lib/environment";
 import { environmentKey, findEnvironment, type UserEnvironment } from "../_lib/user-environments";
+import { chosenClassName, openSystemPicker, pickerStart, swatchClassName } from "./color-field";
 
 const copy = connectionsCopy.form.environment;
-
-const swatchClassName = "inline-flex size-8 cursor-pointer items-center justify-center rounded-full";
-const chosenClassName = "ring-2 ring-ink ring-offset-2 ring-offset-panel";
-
-/** A cor que o seletor do sistema mostra ao abrir quando não há nenhuma: o Cinza do canvas. */
-const pickerStart = "#AEB7C4";
 
 export type EnvironmentPickerProps = {
   /** O começo dos ids ("cx" na conexão, "folder" na pasta): cada formulário tem os seus. */
@@ -32,13 +27,6 @@ export type EnvironmentPickerProps = {
   /** Os ambientes do usuário (RN-AMB-001), para reaproveitar: as etiquetas acima do nome e o que o campo completa ao digitar. */
   environments?: readonly UserEnvironment[];
 };
-
-/** O seletor de cor do sistema: o `showPicker`, onde houver; senão o clique, que é como ele abria antes. */
-function openSystemPicker(input: HTMLInputElement | null) {
-  if (input === null) return;
-  if (typeof input.showPicker === "function") input.showPicker();
-  else input.click();
-}
 
 /**
  * A seção "Ambiente" (RN-CONN-015, RN-CONN-017 e RN-PASTA-005), a mesma no formulário da conexão e no diálogo da pasta: o nome e a cor que os

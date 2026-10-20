@@ -1,0 +1,60 @@
+{
+  "rule": "RN-EXPORT-013 e 024: o corte do texto no limite da célula do Excel, 32.767 caracteres (unidades UTF-16), sem partir um par substituto. Na tela, withinCell (to-xlsx.ts); na API, ExportText.WithinCell.",
+  "notes": [
+    "O valor é fill letras a seguidas de tail; o esperado é fill letras a seguidas de expectedTail. tail e expectedTail são texto ou { codePoints: [...] }.",
+    "cut diz se o valor foi cortado (o aviso do fim conta os valores cortados)."
+  ],
+  "cases": [
+    {
+      "name": "32.767 caracteres cabem",
+      "fill": 32767,
+      "tail": "",
+      "expectedTail": "",
+      "cut": false
+    },
+    {
+      "name": "o 32.768º sai",
+      "fill": 32767,
+      "tail": "b",
+      "expectedTail": "",
+      "cut": true
+    },
+    {
+      "name": "o emoji que passaria do limite sai inteiro",
+      "fill": 32766,
+      "tail": "🙂",
+      "expectedTail": "",
+      "cut": true
+    },
+    {
+      "name": "o emoji que termina no limite fica",
+      "fill": 32765,
+      "tail": "🙂",
+      "expectedTail": "🙂",
+      "cut": false
+    },
+    {
+      "name": "o emoji antes do limite fica, e o resto sai",
+      "fill": 32765,
+      "tail": "🙂b",
+      "expectedTail": "🙂",
+      "cut": true
+    },
+    {
+      "name": "o par solto no limite fica, e o resto sai",
+      "fill": 32766,
+      "tail": {
+        "codePoints": [
+          55357,
+          98
+        ]
+      },
+      "expectedTail": {
+        "codePoints": [
+          55357
+        ]
+      },
+      "cut": true
+    }
+  ]
+}

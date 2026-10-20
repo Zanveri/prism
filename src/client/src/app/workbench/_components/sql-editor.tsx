@@ -11,6 +11,7 @@ import { editorFont, type EditorPreferences } from "@/app/settings/_lib/editor-s
 import { resolveScheme, subscribeSystemScheme, systemPrefersLight } from "@/app/settings/_lib/theme";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import type { Engine } from "@/components/ui";
+import { isMacPlatform } from "@/lib/utils/platform";
 
 import type { CachedLevel } from "../_lib/navigator-search";
 import { completionTheme, highlight } from "../_lib/completion-theme";
@@ -18,8 +19,10 @@ import { cachedLevels, sqlCompletion } from "../_lib/sql-completion";
 import { tableLinks } from "../_lib/table-link-extension";
 import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type TableLink } from "../_lib/table-links";
 import { liveEditors } from "../_lib/live-editors";
+import { flashRun, runFlash } from "../_lib/run-flash";
+import { scriptMark, scriptMarkEffects } from "../_lib/script-mark";
 import { keywordCase } from "../_lib/sql-keyword-case";
-import { hasStatement, statementAt } from "../_lib/sql-statements";
+import { hasStatement, scriptStatements, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
@@ -116,15 +119,60 @@ const errorMark = StateField.define<DecorationSet>({
 
 /**
  * O que "Executar" envia (RN-SQL-001): o texto selecionado, como está; sem seleção, o comando onde
- * está o cursor, separado pelas regras do banco da aba (RN-SQL-002). Sem comando nenhum o texto vai
- * vazio: quem executa é que diz "não há comando", e também quando a seleção tem mais de um.
+ * está o cursor, separado pelas regras do banco da aba (RN-SQL-002) e, com `blankLines` (a preferência
+ * "A linha em branco separa os comandos", RN-SQL-018), também pela linha em branco. Sem comando nenhum
+ * o texto vai vazio: quem executa é que diz "não há comando", e também quando a seleção tem mais de um.
  */
-function runTarget(state: EditorState, engine: Engine | undefined): RunTarget {
+export function runTarget(state: EditorState, engine: Engine | undefined, blankLines: boolean): RunTarget {
   const { from, to, head } = state.selection.main;
   if (from !== to) return { sql: state.sliceDoc(from, to), offset: from, engine };
 
-  const statement = statementAt(state.doc.toString(), head, engine);
+  const statement = statementAt(state.doc.toString(), head, engine, { blankLines });
   return statement === null ? { sql: "", offset: head, engine } : { sql: statement.text, offset: statement.start, engine };
+}
+
+/**
+ * O que "Executar script" envia (RN-SQL-019): os comandos da seleção, quando há, ou do texto inteiro, um por um, divididos pelas regras do Ctrl+Enter (o
+ * `;` e, com `blankLines`, a linha em branco, que no script divide também a seleção), com o bloco de `;` no corpo como um comando só (`scriptStatements`).
+ * Cada um leva onde começa no texto do editor: é por aí que o erro e a marca do comando em execução acham o lugar.
+ */
+export function scriptTargets(state: EditorState, engine: Engine | undefined, blankLines: boolean): RunTarget[] {
+  const { from, to } = state.selection.main;
+  const [text, start] = from === to ? [state.doc.toString(), 0] : [state.sliceDoc(from, to), from];
+  return scriptStatements(text, engine, { blankLines }).map((statement) => ({ sql: statement.text, offset: start + statement.start, engine }));
+}
+
+/**
+ * O trecho que pisca quando "Executar" envia `target` (RN-SQL-018): sem seleção, o comando do cursor, exatamente o que foi enviado; com a linha em
+ * branco separando, é assim que a pessoa vê qual comando o cursor pegou. A seleção já está à vista e não pisca; sem comando, nada pisca.
+ */
+export function flashRangeOf(state: EditorState, target: RunTarget): { from: number; to: number } | null {
+  if (!state.selection.main.empty || target.sql === "") return null;
+  return { from: target.offset, to: target.offset + target.sql.length };
+}
+
+/**
+ * O efeito que acende agora o destaque de `range` (de `flashRangeOf`, no instante do Ctrl+Enter), ou `null` quando nada pisca: entre apertar e
+ * enviar pode vir a pergunta das alterações não salvas da grade (RN-EDIT-007), e o trecho só pisca se ainda é o texto `sql` que foi enviado.
+ */
+export function flashEffect(state: EditorState, range: { from: number; to: number } | null, sql: string): StateEffect<unknown> | null {
+  return range !== null && state.sliceDoc(range.from, range.to) === sql ? flashRun(range.from, range.to) : null;
+}
+
+/**
+ * O que "Executar" envia agora (`runTarget`) e o destaque dele (RN-SQL-018), que quem executa acende só quando o comando vai mesmo ao banco: com a
+ * aba ocupada, sem conexão ou com a pergunta das alterações não salvas cancelada, nada foi enviado, e nada pode piscar.
+ */
+function sendFrom(view: EditorView, engine: Engine | undefined, blankLines: boolean): { target: RunTarget; flash: () => void } {
+  const target = runTarget(view.state, engine, blankLines);
+  const range = flashRangeOf(view.state, target);
+  return {
+    target,
+    flash: () => {
+      const effect = flashEffect(view.state, range, target.sql);
+      if (effect !== null) view.dispatch({ effects: effect });
+    },
+  };
 }
 
 /**
@@ -140,7 +188,9 @@ function docHasStatement(doc: Text, engine: Engine | undefined): boolean {
 /**
  * Se há comando para enviar, sem separar os comandos: roda a cada tecla e a cada movimento do
  * cursor, e o texto pode ter milhares de linhas. Sem seleção, há comando no cursor sempre que o
- * texto tem algum (`statementAt`). É o que habilita o botão "Executar".
+ * texto tem algum (`statementAt`), menos com o cursor na linha em branco que só separou um
+ * comentário do comando de baixo, sem comando acima (RN-SQL-018): o botão continua habilitado, e
+ * quem executa diz que não há comando. É o que habilita o botão "Executar".
  */
 function isRunnable(state: EditorState, engine: Engine | undefined): boolean {
   const { from, to } = state.selection.main;
@@ -150,6 +200,8 @@ function isRunnable(state: EditorState, engine: Engine | undefined): boolean {
 export type SqlEditorHandle = {
   /** Executa o que o editor mandaria com Ctrl+Enter e devolve o foco a ele. */
   run: () => void;
+  /** RN-SQL-019: "Executar script" (o botão e o Alt+X): os comandos da seleção ou do texto inteiro (`scriptTargets`), e o foco volta ao editor. */
+  runScript: () => void;
   focus: () => void;
 };
 
@@ -173,7 +225,18 @@ type SqlEditorProps = {
   autoFocus: boolean;
   /** A posição, no texto, do erro que o banco apontou. */
   errorAt: number | null;
-  onRun: (target: RunTarget) => void;
+  /**
+   * Ctrl+Enter e o botão "Executar": `target` é o que vai ao executor, e `flash` acende o destaque do comando enviado (RN-SQL-018). Quem executa só
+   * chama `flash` quando o comando vai mesmo ao banco, e depois da pergunta das alterações não salvas, quando ela vier.
+   */
+  onRun: (target: RunTarget, flash: () => void) => void;
+  /** RN-SQL-019: "Executar script": os comandos, na ordem. Quem executa pergunta das alterações não salvas antes, e recusa com a aba ocupada. */
+  onRunScript?: (targets: RunTarget[]) => void;
+  /**
+   * RN-SQL-019: o comando do script em execução (o texto e onde ele estava quando o script começou), que o editor marca até o seguinte começar; nulo sem
+   * script rodando. Com o texto editado depois disso, o lugar já não é o mesmo, e nada é marcado.
+   */
+  runningAt?: { offset: number; sql: string } | null;
   /** O texto, com atraso: depois de uma pausa na digitação, ao perder o foco e ao desmontar. */
   onChange: (sql: string) => void;
   onRunnableChange: (runnable: boolean) => void;
@@ -187,7 +250,7 @@ type SqlEditorProps = {
 };
 
 /** O macOS usa o ⌘ onde os outros usam o Ctrl (RN-LINK-001). */
-const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+const isMac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
 
 /** Os níveis da árvore são os mesmos objetos enquanto nenhuma consulta deles mudou: o catálogo dos links só é refeito quando algum muda. */
 const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.length === b.length && a.every((level, index) => level.key === b[index].key && level.nodes === b[index].nodes);
@@ -197,14 +260,14 @@ const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.l
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onChange, onRunnableChange, onEdited, onOpenTable }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
   // Com "seguir o sistema", o esquema vem do sistema, e muda com o app aberto.
   const systemIsLight = useSyncExternalStore(subscribeSystemScheme, systemPrefersLight, () => false);
   const dark = resolveScheme(preferences.theme, systemIsLight) === "dark";
-  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords } = preferences.editor;
+  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, blankLineSeparates } = preferences.editor;
   // Os nomes sugeridos são os da árvore da conexão DESTA aba, que ela passa por propriedade: as abas ficam todas montadas, e ler a aba ativa
   // daria ao editor de uma aba os nomes da conexão de outra.
   const queryClient = useQueryClient();
@@ -214,9 +277,11 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const applied = useRef(`${fontFamily}|${fontSize}|${tabSize}|${dark}`);
   // O banco de agora, lido pelas funções do editor na hora em que rodam (executar, separar o comando, sugerir).
   const engineNow = useRef(engine);
+  // RN-SQL-018: a linha em branco separa os comandos? Lida na hora de executar: não muda nada no editor, e não precisa de compartimento.
+  const blankLinesNow = useRef(blankLineSeparates);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
 
-  const emitRun = useEffectEvent((target: RunTarget) => onRun(target));
+  const emitRun = useEffectEvent((target: RunTarget, flash: () => void) => onRun(target, flash));
   const emitChange = useEffectEvent((text: string) => onChange(text));
   const emitRunnable = useEffectEvent((runnable: boolean) => onRunnableChange(runnable));
   const emitEdited = useEffectEvent(() => onEdited());
@@ -247,8 +312,9 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
       emitChange(editor.state.doc.toString());
     }
 
-    function run(state: EditorState) {
-      emitRun(runTarget(state, engineNow.current));
+    function run(view: EditorView) {
+      const { target, flash } = sendFrom(view, engineNow.current, blankLinesNow.current);
+      emitRun(target, flash);
       return true;
     }
 
@@ -272,9 +338,11 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           tabSlot.of(tabSettings(initial.editor.tabSize)),
           caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine) : []),
           errorMark,
+          runFlash,
+          scriptMark,
           tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
           // À frente do mapa padrão, que usa Ctrl+Enter para abrir uma linha em branco.
-          Prec.highest(keymap.of([{ key: "Mod-Enter", run: (target) => run(target.state) }])),
+          Prec.highest(keymap.of([{ key: "Mod-Enter", run }])),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.contentAttributes.of({ "aria-label": workbenchCopy.editor.label }),
@@ -308,6 +376,10 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
       view.current = null;
     };
   }, [initial]);
+
+  useEffect(() => {
+    blankLinesNow.current = blankLineSeparates;
+  }, [blankLineSeparates]);
 
   // A fonte, o tamanho, a tabulação e o esquema de cor mudam no editor que já existe, sem recriá-lo.
   useEffect(() => {
@@ -346,6 +418,17 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     editor.dispatch({ effects: errorAt === null ? setErrorMark.of(null) : [setErrorMark.of(errorAt), EditorView.scrollIntoView(Math.min(errorAt, editor.state.doc.length))] });
   }, [errorAt]);
 
+  // RN-SQL-019: a marca do comando do script em execução segue o executor; o texto e o lugar dizem qual é, e um script novo no mesmo lugar é outra marca.
+  const runningOffset = runningAt?.offset ?? null;
+  const runningSql = runningAt?.sql ?? null;
+  useEffect(() => {
+    const editor = view.current;
+    if (editor === null) return;
+
+    const effects = scriptMarkEffects(editor.state, runningOffset === null || runningSql === null ? null : { offset: runningOffset, sql: runningSql });
+    if (effects.length > 0) editor.dispatch({ effects });
+  }, [runningOffset, runningSql]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -353,12 +436,20 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
         const editor = view.current;
         if (editor === null) return;
 
-        onRun(runTarget(editor.state, engineNow.current));
+        const { target, flash } = sendFrom(editor, engineNow.current, blankLinesNow.current);
+        onRun(target, flash);
+        editor.focus();
+      },
+      runScript: () => {
+        const editor = view.current;
+        if (editor === null) return;
+
+        onRunScript?.(scriptTargets(editor.state, engineNow.current, blankLinesNow.current));
         editor.focus();
       },
       focus: () => view.current?.focus(),
     }),
-    [onRun],
+    [onRun, onRunScript],
   );
 
   return <div ref={host} className="h-full" />;

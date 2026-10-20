@@ -1,4 +1,5 @@
 using CSharpFunctionalExtensions;
+using Prism.Application.Connections.Queries;
 using Prism.Application.DatabaseSessions.Models;
 using Prism.Application.DatabaseSessions.Models.Dtos;
 using Prism.Core.Api.Models.Dtos;
@@ -33,22 +34,38 @@ public sealed record ExecuteQueryCommand : IRequest<Result<QueryResultDto, ApiEr
     /// </summary>
     public string? Filter { get; init; }
 
+    /// <summary>
+    /// RN-SQL-024: os `resultID` que a aba continua mostrando, e editando, depois deste comando (as abas do script), até 20. Chega como o JSON
+    /// que veio, como o `PageSize`, para a entrada que não é um identificador ser recusada pelo validator com `QUERY_INVALID` no campo.
+    /// Ausente, nula ou vazia, a sessão esquece os resultados guardados quando o comando vai ao banco.
+    /// </summary>
+    public JsonElement? Keep { get; init; }
+
     /// <summary>RN-LOG-001: o `ToString()` gerado de um record imprime todas as propriedades, e o SQL do usuário pode ter dado sensível.</summary>
     public override string ToString() => nameof(ExecuteQueryCommand);
+
+    /// <summary>RN-SQL-024: os identificadores de `Keep`, já conferidos pelo validator; o repetido conta uma vez.</summary>
+    internal IReadOnlyCollection<Guid> KeptResults()
+        => Keep is { ValueKind: JsonValueKind.Array } keep ? [.. keep.EnumerateArray().Select(entry => entry.GetGuid()).Distinct()] : [];
 }
 
-internal sealed class ExecuteQueryHandler(IDatabaseSessionService databaseSessionService) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
+internal sealed class ExecuteQueryHandler(IConnectionQueries connectionQueries, IDatabaseSessionService databaseSessionService) : IRequestHandler<ExecuteQueryCommand, Result<QueryResultDto, ApiErrorDto>>
 {
     /// <summary>
     /// O validator já recusou o que não é um inteiro da faixa (aqui só há o número ou a falta dele) e o filtro que não se junta ao
-    /// comando. Sem filtro, o comando vai como veio.
+    /// comando. Sem filtro (nulo ou só de espaços), o comando vai como veio. RN-PROT-002 e 006: a conexão somente leitura é a do cofre agora,
+    /// e o registro de sessões recusa o que não é leitura antes de ir ao banco. RN-SQL-024: os resultados de `keep` continuam guardados para a
+    /// edição quando o comando vai ao banco, e os outros saem.
     /// </summary>
     public async Task<Result<QueryResultDto, ApiErrorDto>> Handle(ExecuteQueryCommand request, CancellationToken cancellationToken)
     {
+        var readOnly = await connectionQueries.IsReadOnly(databaseSessionService, request.SessionID, cancellationToken);
+        if (readOnly.IsFailure)
+            return Result.Failure<QueryResultDto, ApiErrorDto>(readOnly.Error);
+
         var pageSize = request.PageSize is { ValueKind: JsonValueKind.Number } size ? size.GetInt32() : QueryPaging.DefaultPageSize;
-        var outcome = string.IsNullOrWhiteSpace(request.Filter)
-            ? await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, pageSize, cancellationToken)
-            : await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, request.Filter, pageSize, cancellationToken);
+        var filter = string.IsNullOrWhiteSpace(request.Filter) ? null : request.Filter;
+        var outcome = await databaseSessionService.ExecuteAsync(request.SessionID, request.Sql, filter, pageSize, readOnly.Value, request.KeptResults(), cancellationToken);
 
         return outcome.Map(executed => executed.ToDto()).MapError(DatabaseSessionErrors.From);
     }

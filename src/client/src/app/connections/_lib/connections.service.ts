@@ -4,7 +4,19 @@ import { driverNotInstalledCode } from "@/app/drivers/_lib/drivers.model";
 import { allowRefusal, apiRequest, unwrap, type ApiResult } from "@/lib/api/prism-api";
 import { prismEndpoints } from "@/lib/api/prism-endpoints";
 
-import { connectionSchema, connectionsSchema, foldersSchema, folderSchema, revealedPasswordSchema, type Connection, type ConnectionInput, type Folder, type FolderInput } from "./connections.schema";
+import {
+  connectionSchema,
+  connectionsSchema,
+  connectionVerificationSchema,
+  foldersSchema,
+  folderSchema,
+  revealedPasswordSchema,
+  type Connection,
+  type ConnectionInput,
+  type ConnectionVerificationResult,
+  type Folder,
+  type FolderInput,
+} from "./connections.schema";
 
 /**
  * Uma função por rota de `api/user`. Devolvem `ApiResult`; quem as chama numa `queryFn` ou
@@ -20,9 +32,12 @@ export function createFolder(input: FolderInput): Promise<ApiResult<Folder>> {
   return apiRequest(prismEndpoints.userFolders, { method: "POST", body: input, schema: folderSchema });
 }
 
-/** Renomear e mover são o mesmo `PATCH`: o corpo leva o nome e a pasta pai por inteiro. */
-export function updateFolder(id: string, input: FolderInput): Promise<ApiResult<Folder>> {
-  return apiRequest(prismEndpoints.userFolders, { method: "PATCH", body: { id, ...input }, schema: folderSchema });
+/**
+ * Renomear e mover são o mesmo `PATCH`: o corpo leva a pasta por inteiro (o nome, a pasta pai, a cor, o ambiente e as proteções). `userPassword` é a
+ * senha do usuário do Prism, que só a mudança do somente leitura pede (RN-PROT-003); sem ela a chave nem vai.
+ */
+export function updateFolder(id: string, input: FolderInput, userPassword?: string): Promise<ApiResult<Folder>> {
+  return apiRequest(prismEndpoints.userFolders, { method: "PATCH", body: { id, ...input, ...(userPassword === undefined ? {} : { userPassword }) }, schema: folderSchema });
 }
 
 export function deleteFolder(id: string): Promise<ApiResult<void>> {
@@ -38,9 +53,12 @@ export function createConnection(input: ConnectionInput): Promise<ApiResult<Conn
   return apiRequest(prismEndpoints.userConnections, { method: "POST", body: input, schema: connectionSchema });
 }
 
-/** `password` nulo mantém a senha gravada (RN-CONN-004). */
-export function updateConnection(id: string, input: ConnectionInput): Promise<ApiResult<Connection>> {
-  return apiRequest(prismEndpoints.userConnections, { method: "PATCH", body: { id, ...input }, schema: connectionSchema });
+/**
+ * `password` nulo mantém a senha gravada (RN-CONN-004). `userPassword` é a senha do usuário do Prism, que a mudança do somente leitura pede (RN-PROT-003:
+ * marcar, desmarcar, ou tirar a conexão de uma pasta somente leitura); sem ela a chave nem vai.
+ */
+export function updateConnection(id: string, input: ConnectionInput, userPassword?: string): Promise<ApiResult<Connection>> {
+  return apiRequest(prismEndpoints.userConnections, { method: "PATCH", body: { id, ...input, ...(userPassword === undefined ? {} : { userPassword }) }, schema: connectionSchema });
 }
 
 /**
@@ -55,11 +73,20 @@ export function testConnection(input: ConnectionInput, id?: string): Promise<Api
 
 /**
  * "Testar conexão" como o formulário a usa: as recusas que ele mostra no lugar voltam como valor — o 422 de campos, a
- * falha do banco (que leva a mensagem dele) e o driver não instalado (RN-DRIVER-006, com "Instalar driver") — e as demais
- * lançam, para o aviso central.
+ * falha do banco (que leva a mensagem dele), o driver não instalado (RN-DRIVER-006, com "Instalar driver") e a conexão sem
+ * senha gravada testada com a senha em branco (RN-TRANSF-016, no campo da senha) — e as demais lançam, para o aviso central.
  */
 export async function runConnectionTest(input: ConnectionInput, id?: string): Promise<ApiResult<void>> {
-  return allowRefusal(await testConnection(input, id), "CONNECTION_INVALID", "DATABASE_CONNECTION_FAILED", driverNotInstalledCode);
+  return allowRefusal(await testConnection(input, id), "CONNECTION_INVALID", "DATABASE_CONNECTION_FAILED", driverNotInstalledCode, "CONNECTION_CREDENTIALS_MISSING");
+}
+
+/**
+ * RN-VERIF-002: verifica a conexão conectada numa sessão que já está aberta (sem corpo: a consulta é a gravada). Quem chama é a verificação periódica, que
+ * não passa pelo cache de mutações: a falha da chamada não vira aviso (a do banco é resposta 200, e vai ao indicador), e o `signal` a abandona quando a
+ * conexão desconecta ou o cofre bloqueia.
+ */
+export function verifyConnection(id: string, signal?: AbortSignal): Promise<ApiResult<ConnectionVerificationResult>> {
+  return apiRequest(prismEndpoints.userConnectionVerification(id), { method: "POST", schema: connectionVerificationSchema, signal });
 }
 
 /**

@@ -15,8 +15,8 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// `FROM` (pelo nome: a mesma tabela duas vezes, ou duas de mesmo nome em esquemas diferentes, ficam só leitura) e tem uma chave inteira
 /// no resultado, como colunas dela: a primária, ou uma restrição ou índice único sem condição, só de colunas e com todas elas não nulas. A
 /// coluna se edita quando vem de uma tabela que se edita e não é calculada no comando, gerada sempre pelo banco, binária, de um tipo que o
-/// Prism ainda não converte naquele banco nem, num resultado de junção, uma coluna da chave. Linha nova e exclusão, só no resultado de
-/// uma tabela só.
+/// Prism ainda não converte naquele banco nem, num resultado de junção, uma coluna da chave. Adicionar, duplicar e excluir linha, só no
+/// resultado de uma tabela só.
 /// </summary>
 internal static class EditTargetResolver
 {
@@ -45,27 +45,31 @@ internal static class EditTargetResolver
         {
             var catalog = catalogs[index];
             var name = names[index];
-            var reason = catalog?.Kind switch
+            var kind = KindOf(catalog);
+            var reason = kind switch
             {
-                null => $"{name} não é uma tabela",
-                "table" => null,
-                "view" => $"{name} é uma visão",
-                "materializedView" => $"{name} é uma visão materializada",
-                "foreign" => $"{name} é uma tabela estrangeira",
+                EditTableKind.Table => null,
+                EditTableKind.View => $"{name} é uma visão",
+                EditTableKind.MaterializedView => $"{name} é uma visão materializada",
+                EditTableKind.Foreign => $"{name} é uma tabela estrangeira",
+                EditTableKind.Elsewhere => $"{name}, escrita sem esquema, leva agora a outra tabela na sessão",
                 _ => $"{name} não é uma tabela"
             };
 
             if (reason is null && names.Count(other => other == name) > 1)
                 reason = $"{name} aparece mais de uma vez no comando";
 
+            // RN-GRADE-020: a chave pelo nome, para o "Gerar SQL": a que a edição usa, quando ela acha uma; senão, a primeira candidata.
             IReadOnlyList<int> key = [];
+            IReadOnlyList<string> keyColumns = kind == EditTableKind.Table ? CandidateKeys(catalog!).FirstOrDefault()?.Columns ?? [] : [];
             if (reason is null)
             {
                 var table = index;
-                (key, reason) = KeyOf(dialect, name, catalog!, [.. origins.Select(origin => origin.Table == table ? origin.Column : null)], columns);
+                (key, var used, reason) = KeyOf(dialect, name, catalog!, [.. origins.Select(origin => origin.Table == table ? origin.Column : null)], columns);
+                keyColumns = used?.Columns ?? keyColumns;
             }
 
-            tables.Add(new EditTable(catalog?.Schema ?? source.Tables[index].Name.Schema ?? string.Empty, name, key, reason is null, reason));
+            tables.Add(new EditTable(catalog?.Schema ?? source.Tables[index].Name.Schema ?? string.Empty, name, key, reason is null, reason, kind, keyColumns));
         }
 
         var editColumns = columns.Select((column, index) =>
@@ -82,11 +86,24 @@ internal static class EditTargetResolver
             if (reason is null && join && tables[position].Key.Any(key => origins[key].Column?.Name == origin.Name))
                 reason = KeyInAJoin;
 
-            return new EditColumn(position, origin.Name, reason is null, reason, origin.IsNullable, origin.Generated, origin.Type);
+            return new EditColumn(position, origin.Name, reason is null, reason, origin.IsNullable, GenerationOf(dialect, origin), origin.Type);
         });
 
         return new EditTarget(tables, [.. editColumns], !join && tables[0].Editable, catalogs.Any(catalog => catalog?.OneAtATime == true));
     }
+
+    /// <summary>
+    /// RN-GRADE-020 e RN-PROT-002: o alvo do "Gerar SQL" numa conexão somente leitura. As tabelas, as chaves e as colunas são as de uma conexão comum, e nada
+    /// se edita: todas as tabelas e colunas com o motivo, e sem "Adicionar linha", "Duplicar linha" e "Excluir linha". A chave da edição (`Key`) fica como
+    /// estava; quem a usaria é o "Salvar", que a conexão recusa.
+    /// </summary>
+    public static EditTarget ReadOnly(EditTarget target, string reason)
+        => target with
+        {
+            Tables = [.. target.Tables.Select(table => table with { Editable = false, Reason = reason })],
+            Columns = [.. target.Columns.Select(column => column with { Editable = false, Reason = reason })],
+            RowOperations = false
+        };
 
     /// <summary>O alvo de agora é o mesmo do da consulta: as tabelas, as chaves e o que cada coluna é. É o que o "Salvar" confere no catálogo, dentro da transação.</summary>
     public static bool Same(EditTarget before, EditTarget now)
@@ -230,16 +247,25 @@ internal static class EditTargetResolver
         return null;
     }
 
-    /// <summary>A primeira chave da tabela inteira no resultado, como colunas dela, a primária antes; sem nenhuma, o motivo.</summary>
-    private static (IReadOnlyList<int> Key, string? Reason) KeyOf(ESqlDialect dialect, string name, EditCatalogTable catalog, ColumnInfo?[] origins, IReadOnlyList<QueryColumn> columns)
-    {
-        var candidates = catalog.Keys
-            .OrderByDescending(key => key.Primary)
-            .Where(key => key.Columns.Count > 0 && key.Columns.All(column => catalog.Columns.Any(info => info.Name == column && !info.IsNullable)))
-            .ToList();
+    /// <summary>
+    /// RN-GRADE-020: o tipo de cada tabela como a tela o lê. A que o catálogo não acha (um sinônimo, um apelido de tabela) e o tipo que ele não conhece são
+    /// `other`.
+    /// </summary>
+    private static string KindOf(EditCatalogTable? catalog)
+        => catalog?.Kind is EditTableKind.Table or EditTableKind.View or EditTableKind.MaterializedView or EditTableKind.Foreign or EditTableKind.Elsewhere ? catalog.Kind : EditTableKind.Other;
 
+    /// <summary>As chaves que servem (RN-EDIT-002): a primária antes, e só as de colunas não nulas.</summary>
+    private static List<EditKey> CandidateKeys(EditCatalogTable catalog)
+        => [.. catalog.Keys
+            .OrderByDescending(key => key.Primary)
+            .Where(key => key.Columns.Count > 0 && key.Columns.All(column => catalog.Columns.Any(info => info.Name == column && !info.IsNullable)))];
+
+    /// <summary>A primeira chave da tabela inteira no resultado, como colunas dela, a primária antes, e qual ela é; sem nenhuma, o motivo.</summary>
+    private static (IReadOnlyList<int> Key, EditKey? Used, string? Reason) KeyOf(ESqlDialect dialect, string name, EditCatalogTable catalog, ColumnInfo?[] origins, IReadOnlyList<QueryColumn> columns)
+    {
+        var candidates = CandidateKeys(catalog);
         if (candidates.Count == 0)
-            return ([], $"{name} não tem chave primária nem chave única de colunas não nulas");
+            return ([], null, $"{name} não tem chave primária nem chave única de colunas não nulas");
 
         foreach (var key in candidates)
         {
@@ -250,15 +276,27 @@ internal static class EditTargetResolver
             if (positions.Any(position => EditValues.TypeOf(dialect, origins[position]!.Type, columns[position].Kind) is EEditType.Binary or EEditType.Unsupported))
                 continue;
 
-            return (positions, null);
+            return (positions, key, null);
         }
 
         var missing = candidates[0].Columns.Where(column => !origins.Any(origin => origin?.Name == column)).ToList();
 
         return missing.Count > 0
-            ? ([], $"a chave de {name} não está inteira no resultado: faltam {string.Join(", ", missing)}")
-            : ([], $"a chave de {name} tem coluna de um tipo que o Prism ainda não edita neste banco");
+            ? ([], null, $"a chave de {name} não está inteira no resultado: faltam {string.Join(", ", missing)}")
+            : ([], null, $"a chave de {name} tem coluna de um tipo que o Prism ainda não edita neste banco");
     }
+
+    /// <summary>
+    /// RN-EDIT-016: quem preenche o valor da coluna na linha nova, que o "Duplicar linha" da tela não copia. No PostgreSQL, a coluna cujo padrão é o
+    /// próximo valor de uma sequência (`nextval(...)`: o `serial` e o `bigserial`) é "por padrão", como a identidade "por padrão": o banco a preenche
+    /// quando o valor não vem. Só no alvo da edição: o catálogo continua a mostrá-la como padrão, e não como coluna gerada (RN-CAT-001).
+    /// </summary>
+    private static string? GenerationOf(ESqlDialect dialect, ColumnInfo origin)
+        => origin.Generated is null && dialect == ESqlDialect.PostgreSql && IsNextValue(origin.DefaultValue) ? ColumnGeneration.ByDefault : origin.Generated;
+
+    /// <summary>O padrão é uma chamada de `nextval`, como o `pg_get_expr` o escreve (`nextval('loja.pedido_id_seq'::regclass)`).</summary>
+    private static bool IsNextValue(string? expression)
+        => expression?.Trim() is { } text && text.StartsWith("nextval(", StringComparison.OrdinalIgnoreCase) && text.EndsWith(')');
 
     private static string? ColumnReason(ESqlDialect dialect, ColumnInfo origin, QueryColumn column)
     {

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { transferExits, useTransfersAhead } from "@/app/workbench/_lib/data-import/data-imports";
+import { canceledAheadNote } from "@/app/workbench/_lib/data-import/transfer-exits";
 import { Button, Dialog, FormMessage, RefreshIcon, StatusBadge, useToast } from "@/components/ui";
 import { getBridge } from "@/lib/api/bridge";
 
@@ -49,6 +51,11 @@ export type UpdateDialogViewProps = {
   onCancel: () => void;
   onInstall: () => void;
   onNoStartupCheckChange: (checked: boolean) => void;
+  /**
+   * RN-EXPORT-023: a frase das exportações em andamento ("As 2 exportações em andamento serão canceladas."), que entra no aviso do que a instalação faz
+   * quando ela encerra o Prism (o instalador do Windows); nula sem nenhuma.
+   */
+  exportsNote?: string | null;
 };
 
 /**
@@ -59,8 +66,10 @@ export type UpdateDialogViewProps = {
  * ligado, a versão oferecida pode ser um beta: o cabeçalho diz isso e avisa que pode ter defeitos, e cada beta das notas leva a
  * marca (RN-ATUALIZA-010).
  */
-export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLater, onSkip, onCancel, onInstall, onNoStartupCheckChange }: UpdateDialogViewProps) {
+export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLater, onSkip, onCancel, onInstall, onNoStartupCheckChange, exportsNote = null }: UpdateDialogViewProps) {
   const { status, current, format, forAllUsers, releases } = state;
+  // O que encerra o Prism é só o instalador do Windows: nos outros formatos a instalação é da pessoa, com o Prism fechado por ela.
+  const closing = (text: string) => (format === "nsis" && exportsNote !== null ? `${text} ${exportsNote}` : text);
   const [latest] = releases;
   const downloading = status === "downloading";
   const installing = status === "installing";
@@ -132,7 +141,7 @@ export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLate
           </p>
           {offering ? (
             <p data-update-next className="text-sm text-ink">
-              {format === null ? copy.next.unavailable : manual ? copy.next.manual : forAllUsers ? copy.next.nsisForAll : copy.next.nsis}
+              {format === null ? copy.next.unavailable : manual ? copy.next.manual : closing(forAllUsers ? copy.next.nsisForAll : copy.next.nsis)}
             </p>
           ) : null}
         </div>
@@ -166,7 +175,7 @@ export function UpdateDialogView({ state, noStartupCheck, busy, onUpdate, onLate
         {status === "ready" ? (
           <FormMessage tone="success">
             <p className="font-semibold">{copy.ready}</p>
-            <p className="mt-1">{manual ? copy.readyManual : copy.readyNsis}</p>
+            <p className="mt-1">{manual ? copy.readyManual : closing(copy.readyNsis)}</p>
           </FormMessage>
         ) : null}
 
@@ -259,6 +268,10 @@ export function UpdateDialog() {
   const [busy, setBusy] = useState(false);
   const [noStartupCheck, setNoStartupCheck] = useState(false);
   const open = state.status !== "none" && state.checkId !== dismissed;
+  // RN-EXPORT-023 e RN-IMPORT-021: a conta das transferências em andamento, lida enquanto o diálogo oferece a instalação que encerra o Prism (o cofre
+  // aberto nesta janela).
+  const closesPrism = open && state.format === "nsis" && (state.status === "available" || state.status === "failed" || state.status === "ready" || state.status === "downloading");
+  const transfersAhead = useTransfersAhead(closesPrism);
 
   // A atualização que não foi instalada (RN-INSTALA-003): o processo principal guarda o aviso, e a primeira janela que pergunta
   // o leva, uma vez. O aviso entra na fila mesmo se o efeito já foi desfeito (o `StrictMode` monta duas vezes, e a segunda
@@ -356,7 +369,12 @@ export function UpdateDialog() {
     }
   }
 
-  const install = async () => adoptUpdateState(await updates.install(version));
+  // RN-EXPORT-023 e RN-IMPORT-021: a instalação que encerra o Prism cancela antes as transferências em andamento (o `DELETE` de cada uma) e solta os
+  // destinos das exportações.
+  const install = async () => {
+    if (state.format === "nsis") await transferExits.cancelForExit();
+    adoptUpdateState(await updates.install(version));
+  };
 
   return (
     <UpdateDialogView
@@ -379,6 +397,7 @@ export function UpdateDialog() {
           adoptUpdateState({ status: "none" });
         })
       }
+      exportsNote={canceledAheadNote(transfersAhead)}
       onNoStartupCheckChange={(checked) => {
         setNoStartupCheck(checked);
         updates.setCheckOnStartup(!checked).catch(() => setNoStartupCheck(!checked));

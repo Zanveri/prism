@@ -43,3 +43,22 @@ export function measureRendered<TScroll extends Element | Window, TItem extends 
   const index = instance.indexFromElement(element);
   return instance.itemSizeCache.get(instance.options.getItemKey(index)) ?? instance.options.estimateSize(index);
 }
+
+/**
+ * Esquece as alturas medidas de uma lista virtual que mede as linhas (`measure()`: a estimativa mudou, como na troca da densidade do navegador,
+ * RN-NAV-011) e mede de novo, na hora, as linhas desenhadas.
+ *
+ * Por quê: depois de `measure()` toda linha vale a estimativa até ser medida, e a linha desenhada só é medida pelo `ResizeObserver`, que avisa quando a
+ * CAIXA dela muda, e pelo `ref`, que o React só chama ao montar (a função é a mesma a cada renderização). As linhas comuns mudam de altura com a densidade
+ * e o observador as mede; a de erro, não: a altura dela vem da mensagem e do botão. Ela ficava com a estimativa até sair de vista, e as linhas de baixo
+ * subiam por cima da mensagem e do "Tentar de novo" (a troca feita noutra janela, com a árvore à mostra).
+ *
+ * As posições que a lista guarda ainda são as de antes de esquecer, e a medida nova só é gravada quando difere delas: a linha que mede o mesmo que antes
+ * (a de erro, de novo) não seria gravada. Por isso as linhas são lidas (`getVirtualItems`, que refaz as posições com as estimativas) antes de medir. A
+ * medida é a do `ref` (`measureElement`), e a linha sem caixa fica com a estimativa nova (`measureRendered`).
+ */
+export function remeasureRendered<TScroll extends Element | Window, TItem extends Element>(instance: Virtualizer<TScroll, TItem>) {
+  instance.measure();
+  instance.getVirtualItems();
+  for (const element of [...instance.elementsCache.values()]) if (element.isConnected) instance.measureElement(element);
+}

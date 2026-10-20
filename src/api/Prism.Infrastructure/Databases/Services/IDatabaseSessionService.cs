@@ -16,8 +16,29 @@ public interface IDatabaseSessionService
     /// </summary>
     Task<Result<DatabaseSessionInfo, DatabaseFailure>> OpenAsync(Guid connectionID, ConnectionSettings settings, long vaultGeneration, CancellationToken cancellationToken);
 
-    /// <summary>RN-CONN-013: abre, roda a consulta de verificação e fecha. Não registra sessão. Falha `ConnectionFailed`.</summary>
+    /// <summary>RN-CONN-013: abre, roda a consulta de verificação do banco e fecha. Não registra sessão. Falha `ConnectionFailed`.</summary>
     Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-CONN-013 e RN-VERIF-001: o mesmo, com a consulta de verificação própria do formulário (já validada como uma leitura só) no lugar da do
+    /// banco, quando ela vem. A falha dela é `ConnectionFailed`, com a mensagem do banco.
+    /// </summary>
+    Task<UnitResult<DatabaseFailure>> TestAsync(ConnectionSettings settings, string? verificationQuery, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-VERIF-002: roda a consulta de verificação (a própria, já validada, ou a do banco quando ela é nula) numa sessão já aberta da conexão, do cofre
+    /// da geração `vaultGeneration`, e nunca numa nova: sem nenhuma, `NotConnected`. Nunca numa sessão com cursor aberto, que a consulta fecharia
+    /// (RN-SQL-007), nem numa com comando em andamento: primeiro a sessão sem resultado (a da árvore) e depois a de uma aba sem cursor; com todas
+    /// ocupadas, `Busy` na hora, sem esperar a vez. A falha do banco é `Failed`, e a sessão cuja conexão caiu sai do registro. Não é atividade:
+    /// não mexe no tempo sem leitura do cursor (RN-SQL-007) nem no resultado da sessão.
+    /// </summary>
+    Task<ConnectionVerification> VerifyAsync(Guid connectionID, string? verificationQuery, long vaultGeneration, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-PROT-002 e 006: a conexão de que a sessão é, para quem decide as proteções dela a cada comando (as do cofre, que a Application lê). Nulo
+    /// quando a sessão não existe: aí a operação pedida responde `SessionNotFound` por conta própria.
+    /// </summary>
+    Guid? ConnectionOf(Guid sessionID);
 
     /// <summary>
     /// Fecha a sessão, interrompendo o comando e a contagem que estiverem rodando nela. Espera o comando parar por no máximo dez
@@ -68,6 +89,24 @@ public interface IDatabaseSessionService
     Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, int pageSize, CancellationToken cancellationToken);
 
     /// <summary>
+    /// RN-PROT-002: o mesmo, numa conexão que pode ser somente leitura, que é como a Application executa todo comando da pessoa (as proteções vêm
+    /// do cofre a cada comando, RN-PROT-006). Com `readOnly`, o comando montado (com o filtro) que não é uma leitura (`ReadOnlySql`) é recusado com
+    /// `ConnectionReadOnly`, antes de ir ao banco e sem tirar o resultado anterior; o que é leitura roda pelo `ExecuteReadOnlyAsync` da conexão, e a
+    /// página diz que o resultado inteiro é só leitura (RN-EDIT-002). Sem `readOnly`, é o comando de sempre, e a sessão que estava no modo só de
+    /// leitura do banco sai dele.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-SQL-024: o mesmo, com os resultados que a aba continua mostrando (`keep`, os `resultID` das abas do script). Quando o comando vai ao
+    /// banco (dê certo ou não, também desfeito com `Executed`), a sessão guarda, entre o resultado atual e os já guardados, os da lista, só com o
+    /// que a edição precisa (as colunas, a leitura do texto e o alvo, nunca as linhas nem os valores completos), e esquece os outros; o
+    /// identificador que ela não conhece é ignorado. A recusa antes de ir ao banco não muda nada. É o que a Application usa; as sobrecargas sem
+    /// `keep` esquecem os guardados, como a execução que não é do script.
+    /// </summary>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(Guid sessionID, string sql, string? filter, int pageSize, bool readOnly, IReadOnlyCollection<Guid> keep, CancellationToken cancellationToken);
+
+    /// <summary>
     /// RN-GRADE-011: o mesmo, com o filtro do resultado (condição, ordem ou as duas) junto ao comando, ou por fora dele quando ele não é
     /// um `SELECT` que a leitura do comando reconheça; a página diz como (`FilterApplied`), e o comando embrulhado é só leitura. O
     /// comando montado é o que roda, o que o "contar total" conta e o que a edição lê; a falha do banco vem sem a posição do erro, que
@@ -102,19 +141,37 @@ public interface IDatabaseSessionService
     UnitResult<DatabaseFailure> Cancel(Guid sessionID);
 
     /// <summary>
-    /// RN-EDIT-002, 003 e 010: o que se edita no resultado `resultID` da sessão, pelo catálogo, uma vez por resultado. A consulta vai na
-    /// sessão `catalogSessionID` (a da árvore da mesma conexão e do mesmo banco), esperando a vez nela, ou numa conexão à parte, com
-    /// prazo de espera de trava; nunca na sessão do resultado, cujo cursor continua aberto. Outro resultado na sessão: `ResultChanged`;
-    /// o resultado inteiro só leitura: `ResultNotEditable`, com o motivo.
+    /// RN-EDIT-002, 003 e 010: o que se edita no resultado `resultID` da sessão (o atual ou um guardado, RN-SQL-024), pelo catálogo, uma vez
+    /// por resultado. A consulta vai na sessão `catalogSessionID` (a da árvore da mesma conexão e do mesmo banco), esperando a vez nela, ou
+    /// numa conexão à parte, com prazo de espera de trava; nunca na sessão do resultado, cujo cursor continua aberto. Um resultado que não é o
+    /// atual nem um guardado: `ResultChanged`; no Db2 e no Informix, também o guardado com uma tabela sem esquema depois de um comando que pode
+    /// trocar o esquema atual da sessão (RN-SQL-024); o resultado inteiro só leitura: `ResultNotEditable`, com o motivo.
     /// </summary>
     Task<Result<EditTarget, DatabaseFailure>> GetEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, CancellationToken cancellationToken);
 
-    /// <summary>RN-EDIT-008: os comandos que o "Salvar" executaria, com os valores como literais, sem executar nada.</summary>
+    /// <summary>
+    /// RN-GRADE-020 e RN-PROT-002: o alvo do "Gerar SQL" (e do "Copiar como" do SQL e do DbUnit) numa conexão somente leitura. É resolvido como o da edição
+    /// (<see cref="GetEditTargetAsync"/>, com as mesmas recusas), e volta com tudo só leitura pelo motivo `reason` (as tabelas, as colunas e as operações de
+    /// linha). Ele NÃO fica guardado com o resultado: o "Salvar" continua recusado nessa conexão e, quando ela deixa de ser somente leitura, o `edit-target`
+    /// da edição pergunta de novo. O alvo que a edição já tinha guardado serve, também só leitura.
+    /// </summary>
+    Task<Result<EditTarget, DatabaseFailure>> GetReadOnlyEditTargetAsync(Guid sessionID, Guid resultID, Guid? catalogSessionID, string reason, CancellationToken cancellationToken);
+
+    /// <summary>RN-EDIT-008: os comandos que o "Salvar" executaria, com os valores como literais, sem executar nada. O resultado é o atual ou um guardado, como no `edit-target`.</summary>
     Task<Result<EditPreview, DatabaseFailure>> PreviewEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 
     /// <summary>
     /// RN-EDIT-005, 011 e 012: o "Salvar", na sessão do resultado, sem esperar a vez (`SessionBusy`). Confere o catálogo dentro da
-    /// transação: se a tabela mudou desde o `edit-target`, `ResultChanged`, e nada é executado. Devolve quantas alterações gravou.
+    /// transação: se a tabela mudou desde o `edit-target`, `ResultChanged`, e nada é executado. Devolve quantas alterações gravou. O resultado é
+    /// o atual ou um guardado, como no `edit-target` (RN-SQL-024): o de um guardado fecha o cursor do atual, que continua o atual, com os
+    /// valores completos dele, e os guardados continuam guardados.
     /// </summary>
     Task<Result<int, DatabaseFailure>> ApplyEditsAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// RN-EDIT-019 e 023: a contagem da coluna inteira, na sessão do resultado, sem esperar a vez (`SessionBusy`), como o "Salvar" que ela começa: `changes`
+    /// tem só a alteração da coluna inteira (`EditInvalid`, senão), conferida como no "Ver SQL"; a tabela que mudou na sessão é `ResultChanged`. Devolve
+    /// quantas linhas o comando do resultado devolve agora.
+    /// </summary>
+    Task<Result<long, DatabaseFailure>> CountWholeColumnAsync(Guid sessionID, Guid resultID, IReadOnlyList<EditChange> changes, CancellationToken cancellationToken);
 }

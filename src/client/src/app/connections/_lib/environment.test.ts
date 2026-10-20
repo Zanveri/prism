@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { Connection, Folder } from "./connections.schema";
+import { newVerification, unprotected, type Connection, type Folder } from "./connections.schema";
 import { environmentLookup } from "./environment";
 
 const now = "2026-10-13T12:00:00Z";
 
 function folder(id: string, parentID: string | null, environmentName: string | null = null, environmentColor: string | null = null): Folder {
-  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor, createdAt: now, updatedAt: now };
+  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 }
 
 function connection(folderID: string | null, environmentName: string | null = null, environmentColor: string | null = null): Connection {
-  return { id: "c1", folderID, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName, environmentColor, createdAt: now, updatedAt: now };
+  return { id: "c1", folderID, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName, environmentColor, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 }
 
 // Produção (vermelha) > Linha 1 (sem ambiente) > Extrusão (QAS, âmbar); Geral na raiz, sem ambiente.
@@ -97,5 +97,13 @@ describe("o ambiente da pasta (RN-PASTA-005)", () => {
     expect(lookup.inheritedIn("extrusao")?.folder).toBe(extrusao);
     expect(lookup.inheritedIn(null)).toBeNull();
     expect(lookup.inheritedIn("geral")).toBeNull();
+  });
+
+  it("a cor da pasta (RN-PASTA-007) não é ambiente e não passa adiante: a pasta só com ela não tem etiqueta, e a conexão de dentro não herda nada", () => {
+    const pintada: Folder = { ...folder("pintada", null), color: "#B79CFF" };
+    const lookup = environmentLookup([pintada]);
+
+    expect(lookup.folder("pintada")).toBeNull();
+    expect(lookup.connection(connection("pintada"))).toBeNull();
   });
 });

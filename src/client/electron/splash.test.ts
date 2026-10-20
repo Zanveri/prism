@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { parseSvg, type SvgNode } from "../src/components/layout/svg-tree";
-import { splashCss, splashPage, splashSteps } from "./splash";
+import { splashCss, splashGeometry, splashPage, splashSteps } from "./splash";
 
 const assets = new URL("../../../assets/", import.meta.url);
 
@@ -119,5 +119,31 @@ describe("o selo powered by Zanveri no splash (RN-MARCA-008)", () => {
     expect(page).not.toMatch(/<script|\son[a-z]+\s*=|javascript:/i);
     expect(page).not.toMatch(/(?:src|href)\s*=\s*["'](?:https?:|\/\/)/i);
     expect(page).toContain("img-src 'self' data:");
+  });
+});
+
+describe("splashGeometry: o splash no zoom do programa (RN-ZOOM-001)", () => {
+  const fullHd = { width: 1920, height: 1040 };
+
+  it("em 100% é a janela de sempre, 640×400", () => {
+    expect(splashGeometry(1, fullHd)).toEqual({ width: 640, height: 400, zoomFactor: 1 });
+  });
+
+  it("a janela cresce e encolhe junto com o desenho, no fator do zoom", () => {
+    expect(splashGeometry(1.25, fullHd)).toEqual({ width: 800, height: 500, zoomFactor: 1.25 });
+    expect(splashGeometry(0.67, fullHd)).toEqual({ width: 429, height: 268, zoomFactor: 0.67 });
+    expect(splashGeometry(2, fullHd)).toEqual({ width: 1280, height: 800, zoomFactor: 2 });
+  });
+
+  it("até caber na área útil da tela: a 200%, num monitor de 1366×768, o fator para onde a altura cabe", () => {
+    const geometry = splashGeometry(2, { width: 1366, height: 728 });
+
+    expect(geometry.zoomFactor).toBeCloseTo(1.82);
+    expect(geometry.height).toBe(728);
+    expect(geometry.width).toBeLessThanOrEqual(1366);
+  });
+
+  it("uma área útil que não é medida (zero) não some com o splash: fica em 100%", () => {
+    expect(splashGeometry(1.5, { width: 0, height: 0 })).toEqual({ width: 640, height: 400, zoomFactor: 1 });
   });
 });

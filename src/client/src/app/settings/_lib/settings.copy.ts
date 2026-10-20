@@ -54,6 +54,23 @@ export const settingsCopy = {
       notInstalled: "Esta fonte não está instalada neste computador. Até ela voltar, vale a do Prism.",
       editorPreview: "Prévia do editor",
     },
+    // RN-ZOOM-001: o zoom do programa inteiro, que o processo principal guarda na pasta de dados (e não para o usuário do cofre). A pasta é da conta do
+    // computador: no Prism instalado para todos os usuários do Windows, cada conta tem o seu zoom, e a dica não diz "todos os usuários".
+    zoom: {
+      label: "Zoom do programa",
+      zoomOut: "Diminuir o zoom do programa",
+      zoomIn: "Aumentar o zoom do programa",
+      value: (zoom: number) => `${zoom}%`,
+      reset: "Restaurar 100%",
+      hint: (mod: string) => `${mod} + e ${mod} − mudam o zoom em qualquer tela, e ${mod} 0 volta a 100%. Vale para todas as janelas, já na abertura, e para todos que entram no Prism nesta conta do computador, não só para você.`,
+    },
+    // RN-NAV-011: a densidade do navegador, a da árvore e a da lista de scripts.
+    density: {
+      label: "Densidade do navegador",
+      comfortable: "Confortável",
+      compact: "Compacta",
+      hint: "A compacta tem linhas mais baixas e menos recuo a cada nível: cabem mais itens na árvore e na lista de scripts.",
+    },
   },
 
   editor: {
@@ -68,6 +85,9 @@ export const settingsCopy = {
     autocompleteHint: "Sugere as palavras-chave do banco da aba e os nomes que a árvore já carregou: esquemas, tabelas, visões e colunas. Nunca consulta o banco. As setas escolhem uma sugestão, e só então o Enter a aceita.",
     uppercaseKeywords: "Converter palavras-chave para maiúsculas",
     uppercaseKeywordsHint: "Só as palavras reservadas (SELECT, FROM, WHERE…), quando você as termina com espaço, vírgula, parêntese ou Enter. Nomes de colunas, texto entre aspas, comentários e o que você cola ficam como estão.",
+    // RN-SQL-018 (issue #7): como o "Smart" do DBeaver, com o cuidado de não executar metade de um comando.
+    blankLineSeparates: "A linha em branco separa os comandos",
+    blankLineSeparatesHint: "Sem seleção, o Ctrl+Enter executa só o comando do cursor, até o ponto e vírgula ou até uma linha em branco, como no DBeaver. A linha em branco só separa quando a de baixo começa outro comando (SELECT, INSERT, UPDATE…) e a de cima não ficou pela metade; nunca dentro de texto, comentário ou rotina. Desligada, só o ponto e vírgula separa.",
   },
 
   // RN-ATUALIZA-007: o que a ponte do processo principal guarda e a tela lê e muda.

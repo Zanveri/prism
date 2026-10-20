@@ -1,25 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
+import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { useToast, type Engine } from "@/components/ui";
 
+import { useCopyAs } from "../../_lib/copy-as/use-copy-as";
 import { csvExportOf } from "../../_lib/csv";
+import { openExportWizard } from "../../_lib/data-export/data-exports";
+import { exportRows, recordsSource, runnerExportBlocker } from "../../_lib/data-export/export-entry";
+import { openImportWizard, useImportedAfterRead } from "../../_lib/data-import/data-imports";
+import { importBlockerOf } from "../../_lib/data-import/import-entry";
+import { treeQuery } from "../../_lib/database-sessions.service";
 import { filterHandoff } from "../../_lib/filter-handoff";
 import { followOf, recordLinks } from "../../_lib/foreign-key-links";
 import { allCutCells, noFullValues, withFullValues, type FullValues } from "../../_lib/full-values";
+import { useGridGenerateSql } from "../../_lib/generate-sql/use-grid-generate-sql";
+import { cachedObjectKind, cachedReadOnly, cachedUserName } from "../../_lib/grid-action-context";
 import { inDatabase } from "../../_lib/navigator-model";
-import { isBusy } from "../../_lib/result-paging";
+import { objectKindOf } from "../../_lib/object-kind";
 import { saveText } from "../../_lib/save-file";
 import { recall, remember } from "../../_lib/tab-memory";
 import { useRefreshSlot, type RefreshSlot } from "../../_lib/tab-refresh";
 import type { TableRef } from "../../_lib/table-diagram";
-import { recordsSql, sortOf, sqlLiteral } from "../../_lib/table-sql";
+import { recordsSql, sortOf, sqlLiteral, type RecordsSort } from "../../_lib/table-sql";
 import { foreignKeysQuery } from "../../_lib/table-structure.service";
-import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, runRecords, settleHandoff, sortRecords, takeHandoff } from "../../_lib/table-view";
-import { useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
+import { canClear, clearRecords, filterRecords, idleNotice, needsFirstRun, orderRecords, runRecords, settleHandoff, takeHandoff } from "../../_lib/table-view";
+import { saveQuestion, type WholeColumnQuestion } from "../../_lib/command-confirmation";
+import { useAutoRefresh } from "../../_lib/use-auto-refresh";
+import { useCommandConfirmation } from "../../_lib/use-command-confirmation";
+import { isAutoRun, isPersonBusy, useQueryRunner, type QueryRunner } from "../../_lib/use-query-runner";
 import type { TableView } from "../../_lib/workbench-model";
-import { useRecordEdits, type GridFilterSource, type SavedEdits } from "../../_lib/use-record-edits";
+import { useRecordEdits, type GridFilterSource, type GridFollowSource, type GridSortSource, type SavedEdits } from "../../_lib/use-record-edits";
+import { AutoRefreshControl, AutoRefreshDialog } from "../auto-refresh-control";
+import { ConfirmCommandDialog } from "../confirm-command-dialog";
 import { EditsBanner } from "../edits-banner";
 import { resultEditDialogs } from "../result-edit-dialogs";
 import { ResultPanel } from "../result-panel";
@@ -49,6 +64,8 @@ type RecordsViewProps = {
   onOpenTable: (table: TableRef & { view?: TableView }) => void;
   /** RN-GRADE-012: onde a vista deixa o "Atualizar" para o F5 da aba. */
   refreshSlot?: RefreshSlot;
+  /** RN-GRADE-018: o "Abrir numa aba de consulta" do "Gerar SQL": a aba nova da conexão e do banco desta, com o texto no editor. */
+  onOpenQuery?: (connectionId: string, sql: string, database?: string) => void;
 };
 
 /**
@@ -57,9 +74,9 @@ type RecordsViewProps = {
  * (grade, "carregar mais", contar o total, cancelar). Só leitura. O texto do comando não passa por editor: o
  * executor recebe o comando pronto, e a tela o mostra embaixo do filtro.
  *
- * A ordem mora no texto do campo: clicar no cabeçalho de uma coluna escreve, troca ou tira o `ORDER BY` ali e executa
- * (`sortRecords`), "Limpar" tira a condição e a ordem de uma vez (`clearRecords`), e a seta do cabeçalho é lida do filtro
- * em vigor, quando a ordem dele é de uma coluna só (`sortOf`).
+ * A ordem mora no texto do campo: o botão de ordenar do cabeçalho de uma coluna (RN-GRADE-021) e o "Ordenar" do menu escrevem, trocam ou tiram o
+ * `ORDER BY` ali e executam (`orderRecords`, com a ordem seguinte do ciclo, que a edição decide), "Limpar" tira a condição e a ordem de uma vez
+ * (`clearRecords`), e a seta do cabeçalho é lida do filtro em vigor, quando a ordem dele é de uma coluna só (`sortOf`).
  *
  * Executa ao abrir e, ao voltar a esta vista, só se a aba ainda não tem resultado nenhum: um erro, um
  * cancelamento ou as linhas que estão na tela ficam como estão, e quem as refaz é "Atualizar". A vista
@@ -78,7 +95,7 @@ type RecordsViewProps = {
  * O que esta vista DECIDE (a primeira carga, enviar ou não o comando pedido, a entrega do filtro, o aviso de "Carregando…" ou "desconectada") e o que faz com
  * cada decisão está em `table-view.ts`, em funções sem React, com as peças injetadas e com teste: aqui só se entregam o estado do executor e os `setState`.
  */
-export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot }: RecordsViewProps) {
+export function RecordsView({ tabId, runner, engine, connectionId, database, schema, name, connected, visible, disconnected, onOpenTable, refreshSlot, onOpenQuery }: RecordsViewProps) {
   const state = useQueryRunner(runner);
   const { preferences } = usePreferences();
   const toast = useToast();
@@ -116,9 +133,12 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // RN-EDIT-001 a 012: a edição das células. As ações que executam de novo (atualizar, filtrar, ordenar, limpar) perguntam antes com
   // alterações não salvas (`guard`, RN-EDIT-007); depois de um Salvar que gravou tudo, os registros são lidos de novo, sem perguntar.
   const reload = useCallback(() => run(filter), [run, filter]);
-  const reloadAfterSave = useCallback(({ reread }: SavedEdits) => {
+  // RN-EDIT-021: o Salvar do Informix sem log que parou no meio com a coluna inteira gravada (ou talvez gravada) deixa na grade o que foi gravado, e nada é
+  // lido de novo: o cursor fechou, e "Atualizar" lê.
+  const reloadAfterSave = useCallback(({ reread, partial, resultId, result }: SavedEdits) => {
+    if (partial === true) return runner.keepSaved(resultId, result);
     if (reread) reload();
-  }, [reload]);
+  }, [reload, runner]);
 
   // RN-GRADE-013: o "Filtrar" do menu da célula junta a condição ao texto do campo (lido na hora da escolha) e o envia como o "Aplicar", com a
   // pergunta das alterações não salvas antes (RN-EDIT-007); "Remover todos os filtros e ordenações" é o "Limpar". As funções leem o que muda por uma ref.
@@ -141,26 +161,75 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   );
   const refreshRef = useRef<() => void>(() => {});
   const menuRefresh = useCallback(() => refreshRef.current(), []);
+  // RN-EXPORT-001: o "Exportar dados…" do menu da célula lê o motivo e abre o assistente pelo que está abaixo (o "Salvar" em andamento vem da edição).
+  const exportRef = useRef<{ blocker: string | null; open: () => void }>({ blocker: null, open: () => {} });
+  const menuExport = useMemo(() => ({ blocker: () => exportRef.current.blocker, open: () => exportRef.current.open() }), []);
 
-  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh });
+  // RN-GRADE-014: a atualização automática dos registros, na barra do resultado e no menu da grade; repete o comando em vigor (o do "Atualizar"). Só com a
+  // aba à vista: escondida, ou com a vista desmontada (a Estrutura, o Diagrama), ela espera.
+  const auto = useAutoRefresh(runner, visible);
+
+  // RN-PROT-001: o que o Prism monta para mostrar a tabela (os Registros, com o filtro e a ordem do campo, e a atualização automática deles) não pergunta; o
+  // "Salvar" da grade, em "Todos os comandos", pergunta uma vez, com quantas alterações vão.
+  const confirmation = useCommandConfirmation(connectionId, database);
+  const { confirmed } = confirmation;
+  const confirmSave = useCallback((count: number) => confirmed((protections) => saveQuestion(protections, count)), [confirmed]);
+  // RN-EDIT-019: o "Salvar" com a coluna inteira pergunta sempre, com o ambiente e a conexão da aba, e cobre a pergunta da proteção.
+  const { always } = confirmation;
+  const confirmWholeColumn = useCallback((question: WholeColumnQuestion) => always(question), [always]);
+
+  // A seta do cabeçalho é a da ordem EM VIGOR, quando ela é de uma coluna só da grade que está na tela (as linhas ficam lá, esmaecidas, enquanto outro comando roda).
+  const onScreen = state.status === "running" ? state.previous : state;
+  const gridColumns = onScreen?.status === "rows" ? onScreen.columns : null;
+  const sort = useMemo(() => (gridColumns === null ? null : sortOf(filter, gridColumns, engine)), [filter, gridColumns, engine]);
+  // RN-GRADE-004, RN-GRADE-021 e RN-TABELA-007: o "Ordenar" do menu e o botão de ordenar do cabeçalho (a ordem em vigor, desta renderização, e o que a troca)
+  // e o "Ir para o registro referenciado" (as chaves estrangeiras, o seguir do link), pelo que está mais abaixo, lido na hora por uma ref.
+  const gridMenuRef = useRef<{ order: (sort: RecordsSort | null) => void; links: ReadonlyMap<number, unknown> | undefined; linkable: (value: string) => boolean; follow: (column: number, value: string) => void }>({
+    order: () => {},
+    links: undefined,
+    linkable: () => false,
+    follow: () => {},
+  });
+  const sortSource = useMemo<GridSortSource>(() => ({ applied: () => sort, apply: (next) => gridMenuRef.current.order(next) }), [sort]);
+  const followSource = useMemo<GridFollowSource>(() => ({ links: (column) => gridMenuRef.current.links?.has(column) === true, linkable: (value) => gridMenuRef.current.linkable(value), follow: (column, value) => gridMenuRef.current.follow(column, value) }), []);
+
+  // Seção 37: o submenu "Copiar avançado" (RN-GRADE-003, 016 e 017) e o "Gerar SQL" (RN-GRADE-006 e 018) da grade, com a tabela da aba como origem: o nome
+  // dela nos formatos, a tabela de destino do SQL e do DbUnit, e o tipo (tabela ou visão) que a árvore já sabe, para o CREATE. O usuário, o somente leitura
+  // da conexão e o tipo são lidos do cache na hora da escolha.
+  const recordsTable = useMemo(() => ({ schema, name }), [schema, name]);
+  const userName = useCallback(() => cachedUserName(queryClient), [queryClient]);
+  const copyAs = useCopyAs({ records: recordsTable, userName });
+  const generateSql = useGridGenerateSql({
+    connectionId,
+    database,
+    userName: cachedUserName(queryClient),
+    records: () => ({ schema, name, kind: cachedObjectKind(queryClient, { connectionId, database, schema, name }) }),
+    readOnlyConnection: () => cachedReadOnly(queryClient, connectionId),
+    openQueryTab: (id, sql, db) => onOpenQuery?.(id, sql, db),
+  });
+
+  const edits = useRecordEdits({ tabId, runner, state, connectionId, database, onSaved: reloadAfterSave, filter: filterSource, refresh: menuRefresh, autoRefresh: auto.source, confirmSave, confirmWholeColumn, exportData: menuExport, engine, sort: sortSource, follow: followSource, copyAs: copyAs.source, generateSql: generateSql.source });
   const { guard } = edits;
   const refresh = useCallback(() => guard(reload), [guard, reload]);
   useEffect(() => {
     guardRef.current = guard;
     refreshRef.current = refresh;
   });
-  // RN-GRADE-012: F5 é o "Atualizar", com o filtro e a ordem em vigor e a pergunta das alterações não salvas; com algo em andamento, nada.
+  // RN-GRADE-012: F5 é o "Atualizar", com o filtro e a ordem em vigor e a pergunta das alterações não salvas; com algo da pessoa em andamento, nada (a
+  // execução da atualização automática não segura: o comando toma o lugar dela, RN-GRADE-014).
   const refreshByKey = useCallback(() => {
-    if (!isBusy(runner.getState())) refresh();
+    if (!isPersonBusy(runner.getState())) refresh();
   }, [runner, refresh]);
   useRefreshSlot(refreshSlot, refreshByKey);
 
   /**
    * "Exportar CSV" (RN-TABELA-006): as linhas carregadas agora, pelo download do navegador, e o aviso com quantas saíram. RN-SQL-017: a célula
    * cortada sai com o valor completo, pedido antes à API (sem célula cortada, nada é pedido e o arquivo sai na hora); cancelada a busca, nada é gravado.
+   * Com a execução da atualização automática em andamento, espera por ela e exporta o resultado novo (RN-GRADE-014): o de antes já não está na API, e o
+   * valor completo das células cortadas dele não viria.
    */
   const { completeValues } = edits;
-  const exportCsv = useCallback(() => {
+  const exportNow = useCallback(() => {
     const current = runner.getState();
     if (current.status !== "rows") return;
 
@@ -174,6 +243,42 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
       if (full !== null) write(full);
     });
   }, [runner, schema, name, toast, completeValues]);
+  const exportCsv = useCallback(() => {
+    if (isAutoRun(runner.getState())) void runner.autoRunSettled().then(exportNow);
+    else exportNow();
+  }, [runner, exportNow]);
+
+  /**
+   * "Exportar…" (RN-EXPORT-001): todas as linhas pelo assistente, com a origem do comando que a grade mostra (o filtro e a ordem aplicados, e não o texto só
+   * digitado no campo). Desabilitado, com o motivo, sem resultado, com um comando da pessoa ou o "Salvar" em andamento; a execução da atualização automática
+   * não desabilita, e a origem é a grade que está na tela.
+   */
+  const exportBlocker = runnerExportBlocker(state, { busy: isPersonBusy(state) || edits.banner.saving });
+  const { pending, chosenColumns } = edits;
+  const openExport = useCallback(() => {
+    const rows = exportRows(runner.getState());
+    // RN-EXPORT-005: com colunas inteiras escolhidas na grade, só elas vêm marcadas na Extração.
+    if (rows !== null) openExportWizard(recordsSource(rows, { connectionId, ...inDatabase(database), schema, name, filter, unsavedEdits: pending, checkedColumns: chosenColumns() }));
+  }, [runner, connectionId, database, schema, name, filter, pending, chosenColumns]);
+  useEffect(() => {
+    exportRef.current = { blocker: exportBlocker, open: openExport };
+  });
+
+  /**
+   * "Importar…" (RN-IMPORT-001): o assistente com esta tabela de destino. Desabilitado, com o motivo, na conexão somente leitura (pela opção dela ou de uma
+   * pasta acima) e na visão, que a aba sabe pelas listas que a árvore já carregou (só se lê o cache, como na Estrutura). A conexão desconectada, as alterações
+   * não salvas e a aba ocupada não desabilitam: a importação tem conexão própria, e a Confirmação avisa.
+   */
+  const connections = useQuery(connectionsQuery);
+  const folders = useQuery(foldersQuery);
+  const connection = connections.data?.find((candidate) => candidate.id === connectionId);
+  const readOnly = connection === undefined ? null : readOnlyHintOf(connection.protections, folders.data ?? []);
+  const tables = useQuery(treeQuery({ type: "objects", connectionId, ...inDatabase(database), schema, objects: "tables" }, queryClient, false));
+  const views = useQuery(treeQuery({ type: "objects", connectionId, ...inDatabase(database), schema, objects: "views" }, queryClient, false));
+  const importBlocker = importBlockerOf(readOnly, objectKindOf(name, { tables: tables.data, views: views.data }));
+  const openImport = useCallback(() => openImportWizard({ connectionId, ...inDatabase(database), schema, name }), [connectionId, database, schema, name]);
+  // RN-IMPORT-020: uma importação nesta tabela terminou depois do começo da leitura que está na tela; a faixa diz isso até a aba ler de novo.
+  const importedAfterRead = useImportedAfterRead(runner, { connectionId, ...inDatabase(database), schema, name });
 
   // Com identidade estável: a grade memorizada recebe isto como "cheguei ao fim" (RN-CONFIG-005).
   const loadMore = useCallback(() => void runner.loadMore(), [runner]);
@@ -189,10 +294,6 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
   // Que valores viram link diz o mesmo `sqlLiteral` que o clique usa, com o banco da conexão (hoje só o valor com caractere de controle não vira, em banco nenhum).
   const linkable = useCallback((value: string) => engine !== undefined && sqlLiteral(engine, value, "text") !== null, [engine]);
 
-  // A seta do cabeçalho é a da ordem EM VIGOR, quando ela é de uma coluna só da grade que está na tela (as linhas ficam lá, esmaecidas, enquanto outro comando roda).
-  const onScreen = state.status === "running" ? state.previous : state;
-  const gridColumns = onScreen?.status === "rows" ? onScreen.columns : null;
-  const sort = useMemo(() => (gridColumns === null ? null : sortOf(filter, gridColumns, engine)), [filter, gridColumns, engine]);
   // RN-TABELA-011: o campo completa as colunas da tabela, que são as da grade (`SELECT *`). Um filtro errado deixa a área com o erro e sem grade: as colunas
   // que o campo sugere continuam as da última grade, para a pessoa corrigir o filtro.
   const [seenColumns, setSeenColumns] = useState<readonly { name: string; type: string }[]>([]);
@@ -249,10 +350,16 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
     });
   }
 
-  /** O clique no cabeçalho escreve, troca ou tira o `ORDER BY` no texto do campo e o envia (`sortRecords`, RN-TABELA-010). */
-  function sortBy(column: string) {
-    if (engine !== undefined && gridColumns !== null) guard(() => sortRecords({ engine, schema, name }, { draft, filter, column, columns: gridColumns }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
+  /**
+   * O "Ordenar" do menu da grade (RN-GRADE-004) e o botão de ordenar do cabeçalho (RN-GRADE-021, que pede a ordem seguinte do ciclo): a ordem escolhida para a
+   * coluna, escrita no campo e executada (`orderRecords`, RN-TABELA-010).
+   */
+  function orderBy(next: RecordsSort | null) {
+    if (engine !== undefined) guard(() => orderRecords({ engine, schema, name }, { draft, sort: next }, runner.getState(), { setDraft, setProblem, setFilter, execute }));
   }
+  useEffect(() => {
+    gridMenuRef.current = { order: orderBy, links, linkable, follow };
+  });
 
   /** "Limpar" tira a condição e a ordem de uma vez (`clearRecords`, RN-TABELA-010). */
   function clear() {
@@ -269,7 +376,7 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
         }}
         applied={filter}
         problem={problem}
-        busy={isBusy(state)}
+        busy={isPersonBusy(state)}
         command={engine === undefined ? null : recordsSql(engine, schema, name, filter)}
         onApply={apply}
         onClear={clear}
@@ -286,8 +393,6 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
           name: `${schema}.${name}`,
           onRefresh: refresh,
           onCancel: () => void runner.cancel(),
-          sort,
-          onSort: sortBy,
           onExport: exportCsv,
           links,
           onFollow: follow,
@@ -297,14 +402,21 @@ export function RecordsView({ tabId, runner, engine, connectionId, database, sch
           disconnected: notice.disconnected,
         }}
         editing={edits.editing}
-        banner={<EditsBanner {...edits.banner} />}
+        banner={<EditsBanner {...edits.banner} onImportedRefresh={importedAfterRead ? refresh : null} />}
+        // No rodapé, ao lado de "Atualizar": o menu dos intervalos abre para cima.
+        autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} opensUp onChoose={auto.choose} />}
+        exporter={{ blocker: exportBlocker, onExport: openExport }}
+        importer={{ blocker: importBlocker, onImport: openImport }}
         nullText={preferences.results.nullText}
-        autoLoadMore={preferences.results.autoLoadMore}
+        // RN-CONFIG-005 e RN-GRADE-014: com a atualização automática ligada, a página seguinte espera o botão (cada execução volta à primeira página).
+        autoLoadMore={preferences.results.autoLoadMore && auto.state.status !== "on"}
         onLoadMore={loadMore}
         onCount={() => void runner.countTotal()}
         onRerun={refresh}
       />
-      {resultEditDialogs(edits)}
+      {resultEditDialogs(edits, { copyAs, generateSql, engine, connectionId, database })}
+      {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
+      {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={edits.banner.onViewSql} />}
       {edits.question === null && handoffWaits ? (
         <UnsavedEditsDialog
           count={edits.pending}

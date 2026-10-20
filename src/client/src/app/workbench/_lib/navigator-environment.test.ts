@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Connection, Folder } from "@/app/connections/_lib/connections.schema";
+import { newVerification, unprotected, type Connection, type Folder } from "@/app/connections/_lib/connections.schema";
 import { environmentLookup } from "@/app/connections/_lib/environment";
 
 import { allEnvironments, choiceAvailable, filterByEnvironment, noEnvironment, type EnvironmentChoice } from "./navigator-environment";
@@ -8,11 +8,11 @@ import { allEnvironments, choiceAvailable, filterByEnvironment, noEnvironment, t
 const now = "2026-10-14T10:00:00Z";
 
 function folder(id: string, parentID: string | null, environmentName: string | null = null): Folder {
-  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor: null, createdAt: now, updatedAt: now };
+  return { id, parentID, name: `Pasta ${id}`, environmentName, environmentColor: null, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
 }
 
 function connection(id: string, folderID: string | null, environmentName: string | null = null): Connection {
-  return { id, folderID, name: `Conexão ${id}`, engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName, environmentColor: null, createdAt: now, updatedAt: now };
+  return { id, folderID, name: `Conexão ${id}`, engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 }
 
 // Fábrica (Produção) > Linha (sem ambiente) > Extrusão (QAS); Geral, na raiz, sem ambiente; Vazia (Produção), sem nada dentro.

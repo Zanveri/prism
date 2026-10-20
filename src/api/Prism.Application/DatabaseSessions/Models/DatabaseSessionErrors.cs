@@ -38,12 +38,18 @@ internal static class DatabaseSessionErrors
             EDatabaseFailure.EditInvalid => ApiErrorDto.CreateUnprocessableEntity("A alteração não se aplica.", "EDIT_INVALID", failure.Message, EditDetails(failure)),
             EDatabaseFailure.EditRowMismatch => ApiErrorDto.CreateUnprocessableEntity("O comando não afetou exatamente uma linha.", "EDIT_ROW_MISMATCH", failure.Message, EditDetails(failure)),
 
+            // RN-EDIT-018 e 023: a tela decide pelo código, e mostra o `reason` como veio.
+            EDatabaseFailure.EditAllRowsNotSupported => ApiErrorDto.CreateUnprocessableEntity("A coluna inteira não se altera neste resultado.", "EDIT_ALL_ROWS_NOT_SUPPORTED", failure.Message, EditDetails(failure)),
+
             // RN-SQL-017: o valor completo das células cortadas.
             EDatabaseFailure.ResultNotFound => ApiErrorDto.CreateNotFound("Resultado não localizado.", "RESULT_NOT_FOUND", failure.Message),
             EDatabaseFailure.CellsInvalid => ApiErrorDto.CreateUnprocessableEntity("Células inválidas.", "CELLS_INVALID", failure.Message),
 
             // RN-GRADE-011: pela rota, o validator recusa antes, com o mesmo código, no campo `Filter`; esta é a do registro de sessões.
             EDatabaseFailure.FilterInvalid => ApiErrorDto.CreateUnprocessableEntity("Filtro inválido.", "FILTER_INVALID", failure.Message),
+
+            // RN-PROT-002: nada foi ao banco, e o resultado anterior continua (sem `executed`).
+            EDatabaseFailure.ConnectionReadOnly => ApiErrorDto.CreateUnprocessableEntity("Conexão somente leitura.", "CONNECTION_READ_ONLY", failure.Message),
 
             // O cofre aberto mudou enquanto a sessão abria: para quem chamou, é o cofre que ele usava que fechou.
             EDatabaseFailure.VaultChanged => VaultErrors.From(EVaultError.Locked),

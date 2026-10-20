@@ -56,7 +56,7 @@ public sealed class DatabaseSessionEditsTests
         Assert.That(page.GetProperty("editable").ToString(), Is.EqualTo("""{"known":false,"reason":null}"""));
 
         var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID }), HttpStatusCode.OK);
-        Assert.That(target.ToString(), Is.EqualTo($$"""{"tables":[{"schema":"{{_schema}}","name":"pedido","key":[0],"editable":true,"reason":null}],"columns":[{"table":0,"baseColumn":"id","editable":true,"reason":null,"nullable":false,"generated":null},{"table":0,"baseColumn":"status","editable":true,"reason":null,"nullable":true,"generated":null},{"table":0,"baseColumn":"total","editable":false,"reason":"gerada pelo banco","nullable":true,"generated":"always"}],"rowOperations":true,"oneAtATime":false}"""));
+        Assert.That(target.ToString(), Is.EqualTo($$"""{"tables":[{"schema":"{{_schema}}","name":"pedido","key":[0],"editable":true,"reason":null,"kind":"table","keyColumns":["id"]}],"columns":[{"table":0,"baseColumn":"id","editable":true,"reason":null,"nullable":false,"generated":null},{"table":0,"baseColumn":"status","editable":true,"reason":null,"nullable":true,"generated":null},{"table":0,"baseColumn":"total","editable":false,"reason":"gerada pelo banco","nullable":true,"generated":"always"}],"rowOperations":true,"oneAtATime":false}"""));
 
         var changes = new object[] { new { kind = "update", table = 0, key = new[] { "1" }, set = new[] { new { column = 1, value = (string?)"paga" } } }, new { kind = "insert", table = 0, values = new[] { new { column = 0, value = (string?)"3" }, new { column = 1, value = (string?)null } } } };
         var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID, changes }), HttpStatusCode.OK);
@@ -86,7 +86,7 @@ public sealed class DatabaseSessionEditsTests
         Assert.That(page.GetProperty("editable").ToString(), Is.EqualTo("""{"known":false,"reason":null}"""));
 
         var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID }), HttpStatusCode.OK);
-        Assert.That(target.ToString(), Is.EqualTo($$"""{"tables":[{"schema":"{{_schema}}","name":"conta","key":[0],"editable":true,"reason":null},{"schema":"{{_schema}}","name":"cliente","key":[2],"editable":true,"reason":null}],"columns":[{"table":0,"baseColumn":"id","editable":false,"reason":"coluna da chave numa junção","nullable":false,"generated":null},{"table":0,"baseColumn":"saldo","editable":true,"reason":null,"nullable":true,"generated":null},{"table":1,"baseColumn":"id","editable":false,"reason":"coluna da chave numa junção","nullable":false,"generated":null},{"table":1,"baseColumn":"nome","editable":true,"reason":null,"nullable":true,"generated":null}],"rowOperations":false,"oneAtATime":false}"""));
+        Assert.That(target.ToString(), Is.EqualTo($$"""{"tables":[{"schema":"{{_schema}}","name":"conta","key":[0],"editable":true,"reason":null,"kind":"table","keyColumns":["id"]},{"schema":"{{_schema}}","name":"cliente","key":[2],"editable":true,"reason":null,"kind":"table","keyColumns":["id"]}],"columns":[{"table":0,"baseColumn":"id","editable":false,"reason":"coluna da chave numa junção","nullable":false,"generated":null},{"table":0,"baseColumn":"saldo","editable":true,"reason":null,"nullable":true,"generated":null},{"table":1,"baseColumn":"id","editable":false,"reason":"coluna da chave numa junção","nullable":false,"generated":null},{"table":1,"baseColumn":"nome","editable":true,"reason":null,"nullable":true,"generated":null}],"rowOperations":false,"oneAtATime":false}"""));
 
         var changes = new object[] { new { kind = "update", table = 0, key = new[] { "1" }, set = new[] { new { column = 1, value = (string?)"15" } } }, new { kind = "update", table = 1, key = new[] { "7" }, set = new[] { new { column = 3, value = (string?)"Ana Maria" } } } };
         var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID, changes }), HttpStatusCode.OK);
@@ -128,6 +128,167 @@ public sealed class DatabaseSessionEditsTests
 
         await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { kind = "delete", table = 0, key = new[] { "1" } } } }), HttpStatusCode.Conflict, "RESULT_CHANGED");
         await ProblemAsync(await host.Client.PostAsJsonAsync(Url(Guid.NewGuid(), "/queries/edit-target"), new { resultID }), HttpStatusCode.NotFound, "DATABASE_SESSION_NOT_FOUND");
+    }
+
+    /// <summary>
+    /// RN-SQL-024 (seção 33): o resultado que o comando seguinte leva em `keep` continua se editando pelo `resultID` dele, como as abas do
+    /// script; o "Salvar" dele fecha o cursor do atual, que continua o atual. O comando sem `keep` o esquece, e as rotas da edição respondem
+    /// 409 `RESULT_CHANGED` com o texto novo. O `keep` com uma entrada que não é um identificador, ou com mais de 20, é 422 `QUERY_INVALID`
+    /// no campo, e nada vai ao banco.
+    /// </summary>
+    [Test]
+    public async Task Edits_OfAKeptResult_FollowTheRoutesOfSection33()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var guardado = $"\"{_schema}\".\"guardado\"";
+        await host.Client.ExecuteAsync(session, $"CREATE TABLE {guardado} (id integer PRIMARY KEY, status text)");
+        await host.Client.ExecuteAsync(session, $"INSERT INTO {guardado} VALUES (1, 'aberta'), (2, 'aberta')");
+
+        var first = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {guardado}\nORDER BY 1")).GetProperty("resultID").GetGuid();
+        var current = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = "SELECT * FROM generate_series(1, 500) AS n", pageSize = 50, keep = new[] { first } }), HttpStatusCode.OK);
+        Assert.That(current.GetProperty("hasMore").GetBoolean(), Is.True);
+
+        var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.OK);
+        Assert.That(target.GetProperty("rowOperations").GetBoolean(), Is.True);
+
+        var changes = new object[] { new { kind = "update", table = 0, key = new[] { "2" }, set = new[] { new { column = 1, value = (string?)"guardada" } } } };
+        var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID = first, changes }), HttpStatusCode.OK);
+        Assert.That(preview.GetProperty("statements")[0].GetProperty("sql").GetString(), Is.EqualTo($"UPDATE {guardado} SET \"status\" = 'guardada' WHERE \"id\" = 2"));
+
+        var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID = first, changes }), HttpStatusCode.OK);
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1}"""));
+
+        // O "Salvar" fechou o cursor do atual (RN-EDIT-009), que continua o atual: o "carregar mais" não tem mais o que ler.
+        await ProblemAsync(await host.Client.PostAsync(Url(session, "/queries/next"), null), HttpStatusCode.Conflict, "NO_OPEN_CURSOR");
+
+        var invalid = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = "SELECT 1", keep = new object?[] { first, "texto" } }), HttpStatusCode.UnprocessableEntity, "QUERY_INVALID");
+        Assert.That(invalid.GetProperty("errorCodes").GetProperty("Keep").ToString(), Does.Contain("QUERY_INVALID"));
+        await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = "SELECT 1", keep = Enumerable.Range(0, 21).Select(_ => Guid.NewGuid()) }), HttpStatusCode.UnprocessableEntity, "QUERY_INVALID");
+        await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.OK);
+
+        await host.Client.ExecuteAsync(session, "SELECT 1");
+        var forgotten = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.Conflict, "RESULT_CHANGED");
+        Assert.That(forgotten.GetProperty("detail").GetString(), Is.EqualTo("O resultado não está mais guardado na sessão: outro comando foi executado nela depois dele. Execute o comando de novo para editar."));
+
+        var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {guardado} WHERE id = 2")).GetProperty("rows").ToString();
+        Assert.That(rows, Is.EqualTo("""[["2","guardada"]]"""));
+    }
+
+    /// <summary>
+    /// RN-SQL-024 (seção 33): no PostgreSQL o guardado edita a tabela que leu, pelo identificador dela. Quando o nome escrito sem esquema leva
+    /// agora a outra tabela (um `SET search_path` depois dele), o "Salvar", que confere o nome na própria sessão, dentro da transação, responde
+    /// 409 `RESULT_CHANGED` com a tabela que mudou, e nada vai para nenhuma das duas. O alvo perguntado antes da mudança vinha editável: o
+    /// catálogo do `edit-target` não vai à sessão do resultado (RN-EDIT-010), e o caminho de busca dele é outro.
+    /// </summary>
+    [Test]
+    public async Task Save_OfAKeptResult_IsRefused_WhenTheUnqualifiedNameNowLeadsToAnotherTable()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var other = $"{_schema}_b";
+        try
+        {
+            await host.Client.ExecuteAsync(session, $"CREATE SCHEMA \"{other}\"");
+            foreach (var schema in new[] { _schema, other })
+            {
+                await host.Client.ExecuteAsync(session, $"CREATE TABLE \"{schema}\".\"caminho\" (id integer PRIMARY KEY, status text)");
+                await host.Client.ExecuteAsync(session, $"INSERT INTO \"{schema}\".\"caminho\" VALUES (1, 'aberta')");
+            }
+
+            await host.Client.ExecuteAsync(session, $"SET search_path TO \"{_schema}\"");
+            var first = (await host.Client.ExecuteAsync(session, "SELECT * FROM caminho")).GetProperty("resultID").GetGuid();
+            var target = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edit-target"), new { resultID = first }), HttpStatusCode.OK);
+            Assert.That(target.GetProperty("tables")[0].GetProperty("schema").GetString(), Is.EqualTo(_schema));
+            Assert.That(target.GetProperty("rowOperations").GetBoolean(), Is.True);
+
+            await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries"), new { sql = $"SET search_path TO \"{other}\"", keep = new[] { first } }), HttpStatusCode.OK);
+
+            var changes = new object[] { new { kind = "update", table = 0, key = new[] { "1" }, set = new[] { new { column = 1, value = (string?)"mudou" } } } };
+            var refused = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID = first, changes }), HttpStatusCode.Conflict, "RESULT_CHANGED");
+            Assert.That(refused.GetProperty("detail").GetString(), Is.EqualTo("A tabela caminho mudou desde a consulta (a chave, as colunas ou o tipo delas). Nada foi gravado; execute o comando de novo."));
+
+            foreach (var schema in new[] { _schema, other })
+            {
+                var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM \"{schema}\".\"caminho\"")).GetProperty("rows").ToString();
+                Assert.That(rows, Is.EqualTo("""[["1","aberta"]]"""), schema);
+            }
+        }
+        finally
+        {
+            await host.Client.ExecuteAsync(session, $"DROP SCHEMA IF EXISTS \"{other}\" CASCADE");
+            await host.Client.ExecuteAsync(session, $"DROP TABLE IF EXISTS \"{_schema}\".\"caminho\"");
+        }
+    }
+
+    /// <summary>
+    /// A coluna inteira (seção 38, RN-EDIT-019 a 023) em HTTP: a contagem (`queries/edits/count`, `{ rows }`), o "Ver SQL" com a contagem e o `UPDATE`
+    /// primeiro e a `note` só na contagem, e o "Salvar" com o `rows` confirmado. As recusas levam o código e as extensões da seção 6: o `rows` que falta,
+    /// a outra alteração na contagem, a coluna da chave e o resultado que mudou desde a contagem, com o detalhe da regra.
+    /// </summary>
+    [Test]
+    public async Task WholeColumn_FromTheCountToTheSave_FollowsTheRoutesOfSection38()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var inteira = $"\"{_schema}\".\"inteira\"";
+        await host.Client.ExecuteAsync(session, $"CREATE TABLE {inteira} (id integer PRIMARY KEY, status text)");
+        await host.Client.ExecuteAsync(session, $"INSERT INTO {inteira} VALUES (1, 'aberta'), (2, 'aberta'), (3, 'aberta')");
+
+        var resultID = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {inteira}\nWHERE id > 1\nORDER BY 1")).GetProperty("resultID").GetGuid();
+        var whole = new { kind = "updateAll", table = 0, set = new[] { new { column = 1, value = (string?)"todas" } } };
+
+        var counted = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { whole } }), HttpStatusCode.OK);
+        Assert.That(counted.ToString(), Is.EqualTo("""{"rows":2}"""));
+
+        var mixed = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { whole, new { kind = "delete", table = 0, key = new[] { "2" } } } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+        Assert.That(mixed.GetProperty("change").GetInt32(), Is.EqualTo(1));
+
+        var preview = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/preview"), new { resultID, changes = new object[] { new { kind = "update", table = 0, key = new[] { "3" }, set = new[] { new { column = 1, value = (string?)"três" } } }, whole } }), HttpStatusCode.OK);
+        var statements = preview.GetProperty("statements").EnumerateArray().ToList();
+        Assert.That(statements.Select(statement => statement.GetProperty("sql").GetString()), Is.EqualTo(new[] { $"SELECT COUNT(*) FROM {inteira} WHERE id > 1\n", $"UPDATE {inteira} SET \"status\" = 'todas' WHERE id > 1\n", $"UPDATE {inteira} SET \"status\" = 'três' WHERE \"id\" = 3" }));
+        Assert.That(statements.Select(statement => statement.TryGetProperty("note", out var note) ? note.GetString() : null), Is.EqualTo(new[] { "A contagem confere, antes do UPDATE, que o comando ainda devolve as linhas confirmadas.", null, null }));
+        Assert.That(statements.Select(statement => statement.GetProperty("values").GetArrayLength()), Is.All.Zero);
+
+        var withoutRows = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { whole } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+        Assert.That(withoutRows.GetProperty("change").GetInt32(), Is.Zero);
+        await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 1.5 } } }), HttpStatusCode.UnprocessableEntity, "EDIT_INVALID");
+
+        var key = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), new { resultID, changes = new object[] { new { kind = "updateAll", table = 0, set = new[] { new { column = 0, value = (string?)"9" } } } } }), HttpStatusCode.UnprocessableEntity, "EDIT_ALL_ROWS_NOT_SUPPORTED");
+        Assert.That((key.GetProperty("change").GetInt32(), key.GetProperty("column").GetInt32(), key.GetProperty("reason").GetString()), Is.EqualTo((0, 0, "id é da chave de inteira: na coluna inteira, todas as linhas ficariam com a mesma chave")));
+
+        var changed = await ProblemAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 5 } } }), HttpStatusCode.Conflict, "RESULT_CHANGED");
+        Assert.That(changed.GetProperty("detail").GetString(), Is.EqualTo("O resultado mudou desde a contagem: o comando devolve agora 2 linhas, e não as 5 confirmadas. Nada foi gravado; salve de novo para contar outra vez."));
+
+        var saved = await ReadAsync(await host.Client.PostAsJsonAsync(Url(session, "/queries/edits"), new { resultID, changes = new object[] { new { whole.kind, whole.table, whole.set, rows = 2 } } }), HttpStatusCode.OK);
+        Assert.That(saved.ToString(), Is.EqualTo("""{"applied":1}"""));
+
+        var rows = (await host.Client.ExecuteAsync(session, $"SELECT id, status FROM {inteira} ORDER BY 1")).GetProperty("rows").ToString();
+        Assert.That(rows, Is.EqualTo("""[["1","aberta"],["2","todas"],["3","todas"]]"""));
+    }
+
+    /// <summary>
+    /// RN-EDIT-023: o corpo das três rotas da edição vai até 32 MiB, acima do padrão do Kestrel (30 MB): um pedido de 31 MiB é lido como uma contagem; um
+    /// acima de 32 MiB é recusado antes de o handler rodar (o status é o 500 do defeito conhecido de toda rota que lê corpo, e não 413).
+    /// </summary>
+    [Test]
+    public async Task WholeColumn_TheBodyOfTheEditRoutes_GoesUpTo32MiB()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var session = await StartSessionAsync(host);
+        var resultID = (await host.Client.ExecuteAsync(session, $"SELECT * FROM {Pedido}\nORDER BY 1")).GetProperty("resultID").GetGuid();
+
+        object Body(int bytes)
+            => new { resultID, changes = new object[] { new { kind = "updateAll", table = 0, set = new[] { new { column = 1, value = (string?)new string('a', bytes) } } } } };
+
+        var read = await host.Client.PostAsJsonAsync(Url(session, "/queries/edits/count"), Body(31 * 1024 * 1024));
+        Assert.That(read.StatusCode, Is.EqualTo(HttpStatusCode.OK), await read.Content.ReadAsStringAsync());
+
+        foreach (var route in new[] { "/queries/edits/count", "/queries/edits/preview", "/queries/edits" })
+        {
+            var refused = await host.Client.PostAsJsonAsync(Url(session, route), Body(32 * 1024 * 1024 + 1));
+            Assert.That(refused.StatusCode, Is.Not.EqualTo(HttpStatusCode.OK).And.Not.EqualTo(HttpStatusCode.UnprocessableEntity).And.Not.EqualTo(HttpStatusCode.Conflict), route);
+        }
     }
 
     private async Task<Guid> StartSessionAsync(ApiHost host)

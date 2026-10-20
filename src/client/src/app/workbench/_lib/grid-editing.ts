@@ -1,6 +1,14 @@
+import { isMacPlatform } from "@/lib/utils/platform";
+
+import type { EditBarAction, EditBarButton } from "./edit-bar";
 import type { GridCell } from "./grid-cursor";
+import type { GridLayout, GridSelection } from "./grid-selection";
 import type { QueryRow } from "./query.schema";
 import type { ChangeOrigin, EditValue, PendingEdits } from "./record-edits";
+import { recordsCopy } from "./records.copy";
+import type { RecordsSort } from "./table-sql";
+
+const shortcutCopy = recordsCopy.edit.shortcuts;
 
 /**
  * O que uma linha da grade mostra das pendências (RN-EDIT-004): lida do banco ou nova, marcada para exclusão (riscada), as células
@@ -8,8 +16,18 @@ import type { ChangeOrigin, EditValue, PendingEdits } from "./record-edits";
  */
 export type RowMark = { kind: "read" | "new"; deleted: boolean; pending: ReadonlyMap<number, EditValue>; failed: boolean };
 
-/** O campo de edição aberto numa célula, com o texto que está nele. */
-export type CellEditorState = GridCell & { draft: string };
+/**
+ * RN-GRADE-021: o botão de ordenar do cabeçalho, pelo mesmo caminho do "Ordenar" do menu (RN-TABELA-010 nos Registros, RN-GRADE-011 no resultado): a ordem
+ * aplicada (a seta fica à vista na coluna dela, quando é de uma coluna só), o motivo de ele não valer agora (o mesmo do "Ordenar" do menu, nulo quando vale)
+ * e o clique, que segue o ciclo crescente, decrescente e sem ordem para a coluna dele (pelo nome).
+ */
+export type HeaderSort = { applied: RecordsSort | null; reason: string | null; onSort: (column: string) => void };
+
+/**
+ * O campo de edição aberto numa célula, com o texto que está nele. RN-EDIT-017: `touched` diz se o texto mudou desde que o campo abriu (uma tecla, colar,
+ * apagar; começar a digitar já é mexer); `hint`, para quantas células a edição vale ("Vale para as 37 células escolhidas da coluna preco."), nula com uma só.
+ */
+export type CellEditorState = GridCell & { draft: string; touched?: boolean; hint?: string | null };
 
 /**
  * A edição que a vista Registros e a aba de consulta entregam à grade (RN-EDIT-001). A grade só desenha e avisa: quem decide o que cada célula
@@ -18,6 +36,17 @@ export type CellEditorState = GridCell & { draft: string };
 export type GridEditing = {
   /** As linhas da grade: as lidas e, depois delas, as novas. */
   rows: readonly QueryRow[];
+  /**
+   * RN-GRADE-001: a seleção e a grade de agora (`grid-selection.ts`). A grade desenha as células escolhidas por elas (`rowSpan`, `columnSpan`), e cada gesto
+   * do ponteiro e do teclado muda a seleção pela função pura que recebe a de agora (`onSelection`).
+   */
+  selection: GridSelection;
+  layout: GridLayout;
+  onSelection: (change: (selection: GridSelection, layout: GridLayout) => GridSelection) => void;
+  /** A seleção está mudando (o arraste, a tecla com Shift): a contagem da barra só muda quando ela para (`false`, ao soltar o botão ou a tecla). */
+  onSelecting: (selecting: boolean) => void;
+  /** RN-GRADE-001: a contagem da barra do resultado, com mais de uma célula escolhida ("3 linhas escolhidas", "12 células escolhidas"); nula sem isso. */
+  status: string | null;
   /** As alterações não salvas: sem nenhuma, o Ctrl+S da grade segue para quem o trata (`savesEdits`). */
   pending: number;
   /** As marcas das linhas com pendência, pela posição na grade. */
@@ -31,6 +60,12 @@ export type GridEditing = {
   columnHints: readonly (string | null)[] | null;
   /** As colunas que não se editam, marcadas no cabeçalho ("somente leitura", como no canvas): só na aba de consulta, com o catálogo respondido. */
   columnReadOnly?: readonly boolean[] | null;
+  /**
+   * RN-EDIT-018: as alterações da coluna inteira pendentes, por coluna (o valor e a dica do cabeçalho): a grade desenha a célula daquela coluna em cada linha
+   * lida com o valor novo e o lido riscado ao lado, e o cabeçalho ganha a marca. O MESMO mapa enquanto as pendências não mudam; nulo sem nenhuma.
+   */
+  columnPending?: ReadonlyMap<number, { value: EditValue; hint: string; uncertain: boolean }> | null;
+  /** O clique numa célula: ela é a ativa e a seleção (`select`). */
   onActivate: (cell: GridCell) => void;
   /** Abrir o campo na célula: duplo clique, F2, Enter, ou começar a digitar (`initial` substitui o valor). */
   onEdit: (cell: GridCell, initial?: string) => void;
@@ -38,19 +73,44 @@ export type GridEditing = {
   /** Confirmar o campo (Enter, o botão, sair dele); com Tab e Shift+Tab, passar à próxima célula editável. */
   onCommit: (move?: 1 | -1) => void;
   onCancel: () => void;
-  /** O menu da célula: o ponto do clique, ou o pé da célula quando veio do teclado. */
+  /**
+   * O menu da grade: o ponto do clique, ou o pé da célula quando veio do teclado. O botão direito numa célula fora da seleção a escolhe antes; dentro dela, a
+   * seleção fica, e ela passa a ser a ativa (RN-GRADE-004).
+   */
   onMenu: (cell: GridCell, point: { x: number; y: number }, keyboard: boolean) => void;
-  /** RN-GRADE-002 e RN-SQL-017: Ctrl+C com o foco na grade copia a célula ativa, com o valor completo quando ela chegou cortada. */
-  onCopy: (cell: GridCell) => void;
+  /** O botão direito no número da linha: fora da seleção, escolhe a linha inteira antes; dentro dela, deixa como está; e abre o menu (RN-GRADE-001). */
+  onRowMenu: (row: number, point: { x: number; y: number }) => void;
+  /**
+   * RN-GRADE-021: o botão direito no nome da coluna: fora das colunas inteiras escolhidas, escolhe a coluna antes; entre elas, deixa como está; e abre o menu
+   * com a célula ativa naquela coluna (`contextColumn`).
+   */
+  onColumnMenu: (column: number, point: { x: number; y: number }) => void;
+  /** RN-GRADE-021: o botão de ordenar do cabeçalho; sem ele, o cabeçalho não tem o botão, e o nome ocupa tudo (as abas guardadas do script, RN-SQL-023). */
+  sort?: HeaderSort;
+  /** RN-GRADE-002 e RN-SQL-017: Ctrl+C com o foco na grade copia a seleção, com o valor completo das células cortadas. Sem célula ativa, nada. */
+  onCopy: () => void;
+  /** RN-GRADE-003: Ctrl+Shift+C abre o "Copiar avançado…", quando a grade o tem; sem célula ativa, nada. */
+  onCopyAdvanced?: () => void;
+  /** RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas: com um retângulo, ou só com a célula ativa, não faz nada. */
+  onDeleteRows: () => void;
   /** Ctrl+S com o foco na grade. */
   onSave: () => void;
-  /** Alt+Insert com o foco na grade. */
+  /** Alt+Insert com o foco na grade (RN-EDIT-015). */
   onNewRow: () => void;
+  /** Ctrl+Alt+Insert com o foco na grade: duplica as linhas da seleção (RN-EDIT-015 e 016). */
+  onDuplicateRow: () => void;
+  /** Alt+Delete com o foco na grade: exclui as linhas da seleção (RN-EDIT-015). */
+  onDeleteRow: () => void;
   /**
    * RN-GRADE-013: F11 com o foco na grade abre o menu da célula ativa com o submenu "Filtrar" aberto (`menu`), e Ctrl+F11 abre direto o
    * "Filtrar por valor…" (`values`). Só existe na grade que tem campo de filtro.
    */
   onFilter?: (cell: GridCell, point: { x: number; y: number }, mode: "menu" | "values") => void;
+  /**
+   * RN-EDIT-013 e 014: a barra de edição, com os quatro botões (`editBar`) e o que cada um faz sobre a célula ativa. A área de resultado a desenha onde a
+   * grade tem a edição: no rodapé dos Registros e numa linha própria sob a grade do resultado da aba de consulta e das abas do script.
+   */
+  bar: { buttons: readonly EditBarButton[]; onAction: (id: EditBarAction) => void };
 };
 
 /**
@@ -61,12 +121,46 @@ export function savesEdits(event: { key: string; ctrlKey: boolean; metaKey: bool
   return pending > 0 && (event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "s";
 }
 
+type KeyEvent = { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean };
+
 /**
- * RN-GRADE-002: Ctrl+C (Cmd+C) com o foco na grade copia a célula ativa, como o valor puro. Com Shift é o copiar avançado (RN-GRADE-003), e com Alt
- * não é cópia: a tecla segue.
+ * RN-GRADE-002: Ctrl+C (Cmd+C) com o foco na grade copia a seleção. Com Shift é o copiar avançado (RN-GRADE-003, `copiesAdvanced`), e com Alt não é cópia:
+ * a tecla segue.
  */
-export function copiesCell(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+export function copiesCell(event: KeyEvent): boolean {
   return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c";
+}
+
+/** RN-GRADE-003: Ctrl+Shift+C (Cmd+Shift+C) abre o "Copiar avançado…"; com Alt não (o Ctrl+Shift+Alt+C do DBeaver, que repete o último, fica para depois). */
+export function copiesAdvanced(event: KeyEvent): boolean {
+  return (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "c";
+}
+
+/** RN-GRADE-001: Ctrl+A (Cmd+A) escolhe todas as linhas da grade. */
+export function selectsAll(event: KeyEvent): boolean {
+  return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "a";
+}
+
+/** RN-GRADE-001: Shift+Espaço escolhe as linhas inteiras das células escolhidas (e por isso não abre o campo de edição com um espaço, RN-EDIT-001). */
+export function selectsRows(event: KeyEvent): boolean {
+  return event.key === " " && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
+/**
+ * RN-GRADE-022: Ctrl+Espaço escolhe as colunas inteiras das células escolhidas. No macOS é o Control+Espaço, como no Excel (o Cmd+Espaço é do sistema): a
+ * tecla é a mesma, o Control, nas duas plataformas. Não abre o campo de edição com um espaço (RN-EDIT-001).
+ */
+export function selectsColumns(event: KeyEvent): boolean {
+  return event.key === " " && event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+}
+
+/**
+ * RN-EDIT-015: o Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, que exclui as linhas inteiras escolhidas. No macOS, a tecla "delete" (a de apagar para trás,
+ * `Backspace`) e o fn+delete (`Delete`) também, sozinhas.
+ */
+export function deletesRows(event: KeyEvent, platform: string): boolean {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false;
+  return event.key === "Delete" || (isMacPlatform(platform) && event.key === "Backspace");
 }
 
 /**
@@ -84,6 +178,43 @@ export function filterKey(event: { key: string; ctrlKey: boolean; metaKey: boole
  */
 export function refreshKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
   return event.key === "F5" && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+}
+
+/** As ações da linha que têm atalho com o foco na grade (RN-EDIT-015): adicionar, duplicar e excluir. */
+export type RowShortcut = "newRow" | "duplicateRow" | "deleteRow";
+
+/**
+ * RN-EDIT-015: os atalhos da linha com o foco na grade, como no DBeaver, com os modificadores exatos. Alt+Insert adiciona (sem Ctrl, Shift nem Cmd);
+ * Ctrl+Alt+Insert duplica as linhas da seleção (sem Shift), conferido antes do Alt+Insert, que está dentro dele; Alt+Delete exclui as linhas da seleção
+ * (sem Ctrl, Shift nem Cmd). No Windows o AltGr chega como Ctrl+Alt: com ele o Insert duplica, e o Delete não faz nada. No macOS o Option faz o
+ * papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert (e o Control+Option+Insert do DBeaver, sem Cmd) e Option+Delete, que é também a
+ * tecla "delete" do Mac (a de apagar para trás, `Backspace`) e o fn+delete. Com Shift nada acontece: o Shift+Alt+Insert e o Ctrl+Shift+Alt+Insert do
+ * DBeaver 26.1 ficam para depois. O Delete sozinho é `deletesRows`, que só vale com linhas inteiras escolhidas (RN-GRADE-001).
+ */
+export function rowShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }, platform: string): RowShortcut | null {
+  if (!event.altKey || event.shiftKey) return null;
+  const mac = isMacPlatform(platform);
+
+  if (event.key === "Insert") {
+    if (!event.ctrlKey && !event.metaKey) return "newRow";
+    return (mac ? event.ctrlKey !== event.metaKey : event.ctrlKey && !event.metaKey) ? "duplicateRow" : null;
+  }
+  const deletes = event.key === "Delete" || (mac && event.key === "Backspace");
+  return deletes && !event.ctrlKey && !event.metaKey ? "deleteRow" : null;
+}
+
+/** Um atalho como a tela o escreve (`label`, no menu e na dica) e como o leitor de tela o recebe (`aria`, o `aria-keyshortcuts`, nos nomes das teclas da web). */
+export type EditShortcut = { label: string; aria: string };
+
+/** RN-EDIT-013 e 015: os atalhos da edição como a plataforma os escreve: os mesmos no menu da célula e nas dicas da barra de edição (`navigator.platform`). */
+export function editShortcuts(platform: string): Record<"edit" | RowShortcut, EditShortcut> {
+  const mac = isMacPlatform(platform);
+  return {
+    edit: { label: shortcutCopy.edit, aria: "F2" },
+    newRow: { label: mac ? shortcutCopy.newRowMac : shortcutCopy.newRow, aria: "Alt+Insert" },
+    duplicateRow: mac ? { label: shortcutCopy.duplicateRowMac, aria: "Meta+Alt+Insert Control+Alt+Insert" } : { label: shortcutCopy.duplicateRow, aria: "Control+Alt+Insert" },
+    deleteRow: mac ? { label: shortcutCopy.deleteRowMac, aria: "Alt+Backspace Alt+Delete" } : { label: shortcutCopy.deleteRow, aria: "Alt+Delete" },
+  };
 }
 
 /** As linhas que a grade desenha: as lidas e, depois, as novas, com o que foi preenchido (o resto vazio, para o padrão da tabela). */
@@ -115,6 +246,8 @@ export function rowMarksOf(edits: PendingEdits, rowCount: number, failedRow: num
 /** A linha da grade de uma alteração do pedido (a que falhou, para destacá-la), ou nula se ela não está mais lá. */
 export function gridRowOf(origin: ChangeOrigin, edits: PendingEdits, rowCount: number): number | null {
   if (origin.kind === "row") return origin.row;
+  // RN-EDIT-021: a coluna inteira não é de uma linha.
+  if (origin.kind === "all") return null;
   const position = edits.added.findIndex((row) => row.id === origin.id);
   return position < 0 ? null : rowCount + position;
 }

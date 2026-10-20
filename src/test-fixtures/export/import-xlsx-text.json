@@ -1,0 +1,79 @@
+{
+  "rule": "RN-IMPORT-006 e 028: o texto de uma célula do XLSX com o _xHHHH_ desfeito, depois de o XML desfazer as entidades. Só da API (ImportText.XlsxText); a volta do que a exportação escreve é conferida também pela fixture xlsx-text.json, lida no outro sentido.",
+  "notes": [
+    "expected é texto ou { codePoints: [...] }."
+  ],
+  "cases": [
+    {
+      "name": "o retorno de carro",
+      "value": "a_x000D_b",
+      "expected": "a\rb"
+    },
+    {
+      "name": "os dígitos em minúsculas também",
+      "value": "a_x000d_b",
+      "expected": "a\rb"
+    },
+    {
+      "name": "o escape do sublinhado guarda o escape escrito no dado",
+      "value": "_x005F_x0041_",
+      "expected": "_x0041_"
+    },
+    {
+      "name": "o escape no meio do texto",
+      "value": "a_x0041_b",
+      "expected": "aAb"
+    },
+    {
+      "name": "dois sublinhados",
+      "value": "__x0041_",
+      "expected": "_A"
+    },
+    {
+      "name": "o escape do sublinhado duas vezes",
+      "value": "_x005F_x005F_",
+      "expected": "_x005F_"
+    },
+    {
+      "name": "o par substituto solto",
+      "value": "x_xD83D_y",
+      "expected": {
+        "codePoints": [
+          120,
+          55357,
+          121
+        ]
+      }
+    },
+    {
+      "name": "o par substituto em dois escapes",
+      "value": "_xD83D__xDE42_",
+      "expected": "🙂"
+    },
+    {
+      "name": "X maiúsculo não é escape",
+      "value": "_X0041_",
+      "expected": "_X0041_"
+    },
+    {
+      "name": "sem o sublinhado do fim não é escape",
+      "value": "_x0041",
+      "expected": "_x0041"
+    },
+    {
+      "name": "três dígitos não é escape",
+      "value": "_x004_",
+      "expected": "_x004_"
+    },
+    {
+      "name": "o que não é hexadecimal não é escape",
+      "value": "_xGHIJ_",
+      "expected": "_xGHIJ_"
+    },
+    {
+      "name": "o texto sem escape fica",
+      "value": "Ana 漢 🙂",
+      "expected": "Ana 漢 🙂"
+    }
+  ]
+}

@@ -44,6 +44,8 @@ const resultSchema = z.discriminatedUnion("status", [
     readOnly: name.nullable().optional(),
     /** RN-GRADE-011: como o filtro do resultado entrou no comando. */
     filterApplied: z.enum(["merged", "wrapped"]).optional(),
+    /** RN-EXPORT-002: o comando do resultado é só leitura e não gravou: o "Exportar…" vale na janela que recebe. */
+    read: z.boolean().optional(),
     /** RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou, como `truncated`. */
     generated: z.array(z.tuple([count, z.array(count)])).optional(),
     /** RN-SQL-017: a linha do resultado na API de cada linha da grade, depois de um Salvar que tirou linhas; nula na linha nova. */
@@ -87,10 +89,21 @@ export const tabTransferSchema = z.object({
     sql: z.string().max(maxSqlLength),
     table: z.object({ schema: name, name, view: z.enum(["data", "structure", "diagram"]) }).optional(),
     /**
-     * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o banco em que foi salvo (sem ele, o da conexão); a mudança não salva, a janela que
-     * recebe a refaz pelo texto e pelo banco da aba (RN-ARVORE-007).
+     * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o lugar em que foi salvo: a conexão e o banco (sem ele, o da conexão), ou o genérico
+     * (RN-SCRIPT-005); a mudança não salva, a janela que recebe a refaz pelo texto e pelo lugar da aba (RN-SCRIPT-003). E a pasta de scripts que a aba lembra
+     * (RN-SCRIPT-010), sem ela quando não a sabe.
      */
-    script: z.object({ id: z.uuid(), name: z.string().min(1).max(200), savedSql: z.string().max(maxSqlLength), savedDatabase: z.string().min(1).max(10_000).optional() }).optional(),
+    script: z
+      .object({
+        id: z.uuid(),
+        name: z.string().min(1).max(200),
+        savedSql: z.string().max(maxSqlLength),
+        generic: z.literal(true).optional(),
+        savedConnectionId: id.optional(),
+        savedDatabase: z.string().min(1).max(10_000).optional(),
+        folderId: z.uuid().optional(),
+      })
+      .optional(),
   }),
   /** A seleção do editor (o cursor é a seleção vazia), em posições do texto. */
   editor: z.object({ anchor: count, head: count }).nullable(),
@@ -164,3 +177,34 @@ export type WindowCloseRequest = z.infer<typeof windowCloseRequestSchema>;
 export const peerEventSchema = z.object({ kind: z.enum(["activity", "lock", "unlock", "signOut", "signIn"]) });
 
 export type PeerEvent = z.infer<typeof peerEventSchema>;
+
+/**
+ * RN-VERIF-002: a verificação periódica de uma conexão conectada em mais de uma janela sai de uma só por intervalo, e a resposta vai às outras. Antes de
+ * chamar a API, a janela pede a vez ao processo principal, com o intervalo da conexão: ele a dá se nenhuma outra está verificando a mesma conexão e se a
+ * última verificação dela, feita por outra janela, não acabou há menos que o intervalo. Só o id da conexão e o intervalo: nada de nome, endereço ou SQL.
+ */
+export const verificationClaimSchema = z.object({ connectionId: id, intervalMs: z.number().int().min(1_000).max(3_600_000) });
+
+export type VerificationClaim = z.infer<typeof verificationClaimSchema>;
+
+/**
+ * A resposta da verificação como a API a deu (`POST api/user/connections/{id}/verification`): `status`, o instante, o tempo da consulta e, quando o banco não
+ * respondeu, a mensagem dele como veio e o SQLSTATE. É o que as outras janelas com a conexão conectada mostram no indicador (RN-VERIF-003).
+ */
+export const verificationResultSchema = z.object({
+  status: z.enum(["ok", "failed", "busy", "notConnected"]),
+  checkedAt: z.string().min(1).max(100),
+  elapsedMs: z.number().min(0).nullable(),
+  message: z.string().max(1_000_000).nullable(),
+  sqlState: z.string().max(100).nullable(),
+});
+
+/** A janela terminou a verificação que pediu: com a resposta, que vai às outras, ou sem ela (`null`: a chamada falhou, ou a conexão desconectou no meio). */
+export const verificationDoneSchema = z.object({ connectionId: id, result: verificationResultSchema.nullable() });
+
+export type VerificationDone = z.infer<typeof verificationDoneSchema>;
+
+/** O que chega às outras janelas: a resposta da verificação de uma conexão, feita por outra janela. */
+export const verificationPeerSchema = z.object({ connectionId: id, result: verificationResultSchema });
+
+export type VerificationPeer = z.infer<typeof verificationPeerSchema>;

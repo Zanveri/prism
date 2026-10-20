@@ -1,6 +1,7 @@
 using CSharpFunctionalExtensions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using Prism.Application.Common.Protections;
 using Prism.Application.Connections.Domain;
 using Prism.Application.Connections.Features.UpdateConnection;
 using Prism.Application.Connections.Models;
@@ -22,6 +23,9 @@ public sealed class UpdateConnectionHandlerTests
     private readonly Mock<IConnectionRepository> _connectionRepository = new();
     private readonly FakeTimeProvider _timeProvider = new(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero));
 
+    /// <summary>As proteções que valem para uma conexão sem nenhuma (RN-PROT-004).</summary>
+    private static readonly EffectiveProtections NoProtections = new(false, null, null, null);
+
     private static Result<VaultConnectionRecord?, EVaultError> Found(VaultConnectionRecord record)
         => Result.Success<VaultConnectionRecord?, EVaultError>(record);
 
@@ -37,7 +41,7 @@ public sealed class UpdateConnectionHandlerTests
         var command = ConnectionFakers.ReturnUpdateConnectionCommandValid(iD: stored.ID, folderID: folderID, name: "  Novo   Nome ", engine: EDatabaseEngine.Db2, host: " db2.local ", port: 50000, environmentName: "Homologação", environmentColor: "#00FF00");
         Connection? updated = null;
         _connectionQueries.Setup(q => q.GetRecordByID(stored.ID, cancellationToken)).ReturnsAsync(Found(stored));
-        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), null, cancellationToken)).Callback<Connection, string?, CancellationToken>((connection, _, _) => updated = connection).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), null, null, cancellationToken)).Callback<Connection, string?, string?, CancellationToken>((connection, _, _, _) => updated = connection).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(NoProtections));
         var handler = new UpdateConnectionHandler(_connectionQueries.Object, _connectionRepository.Object, _timeProvider);
 
         //Act
@@ -61,7 +65,7 @@ public sealed class UpdateConnectionHandlerTests
         Assert.True(result.Value.HasPassword);
         Assert.Equal(stored.CreatedAt, result.Value.CreatedAt);
         _connectionQueries.Verify(q => q.GetRecordByID(stored.ID, cancellationToken), Times.Once);
-        _connectionRepository.Verify(r => r.Update(updated, null, cancellationToken), Times.Once);
+        _connectionRepository.Verify(r => r.Update(updated, null, null, cancellationToken), Times.Once);
         _connectionQueries.VerifyNoOtherCalls();
         _connectionRepository.VerifyNoOtherCalls();
     }
@@ -76,7 +80,7 @@ public sealed class UpdateConnectionHandlerTests
         var command = ConnectionFakers.ReturnUpdateConnectionCommandValid(iD: stored.ID, password: "senha-nova");
         Connection? updated = null;
         _connectionQueries.Setup(q => q.GetRecordByID(stored.ID, cancellationToken)).ReturnsAsync(Found(stored));
-        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), "senha-nova", cancellationToken)).Callback<Connection, string?, CancellationToken>((connection, _, _) => updated = connection).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
+        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), "senha-nova", null, cancellationToken)).Callback<Connection, string?, string?, CancellationToken>((connection, _, _, _) => updated = connection).ReturnsAsync(Result.Success<EffectiveProtections, ApiErrorDto>(NoProtections));
         var handler = new UpdateConnectionHandler(_connectionQueries.Object, _connectionRepository.Object, _timeProvider);
 
         //Act
@@ -86,7 +90,7 @@ public sealed class UpdateConnectionHandlerTests
         Assert.True(result.IsSuccess);
         Assert.Equal("senha-nova", updated!.Password);
         _connectionQueries.Verify(q => q.GetRecordByID(stored.ID, cancellationToken), Times.Once);
-        _connectionRepository.Verify(r => r.Update(updated, "senha-nova", cancellationToken), Times.Once);
+        _connectionRepository.Verify(r => r.Update(updated, "senha-nova", null, cancellationToken), Times.Once);
         _connectionQueries.VerifyNoOtherCalls();
         _connectionRepository.VerifyNoOtherCalls();
     }
@@ -110,7 +114,7 @@ public sealed class UpdateConnectionHandlerTests
         Assert.Equal("VAULT_LOCKED", result.Error.Type);
         Assert.Equal(HttpStatusCode.Unauthorized, result.Error.StatusCode);
         _connectionQueries.Verify(q => q.GetRecordByID(command.ID, cancellationToken), Times.Once);
-        _connectionRepository.Verify(r => r.Update(It.IsAny<Connection>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _connectionRepository.Verify(r => r.Update(It.IsAny<Connection>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _connectionQueries.VerifyNoOtherCalls();
         _connectionRepository.VerifyNoOtherCalls();
     }
@@ -133,7 +137,7 @@ public sealed class UpdateConnectionHandlerTests
         Assert.Equal("CONNECTION_NOT_FOUND", result.Error.Type);
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
         _connectionQueries.Verify(q => q.GetRecordByID(command.ID, cancellationToken), Times.Once);
-        _connectionRepository.Verify(r => r.Update(It.IsAny<Connection>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _connectionRepository.Verify(r => r.Update(It.IsAny<Connection>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
         _connectionQueries.VerifyNoOtherCalls();
         _connectionRepository.VerifyNoOtherCalls();
     }
@@ -147,7 +151,7 @@ public sealed class UpdateConnectionHandlerTests
         var stored = VaultFakers.CreateConnection();
         var command = ConnectionFakers.ReturnUpdateConnectionCommandValid(iD: stored.ID);
         _connectionQueries.Setup(q => q.GetRecordByID(stored.ID, cancellationToken)).ReturnsAsync(Found(stored));
-        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), null, cancellationToken)).ReturnsAsync(UnitResult.Failure(ConnectionErrors.AlreadyExists(command.Name)));
+        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), null, null, cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(ConnectionErrors.AlreadyExists(command.Name)));
         var handler = new UpdateConnectionHandler(_connectionQueries.Object, _connectionRepository.Object, _timeProvider);
 
         //Act
@@ -158,7 +162,7 @@ public sealed class UpdateConnectionHandlerTests
         Assert.Equal("CONNECTION_ALREADY_EXISTS", result.Error.Type);
         Assert.Equal(HttpStatusCode.Conflict, result.Error.StatusCode);
         _connectionQueries.Verify(q => q.GetRecordByID(stored.ID, cancellationToken), Times.Once);
-        _connectionRepository.Verify(r => r.Update(It.IsAny<Connection>(), null, cancellationToken), Times.Once);
+        _connectionRepository.Verify(r => r.Update(It.IsAny<Connection>(), null, null, cancellationToken), Times.Once);
         _connectionQueries.VerifyNoOtherCalls();
         _connectionRepository.VerifyNoOtherCalls();
     }
@@ -173,7 +177,7 @@ public sealed class UpdateConnectionHandlerTests
         var folderID = Guid.CreateVersion7();
         var command = ConnectionFakers.ReturnUpdateConnectionCommandValid(iD: stored.ID, folderID: folderID);
         _connectionQueries.Setup(q => q.GetRecordByID(stored.ID, cancellationToken)).ReturnsAsync(Found(stored));
-        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), null, cancellationToken)).ReturnsAsync(UnitResult.Failure(FolderErrors.NotFound(folderID)));
+        _connectionRepository.Setup(r => r.Update(It.IsAny<Connection>(), null, null, cancellationToken)).ReturnsAsync(Result.Failure<EffectiveProtections, ApiErrorDto>(FolderErrors.NotFound(folderID)));
         var handler = new UpdateConnectionHandler(_connectionQueries.Object, _connectionRepository.Object, _timeProvider);
 
         //Act
@@ -184,7 +188,7 @@ public sealed class UpdateConnectionHandlerTests
         Assert.Equal("FOLDER_NOT_FOUND", result.Error.Type);
         Assert.Equal(HttpStatusCode.NotFound, result.Error.StatusCode);
         _connectionQueries.Verify(q => q.GetRecordByID(stored.ID, cancellationToken), Times.Once);
-        _connectionRepository.Verify(r => r.Update(It.Is<Connection>(connection => connection.FolderID == folderID), null, cancellationToken), Times.Once);
+        _connectionRepository.Verify(r => r.Update(It.Is<Connection>(connection => connection.FolderID == folderID), null, null, cancellationToken), Times.Once);
         _connectionQueries.VerifyNoOtherCalls();
         _connectionRepository.VerifyNoOtherCalls();
     }

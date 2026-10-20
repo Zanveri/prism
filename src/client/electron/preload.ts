@@ -1,17 +1,18 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
+import type { CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
-import type { PeerEvent, TabMoveRequest, TabRequest, WindowSummary } from "./window-messages";
+import type { PeerEvent, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
 import type { WorkspaceReport } from "./workspace-messages";
 
 /**
  * A fronteira de confiança do app (decisão 5 da seção 8 da especificação): o endereço e o token
  * da API, o aviso de que ela saiu, o pedido para reiniciá-la, a versão do app (RN-VERSAO-004) e a
  * pasta de dados em uso (só leitura). É tudo o que a tela recebe do processo principal, mais as
- * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`) e as abas que voltam na próxima entrada
- * (`workspace`).
+ * atualizações (`updates`), as janelas (`windows`), o que as outras janelas contam do cofre (`session`), as abas que voltam na próxima entrada
+ * (`workspace`), o zoom do programa (`zoom`), o destino e a entrega das exportações de dados e o arquivo das importações (`transfers`).
  */
 export type PrismBridge = {
   getApiConfig(): Promise<{ baseUrl: string; token: string }>;
@@ -27,7 +28,51 @@ export type PrismBridge = {
   updates: PrismUpdates;
   windows: PrismWindows;
   session: PrismSession;
+  verification: PrismVerification;
   workspace: PrismWorkspace;
+  zoom: PrismZoom;
+  transfers: PrismTransfers;
+};
+
+/**
+ * O destino e a entrega de uma exportação de dados (RN-EXPORT-019 e 020). O processo principal abre o diálogo de salvar e guarda o caminho escolhido: a tela
+ * recebe um identificador do destino e o nome do arquivo, nunca a pasta. Quando a API termina o arquivo, a tela pede a entrega com o identificador do
+ * trabalho, e o processo principal o acha na pasta `transfers` da pasta de dados. **Nenhum pedido leva um caminho, e nenhuma resposta devolve um**; o
+ * processo principal confere cada pedido com o schema de `transfer-messages.ts`, e a resposta (aqui sem tipo) a tela confere de novo.
+ */
+export type PrismTransfers = {
+  /** Há processo principal para escolher o destino? Fora do Electron (a ponte de desenvolvimento) não há, e o "Exportar" diz que só funciona no app. */
+  available: boolean;
+  /** Abre o diálogo de salvar com o nome proposto (sem extensão) e a extensão da lista fixa (`destinationReplySchema`). */
+  chooseDestination(request: DestinationRequest): Promise<unknown>;
+  /** Leva o arquivo pronto do trabalho ao destino (`deliverReplySchema`). */
+  deliver(request: DeliverRequest): Promise<unknown>;
+  /** Põe o texto pronto do trabalho na área de transferência (`copyReplySchema`). */
+  copy(request: CopyRequest): Promise<unknown>;
+  /** "Mostrar na pasta": o arquivo da entrega, só na janela que a pediu. */
+  reveal(request: RevealRequest): Promise<void>;
+  /** Solta o destino; a entrega em andamento para. */
+  release(request: ReleaseRequest): Promise<void>;
+  /**
+   * RN-IMPORT-018: abre o diálogo de abrir do sistema (o título, os filtros e a pasta são do processo principal: nada vai da tela), confere o arquivo e começa
+   * a cópia para a pasta `transfers` (`sourceReplySchema`: o identificador da cópia, o nome sem a pasta e o tamanho, ou o motivo da recusa).
+   */
+  chooseSource(): Promise<unknown>;
+  /** Como está a cópia do arquivo (`sourceStatusSchema`); só a janela que o escolheu o vê. */
+  sourceStatus(request: SourceRequest): Promise<unknown>;
+  /** Solta o arquivo: a cópia em andamento para, e a cópia que a API ainda não tomou é apagada. */
+  releaseSource(request: SourceRequest): Promise<void>;
+};
+
+/**
+ * O zoom do programa inteiro (RN-ZOOM-001), que mora no processo principal, desta instalação: o de agora, o pedido de outro (o processo principal confere
+ * que é um dos passos de `zoom.ts` e devolve o que ficou) e o aviso de que mudou, por um atalho desta ou de outra janela ou pelas Configurações de outra.
+ * As respostas e o aviso chegam sem tipo: a tela os confere. Os atalhos não passam por aqui: o processo principal os trata antes da página.
+ */
+export type PrismZoom = {
+  get(): Promise<unknown>;
+  set(zoom: number): Promise<unknown>;
+  onChanged(listener: (zoom: unknown) => void): () => void;
 };
 
 /**
@@ -81,6 +126,17 @@ export type PrismWindows = {
 export type PrismSession = {
   share(event: PeerEvent): Promise<void>;
   onPeer(listener: (event: unknown) => void): () => void;
+};
+
+/**
+ * RN-VERIF-002: a verificação periódica de uma conexão conectada em mais de uma janela sai de uma só por intervalo. A janela pede a vez antes de chamar a
+ * API (`claim`, que responde se ela a ganhou), conta o fim com a resposta (`finish`, `verificationDoneSchema`), e ouve a resposta das outras (`onPeer`,
+ * `verificationPeerSchema`). Só ids, intervalos e a resposta da API: nada aqui chama a API nem abre arquivo.
+ */
+export type PrismVerification = {
+  claim(claim: VerificationClaim): Promise<unknown>;
+  finish(done: VerificationDone): Promise<void>;
+  onPeer(listener: (peer: unknown) => void): () => void;
 };
 
 /**
@@ -186,12 +242,41 @@ const bridge: PrismBridge = {
     withdraw: () => ipcRenderer.invoke("prism:workspace-withdraw"),
     flush: () => ipcRenderer.invoke("prism:workspace-flush"),
   },
+  zoom: {
+    get: () => ipcRenderer.invoke("prism:zoom-get"),
+    set: (zoom) => ipcRenderer.invoke("prism:zoom-set", zoom),
+    onChanged(listener) {
+      const handler = (_event: unknown, zoom: unknown) => listener(zoom);
+      ipcRenderer.on("prism:zoom-changed", handler);
+      return () => ipcRenderer.removeListener("prism:zoom-changed", handler);
+    },
+  },
   session: {
     share: (event) => ipcRenderer.invoke("prism:session-share", event),
     onPeer(listener) {
       const handler = (_event: unknown, event: unknown) => listener(event);
       ipcRenderer.on("prism:session-peer", handler);
       return () => ipcRenderer.removeListener("prism:session-peer", handler);
+    },
+  },
+  transfers: {
+    available: true,
+    chooseDestination: (request) => ipcRenderer.invoke("prism:transfer-destination", request),
+    deliver: (request) => ipcRenderer.invoke("prism:transfer-deliver", request),
+    copy: (request) => ipcRenderer.invoke("prism:transfer-copy", request),
+    reveal: (request) => ipcRenderer.invoke("prism:transfer-reveal", request),
+    release: (request) => ipcRenderer.invoke("prism:transfer-release", request),
+    chooseSource: () => ipcRenderer.invoke("prism:transfer-source"),
+    sourceStatus: (request) => ipcRenderer.invoke("prism:transfer-source-status", request),
+    releaseSource: (request) => ipcRenderer.invoke("prism:transfer-source-release", request),
+  },
+  verification: {
+    claim: (claim) => ipcRenderer.invoke("prism:verification-claim", claim),
+    finish: (done) => ipcRenderer.invoke("prism:verification-finish", done),
+    onPeer(listener) {
+      const handler = (_event: unknown, peer: unknown) => listener(peer);
+      ipcRenderer.on("prism:verification-peer", handler);
+      return () => ipcRenderer.removeListener("prism:verification-peer", handler);
     },
   },
 };

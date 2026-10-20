@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { databaseSessionKey, treeKey } from "./database-sessions.service";
 import { navKey, type NavPath } from "./navigator-model";
 import { structureKey } from "./table-structure.service";
-import { forgetMissingConnections, isConnected, nextActiveTab, ownedByMissingConnection, pruneWorkbench, type QueryTab } from "./workbench-model";
+import { connectedConnectionIds, forgetMissingConnections, isConnected, nextActiveTab, ownedByMissingConnection, pruneWorkbench, type QueryTab } from "./workbench-model";
 
 function tab(id: string, connectionId: string): QueryTab {
   return { id, title: `consulta-${id}.sql`, connectionId, sessionId: `sessao-${id}`, sql: `select '${id}'` };
@@ -165,5 +165,22 @@ describe("isConnected (a definição única de conexão conectada)", () => {
   it("aba sem sessão, ou aba com sessão de outra conexão, não conecta", () => {
     expect(isConnected("c2", [open, closed], false)).toBe(false);
     expect(isConnected("c3", [open], false)).toBe(false);
+  });
+});
+
+describe("connectedConnectionIds: as conexões conectadas, para a lista da troca da conexão (RN-ARVORE-008) e o script genérico (RN-SCRIPT-005)", () => {
+  it("é a mesma definição de isConnected, na ordem recebida: a sessão da árvore, ou a de uma aba", () => {
+    const tabs = [tab("a", "c3"), { ...tab("b", "c2"), sessionId: null }];
+
+    expect(connectedConnectionIds(["c1", "c2", "c3", "c4"], tabs, (connectionId) => connectionId === "c4" || connectionId === "c1", new Set())).toEqual(["c1", "c3", "c4"]);
+    expect(connectedConnectionIds(["c2"], tabs, () => false, new Set())).toEqual([]);
+  });
+
+  it("a que a verificação achou sem sessão na API (“Sem sessão aberta”) não conta, nem com a sessão da árvore em cache nem com a da aba (RN-NAV-013)", () => {
+    const tabs = [tab("a", "c3")];
+
+    expect(connectedConnectionIds(["c1", "c3", "c4"], tabs, (connectionId) => connectionId === "c1" || connectionId === "c4", new Set(["c1", "c3"]))).toEqual(["c4"]);
+    // A que não está conectada continua de fora, com ou sem a resposta.
+    expect(connectedConnectionIds(["c2"], tabs, () => false, new Set(["c2"]))).toEqual([]);
   });
 });

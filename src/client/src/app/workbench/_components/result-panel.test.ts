@@ -160,7 +160,7 @@ describe("ResultActions: os botões da barra", () => {
 });
 
 describe("a área de resultado na vista Registros de uma tabela (RN-TABELA-002)", () => {
-  const records = { name: "mes.apontamento", onRefresh: noop, onCancel: noop, sort: null, onSort: noop, onExport: noop, waiting: false, disconnected: false };
+  const records = { name: "mes.apontamento", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
   const renderRecords = (state: RunnerState) =>
     renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state, connected: true, records, onLoadMore: noop, onCount: noop, onRerun: noop })));
 
@@ -314,5 +314,95 @@ describe("a área de resultado na vista Registros de uma tabela (RN-TABELA-002)"
 
     expect(markup).toContain('aria-label="Resultado da consulta"');
     expect(markup).not.toContain("Atualizar");
+  });
+});
+
+describe("a execução da atualização automática na área de resultado (RN-GRADE-014)", () => {
+  const autoRunning: RunnerState = { status: "running", cancelling: false, previous: rowsState, auto: true };
+  const renderWith = (state: RunnerState, extra: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop, ...extra })));
+
+  it("não esmaece a grade nem diz \"Executando…\": a barra segue com o resumo do resultado que está lá", () => {
+    const markup = renderWith(autoRunning);
+
+    expect(markup).not.toContain("Executando…");
+    // O esmaecido é a classe sozinha (`disabled:opacity-50` dos botões não conta).
+    expect(markup).not.toMatch(/class="[^"]*(?<![\w:-])opacity-50/);
+    expect(renderWith({ status: "running", cancelling: false, previous: rowsState })).toMatch(/class="[^"]*(?<![\w:-])opacity-50/);
+    expect(markup).toContain("Primeiras 2 linhas · 42 ms");
+    expect(markup).toContain('aria-busy="false"');
+  });
+
+  it("recolhida, a barra também segue com o resumo; o comando da pessoa continua sendo \"Executando…\"", () => {
+    expect(collapsedSummary(autoRunning)).toBe("Primeiras 2 linhas · 42 ms");
+    expect(collapsedSummary({ status: "running", cancelling: false, previous: rowsState })).toBe("Executando…");
+  });
+
+  it("não ocupa a área para a pessoa: nos Registros o botão segue \"Atualizar\" (e não \"Cancelar\"), e \"Exportar CSV\" segue habilitado", () => {
+    const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
+    const markup = renderWith(autoRunning, { records });
+
+    expect(markup).toContain("Atualizar");
+    expect(markup).not.toContain("Cancelar");
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Exportar CSV/);
+    // O comando da pessoa, sim: "Cancelar" no lugar de "Atualizar", e a exportação desabilitada.
+    const mine = renderWith({ status: "running", cancelling: false, previous: rowsState }, { records });
+    expect(mine).toContain("Cancelar");
+    expect(mine).toMatch(/<button[^>]*disabled=""[^>]*>(?:(?!<\/button>).)*Exportar CSV/);
+  });
+
+  it("na aba de consulta, o controle entra na barra, antes do zoom, com a área aberta ou recolhida", () => {
+    const control = createElement("span", { "data-controle": "" }, "relógio");
+
+    for (const collapsed of [false, true]) {
+      const markup = renderWith(rowsState, { autoRefresh: control, collapsed });
+      expect(markup).toContain('data-controle=""');
+      if (!collapsed) expect(markup.indexOf("relógio")).toBeLessThan(markup.indexOf("Diminuir"));
+    }
+  });
+
+  it("nos Registros, o controle fica no rodapé, logo depois de \"Atualizar\" (ou de \"Cancelar\"), e não na barra", () => {
+    const control = createElement("span", { "data-controle": "" }, "relógio");
+    const records = { name: "loja.pedidos", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
+
+    for (const state of [rowsState, { status: "running", cancelling: false, previous: rowsState } as RunnerState]) {
+      const markup = renderWith(state, { autoRefresh: control, records });
+      const button = markup.indexOf(state.status === "rows" ? "Atualizar</button>" : "Cancelar</button>");
+      expect(markup.match(/data-controle/g)).toHaveLength(1);
+      expect(button).toBeGreaterThan(markup.indexOf("Diminuir"));
+      expect(markup.indexOf("relógio")).toBeGreaterThan(button);
+      expect(markup.indexOf("relógio")).toBeLessThan(markup.indexOf("Exportar CSV"));
+    }
+  });
+});
+
+describe("o \"Exportar…\" da área de resultado (RN-EXPORT-001)", () => {
+  const records = { name: "estoque.pedido", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
+  const enabled = { blocker: null, onExport: noop };
+  const panel = (props: Partial<Parameters<typeof ResultPanel>[0]>) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { ...rowsState, read: true }, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop, ...props })));
+
+  it("nos Registros, no rodapé, logo depois de \"Exportar CSV\", com a dica dos Registros", () => {
+    const markup = panel({ records, exporter: enabled });
+
+    expect(markup.indexOf("Exportar CSV")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Exportar…")).toBeGreaterThan(markup.indexOf("Exportar CSV"));
+    expect(markup).toContain('title="Exportar todas as linhas da tabela, com o filtro e a ordem da aba, em CSV ou outro formato"');
+  });
+
+  it("no resultado de um comando, na barra da área, antes de recolher e maximizar, também com a área recolhida", () => {
+    const actions = createElement(ResultActions, { mode: "split", onAction: noop });
+    const markup = panel({ exporter: enabled, actions });
+    expect(markup).toContain('title="Exportar todas as linhas deste resultado, em CSV ou outro formato"');
+    expect(markup.indexOf("Exportar…")).toBeLessThan(markup.indexOf("Recolher"));
+
+    expect(panel({ exporter: enabled, actions, collapsed: true })).toContain("Exportar…");
+  });
+
+  it("sem resultado continua lá, desabilitado sem sair do Tab (`aria-disabled`), com o motivo na dica e para o leitor de tela", () => {
+    const markup = panel({ state: { status: "idle" }, exporter: { blocker: "Não há resultado para exportar.", onExport: noop } });
+
+    expect(markup).toMatch(/<button[^>]*aria-disabled="true"[^>]*title="Não há resultado para exportar."/);
+    expect(markup).toMatch(/<span id="[^"]+" class="sr-only">Não há resultado para exportar.<\/span>/);
   });
 });

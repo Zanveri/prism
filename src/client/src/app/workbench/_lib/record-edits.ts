@@ -2,9 +2,11 @@ import type { ApiError } from "@/lib/api/prism-api";
 
 import type { QueryRow } from "./query.schema";
 import { editErrorDetails, type ApiChange, type EditTarget } from "./record-edits.schema";
+import { multiEditCopy } from "./multi-edit.copy";
 import { recordsCopy } from "./records.copy";
 
 const copy = recordsCopy.edit;
+const multi = multiEditCopy;
 
 /** O texto de uma célula, ou nulo para gravar NULL (RN-EDIT-006: a célula viaja como texto). */
 export type EditValue = string | null;
@@ -20,17 +22,53 @@ export type CellEdit = { row: number; column: number; value: EditValue; change?:
 export type NewRow = { id: number; values: Readonly<Record<number, EditValue>> };
 
 /**
- * RN-EDIT-004: o que a pessoa fez na grade e ainda não foi ao banco. Cada lista guarda a ordem em que foi feita, que é a ordem do Salvar
- * dentro de cada grupo. É um valor: toda função devolve um novo, e a mesma instância quando nada mudou.
+ * RN-EDIT-018: a alteração da coluna inteira, guardada uma vez, com a coluna e o valor, e nunca célula por célula: vale para todas as linhas lidas do
+ * resultado, também as que a grade ainda não carregou. `uncertain`: no Informix sem log, o "Salvar" falhou no meio dela, e parte das linhas pode estar
+ * gravada (RN-EDIT-021).
  */
-export type PendingEdits = { cells: readonly CellEdit[]; deleted: readonly number[]; added: readonly NewRow[]; nextId: number };
+export type ColumnEdit = { column: number; value: EditValue; uncertain?: boolean };
+
+/**
+ * RN-EDIT-004: o que a pessoa fez na grade e ainda não foi ao banco. Cada lista guarda a ordem em que foi feita, que é a ordem do Salvar
+ * dentro de cada grupo. É um valor: toda função devolve um novo, e a mesma instância quando nada mudou. `columns` são as alterações da coluna inteira
+ * (RN-EDIT-018), uma por coluna, na ordem em que foram feitas; sem elas, nenhuma.
+ */
+export type PendingEdits = { cells: readonly CellEdit[]; deleted: readonly number[]; added: readonly NewRow[]; nextId: number; columns?: readonly ColumnEdit[] };
 
 export const noEdits: PendingEdits = { cells: [], deleted: [], added: [], nextId: 1 };
 
-/** De onde veio cada alteração do pedido: uma linha lida (numa junção, com a linha da tabela, `change`) ou uma linha nova. É o que a falha aponta. */
-export type ChangeOrigin = { kind: "row"; row: number; change?: string } | { kind: "new"; id: number };
+/**
+ * De onde veio cada alteração do pedido: uma linha lida (numa junção, com a linha da tabela, `change`), uma linha nova, ou a coluna inteira (`all`, com as
+ * colunas dela, RN-EDIT-018). É o que a falha aponta.
+ */
+export type ChangeOrigin = { kind: "row"; row: number; change?: string } | { kind: "new"; id: number } | { kind: "all"; columns: readonly number[] };
 
-export type PlannedChanges = { changes: ApiChange[]; origins: ChangeOrigin[] };
+/** O pedido do Salvar e de onde veio cada alteração; `rows`, as linhas que a pessoa confirmou para a coluna inteira (RN-EDIT-019), quando há uma. */
+export type PlannedChanges = { changes: ApiChange[]; origins: ChangeOrigin[]; rows?: number };
+
+/** As alterações da coluna inteira, na ordem em que foram feitas (RN-EDIT-018). */
+export function columnEditsOf(edits: PendingEdits): readonly ColumnEdit[] {
+  return edits.columns ?? [];
+}
+
+/** A alteração da coluna inteira daquela coluna, ou nula. */
+export function columnEditOf(edits: PendingEdits, column: number): ColumnEdit | null {
+  return columnEditsOf(edits).find((edit) => edit.column === column) ?? null;
+}
+
+/**
+ * RN-EDIT-017 e 018: o valor de referência de uma célula de linha lida: com uma alteração da coluna inteira pendente na coluna dela, o valor dela; senão, o
+ * lido. A célula que volta ao valor de referência perde a pendência; a que fica com o lido, sob a coluna inteira, continua sendo uma pendência.
+ */
+export function referenceOf(edits: PendingEdits, column: number, read: EditValue): EditValue {
+  const whole = columnEditOf(edits, column);
+  return whole === null ? read : whole.value;
+}
+
+/** A chave de uma pendência de célula: pela linha da tabela (`change`, numa junção), ou pela linha da grade. É a regra de `sameCell`, num texto. */
+function cellKey(row: number, column: number, change: string | undefined): string {
+  return change === undefined ? `r:${row}:${column}` : `c:${change}:${column}`;
+}
 
 /** O valor pendente de uma célula de linha lida, ou nulo quando ela não está pendente. */
 export function pendingCell(edits: PendingEdits, row: number, column: number): { value: EditValue } | null {
@@ -103,13 +141,32 @@ export function deleteRow(edits: PendingEdits, row: number): PendingEdits {
   return { ...edits, cells: edits.cells.filter((item) => item.row !== row), deleted: [...edits.deleted, row] };
 }
 
+/**
+ * RN-EDIT-013: excluir várias linhas lidas de uma vez ("Excluir linhas", o Delete e o Alt+Delete sobre a seleção), na ordem de `rows`: as já excluídas ficam
+ * como estavam, e as edições das outras saem. Uma passada só, pelos conjuntos, e não uma `deleteRow` por linha: o Ctrl+A com 50.000 linhas carregadas não
+ * custa 50.000 cópias da lista. Sem linha nova a excluir, devolve as mesmas pendências.
+ */
+export function deleteRows(edits: PendingEdits, rows: readonly number[]): PendingEdits {
+  const already = new Set(edits.deleted);
+  const added: number[] = [];
+  for (const row of rows) {
+    if (already.has(row)) continue;
+    already.add(row);
+    added.push(row);
+  }
+  if (added.length === 0) return edits;
+  const gone = new Set(added);
+  return { ...edits, cells: edits.cells.filter((item) => !gone.has(item.row)), deleted: [...edits.deleted, ...added] };
+}
+
 export function undoDelete(edits: PendingEdits, row: number): PendingEdits {
   return { ...edits, deleted: edits.deleted.filter((item) => item !== row) };
 }
 
-export function addRow(edits: PendingEdits): { edits: PendingEdits; id: number } {
+/** Uma linha nova no fim da grade; `values` são as colunas que já vêm preenchidas (a duplicada, RN-EDIT-016), e sem elas a linha vem em branco. */
+export function addRow(edits: PendingEdits, values: Readonly<Record<number, EditValue>> = {}): { edits: PendingEdits; id: number } {
   const id = edits.nextId;
-  return { edits: { ...edits, added: [...edits.added, { id, values: {} }], nextId: id + 1 }, id };
+  return { edits: { ...edits, added: [...edits.added, { id, values: { ...values } }], nextId: id + 1 }, id };
 }
 
 export function editNewCell(edits: PendingEdits, id: number, column: number, value: EditValue): PendingEdits {
@@ -128,9 +185,123 @@ export function undoNewCell(edits: PendingEdits, id: number, column: number): Pe
   };
 }
 
+/**
+ * RN-EDIT-004: "Desfazer alteração" nas células escolhidas (RN-GRADE-001): o valor alterado volta ao lido (numa junção, em todas as linhas da grade que mostram
+ * a mesma linha da tabela, pela `change`), a linha marcada para exclusão que tem uma célula escolhida volta, e, numa linha nova, a célula volta ao padrão
+ * da tabela (a linha fica: quem a tira é "Excluir linha"). `view` são as pendências como a grade as mostra (`linkedCells`); `read`, quantas linhas lidas há;
+ * `chosen` diz se a célula da grade está escolhida e `rowChosen`, se a linha tem uma. Nulo quando nenhuma célula escolhida tem o que desfazer: é assim que o
+ * menu sabe se o item se habilita. Percorre as pendências, e não a seleção: a seleção grande não custa nada aqui.
+ */
+export function undoWhere(edits: PendingEdits, view: PendingEdits, read: number, chosen: (row: number, column: number) => boolean, rowChosen: (row: number) => boolean): PendingEdits | null {
+  // Uma passada pelas pendências, pelas chaves (RN-EDIT-017: o grupo de 100.000 células desfeito de uma vez não custa uma cópia da lista por célula).
+  const gone = new Set<string>();
+  for (const cell of view.cells) if (chosen(cell.row, cell.column)) gone.add(cellKey(cell.row, cell.column, cell.change));
+  const cells = gone.size === 0 ? edits.cells : edits.cells.filter((cell) => !gone.has(cellKey(cell.row, cell.column, cell.change)));
+  const deleted = edits.deleted.filter((row) => !rowChosen(row));
+  let changedNew = false;
+  const added = edits.added.map((row, index) => {
+    const columns = Object.keys(row.values).map(Number).filter((column) => chosen(read + index, column));
+    if (columns.length === 0) return row;
+    changedNew = true;
+    const values = { ...row.values };
+    for (const column of columns) delete values[column];
+    return { id: row.id, values };
+  });
+  if (cells.length === edits.cells.length && deleted.length === edits.deleted.length && !changedNew) return null;
+  return { ...edits, cells, deleted, added: changedNew ? added : edits.added };
+}
+
+/**
+ * RN-EDIT-017: o grupo de células de uma coluna que recebe o mesmo valor, montado fora das pendências e trocado num passo só (`done`): quem monta o grupo
+ * grande o faz em partes, cedendo a vez à tela, e o que não termina (o "Cancelar") não deixa nenhuma célula alterada. Cada célula lida é uma pendência comum,
+ * pela linha (numa junção, pela linha da tabela, `change`, que vale para todas as linhas da grade que a mostram); a que volta ao valor de referência
+ * (`original`: o lido, ou o da coluna inteira, `referenceOf`) perde a pendência. Cada linha nova recebe o valor na célula dela. As pendências viram um mapa
+ * uma vez: cada célula custa uma consulta a ele, e não uma volta na lista.
+ */
+export function groupBuilder(edits: PendingEdits, column: number, value: EditValue) {
+  const at = new Map<string, number>();
+  edits.cells.forEach((cell, index) => {
+    if (cell.column === column) at.set(cellKey(cell.row, cell.column, cell.change), index);
+  });
+  const replaced = new Map<number, CellEdit | null>();
+  const appended = new Map<string, CellEdit>();
+  const newRows = new Set<number>();
+  return {
+    read(row: number, original: EditValue, change?: string) {
+      const key = cellKey(row, column, change);
+      const index = at.get(key);
+      if (index !== undefined) {
+        if (value === original) replaced.set(index, null);
+        else replaced.set(index, change === undefined ? { row, column, value } : { row: edits.cells[index].row, column, value, change });
+        return;
+      }
+      if (value === original || appended.has(key)) return;
+      appended.set(key, change === undefined ? { row, column, value } : { row, column, value, change });
+    },
+    added(id: number) {
+      newRows.add(id);
+    },
+    done(): PendingEdits {
+      const cells = [...edits.cells.flatMap((cell, index) => (replaced.has(index) ? (replaced.get(index) ?? []) : [cell])), ...appended.values()];
+      const added = newRows.size === 0 ? edits.added : edits.added.map((row) => (newRows.has(row.id) ? { id: row.id, values: { ...row.values, [column]: value } } : row));
+      return { ...edits, cells, added };
+    },
+  };
+}
+
+/**
+ * RN-EDIT-018: a edição da coluna inteira, uma alteração só: a segunda na mesma coluna troca o valor da primeira (a última vale, no lugar dela na ordem), e
+ * cada coluna tem a dela. As pendências daquela coluna nas linhas lidas saem (a coluna inteira as cobre), e as linhas novas que já existem recebem o valor na
+ * célula delas, como uma alteração comum delas; as que vierem depois, não.
+ */
+export function editWholeColumn(edits: PendingEdits, column: number, value: EditValue): PendingEdits {
+  const current = columnEditsOf(edits);
+  const edit: ColumnEdit = { column, value };
+  const columns = current.some((item) => item.column === column) ? current.map((item) => (item.column === column ? edit : item)) : [...current, edit];
+  const cells = edits.cells.filter((cell) => cell.column !== column);
+  const added = edits.added.map((row) => ({ id: row.id, values: { ...row.values, [column]: value } }));
+  return { ...edits, cells, added, columns };
+}
+
+/**
+ * RN-EDIT-018: "Desfazer alteração" com colunas escolhidas inteiras: tira as alterações da coluna inteira delas e as pendências delas em todas as linhas,
+ * também nas novas, cuja célula volta ao padrão da tabela. Nulo quando não há nada a desfazer nelas.
+ */
+export function undoWholeColumns(edits: PendingEdits, columns: readonly number[]): PendingEdits | null {
+  const chosen = new Set(columns);
+  const wholes = columnEditsOf(edits).filter((edit) => !chosen.has(edit.column));
+  const cells = edits.cells.filter((cell) => !chosen.has(cell.column));
+  let changedNew = false;
+  const added = edits.added.map((row) => {
+    const gone = Object.keys(row.values).map(Number).filter((column) => chosen.has(column));
+    if (gone.length === 0) return row;
+    changedNew = true;
+    const values = { ...row.values };
+    for (const column of gone) delete values[column];
+    return { id: row.id, values };
+  });
+  if (wholes.length === columnEditsOf(edits).length && cells.length === edits.cells.length && !changedNew) return null;
+  return { ...edits, cells, added: changedNew ? added : edits.added, columns: wholes };
+}
+
+/** RN-EDIT-018: quantas pendências de célula as colunas têm, nas linhas lidas (também as fora da tela) e nas novas: a conta do "Desfazer alteração". */
+export function cellsPendingIn(edits: PendingEdits, columns: readonly number[]): number {
+  const chosen = new Set(columns);
+  let count = edits.cells.filter((cell) => chosen.has(cell.column)).length;
+  for (const row of edits.added) for (const column of Object.keys(row.values).map(Number)) if (chosen.has(column)) count += 1;
+  return count;
+}
+
 /** "Excluir linha" numa linha nova: ela some, porque nunca foi ao banco. */
 export function removeNewRow(edits: PendingEdits, id: number): PendingEdits {
   return { ...edits, added: edits.added.filter((row) => row.id !== id) };
+}
+
+/** Tirar várias linhas novas de uma vez, numa passada só (RN-EDIT-013); sem nenhuma delas entre as novas, devolve as mesmas pendências. */
+export function removeNewRows(edits: PendingEdits, ids: readonly number[]): PendingEdits {
+  const gone = new Set(ids);
+  const added = edits.added.filter((row) => !gone.has(row.id));
+  return added.length === edits.added.length ? edits : { ...edits, added };
 }
 
 /** A alteração de uma célula: numa junção, a linha da tabela dela; senão, a linha da grade. */
@@ -140,19 +311,26 @@ function changeOfCell(cell: CellEdit): string {
 
 /** Uma alteração por comando do Salvar: a linha lida com células editadas (numa junção, a linha de cada tabela), a exclusão e a linha nova. */
 export function pendingCount(edits: PendingEdits): number {
-  return new Set(edits.cells.map(changeOfCell)).size + edits.deleted.length + edits.added.length;
+  return new Set(edits.cells.map(changeOfCell)).size + edits.deleted.length + edits.added.length + columnEditsOf(edits).length;
 }
 
 /**
- * RN-EDIT-005: o pedido do Salvar. Primeiro as exclusões, depois as alterações (uma por linha, na ordem em que a linha foi editada pela
+ * RN-EDIT-005 e 021: o pedido do Salvar. Primeiro a coluna inteira, quando há (uma `updateAll` só, com uma atribuição por coluna, na ordem em que foram
+ * feitas, e `rows`, as linhas que a pessoa confirmou, quando já se sabe), depois as exclusões, depois as alterações (uma por linha, na ordem em que a linha foi editada pela
  * primeira vez; numa junção, uma por linha de cada tabela, pela chave dela, e as alterações de uma linha da grade em duas tabelas são duas),
  * depois as linhas novas, cada grupo na ordem em que foi feito. A chave é a que a grade leu (a linha como veio do banco, mesmo com a coluna
- * da chave editada). Linha nova e exclusão só existem no resultado de uma tabela só, a de posição 0.
+ * da chave editada). Linha nova (também a duplicada) e exclusão só existem no resultado de uma tabela só, a de posição 0.
  */
-export function changesOf(edits: PendingEdits, rows: readonly QueryRow[], target: EditTarget): PlannedChanges {
+export function changesOf(edits: PendingEdits, rows: readonly QueryRow[], target: EditTarget, confirmed?: number): PlannedChanges {
   const key = (row: number, table: number) => (target.tables[table]?.key ?? []).map((column) => rows[row][column] ?? "");
   const changes: ApiChange[] = [];
   const origins: ChangeOrigin[] = [];
+
+  const wholes = columnEditsOf(edits);
+  if (wholes.length > 0) {
+    changes.push({ kind: "updateAll", table: 0, set: wholes.map(({ column, value }) => ({ column, value })), ...(confirmed === undefined ? {} : { rows: confirmed }) });
+    origins.push({ kind: "all", columns: wholes.map((edit) => edit.column) });
+  }
 
   for (const row of edits.deleted) {
     changes.push({ kind: "delete", table: 0, key: key(row, 0) });
@@ -176,7 +354,7 @@ export function changesOf(edits: PendingEdits, rows: readonly QueryRow[], target
     origins.push({ kind: "new", id: row.id });
   }
 
-  return { changes, origins };
+  return { changes, origins, ...(confirmed === undefined ? {} : { rows: confirmed }) };
 }
 
 /** RN-EDIT-012: as `applied` primeiras alterações do pedido já foram gravadas, e saem das pendências; a que falhou e as seguintes ficam. */
@@ -184,6 +362,7 @@ export function withoutApplied(edits: PendingEdits, origins: readonly ChangeOrig
   let next = edits;
   for (const origin of origins.slice(0, applied)) {
     if (origin.kind === "new") next = removeNewRow(next, origin.id);
+    else if (origin.kind === "all") next = { ...next, columns: [] };
     else if (origin.change !== undefined) next = { ...next, cells: next.cells.filter((cell) => cell.change !== origin.change) };
     else next = { ...next, cells: next.cells.filter((cell) => cell.row !== origin.row || cell.change !== undefined), deleted: next.deleted.filter((row) => row !== origin.row) };
   }
@@ -229,13 +408,19 @@ export function savedResultOf(result: { rows: readonly QueryRow[]; truncated: Ce
   const positions: (number | null)[] = [];
   const kept: QueryRow[] = [];
   const sourceRows: (number | null)[] = [];
+  // As células alteradas de cada linha, num mapa (uma volta nas pendências, e não uma por linha); a coluna inteira vale em todas, e a pendência de uma célula,
+  // por cima dela (RN-EDIT-018 e 021).
+  const byRow = new Map<number, CellEdit[]>();
+  for (const cell of edits.cells) byRow.set(cell.row, [...(byRow.get(cell.row) ?? []), cell]);
+  const wholes = columnEditsOf(edits);
   rows.forEach((row, index) => {
     if (deleted.has(index)) return void positions.push(null);
     positions.push(kept.length);
     sourceRows.push(result.sourceRows === undefined ? index : (result.sourceRows[index] ?? null));
-    const cells = edits.cells.filter((cell) => cell.row === index);
-    if (cells.length === 0) return void kept.push(row);
+    const cells = byRow.get(index) ?? [];
+    if (cells.length === 0 && wholes.length === 0) return void kept.push(row);
     const next = [...row];
+    for (const whole of wholes) next[whole.column] = whole.value;
     for (const cell of cells) next[cell.column] = cell.value;
     kept.push(next);
   });
@@ -254,6 +439,27 @@ export function savedResultOf(result: { rows: readonly QueryRow[]; truncated: Ce
   return { rows: kept, truncated: truncated.size === 0 ? truncated : shifted(truncated, positionOf), generated: new Map([...generated].filter(([, cells]) => cells.size > 0)), ...(moved ? { sourceRows } : {}) };
 }
 
+/**
+ * RN-EDIT-021: no Informix sem log, o "Salvar" que parou no meio deixou gravado o valor da coluna inteira (`written`): a grade passa a mostrá-lo nas linhas
+ * lidas (as que não estão marcadas para exclusão), e, por cima dele, as células das alterações por linha que também ficaram gravadas (`cells`, as que vieram
+ * depois dela), como a grade as mostrava. As linhas ficam no lugar delas, sem sair nem entrar, e a que não muda é o mesmo objeto.
+ */
+export function withColumnsWritten(rows: readonly QueryRow[], written: readonly ColumnEdit[], deleted: readonly number[] = [], cells: readonly CellEdit[] = []): QueryRow[] {
+  if (written.length === 0 && cells.length === 0) return rows as QueryRow[];
+  const gone = new Set(deleted);
+  const byRow = new Map<number, CellEdit[]>();
+  for (const cell of cells) byRow.set(cell.row, [...(byRow.get(cell.row) ?? []), cell]);
+  return rows.map((row, index) => {
+    if (gone.has(index)) return row;
+    const own = byRow.get(index);
+    if (written.length === 0 && own === undefined) return row;
+    const next = [...row];
+    for (const edit of written) next[edit.column] = edit.value;
+    for (const cell of own ?? []) next[cell.column] = cell.value;
+    return next;
+  });
+}
+
 /** O que a faixa mostra depois de um Salvar recusado: a frase de cima, a mensagem (a do banco, como veio), a alteração e a coluna que falharam. */
 export type SaveFailure = {
   headline: string;
@@ -264,25 +470,57 @@ export type SaveFailure = {
   applied: number;
   /** RN-EDIT-012: a que falhou alterou mais de uma linha e já está gravada: sai das pendências também. */
   written: boolean;
+  /**
+   * RN-EDIT-021, no Informix sem log: a coluna inteira ficou gravada (`written`: o número de linhas não bateu, ou uma alteração depois dela falhou) ou pode ter
+   * ficado gravada em parte das linhas (`uncertain`: o comando dela falhou no meio). Nos dois, o cursor fechou e a aba passa ao "Executar de novo".
+   */
+  whole?: "written" | "uncertain";
 };
 
-/** Como a faixa chama a linha de uma alteração: o número da linha lida, ou a posição da linha nova. */
-export function originLabel(origin: ChangeOrigin, plan: PlannedChanges): string {
+/** Como a faixa chama a linha de uma alteração: o número da linha lida, ou a posição da linha nova; a da coluna inteira, pelos nomes das colunas. */
+export function originLabel(origin: ChangeOrigin, plan: PlannedChanges, names: readonly string[] = []): string {
   if (origin.kind === "row") return copy.rowLabel(origin.row + 1);
+  if (origin.kind === "all") return origin.columns.map((column) => names[column] ?? "").join(", ");
   const added = plan.origins.filter((item) => item.kind === "new");
   return copy.newRowLabel(added.findIndex((item) => item.kind === "new" && item.id === origin.id) + 1);
 }
 
 /**
- * RN-EDIT-005 e 012: a recusa do Salvar, pela API. A mensagem do banco vem como veio (decisão 4 do guia da raiz); a contagem de linhas
+ * RN-EDIT-005, 012 e 021: a recusa do Salvar, pela API. A mensagem do banco vem como veio (decisão 4 do guia da raiz); a contagem de linhas
  * vira a frase da regra ("a linha não existe mais" para zero). Sem log de transação, a frase diz quantas foram gravadas, qual falhou e
- * quantas continuam pendentes.
+ * quantas continuam pendentes. O cancelamento é pelo `outcome` (RN-SQL-010), e não pelo texto: `canceled` (com as já gravadas, no banco sem log) e
+ * `unknown`. A coluna inteira (a `updateAll`) tem as frases dela, com os nomes das colunas (`names`, as do resultado): a recusa do banco, o número de linhas
+ * que não bateu e ficou gravado, e a falha no meio, sem log.
  */
-export function failureOf(error: ApiError, plan: PlannedChanges, oneAtATime: boolean): SaveFailure {
+export function failureOf(error: ApiError, plan: PlannedChanges, oneAtATime: boolean, names: readonly string[] = []): SaveFailure {
+  const failure = refusalOf(error, plan, oneAtATime, names);
+  // RN-EDIT-021: com a coluna inteira gravada, o resto das linhas que a grade não carregou só se vê executando de novo.
+  return failure.whole === "written" ? { ...failure, headline: `${failure.headline} ${multi.otherRows}` } : failure;
+}
+
+function refusalOf(error: ApiError, plan: PlannedChanges, oneAtATime: boolean, names: readonly string[]): SaveFailure {
   const details = editErrorDetails(error.extensions);
   const origin = details.change === null ? null : (plan.origins[details.change] ?? null);
+  const all = origin?.kind === "all" ? origin.columns.map((column) => names[column] ?? "") : null;
   const applied = oneAtATime ? (details.applied ?? 0) : 0;
-  const written = oneAtATime && error.code === "EDIT_ROW_MISMATCH" && (details.rowsAffected ?? 0) > 1;
+  const written = oneAtATime && all === null && error.code === "EDIT_ROW_MISMATCH" && (details.rowsAffected ?? 0) > 1;
+  const left = plan.changes.length - applied - (written ? 1 : 0);
+  // A coluna inteira, quando ela foi gravada antes da que falhou (ela vai primeiro: está entre as `applied`).
+  const wholeWritten = oneAtATime && applied > 0 && plan.origins[0]?.kind === "all" ? { whole: "written" as const } : {};
+
+  if (error.code === "SQL_EXECUTION_FAILED" && details.outcome !== null) {
+    // RN-EDIT-021: a falha no meio do comando da coluna inteira, sem log, é o `unknown` dela, que pode ter deixado parte das linhas alteradas.
+    if (oneAtATime && all !== null && details.outcome === "unknown") return { headline: multi.failedMidway(all), detail: error.detail ?? null, origin, column: null, applied, written: false, whole: "uncertain" };
+    if (details.outcome === "unknown") return { headline: multi.unknown, detail: null, origin: null, column: null, applied, written: false, ...wholeWritten };
+    return { headline: applied > 0 ? multi.cancelledPartly(applied, left) : multi.cancelled, detail: null, origin: null, column: null, applied, written: false, ...wholeWritten };
+  }
+
+  if (all !== null) {
+    if (error.code === "EDIT_ROW_MISMATCH")
+      return { headline: multi.writtenAnyway(all, details.rowsAffected ?? 0, plan.rows ?? 0, Math.max(plan.changes.length - 1, 0)), detail: null, origin, column: null, applied: Math.max(applied, 1), written: false, whole: "written" };
+    if (error.code === "EDIT_ALL_ROWS_NOT_SUPPORTED") return { headline: multi.unavailable(details.reason ?? error.detail ?? error.title), detail: null, origin, column: details.column, applied, written: false };
+    return { headline: multi.failed(all), detail: error.detail ?? null, origin, column: details.column, applied, written: false };
+  }
 
   const detail =
     error.code === "EDIT_ROW_MISMATCH"
@@ -295,9 +533,9 @@ export function failureOf(error: ApiError, plan: PlannedChanges, oneAtATime: boo
 
   if (origin === null) return { headline: error.title, detail, origin: null, column: null, applied, written };
 
-  const row = originLabel(origin, plan);
+  const row = originLabel(origin, plan, names);
   const done = applied + (written ? 1 : 0);
   const headline = oneAtATime && done > 0 ? copy.partlySaved(done, row, plan.changes.length - done) : copy.failedAt(row);
 
-  return { headline, detail, origin, column: details.column, applied, written };
+  return { headline, detail, origin, column: details.column, applied, written, ...wholeWritten };
 }

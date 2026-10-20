@@ -1,0 +1,203 @@
+{
+  "rule": "RN-EXPORT-013 e 024: o número que vai como número na planilha. Na tela, spreadsheetNumber (to-xlsx.ts); na API, ExportText.SpreadsheetNumber.",
+  "notes": [
+    "value é o texto da célula numa coluna de número; expected é o texto do <v>, como o String do JavaScript escreve o número, ou null quando a célula vai como texto."
+  ],
+  "cases": [
+    {
+      "name": "inteiro",
+      "value": "12",
+      "expected": "12"
+    },
+    {
+      "name": "zeros do fim saem",
+      "value": "12.50",
+      "expected": "12.5"
+    },
+    {
+      "name": "um decimal",
+      "value": "1.10",
+      "expected": "1.1"
+    },
+    {
+      "name": "zero",
+      "value": "0",
+      "expected": "0"
+    },
+    {
+      "name": "zero com casas",
+      "value": "0.0",
+      "expected": "0"
+    },
+    {
+      "name": "menos zero",
+      "value": "-0",
+      "expected": "0"
+    },
+    {
+      "name": "negativo",
+      "value": "-0.5",
+      "expected": "-0.5"
+    },
+    {
+      "name": "expoente",
+      "value": "1e5",
+      "expected": "100000"
+    },
+    {
+      "name": "expoente maiúsculo",
+      "value": "1E5",
+      "expected": "100000"
+    },
+    {
+      "name": "expoente com casas",
+      "value": "1.0e2",
+      "expected": "100"
+    },
+    {
+      "name": "cem",
+      "value": "100",
+      "expected": "100"
+    },
+    {
+      "name": "21 dígitos sem expoente",
+      "value": "1e20",
+      "expected": "100000000000000000000"
+    },
+    {
+      "name": "a partir de 1e21, com expoente",
+      "value": "1e21",
+      "expected": "1e+21"
+    },
+    {
+      "name": "15 dígitos com expoente",
+      "value": "123456789012345e7",
+      "expected": "1.23456789012345e+21"
+    },
+    {
+      "name": "um milionésimo sem expoente",
+      "value": "0.000001",
+      "expected": "0.000001"
+    },
+    {
+      "name": "um décimo de milionésimo com expoente",
+      "value": "0.0000001",
+      "expected": "1e-7"
+    },
+    {
+      "name": "expoente negativo com casas",
+      "value": "1.5e-7",
+      "expected": "1.5e-7"
+    },
+    {
+      "name": "15 dígitos significativos",
+      "value": "123456789012345",
+      "expected": "123456789012345"
+    },
+    {
+      "name": "16 dígitos com zero no fim: 15 significativos",
+      "value": "1234567890123450",
+      "expected": "1234567890123450"
+    },
+    {
+      "name": "16 dígitos significativos é texto",
+      "value": "1234567890123456",
+      "expected": null
+    },
+    {
+      "name": "16 dígitos significativos depois do ponto é texto",
+      "value": "0.1234567890123456",
+      "expected": null
+    },
+    {
+      "name": "zero à esquerda é texto",
+      "value": "007",
+      "expected": null
+    },
+    {
+      "name": "ponto sem zero é texto",
+      "value": ".5",
+      "expected": null
+    },
+    {
+      "name": "ponto no fim é texto",
+      "value": "5.",
+      "expected": null
+    },
+    {
+      "name": "sinal de mais é texto",
+      "value": "+1",
+      "expected": null
+    },
+    {
+      "name": "vírgula é texto",
+      "value": "1,5",
+      "expected": null
+    },
+    {
+      "name": "espaço é texto",
+      "value": " 1",
+      "expected": null
+    },
+    {
+      "name": "NaN é texto",
+      "value": "NaN",
+      "expected": null
+    },
+    {
+      "name": "Infinity é texto",
+      "value": "Infinity",
+      "expected": null
+    },
+    {
+      "name": "quebra de linha no fim é texto",
+      "value": "12\n",
+      "expected": null
+    },
+    {
+      "name": "acima do maior do Excel é texto",
+      "value": "1e308",
+      "expected": null
+    },
+    {
+      "name": "o maior do Excel",
+      "value": "9.99999999999999e307",
+      "expected": "9.99999999999999e+307"
+    },
+    {
+      "name": "infinito é texto",
+      "value": "1e400",
+      "expected": null
+    },
+    {
+      "name": "infinito negativo é texto",
+      "value": "-1e400",
+      "expected": null
+    },
+    {
+      "name": "abaixo do menor normal é texto",
+      "value": "1e-308",
+      "expected": null
+    },
+    {
+      "name": "logo acima do menor normal",
+      "value": "3e-308",
+      "expected": "3e-308"
+    },
+    {
+      "name": "o que vira zero é texto",
+      "value": "1e-400",
+      "expected": null
+    },
+    {
+      "name": "zero com expoente enorme é zero",
+      "value": "0e400",
+      "expected": "0"
+    },
+    {
+      "name": "17 dígitos é texto",
+      "value": "2.2250738585072014e-308",
+      "expected": null
+    }
+  ]
+}

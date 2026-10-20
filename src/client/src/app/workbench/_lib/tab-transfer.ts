@@ -40,13 +40,15 @@ function resultOf(state: RunnerState): TransferredResult | null | undefined {
       return undefined;
     case "rows": {
       if (state.loadingMore || state.counting) return undefined;
-      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows, filterApplied } = state;
+      const { status, id, target, columns, rows, truncated, hasMore, totalRows, elapsedMs, pages, cursorClosed, total, resultId, readOnly, generated, sourceRows, filterApplied, read } = state;
       return {
         ...{ status, id, target, columns, rows, hasMore, totalRows, elapsedMs, pages, cursorClosed, total },
         ...(resultId === undefined ? {} : { resultId }),
         ...(readOnly === undefined ? {} : { readOnly }),
         // RN-GRADE-011: como o filtro do resultado entrou; o filtro viaja no `target`, e "Executar de novo" na outra janela o repete.
         ...(filterApplied === undefined || filterApplied === null ? {} : { filterApplied }),
+        // RN-EXPORT-002: o "Exportar…" do resultado continua valendo na outra janela.
+        ...(read === undefined || read === null ? {} : { read }),
         truncated: pairsOf(truncated),
         // RN-EDIT-009: as colunas que o banco preencheu nas linhas novas que a aba de consulta salvou.
         ...(generated === undefined || generated.size === 0 ? {} : { generated: pairsOf(generated) }),
@@ -78,7 +80,19 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
       sessionId,
       sql: editor?.sql ?? tab.sql,
       ...(table === undefined ? {} : { table }),
-      ...(script === undefined ? {} : { script: { id: script.id, name: script.name, savedSql: script.savedSql, ...(script.savedDatabase === undefined ? {} : { savedDatabase: script.savedDatabase }) } }),
+      ...(script === undefined
+        ? {}
+        : {
+            script: {
+              id: script.id,
+              name: script.name,
+              savedSql: script.savedSql,
+              ...(script.generic === true ? { generic: true as const } : {}),
+              ...(script.savedConnectionId === undefined ? {} : { savedConnectionId: script.savedConnectionId }),
+              ...(script.savedDatabase === undefined ? {} : { savedDatabase: script.savedDatabase }),
+              ...(script.folderId === undefined ? {} : { folderId: script.folderId }),
+            },
+          }),
     },
     editor: editor === null ? null : { anchor: editor.anchor, head: editor.head },
     result,
@@ -110,8 +124,8 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
     sessionId: tab.sessionId,
     sql: tab.sql,
     ...(tab.table === undefined ? {} : { table: tab.table }),
-    // RN-SCRIPT-001: o ponto da faixa é o texto que chegou e o banco da aba contra o que foi salvo (RN-ARVORE-007: a aba pode ter trocado de banco).
-    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab.database) } }),
+    // RN-SCRIPT-003: o ponto da faixa é o texto que chegou e o lugar da aba contra o que foi salvo (a aba pode ter trocado de conexão ou de banco).
+    ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab) } }),
   };
   const restored: TransferMemory = memory;
 

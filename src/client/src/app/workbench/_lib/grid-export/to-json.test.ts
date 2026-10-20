@@ -1,19 +1,53 @@
 import { describe, expect, it } from "vitest";
 
-import { column, hostile, hostileValues, sliceOf } from "./test-fixtures";
-import { jsonKeys, toJson } from "./to-json";
+import type { GridSlice } from "./grid-slice";
+import { column, documentOf, hostile, hostileValues, sliceDocument, sliceOf } from "./test-fixtures";
+import { isoDateTime, jsonKeys } from "./to-json";
+
+/** A lista de objetos sem o nome da origem e sem as datas em ISO, sem a quebra de linha do fim: o que a biblioteca escrevia antes da seção 37. */
+const toJson = (slice: GridSlice) => sliceDocument("json", slice, { wrap: false, isoDates: false }).text.slice(0, -1);
 
 const jsonOf = (kind: "number" | "boolean" | "text" | "datetime" | "binary", value: string | null, truncated = false) =>
   toJson(sliceOf([column("v", kind)], [[value]], { truncated: truncated ? [[0, 0]] : [] })).replace(/^\[\n {2}\{\n {4}"v": /, "").replace(/\n {2}\}\n\]$/, "");
 
-describe("toJson: uma lista de objetos, com recuo de 2 espaços", () => {
-  it("recorte vazio é a lista vazia, com colunas ou sem elas", () => {
-    expect(toJson(sliceOf([], []))).toBe("[]");
-    expect(toJson(sliceOf([column("a")], []))).toBe("[]");
+describe("o JSON (RN-EXPORT-010): o nome da origem, as datas em ISO 8601 e o fim", () => {
+  it("com o nome da origem, como o DBeaver, a lista vai um nível para dentro; sem linhas, a lista vazia", () => {
+    expect(documentOf("json", [column("id", "number")], [["1"]]).text).toBe('{\n  "pedido": [\n    {\n      "id": 1\n    }\n  ]\n}\n');
+    expect(documentOf("json", [column("id", "number")], []).text).toBe('{\n  "pedido": []\n}\n');
+    expect(documentOf("json", [column("id", "number")], [], { wrap: false }).text).toBe("[]\n");
   });
 
-  it("sem colunas, cada linha é um objeto vazio", () => {
-    expect(toJson(sliceOf([], [[], []]))).toBe("[\n  {},\n  {}\n]");
+  it("o nome da origem é a chave, escrita como o JSON.stringify escreve", () => {
+    const { text } = documentOf("json", [column("a")], [["x"]], {}, { sourceName: 'pe"dido\n' });
+
+    expect(JSON.parse(text)).toEqual({ 'pe"dido\n': [{ a: "x" }] });
+  });
+
+  it("com as datas em ISO 8601, só a coluna de data e hora ganha o T e o fuso inteiro; sem, sai como a grade", () => {
+    const columns = [column("d", "datetime"), column("t")];
+    const rows = [["2024-01-15 10:30:00+00", "2024-01-15 10:30:00+00"]];
+
+    expect(JSON.parse(documentOf("json", columns, rows, { wrap: false }).text)).toEqual([{ d: "2024-01-15T10:30:00+00:00", t: "2024-01-15 10:30:00+00" }]);
+    expect(JSON.parse(documentOf("json", columns, rows, { wrap: false, isoDates: false }).text)).toEqual([{ d: "2024-01-15 10:30:00+00", t: "2024-01-15 10:30:00+00" }]);
+  });
+
+  it("isoDateTime: o T no lugar do espaço, o fuso de horas com os minutos, e o resto como está", () => {
+    expect(isoDateTime("2024-01-15 10:30:00.000000")).toBe("2024-01-15T10:30:00.000000");
+    expect(isoDateTime("2024-01-15 10:30:00-03")).toBe("2024-01-15T10:30:00-03:00");
+    expect(isoDateTime("2024-01-15 10:30:00+05:30")).toBe("2024-01-15T10:30:00+05:30");
+    expect(isoDateTime("2024-01-15")).toBe("2024-01-15");
+    expect(isoDateTime("2024-01-15 10:30:00\n")).toBe("2024-01-15 10:30:00\n");
+  });
+
+  it("o binário em hexadecimal, inteiro, ou nulo com \"Deixar vazio\"", () => {
+    expect(documentOf("json", [column("f", "binary")], [["0xDEAD"]], { wrap: false }).text).toContain('"f": "0xDEAD"');
+    expect(documentOf("json", [column("f", "binary")], [["0xDEAD"]], { wrap: false, binary: "null" }).text).toContain('"f": null');
+  });
+});
+
+describe("o JSON: uma lista de objetos, com recuo de 2 espaços", () => {
+  it("recorte sem linhas é a lista vazia", () => {
+    expect(toJson(sliceOf([column("a")], []))).toBe("[]");
   });
 
   it("uma célula só", () => {
@@ -49,7 +83,7 @@ describe("toJson: uma lista de objetos, com recuo de 2 espaços", () => {
   });
 });
 
-describe("toJson: o número sai literal quando o texto é um número na gramática do JSON", () => {
+describe("o JSON: o número sai literal quando o texto é um número na gramática do JSON", () => {
   // O que vai para o arquivo é o PRÓPRIO texto, sem passar por `Number`: quem perde precisão, se perder, é o programa que lê.
   it.each([
     "42",
@@ -162,7 +196,7 @@ describe("toJson: o número sai literal quando o texto é um número na gramáti
   });
 });
 
-describe("toJson: o booleano e o nulo", () => {
+describe("o JSON: o booleano e o nulo", () => {
   it("true e false, exatamente como a API manda, na coluna booleana", () => {
     expect(jsonOf("boolean", "true")).toBe("true");
     expect(jsonOf("boolean", "false")).toBe("false");
@@ -204,7 +238,7 @@ describe("jsonKeys: o nome repetido ganha sufixo", () => {
   });
 });
 
-describe("toJson: nome de coluna hostil", () => {
+describe("o JSON: nome de coluna hostil", () => {
   it("aspas, barra, quebra de linha, controle e o nome do protótipo viram chave de verdade, na ordem das colunas", () => {
     const names = ['a"b', "c\\d", "e\nf", "g\th", "__proto__", "constructor", "toString", "10", "2", "zz", ""];
     const text = toJson(sliceOf(names.map((name) => column(name)), [names.map((_, index) => `v${index}`)]));

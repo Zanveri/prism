@@ -76,13 +76,14 @@ export const recordsCopy = {
     // O menu de contexto da célula.
     menu: {
       label: "Ações da célula",
-      copyValue: "Copiar valor",
       paste: "Colar",
-      // Os rótulos da RN-EDIT-001.
+      // Os rótulos da RN-EDIT-001 (seção 33: "Linha nova" passou a se chamar "Adicionar linha"; as marcas da linha nova na grade continuam).
       edit: "Editar célula",
       setNull: "Definir como nulo",
       undo: "Desfazer alteração",
-      newRow: "Linha nova",
+      newRow: "Adicionar linha",
+      // RN-EDIT-016.
+      duplicateRow: "Duplicar linha",
       deleteRow: "Excluir linha",
       // RN-GRADE-012: o "Atualizar" da grade (F5), que lê de novo os Registros ou executa de novo o comando do resultado, com o filtro.
       refresh: "Atualizar",
@@ -93,6 +94,34 @@ export const recordsCopy = {
       // RN-SQL-017: a célula cortada é copiada inteira; esta é a que a API não tinha inteira (passou do teto, ou o resultado mudou).
       copiedCut: (count: number) => (count === 1 ? "Copiado, mas 1 valor não pôde vir inteiro e foi cortado." : `Copiado, mas ${formatCount(count, "valor", "valores")} não puderam vir inteiros e foram cortados.`),
     },
+    // RN-EDIT-015: os atalhos da edição como o menu da célula (e a barra de edição) os escrevem. No macOS o Option faz o papel do Alt e o Cmd o do Ctrl.
+    shortcuts: {
+      edit: "F2",
+      newRow: "Alt+Insert",
+      newRowMac: "Option+Insert",
+      duplicateRow: "Ctrl+Alt+Insert",
+      duplicateRowMac: "Cmd+Option+Insert",
+      deleteRow: "Alt+Delete",
+      deleteRowMac: "Option+Delete",
+    },
+    // RN-EDIT-013 e 014: a barra de edição, como a de baixo do resultado do DBeaver. A dica é a do botão com o atalho e, desabilitado, o motivo; os três
+    // da falta de célula ou de linha não são de só leitura e vêm sozinhos.
+    bar: {
+      label: "Edição da grade",
+      title: (label: string, shortcut: string) => `${label} (${shortcut})`,
+      disabledTitle: (title: string, reason: string) => `${title}. ${reason}`,
+      chooseCell: "Escolha uma célula na grade.",
+      chooseRow: "Escolha uma linha na grade.",
+      noRows: "O resultado não tem linhas.",
+    },
+    // RN-EDIT-016: o que a faixa diz depois de "Duplicar linha", e por que a linha não foi duplicada.
+    duplicate: {
+      keyCopied: (table: string, columns: readonly string[]) => `A linha duplicada copiou a chave de ${table} (${columns.join(", ")}): troque-a antes de salvar, ou o banco vai recusar a linha repetida.`,
+      notCopied: (columns: readonly string[]) => (columns.length === 1 ? `Não copiada (fica com o padrão da tabela): ${columns[0]}.` : `Não copiadas (ficam com o padrão da tabela): ${columns.join(", ")}.`),
+      // Nos Registros não há comando a executar de novo: quem lê de novo é "Atualizar".
+      fullValueMissing: (column: string, subject: "table" | "result") => `A linha não foi duplicada: o valor completo de ${column} não pôde vir. ${subject === "table" ? "Atualize os registros para duplicá-la." : "Execute o comando de novo para duplicá-la."}`,
+      fetchCancelled: "A linha não foi duplicada: a busca dos valores completos foi cancelada.",
+    },
     // RN-SQL-017: enquanto copiar ou exportar busca na API o valor completo das células cortadas.
     fullValues: { fetching: "Buscando os valores completos…", cancel: "Cancelar" },
     // Por que uma célula ou uma linha não se edita (além dos motivos que a API manda).
@@ -100,14 +129,20 @@ export const recordsCopy = {
       truncated: "o valor chegou cortado",
       keyTruncated: "a chave desta linha chegou cortada",
       deleted: "a linha está marcada para exclusão",
+      // RN-EDIT-014: "Excluir linha" na linha que já está riscada.
+      alreadyDeleted: "a linha já está marcada para exclusão; Desfazer alteração a devolve",
       noRowOperations: "este resultado não aceita linha nova nem exclusão",
       // RN-EDIT-002: num resultado de junção só se alteram células, e a tabela que não tem linha ali (junção externa) não se edita.
       joinRowOperations: "num resultado de junção só se alteram células",
       noRowHere: (table: string) => `${table} não tem linha aqui (junção externa)`,
       busy: "há um comando em andamento na aba",
+      // RN-GRADE-014: a atualização automática está trazendo as linhas de novo; a edição começaria sobre linhas que vão sair da tela.
+      refreshing: "a atualização automática está lendo as linhas de novo; tente outra vez em um instante",
       // RN-EDIT-009: a linha nova salva na aba de consulta, que não executa de novo.
       generated: "o valor foi gerado pelo banco; execute de novo para vê-lo",
       keyGenerated: "a chave desta linha foi gerada pelo banco; execute de novo para editá-la",
+      // RN-PROT-002: o mesmo motivo que a página do resultado traz numa conexão somente leitura (`editable.reason`).
+      connectionReadOnly: "a conexão é somente leitura",
     },
     // RN-EDIT-009: a coluna da linha nova salva que a pessoa não preencheu, na aba de consulta.
     generated: "gerado pelo banco — execute de novo para ver",

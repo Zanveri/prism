@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Driver } from "@/app/drivers/_lib/drivers.schema";
 import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 
-import type { Connection, Folder } from "../_lib/connections.schema";
+import { connectionsCopy } from "../_lib/connections.copy";
+import { newVerification, unprotected, type Connection, type Folder } from "../_lib/connections.schema";
 import { ConnectionDialog, type ConnectionDialogRequest } from "./connection-dialog";
 
 // O `Dialog` de verdade desenha num portal em `document.body`, que o renderizador de servidor não tem: aqui ele só devolve o que receberia
@@ -20,8 +21,8 @@ vi.mock("@/components/ui", async (importOriginal) => ({ ...(await importOriginal
 vi.mock("@/app/_components/api-gate", () => ({ useApiRestart: () => async () => {} }));
 
 const now = "2026-10-12T12:00:00Z";
-const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, createdAt: now, updatedAt: now };
-const mes: Connection = { id: "7d2f9a10-aaaa-4bbb-8ccc-000000000001", folderID: fabrica.id, name: "MES Produção", engine: 2, host: "srv-db2", port: 50000, database: "MES", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", createdAt: now, updatedAt: now };
+const fabrica: Folder = { id: "7d2f9a10-aaaa-4bbb-8ccc-0000000000f1", parentID: null, name: "Fábrica", environmentName: null, environmentColor: null, color: null, confirmCommands: null, readOnly: false, protections: unprotected, createdAt: now, updatedAt: now };
+const mes: Connection = { id: "7d2f9a10-aaaa-4bbb-8ccc-000000000001", folderID: fabrica.id, name: "MES Produção", engine: 2, host: "srv-db2", port: 50000, database: "MES", userName: "mes", hasPassword: true, environmentName: "Produção", environmentColor: "#FF8A7A", confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 const license = { name: "Licença", url: "https://exemplo.local/licenca" };
 const catalog: Driver[] = [
   { id: "postgresql", name: "PostgreSQL", vendor: "Npgsql", engines: [1], state: "bundled", version: "10.0.3", sizeBytes: null, license: null, platformNote: null, progress: null, error: null, restartRequired: false },
@@ -29,10 +30,10 @@ const catalog: Driver[] = [
   { id: "sqlite", name: "SQLite", vendor: "SQLite", engines: [], state: "comingSoon", version: null, sizeBytes: null, license: null, platformNote: null, progress: null, error: null, restartRequired: false },
 ];
 
-function render(request: ConnectionDialogRequest) {
+function render(request: ConnectionDialogRequest, folders: Folder[] = [fabrica]) {
   const client = new QueryClient();
   client.setQueryData(driversQuery.queryKey, catalog);
-  const dialog = createElement(ConnectionDialog, { request, folders: [fabrica], openTabs: () => 0, onClose: () => {}, onSaved: () => {} });
+  const dialog = createElement(ConnectionDialog, { request, folders, openTabs: () => 0, onClose: () => {}, onSaved: () => {} });
   return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(MemoryRouter, null, dialog)));
 }
 
@@ -82,6 +83,18 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     expect(footerButtons(markup)).toEqual(["Voltar", "Excluir", "Testar conexão", "Cancelar", "Salvar"]);
   });
 
+  it("a conexão que chegou sem usuário e senha (RN-TRANSF-016): a frase no topo, e o campo da senha não diz “Deixe vazio para manter”", () => {
+    const markup = render({ mode: "edit", connection: { ...mes, userName: "", hasPassword: false } });
+
+    expect(markup).toContain("Esta conexão chegou sem usuário e senha. Preencha para conectar.");
+    expect(markup).not.toContain("Deixe vazio para manter");
+  });
+
+  it("com o usuário e sem a senha, a frase diz que falta a senha; com os dois, nada", () => {
+    expect(render({ mode: "edit", connection: { ...mes, hasPassword: false } })).toContain("Esta conexão chegou sem a senha. Preencha para conectar.");
+    expect(render({ mode: "edit", connection: mes })).not.toContain("Preencha para conectar.");
+  });
+
   it("o driver do banco escolhido falta: o passo das configurações diz ali mesmo, com 'Instalar driver' (RN-NAV-005)", () => {
     const markup = render({ mode: "edit", connection: mes });
 
@@ -97,5 +110,46 @@ describe("o diálogo de conexão sobre a área de trabalho (RN-NAV-004 e 005)", 
     const save = /<button [^>]*>Salvar<\/button>/.exec(markup)?.[0] ?? "";
     expect(save).toContain('type="submit"');
     expect(save).toContain(`form="${formId}"`);
+  });
+
+  it("as Proteções (RN-PROT-001 e 002) vêm depois do Ambiente, com as escolhas próprias da conexão nos campos escondidos", () => {
+    const markup = render({ mode: "edit", connection: { ...mes, confirmCommands: "irreversible", readOnly: true } });
+
+    expect(markup.indexOf('id="cx-environment-title"')).toBeLessThan(markup.indexOf('id="cx-protections-title"'));
+    expect(markup).toContain('<input type="hidden" name="confirmCommands" value="irreversible"/>');
+    expect(markup).toContain('<input type="hidden" name="readOnly" value="true"/>');
+    expect(markup).toMatch(/<input id="cx-read-only" type="checkbox"(?=[^>]*checked="")/);
+    expect(markup).toContain(connectionsCopy.protections.readOnly.connectionHint);
+  });
+
+  it("a Sessão da conexão (RN-VERIF-001) vem logo depois dos campos e antes do Ambiente, como na leitura do canvas, com a verificação gravada", () => {
+    const markup = render({ mode: "edit", connection: { ...mes, verificationEnabled: false, verificationInterval: 120, verificationQuery: "SELECT COUNT(*) FROM SYSCAT.TABLES" } });
+
+    expect(markup.indexOf('id="cx-password"')).toBeLessThan(markup.indexOf('id="cx-session-title"'));
+    expect(markup.indexOf('id="cx-session-title"')).toBeLessThan(markup.indexOf('id="cx-environment-title"'));
+    expect(markup).toContain('<input type="hidden" name="verificationEnabled" value="false"/>');
+    expect(markup).toMatch(/<input id="cx-verification-interval"[^>]*name="verificationInterval" value="120"/);
+    expect(markup).toMatch(/<textarea id="cx-verification-query" name="verificationQuery"[^>]*placeholder="SELECT 1 FROM SYSIBM.SYSDUMMY1"[^>]*>SELECT COUNT\(\*\) FROM SYSCAT.TABLES<\/textarea>/);
+    expect(markup).not.toContain("Encerrar a conexão");
+  });
+
+  it("a conexão nova nasce verificando a cada 30 segundos, com a consulta do banco", () => {
+    const markup = render({ mode: "new", folderID: null });
+
+    expect(markup).toContain('<input type="hidden" name="verificationEnabled" value="true"/>');
+    expect(markup).toMatch(/<input id="cx-verify" type="checkbox"(?=[^>]*checked="")/);
+    expect(markup).toMatch(/<input id="cx-verification-interval"[^>]*name="verificationInterval" value="30"/);
+  });
+
+  it("na pasta que impõe as proteções, elas aparecem marcadas e desabilitadas, com “Herdado da pasta Fábrica”, e a nova conexão nasce sem as próprias (RN-PROT-004)", () => {
+    const protegida: Folder = { ...fabrica, readOnly: true, confirmCommands: "all", protections: { readOnly: true, readOnlyFolderID: null, confirmCommands: "all", confirmCommandsFolderID: null } };
+    const markup = render({ mode: "new", folderID: protegida.id }, [protegida]);
+
+    expect(markup).toMatch(/<input id="cx-read-only" type="checkbox"(?=[^>]*checked="")(?=[^>]*disabled="")/);
+    expect(markup).toMatch(/<input type="radio"(?=[^>]*checked="")[^>]*value="all"/);
+    expect(markup).toMatch(/<input type="radio"(?=[^>]*disabled="")[^>]*value="irreversible"/);
+    expect(markup).toContain(connectionsCopy.protections.inheritedFrom("Fábrica"));
+    expect(markup).toContain('<input type="hidden" name="confirmCommands" value="none"/>');
+    expect(markup).toContain('<input type="hidden" name="readOnly" value="false"/>');
   });
 });

@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 
-import { measureElement, observeElementOffset, Virtualizer } from "@tanstack/react-virtual";
+import { measureElement, observeElementOffset, Virtualizer, type VirtualizerOptions } from "@tanstack/react-virtual";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { measureRendered, observeRenderedOffset } from "./row-measure";
+import { measureRendered, observeRenderedOffset, remeasureRendered } from "./row-measure";
 
 const rowHeight = 30;
 const upTo = (last: number) => Array.from({ length: last + 1 }, (_, index) => index);
@@ -346,6 +346,130 @@ describe("a lista virtual rolada e escondida logo depois: a rolagem lida sem cai
   });
 });
 
+/** A altura da linha comum em cada densidade do navegador (RN-NAV-011), e a da linha de erro, que vem da mensagem e do botão e é a mesma nas duas. */
+const densityRow = { comfortable: 30, compact: 22 } as const;
+const errorRow = 70;
+
+/**
+ * A árvore do navegador com uma linha de erro (a de índice 2) e a troca da densidade com as linhas à mostra (feita noutra janela), na ordem em que o React
+ * e o Chromium fazem: a renderização desenha as linhas com a altura nova e troca a estimativa (`setOptions`); o efeito de layout roda (`forget`) ANTES de a
+ * lista se redesenhar, porque o aviso de mudança do virtualizador só pede outra renderização e não recalcula nada; e o `ResizeObserver` avisa só as linhas
+ * cuja caixa mudou. `hidden` é o contêiner escondido por `display: none` (a área de trabalho por baixo de Configurações): as caixas medem zero.
+ */
+function mountDensityTree(count: number, forget: (virtualizer: Virtualizer<Element, Element>) => void) {
+  let density: keyof typeof densityRow = "comfortable";
+  let hidden = false;
+  const heightOf = (index: number) => (hidden ? 0 : index === 2 ? errorRow : densityRow[density]);
+  const options = (): VirtualizerOptions<Element, Element> => ({
+    count,
+    estimateSize: () => densityRow[density],
+    overscan: 12,
+    measureElement: measureRendered,
+    getScrollElement: () => ({}) as Element,
+    observeElementRect: (_, report) => report({ width: 320, height: 747 }),
+    observeElementOffset: () => {},
+    scrollToFn: () => {},
+    onChange: () => {},
+  });
+  const virtualizer = new Virtualizer<Element, Element>(options());
+  virtualizer._willUpdate();
+
+  const rows = new Map<number, Element>();
+  const row = (index: number) => {
+    const element = rows.get(index) ?? ({ getAttribute: () => String(index), isConnected: true, get offsetHeight() { return heightOf(index); } } as unknown as Element);
+    rows.set(index, element);
+    return element;
+  };
+  const box = (index: number) => ({ borderBoxSize: [{ blockSize: heightOf(index), inlineSize: hidden ? 0 : 320 }] }) as unknown as ResizeObserverEntry;
+  // Montar: o `ref` de cada linha desenhada a mede.
+  for (const item of virtualizer.getVirtualItems()) virtualizer.measureElement(row(item.index));
+
+  return {
+    virtualizer,
+    /** Onde cada linha desenhada começa e quanto mede, como a lista as põe na tela. */
+    layout: () => virtualizer.getVirtualItems().map(({ index, start, size }) => ({ index, start, size })),
+    switchTo(next: keyof typeof densityRow) {
+      const drawn = virtualizer.getVirtualItems().map((item) => item.index);
+      const before = drawn.map(heightOf);
+      density = next;
+      virtualizer.setOptions(options());
+      forget(virtualizer);
+      drawn.forEach((index, at) => {
+        if (heightOf(index) !== before[at]) virtualizer.resizeItem(index, measureRendered(row(index), box(index), virtualizer));
+      });
+    },
+    hide() {
+      hidden = true;
+    },
+  };
+}
+
+describe("a troca da densidade do navegador com a árvore à mostra (RN-NAV-011): a linha de erro continua com a altura dela", () => {
+  const comfortable = [
+    { index: 0, start: 0, size: 30 },
+    { index: 1, start: 30, size: 30 },
+    { index: 2, start: 60, size: errorRow },
+    { index: 3, start: 130, size: 30 },
+    { index: 4, start: 160, size: 30 },
+  ];
+
+  it("de confortável para compacta: as linhas comuns passam a 22 px, a de erro fica com os 70 dela, e a linha de baixo começa onde ela acaba", () => {
+    const tree = mountDensityTree(5, remeasureRendered);
+    expect(tree.layout()).toEqual(comfortable);
+
+    tree.switchTo("compact");
+
+    expect(tree.layout()).toEqual([
+      { index: 0, start: 0, size: 22 },
+      { index: 1, start: 22, size: 22 },
+      { index: 2, start: 44, size: errorRow },
+      { index: 3, start: 114, size: 22 },
+      { index: 4, start: 136, size: 22 },
+    ]);
+    expect(tree.virtualizer.getTotalSize()).toBe(4 * 22 + errorRow);
+  });
+
+  it("e de volta: a confortável fica como era antes da troca", () => {
+    const tree = mountDensityTree(5, remeasureRendered);
+    tree.switchTo("compact");
+
+    tree.switchTo("comfortable");
+
+    expect(tree.layout()).toEqual(comfortable);
+  });
+
+  it("a linha sem caixa (a lista escondida) não mede zero: fica com a estimativa da densidade nova", () => {
+    const tree = mountDensityTree(5, remeasureRendered);
+    tree.hide();
+
+    tree.switchTo("compact");
+
+    expect(tree.layout().map(({ size }) => size)).toEqual([22, 22, 22, 22, 22]);
+  });
+
+  it("a causa: só esquecer as medidas (`measure()`) deixa a linha de erro com a estimativa, porque a caixa dela não muda e o observador não a mede de novo; a linha de baixo começa 48 px antes do fim dela", () => {
+    const tree = mountDensityTree(5, (virtualizer) => virtualizer.measure());
+
+    tree.switchTo("compact");
+
+    const [, , error, below] = tree.layout();
+    expect(error).toEqual({ index: 2, start: 44, size: 22 });
+    expect(below.start).toBe(66);
+    expect(error.start + errorRow - below.start).toBe(48);
+  });
+
+  it("e medir de novo logo depois de esquecer, sem refazer as posições antes, também não basta: a medida da linha de erro é igual à posição guardada, e não é gravada", () => {
+    const tree = mountDensityTree(5, (virtualizer) => {
+      virtualizer.measure();
+      for (const element of virtualizer.elementsCache.values()) virtualizer.measureElement(element);
+    });
+
+    tree.switchTo("compact");
+
+    expect(tree.layout()[2]).toEqual({ index: 2, start: 44, size: 22 });
+  });
+});
+
 describe("a regra que evita repetir o E2", () => {
   /** Os componentes de `src/`: é onde uma lista virtual pode existir. */
   function componentFiles(directory: URL): URL[] {
@@ -375,6 +499,20 @@ describe("a regra que evita repetir o E2", () => {
     expect(measuresRows("const virtualizer = useVirtualizer({ count, measureElement: measureRendered });")).toBe(false);
     expect(measuresRows("// As linhas não são medidas: não há `measureElement` aqui.")).toBe(false);
     expect(measuresRows('import { measureElement } from "@tanstack/react-virtual";')).toBe(false);
+  });
+
+  it("a lista que mede as linhas não esquece as medidas só com `measure()`: usa `remeasureRendered`, que mede de novo as desenhadas (a de erro, RN-NAV-011); a grade, que não mede, usa `measure()`", () => {
+    const measuring = components().filter(({ source }) => measuresRows(source));
+
+    expect(measuring.filter(({ source }) => /\.measure\(\)/.test(source)).map(({ file }) => file)).toEqual([]);
+    expect(measuring.find(({ file }) => file === "app/workbench/_components/navigator.tsx")?.source).toMatch(/\bremeasureRendered\(virtualizer\)/);
+  });
+
+  it("a árvore estima cada linha pela densidade escolhida (a altura que `navigatorMetrics` dá a ela, RN-NAV-011)", () => {
+    const navigator = components().find(({ file }) => file === "app/workbench/_components/navigator.tsx")?.source ?? "";
+
+    expect(navigator).toMatch(/const rowHeight = navigatorMetrics\[density\]\.rowHeight;/);
+    expect(virtualizerCalls(navigator)).toEqual([expect.stringContaining("estimateSize: () => rowHeight")]);
   });
 
   it("todo virtualizador (`useVirtualizer(…)`) observa a rolagem por `observeRenderedOffset`: a árvore e as duas direções da grade", () => {

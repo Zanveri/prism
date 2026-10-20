@@ -84,6 +84,15 @@ describe("o diálogo de versão nova (RN-ATUALIZA-003)", () => {
     expect(render({ status: "available", ...offer, format: "deb" })).toContain("deixa-o na sua pasta de downloads");
   });
 
+  it("com exportações em andamento, a frase delas entra no aviso da instalação que encerra o Prism (RN-EXPORT-023); na que é da pessoa, não", () => {
+    const note = { exportsNote: "As 2 exportações em andamento serão canceladas." };
+
+    expect(render({ status: "available", ...offer }, note)).toContain("O texto das abas de SQL abertas não é salvo. As 2 exportações em andamento serão canceladas.");
+    expect(render({ status: "ready", ...offer }, note)).toContain("abrir de novo. As 2 exportações em andamento serão canceladas.");
+    expect(render({ status: "available", ...offer, format: "deb" }, note)).not.toContain("exportações");
+    expect(render({ status: "available", ...offer })).not.toContain("exportações");
+  });
+
   it("instalado para todos os usuários: avisa que o Windows vai pedir a permissão de administrador, e o que acontece sem ela (RN-INSTALA-003)", () => {
     const forAll = render({ status: "available", ...offer, forAllUsers: true });
 

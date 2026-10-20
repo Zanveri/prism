@@ -1,0 +1,114 @@
+{
+  "rule": "RN-EXPORT-011: o literal do binário. Na tela, binaryLiteral (script-literal.ts); na API, ExportText.BinaryLiteral. No Db2 a forma vem do tipo da coluna: BX'…' no BINARY e no VARBINARY (o X'…' é um texto, que o Db2 recusa nessas colunas com SQL0408N), BLOB(X'…') no BLOB e X'…' no texto FOR BIT DATA.",
+  "notes": [
+    "bytes são os dígitos hexadecimais do valor; type é o tipo da coluna como o driver o diz (GetDataTypeName; o driver da IBM chama o texto binário de \"VARCHAR () FOR BIT DATA\" e \"CHAR () FOR BIT DATA\"). O corte em pedaços de 16.336 bytes do Db2 está nos testes do escritor.",
+    "expected null é: o banco não tem literal para binário, e a linha sai como comentário."
+  ],
+  "cases": [
+    {
+      "name": "PostgreSQL",
+      "engine": "postgresql",
+      "type": "bytea",
+      "bytes": "DEADBEEF",
+      "expected": "decode('DEADBEEF', 'hex')"
+    },
+    {
+      "name": "PostgreSQL em maiúsculas",
+      "engine": "postgresql",
+      "type": "bytea",
+      "bytes": "00ff10",
+      "expected": "decode('00FF10', 'hex')"
+    },
+    {
+      "name": "PostgreSQL vazio",
+      "engine": "postgresql",
+      "type": "bytea",
+      "bytes": "",
+      "expected": "decode('', 'hex')"
+    },
+    {
+      "name": "Db2 VARBINARY",
+      "engine": "db2",
+      "type": "VARBINARY",
+      "bytes": "DEADBEEF",
+      "expected": "BX'DEADBEEF'"
+    },
+    {
+      "name": "Db2 BINARY",
+      "engine": "db2",
+      "type": "BINARY",
+      "bytes": "00FF10",
+      "expected": "BX'00FF10'"
+    },
+    {
+      "name": "Db2 varbinary em minúsculas e com espaço",
+      "engine": "db2",
+      "type": " varbinary ",
+      "bytes": "CAFE",
+      "expected": "BX'CAFE'"
+    },
+    {
+      "name": "Db2 BLOB",
+      "engine": "db2",
+      "type": "BLOB",
+      "bytes": "DEADBEEF",
+      "expected": "BLOB(X'DEADBEEF')"
+    },
+    {
+      "name": "Db2 blob em minúsculas",
+      "engine": "db2",
+      "type": "blob",
+      "bytes": "CAFE",
+      "expected": "BLOB(X'CAFE')"
+    },
+    {
+      "name": "Db2 VARCHAR FOR BIT DATA",
+      "engine": "db2",
+      "type": "VARCHAR () FOR BIT DATA",
+      "bytes": "DEADBEEF",
+      "expected": "X'DEADBEEF'"
+    },
+    {
+      "name": "Db2 CHAR FOR BIT DATA",
+      "engine": "db2",
+      "type": "CHAR () FOR BIT DATA",
+      "bytes": "00FF",
+      "expected": "X'00FF'"
+    },
+    {
+      "name": "Db2 LONG VARCHAR FOR BIT DATA",
+      "engine": "db2",
+      "type": "LONG VARCHAR FOR BIT DATA",
+      "bytes": "CAFE",
+      "expected": "X'CAFE'"
+    },
+    {
+      "name": "Db2 VARBINARY vazio",
+      "engine": "db2",
+      "type": "VARBINARY",
+      "bytes": "",
+      "expected": "BX''"
+    },
+    {
+      "name": "Db2 BLOB vazio",
+      "engine": "db2",
+      "type": "BLOB",
+      "bytes": "",
+      "expected": "BLOB(X'')"
+    },
+    {
+      "name": "Db2 VARCHAR FOR BIT DATA vazio",
+      "engine": "db2",
+      "type": "VARCHAR () FOR BIT DATA",
+      "bytes": "",
+      "expected": "X''"
+    },
+    {
+      "name": "Informix não tem literal",
+      "engine": "informix",
+      "type": "BYTE",
+      "bytes": "DEADBEEF",
+      "expected": null
+    }
+  ]
+}

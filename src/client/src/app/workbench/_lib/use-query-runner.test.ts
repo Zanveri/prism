@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/query-client";
 
 import { queryOutcomeCopy } from "./query-outcome.copy";
+import { platformScriptShortcut } from "./script-run";
 import { scriptsCopy } from "./scripts.copy";
 import { countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { createQueryRunner, isBusyState, type RunnerState } from "./use-query-runner";
+import { credentialsRequests } from "./credentials-missing";
 import { workbenchCopy } from "./workbench.copy";
 
 // As rotas de verdade, embrulhadas: os testes da rede de segurança fazem uma delas lançar um erro qualquer.
@@ -295,8 +297,10 @@ describe("uma execução leva um comando só (RN-SQL-001)", () => {
     await runner.run({ sql: "update t set a = 1;\ndelete from t;\nselect 3;", offset: 0 });
 
     expect(api.calls).toEqual([]);
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
-    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements);
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements(platformScriptShortcut));
+    // Os dois ensinam o script, que executa todos (RN-SQL-019).
+    expect(copy.tooManyStatements("Alt+X")).toBe("A seleção tem mais de um comando. Nada foi executado: para executar todos, use Executar script (Alt+X).");
   });
 
   it("seleção com um comando só vai como está, com o `;` e o comentário que vieram juntos (RN-SQL-003)", async () => {
@@ -329,7 +333,7 @@ describe("uma execução leva um comando só (RN-SQL-001)", () => {
     await runner.run({ sql, offset: 0, engine: 3 });
 
     expect(api.calls).toEqual([]);
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
   });
 });
 
@@ -469,6 +473,35 @@ describe("falhas que não são do comando", () => {
     expect(onSession).not.toHaveBeenCalled();
   });
 
+  it("a conexão sem usuário ou sem senha (RN-TRANSF-016): a aba fica como estava, sem aviso, e pede o “Editar conexão” dela", async () => {
+    const { api, toast, onSession, runner } = setup();
+    credentialsRequests.clear();
+    api.on(`POST ${sessions}`, problem(422, "CONNECTION_CREDENTIALS_MISSING", { errors: { userName: ["Esta conexão não tem usuário gravado."] } }));
+
+    await runner.run({ sql: "select 1", offset: 0 });
+
+    expect(runner.getState()).toEqual({ status: "idle" });
+    expect([toast.error, toast.warning, toast.success].flatMap((mock) => mock.mock.calls)).toEqual([]);
+    expect(onSession).not.toHaveBeenCalled();
+    expect(credentialsRequests.pending()).toMatchObject({ connectionId: "c1" });
+    credentialsRequests.clear();
+  });
+
+  it("com linhas na tela, a recusa por faltar a senha as deixa como estavam, e o comando não sai", async () => {
+    // A aba que já tinha linhas e perdeu a sessão (o bloqueio, por exemplo): a próxima execução abre outra.
+    const { api, result } = await withResult();
+    credentialsRequests.clear();
+    const next = createQueryRunner({ connectionId: "c1", queryClient: createQueryClient({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }), toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() }, onSession: vi.fn(), initial: { state: result, sessionId: null } });
+    api.on(`POST ${sessions}`, problem(422, "CONNECTION_CREDENTIALS_MISSING", { errors: { password: ["Esta conexão não tem senha gravada."] } }));
+
+    await next.run({ sql: "select 2", offset: 0 });
+
+    expect(next.getState()).toMatchObject({ status: "rows", id: result.id });
+    expect(api.routes().filter((route) => route.endsWith("/queries"))).toHaveLength(1);
+    expect(credentialsRequests.pending()).toMatchObject({ connectionId: "c1" });
+    credentialsRequests.clear();
+  });
+
   it("driver do banco não instalado ao abrir a sessão: a frase da API na área de resultado, pronta para 'Instalar driver', e o aviso central (RN-DRIVER-006)", async () => {
     const { api, toast, onSession, runner } = setup();
     api.on(`POST ${sessions}`, problem(422, "DRIVER_NOT_INSTALLED", { detail: "O driver do IBM Data Server não está instalado." }));
@@ -545,7 +578,7 @@ describe("o resultado na tela só é substituído quando a API aceitou um comand
 
     expect(runner.getState()).toBe(result);
     expect(api.calls).toHaveLength(2);
-    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements);
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.tooManyStatements(platformScriptShortcut));
 
     // O cursor continua aberto: "carregar mais" segue lendo dele.
     api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
@@ -824,7 +857,7 @@ describe("linhas afetadas e erro de SQL também são resultado na tela", () => {
     expect(runner.getState()).toMatchObject({ status: "notice" });
 
     await runner.run({ sql: "select 1; select 2; select 3", offset: 0 });
-    expect(runner.getState()).toEqual({ status: "notice", message: "A seleção tem 3 comandos. Nesta versão o Prism executa um por vez: selecione um só ou ponha o cursor nele." });
+    expect(runner.getState()).toEqual({ status: "notice", message: `A seleção tem 3 comandos, e Executar leva um só: selecione um ou ponha o cursor nele. Para executar todos, um depois do outro, use Executar script (${platformScriptShortcut}).` });
 
     api.on(`POST ${sessions}`, session("s1"));
     api.on(`POST ${sessions}/s1/queries`, problem(500, "INTERNAL_SERVER_ERROR"));
@@ -1058,7 +1091,8 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
 
     const loading = runner.loadMore();
     expect(runner.getState()).toMatchObject({ status: "rows", loadingMore: true });
-    await loading;
+    // RN-GRADE-023: quem carrega as linhas que faltam de uma vez sabe o que cada página fez.
+    expect(await loading).toEqual({ kind: "loaded" });
 
     const state = runner.getState();
     expect(state).toMatchObject({ status: "rows", rows: [["1", "a"], ["2", "b"], ["3", "c"], ["4", "d"]], hasMore: false, pages: 2, loadingMore: false, elapsedMs: 42 });
@@ -1109,7 +1143,8 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
     const loading = runner.loadMore();
     await runner.cancel();
     answer.resolve(problem(422, "SQL_EXECUTION_FAILED", afterCancel.postgresCanceled));
-    await loading;
+    // Cancelada, a leitura falhou sem mensagem do banco: o desfecho do cancelamento já é o aviso.
+    expect(await loading).toEqual({ kind: "failed", message: null });
 
     expect(runner.getState()).toMatchObject({ status: "rows", rows: [["1", "a"], ["2", "b"]], cursorClosed: true, loadingMore: false, cancelling: false });
     expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.commandCancelled);
@@ -1164,7 +1199,8 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
     const { api, toast, runner } = await withFirstPage();
     api.on(`POST ${sessions}/s1/queries/next`, problem(422, "SQL_EXECUTION_FAILED", { detail: "ERROR: division by zero", sqlState: "22012" }));
 
-    await runner.loadMore();
+    // RN-GRADE-023: a falha volta com a mensagem do banco, como veio, para a faixa dizer por que as linhas que faltam não vieram.
+    expect(await runner.loadMore()).toEqual({ kind: "failed", message: "ERROR: division by zero" });
 
     expect(runner.getState()).toMatchObject({ status: "rows", rows: [["1", "a"], ["2", "b"]], cursorClosed: true, loadingMore: false });
     expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de SQL_EXECUTION_FAILED", "ERROR: division by zero");
@@ -1172,7 +1208,7 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
 
     // Fechado, "carregar mais" não vai à API (o botão nem aparece).
     const calls = api.calls.length;
-    await runner.loadMore();
+    expect(await runner.loadMore()).toEqual({ kind: "closed" });
     expect(api.calls).toHaveLength(calls);
   });
 
@@ -1180,7 +1216,7 @@ describe("carregar mais (RN-SQL-005, RN-SQL-007)", () => {
     const { api, onSession, runner } = await withFirstPage();
     api.on(`POST ${sessions}/s1/queries/next`, problem(404, "DATABASE_SESSION_NOT_FOUND"));
 
-    await runner.loadMore();
+    expect(await runner.loadMore()).toEqual({ kind: "closed" });
 
     expect(runner.getState()).toMatchObject({ status: "rows", cursorClosed: true });
     expect(onSession).toHaveBeenLastCalledWith(null);
@@ -1214,6 +1250,78 @@ describe("contar total (RN-SQL-006)", () => {
 
     expect(runner.getState()).toMatchObject({ status: "rows", rows: [["1", "a"]], counting: false, total: null });
     expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de SQL_EXECUTION_FAILED", "ERROR: FOR UPDATE is not allowed in subqueries");
+  });
+});
+
+describe("contar de novo (RN-SQL-006, issue #10)", () => {
+  /** Uma aba com linhas na tela e o total já contado (1000). */
+  async function counted() {
+    const context = await withResult();
+    context.api.on(`POST ${sessions}/s1/queries/count`, json({ total: 1000 }));
+    await context.runner.countTotal();
+    return context;
+  }
+
+  it("conta outra vez: o total de antes fica à vista enquanto conta, e o novo toma o lugar dele", async () => {
+    const { api, runner } = await counted();
+    const answer = deferred<Response>();
+
+    api.on(`POST ${sessions}/s1/queries/count`, answer.promise);
+    const counting = runner.countTotal();
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: true, total: 1000 });
+
+    answer.resolve(json({ total: 1003 }));
+    await counting;
+
+    expect(api.routes().filter((route) => route.endsWith("/queries/count"))).toHaveLength(2);
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: false, total: 1003 });
+  });
+
+  it("a contagem de novo recusada pelo banco deixa o total de antes, com o aviso central, como a primeira", async () => {
+    const { api, toast, runner } = await counted();
+
+    api.on(`POST ${sessions}/s1/queries/count`, problem(422, "SQL_EXECUTION_FAILED", { detail: "ERROR: canceling statement due to statement timeout", sqlState: "57014" }));
+    await runner.countTotal();
+
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: false, total: 1000 });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de SQL_EXECUTION_FAILED", "ERROR: canceling statement due to statement timeout");
+  });
+
+  it("a contagem de novo cancelada deixa o total de antes, com \"Comando cancelado.\"", async () => {
+    const { api, toast, runner } = await counted();
+    const answer = deferred<Response>();
+
+    api.on(`POST ${sessions}/s1/queries/count`, answer.promise);
+    api.on(`POST ${sessions}/s1/queries/cancel`, new Response(null, { status: 204 }));
+    const counting = runner.countTotal();
+    await runner.cancel();
+    answer.resolve(problem(422, "SQL_EXECUTION_FAILED", afterCancel.postgresCanceled));
+    await counting;
+
+    expect(runner.getState()).toMatchObject({ status: "rows", counting: false, cancelling: false, total: 1000 });
+    expect(toast.warning).toHaveBeenCalledExactlyOnceWith(copy.commandCancelled);
+  });
+
+  it("com as linhas todas carregadas depois da contagem, o total contado ainda se conta de novo", async () => {
+    const { api, runner } = await counted();
+    api.on(`POST ${sessions}/s1/queries/next`, page([["3", "c"]], { hasMore: false }));
+    await runner.loadMore();
+
+    api.on(`POST ${sessions}/s1/queries/count`, json({ total: 3 }));
+    await runner.countTotal();
+
+    expect(runner.getState()).toMatchObject({ status: "rows", hasMore: false, total: 3 });
+  });
+
+  it("um comando novo começa sem total: contar de novo é só sobre o total que está na tela", async () => {
+    const { api, runner } = await counted();
+
+    api.on(`POST ${sessions}/s1/queries`, page([["9", "z"]], { hasMore: false }));
+    await runner.run({ sql: "select * from u", offset: 0 });
+    await runner.countTotal();
+
+    expect(api.routes().filter((route) => route.endsWith("/queries/count"))).toHaveLength(1);
+    expect(runner.getState()).toMatchObject({ status: "rows", total: null });
   });
 });
 
@@ -1823,5 +1931,43 @@ describe("o resultado depois de um Salvar da edição na aba de consulta (RN-EDI
 
     reply.resolve(page([["9", "z"]], { resultID: "r2" }));
     await running;
+  });
+});
+
+describe("a recusa do somente leitura (RN-PROT-002)", () => {
+  const refusal = "A conexão é somente leitura, e só leituras são executadas nela: um DELETE não é leitura. Nada foi enviado ao banco.";
+
+  it("com linhas na tela, elas e o cursor ficam (nada foi ao banco), e a frase da API vai no aviso de erro, sem o aviso central", async () => {
+    const { api, toast, runner, result } = await withResult();
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "delete from t", offset: 0 });
+
+    expect(runner.getState()).toBe(result);
+    expect(result).toMatchObject({ cursorClosed: false });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith("Título de CONNECTION_READ_ONLY", refusal);
+  });
+
+  it("com o cursor aberto, a recusa não o fecha: “Carregar mais” continua lendo", async () => {
+    const { api, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, page([["1", "a"]], { hasMore: true }));
+    await runner.run({ sql: "select * from t", offset: 0 });
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "update t set a = 1", offset: 0 });
+
+    expect(runner.getState()).toMatchObject({ status: "rows", hasMore: true, cursorClosed: false });
+  });
+
+  it("sem resultado na tela, a frase da API vai à área de resultado, com o aviso curto", async () => {
+    const { api, toast, runner } = setup();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(`POST ${sessions}/s1/queries`, problem(422, "CONNECTION_READ_ONLY", { detail: refusal }));
+
+    await runner.run({ sql: "delete from t", offset: 0 });
+
+    expect(runner.getState()).toEqual({ status: "error", source: "api", title: "Título de CONNECTION_READ_ONLY", message: refusal, sqlState: null, errorAt: null });
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(copy.commandFailed);
   });
 });

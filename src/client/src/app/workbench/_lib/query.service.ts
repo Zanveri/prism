@@ -11,9 +11,12 @@ import { queryPageSchema, queryResultSchema, queryTotalSchema, type QueryPage, t
 /**
  * Executa o comando como está (RN-SQL-003) e devolve a primeira página ou as linhas afetadas. `filter` é o texto do campo de filtro do resultado (RN-GRADE-011:
  * a condição, a ordem ou as duas), que a API junta ao comando; sem ele (ou vazio), o corpo não o leva. O filtro que a API não aceita volta 422 `FILTER_INVALID`.
+ * `keep` são os resultados das abas do script que continuam na tela, e se editando, depois deste comando (RN-SQL-024); sem nenhum, o corpo não o leva, e a
+ * API esquece os que guardava.
  */
-export function executeQuery(sessionId: string, sql: string, filter?: string): Promise<ApiResult<QueryResult>> {
-  return apiRequest(prismEndpoints.userDatabaseSessionQueries(sessionId), { method: "POST", body: filter === undefined || filter === "" ? { sql } : { sql, filter }, schema: queryResultSchema });
+export function executeQuery(sessionId: string, sql: string, filter?: string, keep: readonly string[] = []): Promise<ApiResult<QueryResult>> {
+  const body = { sql, ...(filter === undefined || filter === "" ? {} : { filter }), ...(keep.length === 0 ? {} : { keep }) };
+  return apiRequest(prismEndpoints.userDatabaseSessionQueries(sessionId), { method: "POST", body, schema: queryResultSchema });
 }
 
 /** As próximas linhas do mesmo cursor, sem executar de novo (RN-SQL-005). Cursor fechado: 409 `NO_OPEN_CURSOR`. */

@@ -1,0 +1,146 @@
+{
+  "rule": "RN-EXPORT-009: o texto do dado no HTML. Na tela, stripUnaccepted(texto, isHtmlChar) e depois escapeHtml (text-escape.ts); na API, ExportText.HtmlText. removed é quantos pontos de código saíram.",
+  "notes": [
+    "value e expected são texto ou { codePoints: [...] }."
+  ],
+  "cases": [
+    {
+      "name": "texto simples",
+      "value": "Ana",
+      "expected": "Ana",
+      "removed": 0
+    },
+    {
+      "name": "script",
+      "value": "<script>alert(1)</script>",
+      "expected": "&lt;script&gt;alert(1)&lt;/script&gt;",
+      "removed": 0
+    },
+    {
+      "name": "e comercial",
+      "value": "a & b",
+      "expected": "a &amp; b",
+      "removed": 0
+    },
+    {
+      "name": "as duas aspas",
+      "value": "diz \"oi\" e 'tchau'",
+      "expected": "diz &quot;oi&quot; e &#39;tchau&#39;",
+      "removed": 0
+    },
+    {
+      "name": "fim de CDATA",
+      "value": "]]>",
+      "expected": "]]&gt;",
+      "removed": 0
+    },
+    {
+      "name": "quebras de linha nas três formas ficam",
+      "value": "l1\nl2\r\nl3\rl4",
+      "expected": "l1\nl2\r\nl3\rl4",
+      "removed": 0
+    },
+    {
+      "name": "tabulação e avanço de página ficam",
+      "value": "a\tb\fc",
+      "expected": "a\tb\fc",
+      "removed": 0
+    },
+    {
+      "name": "U+0000 sai",
+      "value": "a\u0000b",
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "tabulação vertical sai",
+      "value": "a\u000bb",
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "DEL sai",
+      "value": "a\u007fb",
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "controle de C1 sai",
+      "value": "a\u0085b",
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "U+202E fica",
+      "value": "abc\u202edef",
+      "expected": "abc\u202edef",
+      "removed": 0
+    },
+    {
+      "name": "U+FEFF fica",
+      "value": "\ufefftexto",
+      "expected": "\ufefftexto",
+      "removed": 0
+    },
+    {
+      "name": "U+FFFE sai",
+      "value": "a\ufffeb",
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "U+FDD0 sai",
+      "value": "a\ufdd0b",
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "U+10FFFF sai",
+      "value": {
+        "codePoints": [
+          97,
+          1114111,
+          98
+        ]
+      },
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "par substituto solto sai",
+      "value": {
+        "codePoints": [
+          97,
+          55357,
+          98
+        ]
+      },
+      "expected": "ab",
+      "removed": 1
+    },
+    {
+      "name": "dois controles saem",
+      "value": "\u0000\u0001x",
+      "expected": "x",
+      "removed": 2
+    },
+    {
+      "name": "emoji e ideogramas ficam",
+      "value": "😀 漢字",
+      "expected": "😀 漢字",
+      "removed": 0
+    },
+    {
+      "name": "_x0041_ já escrito fica",
+      "value": "_x0041_",
+      "expected": "_x0041_",
+      "removed": 0
+    },
+    {
+      "name": "barra invertida fica",
+      "value": "a\\b",
+      "expected": "a\\b",
+      "removed": 0
+    }
+  ]
+}

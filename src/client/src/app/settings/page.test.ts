@@ -9,6 +9,8 @@ import { driversQuery } from "@/app/drivers/_lib/drivers.service";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { navItem } from "@/components/ui";
 
+import type { AppZoom } from "../../../electron/zoom";
+import { appZoomQuery } from "./_lib/app-zoom";
 import { dataFolderQuery } from "./_lib/data-folder";
 import { preferencesStore, type PreferencesPatch } from "./_lib/preferences";
 import { settingsSections } from "./_lib/sections";
@@ -22,8 +24,8 @@ vi.mock("@/app/_components/api-gate", () => ({ useApiRestart: () => async () => 
 
 /** Cada teste usa um usuário só seu: as preferências moram num armazenamento do módulo, que sobrevive de um teste ao outro. */
 let counter = 0;
-type Extras = { updates?: UpdatePreferences; version?: string; dataFolder?: string | null; drivers?: Driver[]; entry?: string };
-function render(preferences: PreferencesPatch = {}, { updates, version, dataFolder, drivers, entry = "/settings" }: Extras = {}) {
+type Extras = { updates?: UpdatePreferences; version?: string; dataFolder?: string | null; drivers?: Driver[]; entry?: string; zoom?: AppZoom | null };
+function render(preferences: PreferencesPatch = {}, { updates, version, dataFolder, drivers, entry = "/settings", zoom }: Extras = {}) {
   const userName = `page.${++counter}`;
   preferencesStore.set(userName, preferences);
   if (version !== undefined) vi.stubGlobal("window", { prism: { version } });
@@ -33,6 +35,7 @@ function render(preferences: PreferencesPatch = {}, { updates, version, dataFold
   if (updates !== undefined) client.setQueryData(updatePreferencesQuery.queryKey, updates);
   if (dataFolder !== undefined) client.setQueryData(dataFolderQuery.queryKey, dataFolder);
   if (drivers !== undefined) client.setQueryData(driversQuery.queryKey, drivers);
+  if (zoom !== undefined) client.setQueryData(appZoomQuery.queryKey, zoom);
 
   return { userName, markup: renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(MemoryRouter, { initialEntries: [entry] }, createElement(SettingsPage)))) };
 }
@@ -231,6 +234,10 @@ describe("Editor SQL", () => {
   const editor = (markup: string) => sectionsOf(markup).find((section) => section.id === "cfg-editor")?.html ?? "";
   /** O valor de cada campo de texto, pelo id. */
   const valueOf = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0].match(/value="([^"]*)"/)?.[1];
+  /** As caixas de marcar: a tag, se está marcada e se o rótulo é o texto dela. */
+  const box = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "";
+  const checked = (tag: string) => / checked(=""| |\/|>)/.test(tag);
+  const labelled = (html: string, id: string, text: string) => new RegExp(`<label[^>]*><input[^>]*id="${id}"[^>]*/><span>${text}</span></label>`).test(html);
 
   it("tem o tamanho da fonte e o da tabulação, com o padrão do canvas; a fonte fica em Aparência (RN-CONFIG-008)", () => {
     const html = editor(render().markup);
@@ -255,10 +262,6 @@ describe("Editor SQL", () => {
 
 
   describe("autocompletar e maiúsculas (RN-CONFIG-004)", () => {
-    const box = (html: string, id: string) => new RegExp(`<input[^>]*id="${id}"[^>]*>`).exec(html)?.[0] ?? "";
-    const checked = (tag: string) => / checked(=""| |\/|>)/.test(tag);
-    const labelled = (html: string, id: string, text: string) => new RegExp(`<label[^>]*><input[^>]*id="${id}"[^>]*/><span>${text}</span></label>`).test(html);
-
     it("são duas caixas de marcar com os textos do canvas, não 'em breve': autocompletar ligado e maiúsculas desligado, como no canvas", () => {
       const html = editor(render().markup);
 
@@ -284,6 +287,26 @@ describe("Editor SQL", () => {
       expect(html).toContain("Nunca consulta o banco.");
       expect(html).toContain("esquemas, tabelas, visões e colunas");
       expect(html).toContain("o que você cola ficam como estão");
+    });
+  });
+
+  describe("a linha em branco separa os comandos (RN-SQL-018)", () => {
+    it("é uma caixa de marcar depois das duas do RN-CONFIG-004, ligada por padrão, com a dica do que ela faz e do que acontece desligada", () => {
+      const html = editor(render().markup);
+
+      expect(box(html, "cfg-linha-em-branco")).toContain('type="checkbox"');
+      expect(labelled(html, "cfg-linha-em-branco", "A linha em branco separa os comandos")).toBe(true);
+      expect(checked(box(html, "cfg-linha-em-branco"))).toBe(true);
+      expect(html.indexOf('id="cfg-maiusculas"')).toBeLessThan(html.indexOf('id="cfg-linha-em-branco"'));
+      expect(html).toContain("até o ponto e vírgula ou até uma linha em branco, como no DBeaver");
+      expect(html).toContain("nunca dentro de texto, comentário ou rotina. Desligada, só o ponto e vírgula separa.");
+    });
+
+    it("mostra a escolha do usuário, sem mexer nas outras caixas", () => {
+      const html = editor(render({ editor: { blankLineSeparates: false } }).markup);
+
+      expect(checked(box(html, "cfg-linha-em-branco"))).toBe(false);
+      expect(checked(box(html, "cfg-autocompletar"))).toBe(true);
     });
   });
 });
@@ -515,5 +538,58 @@ describe("Aparência: fontes (RN-CONFIG-008)", () => {
 
   it("o título da seção já não é só o tema", () => {
     expect(appearance(render().markup)).toMatch(/<h2 id="cfg-aparencia-title"[^>]*>Aparência<\/h2>/);
+  });
+});
+
+describe("Aparência: zoom do programa (RN-ZOOM-001)", () => {
+  const appearance = (markup: string) => sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
+
+  it("mostra o zoom de agora, como o processo principal o diz, com diminuir, aumentar e \"Restaurar 100%\"", () => {
+    const html = appearance(render({}, { zoom: 125 }).markup);
+
+    expect(html).toContain("Zoom do programa");
+    expect(html).toMatch(/<output aria-live="polite"[^>]*>125%<\/output>/);
+    expect(html).toContain('aria-label="Diminuir o zoom do programa"');
+    expect(html).toContain('aria-label="Aumentar o zoom do programa"');
+    expect(html).toMatch(/<button [^>]*>Restaurar 100%<\/button>/);
+  });
+
+  it("sem zoom do programa (fora do Electron, ou a ponte que não respondeu), o controle não aparece, e o resto da seção fica", () => {
+    for (const zoom of [null, undefined]) {
+      const html = appearance(render({}, { zoom }).markup);
+
+      expect(html).not.toContain("Zoom do programa");
+      expect(html).toContain("Fonte da interface");
+    }
+  });
+});
+
+describe("Aparência: densidade do navegador (RN-NAV-011)", () => {
+  const appearance = (markup: string) => sectionsOf(markup).find((section) => section.id === "cfg-aparencia")?.html ?? "";
+  /** Os dois botões de opção, na ordem, com o rótulo e se está marcado. */
+  const radios = (html: string) =>
+    [...html.matchAll(/(<input type="radio"[^>]*name="cfg-densidade"[^>]*\/?>)<span>([^<]*)<\/span>/g)].map(([, input, label]) => [/value="([^"]*)"/.exec(input)?.[1], label, / checked=""/.test(input)]);
+
+  it("um grupo com o nome e a dica, e as duas densidades; a confortável, a do canvas, é a padrão", () => {
+    const html = appearance(render().markup);
+
+    expect(html).toMatch(/<fieldset aria-describedby="cfg-densidade-dica"[^>]*><legend[^>]*>Densidade do navegador<\/legend>/);
+    expect(radios(html)).toEqual([
+      ["comfortable", "Confortável", true],
+      ["compact", "Compacta", false],
+    ]);
+    expect(html).toContain('id="cfg-densidade-dica"');
+    expect(html).toContain("A compacta tem linhas mais baixas e menos recuo a cada nível: cabem mais itens na árvore e na lista de scripts.");
+  });
+
+  it("mostra o que o usuário escolheu", () => {
+    expect(radios(appearance(render({ ui: { navigatorDensity: "compact" } }).markup))).toEqual([
+      ["comfortable", "Confortável", false],
+      ["compact", "Compacta", true],
+    ]);
+  });
+
+  it("aparece também fora do Electron: é preferência do usuário, e não do processo principal", () => {
+    expect(radios(appearance(render({}, { zoom: null }).markup))).toHaveLength(2);
   });
 });
