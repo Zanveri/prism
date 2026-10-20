@@ -189,3 +189,50 @@ describe("a lista de palavras que a conversão escreve em maiúsculas", () => {
     expect(daily.filter((word) => !uppercaseWords.has(word))).toEqual([]);
   });
 });
+
+// RN-CONFIG-004 (seção 41): a conversão para maiúsculas não muda nada dentro das declarações. `null`, `true`, `false` e os nomes continuam como a pessoa os escreveu,
+// porque `NULL` e `TRUE` não são da linguagem das variáveis.
+describe.each(engines)("maiúsculas e as declarações (RN-CONFIG-004 e RN-VAR-025), %s", (_name, dialect, engine) => {
+  it("null, true e false dentro de uma declaração ficam como foram escritos, com ou sem anotação", () => {
+    expect(typed("let a = null\nconst b = true\nlet c: boolean | null = false;\nlet d = [null, true, false] ", { dialect, engine })).toBe("let a = null\nconst b = true\nlet c: boolean | null = false;\nlet d = [null, true, false] ");
+  });
+
+  it("a declaração de várias linhas e a reatribuição também", () => {
+    expect(typed("let o = {\n  a: null,\n  b: true,\n}\nlet n = 1\nn = null ", { dialect, engine })).toBe("let o = {\n  a: null,\n  b: true,\n}\nlet n = 1\nn = null ");
+  });
+
+  it("o nome que parece palavra reservada, na declaração, fica como foi escrito", () => {
+    expect(typed("let order = 1 ", { dialect, engine })).toBe("let order = 1 ");
+    expect(typed("const from = 'a'\nlet limit = 2 ", { dialect, engine })).toBe("const from = 'a'\nlet limit = 2 ");
+  });
+
+  it("o comando de depois da declaração continua a converter, e o de antes também", () => {
+    expect(typed("select 1 from t where x is null;\nlet a = null\nselect * from t where x = a or y is null ", { dialect, engine })).toBe("SELECT 1 FROM t WHERE x IS NULL;\nlet a = null\nSELECT * FROM t WHERE x = a OR y IS NULL ");
+  });
+
+  it("o @nome no comando continua a converter o que é SQL, e o nome da variável não vira palavra", () => {
+    expect(typed("let from = 1\nselect @from, x from t where y is null ", { dialect, engine })).toBe("let from = 1\nSELECT @from, x FROM t WHERE y IS NULL ");
+  });
+
+  it("o texto escrito sem nenhum let ou const nem pergunta pelas declarações (nenhuma leitura do script)", () => {
+    const asked = { count: 0 };
+    let state = EditorState.create({ doc: "", extensions: [sql({ dialect }), keywordCase(engine, () => (asked.count++, true))] });
+    for (const character of "select 1 from t where x is null ") state = state.update({ changes: { from: state.doc.length, insert: character }, selection: { anchor: state.doc.length + 1 }, userEvent: "input.type" }).state;
+
+    expect(state.doc.toString()).toBe("SELECT 1 FROM t WHERE x IS NULL ");
+    expect(asked.count).toBe(0);
+  });
+
+  it("a preferência da linha em branco é lida na hora: ela decide se `b = null`, depois de uma linha em branco, é uma reatribuição ou o resto do comando de cima", () => {
+    let blankLines = true;
+    const doc = "let b = 2;\nselect 1\n\nb = null";
+    const type = () => {
+      const state = EditorState.create({ doc, extensions: [sql({ dialect }), keywordCase(engine, () => blankLines)] });
+      return state.update({ changes: { from: doc.length, insert: " " }, selection: { anchor: doc.length + 1 }, userEvent: "input.type" }).state.doc.toString();
+    };
+
+    expect(type()).toBe("let b = 2;\nselect 1\n\nb = null ");
+    blankLines = false;
+    expect(type()).toBe("let b = 2;\nselect 1\n\nb = NULL ");
+  });
+});
