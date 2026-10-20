@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * A ordem das abas (RN-ABAS-001) e o que decide o arrasto delas, sem tocar a página: para onde a aba vai, onde a marca de soltar aparece, o
- * atalho de teclado e se ela foi solta fora da janela (RN-ABAS-002). A ordem vale enquanto a janela está aberta: não é gravada em lugar nenhum.
+ * atalho de teclado e o que o arraste leva (RN-ABAS-010). A ordem vale enquanto a janela está aberta e volta na próxima entrada (RN-ABAS-006).
  */
 
 /**
@@ -44,26 +44,28 @@ export function tabMoveShortcut(event: { key: string; ctrlKey: boolean; metaKey:
   return event.key === "PageDown" ? 1 : null;
 }
 
-export type ScreenPoint = { x: number; y: number };
-export type ScreenRect = { x: number; y: number; width: number; height: number };
-
 /**
- * A aba foi solta fora da janela? É o que abre a janela nova onde ela caiu (RN-ABAS-002). As medidas são da tela inteira (`screenX` do
- * evento e `screenX` e `outerWidth` da janela). Um ponto que não é número não é fora: sem coordenada, nada se abre.
+ * Os tipos do dado que a aba arrastada leva (RN-ABAS-010): o tipo diz o que é, e ele se lê já no `dragenter` e no `dragover`; o conteúdo, só no `drop`,
+ * porque o Chromium o esconde antes.
+ * - `application/x-prism-tab`: a aba de consulta e a de tabela. A faixa e o véu de qualquer janela do Prism a aceitam (RN-ABAS-001 a 003).
+ * - `application/x-prism-result-tab`: a aba do resultado (RN-ABAS-012). Só a faixa e o véu da janela de origem a aceitam; as outras janelas a reconhecem
+ *   e a recusam (sem véu, com o ponteiro de proibido). Quem a arrasta escreve o mesmo dado (`writeTabDrag`, com o id da aba do resultado) e termina o
+ *   arraste pelo mesmo caminho (`endTabDrag`, com `kind: "result"`), e o ponto que volta abre a janela do resultado (RN-ABAS-013).
  */
-export function isOutsideWindow(point: ScreenPoint, frame: ScreenRect): boolean {
-  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
-  return point.x < frame.x || point.y < frame.y || point.x >= frame.x + frame.width || point.y >= frame.y + frame.height;
+export const tabDragType = "application/x-prism-tab";
+export const resultTabDragType = "application/x-prism-result-tab";
+
+/** O que se arrasta: uma aba (`tab`) ou a aba do resultado (`result`). */
+export type TabDragKind = "tab" | "result";
+
+/** Pelos tipos do arraste (`dataTransfer.types`), o que é: uma aba do Prism, a aba do resultado, ou outra coisa (`null`: texto, um arquivo). */
+export function dragKindOf(types: readonly string[]): TabDragKind | null {
+  if (types.includes(tabDragType)) return "tab";
+  return types.includes(resultTabDragType) ? "result" : null;
 }
 
-/** O tipo do dado que a aba arrastada leva (RN-ABAS-001 e 003): só uma aba do Prism é solta numa faixa de abas. */
-export const tabDragType = "application/x-prism-tab";
-
-/**
- * RN-ABAS-010 e 012: o tipo do arraste da aba do resultado, outro, para as faixas (que só aceitam o da aba) não a receberem: ela não muda de lugar sozinha
- * nem vai sozinha para outra janela. O dado é o mesmo (`writeTabDrag`), com o id da aba dela.
- */
-export const resultTabDragType = "application/x-prism-result-tab";
+/** O tipo que cada coisa arrastada escreve. */
+export const dragTypeOf = (kind: TabDragKind) => (kind === "tab" ? tabDragType : resultTabDragType);
 
 /** Qual aba e de qual janela (o número dela, `null` fora do Electron). O dado vem do arrasto, que outro programa também pode soltar aqui: é conferido. */
 const tabDragSchema = z.object({ windowId: z.number().int().positive().nullable(), tabId: z.uuid() });

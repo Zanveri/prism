@@ -136,9 +136,10 @@ export function placeAnnouncement(place: ResultPlace): string {
 
 /**
  * De onde veio a troca: o botão da barra do resultado, o menu de uma das abas, o fechar da aba do resultado (o X, o clique do meio, o Ctrl+W, "Voltar para o
- * painel" do menu dela), o "Voltar para o painel" da janela do resultado (e o Ctrl+W nela), ou a pessoa fechar a janela do resultado pelo sistema.
+ * painel" do menu dela), o "Voltar para o painel" da janela do resultado (e o Ctrl+W nela), a pessoa fechar a janela do resultado pelo sistema, ou soltar a
+ * aba do resultado fora da faixa (`drag`, RN-ABAS-010: a aba some e o resultado vai para a janela, como pelo menu).
  */
-export type PlaceVia = "bar" | "menu" | "close" | "back" | "windowClosed";
+export type PlaceVia = "bar" | "menu" | "close" | "back" | "windowClosed" | "drag";
 
 /** O que fica ativo depois da troca (`result`: a aba do resultado; `query`: a da consulta; `keep`: como está) e onde fica o foco. */
 export type AfterPlace = { show: "result" | "query" | "keep"; focus: "placeButton" | "result" | null };

@@ -27,6 +27,7 @@ import {
 import {
   peerEventSchema,
   tabDeliverySchema,
+  tabDragEndReplySchema,
   tabGiveSchema,
   tabMoveReplySchema,
   verificationPeerSchema,
@@ -34,6 +35,8 @@ import {
   windowListSchema,
   type PeerEvent,
   type TabDelivery,
+  type TabDragEnd,
+  type TabDragEndReply,
   type TabGive,
   type TabMoveReply,
   type TabMoveRequest,
@@ -175,6 +178,8 @@ export function getBridge(): PrismBridge {
         list: async () => [],
         moveTab: async () => ({ ok: false, reason: "noWindow" }),
         requestTab: async () => false,
+        // Sem processo principal não há janela nova a abrir: o fim do arraste nunca leva a aba (RN-ABAS-010).
+        endDrag: async () => ({ action: "none" }),
         setReady: async () => {},
         describe: async () => {},
         close: async () => {},
@@ -338,6 +343,19 @@ export function onResultWindowState(listener: (state: ResultWindowState) => void
       if (parsed.success) listener(parsed.data);
     }),
   );
+}
+
+/**
+ * RN-ABAS-010: o arraste de uma aba desta janela terminou. O processo principal lê o ponteiro e responde se a janela nova abre, e onde; a resposta que não
+ * confere, e a ponte que não responde, não abrem nada.
+ */
+export async function endTabDrag(request: TabDragEnd): Promise<TabDragEndReply> {
+  try {
+    const parsed = tabDragEndReplySchema.safeParse(await getBridge().windows.endDrag(request));
+    return parsed.success ? parsed.data : { action: "none" };
+  } catch {
+    return { action: "none" };
+  }
 }
 
 /** Liga um ouvinte da ponte que pode não existir: sem ele, nada chega, e soltar não faz nada. */

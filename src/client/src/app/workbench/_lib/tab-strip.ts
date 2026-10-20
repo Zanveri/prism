@@ -181,16 +181,17 @@ export function closeConfirmationText(total: number, withSql: number): { title: 
   return { title: copy.confirmClose.title(total), description: copy.confirmClose.description(withSql), confirm: copy.confirmClose.confirm };
 }
 
-export type MoveMenuItem = { action: "newWindow" | "toWindow"; label: string; disabled: boolean };
+export type MoveMenuItem = { action: "newWindow" | "toWindow"; label: string; disabled: boolean; hint?: string };
 
 /**
- * O grupo de mover a aba para outra janela no menu dela (RN-ABAS-002 e 003): "Mover para nova janela" e "Mover para a janela…", que lista as outras e
- * fica apagado quando não há outra. Fora do Electron não há outra janela possível, e o grupo não aparece.
+ * O grupo de mover a aba para outra janela no menu dela (RN-ABAS-002 e 003): "Mover para nova janela", desabilitado com uma aba só na janela, com o motivo
+ * (RN-ABAS-002: a janela já é aquela aba), e "Mover para a janela…", que lista as outras e fica apagado quando não há outra. Fora do Electron não há outra
+ * janela possível, e o grupo não aparece.
  */
-export function moveMenu(otherWindows: number, available: boolean): MoveMenuItem[] {
+export function moveMenu(otherWindows: number, available: boolean, onlyTab = false): MoveMenuItem[] {
   if (!available) return [];
   return [
-    { action: "newWindow", label: copy.moveToNewWindow, disabled: false },
+    onlyTab ? { action: "newWindow", label: copy.moveToNewWindow, disabled: true, hint: copy.drag.onlyTab } : { action: "newWindow", label: copy.moveToNewWindow, disabled: false },
     { action: "toWindow", label: copy.moveToWindow, disabled: otherWindows === 0 },
   ];
 }

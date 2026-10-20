@@ -34,3 +34,19 @@ export function menuShortcutIgnored(input: { key: string; control: boolean; meta
   if (input.key === "F5" || input.key === "F6" || input.key === "F11") return true;
   return (input.control || input.meta) && input.key.toLowerCase() === "r";
 }
+
+/**
+ * RN-ABAS-010: o app roda no Wayland nativo (a plataforma `wayland` do Ozone)? Ali o ponteiro lido pelo processo principal não vale fora das janelas do app
+ * (vem parado ou em (0, 0), sem erro) e o app não escolhe onde as janelas abrem. Quem decide é o Chromium, pelo `--ozone-platform` (que vence), pelo
+ * `--ozone-platform-hint` ou pela `ELECTRON_OZONE_PLATFORM_HINT` (`auto` é o padrão do Electron desde a 38: o Wayland quando a sessão é Wayland), e só no
+ * Linux. Sem como perguntar ao Chromium o que ele escolheu, isto refaz a mesma conta.
+ */
+export function isWaylandSession({ platform, ozonePlatform, ozoneHint, env }: { platform: NodeJS.Platform; ozonePlatform: string; ozoneHint: string; env: Record<string, string | undefined> }): boolean {
+  if (platform !== "linux") return false;
+  if (ozonePlatform !== "") return ozonePlatform === "wayland";
+
+  const hint = (ozoneHint !== "" ? ozoneHint : (env.ELECTRON_OZONE_PLATFORM_HINT ?? "auto")).toLowerCase();
+  const waylandSession = env.XDG_SESSION_TYPE === "wayland" && (env.WAYLAND_DISPLAY ?? "") !== "";
+  if (hint === "wayland") return (env.WAYLAND_DISPLAY ?? "") !== "";
+  return hint === "auto" && waylandSession;
+}

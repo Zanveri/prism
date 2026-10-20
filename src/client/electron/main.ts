@@ -10,7 +10,7 @@ import { apiExitMessage, closeVaultAndStop, startApi, type ApiProcess } from "./
 import { versionArgument, windowArgument } from "./app-version";
 import { userDataDir } from "./data-dir";
 import { permissionAllowed } from "./permissions";
-import { applicationMenuTemplate, menuShortcutIgnored, windowIconFile } from "./platform";
+import { applicationMenuTemplate, isWaylandSession, menuShortcutIgnored, windowIconFile } from "./platform";
 import type { ApiConfigReply } from "./preload";
 import { createResultWindowSaver, readResultWindow, resultWindowFileName, writeResultWindow, type SavedResultWindow } from "./result-window-file";
 import {
@@ -32,7 +32,7 @@ import { createHttpGet } from "./update/net-transport";
 import { resolveOrigin, updatesBlocked } from "./update/origin";
 import { createUpdater, type Updater } from "./update/updater";
 import { navigationAllowed, preferencesMatch, resultWindowOptions } from "./web-lockdown";
-import { createWindowHub, newWindowBounds, type HubWindow, type Point, type Rect } from "./window-hub";
+import { boundsMatch, createWindowHub, newWindowBounds, type HubWindow, type Point, type Rect } from "./window-hub";
 import { createWorkspaceHub, saveWorkspaceThroughApi } from "./workspace-hub";
 import type { SavedWorkspace } from "./workspace-messages";
 import { isAppZoom, nextAppZoom, zoomFactor, zoomShortcut, type AppZoom } from "./zoom";
@@ -147,14 +147,22 @@ const resultSaver = createResultWindowSaver({
   log: (message) => console.log(`[prism] ${message}`),
 });
 
-/** O Wayland não deixa ler o ponteiro fora das janelas (RN-ABAS-010): ali vale o ponto que a tela mandou. */
-const waylandSession = process.platform === "linux" && (process.env.XDG_SESSION_TYPE === "wayland" || (process.env.WAYLAND_DISPLAY ?? "") !== "");
+/**
+ * RN-ABAS-010: no Wayland nativo o ponteiro lido daqui não vale fora das janelas do app, e o app não escolhe onde as janelas abrem (`isWaylandSession`, em
+ * `platform.ts`, com teste). Lido uma vez: a plataforma não muda com o app aberto.
+ */
+const wayland = isWaylandSession({
+  platform: process.platform,
+  ozonePlatform: app.commandLine.getSwitchValue("ozone-platform"),
+  ozoneHint: app.commandLine.getSwitchValue("ozone-platform-hint"),
+  env: process.env,
+});
 
 const resultWindows = createResultWindows<ResultBrowser>({
   now: () => Date.now(),
   isReady: (openerId) => hub.isReady(openerId),
   // No arraste da aba do resultado o processo principal lê o ponteiro ali mesmo (`at` é o que a tela viu no `dragend`, e só vale onde ele não o lê).
-  pointOf: (at) => (at === null ? null : waylandSession ? at : screen.getCursorScreenPoint()),
+  pointOf: (at) => (at === null ? null : wayland ? at : screen.getCursorScreenPoint()),
   log: (message) => console.log(`[prism] janelas: ${message}`),
 });
 
@@ -629,7 +637,9 @@ function serveRenderer() {
 /**
  * O centro das janelas (`window-hub.ts`): leva as abas de uma janela para outra, repassa o que uma conta às outras sobre o cofre e dá a vez da verificação
  * de cada conexão (RN-VERIF-002). A janela nova
- * (a área de trabalho inteira, RN-ABAS-002) nasce aqui, onde a aba foi solta, e aparece quando a tela dela está pronta.
+ * (a área de trabalho inteira, RN-ABAS-002) nasce aqui, com o canto de cima à esquerda onde a aba foi solta, no monitor do ponteiro, e aparece quando a tela
+ * dela está pronta. O ponto é o do ponteiro, lido aqui no fim do arraste (RN-ABAS-010): o do `dragend` não serve fora da janela no Windows e, com o zoom
+ * do programa ou monitores de densidades diferentes, nem está na medida das janelas.
  */
 const hub = createWindowHub({
   createWindow({ at, source }) {
@@ -639,6 +649,9 @@ const hub = createWindowHub({
     return created.hubWindow;
   },
   log: (message) => console.log(`[prism] janelas: ${message}`),
+  cursorPoint: () => (wayland ? null : screen.getCursorScreenPoint()),
+  // A sonda S-ABAS-1 provou no Linux com o X11 que a soltura fora das janelas vem com `move` e o Esc com `none`; nas outras plataformas, não.
+  escapeEndsWithoutEffect: process.platform === "linux" && !wayland,
 });
 
 /** Os `webContents` das janelas do app (o splash, as janelas do resultado e o que mais o Chromium criar não estão aqui): só estes podem recarregar a própria página em desenvolvimento. */
@@ -680,6 +693,17 @@ function installShortcuts(contents: WebContents): void {
 }
 
 /**
+ * RN-ABAS-010: a janela nasce com os limites pedidos, e eles são aplicados de novo e conferidos depois de criada, e de novo antes de ela aparecer: no
+ * Windows, a janela criada num monitor de escala diferente da do principal pode nascer no tamanho errado. No Wayland o lugar é o que o sistema der.
+ */
+function settleBounds(window: BrowserWindow, bounds: Rect, moment: string) {
+  if (window.isDestroyed() || wayland) return;
+  window.setBounds(bounds);
+  const got = window.getBounds();
+  if (!boundsMatch(bounds, got)) console.log(`[prism] janelas: a janela nova pediu ${JSON.stringify(bounds)} e ficou em ${JSON.stringify(got)} (${moment})`);
+}
+
+/**
  * Cria uma janela do app escondida: quem decide quando ela aparece é quem a pediu (a primeira, `startUp`, depois de a tela estar pronta para ser
  * vista, RN-MARCA-003; as outras, assim que estão prontas). Sem `bounds`, o tamanho de sempre, no centro da tela.
  */
@@ -708,6 +732,7 @@ function createAppWindow(bounds?: Rect) {
   appWindows.set(id, window);
   appContents.add(window.webContents.id);
   const contentsId = window.webContents.id;
+  if (bounds !== undefined) settleBounds(window, bounds, "ao nascer");
 
   // RN-SHELL-001: a janela não sai do app (`web-contents-created`, acima) e só abre a janela do resultado, que `openHandlerOf` aprova depois do pedido da tela
   // (RN-ABAS-017); `did-create-window` confere a janela que nasceu.
@@ -768,7 +793,10 @@ function createAppWindow(bounds?: Rect) {
   // Mostrar a janela quando a página falha ao carregar também: com ela escondida, o app ficaria
   // aberto sem nada na tela, e o splash, que só fecha depois, não sairia.
   const ready = new Promise<void>((resolve) => {
-    window.once("ready-to-show", resolve);
+    window.once("ready-to-show", () => {
+      if (bounds !== undefined) settleBounds(window, bounds, "antes de aparecer");
+      resolve();
+    });
     window.webContents.once("did-fail-load", () => resolve());
     window.once("closed", resolve);
   });
@@ -782,6 +810,7 @@ function createAppWindow(bounds?: Rect) {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
     },
     bounds: () => window.getBounds(),
+    normalBounds: () => window.getNormalBounds(),
     focus() {
       if (window.isDestroyed()) return;
       if (window.isMinimized()) window.restore();
@@ -817,6 +846,12 @@ ipcMain.handle("prism:windows-move-tab", (event, request: unknown) => {
 ipcMain.handle("prism:windows-request-tab", (event, request: unknown) => {
   assertFromApp(event);
   return hub.requestTab(windowIdOf(event.sender), request);
+});
+// RN-ABAS-010: o fim do arraste de uma aba. O centro lê o ponteiro (`cursorPoint`) e decide se abre a janela nova e onde; a tela só diz quem recebeu a
+// soltura nela.
+ipcMain.handle("prism:windows-drag-end", (event, request: unknown) => {
+  assertFromApp(event);
+  return hub.endDrag(windowIdOf(event.sender), request);
 });
 ipcMain.handle("prism:windows-ready", (event, ready: unknown) => {
   assertFromApp(event);

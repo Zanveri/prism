@@ -10,7 +10,8 @@ import { cn } from "@/lib/utils/cn";
 import type { TabMoveTarget, WindowEntry } from "../../../../electron/window-messages";
 
 import { ignoresContextMenu } from "../_lib/navigator-menu";
-import { dropIndex, isOutsideWindow, readTabDrag, resultTabDragType, tabDragType, writeTabDrag } from "../_lib/tab-order";
+import { isOnlyTab, type DragEndEvent, type TabDragSession } from "../_lib/tab-drag";
+import { dropIndex, readTabDrag, resultTabDragType, tabDragType, writeTabDrag } from "../_lib/tab-order";
 import { dropMarks, placeOf, resultEntryKey, resultPanelElementId, resultTabElementId, resultTabTitle, stripEntries, unitRects, type PlaceMenuItem, type PlaceVia, type StripEntry } from "../_lib/result-place";
 import { resultPlaceCopy } from "../_lib/result-place.copy";
 import { scriptIconOf } from "../_lib/saved-scripts";
@@ -47,8 +48,15 @@ type TabStripProps = {
   windowId: number | null;
   /** RN-ABAS-001: a aba desta janela foi solta nesta faixa, antes da posição dada. */
   onReorder: (tabId: string, insertAt: number) => void;
-  /** RN-ABAS-002 e 003: levar a aba para uma janela nova (do menu, ou solta fora da janela) ou para outra janela aberta. */
+  /** RN-ABAS-002 e 003: levar a aba para uma janela nova (pelo menu) ou para outra janela aberta. */
   onMove: (tabId: string, target: TabMoveTarget) => void;
+  /**
+   * RN-ABAS-010: o arraste desta janela (`createTabDragSession`), que a faixa começa no `dragstart` e marca quando a soltura cai nela; o véu marca a dele.
+   * Sem ele (os testes), a faixa só arrasta.
+   */
+  drag?: TabDragSession;
+  /** RN-ABAS-010: o arraste de uma aba terminou (`dragend`): quem a desenha decide, pelo que a soltura marcou, se pede a janela nova. */
+  onDragEnd?: (tabId: string, event: DragEndEvent) => void;
   /** RN-ABAS-003: uma aba de outra janela foi solta nesta faixa. */
   onReceive: (fromWindowId: number, tabId: string, insertAt: number) => void;
   /** RN-SQL-021: o que a aba mostra do estado dela, depois do nome: a marca do script que parou num erro e espera a resposta (`ScriptWaitingMark`). */
@@ -83,7 +91,7 @@ const stripIcon = "size-3.5";
  * Os botões das pontas acendem por atributos (`data-left` e `data-right` da moldura) e não por estado: rolar não redesenha a faixa.
  * Os botões de rolar e o da lista são para o mouse; o teclado tem as setas, que trazem a aba à vista, e a tecla de menu.
  */
-export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scriptOf, onSelect, onClose, windowId, onReorder, onMove, onReceive, markOf, resultActive = false, onShowEntry, onPlace, placeItemsOf, resultMarkOf }: TabStripProps) {
+export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scriptOf, onSelect, onClose, windowId, onReorder, onMove, onReceive, markOf, drag, onDragEnd, resultActive = false, onShowEntry, onPlace, placeItemsOf, resultMarkOf }: TabStripProps) {
   const frame = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<StripMenu | null>(null);
@@ -209,21 +217,30 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
 
     event.preventDefault();
     setDropAt(null);
-    const drag = readTabDrag(event.dataTransfer.getData(tabDragType));
-    if (drag === null) return;
+    const dropped = readTabDrag(event.dataTransfer.getData(tabDragType));
+    if (dropped === null) return;
 
     const index = dropIndex(tabRects(), event.clientX);
-    if (drag.windowId === windowId) onReorder(drag.tabId, index);
-    else if (drag.windowId !== null) onReceive(drag.windowId, drag.tabId, index);
+    if (dropped.windowId === windowId) {
+      // A soltura caiu na faixa da própria janela: o fim do arraste não pede janela nova (RN-ABAS-010).
+      drag?.mark("strip");
+      onReorder(dropped.tabId, index);
+    } else if (dropped.windowId !== null) onReceive(dropped.windowId, dropped.tabId, index);
   }
 
-  /** A aba arrastada caiu fora de qualquer faixa: fora da janela, ela abre uma janela nova ali (RN-ABAS-002); dentro, ou com Esc, fica onde estava. */
+  /**
+   * RN-ABAS-010: o fim do arraste. Quem decide é quem recebeu a soltura (a faixa ou o véu, que marcaram), e não o `dropEffect`: a faixa só entrega o que
+   * o `dragend` traz (o efeito, o ponto na tela e na página) a quem a desenha.
+   */
   function handleDragEnd(event: DragEvent, tab: QueryTab) {
     setDropAt(null);
-    if (event.dataTransfer.dropEffect !== "none" || windowId === null) return;
-
-    const point = { x: Math.round(event.screenX), y: Math.round(event.screenY) };
-    if (isOutsideWindow(point, { x: window.screenX, y: window.screenY, width: window.outerWidth, height: window.outerHeight })) onMove(tab.id, { kind: "new", at: point });
+    const view = event.currentTarget.ownerDocument.defaultView;
+    onDragEnd?.(tab.id, {
+      effect: event.dataTransfer.dropEffect,
+      screen: { x: event.screenX, y: event.screenY },
+      client: { x: event.clientX, y: event.clientY },
+      viewport: { width: view?.innerWidth ?? 0, height: view?.innerHeight ?? 0 },
+    });
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, entry: StripEntry, index: number) {
@@ -277,8 +294,9 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
         onDragStart={(event) => {
           event.dataTransfer.setData(resultTabDragType, writeTabDrag({ windowId, tabId: tab.id }));
           event.dataTransfer.effectAllowed = "move";
+          drag?.begin(tab.id, "result");
         }}
-        onDragEnd={() => setDropAt(null)}
+        onDragEnd={(event) => handleDragEnd(event, tab)}
         onContextMenu={(event) => handleContextMenu(event, entry)}
         onMouseDown={(event) => event.button === 1 && event.preventDefault()}
         onAuxClick={(event) => {
@@ -338,11 +356,12 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
     if (current.kind === "windows") return [otherWindows.map((entry) => ({ id: `window-${entry.id}`, label: copy.windowName(entry.number, entry.activeTitle, entry.tabCount), onSelect: () => onMove(tabId, { kind: "window", windowId: entry.id }) }))];
 
     const closing = tabMenu(tabs, tabId, activeTabId, shortcut).map((group) => group.map((item): ContextMenuItem => ({ id: item.scope, label: item.label, shortcut: item.shortcut, disabled: item.disabled, onSelect: () => onClose(item.scope, tabId) })));
-    const moving = moveMenu(otherWindows.length, windowId !== null).map(
+    const moving = moveMenu(otherWindows.length, windowId !== null, isOnlyTab(tabs)).map(
       (item): ContextMenuItem => ({
         id: item.action,
         label: item.label,
         disabled: item.disabled,
+        hint: item.hint,
         // "Mover para a janela…" abre, no mesmo lugar, a lista das outras janelas.
         onSelect: () => (item.action === "newWindow" ? onMove(tabId, { kind: "new" }) : open({ kind: "windows", tabId, point, initialFocus: "first" })),
       }),
@@ -365,7 +384,9 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
         if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setDropAt(null);
       }}
       onDrop={handleDrop}
-      className="group/strip flex items-stretch border-b border-border bg-background px-2"
+      // RN-ABAS-010: a faixa fica por cima do véu do arraste, e o que cai nela é dela (`isInTabStrip`).
+      data-tab-strip=""
+      className="group/strip relative z-50 flex items-stretch border-b border-border bg-background px-2"
     >
       <button type="button" tabIndex={-1} aria-label={copy.scrollLeft} title={copy.scrollLeft} onClick={() => scrollBy(-1)} className={cn(stripButton, "hidden group-data-[left]/strip:flex")}>
         <ChevronIcon className={cn(stripIcon, "rotate-90")} />
@@ -401,6 +422,8 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
               onDragStart={(event) => {
                 event.dataTransfer.setData(tabDragType, writeTabDrag({ windowId, tabId: tab.id }));
                 event.dataTransfer.effectAllowed = "move";
+                // Nada muda na página aqui dentro: a sessão guarda o arraste e só avisa depois (RN-ABAS-010).
+                drag?.begin(tab.id, "tab");
               }}
               onDragEnd={(event) => handleDragEnd(event, tab)}
               onContextMenu={(event) => handleContextMenu(event, entry)}

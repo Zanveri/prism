@@ -5,7 +5,7 @@ import type { ResultWindowFocus, ResultWindowNamed, ResultWindowRequest, ResultW
 import type { ChooseSourceRequest, CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
 import type { UpdatePreferences } from "./update/preferences";
 import type { CheckOutcome, UpdateNotice, UpdateProgress, UpdateState } from "./update/update-state";
-import type { PeerEvent, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
+import type { PeerEvent, TabDragEnd, TabMoveRequest, TabRequest, VerificationClaim, VerificationDone, WindowSummary } from "./window-messages";
 import type { WorkspaceReport } from "./workspace-messages";
 
 /**
@@ -105,8 +105,13 @@ export type PrismWindows = {
   list(): Promise<unknown>;
   /** Leva uma aba desta janela para outra, ou para uma nova (`TabMoveReply`). Com `ok`, a aba sai daqui sem fechar a sessão. */
   moveTab(request: TabMoveRequest): Promise<unknown>;
-  /** Uma aba de outra janela foi solta na faixa desta: o processo principal pede à de origem que a mande. */
+  /** Uma aba de outra janela foi solta na faixa desta (ou no véu dela): o processo principal pede à de origem que a mande. */
   requestTab(request: TabRequest): Promise<unknown>;
+  /**
+   * RN-ABAS-010: o arraste de uma aba desta janela terminou; o processo principal lê o ponteiro e responde se a janela nova abre, e onde
+   * (`tabDragEndReplySchema`).
+   */
+  endDrag(request: TabDragEnd): Promise<unknown>;
   /** A área de trabalho desta janela montou (pronta para receber abas) ou desmontou. */
   setReady(ready: boolean): Promise<void>;
   /** O resumo desta janela, para a lista das outras. */
@@ -245,6 +250,7 @@ const bridge: PrismBridge = {
     list: () => ipcRenderer.invoke("prism:windows-list"),
     moveTab: (request) => ipcRenderer.invoke("prism:windows-move-tab", request),
     requestTab: (request) => ipcRenderer.invoke("prism:windows-request-tab", request),
+    endDrag: (request) => ipcRenderer.invoke("prism:windows-drag-end", request),
     setReady: (ready) => ipcRenderer.invoke("prism:windows-ready", ready),
     describe: (summary) => ipcRenderer.invoke("prism:windows-describe", summary),
     close: () => ipcRenderer.invoke("prism:windows-close"),
