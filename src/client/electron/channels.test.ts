@@ -45,7 +45,9 @@ describe("os canais entre a tela e o processo principal", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:(?:windows|session)-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);/g)].map((match) => match[1]);
     const windowChannels = channelsOf(main, "ipcMain.handle").filter((channel) => /^prism:(windows|session)-/.test(channel));
 
-    expect(windowChannels.length).toBe(7);
+    // RN-ABAS-010: o fim do arraste da aba (`prism:windows-drag-end`) é o oitavo.
+    expect(windowChannels).toContain("prism:windows-drag-end");
+    expect(windowChannels.length).toBe(8);
     expect(handlers.sort()).toEqual(windowChannels);
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
@@ -86,9 +88,10 @@ describe("os canais entre a tela e o processo principal", () => {
 
     expect(sourceChannels).toEqual(["prism:transfer-source", "prism:transfer-source-release", "prism:transfer-source-status"]);
     for (const channel of sourceChannels) expect(channel).toMatch(/^prism:[a-z-]+$/);
-    // A escolha: o diálogo, o título, os filtros e a pasta são do processo principal; a tela não manda nada.
-    expect(main).toMatch(/ipcMain\.handle\("prism:transfer-source", \(event\) => \{\s*assertFromApp\(event\);\s*return transferSource\.choose\(windowIdOf\(event\.sender\)\);\s*\}\);/);
-    expect(preload).toMatch(/chooseSource: \(\) => ipcRenderer\.invoke\("prism:transfer-source"\)/);
+    // A escolha: o diálogo, o título, os filtros e a pasta são do processo principal; a tela manda no máximo o nome da janela do resultado (RN-ABAS-017), que o
+    // `transferSource` confere com o schema.
+    expect(main).toMatch(/ipcMain\.handle\("prism:transfer-source", \(event, request: unknown\) => \{\s*assertFromApp\(event\);\s*return transferSource\.choose\(windowIdOf\(event\.sender\), request\);\s*\}\);/);
+    expect(preload).toMatch(/chooseSource: \(request\) => ipcRenderer\.invoke\("prism:transfer-source", request\)/);
     // A consulta e o soltar levam só o pedido, que o `transferSource` confere com o schema, e o número da janela que o processo principal sabe.
     for (const channel of ["prism:transfer-source-status", "prism:transfer-source-release"]) {
       expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*return transferSource\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));

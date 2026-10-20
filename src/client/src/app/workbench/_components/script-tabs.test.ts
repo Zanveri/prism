@@ -206,6 +206,15 @@ describe("a faixa das abas do script (RN-SQL-020)", () => {
     rt.unmount();
   });
 
+  it("as abas têm 28 px contando a borda de 2 px, 8 px de cada lado e até 256 px de largura (RN-ABAS-009)", () => {
+    const tree = rt.render(() => ScriptTabs({ run: twelve(), shown: 0, idPrefix: "t", panelId: "t-panel", onChoose: noop }));
+    const tabs = elementsOf(tree).filter((element) => element.props.role === "tab");
+
+    expect(tabs).toHaveLength(13);
+    for (const tab of tabs) expect(String(tab.props.className).split(" ")).toEqual(expect.arrayContaining(["h-7", "px-2", "max-w-64", "border-b-2"]));
+    rt.unmount();
+  });
+
   it("a aba escolhida vem à vista: a do último comando, que vem à frente sozinha no fim, não fica fora da faixa", () => {
     const props = { run: twelve(), shown: 0 as number | "statistics", idPrefix: "t", panelId: "t-panel", onChoose: noop };
     const tree = rt.render(() => ScriptTabs(props));
@@ -231,6 +240,8 @@ describe("a marca da aba cujo script espera a pergunta de erro (RN-SQL-021)", ()
     const marked = elementsOf(rt.render(() => ScriptWaitingMark({ runner: runnerWith(paused()) })));
 
     expect(marked.some((element) => element.props["data-script-waiting"] === true && element.props.title === scriptRunCopy.error.waiting)).toBe(true);
+    // RN-ABAS-009: na faixa, o ponto tem 6 px.
+    expect(marked.find((element) => element.props["data-script-waiting"] === true)?.props.className).toContain("size-1.5");
     expect(marked.some((element) => element.props.className === "sr-only" && element.props.children === scriptRunCopy.error.waiting)).toBe(true);
 
     for (const script of [null, startEntry(createScriptRun(1, [{ sql: "select 1", offset: 0 }]), 0), finishRun(paused(), "stopped")]) {

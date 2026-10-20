@@ -1,9 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { vaultLock } from "@/lib/api/vault-lock";
+import { hostFocus } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
+import { HostProvider } from "./host-context";
 import { createToastApi, type ToastApi } from "./toast-api";
 import { dismissToast, type ToastItem, type ToastTone } from "./toast-queue";
 
@@ -19,6 +21,9 @@ const ToastContext = createContext<ToastApi | null>(null);
  * A fila (tempo por tom, limite, repetição) é a de `toast-queue.ts`; aqui só se desenha e se
  * agenda o fechamento. A pilha vai num portal em `document.body`, no canto inferior direito,
  * com o mais novo embaixo, acima da barra de status e do rodapé do resultado (`bottom-20`).
+ *
+ * RN-ABAS-015: os avisos aparecem na janela que tem o foco, entre a da aba e as do resultado dela (`ToastStack`); sem o foco em nenhuma, na da aba.
+ * Na janela do resultado, que não tem barra de status, a pilha fica no canto de baixo, 12 px acima da borda.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<ToastItem[]>([]);
@@ -31,22 +36,31 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      {createPortal(
-        // Sucesso e atenção são lidos quando o leitor de tela estiver livre; o de erro tem
-        // `role="alert"` e interrompe (RN-AVISO-006). `pointer-events-none`: a pilha flutua sobre
-        // a tela, e vazia não pode roubar o clique do canto.
-        //
-        // `bottom-20` (80 px) deixa a base da pilha acima da barra de status (28 px) e do rodapé do resultado (41 px, com o
-        // "Carregar mais 200" à direita: 69 px a partir da borda da janela, com folga de 11 px). Com `bottom-5` o aviso de erro que
-        // saía de um comando caía sobre esse botão e engolia o clique do usuário (Marco B, D3).
-        <div aria-live="polite" className="pointer-events-none fixed right-5 bottom-20 z-[60] flex w-[380px] max-w-[calc(100vw-2.5rem)] flex-col gap-2.5">
-          {queue.map((item) => (
-            <ToastCard key={item.id} toast={item} onDismiss={dismiss} />
-          ))}
-        </div>,
-        document.body,
-      )}
+      <ToastStack queue={queue} onDismiss={dismiss} />
     </ToastContext.Provider>
+  );
+}
+
+/**
+ * A pilha dos avisos, no portal da janela que tem o foco (`hostFocus`). Sucesso e atenção são lidos quando o leitor de tela estiver livre; o de erro tem
+ * `role="alert"` e interrompe (RN-AVISO-006). `pointer-events-none`: a pilha flutua sobre a tela, e vazia não pode roubar o clique do canto.
+ *
+ * `bottom-20` (80 px) deixa a base da pilha acima da barra de status (28 px) e do rodapé do resultado (41 px, com o "Carregar mais 200" à direita: 69 px a
+ * partir da borda da janela, com folga de 11 px). Com `bottom-5` o aviso de erro que saía de um comando caía sobre esse botão e engolia o clique do usuário
+ * (Marco B, D3). A janela do resultado não tem barra de status: ali a pilha fica 12 px acima da borda (`bottom-3`).
+ */
+export function ToastStack({ queue, onDismiss }: { queue: ToastItem[]; onDismiss: (id: string) => void }) {
+  const host = useSyncExternalStore(hostFocus.subscribe, hostFocus.getSnapshot);
+
+  return createPortal(
+    <HostProvider host={host}>
+      <div aria-live="polite" className={cn("pointer-events-none fixed right-5 z-[60] flex w-[380px] max-w-[calc(100vw-2.5rem)] flex-col gap-2.5", host.resultWindow === null ? "bottom-20" : "bottom-3")}>
+        {queue.map((item) => (
+          <ToastCard key={item.id} toast={item} onDismiss={onDismiss} />
+        ))}
+      </div>
+    </HostProvider>,
+    host.document.body,
   );
 }
 

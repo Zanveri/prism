@@ -88,6 +88,8 @@ export const tabTransferSchema = z.object({
     sessionId: id.nullable(),
     sql: z.string().max(maxSqlLength),
     table: z.object({ schema: name, name, view: z.enum(["data", "structure", "diagram"]) }).optional(),
+    /** RN-ABAS-016: o lugar do resultado da aba de consulta vai com ela (a aba do resultado logo depois dela, na janela que a recebe). */
+    resultPlace: z.enum(["panel", "tab", "window"]).optional(),
     /**
      * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o lugar em que foi salvo: a conexão e o banco (sem ele, o da conexão), ou o genérico
      * (RN-SCRIPT-005); a mudança não salva, a janela que recebe a refaz pelo texto e pelo lugar da aba (RN-SCRIPT-003). E a pasta de scripts que a aba lembra
@@ -109,6 +111,11 @@ export const tabTransferSchema = z.object({
   editor: z.object({ anchor: count, head: count }).nullable(),
   result: resultSchema.nullable(),
   memory: memorySchema,
+  /**
+   * RN-ABAS-016: a janela do resultado da aba não fechou a tempo (o processo principal não confirmou em 3 segundos), e a aba vai com o resultado no painel; a
+   * janela que a recebe avisa que a janela do resultado não pôde ser reaberta.
+   */
+  resultWindowLost: z.boolean().optional(),
 });
 
 export type TabTransfer = z.infer<typeof tabTransferSchema>;
@@ -117,7 +124,10 @@ const windowId = z.number().int().positive();
 /** Um ponto da tela inteira (onde a aba foi solta). */
 const pointSchema = z.object({ x: z.number().int().min(-100_000).max(100_000), y: z.number().int().min(-100_000).max(100_000) });
 
-/** Para onde a aba vai: uma janela nova (com o ponto onde foi solta, ou sem ele, pelo menu) ou outra janela aberta, numa posição da faixa. */
+/**
+ * Para onde a aba vai: uma janela nova (com o canto de cima à esquerda no ponto onde ela foi solta, que o processo principal leu no fim do arraste,
+ * `tabDragEndReplySchema`; sem ele, pelo menu, um pouco abaixo e à direita da de origem) ou outra janela aberta, numa posição da faixa.
+ */
 export const tabMoveTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("new"), at: pointSchema.optional() }),
   z.object({ kind: z.literal("window"), windowId, index: count.optional() }),
@@ -131,12 +141,42 @@ export const tabMoveRequestSchema = z.object({ target: tabMoveTargetSchema, tran
 export type TabMoveRequest = z.infer<typeof tabMoveRequestSchema>;
 
 /**
- * A resposta: a aba saiu (a janela que a mandou a tira da faixa SEM fechar a sessão), ou não saiu e fica onde está. `overWindow`: ela foi solta em cima
- * de outra janela do Prism, e não numa área vazia da tela; quem a leva é essa janela, se a aba caiu na faixa dela (`tabRequestSchema`), e nada se avisa.
+ * A resposta: a aba saiu (a janela que a mandou a tira da faixa SEM fechar a sessão), ou não saiu e fica onde está. Se a aba solta caiu sobre outra janela
+ * do Prism, quem decide é ela (RN-ABAS-010): isso o fim do arraste já respondeu (`tabDragEndReplySchema`), e a janela nova nem é pedida.
  */
-export const tabMoveReplySchema = z.discriminatedUnion("ok", [z.object({ ok: z.literal(true) }), z.object({ ok: z.literal(false), reason: z.enum(["invalid", "noWindow", "overWindow"]) })]);
+export const tabMoveReplySchema = z.discriminatedUnion("ok", [z.object({ ok: z.literal(true) }), z.object({ ok: z.literal(false), reason: z.enum(["invalid", "noWindow"]) })]);
 
 export type TabMoveReply = z.infer<typeof tabMoveReplySchema>;
+
+/**
+ * RN-ABAS-010: o fim do arraste de uma aba, que a janela de origem conta ao processo principal no `dragend`. Quem decide é quem recebeu a soltura, e não o
+ * `dropEffect`: `dropped` diz se o véu DESTA janela a recebeu (`veil`: longe da faixa, dentro da janela) ou se ninguém nela a recebeu (`none`: fora da
+ * janela, sobre outra janela do Prism, o Esc, a barra de título). A soltura na própria faixa não chega aqui: é a ordem da faixa (RN-ABAS-001).
+ * - `kind`: a aba de consulta ou de tabela (`tab`) ou a aba do resultado (`result`, RN-ABAS-012), que nenhuma outra janela recebe (não há a espera da
+ *   outra janela).
+ * - `effect`: o `dropEffect` do `dragend`, que só diz alguma coisa onde a sonda S-ABAS-1 provou que distingue o Esc da soltura (o Linux com o X11).
+ * - `at`: o ponto do `dragend`, em pixels da tela, quando é número, e `inPage`: ele cai dentro da página desta janela. Os dois só valem onde o processo
+ *   principal não lê o ponteiro (o Wayland): o ponto, para a janela nova; `inPage`, para o Esc e a soltura dentro da janela não abrirem nada.
+ */
+export const tabDragEndSchema = z.object({
+  tabId: z.uuid(),
+  kind: z.enum(["tab", "result"]),
+  dropped: z.enum(["veil", "none"]),
+  effect: z.enum(["none", "copy", "link", "move"]),
+  at: pointSchema.nullable(),
+  inPage: z.boolean(),
+});
+
+export type TabDragEnd = z.infer<typeof tabDragEndSchema>;
+
+/**
+ * A resposta: nada a fazer (a outra janela do Prism decide; o Esc; a soltura dentro da janela de origem que ninguém recebeu), ou a janela nova, com o canto
+ * de cima à esquerda em `at` (o ponteiro lido pelo processo principal; `null` onde não há ponto que sirva, e a janela abre um pouco abaixo e à direita da
+ * de origem). A janela de origem pede então a janela nova pelo caminho de sempre (`tabMoveRequestSchema`), com as perguntas de antes.
+ */
+export const tabDragEndReplySchema = z.discriminatedUnion("action", [z.object({ action: z.literal("none") }), z.object({ action: z.literal("newWindow"), at: pointSchema.nullable() })]);
+
+export type TabDragEndReply = z.infer<typeof tabDragEndReplySchema>;
 
 /** O processo principal entrega a aba à janela que a recebe, na posição pedida (sem ela, no fim). */
 export const tabDeliverySchema = z.object({ transfer: tabTransferSchema, index: count.optional() });

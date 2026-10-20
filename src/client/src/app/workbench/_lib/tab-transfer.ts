@@ -23,7 +23,7 @@ export type TabSnapshot = {
 };
 
 /** A aba como a janela que recebe a monta. */
-export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; state: RunnerState; memory: TransferMemory };
+export type AdoptedTab = { tab: QueryTab; selection: SelectionMemory | null; state: RunnerState; memory: TransferMemory; resultWindowLost: boolean };
 
 type TransferredResult = NonNullable<TabTransfer["result"]>;
 
@@ -69,7 +69,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
   const result = resultOf(state);
   if (result === undefined) return null;
 
-  const { table, database, script } = tab;
+  const { table, database, script, resultPlace } = tab;
   return {
     version: 1,
     tab: {
@@ -80,6 +80,7 @@ export function serializeTab({ tab, sessionId, editor, state, memory }: TabSnaps
       sessionId,
       sql: editor?.sql ?? tab.sql,
       ...(table === undefined ? {} : { table }),
+      ...(resultPlace === undefined ? {} : { resultPlace }),
       ...(script === undefined
         ? {}
         : {
@@ -113,7 +114,7 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
   const parsed = tabTransferSchema.safeParse(raw);
   if (!parsed.success) return null;
 
-  const { tab, editor, result, memory } = parsed.data;
+  const { tab, editor, result, memory, resultWindowLost } = parsed.data;
   const clamp = (position: number) => Math.min(position, tab.sql.length);
   // O tipo da aba é o da tela: o TypeScript confere que o schema do processo principal não divergiu dele.
   const adopted: QueryTab = {
@@ -124,10 +125,12 @@ export function readTransfer(raw: unknown): AdoptedTab | null {
     sessionId: tab.sessionId,
     sql: tab.sql,
     ...(tab.table === undefined ? {} : { table: tab.table }),
+    // RN-ABAS-016: a aba chega no lugar do resultado que tinha, e não no da preferência desta janela.
+    ...(tab.resultPlace === undefined ? {} : { resultPlace: tab.resultPlace }),
     // RN-SCRIPT-003: o ponto da faixa é o texto que chegou e o lugar da aba contra o que foi salvo (a aba pode ter trocado de conexão ou de banco).
     ...(tab.script === undefined ? {} : { script: { ...tab.script, dirty: isScriptDirty(tab.script, tab.sql, tab) } }),
   };
   const restored: TransferMemory = memory;
 
-  return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored };
+  return { tab: adopted, selection: editor === null ? null : { anchor: clamp(editor.anchor), head: clamp(editor.head) }, state: stateOf(result), memory: restored, resultWindowLost: resultWindowLost === true };
 }

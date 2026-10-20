@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dropIndex, isOutsideWindow, moveTab, readTabDrag, shiftTab, tabMoveShortcut, writeTabDrag } from "./tab-order";
+import { dragKindOf, dragTypeOf, dropIndex, moveTab, readTabDrag, resultTabDragType, shiftTab, tabDragType, tabMoveShortcut, writeTabDrag } from "./tab-order";
 
 const tabs = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
 const ids = (list: readonly { id: string }[] | null) => list?.map((tab) => tab.id).join("") ?? null;
@@ -82,24 +82,15 @@ describe("tabMoveShortcut", () => {
   });
 });
 
-describe("isOutsideWindow: a aba solta fora da janela abre outra (RN-ABAS-002)", () => {
-  const frame = { x: 100, y: 50, width: 800, height: 600 };
-
-  it("dentro da janela, inclusive na borda, não é fora", () => {
-    expect(isOutsideWindow({ x: 100, y: 50 }, frame)).toBe(false);
-    expect(isOutsideWindow({ x: 500, y: 300 }, frame)).toBe(false);
-    expect(isOutsideWindow({ x: 899, y: 649 }, frame)).toBe(false);
-  });
-
-  it("à esquerda, à direita, acima e abaixo é fora", () => {
-    expect(isOutsideWindow({ x: 99, y: 300 }, frame)).toBe(true);
-    expect(isOutsideWindow({ x: 900, y: 300 }, frame)).toBe(true);
-    expect(isOutsideWindow({ x: 500, y: 49 }, frame)).toBe(true);
-    expect(isOutsideWindow({ x: 500, y: 650 }, frame)).toBe(true);
-  });
-
-  it("um ponto que não é número (o evento sem coordenadas) não abre janela", () => {
-    expect(isOutsideWindow({ x: Number.NaN, y: 300 }, frame)).toBe(false);
+describe("os tipos do arraste (RN-ABAS-010)", () => {
+  it("a aba de consulta e a de tabela levam um tipo, e a aba do resultado, outro; o que não é do Prism não é aba", () => {
+    expect(tabDragType).toBe("application/x-prism-tab");
+    expect(resultTabDragType).toBe("application/x-prism-result-tab");
+    expect(dragKindOf([tabDragType, "chromium/x-drag-id"])).toBe("tab");
+    expect(dragKindOf([resultTabDragType])).toBe("result");
+    expect(dragKindOf(["text/plain", "Files"])).toBeNull();
+    expect(dragKindOf([])).toBeNull();
+    expect([dragTypeOf("tab"), dragTypeOf("result")]).toEqual([tabDragType, resultTabDragType]);
   });
 });
 

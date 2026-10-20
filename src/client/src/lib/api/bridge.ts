@@ -16,8 +16,18 @@ import {
   type SourceStatus,
 } from "../../../electron/transfer-messages";
 import {
+  resultWindowClosedSchema,
+  resultWindowReplySchema,
+  resultWindowStateSchema,
+  type ResultWindowClosed,
+  type ResultWindowFocus,
+  type ResultWindowRequest,
+  type ResultWindowState,
+} from "../../../electron/result-window-messages";
+import {
   peerEventSchema,
   tabDeliverySchema,
+  tabDragEndReplySchema,
   tabGiveSchema,
   tabMoveReplySchema,
   verificationPeerSchema,
@@ -25,6 +35,8 @@ import {
   windowListSchema,
   type PeerEvent,
   type TabDelivery,
+  type TabDragEnd,
+  type TabDragEndReply,
   type TabGive,
   type TabMoveReply,
   type TabMoveRequest,
@@ -166,12 +178,25 @@ export function getBridge(): PrismBridge {
         list: async () => [],
         moveTab: async () => ({ ok: false, reason: "noWindow" }),
         requestTab: async () => false,
+        // Sem processo principal não há janela nova a abrir: o fim do arraste nunca leva a aba (RN-ABAS-010).
+        endDrag: async () => ({ action: "none" }),
         setReady: async () => {},
         describe: async () => {},
         close: async () => {},
         onTab: () => () => {},
         onGiveTab: () => () => {},
         onCloseRequested: () => () => {},
+      },
+      // Fora do Electron não há processo principal para aprovar nem acompanhar uma janela do resultado (RN-ABAS-014): "Numa janela" não aparece.
+      resultWindows: {
+        available: false,
+        request: async () => ({ ok: false }),
+        ready: async () => {},
+        focus: async () => false,
+        close: async () => false,
+        title: async () => false,
+        onClosed: () => () => {},
+        onState: () => () => {},
       },
       session: { share: async () => {}, onPeer: () => () => {} },
       // Uma janela só: a vez da verificação é sempre dela (RN-VERIF-002), e não há a quem contar a resposta.
@@ -232,6 +257,104 @@ export async function sendTabAway(request: TabMoveRequest): Promise<TabMoveReply
     return parsed.success ? parsed.data : { ok: false, reason: "invalid" };
   } catch {
     return { ok: false, reason: "noWindow" };
+  }
+}
+
+/**
+ * A janela do resultado (RN-ABAS-013 e 017), do lado da tela. Cada resposta e cada aviso do processo principal é conferido aqui, com o schema que ele também
+ * usa (`electron/result-window-messages.ts`). Sem a ponte (a tela num teste, ou uma ponte antiga) ou fora do Electron, a janela do resultado não existe, e nada
+ * disto lança.
+ */
+
+/** Há como abrir a janela do resultado? Só no app: o item "Numa janela" aparece conforme isto (RN-ABAS-014 e RN-CONFIG-010). */
+export function resultWindowsAvailable(): boolean {
+  try {
+    return getBridge().resultWindows?.available === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Pede a concessão de uso único para abrir a janela do resultado; a resposta que não é `ok: true` é "não". */
+export async function requestResultWindow(request: ResultWindowRequest): Promise<boolean> {
+  try {
+    const parsed = resultWindowReplySchema.safeParse(await getBridge().resultWindows.request(request));
+    return parsed.success && parsed.data.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** O resultado está desenhado na janela: ela pode aparecer. */
+export function tellResultWindowReady(name: string): void {
+  try {
+    void getBridge()
+      .resultWindows.ready({ name })
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há janela do resultado.
+  }
+}
+
+/** Traz a janela do resultado (ou a da aba que a abriu) à frente. Responde se havia a janela. */
+export async function focusResultWindow(request: ResultWindowFocus): Promise<boolean> {
+  try {
+    return (await getBridge().resultWindows.focus(request)) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** O Prism fecha a janela do resultado (o aviso de que fechou diz `host`). Responde se havia a janela. */
+export async function closeResultWindow(name: string): Promise<boolean> {
+  try {
+    return (await getBridge().resultWindows.close({ name })) === true;
+  } catch {
+    return false;
+  }
+}
+
+/** O título da janela do resultado. */
+export function setResultWindowTitle(name: string, title: string): void {
+  try {
+    void getBridge()
+      .resultWindows.title({ name, title })
+      .catch(() => undefined);
+  } catch {
+    // Sem a ponte: não há janela do resultado.
+  }
+}
+
+/** Uma janela do resultado desta tela fechou, e quem a fechou. O aviso fora do formato é ignorado. */
+export function onResultWindowClosed(listener: (closed: ResultWindowClosed) => void): () => void {
+  return listen(() =>
+    getBridge().resultWindows.onClosed((raw) => {
+      const parsed = resultWindowClosedSchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data);
+    }),
+  );
+}
+
+/** Uma janela do resultado desta tela minimizou ou voltou. */
+export function onResultWindowState(listener: (state: ResultWindowState) => void): () => void {
+  return listen(() =>
+    getBridge().resultWindows.onState((raw) => {
+      const parsed = resultWindowStateSchema.safeParse(raw);
+      if (parsed.success) listener(parsed.data);
+    }),
+  );
+}
+
+/**
+ * RN-ABAS-010: o arraste de uma aba desta janela terminou. O processo principal lê o ponteiro e responde se a janela nova abre, e onde; a resposta que não
+ * confere, e a ponte que não responde, não abrem nada.
+ */
+export async function endTabDrag(request: TabDragEnd): Promise<TabDragEndReply> {
+  try {
+    const parsed = tabDragEndReplySchema.safeParse(await getBridge().windows.endDrag(request));
+    return parsed.success ? parsed.data : { action: "none" };
+  } catch {
+    return { action: "none" };
   }
 }
 

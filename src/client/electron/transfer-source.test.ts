@@ -14,6 +14,7 @@ type Harness = {
   downloads: string;
   files: string;
   dialogs: { windowId: number; title: string; defaultPath: string }[];
+  parents: (string | undefined)[];
   answer: (path: string | null) => void;
   logs: string[];
   source: ReturnType<typeof createTransferSource>;
@@ -38,6 +39,7 @@ function setUp(overrides: Partial<TransferSourceDeps> = {}): Harness {
     downloads,
     files,
     dialogs: [],
+    parents: [],
     answer: (path) => (next = path),
     logs: [],
     source: null as never,
@@ -50,8 +52,9 @@ function setUp(overrides: Partial<TransferSourceDeps> = {}): Harness {
   h.source = createTransferSource({
     dataDir,
     downloadsDir: () => downloads,
-    async showOpenDialog(windowId, options) {
+    async showOpenDialog(windowId, options, resultWindow) {
       h.dialogs.push({ windowId, title: options.title, defaultPath: options.defaultPath });
+      h.parents.push(resultWindow);
       return next;
     },
     log: (message) => h.logs.push(message),
@@ -84,6 +87,25 @@ async function settled(fileId: string, windowId = 1) {
   }
   throw new Error("A cópia não terminou.");
 }
+
+describe("a janela do resultado (RN-ABAS-017): o diálogo de abrir fica sobre a janela de onde o pedido nasceu", () => {
+  const resultWindow = "prism-result-0b9f2c1e-8a4d-4f6b-9c3e-1d2a3b4c5d6e";
+
+  it("o pedido leva o nome da janela do resultado ao diálogo; sem pedido, ou com ele vazio, o diálogo é o da janela da aba", async () => {
+    harness.answer(null);
+    await harness.source.choose(1, { resultWindow });
+    await harness.source.choose(1, {});
+    await harness.source.choose(1);
+
+    expect(harness.parents).toEqual([resultWindow, undefined, undefined]);
+  });
+
+  it("o nome fora do formato, ou um campo a mais, é recusado antes de abrir o diálogo", async () => {
+    await expect(harness.source.choose(1, { resultWindow: "../../etc" })).rejects.toThrow();
+    await expect(harness.source.choose(1, { path: "/etc/passwd" })).rejects.toThrow();
+    expect(harness.dialogs).toEqual([]);
+  });
+});
 
 describe("escolher o arquivo (RN-IMPORT-018): o processo principal abre o diálogo de abrir, confere e copia", () => {
   it("o diálogo é do processo principal: o título, os filtros que ele escreve e a pasta de Downloads na primeira vez; depois, a da última importação", async () => {

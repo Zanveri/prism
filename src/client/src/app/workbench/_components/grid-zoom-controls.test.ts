@@ -34,3 +34,12 @@ describe("os controles do zoom na barra do resultado (RN-GRADE-010)", () => {
     expect(buttonsOf(100).buttons.map((button) => button.props.disabled ?? false)).toEqual([false, false, false]);
   });
 });
+
+describe("as medidas (RN-ABAS-009)", () => {
+  it("na barra da área de resultado da aba de consulta, 24 px; nos Registros (o padrão), 28 px", () => {
+    const sizes = (markup: string) => [...markup.matchAll(/<button [^>]*class="([^"]*)"/g)].map((match) => match[1].split(" ").filter((token) => /^(size|h)-\d+$/.test(token)));
+
+    expect(sizes(renderToStaticMarkup(createElement(GridZoomControls, { zoom: 100, onZoom: () => {}, size: "bar" })))).toEqual([["size-6"], ["h-6"], ["size-6"]]);
+    expect(sizes(renderToStaticMarkup(createElement(GridZoomControls, { zoom: 100, onZoom: () => {} })))).toEqual([["size-7"], ["h-7"], ["size-7"]]);
+  });
+});

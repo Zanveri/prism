@@ -6,8 +6,9 @@ import { isTableTab, type QueryTab } from "./workbench-model";
 
 /**
  * As abas que voltam na próxima entrada (seção 24 da especificação, RN-ABAS-006), sem tocar a página nem a API: o que de cada aba vai para o cofre e o que
- * volta dele. Vai: da aba de consulta, o texto do editor, a conexão, o banco, o script de onde veio e se tem mudança não salva; da aba de uma tabela, a
- * conexão, o banco, o esquema, a tabela e a vista; e a ordem e a ativa. Não vai: o título (a consulta ganha um número novo, o script volta com o nome que tem
+ * volta dele. Vai: da aba de consulta, o texto do editor, a conexão, o banco, o script de onde veio, se tem mudança não salva e o lugar do resultado
+ * (RN-ABAS-016); da aba de uma tabela, a conexão, o banco, o esquema, a tabela e a vista; e a ordem e a ativa (a aba do resultado não é uma aba da lista: volta
+ * pelo lugar da aba dela, e a ativa, quando era ela, é a aba dela). Não vai: o título (a consulta ganha um número novo, o script volta com o nome que tem
  * hoje), a sessão, o resultado, o cursor e as alterações não salvas da grade.
  */
 
@@ -33,6 +34,8 @@ export function savedTabOf(tab: QueryTab, liveSql: string | null): SavedTab {
     scriptID: tab.script?.id ?? null,
     dirty: tab.script === undefined ? false : isScriptDirty(tab.script, sql, tab),
     sqlTooLarge: !fits,
+    // RN-ABAS-016: o lugar que a aba tem, também "Numa janela" enquanto esta tela não a abre (`placeOf`): o gravado não se perde.
+    resultPlace: tab.resultPlace ?? "panel",
   };
 }
 
@@ -153,7 +156,8 @@ export function restoreWorkspace(saved: SavedWorkspace, context: RestoreContext)
     const title = ref?.name ?? `consulta-${context.nextNumber()}.sql`;
     if (tab.sqlTooLarge) emptied.push(title);
 
-    return { id: context.newId(), title, connectionId, ...inDatabase(connectionId === null ? undefined : (tab.database ?? undefined)), sessionId: null, sql: tab.sql, ...(ref === undefined ? {} : { script: ref }) };
+    // RN-ABAS-016: a aba volta no lugar dela; a gravada antes da 0.5.0, no painel.
+    return { id: context.newId(), title, connectionId, ...inDatabase(connectionId === null ? undefined : (tab.database ?? undefined)), sessionId: null, sql: tab.sql, ...(ref === undefined ? {} : { script: ref }), resultPlace: tab.resultPlace ?? "panel" };
   });
 
   const tabs = byIndex.filter((tab) => tab !== null);

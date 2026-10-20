@@ -26,6 +26,12 @@ export const gridZoomSteps = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200] 
 /** As densidades do navegador (RN-NAV-011): "Confortável", o desenho do canvas, e "Compacta", com linhas mais baixas. As medidas são do navegador (`navigator-density.ts`). */
 export const navigatorDensities = ["comfortable", "compact"] as const;
 
+/**
+ * RN-CONFIG-010: onde o resultado das abas de consulta novas aparece: no painel (o padrão), numa aba ou numa janela. Os mesmos três lugares da aba
+ * (`resultPlaces`, em `workbench-model.ts`, RN-ABAS-011); a tela das abas é quem decide o que vale enquanto não há a janela do resultado (`newTabPlace`).
+ */
+export const resultPlacePreferences = ["panel", "tab", "window"] as const;
+
 export const preferenceLimits = {
   fontSize: { min: 10, max: 24 },
   tabSize: { min: 1, max: 8 },
@@ -75,6 +81,8 @@ const fields = {
     showColumnTypes: z.boolean(),
     /** RN-GRADE-010: o zoom da grade, num dos passos. */
     gridZoom: z.literal(gridZoomSteps),
+    /** RN-CONFIG-010: o lugar do resultado das abas de consulta novas. */
+    resultPlace: z.enum(resultPlacePreferences),
   },
   security: {
     /** RN-SEG-001: bloquear o Prism depois de um tempo sem uso. */
@@ -107,14 +115,14 @@ function freeze<T extends object>(value: T): T {
 /**
  * O padrão: o do canvas (`Configuracoes.dc.html`) onde ele diz, e o combinado com as outras frentes onde o canvas não diz
  * (as fontes que o app traz: RN-CONFIG-008; maiúsculas desligadas, bloqueio ligado em 10 minutos, "buscar mais ao rolar" desligado, o tipo no cabeçalho ligado, como a grade
- * sempre o mostrou: RN-CONFIG-006, o zoom da grade em 100%: RN-GRADE-010, a linha em branco separando os comandos, como no DBeaver: RN-SQL-018, e o navegador confortável, o do canvas: RN-NAV-011). Congelado: é o mesmo objeto para
+ * sempre o mostrou: RN-CONFIG-006, o zoom da grade em 100%: RN-GRADE-010, o resultado das abas novas no painel: RN-CONFIG-010, a linha em branco separando os comandos, como no DBeaver: RN-SQL-018, e o navegador confortável, o do canvas: RN-NAV-011). Congelado: é o mesmo objeto para
  * todo mundo que ainda não escolheu nada. A ordem dos campos é a de `fields`.
  */
 export const defaultPreferences: Preferences = freeze({
   theme: "dark",
   ui: { fontFamily: appFonts.ui, navigatorDensity: "comfortable" },
   editor: { fontFamily: appFonts.editor, fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
-  results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
+  results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
   security: { lockEnabled: true, lockAfterMinutes: 10 },
 } as const satisfies Preferences);
 

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui";
 import { throughMutationCache } from "@/lib/api/mutation-cache";
 import { unwrap } from "@/lib/api/prism-api";
+import { hostClipboard } from "@/lib/host/host";
 import { isMacPlatform } from "@/lib/utils/platform";
 
 import { isAutoRefreshAction, type AutoRefreshSource } from "./auto-refresh-menu";
@@ -461,7 +462,7 @@ const cellRefusals = ["RESULT_NOT_FOUND", "DATABASE_SESSION_NOT_FOUND", "CELLS_I
 /** A área de transferência do navegador, como o "Copiar nome" do navegador: escreve e dá o aviso de sucesso, ou o de atenção quando falha. */
 async function writeClipboard(text: string, toast: ReturnType<typeof useToast>, success: () => void): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    await hostClipboard().writeText(text);
   } catch {
     toast.warning(copy.menu.notCopied);
     return false;
@@ -2018,7 +2019,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
               if (several) break;
               // A leitura da área de transferência também segura a atualização automática: o menu já fechou, e a colagem é na linha que ele mostrava.
               const reading = hold();
-              void navigator.clipboard
+              void hostClipboard()
                 .readText()
                 .then(
                   (text) => whenEditable(cell, () => applyValue(cell, text), from),

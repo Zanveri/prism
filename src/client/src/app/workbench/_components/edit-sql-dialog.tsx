@@ -1,4 +1,5 @@
-import { Button, Dialog, useToast } from "@/components/ui";
+import { Button, Dialog, useHost, useToast } from "@/components/ui";
+import { hostClipboard } from "@/lib/host/host";
 
 import type { EditPreview } from "../_lib/record-edits.schema";
 import { recordsCopy } from "../_lib/records.copy";
@@ -18,11 +19,12 @@ export function previewText(preview: EditPreview): string {
  */
 export function EditSqlDialog({ preview, onClose }: { preview: EditPreview; onClose: () => void }) {
   const toast = useToast();
+  const host = useHost();
   const unwritten = preview.statements.flatMap((statement) => statement.values);
 
   async function copyAll() {
     try {
-      await navigator.clipboard.writeText(previewText(preview));
+      await hostClipboard(host).writeText(previewText(preview));
       toast.success(copy.copied);
     } catch {
       toast.warning(copy.notCopied);

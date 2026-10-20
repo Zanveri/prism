@@ -71,10 +71,10 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   texto das abas de SQL). Em desenvolvimento o menu fica. No macOS a barra de menu é do sistema, e um app sem menu não
   ouve Cmd+Q nem Cmd+C e Cmd+V nos campos: fica o mínimo, o menu do app e Editar, sem recarregar e sem ferramentas de
   desenvolvedor (`applicationMenuTemplate`, em `platform.ts`, com teste; não foi aberto no macOS).
-- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5 e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
+- **F5 e Ctrl+R nunca recarregam a janela** (RN-GRADE-012), e F5, F6 (RN-ABAS-014) e F11 chegam à tela. O Chromium do Electron não recarrega nada sem menu: quem
   recarrega é o menu padrão de desenvolvimento (Recarregar Ctrl+R, Forçar recarga Ctrl+Shift+R, Tela cheia F11), e o app empacotado do Windows e do
   Linux não tem menu, e o do macOS não tem Recarregar. Mesmo assim, cada janela ignora o menu para essas teclas: o `before-input-event` de
-  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5 e F11 com qualquer
+  `createAppWindow` chama `setIgnoreMenuShortcuts(menuShortcutIgnored(input))` a cada tecla (`platform.ts`, com teste: F5, F6 e F11 com qualquer
   modificador, Ctrl+R e Cmd+R com ou sem Shift). A tecla não é cancelada (o `preventDefault` do `before-input-event` a tiraria também da página):
   ela só não vai ao menu, e a tela a recebe como qualquer outra. Conferido sob Xvfb, no `pnpm dev`, com o menu padrão: F5 atualizou os Registros,
   F11 abriu o "Filtrar" (e não a tela cheia), e Ctrl+R e Ctrl+Shift+R não recarregaram a página (um marcador em `window` sobreviveu).
@@ -134,7 +134,9 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   (`setPermissionRequestHandler`, pelo `details.requestingUrl`) e o da consulta (`setPermissionCheckHandler`, pela origem), com a mesma regra
   (`permissionAllowed`): só `clipboard-sanitized-write` e `clipboard-read` (copiar e colar) e `local-fonts` (a lista das fontes, em
   Configurações › Aparência), e só para a origem da tela (`rendererOrigin`: `app://prism`, ou o servidor do Vite em desenvolvimento). O resto é
-  negado, mesmo para o app. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
+  negado, mesmo para o app. **A janela do resultado** (RN-ABAS-017) é reconhecida pelo `webContents` (`isResultContents`, pelo `id`), e não pelo endereço
+  (`about:blank`, com a origem herdada ou nula): `permissionAllowed(…, isResultWindow)` dá a ela só a área de transferência (`resultWindowPermissions`); a
+  consulta sem `webContents` vale a regra da origem. **Web API nova que pede permissão** (a tela passa a usar geolocalização, notificação…): entra em `appPermissions`,
   ou falha calada. Conferido no Electron sob Xvfb: `local-fonts` sai `granted` sem gesto da pessoa (quem responde é o tratador da consulta, e a API não precisa pedir), copiar e
   colar funcionam, e `geolocation` e `notifications` saem `denied`.
 - **O destino das exportações de dados** (RN-EXPORT-019 e 020; `electron/transfer-desk.ts`, sem Electron, com teste em pastas temporárias de
@@ -210,8 +212,10 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   origem: a `font-family` as acha pelo nome no computador, sem baixar nada, e o `font-src 'self'` não as vê.
 - O script que aplica o tema antes da primeira pintura é um **arquivo** (`public/theme-boot.js`, clássico, no `<head>`, sem
   `defer`): a política recusa script em linha, e um módulo deixaria a página pintar antes dele (ver "Configurações").
-- `will-navigate` é cancelado; em desenvolvimento passa só a recarga da própria página. Abrir
-  janela é sempre negado. As rotas são em hash, que não é navegação.
+- A navegação (`will-navigate`, `will-frame-navigate` e `will-redirect`), o `webview` e a abertura de janelas são negados em TODO `webContents` desde o
+  nascimento (`app.on("web-contents-created")`, `main.ts`); em desenvolvimento passa só a recarga da própria página das janelas do app
+  (`navigationAllowed`, `web-lockdown.ts`). A **única** abertura é a da janela do resultado (ver "O resultado no painel, numa aba ou numa janela"). As
+  rotas são em hash, que não é navegação.
 
 ## Marca, ícone e abertura (RN-MARCA-001 a 006)
 
@@ -842,16 +846,51 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
 
 - **A ordem** (`_lib/tab-order.ts`, puro e testado): `moveTab(tabs, id, insertAt)` com a posição de ANTES de a aba sair do lugar (a marca de
   soltar), `shiftTab` (Ctrl+Shift+PageUp e PageDown na aba ativa, sem dar a volta, `tabMoveShortcut`, tratado em `WorkbenchTabs` como o Ctrl+W),
-  `dropIndex` (pela metade de cada aba) e `isOutsideWindow`. O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
+  `dropIndex` (pela metade de cada aba), `dragKindOf` e os dois tipos do arraste (abaixo). O provedor tem `reorderTab` e `shiftTab`. A ordem vale na próxima entrada (RN-ABAS-006, ver
   "Abas que voltam na próxima entrada").
-- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`), com o tipo `application/x-prism-tab` e o dado `{ windowId, tabId }`
-  (`writeTabDrag`/`readTabDrag`, conferido: qualquer programa pode soltar algo na faixa). A faixa aceita só esse tipo, mostra a marca de soltar
-  (`data-drop` `before`/`after`, uma sombra interna da cor de destaque) e, solta, ou muda de lugar (veio desta janela) ou pede a aba à janela de
-  origem (`prism:windows-request-tab`; o centro manda `prism:windows-give-tab` a ela, e ela a leva pelo caminho de sempre, na posição pedida).
-  A janela sem abas não tem faixa: o lugar vazio dela recebe a aba solta. O fim do arrasto (`dragend`) com `dropEffect` `none` e o ponto fora da
-  janela leva a aba a uma janela nova ali. **Entre janelas o Chromium às vezes diz `none` mesmo quando a outra aceitou**: por isso o centro
-  recusa a janela nova quando o ponto está em cima de outra janela do Prism (`overWindow`, sem aviso), e quem leva a aba é o pedido da faixa de
-  lá. Solta fora da faixa de outra janela, a aba fica onde estava.
+- **O arrasto é o do HTML** (`draggable` na moldura de cada aba, `data-tab-id`) e carrega o dado `{ windowId, tabId }` (`writeTabDrag`/`readTabDrag`,
+  conferido: qualquer programa pode soltar algo na faixa). **Os dois tipos** (`tab-order.ts`): `tabDragType` (`application/x-prism-tab`), a aba de consulta
+  e a de tabela, que a faixa e o véu de qualquer janela do Prism aceitam; e `resultTabDragType` (`application/x-prism-result-tab`), a aba do resultado
+  (RN-ABAS-012), que só a faixa e o véu da janela de origem aceitam (as outras a reconhecem e a recusam). `dragKindOf(types)` diz `"tab"`, `"result"` ou
+  `null` (texto, arquivo) já pelo `dataTransfer.types`, que o Chromium mostra no `dragenter` e no `dragover`; o conteúdo, só no `drop`. `dragTypeOf(kind)`
+  é o tipo que cada um escreve. Quem arrasta a aba do resultado (fluxos B e C) escreve o mesmo dado com `resultTabDragType`, chama `drag.begin(id, "result")` e
+  termina pelo mesmo caminho (`endTabDrag` com `kind: "result"`, `onDragEnd` do `WorkbenchTabs`).
+- **O arraste de uma aba desta janela** (`_lib/tab-drag.ts`, puro e testado): `createTabDragSession()` guarda o arraste (`begin` no `dragstart`, na hora;
+  o aviso a quem desenha sai depois, num `setTimeout` de 0, porque o Chromium cancela o arraste cujo elemento muda no próprio `dragstart`), a marca de quem
+  recebeu a soltura (`mark("strip" | "veil")`), `finish()` no `dragend` (devolve o que se sabe e solta o que esperava), `whenIdle(tabId, run)` (o
+  `detachTab` da aba que outra janela recebeu espera o fim do arraste: o Chromium não avisa o fim do arraste de um elemento que saiu da página) e
+  `subscribe`/`getSnapshot`. `veilFor({ kind, fromHere, onlyTab, available })` devolve a frase e se a soltura vale (`null`: sem véu, como a aba do resultado de
+  outra janela e o navegador de desenvolvimento); `isOnlyTab` (a aba e a do resultado dela contam como uma) e `dragEndRequest(ended, event, { windowId, onlyTab })`
+  monta o `TabDragEnd` do `dragend` (`null` na soltura na faixa, fora do Electron e na aba única). O `WorkbenchTabs` cria a sessão, passa-a à faixa (`drag`,
+  `onDragEnd`) e ao véu, e `handleDragEnd` faz: `drag.finish()`, `dragEndRequest`, `endTabDrag` (`lib/api/bridge.ts`, que devolve `{ action: "none" }` para a
+  resposta que não confere e para a ponte que não responde) e, com `newWindow`, o `latestMove` de sempre com o `at` que o processo principal leu; a aba do
+  resultado (`kind: "result"`) não vai a outra janela de abas: o `at` abre o resultado na janela dele (`changePlace(tabId, "window", "drag", at)`).
+- **O véu** (`_components/tab-drag-veil.tsx`, `TabDragVeil`): `fixed inset-0 z-40`, borda tracejada de 2 px no acento, a frase no meio da área das abas (a
+  `ref` do `section` do `WorkbenchTabs`), `aria-hidden`. A faixa é `relative z-50` e tem `data-tab-strip` (`tabStripAttribute`, `isInTabStrip`, pelo `nodeType`
+  e não pelo `instanceof`: o elemento pode ser de outro documento, RN-ABAS-017), e o que cai nela é dela. A raiz da página (`ownerDocument` da área) escuta
+  `dragenter`, `dragover`, `dragleave` e `drop` na captura e para a propagação antes do editor, da grade e dos campos (soltar a aba no `.cm-content` não escreve
+  nada); um contador de entradas e saídas evita o pisca; `dragend` e o primeiro `pointermove` depois do arraste apagam um véu que ficou. No `drop` da aba desta
+  janela o véu só marca (`mark("veil")`) e o pedido sai no `dragend`; no da aba de outra janela chama `onReceive` (`requestTab`, ela entra no fim da faixa).
+- **O fim do arraste é decidido por quem recebeu a soltura, não pelo `dropEffect`**, e o ponto é o do ponteiro lido pelo processo principal.
+  `prism:windows-drag-end` (`preload.ts`: `windows.endDrag`; `main.ts`: `hub.endDrag`) leva `tabDragEndSchema` (`tabId`, `kind`, `dropped: "veil" | "none"`,
+  `effect`, `at`, `inPage`) e responde `tabDragEndReplySchema` (`none` ou `newWindow` com `at`), ambos em `window-messages.ts`. `endDrag` (`window-hub.ts`):
+  `dropped: "veil"` abre a janela nova no ponteiro; sem soltura, com o ponteiro dentro da janela de origem ou sobre outra janela do Prism (`windowAt`),
+  nada; fora delas, abre. **A espera pela outra janela**: a aba de consulta e a de tabela esperam `dragClaimWaitMs` (200 ms) que outra janela diga que a
+  recebeu (`requestTab` grava a reivindicação por `fromId:tabId`, que vale `claimMemoryMs`, 2 s, e que o fim do arraste lê e apaga, antes ou depois da
+  espera); a aba do resultado nenhuma outra janela recebe, então não espera. `cursorPoint` (`screen.getCursorScreenPoint()`, em pixels independentes da
+  densidade), `escapeEndsWithoutEffect` e `wait` são dependências do centro (testáveis); o `moveTab` não recusa mais a janela nova sobre outra janela
+  (`overWindow` saiu) e passa `normalBounds()` da origem a `createWindow`. **O Esc**: no Linux com o X11 a sonda S-ABAS-1 mostrou que a soltura fora das
+  janelas vem com `move` e o Esc com `none` (`escapeEndsWithoutEffect`); nas outras plataformas o Esc fora das janelas vale como a soltura e abre a janela
+  nova (a alternativa, um arraste próprio pelos eventos do ponteiro, é decisão do dono, seção 39). **O Wayland** (`isWaylandSession`, `platform.ts`, com
+  teste: o `--ozone-platform` vence, depois o `--ozone-platform-hint` e a `ELECTRON_OZONE_PLATFORM_HINT`, `auto` com a sessão Wayland): `cursorPoint` devolve
+  `null`, vale o `at` do `dragend` (e `inPage` para o Esc), sem ponto a janela abre `cascade` (32 px) abaixo e à direita da de origem, e `settleBounds` não
+  reaplica os limites (o sistema escolhe o lugar). **O lugar da janela nova** (`newWindowBounds`): canto de cima à esquerda no ponto, no monitor do
+  ponteiro, no tamanho da origem sem maximizar, trazida para a área útil e nunca abaixo de `appWindowMinimum` (1024×700); `createAppWindow(bounds)` aplica os
+  limites de novo ao nascer e antes de aparecer e confere com `boundsMatch` (`settleBounds`, que registra a divergência), por causa do Windows com monitores de
+  escalas diferentes. A janela do resultado (RN-ABAS-013) tem o lugar dela (`placeResultWindow`, com o ponto da soltura da aba do resultado) e confere os limites do
+  mesmo modo, aplicando-os de novo depois de criada (`adoptResultWindow`).
+- A faixa mede 28 px (RN-ABAS-009): botões de 24 px de largura com ícones `size-3.5`, aba `h-7` com o X de 20 px (`size-5`) numa área de clique de 24 px e o
+  selo do ambiente de 16 px (`ShownEnvironmentPill` aceita `className`); as abas dos scripts e a barra do resultado seguem a mesma altura (`result-bar.ts`).
 - **O menu da aba** ganhou o grupo `moveMenu`: "Mover para nova janela" e "Mover para a janela…" (apagado sem outra janela; abre, no mesmo
   ponto, a lista das outras, pedida ao centro ao abrir o menu, com o número e o resumo que cada uma dá de si, `prism:windows-describe`). Fora do
   Electron o grupo não aparece.
@@ -904,8 +943,8 @@ guia da API) e voltam na janela principal na próxima entrada. **Nada vai ao `lo
 suas abas ao processo principal, que junta as de todas e grava.
 
 - **O que vai e o que volta** (`_lib/saved-workspace.ts`, puro e testado). Vai, de cada aba de consulta, o texto do editor DESTE instante (`liveEditors`), a
-  conexão, o banco, o script de onde veio e a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco); de cada aba de tabela, a conexão, o banco, o esquema,
-  a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
+  conexão, o banco, o script de onde veio, a marca de mudança não salva (`isScriptDirty`, pelo texto, pela conexão e pelo banco) e o lugar do resultado (`resultPlace`, ver
+  "O resultado no painel, numa aba ou numa janela"); de cada aba de tabela, a conexão, o banco, o esquema, a tabela e a vista; e a ordem e a ativa. O título não vai (a consulta volta com o número seguinte da janela, o script com o nome que tem hoje), nem a sessão,
   o resultado, o cursor e as alterações não salvas da grade. O texto acima de 1 MB em bytes de UTF-8 não vai: a aba vai vazia com `sqlTooLarge`, e volta vazia
   com o aviso (`restoredEmpty`). Volta (`restoreWorkspace`): ids novos, sem sessão, a aba de um script ligada a ele (o SQL salvo dele é lido pela rota do item
   só para a aba que tinha mudança não salva, para o ponto se apagar ao desfazer até o texto salvo), na conexão em que estava e lembrando o lugar com que o
@@ -958,6 +997,144 @@ suas abas ao processo principal, que junta as de todas e grava.
   SQL diz que o que fecha não volta na próxima entrada (`confirmClose.description`).
 - **Em aberto, à espera do dono**: sem nenhuma conexão cadastrada, a área de trabalho mostra o primeiro uso (RN-NAV-007) por cima das abas que
   voltaram sem conexão; elas continuam gravadas e aparecem quando uma conexão é criada.
+
+## O resultado no painel, numa aba ou numa janela (seção 39: RN-ABAS-011 a 016, RN-CONFIG-010, RN-PAINEL-001)
+
+**A área de resultado de uma aba é UMA só, e o que muda com o lugar é só onde ela está na página.** Ela continua sendo desenhada pela aba de consulta
+(`QueryTabPanel`: o mesmo executor, as mesmas pendências, a mesma grade, o mesmo filtro), por um portal do React numa raiz própria (`ResultHost`,
+`_components/result-host.tsx`: um `div` criado uma vez por aba, `data-result-host`), e é essa raiz que muda de pai: o lugar do painel (um `div` da aba, abaixo do
+editor), o painel da aba do resultado (`ResultTabPanel`, em `workbench-tabs.tsx`) ou a raiz da janela do resultado (quem a abrir). Os lugares de fora do painel se
+registram em `resultSlots` (`_lib/result-slots.ts`, pelo id da aba e pelo lugar). Mudar de pai não desmonta nada: a seleção, as larguras, o zoom da grade, a aba do
+script escolhida, o filtro e as pendências ficam, e o executor nem fica sabendo. Na árvore do React a área continua dentro da aba de consulta, então as teclas dela
+(F5, Alt+X, Ctrl+S, o F6) e as da faixa (Ctrl+W, Ctrl+Shift+PageUp e PageDown) sobem até lá como subiam (por isso a área vai dentro do `div` do `onKeyDown` da
+aba). **Não troque o portal por renderizar a área num lugar ou noutro**: o React a desmontaria a cada troca (um portal com outro contêiner é outra fibra), e a
+rolagem, a seleção e as larguras sairiam junto.
+
+- **O que o elemento perde ao sair da página, a raiz devolve.** A rolagem: o Chromium zera o `scrollTop` de um elemento que sai da página e volta; a raiz guarda a
+  de cada elemento de dentro a cada `scroll` (na fase de captura, porque quando ela sai o elemento já não tem caixa para ler) e a devolve quando volta a ter
+  caixa (um `ResizeObserver` na raiz), também quando o lugar novo ainda está escondido (a aba do resultado não ativa) e só aparece depois. O foco: quem troca o
+  lugar pede o foco em `resultFocus` (o resultado, o botão, o editor), e quem desenha o lugar o leva quando pode (a raiz, depois de chegar e ter caixa; o editor, no
+  `useLayoutEffect` da aba, quando ele está à vista). O campo de edição de uma célula aberto é confirmado antes (`releaseFocusIn`: o `blur` sai pelo caminho de
+  sempre; o Chromium não avisa o `blur` de quem sai da página). `releaseFocusIn` acha a raiz também no documento da janela do resultado, e a própria raiz
+  (`ResultHost`) tira o foco de dentro antes de mudar de documento e quando fica sem lugar: o Ctrl+W na janela do resultado e o fechar pelo sistema não
+  passam por um clique.
+- **O modelo** (`_lib/result-place.ts`, puro e testado): `resultPlace` é da aba de consulta (`QueryTab.resultPlace`, sem ele o painel; a aba de tabela não tem),
+  e `placeOf` diz o que vale. A aba do resultado **não é uma aba da lista**: `stripEntries` a põe na faixa logo depois da dela, e o provedor guarda só qual é a
+  entrada ativa (`resultActive`, `showEntry`; `activeTabId` continua o da aba da consulta, para a barra de status, a ativa gravada, o "Mover para a janela…" e a
+  pergunta de erro do script). Por isso o par anda junto sem código nenhum (o Ctrl+Shift+PageUp move a aba, e a do resultado é derivada), "Fechar as outras" e a
+  contagem da pergunta de fechar não a contam, e fechar a aba a leva junto. O arraste mede a aba e a do resultado como uma caixa só (`unitRects`) e o marcador
+  (`dropMarks`) nunca cai entre as duas; a aba do resultado se arrasta com outro tipo (`resultTabDragType`), que as faixas não aceitam. O foco depois de trocar
+  (`afterPlaceChange`), o F6 (`f6Action`), o resultado "à vista" da atualização automática (`resultOnView`) e os itens dos menus (`placeMenu`) também moram ali.
+- **Onde se troca**: o botão "Onde mostrar o resultado" da barra (`ResultPlaceButton`, a propriedade `placeControl` do `ResultPanel`, logo antes de `actions`:
+  no painel, antes de recolher e maximizar; numa aba, na ponta), o submenu do menu da aba da consulta (depois dos de mover) e o menu da aba do resultado ("Ir para
+  a consulta", o submenu, "Voltar para o painel"). Quem troca é `changePlace` de `WorkbenchTabs`, que anuncia a troca numa região `role="status"` (sem toast).
+  Fechar a aba do resultado (o X, o clique do meio, o Ctrl+W com ela ativa, "Voltar para o painel") é trocar para o painel, sem pergunta.
+- **O ponto da aba do resultado** (`ResultTabMark`): o comando da pessoa, o script rodando e o "Salvar" das alterações (que a aba publica em `resultActivity`, porque
+  quem salva é a edição de dentro dela) acendem; o comando que termina com ela não ativa deixa o "resultado novo" (`trackUnseen`) até ela ficar ativa; o ponto
+  vermelho do script parado na pergunta de erro fica no lugar dele. O texto vai no nome da aba, para o leitor de tela.
+- **Numa aba e numa janela** a aba da consulta mostra só o editor, sem a divisória nem o recolher e o maximizar; a divisão do painel fica guardada (`tab-memory`) e
+  volta, e executar não a mexe (no painel, executar com a área recolhida a restaura, como antes).
+- **O lugar volta e viaja**: vai no `PUT api/user/workspace` de cada aba de consulta (`savedTabOf`; o gravado antes da 0.5.0 volta no painel) e na passagem para
+  outra janela (`tabTransferSchema.tab.resultPlace`): a aba do resultado vai junto. O lugar que esta versão não conhece, na leitura das abas gravadas, vale o
+  painel (a aba volta do mesmo jeito). **Rebaixar para a 0.4.0 foi conferido** (guia da API, "Abas que voltam na próxima entrada").
+- **A preferência** (RN-CONFIG-010): `results.resultPlace`, em Configurações › Resultados, lida na hora em que a aba de consulta nasce (`openQueryTab`,
+  `openScriptTab`; as que voltam e as que chegam de outra janela ficam no lugar delas).
+- **"Numa janela"** (RN-ABAS-013 a 017). Aparece nos menus e em Configurações onde há processo principal para aprová-la (`resultWindowAvailable()` pergunta à
+  ponte, `resultWindows.available`); no navegador do desenvolvimento não, e o lugar gravado como "Numa janela" vale ali o painel, sem deixar de ser o gravado.
+  A janela do resultado é uma **página em branco da mesma tela**: a aba de consulta continua desenhando a área de resultado (`ResultHost`), e a raiz dela muda
+  de DOCUMENTO (o `appendChild` a adota no da janela). Não há segunda tela, segundo executor nem estado a combinar.
+
+### A janela do resultado: o processo principal (`electron/`)
+
+- **Tudo é pedido e aprovado, uma vez.** A tela pede `prism:result-window-request {name, mode, at}` (preload da janela da aba, `assertFromApp` e zod,
+  `result-window-messages.ts`); `ResultWindows.request` (`result-windows.ts`, sem Electron, com teste) confere que a janela está pronta com o cofre aberto
+  (`hub.isReady`), que não há 32 abertas por ela (as abertas, as nascendo e as concessões contam) e que o nome não está aberto, e guarda uma **concessão de
+  uso único** (2 s, daquela janela e daquele nome). `openHandlerOf` (o `setWindowOpenHandler` de cada janela do app) só aprova com todas as condições:
+  `about:blank`, o nome casando com `^prism-result-<uuid>$`, `features` exatamente `popup`, disposição `new-window`, sem corpo de envio, janela pronta e a
+  concessão, que a aprovação consome. As opções vêm só do processo principal (`resultWindowOptions`, `web-lockdown.ts`): `show: false`, sem `parent`, o mínimo
+  de 480×320 e as `webPreferences` com todas as chaves escritas (`contextIsolation`, `sandbox`, `nodeIntegration`, `nodeIntegrationInSubFrames`, `webviewTag`,
+  `webSecurity`) e **sem preload**: a janela do resultado não tem `window.prism`. O que o texto das opções diria não conta. O `referrer` não é condição (o
+  Chromium o preenche pela página que abre, e pedir `noreferrer` faria o `window.open` devolver `null`).
+- **`did-create-window`** (`adoptResultWindow`) confere as `webPreferences` (`getLastWebPreferences`, que o tipo do Electron não declara, ou as opções com
+  que nasceu) e **destrói a janela** se alguma chave não bate; nega nela a abertura de outras; guarda-a em `resultWindows` (por janela da aba e nome; fora de
+  `appWindows`, do centro das janelas e da gravação das abas, então `window-all-closed`, `liveWindowIds` e as perguntas de fechar não a veem); aplica o zoom
+  (ali e no `dom-ready`, e `changeZoom` as inclui); liga os atalhos (`installShortcuts`, os mesmos do zoom e do F5/F6/F11/Ctrl+R); aplica de novo os limites e
+  os confere (monitores de densidades diferentes); tira o `setBackgroundThrottling` da janela da aba enquanto ela tem uma aberta; avisa
+  `prism:result-window-state {name, minimized}`; grava o lugar; e a fecha quando a janela da aba fecha, recarrega (`did-start-navigation`) ou perde o
+  processo, quando a área de trabalho dela desmonta (`prism:windows-ready` falso) e quando o app sai (`before-quit`). **Nasce escondida** e aparece quando a
+  tela avisa `prism:result-window-ready` (`show()`+`focus()` no modo `focus`, `showInactive()` no `background`), ou 3 s depois. Se o `show: false` não valer
+  numa janela aberta por `window.open`, ela fica transparente (`setOpacity(0)`) até estar pronta; no Linux isso não faz nada: **sonda S-JANELA-1**.
+- **Quem fechou.** `closeByHost` marca antes de pedir, e o `closed` da janela avisa a que a abriu `prism:result-window-closed {name, reason}`: `host` quando o
+  Prism pediu, `user` nos outros casos (o X da barra, Alt+F4, Cmd+W). Só `user` volta o resultado ao painel.
+- **O lugar** (`result-window-file.ts`, `result-window-place.ts`, sem Electron, com teste): `result-window.json` ao lado do `zoom.json` (contrato,
+  RN-VERSAO-002; `{x, y, width, height, maximized}`, arquivo ilegível vale "como se não existisse"), gravado de uma vez, no máximo a cada 500 ms (e na hora
+  ao fechar). A primeira abre 960×600 no centro do monitor da janela da aba; depois o lembrado (o tamanho sem maximizar, `getNormalBounds()`); o lugar que não
+  está em monitor nenhum vira o centro; outra janela do resultado no mesmo lugar desloca 32 px (a cascata volta ao primeiro lugar quando sairia da área útil);
+  levada pelo arraste, abre onde a aba foi solta (`at`, que só vale onde o processo principal não lê o ponteiro: o Wayland).
+- **Os diálogos do sistema** do resultado (o destino do "Exportar dados", o arquivo do "Importar…") levam o nome da janela (`resultWindow` nos schemas de
+  `transfer-messages.ts`); `dialogParent` prende o diálogo a ela, e com nome desconhecido ou de outra janela da aba, à janela da aba.
+- **Canais novos** (todos com `assertFromApp` e zod, nomes sem dígito, no `channels.test.ts` e no `result-window-main.test.ts`):
+  `prism:result-window-request|ready|focus|close|title` (a tela pede) e `-closed|-state` (o processo principal conta). `-focus` leva `target`: a do
+  resultado (padrão) ou a da aba que a abriu, porque a janela do resultado não tem ponte para pedir por si ("Voltar para o painel" e o F6 de dentro dela).
+
+### A janela do resultado: a tela
+
+- **`resultWindows`** (`workbench/_lib/result-windows.ts`, sem React, peças injetadas, com teste) é o ciclo da janela: `open` (pede a concessão, chama
+  `window.open("about:blank", name, "popup")`, monta a página, registra a raiz em `resultSlots.set(tabId, "window", raiz)`, espera a área chegar e só então
+  avisa `-ready`), `close` (marca a aba como fechando pelo Prism, pede e **espera o aviso, até 3 s**), `reconcile` (a volta das abas), `setTitle`, `focus`,
+  `shownTabs` (as abas com a janela aberta e não minimizada: o resultado "à vista" da atualização automática, `resultOnView({ windowShown })`),
+  `onUserClosed` e `connect` (liga o que o processo principal conta; ao desmontar a área de trabalho, fecha todas pelo Prism). `open` é **idempotente**: a aba que tem a janela
+  ou está abrindo uma não pede outra, e um nome aberto nunca é pedido de novo ao Chromium.
+- **Quem abre**: só a ação da pessoa (`changePlace` de `WorkbenchTabs`, que abre depois de pôr o lugar e **volta o lugar com o aviso** se a janela não abrir) e a
+  volta das abas (um efeito que só decide quais janelas faltam, `reconcile`, uma a uma, na ordem das abas e a da ativa por último, em `background`; a que não
+  abre vira o painel, com o aviso). O bloqueio (`vaultLock`) fecha todas pelo Prism (o `closeAll` também invalida as aberturas que esperam na fila do `reconcile`, e `open`
+  recusa, sem marcar falha, enquanto o cofre está bloqueado: o processo principal não sabe do bloqueio ocioso) e o desbloqueio as reabre; o diálogo, o menu, a
+  lista e o assistente abertos na página de uma janela do resultado fecham quando ela sai da lista de páginas (`useOnHostGone`, em `host-context.tsx`: a troca
+  de lugar, o fechar da pessoa, o bloqueio), e o `closePortals` do bloqueio manda o Esc também a essas páginas; "No painel" e "Numa aba" pelo botão de lugar da
+  janela do resultado trazem a janela da aba à frente, como o "Voltar para o painel"; a aba que vai para outra janela fecha a dela antes
+  e a janela que a recebe reabre (sem a confirmação em 3 s, a aba vai com o resultado no painel e `resultWindowLost` faz a outra avisar).
+- **A página** (`result-window-page.ts`, com teste): a cópia da política de conteúdo e o `<base href>` primeiro, os estilos (as `<link>` pelo endereço, as
+  `<style>` pelo texto, as folhas construídas como `<style>`) e a língua, o tema e o `style` da raiz espelhados por `MutationObserver` (que acompanha as
+  `<style>` que o Vite troca), e o `<main aria-label="Resultado de …">` onde a área se põe. Um `<a href>` não tratado e um arquivo solto não fazem nada.
+  Montar acontece com o documento `complete` e é conferido no `load` (o documento em branco do começo pode ser trocado: monta de novo).
+- **Os componentes usam a página de onde estão** (`lib/host/host.ts` e `components/ui/host-context.tsx`): `useHost()` dá `{document, view, resultWindow}`;
+  `ResultHost` dá o contexto a tudo o que a área desenha, e `Dialog`, `ContextMenu` (e o submenu), `Select`, `CustomFilterField`, a pilha dos avisos e o
+  assistente "Exportar dados" abrem no `body` DELA, medem a janela dela e ouvem o ponteiro dela. O `Dialog` e o `ContextMenu` **fixam a página em que abriram**.
+  A conferência de elemento é por `nodeType` (`isElement`, `isNode`, `elementOfTarget`), não por `instanceof`. A grade segue o ponteiro na janela do elemento, o
+  `ResizeObserver` do virtualizador, da raiz e das abas do script é o da janela do elemento e é refeito quando o documento muda (o virtualizador é desligado e
+  ligado de novo na mesma passada: `enabled`), e o campo de filtro (CodeMirror guarda o documento em que nasceu) recria o editor na página nova (`root`).
+  Os diálogos que a aba desenha por ela (confirmação da proteção, Ver SQL, cópia, Gerar SQL, a pergunta de erro do script, o "Personalizado…") abrem na janela
+  que tem o foco entre a da aba e a do resultado dela (`ActiveHostProvider`, em `query-tab.tsx`). A área de transferência é `hostClipboard(host?)`
+  (`lib/host/host.ts`): o `navigator.clipboard` da janela do elemento, ou da que tem o foco. **Código novo na área de resultado não usa `document`, `window`,
+  `instanceof Element` nem `navigator.clipboard` globais.**
+- **Os avisos e a atividade**: os toasts vão para a janela com o foco (a pilha na janela do resultado fica 12 px acima da borda); o aviso do bloqueio por
+  inatividade aparece também nela (`IdleWarning inResultWindow`, 12 px abaixo da borda de cima) e o que a pessoa faz nela conta como atividade
+  (`resultHostRegistry.each` em `use-idle-lock.ts`).
+- **As teclas**: a raiz (`ResultHost`), só na janela do resultado, trata o Ctrl+W ("Voltar para o painel", `windowKeyAction`) e não deixa o Ctrl+Shift+PageUp e
+  PageDown, o Ctrl+9, o Ctrl+B, o Ctrl+Shift+E e o Ctrl+, subirem pela árvore do React até a aba e a faixa. O F5, o F6, o Alt+X e o Ctrl+S sobem até a aba de
+  consulta. O F6 do editor traz a janela do resultado; o dela traz a da aba (`focusOpener`), com a consulta ativa e o foco no editor. "Voltar para o painel" é
+  um botão com texto na ponta direita da barra (`BackToPanelButton`); um link usado na janela traz a da aba à frente.
+- **O arraste da aba do resultado para fora da faixa** (RN-ABAS-010): a faixa o começa com `drag.begin(tabId, "result")` e o tipo `resultTabDragType`, e o
+  `dragend` segue o caminho da aba de consulta (`endTabDrag` com `kind: "result"`, sem a espera pela outra janela). A resposta `newWindow` chama
+  `changePlace(tabId, "window", "drag", at)`, que abre a janela com `resultWindows.open(tabId, { mode: "focus", at, title })` (`at` é o ponto do `dragend`, que
+  o processo principal devolve; o Wayland usa o do evento). O `PlaceVia` `drag` se comporta como o `menu`.
+- **Sondas que ficam para uma máquina de verdade** (Windows empacotado com dois monitores de escalas diferentes, macOS, Linux X11 e Wayland; nenhuma foi
+  exercitada aqui, e nada disto foi dado como passando): **S-JANELA-1** (a página em branco tem a origem do app; `getLastWebPreferences` e `window.opener`;
+  `show: false` vale numa janela do `window.open`, senão a transparência; a política copiada vale: uma imagem `https://` dispara
+  `securitypolicyviolation`; as fontes e os estilos valem no pacote e no desenvolvimento; não tem `window.prism`; **o `will-frame-navigate` não dispara na
+  página em branco do começo** (a navegação para `about:blank` é permitida por `navigationAllowed` justamente por isso); aparece sem um quadro em branco; o
+  zoom nasce e muda), **S-JANELA-2** (copiar e colar com o foco na janela, `permissions.query`, `writeText` chamado pela tela da aba no `navigator` dela),
+  **S-JANELA-3** (o outro documento: a seleção por arraste e a rolagem sozinha, a largura das colunas, o `ResizeObserver`, a rolagem virtual, o filtro com o
+  autocompletar, os menus e os diálogos com o foco preso, a troca do documento em branco e o modo estrito; o desenho da grade na janela coberta ou escondida),
+  **S-JANELA-4** (a atualização automática de 1 s com a janela da aba minimizada, atrás de outra, e com a do resultado coberta), **S-JANELA-5** (a janela
+  aberta sem clique, o `window.open` depois do pedido assíncrono sem ativação do usuário) e **S-JANELA-6** (trazer à frente uma janela minimizada ou
+  atrás de outra; o Wayland recusa o foco). Se alguma falhar numa plataforma, a chave é `available` de `resultWindows` na ponte (`preload.ts`, hoje sempre
+  `true`): falso nessa plataforma esconde "Numa janela" (nos menus, em Configurações), e o lugar gravado vale o painel. "Numa aba" sai do mesmo jeito.
+- **Conferido sob Xvfb** (`pnpm dev`, um PostgreSQL local com 5.000 linhas): com a grade rolada a 1.500 px, "Numa aba" pelo botão levou a área ao painel da aba do
+  resultado com a rolagem igual, a aba do resultado ativa, o foco no botão e o anúncio; o F6 alternou as duas abas com o foco no editor e na grade; executar com a
+  aba da consulta à frente acendeu o "resultado novo"; o Ctrl+W voltou ao painel com a rolagem (900 px) e o foco na grade; os menus das duas abas e o submenu
+  (`menuitemradio`, o lugar marcado) trocaram como a RN-ABAS-014 diz; o clique do meio voltou ao painel; o `GET api/user/workspace` trouxe `tab`; sair e entrar
+  reabriu a aba do resultado; e "Mover para nova janela" levou a aba com a do resultado.
 
 ## Scripts salvos (RN-SCRIPT-001 a 010)
 
@@ -1606,7 +1783,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     "Copiar valor" deixaram na área de transferência os 50.000 caracteres, com o MD5 igual ao do banco, e o "Exportar CSV" gravou o texto e o
     binário inteiros (o `Blob` que a tela entrega ao download; o diálogo de salvar do sistema foi trocado no teste). Para ler a área de
     transferência pelo protocolo de depuração: `navigator.clipboard.readText()` com `userGesture: true`.
-- **Área de resultado recolhível** (RN-PAINEL-001): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
+- **Área de resultado recolhível** (RN-PAINEL-001; o lugar do resultado, numa aba ou numa janela, está em "O resultado no painel, numa aba ou numa janela"): o estado é um redutor puro (`_lib/result-layout.ts`: `split`, `collapsed`,
   `maximized` e `resultPercent`, de 15 a 85, que fica guardado e volta ao restaurar) em `useReducer` na aba. Recolher e maximizar
   **não desmontam** nada (`h-0` e `inert`): é o que guarda o histórico de desfazer do editor e a rolagem da grade.
   `collapsedSummary` é o texto da barra recolhida; a divisória (`result-splitter.tsx`) é um `separator` horizontal focável e só
@@ -1958,6 +2135,11 @@ consulta: a área é a mesma (`ResultPanel`) e o menu da célula também (`useRe
   "Contar total") recomeça o tempo, e o fim de uma EXECUÇÃO diz se ela trouxe um resultado de leitura novo (`outcomeOf`: o mesmo objeto de linhas de volta é
   "não rodou"; erro, cancelado, gravou). Sem leitura nova, ele para com o motivo (`stopped`), que a barra mostra numa nota curta até a próxima execução da
   pessoa (`ranByPerson`) ou até ligar de novo. A próxima execução só é marcada quando a anterior termina: nunca duas ao mesmo tempo.
+- **Os intervalos** (`autoRefreshChoices`): 1 s (o primeiro, seção 39), 5 s, 10 s, 30 s, 1 min e 5 min; o "Personalizado…" aceita de 1 a 3.600 segundos
+  (`customSecondsLimits`). Com um comando que demora mais que o intervalo, o real é maior (conta do fim), e o controle continua dizendo o escolhido. O
+  `running` do estado ligado (o "atualizando…" e o relógio pulsando) só acende depois de `runningShownAfterMs` (300 ms) de execução, num temporizador do
+  próprio relógio que o fim, o abandono (`yielded`) e o desligar apagam: no de 1 s a leitura costuma voltar antes, e o controle não pisca a cada segundo.
+  Quem decide se ela roda continua sendo o `firing`, que nasce na hora.
 - **A sessão que cai** (`DATABASE_SESSION_NOT_FOUND` no "Carregar mais", no "Contar total" ou na própria execução automática) a desliga com a nota "a sessão
   com o banco caiu" (`stopped: "disconnected"`): quem chama `lost()` é `sessionLost()`, só onde a sessão FICA caída, e não `setSession(null)`. A execução
   automática não reabre a sessão (`execute(…, reopen: false)`: a recusa volta calada, e as linhas de antes ficam), e o relógio confere `connected()` antes de
@@ -2876,6 +3058,9 @@ minuto) e bloqueia: a API fecha o cofre, e a tela pede a senha do MESMO
 usuário. Desbloquear devolve as abas e o texto de SQL; os resultados são descartados; as outras telas de dentro do cofre voltam ao estado
 inicial; "Sair" encerra de verdade.
 
+- **As janelas do resultado** (RN-ABAS-013 a 016): o que a pessoa faz nelas conta como atividade e o aviso de antes do bloqueio aparece nelas também; o
+  bloqueio e o "Sair" as fecham pelo Prism (`resultWindows.closeAll` no `WorkbenchTabs`, e o `windows-ready` falso no processo principal), com o lugar da aba
+  guardado, e o desbloqueio as reabre vazias, no tamanho e no lugar lembrados.
 - **Quem faz o quê.** `lib/api/vault-lock.ts` (o estado "bloqueado", a época e a barreira dos pedidos). Em `app/_lib/`: `idle-timer.ts` (a
   contagem, pura, com relógio injetado), `idle-watch.ts` (`watchActivity`: os eventos da janela ligados ao temporizador), `use-idle-lock.ts`
   (o gancho), `lock-vault.ts` (**a ordem dos passos de bloquear e de desbloquear, e o que cada falha faz**, com dependências injetadas),

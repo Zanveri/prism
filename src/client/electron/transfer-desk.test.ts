@@ -13,6 +13,7 @@ type Harness = {
   dataDir: string;
   downloads: string;
   dialogs: { windowId: number; defaultPath: string; filters: { name: string; extensions: string[] }[] }[];
+  parents: (string | undefined)[];
   answer: (path: string | null) => void;
   clipboard: string[];
   revealed: string[];
@@ -36,6 +37,7 @@ function setUp(overrides: Partial<TransferDeskDeps> = {}): Harness {
     dataDir,
     downloads,
     dialogs: [],
+    parents: [],
     answer: (path) => (next = path),
     clipboard: [],
     revealed: [],
@@ -51,8 +53,9 @@ function setUp(overrides: Partial<TransferDeskDeps> = {}): Harness {
     dataDir,
     downloadsDir: () => downloads,
     platform: "linux",
-    async showSaveDialog(windowId, options) {
+    async showSaveDialog(windowId, options, resultWindow) {
       h.dialogs.push({ windowId, ...options });
+      h.parents.push(resultWindow);
       return next;
     },
     writeClipboard: (text) => h.clipboard.push(text),
@@ -76,6 +79,30 @@ async function choose(path: string | null, request: unknown = { suggestedName: "
   harness.answer(path);
   return harness.desk.chooseDestination(windowId, request);
 }
+
+describe("a janela do resultado (RN-ABAS-017): o diálogo do sistema fica sobre a janela de onde o pedido nasceu", () => {
+  const resultWindow = "prism-result-0b9f2c1e-8a4d-4f6b-9c3e-1d2a3b4c5d6e";
+
+  it("o pedido leva o nome da janela do resultado ao diálogo; sem nome, o diálogo é o da janela da aba", async () => {
+    await choose(null, { suggestedName: "pedido", extension: "csv", resultWindow });
+    await choose(null);
+
+    expect(harness.parents).toEqual([resultWindow, undefined]);
+  });
+
+  it("o nome fora do formato é recusado antes de abrir o diálogo", async () => {
+    harness.answer(null);
+
+    await expect(harness.desk.chooseDestination(1, { suggestedName: "pedido", extension: "csv", resultWindow: "../../etc" })).rejects.toThrow();
+    expect(harness.dialogs).toEqual([]);
+  });
+
+  it("o \"Mostrar na pasta\" aceita o nome também (conferido como nos outros), sem abrir nada para uma entrega que não existe", () => {
+    expect(() => harness.desk.reveal(1, { deliveryId: "nenhuma", resultWindow })).not.toThrow();
+    expect(() => harness.desk.reveal(1, { deliveryId: "nenhuma", resultWindow: "../../etc" })).toThrow();
+    expect(harness.revealed).toEqual([]);
+  });
+});
 
 describe("escolher o destino (RN-EXPORT-019): o processo principal abre o diálogo de salvar e guarda o caminho", () => {
   it("o nome proposto é conferido de novo pelas regras de nome, e só ele vai ao diálogo, na pasta de Downloads, com o filtro que o processo principal escreve", async () => {

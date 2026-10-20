@@ -22,15 +22,20 @@ internal static class WorkspaceRules
 
     private static readonly string[] Views = ["data", "structure", "diagram"];
 
+    /// <summary>RN-ABAS-016: os três lugares do resultado da aba de consulta, no painel, numa aba e numa janela.</summary>
+    private static readonly string[] ResultPlaces = [WorkspaceTab.PanelPlace, "tab", "window"];
+
     /// <summary>
-    /// A aba de consulta tem o texto (vazio, quando passava de 1 MB e não foi gravado) e nada de tabela; a de uma tabela tem a conexão, o esquema (que pode ser
-    /// vazio), a tabela e uma das três vistas, e nada de texto nem de script. Outro tipo, ou os maiúsculos, não é aba.
+    /// A aba de consulta tem o texto (vazio, quando passava de 1 MB e não foi gravado), nada de tabela e, se tem o lugar do resultado, um dos três; a de uma
+    /// tabela tem a conexão, o esquema (que pode ser vazio), a tabela e uma das três vistas, e nada de texto, de script nem de lugar do resultado (RN-ABAS-016:
+    /// o resultado dela fica dentro dela, e até o `panel` é recusado). Outro tipo, ou os maiúsculos, não é aba.
     /// </summary>
     public static bool HasTheShapeOfItsKind(WorkspaceTabDto tab)
         => tab.Kind switch
         {
-            WorkspaceTab.QueryKind => tab.Sql is not null && (!tab.SqlTooLarge || tab.Sql.Length == 0) && tab is { Schema: null, Table: null, View: null },
-            WorkspaceTab.TableKind => tab is { ConnectionID: not null, Schema: not null, Table: { Length: > 0 }, View: not null, Sql: null, ScriptID: null, Dirty: false, SqlTooLarge: false }
+            WorkspaceTab.QueryKind => tab.Sql is not null && (!tab.SqlTooLarge || tab.Sql.Length == 0) && tab is { Schema: null, Table: null, View: null }
+                && (tab.ResultPlace is null || ResultPlaces.Contains(tab.ResultPlace, StringComparer.Ordinal)),
+            WorkspaceTab.TableKind => tab is { ConnectionID: not null, Schema: not null, Table: { Length: > 0 }, View: not null, Sql: null, ScriptID: null, Dirty: false, SqlTooLarge: false, ResultPlace: null }
                 && tab.Schema.Length <= MaxNameLength && tab.Table.Length <= MaxNameLength && Views.Contains(tab.View, StringComparer.Ordinal),
             _ => false,
         };

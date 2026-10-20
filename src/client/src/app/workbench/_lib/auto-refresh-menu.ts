@@ -23,7 +23,7 @@ export function intervalOf(action: AutoRefreshAction): number | null {
 export const unavailable = (blocker: AutoRefreshBlocker) => `Não se aplica: ${autoRefreshCopy.reasons[blocker]}.`;
 
 /**
- * Os itens do submenu (RN-GRADE-014): os intervalos (5 s, 10 s, 30 s, 1 min e 5 min) e o "Personalizado…", com o que está em uso marcado (`checked`: um
+ * Os itens do submenu (RN-GRADE-014): os intervalos (1 s, 5 s, 10 s, 30 s, 1 min e 5 min) e o "Personalizado…", com o que está em uso marcado (`checked`: um
  * grupo de escolha única, como os menus do sistema); e "Desligar", que só se aplica com ela ligada. Os mesmos itens servem ao menu da barra do resultado.
  */
 export function autoRefreshGroups(state: AutoRefreshState): CellMenuGroup[] {

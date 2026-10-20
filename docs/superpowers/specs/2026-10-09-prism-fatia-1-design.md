@@ -224,8 +224,16 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 ### 4.4 Janela e logs
 
 - **RN-SHELL-001.** Janela com `contextIsolation`, `sandbox` e sem `nodeIntegration`. Navegação
-  para fora do app e abertura de janelas são negadas. A política de conteúdo permite só o
-  próprio app e a API em `127.0.0.1`.
+  para fora do app e abertura de janelas são negadas desde o nascimento de cada página, como pede a lista de segurança
+  do Electron: o `app.on('web-contents-created')` põe em todo `webContents`, antes de qualquer outra coisa, a negação
+  de `will-navigate`, `will-frame-navigate` e `will-redirect` (só passa a recarga do Vite, em desenvolvimento, numa
+  janela do app) e um `setWindowOpenHandler` que nega tudo. A única abertura aprovada é a da janela do resultado
+  (RN-ABAS-017): uma página em branco com o nome dela, pedida antes ao processo principal por uma janela do app pronta
+  e com o cofre aberto, aprovada uma vez por pedido e no máximo 32 por janela, que nasce com as proteções escritas uma
+  a uma e conferidas, sem preload, sem navegar e sem abrir outra janela. A política de conteúdo permite só o próprio
+  app e a API em `127.0.0.1`, também na janela do resultado, onde a tela a põe sem depender da herança. *Alterada a
+  pedido do dono em 2026-10-20 (seção 39): a negação desde o nascimento de cada página e a exceção da janela do
+  resultado.*
 - **RN-SHELL-002.** Tudo o que vem de um banco (nomes de objetos, valores, mensagens de erro) é
   desenhado como texto, nunca como HTML.
 - **RN-LOG-001.** O log (arquivo em `<PRISM_DATA_DIR>/logs/`, rotação diária, 7 dias) não
@@ -769,6 +777,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   "Salvar" dela (RN-GRADE-021 a 023 e RN-EDIT-017 a 022, seção 38). O botão de ordenar usa a seta que o cabeçalho
   já tinha, no traço dos ícones do canvas (16 px, traço 1,5); a coluna escolhida usa o fundo de escolha do tema, como
   a célula; a marca da coluna inteira é um ponto no tom de atenção; e a pergunta segue o `ConfirmarComando`.
+- A faixa de abas tem 28 px de altura, e não os 40 px do canvas (`Workbench.dc.html`: 40 px, 14 px dos lados e 8 px
+  entre os itens), com 10 px antes do ícone, 6 px entre os itens, o ícone de 14 px, o selo do ambiente de 16 px e o X
+  de 20 px (RN-ABAS-009), a pedido do dono (seção 39). As abas e a barra da área de resultado também têm 28 px, e os
+  botões da barra, 24 px, também o "Exportar…", que ali deixa os 28 px do "Exportar CSV" de `TabelaDados`. O canvas
+  não desenha o véu do arraste da aba, a aba do resultado com o ícone novo (a grade de três por três), a janela do
+  resultado, o botão "Onde mostrar o resultado" com o ícone novo nem a escolha de Configurações › Resultados
+  (RN-ABAS-010 a 014 e RN-CONFIG-010); os dois ícones novos seguem o traço dos do canvas (16 px, traço 1,5).
 
 ## 10. Riscos e sondas
 
@@ -928,7 +943,8 @@ com as fontes, está em os registros internos do projeto.
   de uma versão é `vX.Y.Z`; pré-lançamento é `vX.Y.Z-beta.N` (o formato `-rc.N` é aceito, mas não
   é usado nesta entrega). Não há ramo por versão (RN-VERSAO-008).
 - **RN-VERSAO-002.** O contrato que o número protege, já que um aplicativo não tem API pública: o formato do cofre
-  e a estrutura da pasta de dados, os arquivos de configuração quando existirem, o arquivo da exportação das
+  e a estrutura da pasta de dados, os arquivos de configuração quando existirem (o `zoom.json`, RN-ZOOM-001, e o
+  `result-window.json`, RN-ABAS-013), o arquivo da exportação das
   conexões (com o número de formato próprio, RN-TRANSF-007), o que cada formato da exportação de dados escreve com
   as mesmas escolhas (seção 35: uma opção nova, que começa com o comportamento de antes, não quebra), o que a
   importação de dados lê com as mesmas escolhas (seção 36: o arquivo que uma versão importa, a seguinte importa com
@@ -938,7 +954,8 @@ com as fontes, está em os registros internos do projeto.
   `1.0.0` sai quando o contrato estiver estável e o Prism estiver em uso no dia a dia. *Alterada a pedido do dono
   em 2026-10-16 (seção 34): o arquivo da exportação passou a existir. Alterada a pedido do dono em 2026-10-16
   (seção 35): entraram os formatos da exportação de dados. Alterada a pedido do dono em 2026-10-16 (seção 36):
-  entrou o que a importação de dados lê.*
+  entrou o que a importação de dados lê. Alterada a pedido do dono em 2026-10-20 (seção 39): os arquivos de
+  configuração passaram a ser nomeados, com o `result-window.json`.*
 - **RN-VERSAO-003.** A versão mora em um lugar só: o campo `version` de
   `src/client/package.json`. A API recebe o mesmo número na publicação (`-p:Version=`), e
   nenhum `.csproj` declara versão. A tag de uma versão é sempre `v` + esse número, criada pelo lançamento (RN-VERSAO-008); a
@@ -1240,10 +1257,13 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   cada uma com as colunas, e uma linha por chave estrangeira ligando as colunas. Dá para rolar e
   ampliar. Duplo clique numa tabela vizinha abre a aba dela. As tabelas que apontam PARA esta
   entram quando a API as devolver.
-- **RN-PAINEL-001.** Na aba de consulta, a área de resultado pode ser recolhida (fica só a barra
+- **RN-PAINEL-001.** Na aba de consulta, a área de resultado fica no painel, abaixo do editor (o padrão), numa aba
+  própria ou numa janela própria (RN-ABAS-011 a 016). No painel, ela pode ser recolhida (fica só a barra
   dela), restaurada e maximizada (o editor é que fica recolhido), e a divisão entre editor e
   resultado pode ser arrastada. Executar um comando com a área recolhida a restaura. O estado
-  vale por aba.
+  vale por aba. Numa aba ou numa janela, o editor ocupa a aba da consulta inteira, sem a divisória, e o recolher e o
+  maximizar não aparecem; a divisão, o recolhido e o maximizado do painel ficam guardados e voltam quando o resultado
+  volta ao painel. *Alterada a pedido do dono em 2026-10-20 (seção 39): o resultado também numa aba ou numa janela.*
 - **RN-CONFIG-001.** Há uma tela de Configurações, alcançada pela barra superior. Ela traz as
   seções do canvas que têm efeito hoje: aparência e editor de SQL (preferências desta instalação,
   guardadas fora do cofre, por usuário), atualizações (verificar ao abrir, versão pulada), drivers
@@ -1285,14 +1305,15 @@ Só da tela:
   página seguinte espera o botão "Carregar mais", pelo pedido do dono em 2026-10-15, issue #11).
   "Linhas por busca" depende da API (RN-SQL-016).
 - **RN-SEG-001.** Bloqueio por inatividade, ligado por padrão em 10 minutos (de 1 a 240, e pode ser desligado). Sem
-  tecla nem ponteiro na janela por esse tempo, e sem comando em andamento em nenhuma aba (o tempo conta a partir do
+  tecla nem ponteiro em nenhuma janela do Prism por esse tempo (as janelas do resultado contam, RN-ABAS-015), e sem comando em andamento em nenhuma aba (o tempo conta a partir do
   fim do último; a execução da atualização automática, RN-GRADE-014, não conta como comando em andamento nem como
   atividade, pedido do dono em 2026-10-15, issue #11; o script conta enquanto roda, e não enquanto espera a
   resposta da pergunta de erro, RN-SQL-021; a verificação periódica das conexões, RN-VERIF-002, não conta como
   comando em andamento nem como atividade, e não roda com o cofre bloqueado; a exportação de dados conta como
   comando em andamento da janela que a começou, do começo até o arquivo entregue, e a entrega que falhou e espera
   outro destino não conta, RN-EXPORT-023; a importação de dados e a cópia para outro banco contam do começo ao fim,
-  RN-IMPORT-021), o Prism avisa 60 segundos antes (30, quando o tempo configurado é de 1 minuto) e então bloqueia:
+  RN-IMPORT-021), o Prism avisa 60 segundos antes (30, quando o tempo configurado é de 1 minuto), em todas as
+  janelas, também nas do resultado (RN-ABAS-015), e então bloqueia:
   a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela mostra o bloqueio, que pede a
   senha do MESMO usuário. Desbloquear devolve a área de trabalho com as abas e o texto de SQL como estavam; os
   resultados que estavam na tela são descartados no bloqueio. O aviso antes do bloqueio diz quantas transações
@@ -1303,13 +1324,13 @@ Só da tela:
   telas de dentro do cofre (Conexões, Configurações, Drivers) voltam ao estado inicial: um formulário aberto, uma
   senha de conexão revelada ou digitada e não gravada não sobrevivem ao bloqueio. "Sair" na tela de bloqueio
   encerra de verdade (tudo é descartado). Enquanto bloqueado, nada do que estava aberto fica visível nem alcançável
-  pelo teclado. Se o serviço não confirmar que fechou o cofre, a tela bloqueia do mesmo jeito e tenta de novo com
+  pelo teclado: as janelas do resultado fecham, e reabrem vazias no desbloqueio (RN-ABAS-016). Se o serviço não confirmar que fechou o cofre, a tela bloqueia do mesmo jeito e tenta de novo com
   espera crescente (cada tentativa com prazo); enquanto tenta, "Desbloquear" espera, e a tela diz o que está
   acontecendo. Se desistir, avisa que o cofre pode continuar aberto no serviço, e o desbloqueio continua conferindo
   a senha lá. *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a verificação periódica. Alterada a
   pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados, e o aviso antes do bloqueio diz das
   entregas que falharam. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a
-  cópia para outro banco.*
+  cópia para outro banco. Alterada a pedido do dono em 2026-10-20 (seção 39): entraram as janelas do resultado.*
 - **RN-TABELA-005.** Registros: um campo de filtro recebe a condição (`WHERE`) que o usuário
   escreve, e o botão de ordenar no cabeçalho de uma coluna (RN-GRADE-021) ordena por ela
   (crescente, decrescente, sem ordem). A tela monta o `SELECT` com a condição e a ordem e mostra o comando que executou. A
@@ -1973,8 +1994,8 @@ Janela e zoom (pedido do dono em 2026-10-12):
   Configurações › Aparência que mostra o valor de agora, com − e + e "Restaurar 100%". Os passos são
   os do zoom da grade: 50, 67, 75, 80, 90, 100, 110, 125, 150, 175 e 200%; 100% é o tamanho do canvas
   (RN-CONFIG-009), e nos limites o passo que não anda mais não faz nada.
-  - Vale para todas as janelas do app, também as que abrem depois (RN-ABAS-002), e desde a
-    abertura: o splash e o login já aparecem no zoom escolhido. O splash, que não tem moldura
+  - Vale para todas as janelas do app, também as que abrem depois (RN-ABAS-002) e as janelas do resultado
+    (RN-ABAS-013), e desde a abertura: o splash e o login já aparecem no zoom escolhido. O splash, que não tem moldura
     para ser arrastado, cresce só até caber na área útil da tela (RN-MARCA-002).
   - É lembrado nesta instalação, e não por usuário: a escolha mora com o processo principal, fora
     do cofre, porque o splash e o login vêm antes de se saber quem entra.
@@ -1987,7 +2008,7 @@ Janela e zoom (pedido do dono em 2026-10-12):
 
   Alterada em 2026-10-15, quando foi feita (pedido do dono, issue #14, seção 30): os passos, todas
   as janelas e o splash (até caber na tela), o "Restaurar 100%" e onde a escolha fica. Antes dizia
-  "de 50% a 200%" e "todas as telas da janela principal".
+  "de 50% a 200%" e "todas as telas da janela principal". *Alterada a pedido do dono em 2026-10-20 (seção 39): entraram as janelas do resultado.*
 
 ## 21. O projeto no GitHub (decisões do dono em 2026-10-12)
 
@@ -2555,30 +2576,58 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
 
 - **RN-ABAS-001.** As abas mudam de lugar arrastando-as ao longo da barra de abas; pelo teclado,
   Ctrl+Shift+PageUp e Ctrl+Shift+PageDown movem a aba ativa uma posição. A ordem vale enquanto a
-  janela está aberta.
-- **RN-ABAS-002.** Uma aba vai para uma janela nova arrastando-a para fora da janela (a janela nova
-  abre onde ela foi solta) ou por "Mover para nova janela" no menu da aba. A janela nova é a área
+  janela está aberta. A aba do resultado anda com a aba dela, e uma posição passa por uma aba com a do resultado
+  (RN-ABAS-012). Solta fora da faixa, a aba vai para uma janela nova (RN-ABAS-010). Ctrl+W (Cmd+W no macOS) fecha a
+  aba ativa, com as perguntas de fechar (RN-ABAS-004); com a aba do resultado ativa, volta o resultado ao painel
+  (RN-ABAS-012). As medidas da faixa estão na RN-ABAS-009. *Alterada a pedido do dono em 2026-10-20 (seção 39):
+  entraram a aba do resultado e o soltar fora da faixa, e o Ctrl+W, que já existia, passou a estar escrito.*
+- **RN-ABAS-002.** Uma aba vai para uma janela nova arrastando-a para fora da faixa e soltando-a em qualquer lugar que
+  não seja uma faixa de abas, fora da janela ou dentro dela (a janela nova abre com o canto de cima à esquerda onde
+  ela foi solta, no ponto que o processo principal lê, RN-ABAS-010), ou por "Mover para nova janela" no menu da aba.
+  A janela nova é a área
   de trabalho inteira, com navegador e barra de abas próprios, e recebe a aba como ela estava: o
-  texto do editor, o resultado na tela, o cursor aberto e a sessão com o banco, sem executar nada
-  de novo.
-- **RN-ABAS-003.** Uma aba passa de uma janela para outra arrastando-a até a barra de abas da outra,
-  ou por "Mover para a janela…" no menu da aba, que lista as outras janelas abertas. A janela que
-  fica sem abas continua aberta.
+  texto do editor, o resultado na tela, o cursor aberto, a sessão com o banco e o lugar do resultado (RN-ABAS-016),
+  sem executar nada de novo. Com uma aba só na janela (com a aba do resultado dela, se tem), soltar fora da faixa não
+  faz nada, e "Mover para nova janela" fica desabilitado, com o motivo "Esta já é a única aba da janela.".
+  *Alterada a pedido do dono em 2026-10-20 (seção 39): a aba sai soltando-a em qualquer lugar que não seja uma faixa, também dentro da janela; o ponto
+  vem do processo principal; o lugar do resultado vai junto; e a janela de uma aba só não abre outra.*
+- **RN-ABAS-003.** Uma aba passa de uma janela para outra arrastando-a até a outra janela: solta na barra de abas
+  dela, entra no lugar onde foi solta; solta em qualquer outro lugar dela, entra no fim da faixa. Enquanto a aba
+  está sobre a outra janela, fora da faixa, a janela dela, menos a faixa, mostra o véu da RN-ABAS-010 com "Solte para
+  trazer a aba para esta janela", também no estado vazio da janela sem abas; a aba do resultado, que a outra janela
+  reconhece pelo tipo do arraste, não tem véu nem entra (RN-ABAS-012). Também
+  por "Mover para a janela…" no menu da aba, que lista as outras janelas abertas (cada uma descrita pela aba ativa
+  dela; a aba do resultado não conta, e, quando ela é a ativa, conta a aba dela). A janela que
+  fica sem abas continua aberta. A aba do resultado vai com a aba dela, e não sozinha (RN-ABAS-012 e 016); a janela
+  do resultado não é uma janela de abas, e soltar uma aba sobre ela é soltar fora das janelas do Prism (RN-ABAS-013).
+  *Alterada a pedido do dono em 2026-10-20 (seção 39): a aba solta sobre a outra janela, fora da faixa dela, também vai, e a aba do resultado vai
+  com a dela.*
 - **RN-ABAS-004.** Todas as janelas usam a mesma API, o mesmo cofre e as mesmas preferências: o bloqueio por
   inatividade e o "Sair" valem para todas, e o login libera todas. Fechar uma janela fecha as abas dela, com as
   mesmas perguntas de fechar cada aba; fechar a última encerra o app, como hoje. Com transferências começadas nela
   e ainda em andamento (as exportações de dados ainda não entregues, as importações e as cópias para outro banco),
-  fechar a janela pergunta antes, porque as cancela (RN-EXPORT-023 e RN-IMPORT-021). *Alterada a pedido do dono em
+  fechar a janela pergunta antes, porque as cancela (RN-EXPORT-023 e RN-IMPORT-021). As janelas do resultado
+  (RN-ABAS-013) não são janelas de abas: fechar uma delas não pergunta nada, e só o fechar que a pessoa pede volta o
+  resultado ao painel (quando é o Prism que a fecha, a aba guarda o lugar); fechar a janela da aba as fecha junto,
+  depois das perguntas; elas não contam como a última janela, e o bloqueio por
+  inatividade e o "Sair" as fecham (RN-ABAS-016). *Alterada a pedido do dono em
   2026-10-16 (seção 35): entraram as exportações de dados. Alterada a pedido do dono em 2026-10-16 (seção 36):
-  entraram as importações e as cópias.*
+  entraram as importações e as cópias. Alterada a pedido do dono em 2026-10-20 (seção 39): entraram as janelas do
+  resultado.*
 - **RN-ABAS-005.** Só o processo principal cria janelas e passa abas entre elas; a tela pede pelo
   preload, por canais com o conteúdo validado (RN-SHELL-001), e nenhuma janela fala com outra
-  diretamente.
+  diretamente. A única exceção é a janela do resultado (RN-ABAS-017): a tela da janela da aba a abre pelo Chromium
+  (`window.open` de uma página em branco), depois de pedi-la ao processo principal pelo preload, e ele a aprova só
+  nesse caso, lhe dá o tamanho, o lugar e as proteções, e a acompanha (fecha com a janela que a abriu); ela não tem
+  preload nem canais, não fala com ninguém, e o que ela mostra é desenhado pela tela que a abriu. O que se faz com
+  ela (trazê-la à frente, fechá-la, o título, os diálogos do sistema sobre ela) a tela da aba pede pelos canais
+  dela. *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou a janela do resultado.*
 - **RN-ABAS-008.** A aba de tabela mostra na barra só o nome da tabela enquanto as tabelas abertas na
   janela são todas de um esquema só (pedido de 2026-10-14). Com tabelas de mais de um esquema abertas
   (o mesmo esquema noutra conexão ou noutro banco conta como outro), todas mostram `esquema.tabela`.
   Com tabelas de mais de um banco, a de um banco que não é o da conexão mostra também o banco. O nome
-  inteiro fica na dica da aba e na lista de abas.
+  inteiro fica na dica da aba e na lista de abas. A aba do resultado mostra "Resultado · " e o título da aba dela,
+  como a faixa o mostra (RN-ABAS-012). *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou o título da aba do resultado.*
 
 ### Scripts salvos
 
@@ -2695,10 +2744,11 @@ fechada, assim, ao reabrir já retorna as queries feitas".
 
 - **RN-ABAS-006.** O Prism grava no cofre do usuário, cifradas como os scripts (RN-SCRIPT-002), as
   abas abertas de todas as janelas:
-  - de cada aba de consulta: o texto do editor, a conexão, o banco, o script de onde veio (se veio)
-    e se tem mudança não salva;
+  - de cada aba de consulta: o texto do editor, a conexão, o banco, o script de onde veio (se veio),
+    se tem mudança não salva e o lugar do resultado (`resultPlace`, RN-ABAS-016);
   - de cada aba de tabela: a conexão, o banco, o esquema, a tabela e a vista;
-  - a ordem das abas e qual estava ativa.
+  - a ordem das abas e qual estava ativa (a aba do resultado não é gravada: volta pelo lugar do resultado da aba
+    dela, e, quando era a ativa, a ativa gravada é a aba dela).
 
   Quando grava:
   - alguns segundos depois de cada mudança, para um fechamento inesperado perder no máximo esses
@@ -2716,6 +2766,10 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   - O texto de cada aba vai até 1 MB (RN-SCRIPT-004). O que passa disso não é gravado, e a aba volta
     vazia, com o aviso.
   - Fechar uma aba a tira do que volta.
+  - A aba de consulta volta no lugar do resultado dela: a aba do resultado logo depois dela, ou a janela do resultado
+    reaberta no tamanho e no lugar lembrados, com a área vazia (RN-ABAS-016).
+
+  *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou o lugar do resultado.*
 
 - **RN-ABAS-007.** Fechar o app (a última janela) pergunta só pelo que não volta: as alterações
   não salvas da grade (RN-EDIT-007) e as transferências em andamento: as exportações de dados
@@ -2723,15 +2777,18 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   abas de consulta e os scripts com mudança não
   salva voltam na próxima entrada (RN-ABAS-006), então não há pergunta por eles. Fechar uma aba,
   várias abas ou uma janela que não é a última pergunta como antes, porque o que fecha não volta,
-  e a pergunta diz isso. *Alterada a pedido do dono em 2026-10-16 (seção 35): entraram as exportações
-  de dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias.*
+  e a pergunta diz isso. As janelas do resultado não contam como janela: a última é a última janela da aba
+  (RN-ABAS-013). *Alterada a pedido do dono em 2026-10-16 (seção 35): entraram as exportações
+  de dados. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram as importações e as cópias. Alterada a
+  pedido do dono em 2026-10-20 (seção 39): as janelas do resultado não contam.*
 
 | Rota | Sucesso | Erros |
 | --- | --- | --- |
-| `GET api/user/workspace` | 200 `{ tabs, activeIndex }` (lista vazia e `activeIndex` nulo quando nada foi gravado) | |
-| `PUT api/user/workspace` `{ tabs, activeIndex }` | 204 | 422 `WORKSPACE_INVALID` (formato, índice fora da lista), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
+| `GET api/user/workspace` | 200 `{ tabs, activeIndex }` (lista vazia e `activeIndex` nulo quando nada foi gravado); cada aba de consulta traz `resultPlace` (`"panel"`, `"tab"` ou `"window"`, RN-ABAS-016) | |
+| `PUT api/user/workspace` `{ tabs, activeIndex }` | 204; cada aba de consulta pode ter `resultPlace` | 422 `WORKSPACE_INVALID` (formato, índice fora da lista, `resultPlace` fora dos três valores, ou numa aba de tabela), `WORKSPACE_TOO_LARGE` (texto de uma aba acima de 1 MB) |
 
-O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes.
+O log dessas rotas registra só a contagem de abas, nunca o SQL nem os nomes. *Alterada a pedido do dono em 2026-10-20
+(seção 39): entrou o `resultPlace`.*
 
 ## 25. Complemento de 2026-10-13, versão 0.3.0: o instalador do Windows como o do DBeaver
 
@@ -3099,11 +3156,15 @@ nos dados que estão sendo acompanhados".
     "Atualizar"; no resultado da aba de consulta, que não tem esse botão (o F5 e "Executar" fazem
     a vez dele), na barra da área de resultado, que fica à vista também com a área recolhida. O
     botão está sempre lá, com ou sem linhas na tela: quando não se aplica, desabilitado, com o
-    motivo. Os intervalos: 5 s, 10 s, 30 s, 1 min e 5 min; "Personalizado…", um diálogo pequeno
-    que pede os segundos (de 2 a 3.600, inteiros); e "Desligar". O intervalo em uso aparece
+    motivo. Os intervalos: 1 s, 5 s, 10 s, 30 s, 1 min e 5 min ("A cada 1 s" é o primeiro da lista);
+    "Personalizado…", um diálogo pequeno
+    que pede os segundos (de 1 a 3.600, inteiros), com a ajuda "O comando do resultado é executado de novo a cada
+    intervalo, enquanto o resultado está à vista. O intervalo vai de 1 a 3.600 segundos (1 hora)." e, com outro
+    valor, "Use um número inteiro de segundos, de 1 a 3.600."; e "Desligar". O intervalo em uso aparece
     marcado.
   - Ligada, o controle mostra "Atualiza a cada 10 s" com a hora da última atualização, e um
-    clique no X ao lado desliga. O texto abre os intervalos, para trocar. Desligada no meio de uma
+    clique no X ao lado desliga. O "atualizando…" só aparece quando a execução automática passa de 300 ms, em
+    qualquer intervalo, para o controle não piscar a cada segundo no de 1 s. O texto abre os intervalos, para trocar. Desligada no meio de uma
     execução automática, a execução é abandonada na hora, como quando a pessoa executa um comando
     (abaixo): nada dela aparece, e o resultado de antes fica, com o cursor fechado (RN-SQL-007).
   - Cada execução é a do F5 (RN-GRADE-012): o mesmo comando, com o mesmo filtro, lendo de novo a
@@ -3124,7 +3185,8 @@ nos dados que estão sendo acompanhados".
     e a faixa diz isso.
   - A próxima execução só é marcada quando a anterior termina, e o tempo conta do fim dela: nunca
     duas ao mesmo tempo. Vale para qualquer comando da aba: depois de "Carregar mais", de "Contar
-    total" e do F5, o tempo recomeça.
+    total" e do F5, o tempo recomeça. Com um comando que demora mais que o intervalo (o de 1 s, sobretudo), o
+    intervalo real é maior que o escolhido, e o controle continua dizendo "Atualiza a cada 1 s".
   - Só para leitura: liga sobre o resultado que a API leu por cursor (RN-SQL-004). O comando que
     grava e devolve linhas (RN-SQL-013: `INSERT`, `UPDATE`, `DELETE` ou `MERGE` com `RETURNING`, o
     procedimento, a leitura que o banco recusou numa transação só de leitura) não se atualiza
@@ -3138,9 +3200,10 @@ nos dados que estão sendo acompanhados".
   - Fica em pausa (não executa) enquanto há alteração não salva na grade (RN-EDIT-007), mais de uma célula escolhida
     ou colunas inteiras, também num resultado de uma linha (RN-GRADE-001 e 022: a execução esqueceria a seleção
     antes do botão direito ou do Ctrl+C; escolher uma célula só, ou o Esc, a liberam), uma célula em edição ou um menu ou diálogo da grade aberto (também o "Copiar avançado", o
-    "Configurar comandos 'Copiar como'" e o "Gerar SQL", RN-GRADE-003, 017 e 018), e enquanto a aba não está à vista
-    (outra aba à frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões, Drivers ou
-    Configurações): só a aba à vista fala com o banco sozinha. Ao sair da pausa, se o prazo já passou, executa na hora;
+    "Configurar comandos 'Copiar como'" e o "Gerar SQL", RN-GRADE-003, 017 e 018), e enquanto o resultado não está à vista
+    (RN-ABAS-015: no painel, outra aba à frente, a vista Estrutura ou Diagrama, ou a área de trabalho atrás de Conexões,
+    Drivers ou Configurações; numa aba, outra aba à frente da aba do resultado, ou a área de trabalho atrás de
+    Conexões, Drivers ou Configurações; numa janela, a janela do resultado minimizada, e não só coberta): só o resultado à vista fala com o banco sozinho. Ao sair da pausa, se o prazo já passou, executa na hora;
     senão, espera o que falta. A pausa da grade vale desde o começo da ação que abre a célula ou o menu, exclui, cola,
     acrescenta ou duplica linhas (pelo menu, pela barra de edição ou pelo atalho, RN-EDIT-013 a 016; a ação antes
     pergunta à API o que se edita), copia (enquanto carrega as linhas que faltam, RN-GRADE-023, busca os valores
@@ -3168,10 +3231,12 @@ nos dados que estão sendo acompanhados".
     execução que estava em andamento termina antes de a aba ir: a outra janela recebe a sessão
     livre, com o resultado e o cursor que a aba mostra; se a aba não vai, ela continua. Executar
     de novo o mesmo comando (F5, "Atualizar", "Executar de novo") a mantém ligada e recomeça o
-    tempo.
+    tempo. Trocar o lugar do resultado (RN-ABAS-011) não a desliga.
   - A execução automática não é atividade da pessoa nem comando em andamento para o bloqueio por
     inatividade (RN-SEG-001): com ela ligada, o Prism bloqueia no prazo, e o bloqueio a desliga.
   - Não é gravada com as abas (RN-ABAS-006): as abas voltam com ela desligada.
+  - *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou o intervalo de 1 s, o "Personalizado…" passou a aceitar de 1 a 3.600 segundos, o
+    "atualizando…" espera 300 ms, e o resultado à vista vale também para a aba e a janela do resultado.*
 - **Fica para depois:** uma marca na faixa de abas para a aba com a atualização automática ligada.
 
 ## 30. Complemento de 2026-10-15, versão 0.4.0: a área de trabalho mais enxuta (issue #14)
@@ -3346,13 +3411,16 @@ RN-SQL-024, para as abas do script se editarem).
     com o SQLSTATE, e pergunta: "Parar" (o padrão, com o foco, e também o Esc), "Tentar de novo"
     (executa o mesmo comando outra vez), "Pular" (segue com o próximo) e "Pular todos os erros" (segue,
     e o resto do script pula os comandos que falharem sem perguntar). O foco volta, quando o diálogo
-    fecha, para onde estava: o editor, de onde o script saiu.
-  - O diálogo só aparece na aba à vista: a ativa, com a área de trabalho na tela (como a atualização
-    automática, RN-GRADE-014). O script de outra aba, ou o da área de trabalho escondida por baixo de
+    fecha, para onde estava na janela em que ele abriu: o editor, de onde o script saiu, quando é a janela da aba.
+  - O diálogo só aparece onde a pessoa vê a aba: com a aba ativa, ou a aba do resultado dela ativa, e a área de
+    trabalho na tela, ou com o foco na janela do resultado dela (RN-ABAS-015). Abre numa janela só: na do resultado
+    quando ela tem o foco, e senão na da aba; o foco volta para onde estava nela. O script de outra aba, ou o da área de trabalho escondida por baixo de
     Configurações, Conexões ou Drivers, espera a resposta sem cobrir a tela nem tirar o foco de quem
     está digitando em outro lugar; a aba dele leva, na faixa de abas, um ponto vermelho ("O script
-    parou num erro e espera a resposta", também para o leitor de tela), e o diálogo aparece quando a
+    parou num erro e espera a resposta", também para o leitor de tela), e a aba do resultado dele também
+    (RN-ABAS-012), e o diálogo aparece quando a
     pessoa vai até ela. Assim dois scripts parados em abas diferentes nunca abrem dois diálogos.
+    *Alterada a pedido do dono em 2026-10-20 (seção 39): entraram a aba e a janela do resultado.*
   - É erro do comando o que o banco respondeu (`SQL_EXECUTION_FAILED`) e a recusa da API para aquele
     comando (`TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`,
     `MULTIPLE_STATEMENTS_NOT_SUPPORTED` e, na conexão somente leitura, `CONNECTION_READ_ONLY`,
@@ -8929,3 +8997,638 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Um prazo de espera de trava no "Salvar", escolhido pela pessoa.
 - Carregar as linhas que faltam em páginas maiores que as do cursor (`queries/next` com tamanho), e mais de 100.000
   linhas na grade para copiar ou gerar SQL.
+
+## 39. Complemento de 2026-10-20, versão 0.5.0: abas menores, arrastar a aba para fora e o resultado numa aba ou numa janela
+
+Pedido do dono em 2026-10-20, com dois prints (a faixa de abas, com "consulta-2.sql QAS ×" e "pallets QAS ×", altas e
+com bastante espaço dos lados, e o menu do intervalo da atualização automática, de "A cada 5 s" a "Desligar"): "Faça
+com que as tabs sejam menores também e faça com que eu possa arrastá-las para fora da tela atual, dessa forma, consigo
+deixar uma página inteira de query apenas, sem exibir os resultados. Outra coisa, os resultados também podem virar
+apenas uma tab e/ou podem também sair da tela, abrindo outra tela no desktop, sabe? No cronometro, permita realizar
+queries de 1 em 1 segundo também."
+
+A versão: tudo isto é funcionalidade nova depois da 0.4.0, então é a 0.5.0 (RN-VERSAO-002). O campo `version` de
+`src/client/package.json` passa a `0.5.0` num commit `chore` desta parte (RN-VERSAO-003), e os betas dela saem como
+`v0.5.0-beta.N` (RN-VERSAO-001). O F6 (RN-ABAS-014) entra nos atalhos documentados, que o número protege, e o Ctrl+W,
+que já existia, passa a estar escrito (RN-ABAS-001); nenhum atalho de antes muda.
+
+O que já existia: a aba muda de lugar na faixa, vai para uma janela nova por "Mover para nova janela" e, solta fora da
+janela, abre uma janela nova ali (RN-ABAS-001 a 003). Com a janela maximizada, como no print do dono, não há "fora"
+onde soltar, e no Windows o fim do arraste fora da janela pode trazer coordenadas que não servem: é, provavelmente,
+por isso que, para o dono, a aba não sai (a sonda S-ABAS-1 confere). A área de resultado ficava sempre abaixo do editor
+(RN-PAINEL-001), e a atualização automática ia de 5 s a 5 min, com o "Personalizado…" de 2 a 3.600 s (RN-GRADE-014).
+Esta seção:
+
+- diminui a faixa de abas, de 40 px para 28 px, e as abas e a barra da área de resultado com ela (RN-ABAS-009);
+- faz a aba solta em qualquer lugar que não seja uma faixa de abas, dentro ou fora da janela, abrir numa janela nova,
+  como no Chrome, com o ponto lido pelo processo principal (RN-ABAS-010), e a aba solta sobre outra janela do Prism,
+  fora da faixa dela, ir para ela (RN-ABAS-003);
+- deixa o resultado da aba de consulta em três lugares, no painel, numa aba ou numa janela do sistema, que a pessoa
+  põe em outro monitor, sempre o mesmo resultado (RN-ABAS-011 a 016), com a janela do resultado desenhada pela tela da
+  aba, numa página em branco que só o processo principal aprova, depois de um pedido dela (RN-ABAS-017);
+- põe em Configurações › Resultados o lugar do resultado das abas novas (RN-CONFIG-010);
+- e acrescenta o intervalo de 1 s à atualização automática, com o "Personalizado…" de 1 a 3.600 s (RN-GRADE-014).
+
+Muda a RN-ABAS-001 a 008, a RN-PAINEL-001, a RN-GRADE-014, a RN-SHELL-001, a RN-SEG-001, a RN-ZOOM-001, a
+RN-SQL-021, a RN-VERSAO-002 e as seções 9 e 24. A API ganha só o campo `resultPlace` nas abas que voltam
+(RN-ABAS-006); o formato do cofre não muda.
+
+### Abas menores
+
+- **RN-ABAS-009.** As medidas da faixa de abas da janela, menores que as do canvas (40 px de altura, 14 px dos lados e
+  8 px entre os itens, `Workbench.dc.html`), a pedido do dono. São as de 100%: com o zoom do programa (RN-ZOOM-001),
+  tudo cresce e diminui junto.
+  - A faixa tem 28 px de altura, mais a borda de baixo de 1 px. O texto das abas continua 13/20 (RN-CONFIG-009).
+  - Cada aba tem 28 px de altura, contando a borda de baixo de 2 px (no acento do tema na aba escolhida, transparente
+    nas outras): 10 px antes do ícone, 6 px entre o ícone, o título, as marcas, o selo do ambiente e o X, e 4 px
+    depois do X.
+  - O ícone (o do documento, o da tabela, o do script com a cor dele, RN-SCRIPT-006, e o do resultado, RN-ABAS-012)
+    tem 14 px, no mesmo traço.
+  - O título vai até 200 px, e o que não cabe termina em reticências; qual é o título diz a RN-ABAS-008, e o inteiro
+    fica na dica.
+  - O ponto da mudança não salva (RN-SCRIPT-001), o do resultado (RN-ABAS-012) e o ponto vermelho do script parado na
+    pergunta de erro (RN-SQL-021) têm 6 px.
+  - O selo do ambiente, na faixa, tem 16 px de altura, com o texto em 11 px e 6 px de cada lado. No navegador e na
+    barra do editor ele não muda.
+  - O X tem 20×20 px desenhados, com o ícone de 12 px, e a área de clique de 24×24 px centrada nele, dentro da aba (o
+    tamanho mínimo de alvo da WCAG 2.2, critério 2.5.8). Continua à vista em todas as abas, e o clique do meio
+    continua fechando.
+  - As setas da rolagem e o botão da lista das abas têm 28 px de altura e 24 px de largura, com o ícone de 14 px; o da
+    lista mantém a borda à esquerda.
+  - Nada muda no comportamento: a rolagem pela roda, as setas, a lista, a aba escolhida trazida à vista, o teclado, o
+    arraste e o menu da aba são os de antes.
+  - A área de resultado segue a mesma medida. As abas do Executar script (RN-SQL-020), e o título "Resultado" que fica
+    no lugar delas sem script, têm 28 px de altura, contando a borda de baixo de 2 px, 8 px de cada lado e até 256 px
+    de largura. A barra da área de resultado tem 28 px de altura no mínimo, e quebra em mais linhas quando não cabe,
+    como hoje. Os botões dela (a atualização automática, o zoom da grade, "Exportar…", "Onde mostrar o resultado",
+    recolher e maximizar, e "Voltar para o painel" na janela do resultado) têm 24 px de altura. Os 24 px valem só na
+    barra da área de resultado da aba de consulta, onde quer que ela esteja: os mesmos controles no rodapé dos
+    Registros e os botões da barra de edição da grade (RN-EDIT-013) ficam como estão, com 28 px.
+
+### Arrastar a aba para fora
+
+- **RN-ABAS-010.** Arrastar a aba para fora da faixa, como no Chrome.
+  - Soltar a aba em qualquer lugar que não seja uma faixa de abas abre a aba numa janela nova (RN-ABAS-002): fora das
+    janelas do Prism (sobre a área de trabalho do sistema, sobre outro programa, em outro monitor) ou dentro da
+    própria janela, longe da faixa (sobre o editor, a grade, o navegador, a barra superior ou a de status). Solta na
+    própria faixa, a aba muda de lugar (RN-ABAS-001); solta sobre outra janela do Prism, vai para ela (RN-ABAS-003).
+    Assim a janela maximizada, que não tem "fora", também solta a aba numa janela nova.
+  - O tipo do arraste diz o que é: `application/x-prism-tab` para a aba de consulta e a de tabela, e
+    `application/x-prism-result-tab` para a aba do resultado (RN-ABAS-012). O tipo se lê já no `dragenter` e no
+    `dragover`; o conteúdo (a janela e a aba, conferidos por `readTabDrag`), só no `drop`, porque o Chromium o esconde
+    antes. As faixas e os véus das outras janelas só aceitam o primeiro; a faixa e o véu da janela de origem aceitam
+    os dois. O `effectAllowed` é `move`.
+  - A indicação: enquanto a aba é arrastada sobre a própria janela, fora da faixa, a janela inteira, menos a faixa de
+    abas (o navegador, a barra superior, a de status e a área das abas), fica coberta por um véu no fundo do painel,
+    com a borda tracejada de 2 px no acento do tema e, no meio da área das abas, "Solte para abrir numa janela nova"
+    (13/20), e o ponteiro é o de mover. Sobre a faixa o véu some, e volta o marcador do lugar (RN-ABAS-001). Fora da
+    área da página (a barra de título, as bordas e as barras de rolagem do sistema) ninguém recebe a soltura, e ela
+    cancela. Fora da janela não há indicação: a janela nova aparece onde a aba foi solta. O véu é só visual: pelo
+    teclado e pelo leitor de tela, o caminho continua sendo "Mover para nova janela" no menu da aba.
+    - O véu é o alvo do `dragover` e do `drop` da janela inteira desde o `dragenter` da aba, com um contador de
+      entradas e saídas para não piscar ao passar de um elemento a outro.
+    - A raiz da área de trabalho escuta o `dragenter`, o `dragover` e o `drop` dos tipos da aba na fase de captura e
+      para a propagação (`stopPropagation`) antes do editor (CodeMirror), da grade e dos campos; quem responde é o
+      véu. Soltar a aba sobre o editor não escreve nada nele, e um teste solta o tipo da aba sobre o `.cm-content` e
+      confere que o texto não muda. A grade, o filtro do resultado, os diálogos e o navegador também não a recebem.
+    - Nada muda na página dentro do `dragstart`: o véu e as marcas aparecem depois (`setTimeout` de 0), porque o
+      Chromium cancela o arraste cujo elemento muda no próprio `dragstart`.
+  - Com uma aba só na janela (a aba e a aba do resultado dela, RN-ABAS-012, contam como uma), a janela já é aquela
+    aba: o véu diz "Esta já é a única aba da janela.", o ponteiro é o de proibido, e soltar, dentro ou fora da janela,
+    não faz nada. "Mover para nova janela" fica desabilitado, com a mesma frase como motivo. Levar a aba para outra
+    janela, pela faixa dela ou por "Mover para a janela…", continua valendo (RN-ABAS-003).
+  - Quem decide o fim do arraste é quem recebeu a soltura, e não o `dropEffect` do `dragend`: o Chromium às vezes o
+    dá como `none` quando outra janela recebeu a aba, e outro programa que aceite a soltura como "mover" o dá como
+    `move`.
+    - Dentro da própria janela, a janela nova abre pelo `drop` que o véu recebe, e nunca só pelo `dragend`: o véu
+      marca a soltura, e o pedido ao processo principal sai no `dragend`, que vem depois.
+    - Fora dela, no `dragend`, sem `drop` na faixa nem no véu da janela de origem, ela pede a janela nova ao processo
+      principal, que a abre quando o ponteiro que ele lê não está sobre outra janela do Prism (pela área dela na
+      tela) e quando nenhuma outra janela pediu a aba pela soltura (RN-ABAS-003) nos 200 ms seguintes. Sobre outra
+      janela do Prism, quem decide é ela, que recebeu a aba ou a recusou, e a janela nova não abre.
+    - Sem `drop` na janela de origem e com o ponteiro dentro dela (o Esc, a soltura sobre a barra de título), nada
+      acontece.
+    - A aba só sai da janela de origem quando o processo principal responde que a janela nova a recebeu.
+  - Esc durante o arraste:
+    - Dentro de uma janela do Prism, cancela: a aba fica onde estava, e nada abre. O Esc termina o arraste sem `drop`,
+      e só o `drop` abre a janela nova.
+    - Fora das janelas do Prism, o Chromium não distingue o Esc da soltura onde nenhuma janela do Prism a recebe: nos
+      dois, o `dragend` vem sem `drop` e com `dropEffect` `none` (no Windows, no macOS e no Linux), e a página não
+      recebe teclas durante o arraste do sistema. Até a sonda S-ABAS-1 provar o contrário numa plataforma, ali o Esc
+      vale como a soltura: abre a janela nova. Isso se afasta da decisão do dono ("Esc durante o arraste cancela") e
+      vai para ele na revisão desta parte, com a alternativa: um arraste próprio da aba, pelos eventos do ponteiro (a
+      captura do ponteiro, o ponto lido do processo principal enquanto ele está fora da janela,
+      `screen.getCursorScreenPoint()`, e o Esc pelo `keydown`, que então chega), no lugar do arrastar do HTML. O dono
+      escolhe entre os dois antes da versão estável. O guia da tela (`src/client/AGENTS.md`) registra o que a sonda
+      achou em cada plataforma.
+  - O ponto da janela nova é o do ponteiro, que o processo principal lê da tela quando o arraste termina
+    (`screen.getCursorScreenPoint()`, em pixels independentes da densidade do monitor), e não as coordenadas do
+    `dragend`, que no Windows podem não servir fora da janela e que, com o zoom do programa ou com monitores de
+    densidades diferentes, nem estão na medida das janelas.
+    - A janela nova abre com o canto de cima à esquerda no ponto onde a aba foi solta, no monitor em que o ponteiro
+      está (outro monitor também), no tamanho da janela de origem (o tamanho dela sem maximizar, `getNormalBounds()`,
+      quando estava maximizada), e é trazida para dentro da área útil desse monitor; maior que ela, diminui até caber,
+      sem passar do mínimo de 1024×700. O deslocamento de hoje, que punha a faixa da janela nova sob o ponteiro, sai.
+    - A janela nasce com esses limites, e o processo principal os aplica de novo depois de criada (`setBounds`) e os
+      confere (`getBounds()`): no Windows, a janela criada num monitor de escala diferente da do principal pode nascer
+      no tamanho errado. O mesmo vale para a janela do resultado (RN-ABAS-013).
+    - No Linux com o Wayland nativo (a plataforma `wayland` do Ozone), o ponto lido não vale: fora das superfícies do
+      app ele vem parado ou em (0, 0), sem erro. Ali vale o ponto do `dragend` e, sem ponto que sirva, a janela abre
+      32 px abaixo e à direita da de origem; o Wayland também não deixa o app escolher o lugar das janelas, e vale o
+      lugar que o sistema der. O guia da tela registra a plataforma.
+  - O que vai com a aba e o que se pergunta antes é o da RN-ABAS-002: o texto, o resultado, o cursor, a sessão e o
+    lugar do resultado (RN-ABAS-016), com a pergunta das alterações não salvas da grade (RN-EDIT-007) antes; a aba com
+    um comando em andamento não vai, com o aviso de hoje.
+  - O elemento da aba arrastada continua na página até o fim do arraste, também quando a faixa muda nesse meio-tempo:
+    o Chromium não avisa o fim do arraste de um elemento que saiu dela.
+  - A aba do resultado (RN-ABAS-012) se arrasta do mesmo jeito, e soltá-la fora de uma faixa leva o resultado para uma
+    janela (RN-ABAS-013), aberta com o canto de cima à esquerda onde ela foi solta, no tamanho lembrado (o ponto vai
+    no pedido da janela, RN-ABAS-017): o véu diz "Solte para abrir o resultado numa janela", também com uma aba só na
+    janela. Ela não muda de lugar na faixa nem vai para outra janela (RN-ABAS-012): solta sobre outra janela do
+    Prism, que não a aceita, não faz nada, e o resultado fica onde estava.
+
+### O resultado no painel, numa aba ou numa janela
+
+- **RN-ABAS-011.** O resultado da aba de consulta (também a de um script salvo) fica num de três lugares, um por aba:
+  1. **No painel**: abaixo do editor, como até aqui, com a divisória, o recolher e o maximizar (RN-PAINEL-001). É o
+     padrão.
+  2. **Numa aba**: o resultado vira uma aba própria na faixa, logo depois da aba da consulta (RN-ABAS-012), e a aba da
+     consulta mostra só o editor, na altura inteira.
+  3. **Numa janela**: o resultado abre numa janela própria do sistema, só com ele (RN-ABAS-013), que a pessoa pode pôr
+     em outro monitor, e a aba da consulta mostra só o editor, na altura inteira.
+
+  O que vale nos três:
+  - O resultado é sempre um só: a mesma sessão, o mesmo cursor, as mesmas linhas, as mesmas alterações não salvas, o
+    mesmo filtro, a mesma atualização automática e os mesmos resultados do script, com as Estatísticas. Nada é copiado
+    de um lugar para outro.
+  - Trocar de lugar não executa nada, não fecha o cursor e não perde a seleção, a rolagem, as larguras das colunas, o
+    zoom da grade (RN-GRADE-010), a aba do script escolhida nem as pendências. Pode ser feito com um comando em
+    andamento, que segue; o campo de edição de uma célula aberto é confirmado antes, como quando perde o foco
+    (RN-EDIT-001). O mesmo vale quando a pessoa fecha a janela do resultado (RN-ABAS-013). Quando o resultado sai da
+    janela do resultado (pela troca ou pelo fechar), os diálogos e os menus abertos nela fecham sem aplicar nada,
+    como no Esc, também o assistente "Exportar dados" (as escolhas lembradas dele ficam, RN-EXPORT-003); o que já
+    está em andamento (uma exportação, um "Salvar") continua, na janela da aba.
+  - A aba de tabela não muda: os Registros, a Estrutura e o Diagrama continuam dentro dela.
+  - O editor continua sendo o da aba: "Executar", o Ctrl+Enter, o Alt+X e a lista das conexões continuam nele, na
+    janela da aba, e o resultado do que ele executa aparece onde o resultado está.
+  - Executar não muda o foco nem a aba ativa: a pessoa continua no editor. Numa aba, a aba do resultado mostra o ponto
+    (RN-ABAS-012); numa janela, a janela mostra o resultado novo sem vir à frente.
+  - Numa aba e numa janela, o editor ocupa a aba da consulta inteira, sem divisória, e o recolher e o maximizar não
+    aparecem: o resultado já ocupa o lugar inteiro dele. O que o painel tinha (a divisão, recolhido ou maximizado)
+    fica guardado e volta quando o resultado volta ao painel.
+- **RN-ABAS-012.** A aba do resultado.
+  - Fica sempre logo depois da aba da consulta dela, e as duas andam juntas: arrastar a aba da consulta pela faixa
+    (RN-ABAS-001) e o Ctrl+Shift+PageUp e PageDown, com qualquer uma das duas ativa, movem as duas, e uma posição
+    passa por uma aba (ou por uma aba com a aba do resultado dela). O marcador do lugar nunca fica entre a aba da
+    consulta e a do resultado dela: cai antes da aba ou depois da do resultado, qualquer que seja a aba arrastada,
+    também a que vem de outra janela. A aba do resultado não muda de lugar sozinha: arrastada pela faixa, a faixa não
+    mostra o marcador do lugar, e soltá-la na faixa não faz nada; solta fora de uma faixa, o resultado vai para uma
+    janela (RN-ABAS-010). Ela não vai sozinha para outra janela: vai com a aba dela (RN-ABAS-016), e a outra janela,
+    que reconhece o tipo do arraste (RN-ABAS-010), não a aceita (sem véu, com o ponteiro de proibido). Solta assim,
+    sobre outra janela do Prism, a aba do resultado não faz nada: o resultado fica onde estava.
+  - O título é "Resultado · " seguido do título da aba da consulta na faixa (RN-ABAS-008): "Resultado ·
+    consulta-2.sql", "Resultado · Pedidos do dia". Muda quando o da aba muda (renomear, salvar como script). O ícone é
+    o do resultado, novo: uma grade de três por três, no traço dos ícones do canvas (16 px e traço 1,5 no desenho, 14
+    px na faixa), diferente do ícone da aba de tabela. O selo do ambiente é o da conexão da aba, como na aba da
+    consulta. A dica é "Resultado de consulta-2.sql. F6 alterna com a consulta.". Na lista das abas, ela vem logo
+    depois da aba dela, com o mesmo título.
+  - O ponto: a aba do resultado mostra um ponto de 6 px no acento do tema enquanto há um comando em andamento na aba
+    (também o script e o "Salvar" das alterações; a execução automática, que não toma a aba, RN-GRADE-014, não o
+    mostra), e, quando ela não é a aba ativa, desde que chega um resultado novo que a pessoa ainda não viu (de um
+    comando, de um script, do F5, do "Carregar mais", do filtro; um erro também) até ela ficar ativa. Para o leitor de
+    tela, o ponto entra no nome da aba: "Resultado · consulta-2.sql, executando" e "Resultado · consulta-2.sql,
+    resultado novo". O ponto vermelho do script parado na pergunta de erro (RN-SQL-021) aparece nela também, no lugar
+    do outro.
+  - O conteúdo é a área de resultado inteira, na altura e na largura da área das abas: a barra dela, a grade, o
+    filtro, as abas do script e as Estatísticas, a faixa das alterações e a barra de edição.
+  - Para o teclado e o leitor de tela, ela é uma aba da faixa como as outras: `role="tab"`, na ordem da faixa, com as
+    setas, Home e End, e `aria-controls` no painel dela, que tem `role="tabpanel"` e
+    `aria-label="Resultado de consulta-2.sql"` (o nome não vem da aba, que leva o ponto no nome). O painel da aba da
+    consulta continua ligado à aba da consulta.
+  - Fechar a aba do resultado (o X, o clique do meio, o Ctrl+W com ela ativa, "Voltar para o painel" no menu dela)
+    volta o resultado ao painel, sem perguntar nada, porque nada se perde. Se ela era a ativa, a aba da consulta fica
+    ativa, com o foco no resultado (a grade, ou o botão "Onde mostrar o resultado" sem grade). A dica do X é "Voltar
+    para o painel (Ctrl+W)", e o nome acessível, "Voltar o resultado de consulta-2.sql para o painel".
+  - Fechar a aba da consulta fecha a do resultado junto, com as perguntas de fechar a aba (RN-ABAS-004 e RN-EDIT-007):
+    as alterações não salvas do resultado são da aba. "Fechar as outras", "Fechar as da direita" e "Fechar todas"
+    contam a aba e a aba do resultado dela como uma: a do resultado fecha com a dela, e nunca sozinha; a contagem da
+    pergunta de fechar não a conta.
+  - O menu da aba do resultado (o botão direito, o Shift+F10, a tecla de menu): "Ir para a consulta" (F6), o submenu
+    "Onde mostrar o resultado" (RN-ABAS-014) e "Voltar para o painel" (Ctrl+W).
+- **RN-ABAS-013.** A janela do resultado.
+  - É uma janela do sistema, com a barra de título do sistema, e não uma área de trabalho: não tem navegador, faixa de
+    abas, barra superior nem barra de status. Mostra a área de resultado inteira, no tamanho da janela: a barra dela,
+    a grade, o filtro, as abas do script e as Estatísticas, a faixa das alterações e a barra de edição.
+  - O título é "Resultado · consulta-2.sql — Prism", com o título da aba (RN-ABAS-008), na barra da janela, na barra
+    de tarefas e no Alt+Tab, e muda quando o da aba muda.
+  - Na barra da área de resultado, na ponta direita, o botão com texto "Voltar para o painel": volta o resultado ao
+    painel da aba, fecha a janela e traz à frente a janela da aba, com a aba da consulta ativa e o foco na grade, ou
+    no botão "Onde mostrar o resultado" sem grade (RN-ABAS-012). O Ctrl+W com o foco na janela do resultado faz o
+    mesmo.
+  - Fechar a janela pelo sistema (o X da barra, Alt+F4, Cmd+W) também volta o resultado ao painel, sem perguntar nada,
+    mas não traz a janela da aba à frente: quem decide o foco é o sistema. O que estava aberto nela segue a
+    RN-ABAS-011.
+  - Só o fechar que a pessoa pede volta o resultado ao painel. Quando é o Prism que fecha a janela (o bloqueio, o
+    "Sair", o fechar ou o recarregar da janela da aba, a perda do processo da tela dela, o fim do app e levar a aba
+    para outra janela, RN-ABAS-016), o lugar da aba continua "Numa janela", e nada volta ao painel. Como os dois se
+    distinguem está na RN-ABAS-017.
+  - Não é janela filha da janela da aba: minimiza, maximiza, vai para outro monitor e fica atrás dela sozinha, e a
+    janela da aba minimizada não a leva junto.
+  - O tamanho e o lugar:
+    - A primeira abre com 960×600 px, no centro do monitor da janela da aba.
+    - Depois, o Prism lembra o tamanho, o lugar e se estava maximizada da última janela do resultado que mudou (ao
+      mover, redimensionar e fechar), nesta instalação, e não por usuário, como o zoom (RN-ZOOM-001): num arquivo
+      `result-window.json`, ao lado do `zoom.json`, gravado só pelo processo principal. A próxima abre ali. O tamanho
+      lembrado de uma janela maximizada é o dela sem maximizar (`getNormalBounds()`).
+    - O arquivo é gravado de uma vez (num arquivo ao lado, depois trocado, como o `zoom.json`), no máximo uma vez a
+      cada 500 ms enquanto a janela se move ou muda de tamanho, e mais uma ao fechar. Arquivo ausente ou ilegível é
+      como se não existisse: vale o tamanho e o lugar da primeira, sem erro, e ele é regravado na próxima mudança. É
+      contrato (RN-VERSAO-002), como o `zoom.json`.
+    - Se o lugar lembrado não fica mais em nenhum monitor (o monitor saiu), ela abre com o tamanho lembrado, trazido
+      para caber, no centro do monitor da janela da aba. Com outra janela do resultado aberta no mesmo lugar, abre 32
+      px abaixo e à direita dela; a cascata volta ao primeiro lugar quando o deslocamento sairia da área útil do
+      monitor.
+    - Levada pelo arraste da aba do resultado (RN-ABAS-010), abre com o tamanho lembrado e o canto de cima à esquerda
+      onde a aba foi solta, trazida para dentro da área útil daquele monitor.
+    - A janela nasce com os limites, e o processo principal os aplica de novo e os confere depois de criada, como na
+      janela nova da aba (RN-ABAS-010). No Wayland, vale o lugar que o sistema der.
+    - O mínimo é 480×320 px.
+  - O tema, as fontes (RN-CONFIG-003 e 008) e o zoom do programa (RN-ZOOM-001) são os do app, e mudam nela na hora,
+    como nas outras janelas; os atalhos do zoom valem com o foco nela e mudam o de todas as janelas. O zoom da grade
+    (RN-GRADE-010) é o da grade, e vai com ela.
+  - Aparece já com os estilos, o tema e o resultado, sem um quadro em branco antes (RN-ABAS-017). Aberta a pedido da
+    pessoa naquela hora (o botão, o menu, o arraste), vem à frente com o foco no resultado. Aberta sem um pedido
+    naquela hora (a aba nova com a preferência, RN-CONFIG-010; a volta das abas na próxima entrada e no desbloqueio;
+    a aba levada para outra janela, RN-ABAS-016), aparece sem tomar o foco de quem está digitando.
+  - Há no máximo uma por aba, e no máximo 32 abertas por uma janela da aba (RN-ABAS-017).
+  - Não é uma janela de abas: não aparece em "Mover para a janela…", não recebe abas (soltar uma aba sobre ela é
+    soltar fora das janelas do Prism, RN-ABAS-010), não conta como a última janela para fechar o app (RN-ABAS-004 e
+    007) e não grava abas (RN-ABAS-006).
+  - Para o leitor de tela, o documento dela tem a língua do app e um ponto de referência principal (`main`) com o nome
+    "Resultado de consulta-2.sql".
+- **RN-ABAS-014.** Como trocar o lugar do resultado.
+  - Na barra da área de resultado, onde quer que ela esteja, o botão "Onde mostrar o resultado", com um ícone novo
+    (uma janela com o painel de baixo marcado, 16 px, traço 1,5), logo antes do recolher e do maximizar (no painel),
+    ou na ponta direita (na aba), ou logo antes de "Voltar para o painel" (na janela).
+    - Abre um menu com "No painel", "Numa aba" e "Numa janela", itens de escolha única (`menuitemradio`, com
+      `aria-checked`), com o lugar de agora marcado. O menu é o do app (RN-MENU-001): anda pelas setas, escolhe com
+      Enter, fecha com Esc e com o clique fora, e devolve o foco ao botão.
+    - O botão tem `aria-haspopup="menu"` e `aria-expanded`, e o nome e a dica dizem o lugar de agora: "Onde mostrar o
+      resultado: no painel", "… numa aba", "… numa janela".
+  - No menu da aba da consulta (RN-ABAS-002 e 003), depois dos itens de mover, o submenu "Onde mostrar o resultado",
+    com os mesmos três itens. No menu da aba do resultado, o mesmo submenu (RN-ABAS-012).
+  - Arrastar a aba do resultado para fora de uma faixa a leva para "Numa janela" (RN-ABAS-010). Na janela do
+    resultado, "Voltar para o painel" a traz de volta (RN-ABAS-013).
+  - O foco depois de trocar:
+    - Pelo botão da barra, o foco vai com o resultado: a aba do resultado fica ativa, ou a janela do resultado vem à
+      frente, com o foco no botão "Onde mostrar o resultado" dela; de volta ao painel, a aba da consulta fica ativa,
+      com o foco no mesmo botão, no painel.
+    - Pelo menu da aba, a aba ativa não muda, e o foco volta à aba na faixa (RN-MENU-001); "Numa janela" abre a janela
+      à frente, e o F6 traz a pessoa de volta. Se a aba que some era a ativa (a do resultado, que deixa de existir
+      com "No painel" ou "Numa janela"), a aba da consulta fica ativa, com o foco no botão "Onde mostrar o resultado"
+      dela; o mesmo vale quando o menu foi aberto sobre a aba da consulta, com a do resultado ativa.
+  - Cada troca é anunciada ao leitor de tela, numa região `role="status"` da janela que tem o foco, sem toast:
+    "Resultado agora no painel.", "Resultado agora numa aba." e "Resultado agora numa janela.". A janela do resultado
+    aberta sem tomar o foco (RN-ABAS-013) anuncia o mesmo na janela da aba.
+  - "Numa janela" fica desabilitado enquanto a aba vai para outra janela, com o motivo "A aba está indo para outra
+    janela.", e não aparece fora do app (no navegador do desenvolvimento), como os itens de mover. Se o processo
+    principal recusar a janela, o aviso "Não foi possível abrir a janela do resultado." aparece, e o resultado fica
+    onde estava.
+  - O F6 alterna entre o editor e o resultado da aba, onde quer que o resultado esteja:
+    - no painel, leva o foco do editor ao resultado (a grade, ou o botão "Onde mostrar o resultado" sem grade, também
+      com a área recolhida) e do resultado ao editor; com o resultado maximizado, o editor está escondido, e o F6 no
+      resultado não faz nada;
+    - numa aba, troca a aba ativa entre a aba da consulta e a do resultado, com o foco no editor ou no resultado;
+    - numa janela, no editor traz a janela do resultado à frente, restaurada se estava minimizada, com o foco no
+      resultado, e na janela do resultado traz à frente a janela da aba, também restaurada, com a aba da consulta
+      ativa e o foco no editor.
+
+    Trazer uma janela à frente é do processo principal (`restore()` se minimizada, `show()` e `focus()`), pedido pelo
+    canal da janela da aba (RN-ABAS-017), no F6, no "Voltar para o painel" e no "traz à frente" das outras regras.
+    Onde o sistema recusa o foco (o Wayland, a proteção do Windows contra tomar o primeiro plano), a janela vem à
+    frente sem ele, ou pisca na barra de tarefas, e nada mais aparece; a sonda S-JANELA-6 registra o que cada
+    plataforma faz.
+
+    Com o campo de edição de uma célula aberto, ou com um menu ou um diálogo aberto, o F6 não faz nada. Nenhum atalho
+    do Prism, dos mapas de teclas do editor (CodeMirror) nem do menu do Electron usa o F6; como o F5 e o F11, ele não
+    chega ao menu de desenvolvimento e do macOS (RN-GRADE-012), e, como o F5, pode pedir o Fn nos teclados em que as
+    teclas de função controlam o volume e o brilho.
+- **RN-ABAS-015.** Tudo o que o resultado faz no painel, ele faz na aba e na janela, do mesmo jeito.
+  - A barra (o resumo, o total com "Contar total" e "Contar de novo", a atualização automática, o zoom da grade,
+    "Exportar…"), a grade com a seleção (o clique, o Shift, o Ctrl, o arraste com a rolagem sozinha perto da borda, o
+    cabeçalho que escolhe a coluna e o botão de ordenar, a largura das colunas), o menu da grade, a edição das
+    células, a barra de edição, a faixa das alterações com "Ver SQL", "Descartar" e "Salvar", "Carregar mais", o
+    filtro do resultado com o autocompletar dele, as abas do script e as Estatísticas, "Executar este comando", o
+    "Copiar avançado", o "Configurar comandos 'Copiar como'", o "Gerar SQL" e o "Exportar dados".
+  - Diálogos, menus, listas e avisos abrem na janela onde a pessoa está.
+    - O que nasce de uma ação no resultado abre na janela do resultado, quando ele está numa janela: o menu da grade e
+      os submenus, o "Filtrar por valor…", o "Personalizado…" da atualização automática, a pergunta da proteção da
+      conexão (RN-PROT-001), a das alterações não salvas (RN-EDIT-007), o "Ver SQL", os diálogos de cópia e do "Gerar
+      SQL", o assistente "Exportar dados" e o diálogo do sistema para escolher o arquivo, que fica sobre ela (o canal
+      leva o nome da janela do resultado, RN-ABAS-017). O foco preso no diálogo e o foco que volta quando ele fecha
+      são dessa janela.
+    - O que nasce no editor (executar, a lista das conexões, o Ctrl+S do script) abre na janela da aba.
+    - Os avisos (os toasts) aparecem na janela que tem o foco, entre a da aba e a do resultado dela; sem foco em
+      nenhuma das duas, na da aba. Na janela do resultado, que não tem barra de status, a pilha fica no canto de
+      baixo, 12 px acima da borda. O progresso das exportações, importações e cópias continua na barra de status da
+      janela da aba, que é a janela que as começou (RN-EXPORT-023 e RN-IMPORT-021).
+    - O aviso antes do bloqueio por inatividade (RN-SEG-001) aparece também na janela do resultado, no alto à direita,
+      12 px abaixo da borda de cima, porque ela não tem barra superior.
+  - Os atalhos: os da grade e da área de resultado, e os da aba de consulta que valem com o foco no resultado (o F5, o
+    Alt+X, RN-SQL-019; o Ctrl+S do "Salvar" das alterações com o foco na grade), valem igual na aba e na janela do
+    resultado. Também o Ctrl+W (volta o resultado ao painel), o F6 (RN-ABAS-014) e os do zoom do programa. Na janela
+    do resultado, os atalhos do que ela não tem (o Ctrl+B e o Ctrl+Shift+E do navegador, o Ctrl+Shift+PageUp e
+    PageDown da faixa, o Ctrl+9 da conexão, o Ctrl+, de Configurações) não fazem nada; quem os segura é a raiz da
+    área de resultado nela (RN-ABAS-017).
+  - A área de transferência funciona na janela do resultado como na janela da aba: copiar (Ctrl+C, Ctrl+Shift+C, o
+    "Copiar" dos diálogos) e colar na grade.
+  - O que leva a outra tela (o "Instalar driver" do erro de driver ausente) abre a tela na janela da aba e a traz à
+    frente.
+  - O que a pessoa faz na janela do resultado conta como atividade para o bloqueio por inatividade (RN-SEG-001).
+  - O resultado "à vista", de que depende a atualização automática (RN-GRADE-014):
+    - no painel, a aba da consulta ativa, com a área de trabalho na tela, como antes;
+    - numa aba, a aba do resultado ativa, com a área de trabalho na tela;
+    - numa janela, a janela do resultado aberta e não minimizada, como o processo principal a informa (`isMinimized()`,
+      pelo `prism:result-window-state`, RN-ABAS-017), qualquer que seja a aba ativa e a tela da janela da aba. Coberta
+      por outra janela, ela continua à vista e atualizando: a visibilidade do documento dela não conta, porque o
+      Chromium também dá como escondida a janela inteira coberta (o rastreio de oclusão do Windows e do macOS).
+  - A pergunta de erro do script (RN-SQL-021) aparece com a aba da consulta ou a aba do resultado ativa e a área de
+    trabalho na tela, ou com o foco na janela do resultado. Quando as duas valem, abre na janela do resultado se ela
+    tem o foco, e senão na janela da aba; o foco volta, quando ela fecha, para onde estava na janela em que abriu.
+    Sem o foco, a janela do resultado só mostra o ponto vermelho na barra dela, ao lado das abas do script, e não abre
+    o diálogo sozinha.
+  - A janela da aba minimizada, ou coberta, não para o resultado que está numa janela: quem conta o tempo da
+    atualização automática é a tela dela. Enquanto ela tem uma janela do resultado aberta, o processo principal tira
+    do `webContents` dela, e não do da janela do resultado, a redução de ritmo que o Chromium aplica a uma página
+    escondida (`setBackgroundThrottling(false)`), e a devolve quando a última janela do resultado dela fecha. Assim a
+    atualização de 1 s continua a cada 1 s com a janela da aba minimizada (sonda S-JANELA-4).
+- **RN-ABAS-016.** O lugar do resultado é da aba.
+  - A aba de consulta nova nasce no lugar da preferência (RN-CONFIG-010): a "Nova consulta", o script aberto, o "Gerar
+    `SELECT`" numa consulta nova e as outras ações que criam uma aba de consulta. Mudar a preferência não muda as abas
+    abertas. Numa aba ou numa janela, a aba do resultado e a janela aparecem já com a aba, com a área de resultado
+    vazia, como no painel.
+  - Fica guardado com a aba (RN-ABAS-006): as abas voltam na próxima entrada no mesmo lugar, a aba do resultado logo
+    depois da dela, e a janela do resultado reabre no tamanho e no lugar lembrados (RN-ABAS-013), com a área vazia,
+    porque o resultado não volta. Na volta das abas (a entrada e o desbloqueio), as janelas do resultado abrem uma a
+    uma, na ordem das abas, sem tomar o foco, e a da aba ativa por último.
+  - Levar a aba da consulta para outra janela (RN-ABAS-002, 003 e 010) leva o lugar: a aba do resultado vai junto,
+    logo depois dela; a janela do resultado fecha (pelo Prism, RN-ABAS-013) e reabre a partir da outra janela, no
+    mesmo lugar da tela, com o resultado, como a aba o leva (RN-ABAS-002). A janela de origem só manda a aba depois
+    de o processo principal confirmar que a janela do resultado dela fechou (`prism:result-window-closed`,
+    RN-ABAS-017); sem a confirmação em 3 segundos, a aba vai assim mesmo, com o resultado no painel, e a janela que a
+    recebe mostra o aviso "Não foi possível abrir a janela do resultado.". As regras de levar a aba continuam: a aba
+    ocupada não vai, e as alterações não salvas perguntam antes.
+  - Fechar a janela da aba (RN-ABAS-004) fecha as janelas do resultado das abas dela, depois das perguntas; fechar o
+    app também.
+  - O bloqueio por inatividade e o "Sair" fecham as janelas do resultado (nada do que estava aberto fica à vista,
+    RN-SEG-001), e as abas guardam o lugar. No desbloqueio, as janelas reabrem no tamanho e no lugar lembrados, com a
+    área vazia (o bloqueio descarta os resultados); depois do "Sair", voltam com as abas, na próxima entrada. A aba do
+    resultado fica na faixa, vazia, como a aba da consulta.
+  - A janela da aba que recarrega ou perde o processo da tela fecha as janelas do resultado dela, que voltam quando a
+    aba volta.
+- **RN-ABAS-017.** Como a janela do resultado é feita. O resultado tem de continuar sendo um só, e por isso a janela
+  do resultado não é uma área de trabalho com estado próprio: quem a desenha é a tela da janela da aba, com o mesmo
+  estado (o mesmo executor da aba, a mesma sessão, as mesmas pendências), e não há nada a combinar entre duas telas.
+  - A tela abre a janela pelo Chromium, com `window.open("about:blank", "prism-result-<id da aba>", "popup")`: uma
+    página em branco, da mesma origem, no mesmo processo, e desenha nela a área de resultado por um portal do React.
+    O componente da área de resultado é o mesmo: muda o documento onde ele está.
+  - O pedido, antes da abertura. A tela pede a janela ao processo principal pelo preload da janela da aba
+    (`prism:result-window-request`, com `assertFromApp` e o conteúdo validado por zod nos dois lados), com
+    `{ name, mode, at }`: o nome; `mode` `"focus"` quando a pessoa a pediu naquela hora (o botão, o menu, o arraste) e
+    `"background"` quando não (RN-ABAS-013); e `at`, que só o arraste da aba do resultado traz (RN-ABAS-010), com o
+    ponto do `dragend`, e nos outros casos `null`. No arraste, o processo principal lê o ponteiro ali mesmo, e o `at`
+    só vale onde ele não o lê (o Wayland, RN-ABAS-010). Ele confere que a janela que pede está pronta
+    (a área de trabalho montada e o cofre aberto, `hub.isReady`, como para receber abas, RN-ABAS-004), que ela tem
+    menos de 32 janelas do resultado abertas e que não há uma aberta por ela com esse nome, e guarda uma concessão de
+    uso único, daquela janela e daquele nome, com o modo e o lugar, válida por 2 segundos. A resposta diz se pode
+    abrir; recusada, ou se a janela não abre, vale o aviso da RN-ABAS-014.
+  - A aprovação. O `setWindowOpenHandler` de cada janela do app aprova a abertura, e só ela, quando todas valem:
+    - o endereço é exatamente `about:blank`;
+    - o nome casa com `^prism-result-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`;
+    - o texto das opções (`features`) é exatamente `popup`, e a disposição é a de uma janela pedida por script
+      (`new-window`), sem corpo de envio;
+    - a janela que pede continua pronta, com o cofre aberto (`hub.isReady`);
+    - e há uma concessão válida daquela janela para aquele nome, que a aprovação consome.
+
+    Qualquer outra abertura continua negada (RN-SHELL-001), também com o cofre bloqueado. O endereço de quem abre
+    (`referrer`) não entra nas condições: o Chromium o preenche pela página que abre, e pedir `noreferrer` cortaria a
+    ligação com ela (o `window.open` devolveria `null`). O processo principal ignora o que o texto das opções diria e
+    passa só as próprias (`overrideBrowserWindowOptions`): o tamanho e o lugar da RN-ABAS-013 (com o ponto da
+    concessão, quando tem), o título "Prism" até a tela pôr o dela, o ícone e a cor de fundo do app, o mínimo de
+    480×320 px, nenhuma janela-mãe (`parent`), `show: false`, e as `webPreferences` com todas as chaves escritas:
+    `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`, `nodeIntegrationInSubFrames: false`,
+    `webviewTag: false`, `webSecurity: true` e `preload` ausente (a janela do resultado não tem `window.prism`).
+  - Quando a janela nasce (`did-create-window`), o processo principal:
+    - confere as `webPreferences` dela (`getLastWebPreferences()`) contra as que passou, e a fecha se alguma chave não
+      bate;
+    - troca o `setWindowOpenHandler` dela pela negação total; a negação das navegações já está nela desde o nascimento
+      do `webContents` (RN-SHELL-001), sem a exceção da recarga do Vite;
+    - guarda-a numa lista própria, pela janela que a abriu e pelo nome (o mesmo nome em duas janelas da aba são duas
+      entradas), fora da lista das janelas do app (`appWindows`), do centro das janelas (`window-hub.ts`) e da gravação
+      das abas;
+    - aplica nela o zoom do programa (`setZoomFactor`), ali e de novo no `dom-ready`, e o `changeZoom` passa a incluir
+      as janelas do resultado; trata nela, como nas janelas do app, os atalhos do zoom e as teclas que o menu não
+      recebe (`before-input-event`, com o F6 junto do F5, do F11 e do Ctrl+R);
+    - aplica de novo os limites dela e os confere (RN-ABAS-010);
+    - grava o tamanho e o lugar dela (RN-ABAS-013), cuida da redução de ritmo da janela que a abriu (RN-ABAS-015) e
+      avisa a janela que a abriu quando ela minimiza e volta (`prism:result-window-state { name, minimized }`);
+    - e a fecha quando a janela que a abriu fecha, recarrega (a navegação do quadro principal) ou perde o processo da
+      tela.
+  - Ela aparece pronta. Nasce escondida: o `show: false` tem de valer para uma janela aberta por `window.open`, que no
+    Electron nasce visível por padrão (a sonda S-JANELA-1 confere; se não valer, ela nasce fora da tela, ou com
+    opacidade 0, até estar pronta). O `ready-to-show` não serve, porque a página em branco fica pronta quase na hora,
+    antes dos estilos. Quando a tela copiou os estilos e montou o portal, avisa pelo canal da janela da aba
+    (`prism:result-window-ready { name }`), e só então o processo principal a mostra: `show()` e `focus()` no modo
+    `"focus"`, `showInactive()` no `"background"`. Sem esse aviso em 3 segundos, ele a mostra assim mesmo.
+  - O que se faz com ela passa pelo processo principal, pedido pelos canais da janela da aba com o nome dela, que ele
+    confere contra a lista dele para aquela janela: trazê-la à frente (`prism:result-window-focus`: `restore()` se
+    minimizada, `show()` e `focus()`, RN-ABAS-014), fechá-la (`prism:result-window-close`) e pôr o título
+    (`prism:result-window-title`). Os canais que abrem um diálogo do sistema a partir do resultado (o destino do
+    "Exportar dados", o arquivo do "Importar…", o "Mostrar na pasta") levam também o nome da janela do resultado: o
+    processo principal prende o diálogo a ela e, com nome desconhecido ou de outra janela, à janela da aba. A tela
+    guarda a referência da janela aberta e nunca chama `window.open` de novo para um nome já aberto: o Chromium daria
+    a janela que já existe com esse nome, navegada para a página em branco, e o que ela mostra se apagaria.
+  - Quem diz que a janela fechou é o processo principal, à janela que a abriu: `prism:result-window-closed { name,
+    reason }`. O `reason` é `"host"` quando foi o Prism que a fechou: pelo canal de fechar, que a tela usa no
+    bloqueio, no "Sair", no "Voltar para o painel" e ao levar a aba para outra janela; ou pelo próprio processo
+    principal, quando a janela da aba fecha ou recarrega e quando o app sai. É `"user"` nos outros casos (o X da
+    barra, Alt+F4, Cmd+W). Só o `"user"` volta o resultado ao painel e muda o lugar da aba (RN-ABAS-013). Antes de
+    pedir um fechamento, a tela marca a aba como fechando pelo Prism, e o portal desmonta sem tocar no lugar guardado.
+    O fim da janela não se descobre pelo `pagehide` nem pela referência na tela, que não chegam com certeza quando a
+    janela que a abriu também está saindo.
+  - O app acaba quando a última janela do app fecha (`appWindows`): as janelas do resultado fecham no `closed` da
+    janela que as abriu, antes do `window-all-closed`, e o `liveWindowIds()` não as conta. O `close` de uma janela do
+    resultado nunca passa pelas perguntas de fechar a janela (o `hub.isReady` do `close` de `createAppWindow`,
+    RN-ABAS-004). O teste do processo principal e do centro das janelas cobre os dois.
+  - As permissões: os dois tratadores (`setPermissionRequestHandler` e `setPermissionCheckHandler`) procuram primeiro o
+    `webContents` (pelo `id`) na lista das janelas do resultado e aceitam dele só `clipboard-read` e
+    `clipboard-sanitized-write`; ali o endereço de quem pede é `about:blank`, e a origem pode vir herdada ou nula.
+    Quando o `webContents` vem nulo na consulta, vale a regra de hoje, pela origem. A `permissionAllowed`
+    (`electron/permissions.ts`) ganha o parâmetro `isResultWindow`, e o teste cobre os quatro casos (janela do app ou
+    do resultado, permissão da área de transferência ou outra). As fontes locais, não.
+  - A política de conteúdo e o endereço base não dependem da herança: a tela põe na `<head>` da janela, antes de
+    qualquer outra coisa, uma cópia da `<meta http-equiv="Content-Security-Policy">` do documento do app e um
+    `<base href>` com o `document.baseURI` dele (sem ele, os `url()` relativos das folhas copiadas, como os `url(/…)`
+    do Vite em desenvolvimento, não acham as fontes). A janela do resultado não carrega nada que a janela do app não
+    carregue.
+  - A montagem: a tela monta o portal quando `child.document.readyState` é `complete`; guarda o `document` em que
+    montou e, no `load` da janela, confere que é o mesmo (o documento em branco do começo pode ser trocado depois que
+    o `window.open` volta), e senão monta de novo. A cópia dos estilos e o portal vêm depois disso: as `<link>` pelo
+    endereço, as `<style>` pelo texto (uma folha construída não serve a dois documentos), e a língua, o `data-theme` e
+    o `style` da raiz (as variáveis das fontes), que um `MutationObserver` acompanha, com as `<style>` e `<link>` que
+    entram e saem da `<head>` do app (no desenvolvimento, o Vite as troca a cada mudança do código).
+  - Para o mesmo componente funcionar no outro documento:
+    - a tela usa o documento e a janela de onde o elemento está (`ownerDocument` e `defaultView`), e não o `document`
+      e o `window` globais, nos ouvintes de ponteiro e de teclado da grade (a seleção por arraste, a rolagem sozinha,
+      a largura das colunas), no foco (o elemento ativo, o foco que volta), nas medidas (o tamanho da janela para pôr
+      um menu, o `ResizeObserver` da janela do elemento) e na busca por `id`;
+    - conferir se algo é um elemento não usa o `instanceof` da janela principal, porque um elemento do outro documento
+      não é instância do `Element` dela: usa o `nodeType`, ou o construtor da janela do próprio elemento;
+    - os diálogos, os menus, as listas, os avisos e o autocompletar do filtro abrem no `body` do documento de onde
+      vieram, por um contexto com o alvo que a área de resultado dá a tudo o que nasce nela, também aos diálogos que a
+      aba desenha por ela;
+    - a área de transferência é a da janela onde a pessoa está: todas as chamadas que o resultado alcança (o copiar, o
+      "Copiar como", o "Gerar SQL", o colar na grade, o "Ver SQL") passam por um só `hostClipboard(host)`, que usa o
+      `navigator.clipboard` da janela do alvo;
+    - um link (`<a href>` ou `Link`) na área de resultado, como o do painel de erro, chama `preventDefault()` e navega
+      o roteador da janela da aba: nada navega a janela do resultado;
+    - na janela do resultado, a raiz do portal (`ResultHost`) trata o Ctrl+W ("Voltar para o painel") e para a
+      propagação (`stopPropagation`) do Ctrl+W, do Ctrl+Shift+PageUp e PageDown, do Ctrl+9, do Ctrl+B, do
+      Ctrl+Shift+E e do Ctrl+, antes que cheguem, pela árvore do React, à aba e à faixa da janela da aba
+      (`workbench-tabs.tsx`); os ouvintes de `window` da janela da aba (`page.tsx`, `settings-shortcut.tsx`) não veem
+      as teclas do outro documento e ficam como estão. Na aba do resultado, as teclas seguem para a faixa, que as
+      trata como a RN-ABAS-012 diz;
+    - a janela abre pela ação da pessoa ou pela volta das abas, e nunca por um efeito do React, que o modo estrito
+      executa duas vezes.
+  - Os canais novos (`prism:result-window-request`, `-ready`, `-focus`, `-close`, `-title`, `-closed` e `-state`) e o
+    nome da janela do resultado nos canais dos diálogos do sistema entram no teste dos canais
+    (`electron/channels.test.ts`), com `assertFromApp` e o conteúdo validado dos dois lados (RN-ABAS-005).
+  - Por que este caminho, e não uma janela do app com o resultado passado pelo processo principal, como a aba passa de
+    uma janela para outra (RN-ABAS-002): o resultado vive no executor da aba, na tela, junto da sessão, que aceita um
+    comando por vez (`SESSION_BUSY`), das alterações não salvas e da seleção. Numa segunda tela, ou o executor e as
+    pendências iriam para lá e o editor ficaria sem eles, ou cada página de linhas, cada clique e cada resposta iria e
+    voltaria pelo processo principal, com uma segunda tela inteira (o cofre, o bloqueio, o tema, as fontes) para
+    manter igual. A página em branco mantém um resultado só, sem duplicar nada, e a janela não ganha poder nenhum: não
+    tem preload, não navega, não abre janela, só tem as permissões da área de transferência e só mostra o que a tela
+    da aba desenha. Abri-la pede uma concessão de uso único, de uma janela pronta, até 32 por janela.
+  - A ordem de entrega: "Numa aba" primeiro, que não depende de nada do outro documento, e depois "Numa janela". Se as
+    sondas S-JANELA-1 a 3 mostrarem, numa plataforma, uma falha sem conserto barato, "Numa janela" não sai nela, a
+    decisão volta para o dono com o que a sonda mostrou, e "Numa aba" sai do mesmo jeito.
+- **RN-CONFIG-010.** Configurações › Resultados ganha "Onde o resultado das abas novas aparece", com "No painel" (o
+  padrão), "Numa aba" e "Numa janela", no mesmo controle de escolha da densidade do navegador (RN-NAV-011), e a ajuda
+  "Vale para as abas de consulta abertas daqui em diante. Cada aba guarda o lugar dela, que o botão 'Onde mostrar o
+  resultado' da área de resultado troca.". Fica nas preferências desta instalação, por usuário (RN-CONFIG-001), e vale
+  na hora, em todas as janelas, para as abas que abrem depois (RN-ABAS-016). As abas que voltam na próxima entrada e
+  as que vêm de outra janela ficam no lugar delas, e não no da preferência. Fora do app (no navegador do
+  desenvolvimento), "Numa janela" não aparece, como na RN-ABAS-014, e a preferência gravada como "Numa janela" vale ali
+  como "No painel". O dono pediu a escolha em "Área de trabalho"; Configurações não tem essa seção, e a de Resultados
+  já guarda as preferências do resultado.
+
+### Atualizar a cada 1 s
+
+Está na própria RN-GRADE-014, alterada no lugar: "A cada 1 s" entra no começo da lista, e o "Personalizado…" aceita de
+1 a 3.600 segundos, com os textos do diálogo trocados. A regra de nunca duas execuções ao mesmo tempo continua: a
+próxima só é marcada quando a anterior termina, e o tempo conta do fim dela; com um comando que demora mais que 1 s, o
+intervalo real é maior, e o controle continua dizendo "Atualiza a cada 1 s". O "atualizando…" só aparece quando a
+execução automática passa de 300 ms, em qualquer intervalo, para o controle não piscar a cada segundo.
+
+### Sondas
+
+Antes de dar a parte por pronta, no app empacotado do Windows (com dois monitores de escalas diferentes), no Linux
+(X11 e Wayland) e no macOS, onde houver máquina; o que não puder ser exercitado é dito no relatório, e nunca dado como
+passando:
+
+- **S-ABAS-1.** O arraste da aba: o ponto que o `screen.getCursorScreenPoint()` dá no fim do arraste, dentro e fora da
+  janela, em outro monitor, com dois monitores de escalas diferentes (o tamanho da janela nova, depois do `setBounds`)
+  e com o zoom do programa fora de 100%; no Wayland nativo, o que ele dá fora das janelas e onde a janela nova abre; se
+  o fim do arraste chega quando o elemento da aba muda; um sinal que distinga o Esc fora da janela da soltura onde
+  ninguém recebe (RN-ABAS-010); e que o editor não recebe a aba como texto (o teste automático já cobre o `drop`; a
+  sonda confirma).
+- **S-JANELA-1.** A página em branco aberta por `window.open`: tem a origem do app; as `webPreferences` finais dela
+  (`getLastWebPreferences()`) e o `window.opener`, registrados; o `show: false` vale nela; a política de conteúdo
+  copiada vale (uma imagem `https://` carregada nela dispara `securitypolicyviolation`); as fontes do app e os estilos
+  copiados valem nela, no app empacotado e no desenvolvimento; não tem `window.prism`; não navega nem abre outra
+  janela; aparece sem um quadro em branco; e, com o zoom do programa fora de 100%, nasce nele, o Ctrl+ e o Ctrl− nela
+  mudam o de todas as janelas, e o zoom dela não muda o guardado para as outras.
+- **S-JANELA-2.** A área de transferência na janela do resultado com o foco nela: copiar e colar, com a permissão
+  aceita pela janela; o `navigator.permissions.query({ name: "clipboard-read" })` nela; e um `writeText` chamado pelo
+  código da janela da aba no `navigator` da janela do resultado.
+- **S-JANELA-3.** O outro documento: a seleção por arraste e a rolagem sozinha, a largura das colunas (a captura do
+  ponteiro), o `ResizeObserver`, a rolagem virtual da grade, o filtro com o autocompletar, os menus e os diálogos com
+  o foco preso, a troca do documento em branco depois do `window.open`, e o modo estrito do React.
+- **S-JANELA-4.** A atualização automática de 1 s com o resultado numa janela: com a janela da aba minimizada, com ela
+  atrás de outra, e com a janela do resultado coberta por outro programa maximizado (sem minimizar). O intervalo
+  continua de 1 s nos três.
+- **S-JANELA-5.** A janela aberta sem um clique (a volta das abas na entrada e no desbloqueio, a aba nova com a
+  preferência, a aba levada para outra janela), também com a janela da aba minimizada ou sem o foco: o Electron a
+  abre, e ela aparece sem tomar o foco.
+- **S-JANELA-6.** Trazer à frente uma janela atrás de outra ou minimizada, a da aba e a do resultado, no F6 e no
+  "Voltar para o painel" (Windows, X11, Wayland, macOS). Onde o sistema não deixar, o guia da tela
+  (`src/client/AGENTS.md`) registra a plataforma e o que acontece.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `PUT api/user/workspace` `{ tabs, activeIndex }` | 204, como antes; cada aba de consulta pode ter `resultPlace` | 422 `WORKSPACE_INVALID` também com `resultPlace` fora dos três valores, ou numa aba de tabela |
+| `GET api/user/workspace` | 200 `{ tabs, activeIndex }`, como antes; cada aba de consulta traz `resultPlace` | |
+
+Notas:
+
+- `resultPlace`: `"panel"`, `"tab"` ou `"window"` (RN-ABAS-016). Ausente ou nulo no `PUT`, é `"panel"`; a aba de
+  consulta gravada antes desta versão volta como `"panel"`. Na aba de tabela, ausente ou nulo: qualquer outro valor,
+  também `"panel"`, é `WORKSPACE_INVALID`.
+- A aba do resultado não é uma aba gravada: ela volta pelo `resultPlace` da aba dela, e o `activeIndex`, quando ela
+  era a ativa, aponta a aba dela.
+- O formato do cofre não muda: o campo é novo e opcional, e uma versão anterior do Prism que abra o cofre o ignora
+  (quem implementa confirma que o leitor do conteúdo do cofre ignora o campo que não conhece; se não ignorar, o
+  formato sobe para o 5, RN-VERSAO-005).
+- A passagem da aba entre janelas (`window-messages.ts`, RN-ABAS-002) leva o mesmo campo.
+- O log da rota continua registrando só a contagem das abas.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-ABAS-001**: a aba do resultado anda com a dela, soltar fora da faixa abre uma janela nova, e o Ctrl+W, que já
+  fechava a aba ativa, passa a estar escrito.
+- **RN-ABAS-002**: a aba solta em qualquer lugar que não seja uma faixa abre a janela nova com o canto onde foi solta;
+  o lugar do resultado vai junto; com uma aba só, nada abre, e "Mover para nova janela" fica desabilitado.
+- **RN-ABAS-003**: a aba solta sobre outra janela, fora da faixa dela, vai para o fim da faixa, com o véu; a aba do
+  resultado vai com a dela; a janela do resultado não recebe abas.
+- **RN-ABAS-004**: as janelas do resultado não são janelas de abas: fechá-las não pergunta, só o fechar da pessoa
+  volta o resultado ao painel, elas fecham com a janela da aba e não contam como a última; o bloqueio e o "Sair"
+  valem para elas.
+- **RN-ABAS-005**: a janela do resultado é a única aberta pela tela, com o pedido, a aprovação e o acompanhamento do
+  processo principal, e não fala com ninguém.
+- **RN-ABAS-006**: a aba de consulta grava o lugar do resultado, que volta com ela.
+- **RN-ABAS-007**: as janelas do resultado não contam como a última janela.
+- **RN-ABAS-008**: o título da aba do resultado.
+- **RN-PAINEL-001**: o resultado no painel, numa aba ou numa janela; o recolher, o maximizar e a divisória só no
+  painel.
+- **RN-GRADE-014**: o intervalo de 1 s, o "Personalizado…" de 1 a 3.600, os textos do diálogo, o "atualizando…" depois
+  de 300 ms, e o resultado "à vista" na aba e na janela do resultado.
+- **RN-SHELL-001**: a negação da navegação e da abertura de janelas desde o nascimento de cada página, e a exceção da
+  janela do resultado, com as mesmas proteções e a mesma política de conteúdo.
+- **RN-SEG-001**: a atividade nas janelas do resultado conta, o aviso antes do bloqueio aparece nelas, e elas fecham no
+  bloqueio e reabrem vazias no desbloqueio.
+- **RN-ZOOM-001**: vale também para as janelas do resultado.
+- **RN-SQL-021**: a pergunta de erro do script aparece também com a aba do resultado ativa ou com o foco na janela do
+  resultado, e abre numa só janela; o ponto vermelho vai também na aba do resultado.
+- **RN-VERSAO-002**: o `zoom.json` e o `result-window.json` são arquivos de configuração do contrato.
+- **Seção 9**: as medidas da faixa e da área de resultado, e o que o canvas não desenha.
+- **Seção 24**: o `resultPlace` nas rotas das abas que voltam (na tabela dela e aqui, em "Rotas e respostas").
+
+### Fica para depois
+
+- Arrastar o resultado de volta para a faixa de outra janela, e levar a aba do resultado sozinha para outra janela.
+- Vários resultados da mesma aba em janelas diferentes (uma janela por aba de resultado do script, por exemplo).
+- O editor numa janela e o navegador em outra.
+- Lembrar o lugar do resultado por conexão.
+- Lembrar o tamanho e o lugar de cada janela do resultado por aba, e o das janelas do app (hoje nenhuma janela do app
+  lembra onde estava).
+- A barra da janela do resultado no desenho do app, com os botões do sistema sobrepostos (RN-JANELA-001).
+- Pôr a aba do resultado em outro lugar da faixa, longe da aba dela.
+- Um limite para as janelas do resultado que reabrem juntas na volta das abas (hoje, uma por aba em "Numa janela"),
+  se o dono quiser.
+- Uma marca na faixa para a aba com a atualização automática ligada (já estava na seção 29).

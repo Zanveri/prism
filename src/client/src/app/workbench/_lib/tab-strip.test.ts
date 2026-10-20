@@ -302,6 +302,13 @@ describe("moveMenu: levar a aba para outra janela (RN-ABAS-002 e 003)", () => {
   it("fora do Electron não há para onde levar: o grupo não aparece", () => {
     expect(moveMenu(3, false)).toEqual([]);
   });
+
+  it("com uma aba só na janela, 'Mover para nova janela' fica desabilitado, com o motivo (RN-ABAS-002 e 010); 'Mover para a janela…' continua valendo", () => {
+    expect(moveMenu(1, true, true)).toEqual([
+      { action: "newWindow", label: "Mover para nova janela", disabled: true, hint: "Esta já é a única aba da janela." },
+      { action: "toWindow", label: "Mover para a janela…", disabled: false },
+    ]);
+  });
 });
 
 describe("tabTitleOf: o que a aba diz de si (RN-SCRIPT-001)", () => {

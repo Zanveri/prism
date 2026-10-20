@@ -145,6 +145,7 @@ export function unlockMutationOptions({ userName, signIn, onUnlocked }: { userNa
 export function createLockVaultDeps({
   lock,
   root,
+  extraRoots = () => [],
   signOut,
   discard,
   saveWorkspace = async () => {},
@@ -155,6 +156,8 @@ export function createLockVaultDeps({
 }: {
   lock: { lock: () => void; isLocked: () => boolean };
   root: Pick<ParentNode, "querySelectorAll">;
+  /** As páginas das janelas do resultado abertas (RN-ABAS-011): o que abriu nelas fecha no bloqueio como o da janela da aba. */
+  extraRoots?: () => readonly Pick<ParentNode, "querySelectorAll">[];
   signOut: (signal: AbortSignal) => Promise<ApiResult<void>>;
   discard: () => void;
   /** A gravação das abas (RN-ABAS-006). Sem ela, nada é gravado: a janela que bloqueia porque outra bloqueou deixa a gravação para a que bloqueou. */
@@ -167,7 +170,10 @@ export function createLockVaultDeps({
 }): LockVaultDeps {
   return {
     arm: () => lock.lock(),
-    closePortals: () => closeOpenPortals(root),
+    closePortals: () => {
+      closeOpenPortals(root);
+      for (const page of extraRoots()) closeOpenPortals(page);
+    },
     discard,
     saveWorkspace,
     // Fechou, ou já estava fechado por outro motivo (401 `VAULT_LOCKED`): o cofre está fechado do mesmo jeito.

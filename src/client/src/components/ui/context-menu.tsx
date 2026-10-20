@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
+import { isHtmlElement, isNode, type Host } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 
+import { HostProvider, useHost, useOnHostGone } from "./host-context";
 import { CheckIcon } from "./icons";
 
 export type ContextMenuItem = {
@@ -186,7 +188,9 @@ export const firstItemOf = (menu: ParentNode | null): HTMLElement | null => menu
 /** As setas, Home e End movem o foco entre os itens do menu dado; devolve se a tecla foi dele. */
 export function moveFocus(event: Pick<KeyboardEvent<HTMLElement>, "key" | "preventDefault">, menu: ParentNode | null): boolean {
   const elements = itemElementsOf(menu);
-  const target = nextItemIndex(event.key, elements.indexOf(document.activeElement as HTMLElement), elements.length);
+  // O foco está na página do menu, que pode não ser a da janela da aba.
+  const active = ((menu as Node | null)?.ownerDocument ?? document).activeElement;
+  const target = nextItemIndex(event.key, elements.indexOf(active as HTMLElement), elements.length);
   if (target === null) return false;
   event.preventDefault();
   elements[target].focus({ preventScroll: true });
@@ -201,6 +205,8 @@ type SubmenuProps = {
   /** O foco entra no primeiro item (o submenu veio do teclado); pelo mouse ele fica no item que o abriu. */
   focusFirst: boolean;
   menuRef: RefObject<HTMLDivElement | null>;
+  /** A página onde o menu abriu (RN-ABAS-017). */
+  host: Host;
   onChoose: (item: ContextMenuItem) => void;
   /** Fecha só o submenu, com o foco de volta no item que o abriu. */
   onBack: () => void;
@@ -209,17 +215,17 @@ type SubmenuProps = {
 };
 
 /** O submenu: outro `menu`, num portal ao lado do item que o abriu, com as mesmas teclas do menu e a seta para a esquerda (e o Esc) para voltar. */
-function Submenu({ label, groups, anchor, focusFirst, menuRef, onChoose, onBack, onClose }: SubmenuProps) {
+function Submenu({ label, groups, anchor, focusFirst, menuRef, host, onChoose, onBack, onClose }: SubmenuProps) {
   useLayoutEffect(() => {
     const menu = menuRef.current;
     if (menu === null) return;
 
     const { width, height } = menu.getBoundingClientRect();
-    const { left, top } = placeSubmenu(anchor.getBoundingClientRect(), { width, height }, { width: window.innerWidth, height: window.innerHeight });
+    const { left, top } = placeSubmenu(anchor.getBoundingClientRect(), { width, height }, { width: host.view.innerWidth, height: host.view.innerHeight });
     menu.style.left = `${left}px`;
     menu.style.top = `${top}px`;
     menu.style.visibility = "visible";
-  }, [anchor, menuRef]);
+  }, [anchor, menuRef, host]);
 
   useEffect(() => {
     if (focusFirst) firstItemOf(menuRef.current)?.focus({ preventScroll: true });
@@ -239,15 +245,18 @@ function Submenu({ label, groups, anchor, focusFirst, menuRef, onChoose, onBack,
   }
 
   return createPortal(
-    <div ref={menuRef} role="menu" aria-label={label} aria-orientation="vertical" tabIndex={-1} onKeyDown={handleKeyDown} onContextMenu={(event) => event.preventDefault()} style={{ left: 0, top: 0, visibility: "hidden" }} className={menuClass}>
-      <ContextMenuItems groups={groups} onChoose={onChoose} />
-    </div>,
-    document.body,
+    <HostProvider host={host}>
+      <div ref={menuRef} role="menu" aria-label={label} aria-orientation="vertical" tabIndex={-1} onKeyDown={handleKeyDown} onContextMenu={(event) => event.preventDefault()} style={{ left: 0, top: 0, visibility: "hidden" }} className={menuClass}>
+        <ContextMenuItems groups={groups} onChoose={onChoose} />
+      </div>
+    </HostProvider>,
+    host.document.body,
   );
 }
 
 /**
- * O menu de contexto (botão direito, Shift+F10, tecla de menu). Vai num portal `position: fixed` em `document.body`, como a lista
+ * O menu de contexto (botão direito, Shift+F10, tecla de menu). Vai num portal `position: fixed` em `document.body` da página onde abriu (a da janela da aba,
+ * ou a da janela do resultado, RN-ABAS-017), e ouve o ponteiro e mede a janela dessa página. Vai num portal, como a lista
  * do `Select`, para o `overflow` de um painel não o recortar, e abre no ponto pedido sem sair da janela.
  *
  * Teclado: setas movem o foco entre os itens (dão a volta), Home e End vão ao primeiro e ao último, Enter e Espaço executam, Esc e Tab
@@ -263,8 +272,11 @@ function Submenu({ label, groups, anchor, focusFirst, menuRef, onChoose, onBack,
 export function ContextMenu({ label, point, groups, initialFocus = "menu", openSubmenu, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
+  // A página onde o menu abre (RN-ABAS-017), a mesma até ele fechar.
+  const current = useHost();
+  const [host] = useState(current);
   // Quem tinha o foco quando o menu abriu, lido na primeira renderização: o submenu que já abre com o menu (o F11) leva o foco antes do efeito do menu.
-  const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+  const [opener] = useState(() => (isHtmlElement(host.document.activeElement) ? host.document.activeElement : null));
   // O submenu aberto: o item que o abriu (o elemento, para a posição) e se o foco entra nele.
   const [open, setOpen] = useState<{ id: string; anchor: HTMLElement | null; focusFirst: boolean } | null>(() => (openSubmenu === undefined ? null : { id: openSubmenu, anchor: null, focusFirst: true }));
   const openItem = open === null ? undefined : allItems(groups).find((item) => item.id === open.id && item.submenu !== undefined && item.disabled !== true);
@@ -275,11 +287,11 @@ export function ContextMenu({ label, point, groups, initialFocus = "menu", openS
     if (menu === null) return;
 
     const { width, height } = menu.getBoundingClientRect();
-    const { left, top } = placeMenu({ x: point.x, y: point.y }, { width, height }, { width: window.innerWidth, height: window.innerHeight });
+    const { left, top } = placeMenu({ x: point.x, y: point.y }, { width, height }, { width: host.view.innerWidth, height: host.view.innerHeight });
     menu.style.left = `${left}px`;
     menu.style.top = `${top}px`;
     menu.style.visibility = "visible";
-  }, [point.x, point.y]);
+  }, [point.x, point.y, host]);
 
   // O submenu que abre com o menu (o F11) ainda não tem o elemento do item: ele existe depois da primeira pintura do menu.
   const [anchorOf, setAnchorOf] = useState<HTMLElement | null>(null);
@@ -302,38 +314,43 @@ export function ContextMenu({ label, point, groups, initialFocus = "menu", openS
 
     return () => {
       const restore = () => opener?.isConnected === true && opener.focus({ preventScroll: true });
-      const lost = () => document.activeElement === null || document.activeElement === document.body;
+      const page = host.document;
+      const lost = () => page.activeElement === null || page.activeElement === page.body;
 
-      if (lost() || menu?.contains(document.activeElement)) restore();
+      if (lost() || menu?.contains(page.activeElement)) restore();
       // O clique fora numa área sem foco tira o foco do que o tinha depois do nosso `pointerdown` (é o padrão do navegador): conferir de novo no fim do evento.
       // Só com o menu já fora do DOM: o `StrictMode` desmonta e monta os efeitos de mentira, e aí o menu segue vivo e é quem tem o foco.
       setTimeout(() => {
         if (menu?.isConnected !== true && lost()) restore();
       }, 0);
     };
-  }, [initialFocus, opener]);
+  }, [initialFocus, opener, host]);
 
   const dismiss = useEffectEvent(() => onClose());
+  // A página da janela do resultado que sai leva o menu (RN-ABAS-011).
+  useOnHostGone(host, true, onClose);
 
   useEffect(() => {
-    const inside = (target: EventTarget | null) => target instanceof Node && (menuRef.current?.contains(target) === true || submenuRef.current?.contains(target) === true);
+    // O `nodeType`, e não o `instanceof Node` desta janela: o alvo pode ser da página da janela do resultado.
+    const inside = (target: EventTarget | null) => isNode(target) && (menuRef.current?.contains(target) === true || submenuRef.current?.contains(target) === true);
     const onOutside = (event: Event) => {
       if (!inside(event.target)) dismiss();
     };
     const onWindow = () => dismiss();
+    const { document: page, view } = host;
 
-    document.addEventListener("pointerdown", onOutside, true);
-    window.addEventListener("scroll", onOutside, true);
-    window.addEventListener("resize", onWindow);
-    window.addEventListener("blur", onWindow);
+    page.addEventListener("pointerdown", onOutside, true);
+    view.addEventListener("scroll", onOutside, true);
+    view.addEventListener("resize", onWindow);
+    view.addEventListener("blur", onWindow);
 
     return () => {
-      document.removeEventListener("pointerdown", onOutside, true);
-      window.removeEventListener("scroll", onOutside, true);
-      window.removeEventListener("resize", onWindow);
-      window.removeEventListener("blur", onWindow);
+      page.removeEventListener("pointerdown", onOutside, true);
+      view.removeEventListener("scroll", onOutside, true);
+      view.removeEventListener("resize", onWindow);
+      view.removeEventListener("blur", onWindow);
     };
-  }, []);
+  }, [host]);
 
   /** Escolhido um item (habilitado: `ContextMenuItems` não chama com o outro): o foco volta ao item da árvore ANTES da ação, para um diálogo que ela abra devolver o foco ao lugar certo. */
   function choose(item: ContextMenuItem) {
@@ -374,7 +391,8 @@ export function ContextMenu({ label, point, groups, initialFocus = "menu", openS
     }
 
     if (event.key === "ArrowRight") {
-      const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.item : undefined;
+      const active = host.document.activeElement;
+      const focused = isHtmlElement(active) ? active.dataset.item : undefined;
       const item = allItems(groups).find((candidate) => candidate.id === focused);
       if (item?.submenu !== undefined && item.disabled !== true) {
         event.preventDefault();
@@ -387,7 +405,7 @@ export function ContextMenu({ label, point, groups, initialFocus = "menu", openS
   }
 
   return (
-    <>
+    <HostProvider host={host}>
       {createPortal(
         <div
           ref={menuRef}
@@ -404,11 +422,11 @@ export function ContextMenu({ label, point, groups, initialFocus = "menu", openS
         >
           <ContextMenuItems groups={groups} onChoose={chooseInMenu} expanded={openItem === undefined ? null : openItem.id} onHover={hover} />
         </div>,
-        document.body,
+        host.document.body,
       )}
       {openItem?.submenu === undefined || anchor === null ? null : (
-        <Submenu key={openItem.id} label={openItem.submenu.label} groups={openItem.submenu.groups} anchor={anchor} focusFirst={open?.focusFirst === true} menuRef={submenuRef} onChoose={choose} onBack={back} onClose={onClose} />
+        <Submenu key={openItem.id} label={openItem.submenu.label} groups={openItem.submenu.groups} anchor={anchor} focusFirst={open?.focusFirst === true} menuRef={submenuRef} host={host} onChoose={choose} onBack={back} onClose={onClose} />
       )}
-    </>
+    </HostProvider>
   );
 }

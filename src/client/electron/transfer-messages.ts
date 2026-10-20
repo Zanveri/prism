@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { exportExtensions } from "./file-name";
+import { resultWindowNameSchema } from "./result-window-messages";
 
 /**
  * O que passa entre a tela e o processo principal no destino e na entrega de uma exportação de dados (RN-EXPORT-019 e 020), com o mesmo schema dos
@@ -15,8 +16,14 @@ export const transferIdSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a
 /** O identificador de um destino ou de uma entrega: do processo principal, aleatório; a tela só o devolve. */
 const handleSchema = z.string().min(1).max(100);
 
+/**
+ * RN-ABAS-017: o pedido que nasce na janela do resultado leva o nome dela (`resultWindow`), e o processo principal prende o diálogo do sistema a ela; com nome
+ * desconhecido ou de outra janela da aba, o diálogo fica sobre a janela da aba.
+ */
+const resultWindow = resultWindowNameSchema.optional();
+
 /** `prism:transfer-destination`: o nome proposto no diálogo de salvar, sem a extensão, e a extensão, de uma lista fixa. */
-export const destinationRequestSchema = z.object({ suggestedName: z.string().min(1).max(200), extension: z.enum(exportExtensions) }).strict();
+export const destinationRequestSchema = z.object({ suggestedName: z.string().min(1).max(200), extension: z.enum(exportExtensions), resultWindow }).strict();
 
 export type DestinationRequest = z.infer<typeof destinationRequestSchema>;
 
@@ -64,7 +71,7 @@ export const copyReplySchema = z.discriminatedUnion("status", [
 export type CopyReply = z.infer<typeof copyReplySchema>;
 
 /** `prism:transfer-reveal`: "Mostrar na pasta" do aviso de sucesso, pela entrega que o processo principal guarda. */
-export const revealRequestSchema = z.object({ deliveryId: handleSchema }).strict();
+export const revealRequestSchema = z.object({ deliveryId: handleSchema, resultWindow }).strict();
 
 export type RevealRequest = z.infer<typeof revealRequestSchema>;
 
@@ -100,6 +107,11 @@ export const sourceReplySchema = z.discriminatedUnion("status", [
 ]);
 
 export type SourceReply = z.infer<typeof sourceReplySchema>;
+
+/** `prism:transfer-source`: a escolha do arquivo não recebe nada da tela, a não ser a janela do resultado de onde o pedido nasceu (RN-ABAS-017). */
+export const chooseSourceRequestSchema = z.object({ resultWindow }).strict();
+
+export type ChooseSourceRequest = z.infer<typeof chooseSourceRequestSchema>;
 
 /** `prism:transfer-source-status` e `prism:transfer-source-release`: o arquivo, pelo identificador que o processo principal deu. */
 export const sourceRequestSchema = z.object({ fileId: transferIdSchema }).strict();

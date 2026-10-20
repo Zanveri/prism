@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { useToast } from "@/components/ui/toast";
 import { ApiRequestError } from "@/lib/api/prism-api";
+import { hostClipboard } from "@/lib/host/host";
 
 import { columnsQuery, foreignKeysQuery, indexesQuery } from "../table-structure.service";
 import type { SqlOptions, SqlPlan, SqlTable } from "./generate-sql";
@@ -24,7 +25,7 @@ export type GenerateSqlRequest = SqlDialogRequest & { resultId: string };
 export type GenerateSqlDeps = SqlFlowDeps & {
   /** Abre a aba de consulta nova, da mesma conexão e do mesmo banco do resultado, com o texto no editor; nada é executado (RN-GRADE-018). */
   openQueryTab: (sql: string) => void;
-  /** Escreve na área de transferência; rejeita quando não dá. Por padrão, `navigator.clipboard.writeText`. */
+  /** Escreve na área de transferência; rejeita quando não dá. Por padrão, a da janela onde a pessoa está (`hostClipboard`, RN-ABAS-017). */
   copyText?: (text: string) => Promise<void>;
   /** RN-GRADE-014: segura a atualização automática enquanto o diálogo está aberto; o que devolve a solta. */
   hold?: () => () => void;
@@ -58,7 +59,7 @@ export function catalogReader(queryClient: QueryClient, connectionId: string, da
   };
 }
 
-const defaultCopy = (text: string) => navigator.clipboard.writeText(text);
+const defaultCopy = (text: string) => hostClipboard().writeText(text);
 
 /** A fase do resultado que mudou com o diálogo aberto, sempre a mesma: o texto memorizado não é refeito por ela a cada renderização. */
 const changedPhase: SqlDialogPhase = { kind: "changed" };

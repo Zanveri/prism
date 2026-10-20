@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useToast } from "@/components/ui/toast";
+import { hostClipboard } from "@/lib/host/host";
 
 import { copyAsFormats, type CopyAsFormat } from "../cell-menu";
 import type { EditAccess } from "../cell-editing";
@@ -55,13 +56,13 @@ type Params = {
   records: { schema: string; name: string } | null;
   /** O usuário do cofre, lido na hora da escolha: as escolhas lembradas são dele (RN-GRADE-017). */
   userName: () => string | null;
-  /** A área de transferência; por padrão, `navigator.clipboard.writeText`. */
+  /** A área de transferência; por padrão, a da janela onde a pessoa está (`hostClipboard`, RN-ABAS-017). */
   writeText?: (text: string) => Promise<void>;
 };
 
 const allowed: EditAccess = { editable: true };
 
-const browserClipboard = (text: string) => navigator.clipboard.writeText(text);
+const browserClipboard = (text: string) => hostClipboard().writeText(text);
 
 type Open = { kind: "advanced"; props: CopyAdvancedDialogProps } | { kind: "configure"; props: ConfigureCopyAsDialogProps };
 

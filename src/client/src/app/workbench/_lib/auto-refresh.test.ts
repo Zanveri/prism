@@ -113,14 +113,15 @@ describe("as peças puras", () => {
   });
 
   it("intervalLabel escreve o intervalo como a tela", () => {
-    expect([5_000, 10_000, 30_000, 60_000, 300_000, 90_000, 3_600_000, 2_000].map(intervalLabel)).toEqual(["5 s", "10 s", "30 s", "1 min", "5 min", "1 min 30 s", "1 h", "2 s"]);
+    expect([1_000, 5_000, 10_000, 30_000, 60_000, 300_000, 90_000, 3_600_000, 2_000].map(intervalLabel)).toEqual(["1 s", "5 s", "10 s", "30 s", "1 min", "5 min", "1 min 30 s", "1 h", "2 s"]);
   });
 
-  it("customInterval aceita segundos inteiros de 2 a 3.600, com espaço nas pontas, e recusa o resto", () => {
+  it("customInterval aceita segundos inteiros de 1 a 3.600, com espaço nas pontas, e recusa o resto", () => {
     expect(customInterval(" 45 ")).toBe(45_000);
+    expect(customInterval("1")).toBe(1_000);
     expect(customInterval("2")).toBe(2_000);
     expect(customInterval("3600")).toBe(3_600_000);
-    for (const text of ["", "1", "3601", "1.5", "1,5", "-5", "abc", "10s", "1e3"]) expect(customInterval(text)).toBeNull();
+    for (const text of ["", "0", "00", "3601", "1.5", "1,5", "-5", "abc", "10s", "1e3"]) expect(customInterval(text)).toBeNull();
   });
 
   it("sameCommand: o mesmo texto e o mesmo filtro; o lugar no editor e o banco não contam", () => {
@@ -156,6 +157,7 @@ describe("o relógio (RN-GRADE-014)", () => {
 
     await vi.advanceTimersByTimeAsync(5_000);
     expect(tab.run).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(300);
     expect(auto.getState()).toMatchObject({ running: true });
 
     // A execução demora 20 s: nada mais sai enquanto isso.
@@ -163,11 +165,70 @@ describe("o relógio (RN-GRADE-014)", () => {
     expect(tab.run).toHaveBeenCalledOnce();
 
     tab.finish(fresh(tab.get()));
-    expect(auto.getState()).toMatchObject({ running: false, lastAt: new Date(2026, 9, 15, 14, 0, 25).getTime() });
+    expect(auto.getState()).toMatchObject({ running: false, lastAt: new Date(2026, 9, 15, 14, 0, 25, 300).getTime() });
     await vi.advanceTimersByTimeAsync(4_999);
     expect(tab.run).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(1);
     expect(tab.run).toHaveBeenCalledTimes(2);
+  });
+
+  it("o \"atualizando…\" só aparece depois de 300 ms de execução, em qualquer intervalo: a leitura que volta antes nunca o mostra (seção 39)", async () => {
+    const { tab, auto } = setup();
+    const seen: boolean[] = [];
+    auto.subscribe(() => {
+      const state = auto.getState();
+      if (state.status === "on") seen.push(state.running);
+    });
+    auto.start(1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(tab.run).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(299);
+    tab.finish(fresh(tab.get()));
+    await vi.advanceTimersByTimeAsync(1);
+    expect(seen).not.toContain(true);
+    expect(auto.getState()).toMatchObject({ status: "on", running: false });
+
+    // A segunda passa dos 300 ms: o controle diz "atualizando…" até ela voltar.
+    await vi.advanceTimersByTimeAsync(999);
+    expect(tab.run).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(299);
+    expect(auto.getState()).toMatchObject({ running: false });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(auto.getState()).toMatchObject({ running: true });
+    tab.finish(fresh(tab.get()));
+    expect(auto.getState()).toMatchObject({ running: false });
+  });
+
+  it("a cada 1 s com uma leitura que demora 1,5 s: a próxima conta do fim da anterior, e o intervalo continua o de 1 s", async () => {
+    const { tab, auto } = setup();
+    auto.start(1_000);
+    for (let run = 1; run <= 3; run += 1) {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(tab.run).toHaveBeenCalledTimes(run);
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(tab.run).toHaveBeenCalledTimes(run);
+      tab.finish(fresh(tab.get()));
+    }
+    expect(auto.getState()).toMatchObject({ status: "on", everyMs: 1_000 });
+    // Três execuções em 7,5 s, e não sete: nunca duas ao mesmo tempo.
+    expect(Date.now() - new Date(2026, 9, 15, 14, 0, 0).getTime()).toBe(7_500);
+  });
+
+  it("desligar ou abandonar a execução antes dos 300 ms não deixa o \"atualizando…\" aparecer depois", async () => {
+    const { tab, auto } = setup();
+    auto.start(1_000);
+    await vi.advanceTimersByTimeAsync(1_100);
+    auto.ranByPerson(command);
+    auto.yielded();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(auto.getState()).toMatchObject({ status: "on", running: false });
+
+    tab.finish(fresh(tab.get()));
+    await vi.advanceTimersByTimeAsync(1_100);
+    auto.stop();
+    await vi.advanceTimersByTimeAsync(500);
+    expect(auto.getState()).toEqual({ status: "off", stopped: null });
   });
 
   it("qualquer coisa que ocupe a aba recomeça o tempo do fim dela ('Carregar mais', 'Contar total')", async () => {
@@ -359,7 +420,7 @@ describe("o relógio (RN-GRADE-014)", () => {
   it("a execução que o executor abandonou para o comando da pessoa (`yielded`) não conta: quem diz se segue é o comando da pessoa", async () => {
     const { tab, auto } = setup();
     auto.start(5_000);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(5_300);
     expect(auto.getState()).toMatchObject({ running: true });
     const before = (tab.get() as Extract<RunnerState, { status: "running" }>).previous;
 
@@ -372,7 +433,7 @@ describe("o relógio (RN-GRADE-014)", () => {
     expect(tab.run).toHaveBeenCalledOnce();
 
     tab.set(rows({ id: 7 }));
-    expect(auto.getState()).toMatchObject({ status: "on", lastAt: new Date(2026, 9, 15, 14, 1, 5).getTime() });
+    expect(auto.getState()).toMatchObject({ status: "on", lastAt: new Date(2026, 9, 15, 14, 1, 5, 300).getTime() });
     tab.next = fresh;
     await vi.advanceTimersByTimeAsync(5_000);
     expect(tab.run).toHaveBeenCalledTimes(2);

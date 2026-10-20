@@ -1,8 +1,9 @@
 import { useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
-import { Button } from "@/components/ui";
+import { Button, useHost } from "@/components/ui";
 import { placeMenu } from "@/components/ui/context-menu";
+import { isHtmlElement, isNode } from "@/lib/host/host";
 
 import { gridFilterCopy } from "../_lib/grid-filter.copy";
 import type { OpenCustomFilter } from "../_lib/use-record-edits";
@@ -18,7 +19,10 @@ export function CustomFilterField({ prefix, point, problem, onApply, onClose }: 
   const box = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState("");
-  const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+  // RN-ABAS-017: o campo abre na página de onde nasceu (a da janela da aba, ou a da janela do resultado).
+  const current = useHost();
+  const [host] = useState(current);
+  const [opener] = useState(() => (isHtmlElement(host.document.activeElement) ? host.document.activeElement : null));
   const problemId = useId();
   const close = useEffectEvent(() => onClose());
 
@@ -26,30 +30,31 @@ export function CustomFilterField({ prefix, point, problem, onApply, onClose }: 
     const element = box.current;
     if (element === null) return;
     const { width, height } = element.getBoundingClientRect();
-    const { left, top } = placeMenu(point, { width, height }, { width: window.innerWidth, height: window.innerHeight });
+    const { left, top } = placeMenu(point, { width, height }, { width: host.view.innerWidth, height: host.view.innerHeight });
     element.style.left = `${left}px`;
     element.style.top = `${top}px`;
     element.style.visibility = "visible";
     // O foco entra no campo só agora: escondido (`visibility: hidden`, até a medida), ele não o recebe, e o `autoFocus` do React chega antes.
     input.current?.focus({ preventScroll: true });
-  }, [point]);
+  }, [point, host]);
 
   useEffect(() => {
     const element = box.current;
     const onOutside = (event: Event) => {
-      if (!(event.target instanceof Node && element?.contains(event.target))) close();
+      if (!(isNode(event.target) && element?.contains(event.target))) close();
     };
-    document.addEventListener("pointerdown", onOutside, true);
+    const page = host.document;
+    page.addEventListener("pointerdown", onOutside, true);
     return () => {
-      document.removeEventListener("pointerdown", onOutside, true);
+      page.removeEventListener("pointerdown", onOutside, true);
       // O foco volta à grade quando o campo sai de verdade e o foco ficou sem dono (filtrou, ou Esc). Conferido no fim do evento e só com o campo fora do
       // DOM: o `StrictMode` desmonta e monta os efeitos de mentira, e aí o campo segue vivo, com o foco.
       setTimeout(() => {
-        const lost = document.activeElement === null || document.activeElement === document.body;
+        const lost = page.activeElement === null || page.activeElement === page.body;
         if (element?.isConnected !== true && lost && opener?.isConnected === true) opener.focus({ preventScroll: true });
       }, 0);
     };
-  }, [opener]);
+  }, [opener, host]);
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
@@ -96,6 +101,6 @@ export function CustomFilterField({ prefix, point, problem, onApply, onClose }: 
         </p>
       )}
     </div>,
-    document.body,
+    host.document.body,
   );
 }

@@ -6,6 +6,7 @@ export { EngineTag, type Engine } from "./engine-tag";
 export { EnvironmentPill, environmentTextColor } from "./environment-pill";
 export { Field, FieldLabel, Input } from "./field";
 export { FieldError, FormMessage, type FormMessageProps } from "./form-message";
+export { HostProvider, useHost } from "./host-context";
 export { iconColorStyle, readableIconColor } from "./icon-color";
 export {
   AlertIcon,

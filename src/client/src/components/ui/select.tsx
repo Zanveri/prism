@@ -2,7 +2,10 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { createPortal } from "react-dom";
 
 import { controlClassName } from "@/components/ui/field";
+import { isNode } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
+
+import { useHost, useOnHostGone } from "./host-context";
 
 /**
  * Uma opção. `content` desenha a opção no lugar do rótulo, na lista e no controle fechado (a etiqueta colorida de um ambiente, RN-NAV-010); o rótulo
@@ -70,6 +73,8 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
   const triggerId = id ?? `select-${generatedId}`;
   const listboxId = `${triggerId}-listbox`;
 
+  // RN-ABAS-017: a lista abre na página do controle (a da janela da aba, ou a da janela do resultado) e mede a janela dela.
+  const host = useHost();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const typeahead = useRef({ search: "", at: 0 });
@@ -103,7 +108,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
       if (!trigger) return;
 
       const rect = trigger.getBoundingClientRect();
-      const below = window.innerHeight - rect.bottom - gap;
+      const below = host.view.innerHeight - rect.bottom - gap;
       const above = rect.top - gap;
       const height = Math.min(maxPanelHeight, panelRef.current?.scrollHeight ?? items.length * optionHeight + panelPadding);
       // Abre para cima quando não cabe embaixo e há mais espaço em cima.
@@ -113,33 +118,36 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
         left: rect.left,
         width: rect.width,
         maxHeight: Math.max(0, Math.min(maxPanelHeight, dropUp ? above : below)),
-        ...(dropUp ? { bottom: window.innerHeight - rect.top + gap } : { top: rect.bottom + gap }),
+        ...(dropUp ? { bottom: host.view.innerHeight - rect.top + gap } : { top: rect.bottom + gap }),
       });
     }
 
     place();
-    window.addEventListener("scroll", place, true);
-    window.addEventListener("resize", place);
+    host.view.addEventListener("scroll", place, true);
+    host.view.addEventListener("resize", place);
 
     return () => {
-      window.removeEventListener("scroll", place, true);
-      window.removeEventListener("resize", place);
+      host.view.removeEventListener("scroll", place, true);
+      host.view.removeEventListener("resize", place);
     };
-  }, [open, items.length]);
+  }, [open, items.length, host]);
+
+  // A página da janela do resultado que sai leva a lista (RN-ABAS-011).
+  useOnHostGone(host, open, () => setOpen(false));
 
   // Fecha ao clicar fora.
   useEffect(() => {
     if (!open) return;
 
     function onPointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      const target = event.target;
+      if (isNode(target) && (buttonRef.current?.contains(target) || panelRef.current?.contains(target))) return;
       setOpen(false);
     }
 
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open]);
+    host.document.addEventListener("pointerdown", onPointerDown);
+    return () => host.document.removeEventListener("pointerdown", onPointerDown);
+  }, [open, host]);
 
   // Mantém a opção ativa à vista enquanto as setas a movem.
   useEffect(() => {
@@ -284,7 +292,7 @@ export function Select({ id, name, value, onChange, options, placeholder, disabl
                 );
               })}
             </div>,
-            document.body,
+            host.document.body,
           )
         : null}
     </div>

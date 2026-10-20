@@ -11,11 +11,11 @@ const on = (everyMs: number): AutoRefreshState => ({ status: "on", everyMs, last
 const itemsOf = (groups: ReturnType<typeof autoRefreshGroups>) => groups.map((group) => (Array.isArray(group) ? group : group.items));
 
 describe("o submenu \"Atualizar automaticamente\" (RN-GRADE-014)", () => {
-  it("os intervalos 5 s, 10 s, 30 s, 1 min e 5 min, o \"Personalizado…\" e, depois do separador, \"Desligar\"", () => {
+  it("os intervalos 1 s (o primeiro, seção 39), 5 s, 10 s, 30 s, 1 min e 5 min, o \"Personalizado…\" e, depois do separador, \"Desligar\"", () => {
     const [choices, last] = itemsOf(autoRefreshGroups(off));
 
-    expect(choices.map((item) => item.label)).toEqual(["A cada 5 s", "A cada 10 s", "A cada 30 s", "A cada 1 min", "A cada 5 min", copy.menu.custom]);
-    expect(choices.map((item) => item.id)).toEqual(["autoRefresh:every:5000", "autoRefresh:every:10000", "autoRefresh:every:30000", "autoRefresh:every:60000", "autoRefresh:every:300000", "autoRefresh:custom"]);
+    expect(choices.map((item) => item.label)).toEqual(["A cada 1 s", "A cada 5 s", "A cada 10 s", "A cada 30 s", "A cada 1 min", "A cada 5 min", copy.menu.custom]);
+    expect(choices.map((item) => item.id)).toEqual(["autoRefresh:every:1000", "autoRefresh:every:5000", "autoRefresh:every:10000", "autoRefresh:every:30000", "autoRefresh:every:60000", "autoRefresh:every:300000", "autoRefresh:custom"]);
     expect(last).toEqual([{ id: "autoRefresh:off", label: copy.menu.off, disabled: true }]);
   });
 
@@ -53,6 +53,7 @@ describe("o submenu \"Atualizar automaticamente\" (RN-GRADE-014)", () => {
     const actions: AutoRefreshAction[] = ["autoRefresh:every:10000", "autoRefresh:custom", "autoRefresh:off"];
 
     expect(actions.map(intervalOf)).toEqual([10_000, null, null]);
+    expect(intervalOf("autoRefresh:every:1000")).toBe(1_000);
     expect(intervalOf("autoRefresh:every:abc" as AutoRefreshAction)).toBeNull();
     expect(actions.every(isAutoRefreshAction)).toBe(true);
     expect(isAutoRefreshAction("refresh")).toBe(false);

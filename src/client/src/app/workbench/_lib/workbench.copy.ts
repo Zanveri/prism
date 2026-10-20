@@ -105,6 +105,13 @@ export const workbenchCopy = {
       activeTitle === null ? `Janela ${number} — sem abas` : tabCount > 1 ? `Janela ${number} — ${activeTitle} e mais ${formatCount(tabCount - 1, "aba", "abas")}` : `Janela ${number} — ${activeTitle}`,
     moveBusy: "Espere o comando terminar, ou cancele-o, antes de levar a aba para outra janela.",
     moveFailed: "Não foi possível levar a aba para outra janela.",
+    // RN-ABAS-010: o véu do arraste da aba, sobre a janela inteira menos a faixa; e o motivo de "Mover para nova janela" desabilitado com uma aba só.
+    drag: {
+      toNewWindow: "Solte para abrir numa janela nova",
+      onlyTab: "Esta já é a única aba da janela.",
+      bringHere: "Solte para trazer a aba para esta janela",
+      resultToWindow: "Solte para abrir o resultado numa janela",
+    },
   },
 
   editor: {

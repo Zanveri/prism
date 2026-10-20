@@ -58,6 +58,21 @@ describe("serializeTab e readTransfer: a aba passa para outra janela como estava
     expect(adopted?.memory).toEqual({ layout: { mode: "maximized", resultPercent: 70 }, grid: { key: "[]", widths: { 0: 120 } } });
   });
 
+  it("RN-ABAS-016: a aba leva o lugar do resultado (a aba do resultado vai junto); a que não o tem chega sem ele, no painel", () => {
+    for (const resultPlace of ["panel", "tab", "window"] as const) expect(roundTrip(serializeTab(snapshot({ tab: { ...tab, resultPlace } })))?.tab.resultPlace).toBe(resultPlace);
+    expect(roundTrip(serializeTab(snapshot()))?.tab).not.toHaveProperty("resultPlace");
+    // Um lugar que a tela não conhece não é uma aba: a janela não a abre.
+    const transfer = serializeTab(snapshot()) as unknown as { tab: Record<string, unknown> };
+    expect(roundTrip({ ...transfer, tab: { ...transfer.tab, resultPlace: "flutuante" } })).toBeNull();
+  });
+
+  it("RN-ABAS-016: a janela do resultado que não fechou a tempo vai dita na passagem, e a janela que recebe a lê; sem ela, a passagem não diz nada", () => {
+    const transfer = serializeTab(snapshot({ tab: { ...tab, resultPlace: "panel" } }));
+    expect(roundTrip(transfer)?.resultWindowLost).toBe(false);
+    expect(roundTrip({ ...transfer, resultWindowLost: true })?.resultWindowLost).toBe(true);
+    expect(roundTrip({ ...transfer, resultWindowLost: "sim" })).toBeNull();
+  });
+
   it("o resultado filtrado leva o filtro com o comando e diz como ele entrou (RN-GRADE-011): Executar de novo na outra janela repete os dois", () => {
     const filtered: RowsState = { ...rows, target: { ...rows.target, filter: `"nota" IS NULL ORDER BY "id" DESC` }, filterApplied: "wrapped", readOnly: "o filtro foi aplicado por fora do comando" };
 

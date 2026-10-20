@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 
 import type { ToastAction } from "@/components/ui";
 import { chooseExportDestination, copyExport, currentWindowId, deliverExport, releaseExportDestination, revealExport } from "@/lib/api/bridge";
+import { focusedHost, type Host } from "@/lib/host/host";
 
 import type { ExportSource } from "./export-source";
 import { createTransferTracker, type TrackedExport, type TrackerNotify } from "./transfer-tracker";
@@ -46,8 +47,11 @@ let vaultOpen = false;
 /** O cofre está aberto nesta janela (a área de trabalho montada): as saídas só perguntam à API por transferências com ele (`transferExits`). */
 export const workbenchMounted = () => vaultOpen;
 
-/** O assistente aberto nesta janela: a origem e um número que muda a cada abertura (o diálogo nasce de novo). */
-export type ExportWizardRequest = { key: number; source: ExportSource };
+/**
+ * O assistente aberto nesta janela: a origem, um número que muda a cada abertura (o diálogo nasce de novo) e a página onde ele abre (RN-ABAS-015: o que nasce de
+ * uma ação no resultado abre na janela do resultado, quando ele está numa).
+ */
+export type ExportWizardRequest = { key: number; source: ExportSource; host: Host };
 
 let wizard: ExportWizardRequest | null = null;
 let wizardKey = 0;
@@ -58,9 +62,12 @@ function publishWizard(next: ExportWizardRequest | null) {
   for (const listener of wizardListeners) listener();
 }
 
-/** Abre o assistente "Exportar dados" com a origem já escolhida (RN-EXPORT-001). Há um por vez: o pedido novo toma o lugar do aberto. */
-export function openExportWizard(source: ExportSource): void {
-  publishWizard({ key: ++wizardKey, source });
+/**
+ * Abre o assistente "Exportar dados" com a origem já escolhida (RN-EXPORT-001). Há um por vez: o pedido novo toma o lugar do aberto. Abre na página da janela
+ * que tem o foco (a do resultado, se o pedido veio dela), ou na dada.
+ */
+export function openExportWizard(source: ExportSource, host: Host = focusedHost()): void {
+  publishWizard({ key: ++wizardKey, source, host });
 }
 
 export function closeExportWizard(): void {

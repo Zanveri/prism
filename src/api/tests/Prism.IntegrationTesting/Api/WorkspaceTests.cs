@@ -53,8 +53,8 @@ public sealed class WorkspaceTests
         return host;
     }
 
-    private static object QueryTab(string sql, Guid? connectionID = null, string? database = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false)
-        => new { kind = "query", connectionID, database, sql, scriptID, dirty, sqlTooLarge };
+    private static object QueryTab(string sql, Guid? connectionID = null, string? database = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false, string? resultPlace = null)
+        => new { kind = "query", connectionID, database, sql, scriptID, dirty, sqlTooLarge, resultPlace };
 
     private static object TableTab(string schema, string table, string view, Guid? connectionID = null, string? database = null)
         => new { kind = "table", connectionID = connectionID ?? ConnectionID, database, schema, table, view };
@@ -85,14 +85,17 @@ public sealed class WorkspaceTests
         Assert.That(body.GetProperty("activeIndex").ValueKind, Is.EqualTo(JsonValueKind.Null));
     }
 
-    /// <summary>RN-ABAS-006: as abas voltam na ordem, com a ativa, cada uma com os campos dela; a gravação seguinte troca a anterior inteira (fechar uma aba a tira do que volta).</summary>
+    /// <summary>
+    /// RN-ABAS-006: as abas voltam na ordem, com a ativa, cada uma com os campos dela; a gravação seguinte troca a anterior inteira (fechar uma aba a tira do que
+    /// volta). A aba de consulta volta com o lugar do resultado (RN-ABAS-016), o painel quando não veio nenhum, e a de tabela, sem lugar.
+    /// </summary>
     [Test]
     public async Task Put_Returns204_AndTheTabsComeBackInOrder_AndTheNextPutReplacesThem()
     {
         await using var host = await StartWithUserAsync();
         const string sql = "SELECT *\n  FROM pedidos\n WHERE total > 10;\n";
 
-        var put = await PutAsync(host, [QueryTab(sql, ConnectionID, "vendas", ScriptID, dirty: true), TableTab("loja", "clientes", "structure"), QueryTab("", sqlTooLarge: true)], 1);
+        var put = await PutAsync(host, [QueryTab(sql, ConnectionID, "vendas", ScriptID, dirty: true, resultPlace: "tab"), TableTab("loja", "clientes", "structure"), QueryTab("", sqlTooLarge: true)], 1);
 
         Assert.That(put.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await put.Content.ReadAsStringAsync());
         Assert.That(await put.Content.ReadAsStringAsync(), Is.Empty);
@@ -100,7 +103,8 @@ public sealed class WorkspaceTests
         var tabs = body.GetProperty("tabs").EnumerateArray().ToList();
         Assert.That(body.GetProperty("activeIndex").GetInt32(), Is.EqualTo(1));
         Assert.That(tabs.Select(tab => tab.GetProperty("kind").GetString()), Is.EqualTo(new[] { "query", "table", "query" }));
-        Assert.That(tabs[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "kind", "connectionID", "database", "sql", "scriptID", "dirty", "sqlTooLarge", "schema", "table", "view" }));
+        Assert.That(tabs[0].EnumerateObject().Select(property => property.Name), Is.EqualTo(new[] { "kind", "connectionID", "database", "sql", "scriptID", "dirty", "sqlTooLarge", "schema", "table", "view", "resultPlace" }));
+        Assert.That(tabs.Select(tab => tab.GetProperty("resultPlace").ValueKind == JsonValueKind.Null ? null : tab.GetProperty("resultPlace").GetString()), Is.EqualTo(new[] { "tab", null, "panel" }));
         Assert.That(tabs[0].GetProperty("sql").GetString(), Is.EqualTo(sql));
         Assert.That(tabs[0].GetProperty("connectionID").GetGuid(), Is.EqualTo(ConnectionID));
         Assert.That(tabs[0].GetProperty("database").GetString(), Is.EqualTo("vendas"));
@@ -149,6 +153,8 @@ public sealed class WorkspaceTests
         await AssertProblemAsync(await PutAsync(host, [QueryTab("SELECT 1"), new { kind = "grafico", sql = "SELECT 1" }], 0), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
         await AssertProblemAsync(await PutAsync(host, [new { kind = "table", schema = "loja", table = "clientes", view = "data" }], 0), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
         await AssertProblemAsync(await PutAsync(host, [TableTab("loja", "clientes", "grade")], 0), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
+        await AssertProblemAsync(await PutAsync(host, [QueryTab("SELECT 1", resultPlace: "flutuante")], 0), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
+        await AssertProblemAsync(await PutAsync(host, [new { kind = "table", connectionID = ConnectionID, schema = "loja", table = "clientes", view = "data", resultPlace = "panel" }], 0), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
         await AssertProblemAsync(await PutAsync(host, [QueryTab("SELECT 1")], 1), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
         await AssertProblemAsync(await PutAsync(host, [QueryTab("SELECT 1")], -1), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");
         await AssertProblemAsync(await PutAsync(host, [], 0), HttpStatusCode.UnprocessableEntity, "WORKSPACE_INVALID");

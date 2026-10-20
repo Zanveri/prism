@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { Button, ConfirmDialog, DownloadIcon } from "@/components/ui";
+import { Button, ConfirmDialog, DownloadIcon, HostProvider } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { dataExportCopy } from "../../_lib/data-export/data-export.copy";
@@ -154,5 +154,9 @@ export function TransferStatus() {
 /** O assistente "Exportar dados" desta janela, um por vez (RN-EXPORT-003): nasce de novo a cada abertura. */
 export function ExportWizardHost() {
   const request = useExportWizard();
-  return request === null ? null : <ExportWizard key={request.key} request={request} />;
+  return request === null ? null : (
+    <HostProvider key={request.key} host={request.host}>
+      <ExportWizard request={request} />
+    </HostProvider>
+  );
 }
