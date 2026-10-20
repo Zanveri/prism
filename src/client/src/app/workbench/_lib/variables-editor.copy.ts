@@ -30,7 +30,7 @@ export const variablesEditorCopy = {
   },
   /** A dica do ponteiro sobre um `@nome` ou o nome numa declaração. */
   tip: {
-    withValue: (name: string, type: string, value: string, stale: boolean) => `${name}: ${type} = ${value}${stale ? " · desatualizado" : ""}`,
+    withValue: (name: string, type: string, value: string, stale: boolean, from?: string) => `${name}: ${type} = ${value}${from === undefined ? "" : ` · ${from}`}${stale ? " · desatualizado" : ""}`,
     withoutValue: (name: string, type: string | null) => `${type === null ? name : `${name}: ${type}`} · ainda sem valor. Alt+X, ou Ctrl+Enter na declaração, calcula.`,
   },
   /** O autocompletar: o que a sugestão diz de si. */

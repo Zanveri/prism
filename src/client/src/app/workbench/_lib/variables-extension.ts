@@ -14,7 +14,15 @@ import { variablesEditorCopy as copy } from "./variables-editor.copy";
  */
 
 /** O que o armazém dos valores da aba entrega ao editor por variável: o tipo e o valor como o painel os escreve, e se o valor é de antes de a declaração mudar. */
-export type VariableEntry = { type: string; value: string; stale: boolean };
+export type VariableEntry = {
+  type: string;
+  value: string;
+  stale: boolean;
+  /** O texto do fim da linha, quando difere do `value` (a lista leva o " · 3 itens"). Sem ele, o `value` cortado em 60 caracteres. */
+  short?: string;
+  /** A origem e a hora da avaliação, para a dica do ponteiro ("diálogo · 14:32:05"). Sem eles, a dica não os diz. */
+  from?: string;
+};
 
 export type VariablesStore = {
   snapshot(): ReadonlyMap<string, VariableEntry>;
@@ -161,7 +169,7 @@ class ValueWidget extends WidgetType {
 /** O texto do fim da linha de uma variável (`= 7`), ou nulo quando nada se mostra: sem valor, ou com o valor de antes de a declaração mudar. */
 export function tailText(entry: VariableEntry | undefined): string | null {
   if (entry === undefined || entry.stale || entry.value === "") return null;
-  return `= ${clipped(entry.value, tailValueChars)}`;
+  return `= ${clipped(entry.short ?? entry.value, tailValueChars)}`;
 }
 
 function buildTails(items: readonly TailItem[], values: ReadonlyMap<string, VariableEntry>, show: boolean, touched: ReadonlyMap<string, Touched>): DecorationSet {

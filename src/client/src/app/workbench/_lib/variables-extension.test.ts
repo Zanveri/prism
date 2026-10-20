@@ -120,6 +120,8 @@ describe("o valor no fim da linha (RN-VAR-025)", () => {
     expect(tailText(entry("string", "x".repeat(60)))).toBe(`= ${"x".repeat(60)}`);
     expect(tailText(entry("string", ""))).toBeNull();
     expect(tailText(undefined)).toBeNull();
+    // O texto curto do armazém (a lista com o " · 3 itens") vale no lugar do valor.
+    expect(tailText({ ...entry("number[]", "[1, 2, 3]"), short: "[1, 2, 3] · 3 itens" })).toBe("= [1, 2, 3] · 3 itens");
     expect(clipped("😀".repeat(5), 3)).toBe("😀😀…");
   });
 
@@ -208,6 +210,15 @@ describe("a dica do ponteiro (RN-VAR-025)", () => {
     expect(hoverAt(state, at("@cliente_id") + 3)?.lines).toEqual([{ kind: "variable", text: "cliente_id: number = 7" }]);
     expect(hoverAt(state, at("cliente_id") + 2)?.lines).toEqual([{ kind: "variable", text: "cliente_id: number = 7" }]);
     expect(hoverAt(state, at("@cliente_id") + 3)).toMatchObject({ from: at("@cliente_id"), to: at("@cliente_id") + "@cliente_id".length });
+  });
+
+  it("a origem e a hora, quando o armazém as entrega, vêm depois do valor, antes do desatualizado", () => {
+    const from = "diálogo · 14:32:05";
+    const state = read(source).update({ effects: setVariableValues.of(values({ cliente_id: { ...entry("number", "7"), from } })) }).state;
+    expect(hoverAt(state, at("@cliente_id") + 3)?.lines).toEqual([{ kind: "variable", text: "cliente_id: number = 7 · diálogo · 14:32:05" }]);
+
+    const stale = read(source).update({ effects: setVariableValues.of(values({ cliente_id: { ...entry("number", "7", true), from } })) }).state;
+    expect(hoverAt(stale, at("@cliente_id") + 3)?.lines).toEqual([{ kind: "variable", text: "cliente_id: number = 7 · diálogo · 14:32:05 · desatualizado" }]);
   });
 
   it("o valor de antes de a declaração mudar diz que está desatualizado, e o texto longo é cortado em 200 caracteres", () => {
