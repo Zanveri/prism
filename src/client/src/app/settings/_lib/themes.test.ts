@@ -6,7 +6,7 @@ import { themeModes } from "./preferences";
 import { themePreviews, themeOptions } from "./themes";
 
 describe("os cartões dos temas (Configuracoes.dc.html)", () => {
-  it("são seis, na ordem do canvas: Prism Escuro, Prism Claro, Monokai, Dracula, Nord e GitHub Claro", () => {
+  it("incluem os seis temas do canvas e Kanagawa", () => {
     expect(themeOptions.map((option) => [option.mode, option.name, option.kind])).toEqual([
       ["dark", "Prism Escuro", "escuro"],
       ["light", "Prism Claro", "claro"],
@@ -14,6 +14,7 @@ describe("os cartões dos temas (Configuracoes.dc.html)", () => {
       ["dracula", "Dracula", "escuro"],
       ["nord", "Nord", "escuro"],
       ["github-light", "GitHub Claro", "claro"],
+      ["kanagawa", "Kanagawa", "escuro"],
     ]);
   });
 

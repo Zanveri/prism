@@ -123,6 +123,7 @@ describe("o esquema de cor que vale", () => {
       expect(resolveScheme("dracula", prefersLight)).toBe("dark");
       expect(resolveScheme("nord", prefersLight)).toBe("dark");
       expect(resolveScheme("github-light", prefersLight)).toBe("light");
+      expect(resolveScheme("kanagawa", prefersLight)).toBe("dark");
     }
   });
 

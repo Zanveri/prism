@@ -8,7 +8,7 @@
 (function () {
   try {
     var mode = localStorage.getItem("prism:theme");
-    if (["dark", "light", "system", "monokai", "dracula", "nord", "github-light"].indexOf(mode) !== -1) document.documentElement.dataset.theme = mode;
+    if (["dark", "light", "system", "monokai", "dracula", "nord", "github-light", "kanagawa"].indexOf(mode) !== -1) document.documentElement.dataset.theme = mode;
   } catch {
     // Sem acesso ao localStorage: fica o tema padrão.
   }
