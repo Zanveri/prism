@@ -1,5 +1,6 @@
 using CSharpFunctionalExtensions;
 using Moq;
+using Prism.Application.ConnectionTransfers.Models;
 using Prism.Application.DbeaverImports.Features.GetDbeaverState;
 using Prism.Application.DbeaverImports.Features.InviteToDbeaver;
 using Prism.Application.DbeaverImports.Models;
@@ -122,5 +123,24 @@ public sealed class DbeaverStateTests
         //Assert
         Assert.Equal(new VaultDbeaverRecord(Now, Now), first.Dbeaver);
         Assert.Equal(new VaultDbeaverRecord(Now.AddDays(-3), Now), later.Dbeaver);
+    }
+
+    [Trait("DbeaverState", "Export")]
+    [Fact(DisplayName = "OK a exportação não leva a origem do DBeaver: o arquivo do Prism chega sem ela (RN-TRANSF-006)")]
+    public void Export_DoesNotCarryTheOrigin()
+    {
+        //Arrange
+        var connection = VaultFakers.CreateConnection(name: "Importada", userName: "fulano", password: "senha-fictícia") with { Origin = new VaultConnectionOrigin("dbeaver", "Projeto-Secreto", "id-do-dbeaver-secreto") };
+        var document = Document() with { Connections = [connection] };
+        var planned = ExportPlanner.Plan(document, [], [new ExportChoice(connection.ID, ETransferCredentials.UserAndPassword)]);
+
+        //Act
+        var json = System.Text.Json.JsonSerializer.Serialize(ExportPlanner.Build(document, planned.Value).Content, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        //Assert
+        Assert.Contains("Importada", json);
+        Assert.DoesNotContain("Projeto-Secreto", json);
+        Assert.DoesNotContain("id-do-dbeaver-secreto", json);
+        Assert.DoesNotContain("origin", json, StringComparison.OrdinalIgnoreCase);
     }
 }
