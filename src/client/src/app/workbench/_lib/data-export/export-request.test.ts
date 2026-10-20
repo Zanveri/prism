@@ -66,8 +66,8 @@ describe("o pedido de POST api/user/transfers/exports (RN-EXPORT-016)", () => {
     expect(exportRequest(draft({ zip: true, entryName: "pedido.csv" })).output).toEqual({ bom: true, zip: true, entryName: "pedido.csv", clipboard: false });
   });
 
-  it("o tamanho do corpo é contado em UTF-8, contra os 8 MiB", () => {
-    expect(maxRequestBytes).toBe(8 * 1024 * 1024);
+  it("o tamanho do corpo é contado em UTF-8, contra os 16 MiB", () => {
+    expect(maxRequestBytes).toBe(16 * 1024 * 1024);
     const small = requestBytes(exportRequest(draft()));
     expect(requestBytes(exportRequest(draft({ origin: { ...result, sql: "é".repeat(10) } })))).toBeGreaterThan(small - 100);
     expect(requestBytes(exportRequest(draft({ origin: { ...result, sql: "é".repeat(5_000_000) } })))).toBeGreaterThan(maxRequestBytes);

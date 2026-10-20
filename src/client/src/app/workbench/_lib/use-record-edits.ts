@@ -10,6 +10,7 @@ import { isMacPlatform } from "@/lib/utils/platform";
 import { isAutoRefreshAction, type AutoRefreshSource } from "./auto-refresh-menu";
 import { cellAccess, columnHintsOf, deleteRowsAccess, isJoin, newRowAccess, resultReadOnly, type EditAccess, type RowContext, type SelectedRow } from "./cell-editing";
 import type { WholeColumnQuestion } from "./command-confirmation";
+import { sentTextOf } from "./command-wire";
 import type { Engine } from "@/components/ui/engine-tag";
 
 import { cellMenu, isCopyAsAction, isGenerateSqlAction, type CellMenuAction, type CellMenuItem, type CopyAsAccess, type CopyAsAction, type GenerateSqlAction, type GenerateSqlKind } from "./cell-menu";
@@ -1192,7 +1193,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           say(null);
           return act({ kind: "cells", column: cell.column, refs });
         }
-        const blocker = wholeColumnBlocker({ target: known, column: cell.column, columns: current.columns, read: current.read, sql: current.target.sql, filter: current.target.filter, engine: sources.current.engine });
+        const blocker = wholeColumnBlocker({ target: known, column: cell.column, columns: current.columns, read: current.read, sql: sentTextOf(current.target), filter: current.target.filter, engine: sources.current.engine });
         if (blocker !== null) return say(multi.unavailable(blocker), "warning");
         say(null);
         act({ kind: "all", column: cell.column });
@@ -1211,7 +1212,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     const access = accessOf(cell, known, null);
     const current = latest.current.shown;
     if (!access.editable || current === null) return access;
-    const blocker = wholeColumnBlocker({ target: known, column: cell.column, columns: current.columns, read: current.read, sql: current.target.sql, filter: current.target.filter, engine: sources.current.engine });
+    const blocker = wholeColumnBlocker({ target: known, column: cell.column, columns: current.columns, read: current.read, sql: sentTextOf(current.target), filter: current.target.filter, engine: sources.current.engine });
     return blocker === null ? access : { editable: false, reason: multi.unavailable(blocker) };
   }, [accessOf]);
 
@@ -1674,7 +1675,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
           total: current.hasMore ? null : current.rows.length,
           loaded: current.rows.length,
           kept: keptNow.current,
-          limited: commandLimits(current.target.sql, sources.current.engine, current.target.filter).limited,
+          limited: commandLimits(sentTextOf(current.target), sources.current.engine, current.target.filter).limited,
           others: pendingCount(pending) - wholes.length,
           subject,
           oneAtATime: known.oneAtATime,
@@ -2148,7 +2149,7 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     const hint = scopeHint(editScope, shown.columns[editScope.column]?.name ?? "", "bar");
     if (editScope.kind !== "all") return { scope: hint };
     const access = cellAccess({ readOnly: readOnlyReason, target, busy: saving || busy, column: active.column, row: { kind: "new" } });
-    const blocker = access.editable ? wholeColumnBlocker({ target, column: active.column, columns: shown.columns, read: shown.read, sql: shown.target.sql, filter: shown.target.filter, engine }) : null;
+    const blocker = access.editable ? wholeColumnBlocker({ target, column: active.column, columns: shown.columns, read: shown.read, sql: sentTextOf(shown.target), filter: shown.target.filter, engine }) : null;
     return { scope: hint, access: blocker === null ? access : { editable: false as const, reason: multi.unavailable(blocker) } };
   }, [editScope, shown, active, target, readOnlyReason, busy, saving, engine]);
   // RN-EDIT-013 e 014: os botões da barra, pelas linhas da seleção; contar e conferir as linhas de uma seleção grande custa uma volta nelas, uma vez por mudança.

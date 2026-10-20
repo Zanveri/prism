@@ -7,8 +7,8 @@ import { isPersonBusy, type FilterRefusal, type RunnerState, type RunTarget } fr
  */
 
 /** O comando sem o filtro: o que o editor mandou. */
-function withoutFilter({ sql, offset, engine }: RunTarget): RunTarget {
-  return engine === undefined ? { sql, offset } : { sql, offset, engine };
+function withoutFilter({ sql, offset, engine, sent }: RunTarget): RunTarget {
+  return { sql, offset, ...(engine === undefined ? {} : { engine }), ...(sent === undefined ? {} : { sent }) };
 }
 
 /**

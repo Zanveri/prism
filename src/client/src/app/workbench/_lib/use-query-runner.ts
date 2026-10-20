@@ -19,6 +19,7 @@ import { gridFilterCopy } from "./grid-filter.copy";
 import { sqlErrorDetails, type FilterApplied, type QueryColumn, type QueryPage, type QueryResult, type QueryRow } from "./query.schema";
 import { cancelQuery, countQueryTotal, executeQuery, fetchNextPage } from "./query.service";
 import { statementCount, utf16IndexOf } from "./sql-statements";
+import type { BoundCommand } from "./variables/bind";
 import { workbenchCopy } from "./workbench.copy";
 
 const copy = workbenchCopy.toasts;
@@ -69,6 +70,12 @@ export type RunTarget = {
    * "Executar de novo" repete o comando COM o filtro, porque ele viaja aqui. Sem filtro, o campo não existe.
    */
   filter?: string;
+  /**
+   * RN-VAR-033: o comando com variáveis, trocado pelos marcadores (`sql` do editor segue o texto da pessoa). `sent.sql` é o texto que vai à API, `sent.params` os
+   * valores (a tela manda só `type` e `value`) e `sent.replacements` o mapa das posições entre os dois (RN-SQL-009). Tudo o que executa de novo a partir do
+   * resultado usa estes, e nunca avalia as variáveis de novo. Sem variáveis, não existe.
+   */
+  sent?: BoundCommand;
 };
 
 /** RN-GRADE-011: a API recusou o filtro do resultado (422 `FILTER_INVALID`), sem executar nada; a frase vai ao campo, como veio. */

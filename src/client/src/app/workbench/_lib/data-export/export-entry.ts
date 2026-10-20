@@ -1,3 +1,4 @@
+import { boundOf, parametersOf, sentTextOf } from "../command-wire";
 import type { QueryColumn } from "../query.schema";
 import type { RowsState, RunnerState } from "../use-query-runner";
 import { dataExportCopy } from "./data-export.copy";
@@ -33,12 +34,24 @@ export function runnerExportBlocker(state: RunnerState, options: { busy: boolean
   return exportBlocker(exportRows(state), options);
 }
 
+/** RN-VAR-033: o comando com variáveis vai pelo texto enviado e pelos parâmetros dele (`source.params`). */
+const paramsOf = (target: RowsState["target"]) => {
+  const params = parametersOf(target);
+  return params === undefined ? {} : { params };
+};
+
+/** RN-EXPORT-015: o comando trocado inteiro, para a Origem mostrar o "SQL enviado". */
+const boundIn = (target: RowsState["target"]) => {
+  const bound = boundOf(target);
+  return bound === undefined ? {} : { bound };
+};
+
 /** As colunas como a Extração as mostra (o nome e o tipo, como o cabeçalho da grade). */
 const sourceColumns = (columns: readonly QueryColumn[]) => columns.map(({ name, type }) => ({ name, type }));
 
 /** A origem dos Registros: o comando que a grade mostra (com o filtro e a ordem aplicados) e o texto deles, a tabela e as colunas do resultado. */
 export function recordsSource(rows: RowsState, place: { connectionId: string; database?: string; schema: string; name: string; filter: string; unsavedEdits: number; checkedColumns?: readonly number[] | null }): ExportSource {
-  const origin: ExportOrigin = { kind: "records", schema: place.schema, name: place.name, sql: rows.target.sql, filter: place.filter };
+  const origin: ExportOrigin = { kind: "records", schema: place.schema, name: place.name, sql: sentTextOf(rows.target), filter: place.filter, ...paramsOf(rows.target) };
   return { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), origin, columns: sourceColumns(rows.columns), unsavedEdits: place.unsavedEdits, ...checkedOf(place.checkedColumns) };
 }
 
@@ -53,6 +66,6 @@ export function resultSource(
   rows: RowsState,
   place: { connectionId: string; database?: string; tabTitle: string; scriptNumber: number | null; unsavedEdits: number; table: { schema: string; name: string } | null; checkedColumns?: readonly number[] | null },
 ): ExportSource {
-  const origin: ExportOrigin = { kind: "result", tabTitle: place.tabTitle, scriptNumber: place.scriptNumber, sql: rows.target.sql, filter: rows.target.filter ?? null, table: place.table };
+  const origin: ExportOrigin = { kind: "result", tabTitle: place.tabTitle, scriptNumber: place.scriptNumber, sql: sentTextOf(rows.target), filter: rows.target.filter ?? null, table: place.table, ...paramsOf(rows.target), ...boundIn(rows.target) };
   return { connectionId: place.connectionId, ...(place.database === undefined ? {} : { database: place.database }), origin, columns: sourceColumns(rows.columns), unsavedEdits: place.unsavedEdits, ...checkedOf(place.checkedColumns) };
 }

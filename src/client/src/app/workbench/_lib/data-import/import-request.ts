@@ -1,3 +1,4 @@
+import { limits } from "../variables/variables.copy";
 import { commitEveryOfChoices } from "./import-load";
 import type { CommitChoices, ImportChoices } from "./import-choices";
 import { entriesOf, type Targets } from "./import-mapping";
@@ -97,8 +98,8 @@ export function startRequest(
   };
 }
 
-/** O limite do corpo dos pedidos (as notas das rotas): 8 MiB em UTF-8. A tela confere antes de mandar e não manda o que passa. */
-export const maxImportRequestBytes = 8 * 1024 * 1024;
+/** O limite do corpo dos pedidos (as notas das rotas): 16 MiB em UTF-8 (RN-IMPORT-013; era 8 MiB antes dos `source.params`). A tela confere antes de mandar e não manda o que passa. */
+export const maxImportRequestBytes = limits.transferBodyBytes;
 
 export function importRequestBytes(request: unknown): number {
   return new TextEncoder().encode(JSON.stringify(request)).length;

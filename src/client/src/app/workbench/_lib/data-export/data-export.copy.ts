@@ -228,7 +228,7 @@ export const dataExportCopy = {
       names.length === 1 ? `1 coluna que o banco calcula fica fora dos INSERT: ${names[0]}.` : `${formatCount(names.length)} colunas que o banco calcula ficam fora dos INSERT: ${names.join(", ")}.`,
     informixBinary: "O Informix não tem literal para binário: as linhas com binário saem como comentário.",
     outsideElectron: "Exportar só funciona no app do Prism.",
-    tooLarge: "O pedido passa de 8 MiB, por causa do comando e dos nomes das colunas. Deixe colunas de fora na Extração.",
+    tooLarge: "O pedido passa de 16 MiB, por causa do comando, dos valores das variáveis e dos nomes das colunas. Deixe colunas de fora na Extração ou use menos valores no comando.",
     notWritable: "Não é possível gravar na pasta escolhida. Escolha outra pasta.",
     inUse: "Outra exportação em andamento vai gravar neste arquivo. Escolha outro nome.",
     destinationFailed: "Não foi possível abrir o diálogo de salvar.",

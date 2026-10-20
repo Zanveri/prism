@@ -1,3 +1,4 @@
+import { sentTextOf } from "./command-wire";
 import type { RunnerState, RunTarget } from "./use-query-runner";
 
 /**
@@ -79,9 +80,15 @@ export type AutoRefreshDeps = {
   clearTimer?: (handle: unknown) => void;
 };
 
-/** A mesma consulta: o mesmo texto e o mesmo filtro do resultado (RN-GRADE-011). O lugar no editor e o banco não mudam o comando. */
+/**
+ * A mesma consulta: o mesmo texto, o mesmo filtro do resultado (RN-GRADE-011) e os mesmos parâmetros, o tipo e o valor de cada um (RN-GRADE-014 e RN-VAR-033: o
+ * `random` sorteado de novo é outro comando). O lugar no editor e o banco não mudam o comando.
+ */
 export function sameCommand(a: RunTarget, b: RunTarget): boolean {
-  return a.sql === b.sql && (a.filter ?? "") === (b.filter ?? "");
+  if (a.sql !== b.sql || (a.filter ?? "") !== (b.filter ?? "") || sentTextOf(a) !== sentTextOf(b)) return false;
+  const left = a.sent?.params ?? [];
+  const right = b.sent?.params ?? [];
+  return left.length === right.length && left.every((parameter, index) => parameter.type === right[index].type && parameter.value === right[index].value);
 }
 
 /**
