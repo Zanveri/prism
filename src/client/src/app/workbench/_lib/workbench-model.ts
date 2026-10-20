@@ -18,8 +18,17 @@ export type TableTarget = { schema: string; name: string; view: TableView };
  * Com `script`, a aba de consulta é um script salvo (RN-SCRIPT-001 a 003): o título é o nome dele, e o ponto da faixa diz que o texto mudou desde a última
  * gravação. `connectionId` nulo é a aba de um script cuja conexão não existe mais (RN-SCRIPT-003): ela abre sem conexão e pede uma antes de executar. Só a
  * aba de consulta fica sem conexão; a de uma tabela sempre tem a dela.
+ *
+ * `resultPlace` é o lugar do resultado da aba de consulta (RN-ABAS-011 e 016): no painel, abaixo do editor (o padrão, também sem o campo), numa aba própria
+ * logo depois dela, ou numa janela própria. É da aba: vai com ela para outra janela e volta com ela na próxima entrada. A aba de tabela não o tem. Quem o lê
+ * é `placeOf` (`result-place.ts`), que diz também o que vale enquanto a janela do resultado não existe.
  */
-export type QueryTab = { id: string; title: string; connectionId: string | null; database?: string; sessionId: string | null; sql: string; table?: TableTarget; script?: ScriptRef };
+export type QueryTab = { id: string; title: string; connectionId: string | null; database?: string; sessionId: string | null; sql: string; table?: TableTarget; script?: ScriptRef; resultPlace?: ResultPlace };
+
+/** RN-ABAS-011: os três lugares do resultado da aba de consulta. */
+export const resultPlaces = ["panel", "tab", "window"] as const;
+
+export type ResultPlace = (typeof resultPlaces)[number];
 
 /** A aba de uma tabela: sempre tem a conexão dela (só a aba de consulta de um script fica sem conexão, RN-SCRIPT-003). */
 export type TableTab = QueryTab & { table: TableTarget; connectionId: string };

@@ -59,6 +59,12 @@ export function isOutsideWindow(point: ScreenPoint, frame: ScreenRect): boolean 
 /** O tipo do dado que a aba arrastada leva (RN-ABAS-001 e 003): só uma aba do Prism é solta numa faixa de abas. */
 export const tabDragType = "application/x-prism-tab";
 
+/**
+ * RN-ABAS-010 e 012: o tipo do arraste da aba do resultado, outro, para as faixas (que só aceitam o da aba) não a receberem: ela não muda de lugar sozinha
+ * nem vai sozinha para outra janela. O dado é o mesmo (`writeTabDrag`), com o id da aba dela.
+ */
+export const resultTabDragType = "application/x-prism-result-tab";
+
 /** Qual aba e de qual janela (o número dela, `null` fora do Electron). O dado vem do arrasto, que outro programa também pode soltar aqui: é conferido. */
 const tabDragSchema = z.object({ windowId: z.number().int().positive().nullable(), tabId: z.uuid() });
 

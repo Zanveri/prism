@@ -88,6 +88,8 @@ export const tabTransferSchema = z.object({
     sessionId: id.nullable(),
     sql: z.string().max(maxSqlLength),
     table: z.object({ schema: name, name, view: z.enum(["data", "structure", "diagram"]) }).optional(),
+    /** RN-ABAS-016: o lugar do resultado da aba de consulta vai com ela (a aba do resultado logo depois dela, na janela que a recebe). */
+    resultPlace: z.enum(["panel", "tab", "window"]).optional(),
     /**
      * RN-SCRIPT-001: a aba é um script salvo. Vai o SQL como foi salvo e o lugar em que foi salvo: a conexão e o banco (sem ele, o da conexão), ou o genérico
      * (RN-SCRIPT-005); a mudança não salva, a janela que recebe a refaz pelo texto e pelo lugar da aba (RN-SCRIPT-003). E a pasta de scripts que a aba lembra
