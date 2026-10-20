@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
+import { dbeaverEntry } from "@/app/workbench/_lib/dbeaver-entry";
 import { Button, TextField, useToast } from "@/components/ui";
 import { pathsConfig } from "@/config/paths.config";
 import { sharePeerEvent } from "@/lib/api/bridge";
@@ -38,6 +39,8 @@ export function CreateUserForm({ onSignIn }: { onSignIn: () => void }) {
         toast.success(copy.created);
         // RN-COFRE-007: criar entra, e entrar fecha o cofre de quem estava antes. RN-ABAS-004: o login libera as outras janelas.
         queryClient.clear();
+        // RN-DBEAVER-002: esta é a janela em que se entrou; a página da área de trabalho decide sobre o convite do DBeaver.
+        dbeaverEntry.arm({ created: true });
         sharePeerEvent("signIn");
         void navigate(pathsConfig.workbench, { replace: true });
         return;

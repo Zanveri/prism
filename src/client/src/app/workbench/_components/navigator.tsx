@@ -3,8 +3,6 @@ import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult 
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { DeleteConnectionDialog } from "@/app/connections/_components/delete-connection-dialog";
-import { ExportConnectionsDialog } from "@/app/connections/_components/export-connections-dialog";
-import { ImportConnectionsDialog } from "@/app/connections/_components/import-connections-dialog";
 import { MoveConnectionDialog } from "@/app/connections/_components/move-connection-dialog";
 import { RenameConnectionDialog } from "@/app/connections/_components/rename-connection-dialog";
 import { buildConnectionTree } from "@/app/connections/_lib/connection-tree";
@@ -12,14 +10,14 @@ import { connectionsCopy } from "@/app/connections/_lib/connections.copy";
 import type { Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, duplicateConnection, foldersQuery, invalidateLists } from "@/app/connections/_lib/connections.service";
 import { environmentLookup, type EnvironmentLookup } from "@/app/connections/_lib/environment";
-import type { ExportOrigin } from "@/app/connections/_lib/export-model";
+import { dbeaverCopy } from "@/app/connections/_lib/dbeaver.copy";
 import { readOnlyHintOf } from "@/app/connections/_lib/protections";
 import { userEnvironments } from "@/app/connections/_lib/user-environments";
 import type { NavigatorDensity } from "@/app/settings/_lib/preferences";
 import { usePreferences } from "@/app/settings/_lib/use-preferences";
 import { Button, ColumnsIcon, ContextMenu, DiagramIcon, DocumentIcon, DownloadIcon, DuplicateIcon, FolderMoveIcon, FolderPlusIcon, FormMessage, PencilIcon, PlugIcon, PlusIcon, PowerIcon, RefreshIcon, TableIcon, TrashIcon, UploadIcon, useToast, type ContextMenuItem } from "@/components/ui";
+import { dbeaverAvailable } from "@/lib/api/bridge";
 import { ApiRequestError, unwrap } from "@/lib/api/prism-api";
-import { vaultLock } from "@/lib/api/vault-lock";
 
 import { notConnectedIds, type CheckState } from "../_lib/connection-checks";
 import { connectionReveal } from "../_lib/connection-intent";
@@ -33,10 +31,11 @@ import { filterConnected } from "../_lib/navigator-connected";
 import { allEnvironments, choiceAvailable, filterByEnvironment, type EnvironmentChoice } from "../_lib/navigator-environment";
 import { navigatorMetrics } from "../_lib/navigator-density";
 import { rememberedTreeScroll } from "../_lib/navigator-layout";
-import { importArrived, importRevealOf, revealOf, type ImportedItems } from "../_lib/navigator-reveal";
+import { importArrived, importRevealOf, revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
 import { refreshKey } from "../_lib/grid-editing";
+import { importedReveal, type TransferRequest } from "../_lib/transfer-requests";
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
 import { selectAllSql } from "../_lib/table-sql";
 import { useConnectionChecksSnapshot } from "../_lib/use-connection-checks";
@@ -130,17 +129,13 @@ type ConnectionAction = { type: "rename" | "move" | "delete"; connection: Connec
 /** O diálogo de cada ação de conexão do menu que tem diálogo. */
 const connectionActionTypes = { renameConnection: "rename", moveConnection: "move", deleteConnection: "delete" } as const;
 
-/**
- * O "Exportar conexões" ou o "Importar conexões" aberto (RN-TRANSF-001), um de cada por janela, com a época do bloqueio em que abriu: o bloqueio, o "Sair" e
- * o quinto erro de senha os fecham, e o que estava neles (as marcas, as senhas digitadas, o arquivo lido, a prévia) não sobrevive.
- */
-type TransferDialog = { type: "export"; origin: ExportOrigin; epoch: number } | { type: "import"; targetFolderID: string | null; epoch: number };
-
 type NavigatorProps = {
   /** "Nova conexão" (RN-NAV-002 e 003): na pasta dada, ou na raiz (`null`). */
   onNewConnection: (folderID: string | null) => void;
   /** "Editar conexão" (RN-MENU-001): o diálogo de edição, ali mesmo. */
   onEditConnection: (connectionId: string) => void;
+  /** O "Exportar conexões", o "Importar conexões" e o "Importar do DBeaver" (RN-TRANSF-001, RN-DBEAVER-003): os diálogos são da página da área de trabalho. */
+  onTransfer: (request: TransferRequest) => void;
   onRevealed?: () => void;
   /** O botão de esconder da barra de ações (RN-NAV-008): quem esconde é a página, que também cuida do foco. */
   onHide: () => void;
@@ -174,7 +169,7 @@ function folderIdOf(node: NavNode): string | null {
  * estava escondido. O formulário é um diálogo sobre a área de trabalho (RN-NAV-004), e quem o abre é a página: o navegador só pede
  * (`onNewConnection`, na pasta onde a conexão nasce; `onEditConnection`).
  */
-export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHide, hideShortcut }: NavigatorProps) {
+export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRevealed, onHide, hideShortcut }: NavigatorProps) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const folders = useQuery(foldersQuery);
@@ -187,12 +182,10 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null);
   const [connectionAction, setConnectionAction] = useState<ConnectionAction | null>(null);
-  // RN-TRANSF-001: o diálogo de exportar ou de importar, que some quando o cofre fecha (a época do bloqueio mudou), com o que tinha.
-  const lockEpoch = useSyncExternalStore(vaultLock.subscribe, vaultLock.epoch, vaultLock.epoch);
-  const [transfer, setTransfer] = useState<TransferDialog | null>(null);
-  if (transfer !== null && transfer.epoch !== lockEpoch) setTransfer(null);
-  // RN-TRANSF-014: o que a importação acabou de criar, à espera de as listas o trazerem para a árvore mostrá-lo.
-  const [imported, setImported] = useState<ImportedItems | null>(null);
+  // RN-TRANSF-014 e RN-DBEAVER-014: o que a importação acabou de criar (o diálogo é da página, e o pedido vem por `importedReveal`), à espera de as listas o
+  // trazerem para a árvore mostrá-lo. `handledImport` é o pedido que a árvore já atendeu.
+  const importedRequest = useSyncExternalStore(importedReveal.subscribe, importedReveal.pending, importedReveal.pending);
+  const [handledImport, setHandledImport] = useState(0);
   // A linha a trazer à vista e a receber o foco (a conexão salva ou duplicada, RN-NAV-004; a primeira importada, RN-TRANSF-014), uma vez por pedido.
   const [rowFocus, setRowFocus] = useState<{ key: string; seq: number } | null>(null);
   const focusRow = (key: string) => setRowFocus((current) => ({ key, seq: (current?.seq ?? 0) + 1 }));
@@ -316,9 +309,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   // RN-TRANSF-014: depois da importação, com as listas já trazendo o que entrou, as pastas até ele abrem e a primeira linha importada, na ordem da árvore, é
   // escolhida e recebe o foco. Os filtros ficam como estavam: se um deles a esconde, o foco vai à pasta de destino, ou, quando o destino é a raiz ou também
   // está escondido, à primeira linha à vista. Ajuste durante a renderização, uma vez, como o da conexão salva.
-  if (imported !== null && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(imported, folders.data, connections.data)) {
-    const plan = importRevealOf(imported, folders.data, connections.data);
-    setImported(null);
+  if (importedRequest !== null && importedRequest.seq !== handledImport && onScreen && folders.data !== undefined && connections.data !== undefined && importArrived(importedRequest.value, folders.data, connections.data)) {
+    const plan = importRevealOf(importedRequest.value, folders.data, connections.data);
+    setHandledImport(importedRequest.seq);
     setCollapsedFolders((current) => new Set([...current].filter((key) => !plan.folderKeys.includes(key))));
     const shownKeys = new Set([...shown.folders.map((folder) => navKey({ type: "folder", id: folder.id })), ...shown.connections.map((connection) => navKey({ type: "connection", connectionId: connection.id }))]);
     const onView = (key: string | null): key is string => key !== null && shownKeys.has(key) && (search === null || search.rows.some((row) => row.key === key));
@@ -335,6 +328,15 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       setNodeOpen(navKey({ type: "database", connectionId }), false);
     }
   }, [lackingKey, setNodeOpen]);
+
+  // RN-DBEAVER-014: com o navegador escondido (RN-NAV-008), a importação o mostra antes de levar o foco à linha; o pedido sai quando a árvore o atendeu.
+  const announcedImport = useRef(0);
+  useEffect(() => {
+    if (handledImport === 0 || announcedImport.current === handledImport) return;
+    announcedImport.current = handledImport;
+    importedReveal.take(handledImport);
+    onRevealed?.();
+  }, [handledImport, onRevealed]);
 
   const announcedReveal = useRef(0);
   useEffect(() => {
@@ -456,7 +458,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     const connectionId = node.kind === "connection" ? ownerConnectionId(node) : null;
     // RN-IMPORT-001: na tabela, a conexão dela somente leitura desabilita o "Importar dados…".
     const owner = node.kind === "table" ? ownerConnectionId(node) : null;
-    return { status: (connectionId === null ? undefined : statuses.get(connectionId)) ?? "disconnected", busy: connectionId !== null && disconnecting === connectionId, readOnly: owner !== null && readOnlyHints.has(owner) } as const;
+    return { status: (connectionId === null ? undefined : statuses.get(connectionId)) ?? "disconnected", busy: connectionId !== null && disconnecting === connectionId, readOnly: owner !== null && readOnlyHints.has(owner), dbeaverAvailable: dbeaverAvailable() } as const;
   }
 
   /**
@@ -473,7 +475,7 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
   }
 
   /** Os itens do menu: os da linha, ou os do espaço vazio do navegador (`null`), que sem nada no cofre não tem o que exportar (RN-TRANSF-001). */
-  const menuGroupsOf = (node: NavNode | null) => (node === null ? backgroundMenu((folders.data ?? []).length + connectionList.length > 0) : menuFor(node, menuStateOf(node)));
+  const menuGroupsOf = (node: NavNode | null) => (node === null ? backgroundMenu((folders.data ?? []).length + connectionList.length > 0, dbeaverAvailable()) : menuFor(node, menuStateOf(node)));
 
   /** Abre o menu da linha (RN-MENU-001), ou o do espaço vazio (`null`); a linha sem itens (Carregando…, erro) não tem menu. */
   function openMenu(node: NavNode | null, point: OpenMenu["point"], initialFocus: OpenMenu["initialFocus"]): boolean {
@@ -498,8 +500,9 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
     if (node === null) {
       if (action.type === "newConnection") onNewConnection(null);
       else if (action.type === "newFolder") setFolderAction({ type: "create", parentID: null });
-      else if (action.type === "exportConnections") setTransfer({ type: "export", origin: { type: "all" }, epoch: lockEpoch });
-      else if (action.type === "importConnections") setTransfer({ type: "import", targetFolderID: null, epoch: lockEpoch });
+      else if (action.type === "exportConnections") onTransfer({ type: "export", origin: { type: "all" } });
+      else if (action.type === "importConnections") onTransfer({ type: "import", targetFolderID: null });
+      else if (action.type === "importDbeaver") onTransfer({ type: "dbeaver", targetFolderID: null, start: { type: "find" } });
       return;
     }
 
@@ -559,13 +562,19 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       // RN-TRANSF-001: exportar a conexão (só ela marcada) ou a pasta (ela e tudo o que está dentro), e importar na pasta.
       case "exportConnections": {
         const folderId = folderIdOf(node);
-        if (connectionId !== null && node.kind === "connection") setTransfer({ type: "export", origin: { type: "connection", id: connectionId }, epoch: lockEpoch });
-        else if (folderId !== null) setTransfer({ type: "export", origin: { type: "folder", id: folderId }, epoch: lockEpoch });
+        if (connectionId !== null && node.kind === "connection") onTransfer({ type: "export", origin: { type: "connection", id: connectionId } });
+        else if (folderId !== null) onTransfer({ type: "export", origin: { type: "folder", id: folderId } });
         return;
       }
       case "importConnections": {
         const folderId = folderIdOf(node);
-        if (folderId !== null) setTransfer({ type: "import", targetFolderID: folderId, epoch: lockEpoch });
+        if (folderId !== null) onTransfer({ type: "import", targetFolderID: folderId });
+        return;
+      }
+      // RN-DBEAVER-003: "Importar do DBeaver aqui…", com a pasta da linha já escolhida em "Onde colocar".
+      case "importDbeaver": {
+        const folderId = folderIdOf(node);
+        if (folderId !== null) onTransfer({ type: "dbeaver", targetFolderID: folderId, start: { type: "find" } });
         return;
       }
       case "newConnection":
@@ -685,6 +694,12 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
         <div className="flex flex-col gap-1 px-3 py-2">
           <p className="font-semibold text-ink">{copy.empty.title}</p>
           <p className="text-muted">{navigatorCopy.empty.hint}</p>
+          {/* RN-DBEAVER-003: o estado vazio do navegador também tem "Importar do DBeaver…" (fora do app, desabilitado, com o motivo). */}
+          <div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => onTransfer({ type: "dbeaver", targetFolderID: null, start: { type: "find" } })} disabled={!dbeaverAvailable()} title={dbeaverAvailable() ? undefined : dbeaverCopy.outside}>
+              {dbeaverCopy.empty.importDbeaver}
+            </Button>
+          </div>
         </div>
       );
     }
@@ -775,16 +790,6 @@ export function Navigator({ onNewConnection, onEditConnection, onRevealed, onHid
       {failure?.kind === "failed" && failureConnection !== undefined ? <CheckFailureDialog connection={failureConnection.name} state={failure} onClose={() => setCheckFailure(null)} /> : null}
       {folderAction === null ? null : <FolderActionDialogs action={folderAction} folders={folders.data ?? []} onClose={() => setFolderAction(null)} />}
       {connectionAction?.type === "rename" ? <RenameConnectionDialog connection={connectionAction.connection} onClose={() => setConnectionAction(null)} /> : null}
-      {transfer?.type === "export" ? <ExportConnectionsDialog origin={transfer.origin} onClose={() => setTransfer(null)} /> : null}
-      {transfer?.type === "import" ? (
-        <ImportConnectionsDialog
-          targetFolderID={transfer.targetFolderID}
-          onImported={(result, targetFolderID) => {
-            if (result.folderIDs.length + result.connectionIDs.length > 0) setImported({ folderIDs: result.folderIDs, connectionIDs: result.connectionIDs, targetFolderID });
-          }}
-          onClose={() => setTransfer(null)}
-        />
-      ) : null}
       {connectionAction?.type === "move" ? <MoveConnectionDialog connection={connectionAction.connection} folders={folders.data ?? []} onClose={() => setConnectionAction(null)} /> : null}
       {connectionAction?.type === "delete" ? (
         <DeleteConnectionDialog
