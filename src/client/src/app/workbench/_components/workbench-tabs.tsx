@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
@@ -15,8 +15,12 @@ import { loadTracker, windowTransfers } from "../_lib/data-import/data-imports";
 import { exitQuestion, totalOf, type ExitQuestion } from "../_lib/data-import/transfer-exits";
 import { windowCloseStep } from "../_lib/data-export/export-exits";
 import { liveEditors } from "../_lib/live-editors";
-import { recallForTransfer } from "../_lib/tab-memory";
+import { recall, recallForTransfer } from "../_lib/tab-memory";
+import { afterPlaceChange, f6Action, isF6, placeAnnouncement, placeMenu, placeOf, resultOnView, resultPanelElementId, type PlaceVia } from "../_lib/result-place";
+import { resultPlaceCopy } from "../_lib/result-place.copy";
+import { resultFocus, resultSlots } from "../_lib/result-slots";
 import { readTabDrag, tabDragType, tabMoveShortcut } from "../_lib/tab-order";
+import { stripTitles } from "../_lib/tab-titles";
 import { closeAsks, closeConfirmation, closeConfirmationText, isCloseShortcut, mergeCloseQueue, nextToClose, tabsToClose, type CloseAsks, type CloseScope } from "../_lib/tab-strip";
 import { scriptsToAsk } from "../_lib/saved-scripts";
 import { scriptsQuery } from "../_lib/scripts.service";
@@ -27,9 +31,11 @@ import { unsavedEdits, unsavedQuestion } from "../_lib/unsaved-edits";
 import { isBusyState } from "../_lib/use-query-runner";
 import { useWorkbenchOnScreen } from "../_lib/use-workbench-on-screen";
 import { useWorkbench } from "../_lib/workbench-state";
-import { isTableTab, type TableView } from "../_lib/workbench-model";
+import { isTableTab, type ResultPlace, type TableView } from "../_lib/workbench-model";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { QueryTabPanel } from "./query-tab";
+import { focusResultIn, releaseFocusIn, resultHostOf } from "./result-host";
+import { ResultTabMark } from "./result-tab-mark";
 import { UnsavedScriptsDialog } from "./script-dialogs";
 import { ScriptWaitingMark } from "./script-tabs";
 import { panelElementId, tabElementId, TabStrip } from "./tab-strip";
@@ -41,6 +47,15 @@ const copy = workbenchCopy.tabs;
 
 /** Fechar abas, ou uma janela que não é a última, pergunta tudo (RN-ABAS-007). */
 const askEverything = closeAsks({ closesTheApp: false });
+
+/**
+ * RN-ABAS-012: o painel da aba do resultado, logo depois do da aba dela: o lugar onde a área de resultado da aba se põe (`resultSlots`), com o nome
+ * "Resultado de consulta-2.sql" (e não o da aba, que leva o ponto no nome). O conteúdo é da aba de consulta, que o desenha por portal (`ResultHost`).
+ */
+function ResultTabPanel({ tabId, label, hidden }: { tabId: string; label: string; hidden: boolean }) {
+  const register = useCallback((element: HTMLDivElement | null) => resultSlots.set(tabId, "tab", element), [tabId]);
+  return <div ref={register} role="tabpanel" id={resultPanelElementId(tabId)} aria-label={label} hidden={hidden} className={hidden ? undefined : "flex min-h-0 min-w-0 flex-1 flex-col"} />;
+}
 
 /**
  * A faixa de abas e o painel de cada uma. Cada aba é uma consulta (`QueryTab`) de uma conexão, com
@@ -58,8 +73,10 @@ const askEverything = closeAsks({ closesTheApp: false });
  * alterações não salvas pergunta antes se salva ou descarta. Fechar a janela fecha as abas dela, com as perguntas de "Fechar todas" (RN-ABAS-004).
  */
 export function WorkbenchTabs() {
-  const { tabs, activeTabId, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
+  const { tabs, activeTabId, resultActive, showEntry, setResultPlace, setActiveTab, closeTab, updateTab, setTableView, openTableTab, openQueryTab, runnerOf, reorderTab, shiftTab, detachTab, releaseWindow, markScriptEdited, switchConnection, switchDatabase, restoredTableConnections, holdForWindowClose, releaseWindowClose } = useWorkbench();
   const toast = useToast();
+  // RN-ABAS-008: o nome curto das abas (o do painel da aba do resultado também).
+  const shortTitles = useMemo(() => stripTitles(tabs), [tabs]);
   const windowId = currentWindowId();
   const connections = useQuery(connectionsQuery);
   const folders = useQuery(foldersQuery);
@@ -110,6 +127,43 @@ export function WorkbenchTabs() {
   const handleOpenQuery = useCallback((connectionId: string, sql: string, database?: string) => latestOpenQuery.current(connectionId, sql, database), []);
   const handleSwitchDatabase = useCallback((tabId: string, database: string | undefined) => latestSwitchDatabase.current(tabId, database), []);
   const handleSwitchConnection = useCallback((tabId: string, connectionId: string) => latestSwitchConnection.current(tabId, connectionId), []);
+
+  // RN-ABAS-014: as abas que estão indo para outra janela ("Numa janela" fica desabilitado nelas), e o anúncio da troca de lugar, para o leitor de tela.
+  const [moving, setMoving] = useState<ReadonlySet<string>>(() => new Set());
+  const [announcement, setAnnouncement] = useState({ text: "", seq: 0 });
+  useEffect(() => resultFocus.forgetExcept(new Set(tabs.map((tab) => tab.id))), [tabs]);
+
+  /**
+   * Seção 39 (RN-ABAS-011, 012 e 014): troca o lugar do resultado da aba, sem executar nada (a área é a mesma, e só muda de lugar). Antes, o campo de edição
+   * de uma célula aberto é confirmado (o foco sai da área). Depois, o que fica ativo e onde fica o foco (`afterPlaceChange`), e o anúncio, numa região
+   * `role="status"`, sem toast.
+   */
+  function changePlace(tabId: string, to: ResultPlace, via: PlaceVia) {
+    const tab = latestTabs.current.find((candidate) => candidate.id === tabId);
+    const from = tab === undefined ? null : placeOf(tab);
+    if (from === null || from === to) return;
+
+    const after = afterPlaceChange({ to, via, resultWasActive: resultActive && activeTabId === tabId });
+    releaseFocusIn(tabId);
+    setResultPlace(tabId, to);
+    if (after.show !== "keep") showEntry(tabId, after.show);
+    if (after.focus !== null) resultFocus.request(tabId, after.focus);
+    setAnnouncement((current) => ({ text: placeAnnouncement(to), seq: current.seq + 1 }));
+  }
+  const latestChangePlace = useRef(changePlace);
+  useEffect(() => {
+    latestChangePlace.current = changePlace;
+  });
+  // O botão da barra do resultado (no painel memorizado de cada aba): a função é estável e chama a versão mais recente.
+  const handlePlace = useCallback((tabId: string, place: ResultPlace) => latestChangePlace.current(tabId, place, "bar"), []);
+  // RN-ABAS-014: o F6 com o resultado numa aba troca a entrada ativa, com o foco no resultado ou no editor.
+  const handleToggleEntry = useCallback(
+    (tabId: string, view: "query" | "result") => {
+      showEntry(tabId, view);
+      resultFocus.request(tabId, view === "result" ? "result" : "editor");
+    },
+    [showEntry],
+  );
 
   /**
    * Fechar várias de uma vez. `closeTab` parte da lista de abas que viu quando foi criado, então chamado várias vezes no mesmo instante
@@ -212,6 +266,15 @@ export function WorkbenchTabs() {
     const asked = tabNow();
     if (asked === undefined) return;
 
+    setMoving((current) => new Set([...current, tabId]));
+    try {
+      await sendNow(tabId, target, tabNow, asked, saved);
+    } finally {
+      setMoving((current) => new Set([...current].filter((id) => id !== tabId)));
+    }
+  }
+
+  async function sendNow(tabId: string, target: TabMoveTarget, tabNow: () => (typeof tabs)[number] | undefined, asked: (typeof tabs)[number], saved: boolean) {
     const runner = runnerOf(tabId);
     const outcome = await handOffTab(runner, {
       // Enquanto a execução automática terminava, a aba pode ter fechado (ela saiu da lista, e o executor também: `runnerOf` lança) ou trocado de executor
@@ -335,9 +398,24 @@ export function WorkbenchTabs() {
       return;
     }
 
+    // RN-ABAS-014: o F6 na faixa vale o lado da entrada ativa (o editor e o resultado tratam o deles e não deixam a tecla chegar aqui).
+    if (isF6(event)) {
+      const tab = tabs.find((candidate) => candidate.id === activeTabId);
+      const place = tab === undefined ? null : placeOf(tab);
+      if (place === null || (event.target as Element).closest?.('[role="tablist"]') == null) return;
+      event.preventDefault();
+      const action = f6Action({ place, from: "strip", mode: recall(activeTabId, "layout")?.mode ?? "split", resultActive });
+      const host = resultHostOf(activeTabId);
+      if (action === "focusResult" && host !== null) focusResultIn(host);
+      else if (action === "showResult" || action === "showQuery") handleToggleEntry(activeTabId, action === "showResult" ? "result" : "query");
+      return;
+    }
+
     if (!isCloseShortcut(event)) return;
     event.preventDefault();
-    handleClose("one", activeTabId);
+    // RN-ABAS-012: com a aba do resultado ativa, o Ctrl+W volta o resultado ao painel, sem perguntar nada.
+    if (resultActive) changePlace(activeTabId, "panel", "close");
+    else handleClose("one", activeTabId);
   }
 
   // RN-ABAS-003: a janela sem abas também recebe a aba arrastada de outra janela, no lugar da faixa.
@@ -372,6 +450,14 @@ export function WorkbenchTabs() {
             onReceive={receive}
             // RN-SQL-021: a aba cujo script espera a resposta da pergunta de erro, que só aparece na aba à vista.
             markOf={(tabId) => <ScriptWaitingMark runner={runnerOf(tabId)} />}
+            resultActive={resultActive}
+            onShowEntry={showEntry}
+            onPlace={(tabId, place, via) => changePlace(tabId, place, via)}
+            placeItemsOf={(tabId) => {
+              const tab = tabs.find((candidate) => candidate.id === tabId);
+              return placeMenu((tab === undefined ? null : placeOf(tab)) ?? "panel", { moving: moving.has(tabId) });
+            }}
+            resultMarkOf={(tabId, active) => <ResultTabMark tabId={tabId} runner={runnerOf(tabId)} active={active} />}
           />
         )}
 
@@ -396,15 +482,39 @@ export function WorkbenchTabs() {
         ) : (
           tabs.map((tab) => {
             const selected = tab.id === activeTabId;
+            // RN-ABAS-012: com a aba do resultado ativa, o painel dela aparece, e o da aba da consulta fica escondido (montado, como o das outras abas).
+            const place = placeOf(tab);
+            const queryShown = selected && !resultActive;
 
             return (
-              <div key={tab.id} role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!selected} className={selected ? "flex min-h-0 flex-1 flex-col" : undefined}>
-                {isTableTab(tab) ? (
-                  <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
-                ) : (
-                  <QueryTabPanel tab={tab} runner={runnerOf(tab.id)} engine={connectionOf(tab.connectionId)?.engine} active={selected} onSqlChange={updateTab} onEdited={markScriptEdited} onSave={requestSave} onSwitchConnection={handleSwitchConnection} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} onSwitchDatabase={handleSwitchDatabase} />
-                )}
-              </div>
+              <Fragment key={tab.id}>
+                <div role="tabpanel" id={panelElementId(tab.id)} aria-labelledby={tabElementId(tab.id)} hidden={!queryShown} className={queryShown ? "flex min-h-0 flex-1 flex-col" : undefined}>
+                  {isTableTab(tab) ? (
+                    <TableTabPanel tab={tab} table={tab.table} runner={runnerOf(tab.id)} connection={connectionOf(tab.connectionId)} environment={environmentOf(tab.connectionId)} visible={selected && onScreen} disconnected={disconnected.has(tab.connectionId)} onView={setTableView} onOpenTable={handleOpenTable} onOpenQuery={handleOpenQuery} />
+                  ) : (
+                    <QueryTabPanel
+                      tab={tab}
+                      runner={runnerOf(tab.id)}
+                      engine={connectionOf(tab.connectionId)?.engine}
+                      active={selected}
+                      place={place ?? "panel"}
+                      editorShown={queryShown}
+                      resultShown={resultOnView({ place: place ?? "panel", selected, resultActive })}
+                      moving={moving.has(tab.id)}
+                      onPlace={handlePlace}
+                      onToggleEntry={handleToggleEntry}
+                      onSqlChange={updateTab}
+                      onEdited={markScriptEdited}
+                      onSave={requestSave}
+                      onSwitchConnection={handleSwitchConnection}
+                      onOpenTable={handleOpenTable}
+                      onOpenQuery={handleOpenQuery}
+                      onSwitchDatabase={handleSwitchDatabase}
+                    />
+                  )}
+                </div>
+                {place === "tab" ? <ResultTabPanel tabId={tab.id} label={resultPlaceCopy.tab.panelLabel(shortTitles.get(tab.id) ?? tab.title)} hidden={!(selected && resultActive)} /> : null}
+              </Fragment>
             );
           })
         )}
@@ -446,6 +556,11 @@ export function WorkbenchTabs() {
       )}
 
       {saveDialog}
+
+      {/* RN-ABAS-014: a troca do lugar do resultado, para o leitor de tela, sem toast. */}
+      <div role="status" className="sr-only">
+        {announcement.text === "" ? null : <span key={announcement.seq}>{announcement.text}</span>}
+      </div>
 
       {/* RN-EXPORT-023: "Continuar exportando" tem o foco e o Esc, e deixa a janela aberta; confirmado, seguem as perguntas das abas. */}
       {transferQuestion === null ? null : (

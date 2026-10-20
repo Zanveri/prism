@@ -185,6 +185,11 @@ type ResultPanelProps = {
   collapsed?: boolean;
   /** Os botões do fim da barra (recolher, maximizar); a vista Registros de uma tabela não os tem. */
   actions?: ReactNode;
+  /**
+   * RN-ABAS-014: "Onde mostrar o resultado", logo antes dos botões do fim da barra: antes do recolher e do maximizar (no painel), na ponta direita (na aba),
+   * antes de "Voltar para o painel" (na janela). Só na aba de consulta; os Registros não o têm.
+   */
+  placeControl?: ReactNode;
   id?: string;
   /** O `flex` que o pai dá à área; sem ele ela ocupa o que sobra. */
   style?: CSSProperties;
@@ -246,7 +251,7 @@ type ResultPanelProps = {
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -363,6 +368,7 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
         {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} /> : null}
         {records || exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.resultHint} />}
+        {placeControl}
         {actions}
       </div>
 
