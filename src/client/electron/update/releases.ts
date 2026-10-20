@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { splitNotes } from "./checksums";
+import { choosePackage, type InstallFacts } from "./packages";
 import { compareVersions, isNewerThan, releaseOfTag } from "./version";
 
 /**
@@ -120,6 +121,30 @@ export function readReleasePage(payload: unknown, installed: string, channel: Ch
   }
 
   return { releases: [...found.values()].sort((a, b) => compareVersions(b.version, a.version)), ignored, items: payload.length, reachedInstalled };
+}
+
+/**
+ * O que é oferecido a ESTA instalação (RN-ATUALIZA-002 e 003). A pipeline publica a release com as plataformas que vieram inteiras,
+ * e uma plataforma cujo pacote falhou fica de fora (o macOS nunca vem num beta): a release sem o pacote da plataforma e da
+ * arquitetura em uso, no formato desta instalação, não é oferecida, e a oferta é a versão mais nova QUE TEM o pacote. O pacote é o
+ * que `choosePackage` escolheria, e "ter" é o nome dele estar nas somas das notas (o que a pipeline escreve só para o que entrou).
+ * `releases` vem da mais nova para a mais antiga: as mais novas que a escolhida saem, e as mais antigas ficam (as notas delas
+ * contam o que mudou até a oferta, mesmo que o pacote delas tenha faltado). `withoutPackage` são as versões de fora, da mais nova
+ * para a mais antiga, sem os betas no macOS: lá a falta é o esperado (a pipeline só empacota o macOS nas estáveis), não uma falha
+ * de pacote, e a tela não a conta como tal. Um sistema para o qual não existe pacote nenhum (`choosePackage` sem resposta) não filtra nada: a tela
+ * já diz que não há pacote, e baixar é recusado.
+ */
+export function offerable(releases: ReleaseInfo[], facts: InstallFacts): { releases: ReleaseInfo[]; withoutPackage: string[] } {
+  const hasPackage = (release: ReleaseInfo) => {
+    const choice = choosePackage(release.version, facts);
+    return choice === null || release.sums.has(choice.fileName);
+  };
+  const first = releases.findIndex(hasPackage);
+  // No macOS um beta nunca tem o pacote: não é "saiu sem ele", e não entra no que a tela e o log contam como falha de pacote.
+  const reported = (left: ReleaseInfo[]) => left.filter((release) => !(release.prerelease && facts.platform === "darwin")).map((release) => release.version);
+  if (first === -1) return { releases: [], withoutPackage: reported(releases) };
+
+  return { releases: releases.slice(first), withoutPackage: reported(releases.slice(0, first)) };
 }
 
 /** As páginas lidas, juntas: da versão mais nova para a mais antiga, e a versão repetida vale a da página que veio antes. */

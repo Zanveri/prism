@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { clipNotes, maxNotesLength, maxNotesLines, mergeReleasePages, readReleasePage } from "./releases";
+import type { InstallFacts } from "./packages";
+import { clipNotes, maxNotesLength, maxNotesLines, mergeReleasePages, offerable, readReleasePage, type ReleaseInfo } from "./releases";
 
 const sum = "a".repeat(64);
 const notesOf = (version: string) => `### Adicionado\n\n- Coisa da ${version}.\n\n### Somas SHA-256\n\n\`\`\`\n${sum}  Prism-${version}-win-x64.exe\n\`\`\`\n`;
@@ -235,5 +236,72 @@ describe("readReleasePage (RN-ATUALIZA-002 e 003): uma página da lista de relea
 
     expect(found.notes.length).toBeLessThanOrEqual(maxNotesLength + 1);
     expect(found.sums.get("Prism-0.2.0-win-x64.exe")).toBe(sum);
+  });
+});
+
+describe("offerable (RN-ATUALIZA-002 e 003): só o que tem o pacote desta instalação", () => {
+  const windows: InstallFacts = { platform: "win32", arch: "x64", appImage: false, execPath: "C:\\Prism\\Prism.exe", debInstalled: false, hasRpm: false, nsisInstalled: true };
+  const info = (version: string, files: string[]): ReleaseInfo => ({ version, prerelease: version.includes("-"), date: null, notes: "", sums: new Map(files.map((file) => [file, sum])) });
+  const withWindows = (version: string) => info(version, [`Prism-${version}-win-x64.exe`]);
+  const withoutWindows = (version: string) => info(version, [`Prism-${version}-linux-x64.tar.gz`]);
+  const versions = (releases: ReleaseInfo[]) => releases.map((each) => each.version);
+
+  it("todas têm o pacote: nada muda", () => {
+    const result = offerable([withWindows("0.3.0"), withWindows("0.2.0")], windows);
+
+    expect(versions(result.releases)).toEqual(["0.3.0", "0.2.0"]);
+    expect(result.withoutPackage).toEqual([]);
+  });
+
+  it("as mais novas sem o pacote saem, e a oferta é a mais nova que o tem, com as mais antigas atrás dela", () => {
+    const result = offerable([withoutWindows("0.5.0"), withoutWindows("0.4.0"), withWindows("0.3.0"), withoutWindows("0.2.0")], windows);
+
+    expect(versions(result.releases)).toEqual(["0.3.0", "0.2.0"]);
+    expect(result.withoutPackage).toEqual(["0.5.0", "0.4.0"]);
+  });
+
+  it("uma sem o pacote no meio fica, porque há uma mais nova com ele", () => {
+    expect(versions(offerable([withWindows("0.5.0"), withoutWindows("0.4.0"), withWindows("0.3.0")], windows).releases)).toEqual(["0.5.0", "0.4.0", "0.3.0"]);
+  });
+
+  it("nenhuma tem o pacote: nada é oferecido, e todas as versões vão para o aviso", () => {
+    const result = offerable([withoutWindows("0.4.0"), withoutWindows("0.3.0")], windows);
+
+    expect(result.releases).toEqual([]);
+    expect(result.withoutPackage).toEqual(["0.4.0", "0.3.0"]);
+  });
+
+  it("o nome do arquivo tem de ser o da versão: o pacote de outra versão nas somas não vale", () => {
+    expect(versions(offerable([info("0.4.0", ["Prism-0.3.0-win-x64.exe"])], windows).releases)).toEqual([]);
+  });
+
+  it("o zip portátil do Windows não é o instalador: procura o próprio arquivo", () => {
+    const portable: InstallFacts = { ...windows, nsisInstalled: false };
+    const installerOnly = info("0.4.0", ["Prism-0.4.0-win-x64.exe"]);
+
+    expect(offerable([installerOnly], portable).releases).toEqual([]);
+    expect(versions(offerable([installerOnly], windows).releases)).toEqual(["0.4.0"]);
+  });
+
+  it("um sistema sem pacote nenhum (Linux arm64) não filtra: a tela diz que não há pacote", () => {
+    const arm: InstallFacts = { platform: "linux", arch: "arm64", appImage: false, execPath: "/opt/Prism/prism", debInstalled: false, hasRpm: false, nsisInstalled: false };
+
+    expect(versions(offerable([withoutWindows("0.4.0")], arm).releases)).toEqual(["0.4.0"]);
+  });
+
+  it("no macOS um beta sem o pacote é o esperado: não vai para o aviso, e a estável sem o pacote vai", () => {
+    const mac: InstallFacts = { platform: "darwin", arch: "arm64", appImage: false, execPath: "/Applications/Prism.app", debInstalled: false, hasRpm: false, nsisInstalled: false };
+    const beta = info("0.6.0-beta.2", ["Prism-0.6.0-beta.2-win-x64.exe"]);
+    const stable = info("0.5.1", ["Prism-0.5.1-linux-x64.tar.gz"]);
+
+    expect(offerable([beta], mac)).toEqual({ releases: [], withoutPackage: [] });
+    expect(offerable([beta, stable], mac)).toEqual({ releases: [], withoutPackage: ["0.5.1"] });
+    expect(offerable([beta, info("0.5.0", ["Prism-0.5.0-mac-arm64.dmg"])], mac).withoutPackage).toEqual([]);
+    // No Windows o beta sem o pacote é uma falha de pacote, e conta.
+    expect(offerable([info("0.6.0-beta.2", ["Prism-0.6.0-beta.2-linux-x64.tar.gz"])], windows).withoutPackage).toEqual(["0.6.0-beta.2"]);
+  });
+
+  it("lista vazia: nada oferecido e nada de fora", () => {
+    expect(offerable([], windows)).toEqual({ releases: [], withoutPackage: [] });
   });
 });

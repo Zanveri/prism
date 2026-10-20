@@ -10,7 +10,7 @@ import { attemptFileName, takeAttempt, writeAttempt } from "./install-attempt";
 import { githubApiHeaders, maxReleasePages, packageUrl, releasesPerPage, releasesUrl, type UpdateOrigin } from "./origin";
 import { choosePackage, isPackageFile, sumsFile, type InstallFacts, type InstallFormat } from "./packages";
 import { dueForStartupCheck, readPreferences, writePreferences, type UpdatePreferences } from "./preferences";
-import { clipNotes, mergeReleasePages, readReleasePage, type ReleaseInfo, type ReleasePage } from "./releases";
+import { clipNotes, mergeReleasePages, offerable, readReleasePage, type ReleaseInfo, type ReleasePage } from "./releases";
 import type { CheckOutcome, UpdateNotice, UpdateOffer, UpdateProgress, UpdateState } from "./update-state";
 
 export type UpdaterDeps = {
@@ -203,7 +203,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
    * à versão instalada (a pipeline publica um beta a cada merge, e cem betas podem esconder a estável que falta a quem está atrás),
    * e no máximo `maxReleasePages`. Uma página seguinte que falha não derruba a consulta: vale o que já veio, e a falha vai para o log.
    */
-  async function query(source: UpdateOrigin): Promise<{ releases: ReleaseInfo[]; forAllUsers: boolean } | { failure: string }> {
+  async function query(source: UpdateOrigin): Promise<{ releases: ReleaseInfo[]; forAllUsers: boolean; withoutPackage: string[] } | { failure: string }> {
     save({ lastCheckedAt: now().toISOString() });
 
     const pages: ReleasePage[] = [];
@@ -218,7 +218,10 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       pages.push(read);
       if (read.items < releasesPerPage || read.reachedInstalled) break;
     }
-    return { releases: mergeReleasePages(pages), forAllUsers: await isForAllUsers() };
+    // Uma release que saiu sem o pacote deste sistema não é oferecida: vale a mais nova que o tem, e as notas vão até ela.
+    const { releases, withoutPackage } = offerable(mergeReleasePages(pages), facts);
+    if (withoutPackage.length > 0) log(`atualização: ${withoutPackage.length} versão(ões) mais nova(s) sem o pacote deste sistema, não oferecida(s): ${withoutPackage.slice(0, 10).join(", ")}${withoutPackage.length > 10 ? ", …" : ""}`);
+    return { releases, forAllUsers: await isForAllUsers(), withoutPackage };
   }
 
   /** Passa a valer o que a consulta achou. O que tinha sido baixado para o achado anterior deixa de valer. */
@@ -338,7 +341,7 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       if ("failure" in result) return log(`atualização: a consulta ao abrir falhou: ${result.failure}`);
 
       const latest = result.releases.at(0);
-      if (latest === undefined) return log("atualização: nenhuma versão mais nova");
+      if (latest === undefined) return log(result.withoutPackage.length > 0 ? "atualização: nenhuma versão mais nova com o pacote deste sistema" : "atualização: nenhuma versão mais nova");
       if (latest.version === preferences.skippedVersion) return log(`atualização: a versão ${latest.version} foi pulada pelo usuário`);
       // Uma consulta manual pode ter chegado antes: o que ela pôs na tela fica.
       if (state.status !== "none") return;
@@ -362,7 +365,8 @@ export function createUpdater({ origin: recordedOrigin, blocked = false, current
       if (isBusy()) return { outcome: "busy" };
 
       adopt(result.releases, result.forAllUsers);
-      return { outcome: result.releases.length === 0 ? "upToDate" : "available" };
+      if (result.releases.length > 0) return { outcome: "available" };
+      return result.withoutPackage.length > 0 ? { outcome: "upToDate", withoutPackage: result.withoutPackage[0] } : { outcome: "upToDate" };
     },
 
     /**
