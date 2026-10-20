@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { dbeaverSourceReplySchema, type DbeaverMode, type DbeaverSourceReply } from "../../../electron/dbeaver-messages";
 import type { PrismBridge, PrismWorkspace } from "../../../electron/preload";
 import {
   copyReplySchema,
@@ -136,6 +137,7 @@ function devWorkspaceBridge(api: { baseUrl: string; token: string }): PrismWorks
 
 const outsideElectron = "Exportar só funciona no app do Prism.";
 const importOutsideElectron = "Importar só funciona no app do Prism.";
+const dbeaverOutsideElectron = "Importar do DBeaver só funciona no app do Prism.";
 
 /**
  * A ponte com o processo principal. Só em desenvolvimento, com a tela aberta num navegador comum
@@ -219,6 +221,8 @@ export function getBridge(): PrismBridge {
         sourceStatus: async () => ({ status: "missing" }),
         releaseSource: async () => {},
       },
+      // RN-DBEAVER-003: fora do Electron não há quem procure o DBeaver nem copie os arquivos: as entradas ficam desabilitadas, com a dica.
+      dbeaver: { available: false, source: () => Promise.reject(new Error(dbeaverOutsideElectron)), release: async () => {} },
     };
   }
 
@@ -609,5 +613,38 @@ export async function releaseImportSource(fileId: string): Promise<void> {
     await getBridge().transfers.releaseSource({ fileId });
   } catch {
     // Sem a ponte, ou o arquivo já foi solto: não há o que soltar.
+  }
+}
+
+/**
+ * A procura e a cópia do DBeaver (RN-DBEAVER-004 a 006), do lado da tela. Cada resposta do processo principal é conferida com o schema que ele também usa;
+ * nada aqui lança, e nenhum caminho chega à tela: só o identificador da cópia, onde o DBeaver estava e quantos projetos foram copiados.
+ */
+
+/** Há processo principal para procurar o DBeaver? Fora do Electron (ou com uma ponte sem `dbeaver`), não: as entradas dizem que só funciona no app. */
+export function dbeaverAvailable(): boolean {
+  try {
+    return getBridge().dbeaver?.available === true;
+  } catch {
+    return false;
+  }
+}
+
+/** A procura nos lugares de sempre (`find`) ou o diálogo de pasta (`choose`), e a cópia. `error`: a ponte recusou o pedido ou respondeu fora do formato. */
+export async function requestDbeaverSource(mode: DbeaverMode): Promise<DbeaverSourceReply | { status: "error" }> {
+  try {
+    const parsed = dbeaverSourceReplySchema.safeParse(await getBridge().dbeaver.source({ mode }));
+    return parsed.success ? parsed.data : { status: "error" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
+/** Apaga a cópia do DBeaver. Espera a resposta. Nunca lança: sem a ponte, ou com a cópia já solta, não há o que soltar. */
+export async function releaseDbeaverSource(sourceId: string): Promise<void> {
+  try {
+    await getBridge().dbeaver.release({ sourceId });
+  } catch {
+    // Nada a fazer.
   }
 }

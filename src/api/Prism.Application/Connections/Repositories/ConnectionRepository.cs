@@ -83,7 +83,8 @@ internal sealed class ConnectionRepository(IVaultService vaultService) : IConnec
 
             // RN-CONN-004: senha omitida mantém a do documento que esta função recebeu, e não a que o handler leu: com duas alterações
             // simultâneas (uma trocando a senha, outra não), usar a lida antes desfaria a troca, e nenhuma ordem serial dá esse resultado.
-            var updated = ConnectionRecords.ToRecord(connection) with { Password = password ?? existing.Password };
+            // RN-DBEAVER-018: editar, renomear e mover mantêm a origem da conexão importada; o domínio não a conhece, e ela vem do registro gravado.
+            var updated = ConnectionRecords.ToRecord(connection) with { Password = password ?? existing.Password, Origin = existing.Origin };
             var changed = document with { Connections = [.. document.Connections.Select(record => record.ID == connection.ID ? updated : record)] };
             protections = ProtectionRules.Of(changed, updated);
 

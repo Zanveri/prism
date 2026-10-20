@@ -13,7 +13,7 @@ na janela; `"use client"` e `server-only` não existem aqui.
 ## Layout
 
 ```
-electron/        main.ts, preload.ts, api-process.ts, app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
+electron/        main.ts, preload.ts, api-process.ts, dbeaver-source.ts e dbeaver-messages.ts (a procura e a cópia do DBeaver), app-version.ts, data-dir.ts, permissions.ts (as permissões do Chromium), platform.ts, splash.ts, startup.ts, window-hub.ts e window-messages.ts (as janelas e o que passa entre elas), workspace-hub.ts e workspace-messages.ts (as abas que voltam na próxima entrada), zoom.ts e zoom-file.ts (o zoom do programa)   (processo principal e ponte; o channels.test.ts confere os canais) e update/ (as atualizações)
 src/app/         app.tsx (provedores), routes.tsx (a tabela de rotas), _components/ (o que só a casca usa: o guard do cofre, o WorkbenchSlot, o bloqueio) e _lib/ (as peças do bloqueio por inatividade), uma pasta por tela (sign-in, connections, workbench, drivers, settings)
 src/components/  ui/ (primitivos + index.ts), layout/ e update/ (o diálogo de versão nova, usado pelo login e pela barra superior)
 src/config/      paths.config.ts
@@ -107,17 +107,17 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   máximo 2 s e para a API. A instalação de uma atualização (`stopApi` do atualizador) faz o mesmo. A resposta só vai para o log. "Reiniciar" para a API sem essa chamada.
   Os três (o `before-quit`, o `stopApi` e o "Reiniciar") soltam antes os destinos das exportações de dados (`transferDesk.releaseAll`), o que interrompe a
   entrega em andamento e apaga a cópia pela metade (RN-EXPORT-023), e os arquivos das importações de dados (`transferSource.releaseAll`), o que interrompe a
-  cópia do arquivo e apaga o que a API ainda não tomou (RN-IMPORT-018).
+  cópia do arquivo e apaga o que a API ainda não tomou (RN-IMPORT-018), e as cópias do DBeaver (`dbeaverSource.releaseAll`, RN-DBEAVER-006).
 - A ponte (`window.prism`, o tipo `PrismBridge` em `electron/preload.ts`) tem `getApiConfig`, `onApiExit`, `restartApi`, `version`,
   `getDataFolder`, `updates` (ver "Atualizações"), `windows` e `session` (ver "Abas que se movem e outras janelas"), `verification` (a vez da verificação
   periódica entre as janelas; ver "Verificação periódica e Só as conectadas"), `workspace` (ver "Abas que voltam na
   próxima entrada"), `zoom` (`get`, `set` e `onChanged`; ver "O zoom do programa inteiro", acima) e `transfers` (o destino e a entrega das
-  exportações de dados e o arquivo das importações, abaixo). Os canais da API são
+  exportações de dados e o arquivo das importações, abaixo) e `dbeaver` (a procura e a cópia do DBeaver, abaixo). Os canais da API são
   `prism:api-config`, `prism:api-restart` e `prism:api-exit`; o da pasta de dados, `prism:data-folder`; os das atualizações, `prism:update-*`;
   os das janelas, `prism:windows-*` e `prism:session-*`; os da verificação, `prism:verification-*`; os das abas que voltam, `prism:workspace-*`; os do zoom, `prism:zoom-get`, `prism:zoom-set` (só um dos
   passos passa: `isAppZoom`) e o aviso `prism:zoom-changed`; os das exportações de dados, `prism:transfer-destination`, `prism:transfer-deliver`,
   `prism:transfer-copy`, `prism:transfer-reveal` e `prism:transfer-release`; os do arquivo das importações de dados, `prism:transfer-source`,
-  `prism:transfer-source-status` e `prism:transfer-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
+  `prism:transfer-source-status` e `prism:transfer-source-release`; os da cópia do DBeaver, `prism:dbeaver-source` e `prism:dbeaver-source-release`. O processo principal só responde ao quadro que veio da origem do app (`assertFromApp`).
 - **As janelas** (RN-ABAS-002 a 005). `createAppWindow` cria todas, com o mesmo `webPreferences` (RN-SHELL-001) e a mesma origem; cada uma tem
   um número do app (não o `id` do `BrowserWindow`: ele vai em `additionalArguments`, `windowArgument`, antes de a janela existir), que o preload
   lê (`windowIdFromArgv`, em `app-version.ts`, com teste). A primeira é a da abertura (`createMainWindow`, pelo `startUp`); as outras só nascem no
@@ -174,6 +174,28 @@ uninstall": `ELECTRON_EXEC_PATH=<outra cópia>/node_modules/electron/dist/electr
   desconhecido, respondem `missing`. A janela que recarrega, cai ou fecha solta os dela; a saída e o reinício, todos. O log leva só o `fileId`, o
   tamanho e a duração. A tela confere cada resposta com o mesmo schema (`chooseImportSource`, `importSourceStatus`, `releaseImportSource`, em
   `lib/api/bridge.ts`), e a ponte de desenvolvimento responde que importar só funciona no app.
+- **A procura e a cópia do DBeaver** (RN-DBEAVER-004 a 006; `electron/dbeaver-source.ts`, sem Electron, com teste em pastas temporárias de verdade e uma
+  pasta pessoal falsa; as mensagens em `electron/dbeaver-messages.ts`, `zod` dos dois lados). **O processo principal é o dono de todo caminho, e não lê o
+  conteúdo dos arquivos: só os copia**; quem os lê e decifra as senhas é a API, pelo `sourceId`. `prism:dbeaver-source` recebe só `{ mode: "find" | "choose" }`
+  (`.strict()`). `find` procura nas pastas de dados do sistema (`dbeaverRoots`, pura: `DBEAVER_DATA` sozinha; `%APPDATA%\DBeaverData`; `~/Library/DBeaverData`; no
+  Linux o Flatpak, o Snap, `~/.local/share/DBeaverData` e, só quando esta não existe, a antiga `.DBeaverData`), cada uma resolvida uma vez com `realpath` (o
+  `current` do Snap é um atalho), com `workspace6` também resolvido; vale a pasta cujo `data-sources*.json` foi alterado por último, com o `General` primeiro e
+  os outros projetos pela ordem dos nomes. `choose` abre o diálogo de pasta (`openDirectory` e `showHiddenFiles`, escritos em `main.ts`, o título em
+  `dbeaverDialogTitle`, começando na primeira pasta de dados que existe ou na pessoal) e descobre o que a pasta é pelo que tem dentro: a de dados, um
+  workspace, um projeto ou a própria `.dbeaver`; nada disso é `notDbeaver`. Listar uma pasta passa de 1.000 entradas: não é do DBeaver. **Só se copiam** os
+  cinco arquivos esperados da `.dbeaver` de cada projeto (`data-sources[-<sufixo>].json`, `credentials-config[-<sufixo>].json`, `project-settings.json`; o
+  sufixo de 1 a 64 caracteres), com os limites de 50 projetos, 41 arquivos por projeto, 5 MiB por arquivo e 32 MiB no total conferidos ANTES de qualquer
+  cópia (`tooLarge`), a pasta `transfers` aceitando gravação (`notWritable`) e o espaço da cópia mais 64 MiB (`noSpace`). **Atalho não se segue**: o projeto, a
+  `.dbeaver` ou o arquivo que é atalho recusa tudo com `unreadable` e a frase do atalho (`symlinkMessage`); a abertura é `O_RDONLY | O_NOFOLLOW`, conferida pelo
+  `fstat` do descritor contra o `lstat` (arquivo comum, mesmo dispositivo e `inode`: o arquivo trocado no meio do caminho é recusado, e o teste o troca pelo
+  `beforeOpen`), lida até 5 MiB (o que cresceu para ali). Vai tudo para `transfers/<sourceId>.dbeaver.part/` (a pasta 0700, uma subpasta 0700 por projeto, `1`,
+  `2`…, os arquivos 0600 com `fsync` e o `manifest.json` por último) e a pasta inteira é renomeada no fim: a API nunca vê uma cópia pela metade. A resposta é
+  `found { sourceId, where, projects }` ou `notFound`, `canceled`, `notDbeaver`, `tooLarge`, `notWritable`, `noSpace`, `unreadable { message }` (a frase inteira,
+  pelo código do sistema, sem caminho). **Uma cópia por janela**: um novo `find` solta a anterior, o `choose` desistido não solta nada, e o pedido que termina
+  depois de a janela ser solta ou de outro mais novo da mesma janela apaga a cópia que fez e responde `canceled`. `prism:dbeaver-source-release`
+  (`{ sourceId }`) apaga a cópia da própria janela (a de outra, ou um id desconhecido, não faz nada). O log leva só o `sourceId`, o `where`, as contagens e a
+  duração, nunca um caminho nem um nome. A tela confere cada resposta com o mesmo schema (`requestDbeaverSource`, `releaseDbeaverSource` e `dbeaverAvailable`, em
+  `lib/api/bridge.ts`), e a ponte de desenvolvimento diz que importar do DBeaver só funciona no app.
 - **A pasta de dados pela ponte** (RN-CONFIG-001): `getDataFolder()` não leva argumento, e o processo principal responde
   `app.getPath("userData")`, só para a tela mostrar em Configurações > Sobre. Ela não abre nem troca pasta (o `channels.test.ts` confere que
   a ponte não oferece isso), e a tela valida a resposta (`readDataFolder`, em `lib/api/bridge.ts`: texto não vazio, senão `null`); fora do
@@ -2620,6 +2642,48 @@ Electron não ganhou canal novo.
   demais recusas da leitura, 422. Os testes simulam a API.
 - **O que não foi feito**: a conferência na tela com a API de verdade (cada lado tem os testes dele, e o contrato foi conferido no código), e o diálogo de
   salvar do sistema concluído por uma pessoa, como no "Exportar CSV".
+
+## Importar do DBeaver (seção 40, RN-DBEAVER-001 a 018 e RN-CONFIG-011)
+
+- **A origem é o `sourceId`** da cópia que o processo principal fez (acima); a tela nunca recebe caminho nem senha, e a prévia diz só se a conexão leva senha. As
+  rotas (`connections/_lib/dbeaver.service.ts`, `dbeaver.schema.ts`): `GET api/user/connections/dbeaver` → `{ invitedAt, lastImportAt }` (a consulta
+  `dbeaverStateQuery`); `PUT …/dbeaver/invite` → 204 (`markInvited`, que nunca lança: a falha só faz o convite voltar); `POST …/dbeaver/scan` `{ sourceId }` →
+  `{ where, projects: [{ name, connections, importable, withPassword, protected, nameInvalid, credentialsUnreadable, credentialsProtected }] }`; `POST
+  …/dbeaver/import/preview` `{ sourceId, project?, targetFolderID, withPasswords, drdaPorts? }` → `{ folders, connections, notes }`; `POST …/dbeaver/import` com
+  o mesmo mais `{ items, onConflict, overwrite }` → `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }`. `project` é o nome inteiro do
+  projeto e some do corpo para "Todos os projetos". As recusas que o diálogo mostra no lugar (`dbeaverRefusals`): `DBEAVER_SOURCE_MISSING`,
+  `DBEAVER_SOURCE_INVALID`, `DBEAVER_PROJECT_NOT_FOUND`, `DBEAVER_LIMITS_EXCEEDED` e `FOLDER_NOT_FOUND`; `IMPORT_EMPTY` e `IMPORT_INVALID` vão ao aviso central.
+  O schema tolera o que a API pode omitir (`notes`, `existing` e `overwrite` nulos, o `leftOut` com código que a tela não conhece é ignorado). A conexão da prévia
+  traz também `dbeaverPort` (a SQLI do DBeaver no Informix; `port` é a que a conexão terá), `drdaPort` e `authModel` (o `<modelo>` de "o login do DBeaver"), o
+  `existing` traz o que a conexão do Prism tem hoje (`host`, `port`, `database`, `userName`, `environmentName`) e o `notes`, `unreadableProjects` (os projetos de
+  que nenhum arquivo foi lido, que levam a frase no plural).
+- **O diálogo** (`connections/_components/import-dbeaver-dialog.tsx`; o que se decide está em `_lib/dbeaver-model.ts`, puro e testado): o "Importar conexões" da seção 34
+  com outra origem. Reusa a árvore de marcar, as marcas e a conta do rodapé (`import-model.ts`), as linhas de pasta e as marcas (`ImportFolderRow`, `Tags`). Abre
+  procurando sozinho (`start: { type: "find" }`), pedindo a pasta (`choose`) ou com a cópia do convite (`copy`); a prévia vem sozinha, sem botão. A cópia é solta ao
+  fechar, ao trocar de origem e em qualquer saída (a limpeza do efeito; a resposta que chega depois de fechar solta a que trouxe). Trocar "Levar as senhas", o lugar
+  ou as portas DRDA refaz a prévia com as marcas, um pedido de cada vez; **trocar o projeto pede a prévia dele e as marcas continuam** (`marksAfterScopeChange`): a API dá a mesma chave
+  (`p2`, `f2_1`, `c2_1`: a posição do projeto e a ordem dentro dele) ao mesmo item em "Todos os projetos" e com o projeto escolhido, então valem as marcas que ainda existem na árvore
+  nova, e o que a árvore de antes não tinha chega marcado; sem prévia à vista (a anterior foi recusada), abre de novo, tudo marcado. A recusa da importação deixa o diálogo aberto; só `DBEAVER_SOURCE_MISSING` apaga a
+  origem. **Importar com alguma marcada que já existe no Prism abre a pergunta** (RN-DBEAVER-017), que ocupa a janela (o foco começa em "Cancelar", Esc volta ao
+  diálogo): "Sobrescrever todas", "Escolher quais…" (a lista com caixas, o que muda e, quando a prévia traz os valores de antes, "host a → b") e "Não sobrescrever
+  nenhuma"; as três mandam todas as marcadas em `items` e as que se sobrescrevem em `overwrite`.
+- **A porta DRDA do Informix** (RN-DBEAVER-010 e 015, emenda do arquiteto): uma tabela com uma linha por servidor do DBeaver (host, porta
+  SQLI e `INFORMIXSERVER` como a prévia os dá, porque a API os compara assim; `drdaRows`) com conexão Informix marcada, cada uma com um campo opcional (1 a 65.535). O preenchido vai em `drdaPorts: [{ host, port,
+  server, drdaPort }]` na prévia e na importação (`port` é a SQLI do DBeaver, o `dbeaverPort` da prévia, e não o `port` dela, que já é a DRDA depois de aplicada: a chave que a API casa) e vale para as conexões novas e as
+  sobrescritas daquele servidor; a segunda linha mostra a porta digitada e a marca "porta do DBeaver" sai. A prévia se refaz 500 ms depois da última tecla, e
+  "Importar" com uma porta ainda não vista por ela refaz primeiro e segue.
+- **O "Comece por aqui"** (`workbench/_components/start-here.tsx`) é decidido uma vez por entrada pela página (`startHerePhaseOf`, em `dbeaver-entry.ts`): o cofre sem
+  conexão e o convite por fazer; enquanto as duas respostas não chegam, a área fica vazia. O cartão do DBeaver procura e conta ao aparecer e **solta a cópia assim que
+  a contagem responde**; fora do Electron diz que só funciona no app. Clicar em qualquer botão do painel, ou em "Agora não", grava o convite (a página). **O convite em
+  forma de diálogo** (`inviteStep`): `Entrar` e `Criar usuário` armam `dbeaverEntry` (a janela de entrada é a única que convida; o desbloqueio não passa por ali), e a
+  página, com o cofre já com conexão e o convite por fazer, procura e conta sem mostrar nada: achando o que importar abre o diálogo com a cópia (`invite: true`, "Agora
+  não"), senão solta a cópia e não grava o convite. O bloqueio e o "Sair" fecham o diálogo sem gravar.
+- **Os diálogos de passar conexões são da página** (`workbench/page.tsx`, um por janela; `transfer-requests.ts`): o "Exportar conexões", o "Importar conexões" e o
+  "Importar do DBeaver" não abrem juntos nem com o formulário de conexão (a entrada de um, com outro aberto, leva o foco ao aberto), e somem com o bloqueio e quando a
+  área de trabalho sai da tela (`keepsTransfer`). O navegador pede por `onTransfer`; Configurações › Importar (RN-CONFIG-011, `settings/_components/import-section.tsx`)
+  pede por `transferRequests` e vai à área de trabalho. O que a importação criou volta ao navegador por `importedReveal` (e ele aparece, se estava escondido).
+- **O que não foi feito**: a conferência com a API de verdade (o contrato é o da seção 40 mais a emenda da porta DRDA, e cada lado tem os testes dele), com um DBeaver
+  instalado (as sondas S-DBEAVER-1 a 3 são do arquiteto) e sob o Electron (os testes cobrem o processo principal em pastas de verdade, mas não o diálogo de pasta do sistema).
 
 ## Copiar como e Copiar avançado (RN-GRADE-003, 016 e 017)
 

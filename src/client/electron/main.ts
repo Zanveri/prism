@@ -25,6 +25,7 @@ import { placeResultWindow, sameRect, savedPlace } from "./result-window-place";
 import { createResultWindows, type ResultWindowEntry } from "./result-windows";
 import { createSplash, splashGeometry } from "./splash";
 import { startUp } from "./startup";
+import { createDbeaverSource } from "./dbeaver-source";
 import { createTransferDesk } from "./transfer-desk";
 import { createTransferSource } from "./transfer-source";
 import { installedForAllUsers } from "./update/install-scope";
@@ -480,6 +481,28 @@ const transferSource = createTransferSource({
   now: () => Date.now(),
 });
 
+/**
+ * A procura e a cópia do DBeaver (RN-DBEAVER-004 a 006, `dbeaver-source.ts`): este processo acha a pasta do DBeaver nos lugares de sempre ou a que a pessoa
+ * escolhe no diálogo de pasta do sistema, e copia só os arquivos esperados de cada projeto para a pasta `transfers` da pasta de dados; a tela recebe o
+ * identificador da cópia, e a API lê e decifra. Nenhum canal recebe um caminho da tela nem devolve um a ela.
+ */
+const dbeaverSource = createDbeaverSource({
+  dataDir: app.getPath("userData"),
+  platform: process.platform,
+  env: process.env,
+  home: app.getPath("home"),
+  async showOpenDialog(windowId, options) {
+    const window = appWindows.get(windowId);
+    // Uma pasta só, e os ocultos à vista: `~/.local/share` e `~/Library` ficam ocultas (RN-DBEAVER-005).
+    const settings = { ...options, properties: ["openDirectory", "showHiddenFiles"] as ("openDirectory" | "showHiddenFiles")[] };
+    const result = window === undefined || window.isDestroyed() ? await dialog.showOpenDialog(settings) : await dialog.showOpenDialog(window, settings);
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  },
+  log: (message) => console.log(`[prism] ${message}`),
+  randomId: () => randomUUID().toLowerCase(),
+  now: () => Date.now(),
+});
+
 ipcMain.handle("prism:api-config", (event) => {
   assertFromApp(event);
   return describeApi();
@@ -488,8 +511,8 @@ ipcMain.handle("prism:api-config", (event) => {
 ipcMain.handle("prism:api-restart", async (event) => {
   assertFromApp(event);
   // RN-EXPORT-019: o serviço que reinicia solta todos os destinos (a API nova não tem os trabalhos da de antes). RN-IMPORT-018: e os arquivos das
-  // importações, que a partida da API nova apagaria da pasta `transfers` no meio da cópia.
-  await Promise.all([transferDesk.releaseAll(), transferSource.releaseAll()]);
+  // importações, que a partida da API nova apagaria da pasta `transfers` no meio da cópia. RN-DBEAVER-006: e as cópias do DBeaver.
+  await Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), dbeaverSource.releaseAll()]);
   await stopApi();
   launchApi();
   // A API nova tem outro token e o cofre fechado: as outras janelas, que mostram "Reiniciar" com a mesma falha, recarregam e pedem o endereço de
@@ -579,7 +602,7 @@ function startUpdater() {
     spawn: (command, args, options) => spawn(command, args, options),
     // Antes de o instalador rodar: o mesmo fechamento do `before-quit` (grava as abas, fecha o cofre e para a API), que só volta quando o
     // processo da API terminou. O instalador desinstala a versão antiga, e a API viva seguraria os arquivos dela.
-    stopApi: () => Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), workspaceHub.flush()]).then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`)))),
+    stopApi: () => Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), dbeaverSource.releaseAll(), workspaceHub.flush()]).then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`)))),
     // O caminho normal de saída. No caminho de instalar a API já parou, e o `before-quit` não tem o que esperar.
     quit: () => app.quit(),
     reveal: (path) => shell.showItemInFolder(path),
@@ -758,6 +781,8 @@ function createAppWindow(bounds?: Rect) {
     // RN-IMPORT-018: e os arquivos das importações dela são soltos (a cópia em andamento para, e a cópia que a API não tomou é apagada).
     void transferDesk.releaseWindow(id);
     void transferSource.releaseWindow(id);
+    // RN-DBEAVER-006: e a cópia do DBeaver dela.
+    void dbeaverSource.releaseWindow(id);
   });
   window.webContents.on("render-process-gone", () => {
     hub.setReady(id, false);
@@ -765,6 +790,7 @@ function createAppWindow(bounds?: Rect) {
     resultWindows.closeAllByHost(id);
     void transferDesk.releaseWindow(id);
     void transferSource.releaseWindow(id);
+    void dbeaverSource.releaseWindow(id);
   });
 
   // RN-ABAS-004: fechar a janela fecha as abas dela, com as perguntas de fechar cada uma. Quem pergunta é a tela; quando as abas fecharam, ela pede
@@ -786,6 +812,7 @@ function createAppWindow(bounds?: Rect) {
     hub.remove(id);
     void transferDesk.windowClosed(id);
     void transferSource.releaseWindow(id);
+    void dbeaverSource.releaseWindow(id);
     // RN-ABAS-006: a última janela (ou qualquer uma, com o app saindo) leva as abas para a gravação de antes de sair; as outras as tiram do que volta.
     workspaceHub.windowClosed(id, { last: quitting !== "no" || liveWindowIds().length === 0 });
   });
@@ -974,6 +1001,17 @@ ipcMain.handle("prism:transfer-source-release", (event, request: unknown) => {
   return transferSource.release(windowIdOf(event.sender), request);
 });
 
+// RN-DBEAVER-006: a procura e a cópia do DBeaver. O pedido leva só o modo (`find` ou `choose`) e o soltar, só o `sourceId`; o `dbeaverSource` os confere com o
+// schema de `dbeaver-messages.ts`, e a cópia é da janela que a fez.
+ipcMain.handle("prism:dbeaver-source", (event, request: unknown) => {
+  assertFromApp(event);
+  return dbeaverSource.source(windowIdOf(event.sender), request);
+});
+ipcMain.handle("prism:dbeaver-source-release", (event, request: unknown) => {
+  assertFromApp(event);
+  return dbeaverSource.release(windowIdOf(event.sender), request);
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -1009,8 +1047,8 @@ if (!app.requestSingleInstanceLock()) {
     for (const entry of resultWindows.all()) resultWindows.closeByHost(entry.openerId, entry.name);
     // RN-ABAS-006: as abas de todas as janelas são gravadas antes de o cofre fechar. RN-EXPORT-023: a entrega em andamento para, e a cópia pela metade é
     // apagada (o que sobrar em `transfers`, a API apaga ao encerrar ou na partida seguinte). RN-IMPORT-018: a cópia do arquivo de uma importação para, e
-    // o que a API não tomou é apagado.
-    void Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), workspaceHub.flush()])
+    // o que a API não tomou é apagado. RN-DBEAVER-006: e as cópias do DBeaver.
+    void Promise.all([transferDesk.releaseAll(), transferSource.releaseAll(), dbeaverSource.releaseAll(), workspaceHub.flush()])
       .then(() => stopApi((running) => closeVaultAndStop(running, (message) => console.log(`[prism] ${message}`))))
       .finally(() => {
         quitting = "ready";

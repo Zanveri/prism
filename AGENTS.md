@@ -34,4 +34,5 @@ Estão aqui para que ninguém as "corrija" depois (seção 8 da especificação)
 6. **Interface em `src/client`, não em `src/web`.** É a pasta que o usuário criou.
 7. **Sem rate limiting, Turnstile, cabeçalhos de proxy e HTTPS.** A API só existe em loopback e só para o próprio app, então nenhuma dessas defesas tem de quem proteger.
 8. **O mediador é do próprio Prism (`Prism.Core.Mediator`).** O projeto é de código aberto e tem de compilar só com fontes públicas, então não há pacote de mediador (RN-ABERTO-002).
+9. **A chave pública do DBeaver numa constante.** O `credentials-config.json` do DBeaver é cifrado com uma chave fixa que está no código aberto dele; a API a tem numa constante comentada (RN-DBEAVER-008). Não é segredo do Prism e não protege nada: a regra de "nenhum segredo no código" e a verificação de vazamentos da pipeline a aceitam só nessa constante, e ela não vira configuração.
 

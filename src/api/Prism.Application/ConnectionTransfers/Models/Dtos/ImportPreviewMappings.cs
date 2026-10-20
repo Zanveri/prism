@@ -17,7 +17,7 @@ internal static class ImportPreviewMappings
             Connections = [.. analysis.Connections.Select(connection => ToDto(connection, placement))]
         };
 
-    private static ImportPreviewFolderDto ToDto(ImportFolderItem folder, ImportPlacementResult placement)
+    internal static ImportPreviewFolderDto ToDto(ImportFolderItem folder, ImportPlacementResult placement)
     {
         if (folder.Candidate is not { } candidate || !placement.Folders.TryGetValue(folder.Key, out var placed))
         {
@@ -53,8 +53,15 @@ internal static class ImportPreviewMappings
     }
 
     private static ImportPreviewConnectionDto ToDto(ImportConnectionItem connection, ImportPlacementResult placement)
+        => ToDto(connection, placement.Connections.GetValueOrDefault(connection.Key));
+
+    /// <summary>
+    /// A conexão da prévia, com o que a colocação fez dela (`placed`). Nulo é a que não foi posta: a que não pode ser importada, que sai como veio no arquivo; a do
+    /// DBeaver que já existe no Prism (RN-DBEAVER-017) passa uma colocação sem conflito, porque a prévia dela é a sobrescrita, e não um nome tomado.
+    /// </summary>
+    internal static ImportPreviewConnectionDto ToDto(ImportConnectionItem connection, ConnectionPlacement? placed)
     {
-        if (connection.Candidate is not { } candidate || !placement.Connections.TryGetValue(connection.Key, out var placed))
+        if (connection.Candidate is not { } candidate || placed is null)
         {
             var raw = connection.Raw;
 

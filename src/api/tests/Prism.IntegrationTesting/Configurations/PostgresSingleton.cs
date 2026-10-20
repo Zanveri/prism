@@ -47,7 +47,9 @@ public static class PostgresSingleton
     {
         // A senha é sorteada a cada execução: nenhuma credencial de banco fica escrita num teste.
         var password = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        var container = new PostgreSqlBuilder(Image).WithDatabase(Database).WithUsername(UserName).WithPassword(password).Build();
+        // Sem o autovacuum: o ANALYZE automático, que os testes que gravam na `loja` disparam no meio da execução, daria a contagem estimada a
+        // uma tabela da carga, que a RN-CAT-009 diz nula (a carga não analisa nada), conforme a ordem e o tempo dos testes.
+        var container = new PostgreSqlBuilder(Image).WithDatabase(Database).WithUsername(UserName).WithPassword(password).WithCommand("-c", "autovacuum=off").Build();
         _container = container;
 
         await container.StartAsync();

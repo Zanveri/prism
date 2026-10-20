@@ -1,6 +1,6 @@
 import { settingsCopy } from "./settings.copy";
 
-export type SettingsSectionId = "appearance" | "editor" | "updates" | "drivers" | "about" | "results" | "account" | "transactions" | "security";
+export type SettingsSectionId = "appearance" | "editor" | "updates" | "drivers" | "about" | "results" | "account" | "import" | "transactions" | "security";
 
 export type SettingsSection = {
   id: SettingsSectionId;
@@ -13,11 +13,12 @@ export type SettingsSection = {
 
 /**
  * As seções, na ordem da navegação e da página: primeiro as que funcionam, depois as "em breve". O canvas as põe na ordem
- * Conta, Aparência, Editor SQL, Resultados, Transações e Segurança; aqui é a mesma, com o que ainda não tem efeito (as Transações)
+ * Conta, Aparência, Editor SQL, Resultados, Transações e Segurança, com Importar depois de Conta (RN-CONFIG-011); aqui é a mesma, com o que ainda não tem efeito (as Transações)
  * no fim, para o que se vê primeiro ser uma seção que funciona. Atualizações, Drivers e Sobre vêm depois das do canvas.
  */
 export const settingsSections: readonly SettingsSection[] = [
   { id: "account", anchor: "cfg-conta", label: settingsCopy.sections.account, soon: false },
+  { id: "import", anchor: "cfg-importar", label: settingsCopy.sections.import, soon: false },
   { id: "appearance", anchor: "cfg-aparencia", label: settingsCopy.sections.appearance, soon: false },
   { id: "editor", anchor: "cfg-editor", label: settingsCopy.sections.editor, soon: false },
   { id: "results", anchor: "cfg-resultados", label: settingsCopy.sections.results, soon: false },

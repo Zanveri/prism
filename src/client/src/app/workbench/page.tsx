@@ -2,19 +2,28 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncEx
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ConnectionDialog } from "@/app/connections/_components/connection-dialog";
+import { ExportConnectionsDialog } from "@/app/connections/_components/export-connections-dialog";
+import { ImportConnectionsDialog } from "@/app/connections/_components/import-connections-dialog";
+import { ImportDbeaverDialog } from "@/app/connections/_components/import-dbeaver-dialog";
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
+import { importableTotal, importedItems } from "@/app/connections/_lib/dbeaver-model";
+import { dbeaverStateQuery, markInvited, scanDbeaver } from "@/app/connections/_lib/dbeaver.service";
 import { TopBar } from "@/components/layout/top-bar";
+import { releaseDbeaverSource, requestDbeaverSource } from "@/lib/api/bridge";
 import { vaultLock } from "@/lib/api/vault-lock";
 
 import { ConnectionCheckLabel } from "./_components/connection-check";
 import { FirstUse } from "./_components/first-use";
+import { StartHere } from "./_components/start-here";
 import { Navigator } from "./_components/navigator";
 import { NavigatorToggle } from "./_components/navigator-toggle";
 import { ScriptsSection } from "./_components/scripts-section";
 import { connectionReveal } from "./_lib/connection-intent";
 import { keepsDialog, type ConnectionDialogOpen } from "./_lib/connection-dialog-state";
 import { credentialsRequests, watchCredentialsMissing } from "./_lib/credentials-missing";
+import { dbeaverEntry, inviteStep, startHerePhaseOf, type StartHerePhase } from "./_lib/dbeaver-entry";
 import { hideFocusTarget, navigatorShortcut, navigatorShortcutLabels } from "./_lib/navigator-layout";
+import { importedReveal, keepsTransfer, transferRequests, type TransferDialogOpen, type TransferRequest } from "./_lib/transfer-requests";
 import { useNavigatorHidden } from "./_lib/use-navigator-layout";
 import { useWorkbenchOnScreen } from "./_lib/use-workbench-on-screen";
 import { useWorkbench } from "./_lib/workbench-state";
@@ -96,6 +105,15 @@ export function WorkbenchPage() {
   const connections = useQuery(connectionsQuery);
   // Sem nenhuma conexão cadastrada (RN-NAV-007), a área das abas é o primeiro uso, com "Nova conexão": aba nenhuma existe sem conexão.
   const firstUse = connections.data !== undefined && connections.data.length === 0;
+  const dbeaverState = useQuery(dbeaverStateQuery);
+  // RN-DBEAVER-001: o "Comece por aqui" é decidido uma vez por entrada, ao abrir a área de trabalho com o cofre aberto (nenhuma conexão e o convite do DBeaver
+  // por fazer), e não relê o convite depois: ele fica à vista, mesmo com o convite gravado por um dos botões dele, até a primeira conexão ou o "Agora não".
+  // Sem saber o convite (a consulta falhou), não aparece. Enquanto isso se decide, a área fica vazia, para o estado vazio não piscar antes dele.
+  const [startHerePhase, setStartHerePhase] = useState<StartHerePhase>("pending");
+  const decided = startHerePhaseOf({ connections: connections.data?.length, invitedAt: dbeaverState.data?.invitedAt, failed: dbeaverState.isError });
+  if (startHerePhase === "pending" && decided !== "pending") setStartHerePhase(decided);
+  const [startHereDismissed, setStartHereDismissed] = useState(false);
+  const [startHereFocus] = useState(() => dbeaverEntry.armed() && dbeaverEntry.created());
 
   const onScreen = useWorkbenchOnScreen();
   const lockEpoch = useSyncExternalStore(vaultLock.subscribe, vaultLock.epoch, vaultLock.epoch);
@@ -119,6 +137,66 @@ export function WorkbenchPage() {
   useEffect(() => {
     if (answeredCredentials !== 0) credentialsRequests.take(answeredCredentials);
   }, [answeredCredentials]);
+
+  // RN-DBEAVER-003 e RN-TRANSF-001: o "Exportar conexões", o "Importar conexões" e o "Importar do DBeaver" são da página, um por janela, e nenhum abre junto com
+  // outro: a entrada de um, com outro aberto, leva o foco ao que está aberto. Somem com o bloqueio e quando a área de trabalho sai da tela.
+  const [transfer, setTransfer] = useState<TransferDialogOpen | null>(null);
+  if (transfer !== null && !keepsTransfer(transfer, { onScreen, lockEpoch })) setTransfer(null);
+  const openTransfer = (request: TransferRequest): boolean => {
+    if (transfer !== null || dialog !== null) {
+      document.querySelector<HTMLElement>('[aria-modal="true"]')?.focus();
+      return false;
+    }
+    setTransfer({ ...request, epoch: lockEpoch });
+    return true;
+  };
+  // O que as outras partes da tela pedem (Configurações › Importar, RN-CONFIG-011, e o convite) é atendido com a área de trabalho na tela.
+  const latestOpen = useRef(openTransfer);
+  useEffect(() => {
+    latestOpen.current = openTransfer;
+  });
+  const transferRequest = useSyncExternalStore(transferRequests.subscribe, transferRequests.pending, transferRequests.pending);
+  useEffect(() => {
+    if (transferRequest === null || !onScreen) return;
+    transferRequests.take(transferRequest.seq);
+    latestOpen.current(transferRequest.value);
+  }, [transferRequest, onScreen]);
+  useEffect(() => () => transferRequests.clear(), []);
+  useEffect(() => () => importedReveal.clear(), []);
+
+  // RN-DBEAVER-002: o convite, uma vez por usuário, na janela em que se entrou (`dbeaverEntry`), com a área de trabalho pronta: o cofre já tem conexão e o
+  // convite não foi feito. Procura o DBeaver e conta o que achou sem mostrar nada; se há o que importar, abre o diálogo com a cópia que fez, senão a solta e
+  // não grava o convite (o DBeaver pode ser instalado depois). Com o cofre vazio o convite é o "Comece por aqui".
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const inviteRan = useRef(false);
+  const invitedAt = dbeaverState.data?.invitedAt;
+  const connectionCount = connections.data?.length;
+  const stateFailed = dbeaverState.isError;
+  useEffect(() => {
+    if (inviteRan.current) return;
+    const step = inviteStep({ armed: dbeaverEntry.armed(), onScreen, connections: connectionCount, invitedAt, failed: stateFailed });
+    if (step === "wait") return;
+    inviteRan.current = true;
+    dbeaverEntry.done();
+    if (step === "skip") return;
+
+    const epoch = vaultLock.epoch();
+    void (async () => {
+      const reply = await requestDbeaverSource("find");
+      if (reply.status !== "found") return;
+      const scan = await scanDbeaver(reply.sourceId);
+      const usable = scan.ok && importableTotal(scan.data) > 0;
+      const opened =
+        usable && mounted.current && !vaultLock.isLocked() && vaultLock.epoch() === epoch && latestOpen.current({ type: "dbeaver", targetFolderID: null, start: { type: "copy", sourceId: reply.sourceId, where: reply.where }, invite: true });
+      if (!opened) void releaseDbeaverSource(reply.sourceId);
+    })();
+  }, [onScreen, connectionCount, invitedAt, stateFailed]);
 
   const openNew = (folderID: string | null) => setDialog({ request: { mode: "new", folderID }, epoch: lockEpoch });
   const openEdit = (connectionId: string) => setDialog({ request: { mode: "edit", connectionId }, epoch: lockEpoch });
@@ -199,6 +277,7 @@ export function WorkbenchPage() {
           <Navigator
             onNewConnection={openNew}
             onEditConnection={openEdit}
+            onTransfer={openTransfer}
             onRevealed={() => {
               if (hidden) showNavigator(false);
             }}
@@ -209,13 +288,67 @@ export function WorkbenchPage() {
           <ScriptsSection />
         </aside>
         {hidden ? null : <ResizeHandle width={width} onResize={setWidth} />}
-        {firstUse ? <FirstUse onNewConnection={() => openNew(null)} /> : <WorkbenchTabs />}
+        {!firstUse ? (
+          <WorkbenchTabs />
+        ) : startHerePhase === "pending" ? (
+          <div className="min-w-0 flex-1" />
+        ) : startHerePhase === "show" && !startHereDismissed ? (
+          // RN-DBEAVER-001: clicar em qualquer um dos três botões, ou em "Agora não", grava o convite como feito.
+          <StartHere
+            focusFirst={startHereFocus}
+            onImportDbeaver={(start) => {
+              void markInvited(queryClient);
+              openTransfer({ type: "dbeaver", targetFolderID: null, start: { type: start } });
+            }}
+            onImportPrism={() => {
+              void markInvited(queryClient);
+              openTransfer({ type: "import", targetFolderID: null });
+            }}
+            onNewConnection={() => {
+              void markInvited(queryClient);
+              openNew(null);
+            }}
+            onDismiss={() => {
+              void markInvited(queryClient);
+              setStartHereDismissed(true);
+            }}
+          />
+        ) : (
+          <FirstUse
+            onNewConnection={() => openNew(null)}
+            onImportPrism={() => openTransfer({ type: "import", targetFolderID: null })}
+            onImportDbeaver={() => openTransfer({ type: "dbeaver", targetFolderID: null, start: { type: "find" } })}
+          />
+        )}
       </div>
 
       <StatusBar />
       {/* RN-EXPORT-003: o assistente "Exportar dados", um por janela, aberto por qualquer entrada (RN-EXPORT-001). */}
       <ExportWizardHost />
       <ImportWizardHost />
+      {transfer?.type === "export" ? <ExportConnectionsDialog origin={transfer.origin} onClose={() => setTransfer(null)} /> : null}
+      {transfer?.type === "import" ? (
+        <ImportConnectionsDialog
+          targetFolderID={transfer.targetFolderID}
+          onImported={(result, targetFolderID) => {
+            if (result.folderIDs.length + result.connectionIDs.length > 0) importedReveal.request({ folderIDs: result.folderIDs, connectionIDs: result.connectionIDs, targetFolderID });
+          }}
+          onClose={() => setTransfer(null)}
+        />
+      ) : null}
+      {transfer?.type === "dbeaver" ? (
+        <ImportDbeaverDialog
+          targetFolderID={transfer.targetFolderID}
+          start={transfer.start}
+          invite={transfer.invite === true}
+          onImported={(result, targetFolderID) => importedReveal.request(importedItems(result, targetFolderID))}
+          onClose={() => {
+            setTransfer(null);
+            // RN-DBEAVER-002: "Agora não", Esc, fechar e importar gravam o convite. O bloqueio e o "Sair" o fecham por fora, sem gravar.
+            if (transfer.invite === true) void markInvited(queryClient);
+          }}
+        />
+      ) : null}
 
       {dialogRequest === null ? null : (
         <ConnectionDialog

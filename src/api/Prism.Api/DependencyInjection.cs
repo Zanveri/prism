@@ -1,6 +1,7 @@
 using Prism.Api.Filters;
 using Prism.Api.Hosting;
 using Prism.Core.Api.Models.Dtos;
+using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Drivers.Services;
 using Prism.Infrastructure.Transfers.Services;
 
@@ -54,6 +55,9 @@ public static class DependencyInjection
 
         // RN-EXPORT-018: também é na subida que a pasta `transfers` é criada (ou volta ao modo só do dono) e esvaziada do que sobrou de uma execução que caiu.
         app.ApplicationServices.GetRequiredService<ITransferService>();
+
+        // RN-DBEAVER-006: o serviço da cópia do DBeaver assina o fechamento do cofre para apagá-la; precisa existir desde a subida.
+        app.ApplicationServices.GetRequiredService<IDbeaverSourceService>();
 
         app.UseExceptionHandler(handler => handler.Run(WriteUnexpectedError));
 

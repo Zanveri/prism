@@ -103,6 +103,25 @@ describe("os canais entre a tela e o processo principal", () => {
     expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
   });
 
+  it("a procura e a cópia do DBeaver (RN-DBEAVER-006): dois pedidos, sem dígito no nome, cada um confere a origem e passa ao `dbeaverSource` com o número da janela; nenhum devolve aviso nem leva caminho", () => {
+    const dbeaverChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:dbeaver-"));
+
+    expect(dbeaverChannels).toEqual(["prism:dbeaver-source", "prism:dbeaver-source-release"]);
+    for (const channel of dbeaverChannels) expect(channel).toMatch(/^prism:[a-z-]+$/);
+    // O pedido leva só o objeto que o schema de `dbeaver-messages.ts` confere (o modo, ou o `sourceId`), e o número da janela é o que o processo principal sabe.
+    for (const channel of dbeaverChannels) {
+      expect(main).toMatch(new RegExp(`ipcMain\\.handle\\("${channel}", \\(event, request: unknown\\) => \\{\\s*assertFromApp\\(event\\);\\s*return dbeaverSource\\.[a-zA-Z]+\\(windowIdOf\\(event\\.sender\\), request\\);`));
+      expect(preload).toMatch(new RegExp(`\\(request\\) => ipcRenderer\\.invoke\\("${channel}", request\\)`));
+    }
+    expect(channelsOf(main, "webContents.send").some((channel) => channel.startsWith("prism:dbeaver-"))).toBe(false);
+    // A janela que recarrega, cai ou fecha solta a cópia dela, e a saída e o reinício do serviço soltam todas.
+    expect(main.match(/dbeaverSource\.releaseWindow\(id\)/g)).toHaveLength(3);
+    expect(main.match(/dbeaverSource\.releaseAll\(\)/g)?.length).toBeGreaterThanOrEqual(3);
+    // A procura abre o diálogo de pasta com os ocultos à vista, e nenhum nome da ponte é de caminho.
+    expect(main).toMatch(/properties: \["openDirectory", "showHiddenFiles"\]/);
+    expect(preload).not.toMatch(/require\(|process\.env|shell\.|fs\./);
+  });
+
   it("a vez da verificação periódica (RN-VERIF-002): os dois pedidos conferem a origem e passam ao centro das janelas, que os confere com o schema", () => {
     const handlers = [...main.matchAll(/ipcMain\.handle\("(prism:verification-[a-z-]+)", \(([^)]*)\) => \{\s*assertFromApp\(event\);\s*(?:return )?hub\.[a-zA-Z]+Verification\(windowIdOf\(event\.sender\), /g)].map((match) => match[1]);
     const verificationChannels = channelsOf(main, "ipcMain.handle").filter((channel) => channel.startsWith("prism:verification-"));

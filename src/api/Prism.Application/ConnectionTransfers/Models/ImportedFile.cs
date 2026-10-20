@@ -102,8 +102,12 @@ internal sealed record ImportedFolder(string Key, string? ParentKey, FileValue N
         => nameof(ImportedFolder);
 }
 
-/// <summary>Uma conexão do arquivo: a chave e a pasta, que a forma garante, e os outros campos como vieram, a senha do banco inclusive.</summary>
-internal sealed record ImportedConnection(string Key, string? FolderKey, FileValue Name, FileValue Engine, FileValue Host, FileValue Port, FileValue Database, FileValue UserName, FileValue Password, FileValue EnvironmentName, FileValue EnvironmentColor, FileValue ConfirmCommands, FileValue ReadOnly, FileValue VerificationEnabled, FileValue VerificationInterval, FileValue VerificationQuery, FileEffective Effective)
+/// <summary>
+/// Uma conexão do arquivo: a chave e a pasta, que a forma garante, e os outros campos como vieram, a senha do banco inclusive. `SourceRefusal` é o motivo de não ser
+/// importável que a origem já sabe e que as regras de campo não dizem (RN-DBEAVER-009 e 010: o banco que o Prism não tem, a URL que não casa): só a leitura do
+/// DBeaver o preenche, e a análise o devolve como o motivo do item.
+/// </summary>
+internal sealed record ImportedConnection(string Key, string? FolderKey, FileValue Name, FileValue Engine, FileValue Host, FileValue Port, FileValue Database, FileValue UserName, FileValue Password, FileValue EnvironmentName, FileValue EnvironmentColor, FileValue ConfirmCommands, FileValue ReadOnly, FileValue VerificationEnabled, FileValue VerificationInterval, FileValue VerificationQuery, FileEffective Effective, string? SourceRefusal = null)
 {
     /// <summary>RN-LOG-001: o `ToString()` gerado imprimiria o host, o usuário e a senha do banco.</summary>
     public override string ToString()

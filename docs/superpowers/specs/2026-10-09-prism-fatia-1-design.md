@@ -248,9 +248,14 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   confirmadas, bytes), a duração e a classe do erro com o SQLSTATE: nunca o nome nem o caminho do
   arquivo, os nomes da tabela e das colunas, os valores, a linha com o erro, a mensagem do banco (que
   pode trazer um valor) nem o comando da origem, também no log do processo principal (RN-IMPORT-014,
-  018 e 027). *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram a exportação e
+  018 e 027). Da importação do DBeaver, só o identificador da cópia, o lugar dela (`where`), as contagens (projetos,
+  arquivos, bytes, conexões criadas, atualizadas e de fora, senhas que não decifraram), os IDs do Prism, a duração e a
+  classe do erro: nunca o usuário, a senha, o host, o nome de uma conexão, de uma pasta ou de um projeto, o ID do
+  DBeaver, o conteúdo decifrado nem um caminho, também no log do processo principal (RN-DBEAVER-006, 008 e 016).
+  *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram a exportação e
   a importação. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados.
-  Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a cópia.*
+  Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a cópia. Alterada a pedido do
+  dono em 2026-10-20 (seção 40): entrou a importação do DBeaver.*
 
 ## 5. Regras de negócio
 
@@ -565,6 +570,11 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `POST api/user/connections/export` `{ folderIDs, connections: [{ id, credentials }], passphrase, userPassword? }` | 200 `{ content, folders, connections, withUser, withPassword }`, o texto do arquivo já cifrado (RN-TRANSF-007 e 008, seção 34) | 404 `FOLDER_NOT_FOUND`, `CONNECTION_NOT_FOUND`; 422 `EXPORT_EMPTY`, `EXPORT_INVALID`, `EXPORT_PASSPHRASE_INVALID`, `EXPORT_LIMITS_EXCEEDED`, `USER_PASSWORD_REQUIRED` e `INVALID_PASSWORD` (RN-TRANSF-005); 401 `VAULT_LOCKED` no quinto erro e quando o cofre muda durante a derivação (RN-TRANSF-008) |
 | `POST api/user/connections/import/preview` `{ content, passphrase, targetFolderID? }` | 200 `{ folders, connections }`, a árvore do arquivo com o que a importação faria (RN-TRANSF-011) | 404 `FOLDER_NOT_FOUND` (o lugar escolhido); 409 `IMPORT_FILE_NEWER`; 422 `IMPORT_FILE_INVALID`, `IMPORT_PASSPHRASE_INVALID`, `IMPORT_PASSPHRASE_WRONG`, `IMPORT_LIMITS_EXCEEDED` |
 | `POST api/user/connections/import` `{ content, passphrase, targetFolderID?, items, onConflict, keepVerificationQueries? }` | 200 `{ folderIDs, connectionIDs, mergedFolders, renamed, skipped }` (RN-TRANSF-014) | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
+| `GET api/user/connections/dbeaver` | 200 `{ invitedAt, lastImportAt }` (RN-DBEAVER-018, seção 40) | |
+| `PUT api/user/connections/dbeaver/invite` | 204 (o convite do DBeaver feito, RN-DBEAVER-002) | |
+| `POST api/user/connections/dbeaver/scan` `{ sourceId }` | 200 `{ where, projects }`, os projetos da cópia do DBeaver com as contagens (RN-DBEAVER-006 e 007) | 404 `DBEAVER_SOURCE_MISSING`; 422 `DBEAVER_SOURCE_INVALID`, `IMPORT_INVALID` |
+| `POST api/user/connections/dbeaver/import/preview` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts? }` | 200 `{ folders, connections, notes }` (RN-DBEAVER-015) | 404 `DBEAVER_SOURCE_MISSING`, `DBEAVER_PROJECT_NOT_FOUND`, `FOLDER_NOT_FOUND`; 422 `DBEAVER_SOURCE_INVALID`, `DBEAVER_LIMITS_EXCEEDED`, `IMPORT_INVALID` |
+| `POST api/user/connections/dbeaver/import` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts?, items, onConflict, overwrite }` | 200 `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }` (RN-DBEAVER-016 e 017) | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
 | `PUT api/user/password` `{ currentPassword, newPassword }` | 204 (troca a senha e recifra o cofre, RN-COFRE-013) | 422 `INVALID_PASSWORD` (a atual não confere), `PASSWORD_INVALID` (a nova), `PASSWORD_UNCHANGED`; 401 `VAULT_LOCKED` no quinto erro |
 | `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013), `CONNECTION_CREDENTIALS_MISSING` (a conexão sem usuário ou sem senha, RN-TRANSF-016) |
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
@@ -642,7 +652,11 @@ ganha `line`, `column`, `side`, `committed` e `uncertain`; o `DELETE` do trabalh
 somente leitura. Com a seção 38: a rota `queries/edits/count` e a alteração `updateAll` nas rotas da edição
 (RN-EDIT-023); `EDIT_ALL_ROWS_NOT_SUPPORTED` (422), a recusa da coluna inteira num resultado em que ela não se
 altera, com `reason`; o detalhe do `RESULT_CHANGED` que começa por "O resultado mudou desde a contagem:"; e o
-`outcome` do `SQL_EXECUTION_FAILED` também nas rotas da edição, no "Salvar" e na contagem cancelados.
+`outcome` do `SQL_EXECUTION_FAILED` também nas rotas da edição, no "Salvar" e na contagem cancelados. Com a seção 40: as
+rotas da importação do DBeaver (`api/user/connections/dbeaver`), com os campos e as recusas nas notas dela;
+`DBEAVER_SOURCE_MISSING` e `DBEAVER_PROJECT_NOT_FOUND` (404), a cópia do DBeaver que não existe mais e o projeto que não
+está nela; e `DBEAVER_SOURCE_INVALID` e `DBEAVER_LIMITS_EXCEEDED` (422), o DBeaver que não se lê e o que passa dos
+limites da importação (este só na prévia e na importação, não na contagem).
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -686,6 +700,12 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
 6. **Interface em `src/client`**, não `src/web`. É a pasta que o usuário criou.
 7. **Sem rate limiting, Turnstile, cabeçalhos de proxy e HTTPS.** A API só existe em loopback e
    só para o próprio app.
+8. **A chave pública do DBeaver numa constante.** O `credentials-config.json` do DBeaver é cifrado
+   com uma chave fixa que está no código aberto dele; a API a tem numa constante comentada
+   (RN-DBEAVER-008, seção 40). Não é segredo do Prism e não protege nada: a regra de "nenhum
+   segredo no código" e a verificação de vazamentos da pipeline a aceitam só nessa constante, e ela
+   não vira configuração. *Entrou a pedido do dono em 2026-10-20 (seção 40); no `AGENTS.md`, é o
+   item 9, depois do mediador.*
 
 ## 9. Diferenças em relação ao canvas
 
@@ -784,6 +804,11 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   não desenha o véu do arraste da aba, a aba do resultado com o ícone novo (a grade de três por três), a janela do
   resultado, o botão "Onde mostrar o resultado" com o ícone novo nem a escolha de Configurações › Resultados
   (RN-ABAS-010 a 014 e RN-CONFIG-010); os dois ícones novos seguem o traço dos do canvas (16 px, traço 1,5).
+- O canvas não desenha o "Comece por aqui", o "Importar do DBeaver", a pergunta de sobrescrever nem Configurações ›
+  Importar (RN-DBEAVER-001 a 017 e RN-CONFIG-011, seção 40). O painel segue os cartões de Configurações do canvas
+  (`Configuracoes`), com os três lado a lado; o diálogo é o "Importar conexões" (seção 34), com a origem no lugar do
+  arquivo; a pergunta segue o `ConfirmarComando`; e o item de menu "Importar do DBeaver…" usa a seta para cima de
+  "Importar…". Nenhum ícone novo: a logo do DBeaver não aparece.
 
 ## 10. Riscos e sondas
 
@@ -948,14 +973,17 @@ com as fontes, está em os registros internos do projeto.
   conexões (com o número de formato próprio, RN-TRANSF-007), o que cada formato da exportação de dados escreve com
   as mesmas escolhas (seção 35: uma opção nova, que começa com o comportamento de antes, não quebra), o que a
   importação de dados lê com as mesmas escolhas (seção 36: o arquivo que uma versão importa, a seguinte importa com
-  os mesmos valores), e os atalhos e comandos documentados. A API HTTP local e a aparência ficam fora. Enquanto a
+  os mesmos valores), e os atalhos e comandos documentados. A API HTTP local e a aparência ficam fora, e o que o Prism
+  lê do DBeaver também (seção 40): o formato é do DBeaver, que pode mudá-lo, e a leitura acompanha a versão dele de
+  agora; o que entra no cofre por ela é do contrato, como qualquer conexão. Enquanto a
   versão for `0.x`, uma mudança que quebra esse contrato sobe o segundo número; a partir da `1.0.0`, sobe o
   primeiro. Funcionalidade nova sobe o segundo número e correção sobe o terceiro, antes e depois da `1.0.0`. A
   `1.0.0` sai quando o contrato estiver estável e o Prism estiver em uso no dia a dia. *Alterada a pedido do dono
   em 2026-10-16 (seção 34): o arquivo da exportação passou a existir. Alterada a pedido do dono em 2026-10-16
   (seção 35): entraram os formatos da exportação de dados. Alterada a pedido do dono em 2026-10-16 (seção 36):
   entrou o que a importação de dados lê. Alterada a pedido do dono em 2026-10-20 (seção 39): os arquivos de
-  configuração passaram a ser nomeados, com o `result-window.json`.*
+  configuração passaram a ser nomeados, com o `result-window.json`. Alterada a pedido do dono em 2026-10-20 (seção
+  40): o que o Prism lê do DBeaver fica fora do contrato.*
 - **RN-VERSAO-003.** A versão mora em um lugar só: o campo `version` de
   `src/client/package.json`. A API recebe o mesmo número na publicação (`-p:Version=`), e
   nenhum `.csproj` declara versão. A tag de uma versão é sempre `v` + esse número, criada pelo lançamento (RN-VERSAO-008); a
@@ -1234,11 +1262,13 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
   e visão: abrir registros, ver estrutura, ver diagrama, gerar `SELECT` numa consulta nova, exportar dados
   (RN-EXPORT-001), importar dados (só na tabela, RN-IMPORT-001), copiar nome e copiar nome qualificado. Rotina,
   coluna, índice e chave: copiar nome. Pasta: as ações que a tela de Conexões já oferece para ela, e exportar as
-  conexões dela e importar conexões nela (RN-TRANSF-001). O menu tem papel de menu, anda pelas setas, executa com
+  conexões dela, importar conexões nela e importar do DBeaver nela (RN-TRANSF-001). O espaço vazio: nova conexão, nova
+  pasta, exportar e importar conexões e importar do DBeaver (RN-NAV-003). O menu tem papel de menu, anda pelas setas, executa com
   Enter, fecha com Esc e com clique fora, e devolve o foco ao item. Ação que não se aplica no estado atual aparece
   desabilitada, não some. *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram exportar e importar
   conexões. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou exportar dados, na tabela e na visão.
-  Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar dados, na tabela.*
+  Alterada a pedido do dono em 2026-10-16 (seção 36): entrou importar dados, na tabela. Alterada a pedido do dono
+  em 2026-10-20 (seção 40): entrou importar do DBeaver, na pasta e no espaço vazio.*
 - **RN-TABELA-001.** Duplo clique (ou Enter) numa tabela ou visão do navegador abre a aba dela,
   uma por tabela: abrir de novo volta para a aba que já existe. A aba tem a sessão dela, como uma
   aba de consulta (RN-SESSAO-001), e três vistas: Registros, Estrutura e Diagrama.
@@ -1267,10 +1297,11 @@ depende de uma parte da API que ainda não existe, a tela não desenha um contro
 - **RN-CONFIG-001.** Há uma tela de Configurações, alcançada pela barra superior. Ela traz as
   seções do canvas que têm efeito hoje: aparência e editor de SQL (preferências desta instalação,
   guardadas fora do cofre, por usuário), atualizações (verificar ao abrir, versão pulada), drivers
-  (atalho), conta (troca de senha, RN-COFRE-013) e sobre (versão, pasta de dados). O que o canvas
+  (atalho), conta (troca de senha, RN-COFRE-013), importar (o DBeaver e o arquivo do Prism, RN-CONFIG-011) e sobre
+  (versão, pasta de dados). O que o canvas
   mostra e ainda depende da API (proteções) aparece como "em breve", sem controle que finja
   funcionar. Transações deixa
-  de ser "em breve" (RN-CONFIG-007).
+  de ser "em breve" (RN-CONFIG-007). *Alterada a pedido do dono em 2026-10-20 (seção 40): entrou a seção Importar.*
 - **RN-CONFIG-007.** Configurações › Transações tem "Modo padrão das novas abas" (Auto-commit ou
   Commit manual; vem Auto-commit) e "Nível de isolamento padrão" (RN-ISOL-006), guardados por
   usuário; valem para as abas abertas depois.
@@ -1485,9 +1516,9 @@ Navegação:
   de pasta e de conexão (seções 5.1 e 5.2) não mudam, e nenhuma capacidade da tela antiga se
   perde. O menu de contexto de uma pasta tem "Nova conexão" e "Nova pasta", que criam dentro
   dela, e o botão direito no espaço vazio do navegador abre um menu com as duas, que criam na
-  raiz (pedido do dono em 2026-10-12), e, num grupo depois delas, "Exportar conexões…" e "Importar
-  conexões…" (RN-TRANSF-001). *Alterada a pedido do dono em 2026-10-16 (seção 34): o menu do espaço
-  vazio ganhou exportar e importar.*
+  raiz (pedido do dono em 2026-10-12), e, num grupo depois delas, "Exportar conexões…", "Importar
+  conexões…" e "Importar do DBeaver…" (RN-TRANSF-001). *Alterada a pedido do dono em 2026-10-16 (seção 34): o menu do espaço
+  vazio ganhou exportar e importar. Alterada a pedido do dono em 2026-10-20 (seção 40): e importar do DBeaver.*
 - **RN-NAV-004.** O formulário de conexão, nova e edição, é um DIÁLOGO sobre a área de trabalho,
   como o do DBeaver (pedido do dono em 2026-10-12: "eu não quero mais aquela tela; deixar
   unificado na tela padrão da área de trabalho"). Não existe mais tela de Conexões: o endereço
@@ -1521,8 +1552,13 @@ Navegação:
   cancelar, remover, estado, reinício), fica em Configurações › Drivers. O 422
   `DRIVER_NOT_INSTALLED` continua oferecendo "Instalar driver", que leva para lá. O lembrete de
   reinício pendente (RN-DRIVER-005) continua à vista na barra superior.
-- **RN-NAV-007.** Sem nenhuma conexão cadastrada, a área de trabalho mostra o estado vazio com
-  "Nova conexão".
+- **RN-NAV-007.** Sem nenhuma conexão cadastrada (as pastas não contam), a área de trabalho mostra, enquanto o
+  convite do DBeaver não foi feito para o usuário, o "Comece por aqui" (RN-DBEAVER-001), com "Importar do DBeaver",
+  "Importar conexões do Prism" e "Nova conexão"; depois dele (o "Agora não" ou, na entrada seguinte, um dos três
+  caminhos), o estado vazio
+  com "Nova conexão" e, embaixo, os atalhos "Importar do DBeaver…" e "Importar conexões…". O corpo vazio do navegador
+  diz "Crie a primeira pelo “Nova conexão”, ou importe do DBeaver ou de um arquivo do Prism." *Alterada a pedido do
+  dono em 2026-10-20 (seção 40): entraram o "Comece por aqui" e os atalhos para importar.*
 - **RN-NAV-008.** O navegador pode ser escondido e mostrado: por um botão sempre à vista, por
   `Ctrl+B`, e `Ctrl+Shift+E` o mostra e leva o foco ao campo de busca. Escondido, a área das
   abas ocupa a largura toda, e nada do navegador é alcançável pelo teclado nem lido por leitor
@@ -2721,12 +2757,14 @@ duplicar a conexão" pelo botão direito.
   2026-10-15, issue #8: a pasta usava o diálogo de "Renomear" que já existia, que virou o "Editar
   pasta…" (F2) com a RN-PASTA-006; agora ela tem o diálogo só com o nome, como a conexão.*
 - **RN-CONN-016.** "Duplicar conexão" no menu de contexto da conexão cria, na mesma pasta, uma
-  cópia com todos os campos e a senha salva. A senha é copiada dentro do cofre e não passa pela
+  cópia com todos os campos e a senha salva, menos a origem do DBeaver (RN-DBEAVER-018): a cópia é uma conexão do
+  Prism, que a reimportação não sobrescreve. A senha é copiada dentro do cofre e não passa pela
   tela. O nome da cópia é "<nome> (cópia)"; se esse já existir, "(cópia 2)", "(cópia 3)" e assim
   por diante, cortando o nome original para caber no limite do nome. A cópia nasce desconectada e
   aparece selecionada no navegador, e nada abre sozinho. Rota:
   `POST api/user/connections/{id}/duplicate` → 201 com a conexão nova, no formato do
-  `GET api/user/connections/{id}`; 404 `CONNECTION_NOT_FOUND`. O log registra os IDs, nunca a senha.
+  `GET api/user/connections/{id}`; 404 `CONNECTION_NOT_FOUND`. O log registra os IDs, nunca a senha. *Alterada a pedido do dono em 2026-10-20 (seção 40): a
+  cópia não leva a origem do DBeaver.*
 
 ## 24. Complemento de 2026-10-13: fontes, troca de banco na aba e abas que voltam
 
@@ -4467,11 +4505,12 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     nome". O primeiro abre o "Exportar conexões" com a pasta e tudo o que está dentro dela marcados, a
     qualquer profundidade, também quando não há nenhuma conexão dentro (vão as pastas, RN-TRANSF-006). O
     segundo abre o "Importar conexões" (RN-TRANSF-009) com ela já escolhida como o lugar onde o que vem
-    do arquivo vai ficar.
+    do arquivo vai ficar. Depois deles, "Importar do DBeaver aqui…", que abre o "Importar do DBeaver"
+    (RN-DBEAVER-014) com ela escolhida em "Onde colocar".
   - No espaço vazio do navegador, depois de "Nova conexão" e "Nova pasta", um grupo com "Exportar
-    conexões…" (nada marcado) e "Importar conexões…" (na raiz). Sem nenhuma pasta e nenhuma conexão no
-    cofre, "Exportar conexões…" fica desabilitado, com o motivo ("Não há pastas nem conexões para
-    exportar.").
+    conexões…" (nada marcado), "Importar conexões…" (na raiz) e "Importar do DBeaver…" (na raiz,
+    RN-DBEAVER-003). Sem nenhuma pasta e nenhuma conexão no cofre, "Exportar conexões…" fica desabilitado,
+    com o motivo ("Não há pastas nem conexões para exportar.").
   - Valem em qualquer estado da conexão, conectada ou não, somente leitura ou não: exportar não mexe em
     sessão, em proteção nem no cofre.
   - A barra de ações do navegador não ganha botão: os sete de hoje são o que cabe na largura mínima
@@ -4484,6 +4523,8 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     (exportar, a prévia e importar) não ficam no cache de mutações da tela (`variables` e `data`):
     `gcTime: 0` e `reset()` assim que a resposta chega, como no "Revelar senha"
     (`RevealPasswordDialog`); um teste confere o cache vazio depois de cada chamada, também da recusa.
+  - *Alterada a pedido do dono em 2026-10-20 (seção 40): entraram "Importar do DBeaver…" no espaço vazio e "Importar do DBeaver aqui…" na
+    pasta.*
 
 ### Exportar
 
@@ -4626,7 +4667,8 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     a cor (RN-PASTA-005). A importação não a deixa mais fraca que isso (RN-TRANSF-013).
   - Não vão: os IDs do cofre (o arquivo tem chaves próprias, só para ligar cada item à pasta dele), as
     datas de criação e de alteração, os scripts e as pastas de scripts, as abas, as preferências, o nome
-    do usuário do Prism, as sessões e os drivers.
+    do usuário do Prism, as sessões, os drivers e a origem do DBeaver da conexão (RN-DBEAVER-018). *Alterada a pedido do dono em 2026-10-20 (seção 40): a
+    origem do DBeaver não vai.*
   - Os limites do arquivo são os da importação (RN-TRANSF-010): até 2.000 conexões, 2.000 pastas (as do
     caminho contam), 32 níveis de pastas e 5 MiB. Os níveis contam da raiz do navegador, porque o
     caminho inteiro vai no arquivo: a conexão que está a mais de 32 níveis da raiz não sai nem sozinha
@@ -4898,7 +4940,9 @@ e 004, e as seções 6 e 9. O canvas não desenha nada disto (seção 9).
     (RN-CONN-011) segue a escolha única do diálogo. "Importar com outro nome" lhe dá o nome da cópia do
     "Duplicar conexão" ("DATA FIX (cópia)", "(cópia 2)"…, com o nome cortado para caber, RN-CONN-016);
     "Não importar" a deixa de fora. A importação nunca muda nem sobrescreve uma conexão ou uma pasta que
-    já existe.
+    já existe; a única exceção é a reimportação do DBeaver, que sobrescreve a conexão que veio dele quando a
+    pessoa confirma, e nunca a feita à mão (RN-DBEAVER-017). *Alterada a pedido do dono em 2026-10-20 (seção 40): entrou a exceção da reimportação do
+    DBeaver.*
   - As conferências valem contra o que já existe E contra o que a mesma importação já pôs. Duas pastas
     irmãs com o mesmo nome dentro do arquivo viram uma só, e duas conexões com o mesmo nome na mesma
     pasta do arquivo são um conflito como outro qualquer: a segunda vai com outro nome, ou fica de fora.
@@ -5144,7 +5188,8 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Arrastar o arquivo para o navegador para importar.
 - Exportar sem cifrar.
 - Um medidor da força da senha de exportação, e um botão que gera uma.
-- Importar as conexões e as pastas do DBeaver (o `data-sources.json` dele).
+- Importar as conexões e as pastas do DBeaver (o `data-sources.json` dele). *Entrou a pedido do dono em
+  2026-10-20, com os ambientes e as senhas (seção 40).*
 - Escolher, na importação, outro lugar para cada pasta do arquivo, ou trazer o conteúdo de uma pasta do
   arquivo sem ela.
 
@@ -5856,8 +5901,9 @@ e 13. O canvas não desenha nada disto (seção 9).
     gravado no disco. O estado `done` só aparece depois da troca de nome: o `.ready` é sempre um arquivo inteiro.
     Nenhum caminho, nome ou pedaço de nome vem da tela, e a tela nem sabe onde a pasta fica.
   - A API apaga o arquivo do trabalho quando ele falha, é cancelado, é esquecido (`DELETE`) ou é abandonado, e
-    quando o cofre fecha. A cada partida, ela apaga tudo o que encontra na pasta `transfers`: é o que sobrou de
-    uma execução que caiu, e nenhum trabalho atravessa uma partida. O arquivo que ela não consegue apagar na hora
+    quando o cofre fecha. A cada partida, ela apaga tudo o que encontra na pasta `transfers`, também as pastas
+    `<id>.dbeaver` e `<id>.dbeaver.part`, com o que têm dentro (RN-DBEAVER-006): é o que sobrou de uma execução que
+    caiu, e nenhum trabalho atravessa uma partida. O arquivo que ela não consegue apagar na hora
     (no Windows, o que o processo principal está copiando para o destino) fica para a partida seguinte, e o
     trabalho sai do registro do mesmo jeito.
   - O disco cheio na pasta de dados termina o trabalho com `EXPORT_WRITE_FAILED`: "Não há espaço em disco para o
@@ -5873,7 +5919,8 @@ e 13. O canvas não desenha nada disto (seção 9).
     modo só para o dono (RN-IMPORT-017 e 018). É o único arquivo da pasta que a API não escreve, e a limpeza da
     partida o apaga como os outros. O processo principal também cria a pasta quando ela falta na hora de copiar.
   - *Alterada a pedido do dono em 2026-10-16 (seção 36): entrou o arquivo da importação, e a pasta passou a ser
-    criada na partida da API e pelo processo principal.*
+    criada na partida da API e pelo processo principal.* *Alterada a pedido do dono em 2026-10-20 (seção 40): a
+    limpeza da partida apaga também as pastas da cópia do DBeaver.*
 
 ### O destino e a entrega
 
@@ -7161,6 +7208,9 @@ desenha nada disto (seção 9).
     textos compartilhados (até 256 MiB) e dos estilos.
   - O `.in` leva os dados da pessoa em claro, como o arquivo temporário da exportação, na pasta de dados do usuário
     do sistema, e vive só até a importação acabar ou o assistente fechar.
+  - A mesma pasta guarda a cópia do DBeaver, `<sourceId>.dbeaver/` (`.dbeaver.part` enquanto copia), com as mesmas
+    regras de modo, de nome e de limpeza (RN-DBEAVER-006): a API a apaga depois da importação que gravou, quando o
+    cofre fecha e na partida, e o processo principal, ao soltá-la. *Alterada a pedido do dono em 2026-10-20 (seção 40): entrou a cópia do DBeaver.*
 
 ### O arquivo e o processo principal
 
@@ -9656,3 +9706,763 @@ Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
 - Um limite para as janelas do resultado que reabrem juntas na volta das abas (hoje, uma por aba em "Numa janela"),
   se o dono quiser.
 - Uma marca na faixa para a aba com a atualização automática ligada (já estava na seção 29).
+
+## 40. Complemento de 2026-10-20, versão 0.5.0: importar do DBeaver as pastas, as conexões, os ambientes e as senhas
+
+Pedido do dono em 2026-10-20, com dois prints (a conexão Informix "USER MIGRATION STOCK MANAGER" no DBeaver, conectada
+por Host, com o host, a porta, o servidor, o banco de dados e a URL JDBC, e os parâmetros internos dela, com o ID da
+conexão circulado, o Driver ID `informix` e o Provider ID `generic`) e um arquivo de exemplo, o `credentials-config.json`
+dele aberto, com as senhas apagadas: "Adicione no onboarding do usuário a possibilidade dele importar suas estruturas
+de pastas, conexões e ambientes do dbeaver, junto com o usuário e senha. Antigamente, para eu descobrir a senha de uma
+conexão do dbeaver, eu precisava utilizar um comando muito específico no wsl … como hoje em dia o app pode ser buildado
+para todas plataformas, você precisa ver as ferramentas existentes no pc do usuário (ou utilizar a API em C# para
+conseguir executar o mesmo que o openssl faz) … Nesse arquivo, vai ter apenas o usuário e senha, junto com o ID da
+conexão, mas não vem com as informações da conexão … Por enquanto, faça apenas a importação do dbeaver, depois fazemos
+do datagrip e outros programas de banco de dados". No mesmo dia, um pedido complementar: "pro caso dos usuários que já
+tenham baixado o prism mas não importaram as conexões do dbeaver ainda, abra o modal pra eles também. E deixe uma
+configuração também pra permitir que ele re-importe as infos do dbeaver quando ele quiser. Caso ele queira re-importar
+e a conexão já exista, exiba um warning pra ele pedindo se ele deseja sobreescrever as existentes ou escolher as que
+ele não quer que sejam sobreescritas."
+
+O que o DBeaver guarda, pela leitura do código dele (o ramo `devel` em 2026-10-20, a versão 26.2) e da documentação
+(dbeaver.com/docs: "Workspace Location", "Data Sources Json Reference", "Connection Types", "Project security"):
+
+- cada projeto do workspace é uma pasta (`General` é o padrão), e as conexões dele ficam na subpasta `.dbeaver`;
+- `data-sources.json` tem as pastas, as conexões (o banco, o host, a porta, o banco de dados, o servidor do Informix, a
+  URL, a pasta, o tipo de conexão, o somente leitura, o túnel, as propriedades) e os tipos de conexão; um projeto pode
+  ter outros `data-sources-<sufixo>.json`, cada um com o seu `credentials-config-<sufixo>.json`;
+- `credentials-config.json` tem o usuário e a senha de cada conexão, pelo ID dela. É cifrado com AES-128 em CBC, com
+  uma chave fixa que está no próprio código do DBeaver Community (a mesma do comando do dono) e com o IV gravado nos 16
+  primeiros bytes do arquivo. Por isso o comando do dono, com o IV zero, tirava 16 bytes de lixo no começo e o resto
+  certo: na CBC, o IV errado só estraga o primeiro bloco, que aqui é o próprio IV;
+- o tipo de conexão (Development, Test, Production e os criados pela pessoa) tem o nome, a cor e as confirmações; o
+  "Confirmar execução SQL" pergunta antes de todo comando que não é um `SELECT`.
+
+Quem lê e decifra é a API, em C#, igual nos três sistemas, sem `openssl`, WSL nem ferramenta do sistema. O processo
+principal só acha a pasta do DBeaver e copia os arquivos para a pasta de transferências, como já faz com o arquivo da
+importação de dados (RN-IMPORT-018), e a tela nunca recebe um caminho nem uma senha (RN-CONN-001). O que vem do DBeaver
+passa pela mesma análise, pela mesma colocação e pela mesma gravação tudo ou nada do "Importar conexões" (RN-TRANSF-010
+a 014): o diálogo é aquele, com a origem "DBeaver" no lugar do arquivo cifrado.
+
+A versão: é funcionalidade nova, e entra na 0.5.0, com a seção 39 (RN-VERSAO-002). O cofre ganha dois campos
+opcionais (a origem da conexão e a marca do convite), sem subir o formato (RN-DBEAVER-018).
+
+Esta seção:
+
+- põe na área de trabalho o "Comece por aqui" do primeiro uso, com os três caminhos (RN-DBEAVER-001);
+- abre o "Importar do DBeaver" uma vez por usuário, também para quem já usa o Prism (RN-DBEAVER-002);
+- dá as entradas de sempre, no menu do navegador e em Configurações › Importar (RN-DBEAVER-003 e RN-CONFIG-011);
+- diz onde o processo principal procura, o que ele copia e como a API acha a cópia (RN-DBEAVER-004 a 006);
+- diz como a API lê e decifra (RN-DBEAVER-007 e 008) e o que vira o quê (RN-DBEAVER-009 a 013);
+- descreve o diálogo, a prévia e a gravação (RN-DBEAVER-014 a 016), e a reimportação que sobrescreve
+  (RN-DBEAVER-017);
+- e guarda no cofre a origem de cada conexão importada e a marca do convite (RN-DBEAVER-018).
+
+As regras são uma família nova, RN-DBEAVER-*, e não a continuação da RN-TRANSF-*: a origem, a leitura e a
+reimportação são próprias, e o que é igual ao "Importar conexões" está escrito lá e citado aqui. Muda a RN-TRANSF-001,
+006 e 012, a RN-NAV-003 e 007, a RN-MENU-001, a RN-CONFIG-001, a RN-CONN-016, a RN-IMPORT-017, a RN-EXPORT-018, a
+RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada disto (seção 9).
+
+### O primeiro uso e o convite
+
+- **RN-DBEAVER-001.** O "Comece por aqui".
+  - Aparece no lugar do estado vazio da área de trabalho (RN-NAV-007) quando o cofre do usuário não tem nenhuma conexão
+    (as pastas não contam) e o convite do DBeaver ainda não foi feito para este usuário (RN-DBEAVER-018): logo depois de
+    "Criar usuário" e, enquanto as duas coisas valerem, a cada entrada. Some quando a primeira conexão existir (criada
+    ou importada, nesta janela ou noutra, quando a lista é lida de novo) ou com "Agora não".
+  - O título é "Comece por aqui", com "Traga as conexões que você já tem, ou crie a primeira." Embaixo, três cartões,
+    lado a lado na largura que couber e um embaixo do outro na estreita, cada um com o título, uma frase e o botão:
+    - "Importar do DBeaver". Ao aparecer, o painel pede ao processo principal que procure o DBeaver (RN-DBEAVER-004) e
+      à API que conte o que achou (RN-DBEAVER-006), e solta a cópia assim que a contagem responde: o painel guarda só
+      as contagens, e nenhuma cópia com as senhas fica no disco enquanto ele está à vista. Enquanto isso, a frase é
+      "Procurando o DBeaver neste computador…", e o botão espera. Depois:
+      - achou, com ao menos uma conexão que o Prism importa: "Encontramos o DBeaver neste computador: 22 conexões."
+        ("1 conexão."; com o do Flatpak ou do Snap, "Encontramos o DBeaver (Flatpak) neste computador: …"), em que a
+        conta é a das conexões importáveis de todos os projetos; o botão é "Importar do DBeaver…", e um link
+        "Escolher a pasta do DBeaver…" abre o diálogo de pasta (RN-DBEAVER-005);
+      - achou, sem nenhuma que o Prism importe: "Encontramos o DBeaver neste computador, mas sem conexões de
+        PostgreSQL, Db2 ou Informix.", e o botão é "Escolher a pasta do DBeaver…";
+      - não achou (`notFound`): "Não encontramos o DBeaver nos lugares de sempre. Se ele guarda o workspace noutro
+        lugar, escolha a pasta.", e o botão é "Escolher a pasta do DBeaver…";
+      - a procura achou, mas não pôde copiar ou ler (as outras recusas do processo principal, RN-DBEAVER-006, e as da
+        contagem): a frase da recusa, e os botões "Tentar de novo" e "Escolher a pasta do DBeaver…".
+    - "Importar conexões do Prism", com "Um arquivo .prismconexoes que alguém exportou do Prism." e o botão "Importar
+      conexões…", que abre o "Importar conexões" (RN-TRANSF-009) na raiz.
+    - "Nova conexão", com "Informe o servidor, a porta e o usuário de um banco." e o botão "Nova conexão", que abre o
+      diálogo de sempre (RN-NAV-005) na raiz.
+  - Embaixo dos cartões, o botão "Agora não", que fecha o painel e grava o convite como feito (RN-DBEAVER-018); a área
+    de trabalho fica com o estado vazio da RN-NAV-007, que continua com os atalhos para importar.
+  - O painel conta como o convite do DBeaver: clicar em qualquer um dos três botões, ou em "Agora não", grava o convite
+    como feito (RN-DBEAVER-018), e o diálogo da RN-DBEAVER-002 não abre sozinho para este usuário. A presença do painel
+    é decidida uma vez por entrada, ao abrir a área de trabalho com o cofre aberto (convite não feito e nenhuma
+    conexão), e não relê o convite depois: ele fica à vista, mesmo com o convite gravado por um dos botões, até a
+    primeira conexão ou o "Agora não". Quem abriu um diálogo e desistiu volta ao painel. Na entrada seguinte, com o
+    convite gravado, vem o estado vazio da RN-NAV-007.
+  - O Tab anda na ordem em que se lê: o botão do primeiro cartão, "Escolher a pasta do DBeaver…" (quando o cartão o
+    tem como link), os botões dos outros dois cartões e "Agora não"; o foco começa no primeiro botão quando o painel
+    aparece logo depois de "Criar usuário". O painel tem papel de região, com o nome "Comece por aqui".
+  - Fora do Electron (o navegador do desenvolvimento), o primeiro cartão diz "Importar do DBeaver só funciona no app do
+    Prism.", sem botão, como a RN-IMPORT-018.
+
+- **RN-DBEAVER-002.** O convite, uma vez por usuário, também para quem já usa o Prism.
+  - Na entrada (depois de "Entrar" ou de "Criar usuário", e não no desbloqueio), na janela em que se entrou, com a área
+    de trabalho pronta: se o convite ainda não foi feito para este usuário e o cofre já tem ao menos uma conexão, o
+    Prism procura o DBeaver (RN-DBEAVER-004) e conta o que achou (RN-DBEAVER-006), sem mostrar nada enquanto isso. Se
+    achou ao menos uma conexão que o Prism importa, abre o "Importar do DBeaver" (RN-DBEAVER-014) com a prévia já
+    carregada; se não, não mostra nada, não grava o convite (o DBeaver pode ser instalado depois) e solta a cópia na
+    hora (RN-DBEAVER-006).
+  - Com o cofre sem conexão nenhuma, o convite é o "Comece por aqui" (RN-DBEAVER-001), e o diálogo não abre sozinho.
+  - Aberto como convite, o diálogo tem "Agora não" no lugar de "Cancelar". "Agora não", Esc, fechar o diálogo e
+    importar gravam o convite como feito (RN-DBEAVER-018), e ele não abre sozinho de novo para este usuário, nesta
+    instalação ou noutra que abra o mesmo cofre. A importação continua alcançável pelo menu (RN-DBEAVER-003) e por
+    Configurações › Importar (RN-CONFIG-011).
+  - O bloqueio e o "Sair" com o diálogo do convite aberto o fecham sem gravar o convite: ele abre de novo na próxima
+    entrada.
+  - A falha ao gravar o convite não aparece para a pessoa: o convite volta na próxima entrada, e é só isso.
+
+- **RN-DBEAVER-003.** As entradas, a qualquer hora.
+  - No espaço vazio do navegador, no grupo de "Exportar conexões…" e "Importar conexões…", depois deste, "Importar do
+    DBeaver…", que abre o diálogo com a raiz como lugar.
+  - Na pasta, depois de "Importar conexões aqui…", "Importar do DBeaver aqui…", que abre o diálogo com ela já
+    escolhida em "Onde colocar".
+  - O estado vazio do navegador (RN-NAV-007) também tem "Importar do DBeaver…".
+  - Em Configurações › Importar (RN-CONFIG-011), "Importar do DBeaver…".
+  - O diálogo é da janela em que abriu, um por janela, e não abre junto com o "Importar conexões" nem com o "Exportar
+    conexões" na mesma janela: a entrada de um, com outro aberto, leva o foco ao que está aberto. O bloqueio por inatividade, o "Sair" e o quinto
+    erro de senha o fecham (RN-SEG-001), e nada do que estava nele (a origem, a prévia, as marcas) sobrevive. As
+    chamadas da prévia e da importação ficam fora do cache de mutações da tela (`gcTime: 0` e `reset()`), como as da
+    RN-TRANSF-001.
+  - Fora do Electron, as entradas aparecem desabilitadas, com a dica "Importar do DBeaver só funciona no app do
+    Prism."
+
+### Onde o DBeaver guarda, e a cópia
+
+- **RN-DBEAVER-004.** Onde o processo principal procura.
+  - A pasta de dados do DBeaver, em cada sistema, nesta ordem, como o próprio DBeaver a calcula (`RuntimeUtils` e o
+    launcher dele):
+    - com a variável de ambiente `DBEAVER_DATA` definida, `$DBEAVER_DATA/DBeaverData`, e só ela;
+    - Windows: `%APPDATA%\DBeaverData` (sem `APPDATA`, `<perfil do usuário>\DBeaverData`);
+    - macOS: `~/Library/DBeaverData`;
+    - Linux: o do Flatpak, `~/.var/app/io.dbeaver.DBeaverCommunity/data/DBeaverData`; o do Snap,
+      `~/snap/dbeaver-ce/current/.local/share/DBeaverData` (a confirmar na S-DBEAVER-1); e o de sempre,
+      `~/.local/share/DBeaverData` (e, quando este não existe, o antigo `~/.local/share/.DBeaverData`). O Flatpak
+      copia a pasta antiga para a dele e deixa a antiga no lugar, por isso os dois podem existir.
+  - O workspace é a subpasta `workspace6` da pasta de dados. Um projeto é cada subpasta direta do workspace que tem
+    `.dbeaver/data-sources.json` ou ao menos um `.dbeaver/data-sources-*.json`; as outras são ignoradas, e as que
+    começam com ponto (como `.metadata`) também.
+  - A pasta de dados e o workspace são resolvidos uma vez (`realpath`) antes de tudo, porque o caminho do Snap passa
+    pelo atalho `current`, e a pasta escolhida pode ser um atalho; a recusa de atalho da RN-DBEAVER-006 vale para o
+    que está dentro do workspace.
+  - Com mais de uma pasta de dados com projetos (o Flatpak e a de sempre, por exemplo), vale a que tem o
+    `data-sources*.json` alterado por último: é a que a pessoa usa. As outras ficam ao alcance de "Escolher a pasta do
+    DBeaver…".
+  - O workspace que a pessoa escolheu no DBeaver (o `-data` do `dbeaver.ini`, a variável `DBEAVER_WORKSPACE`, ou
+    "Trocar workspace") não é procurado: é para isso o "Escolher a pasta do DBeaver…" (RN-DBEAVER-005).
+  - A procura só lista pastas e lê os metadados dos arquivos (`lstat`), com chamadas assíncronas: nada é aberto além do
+    que a cópia abre (RN-DBEAVER-006). Ela lista no máximo 1.000 entradas de cada pasta que olha (a pasta escolhida,
+    o workspace); passando disso, aquela pasta não é do DBeaver (`notDbeaver` na pasta escolhida, e a pasta de dados
+    seguinte, ou `notFound`, na procura).
+
+- **RN-DBEAVER-005.** "Escolher a pasta do DBeaver…".
+  - Abre o diálogo de pasta do sistema pelo processo principal (`openDirectory`, uma pasta só, e `showHiddenFiles`,
+    porque `~/.local/share` e `~/Library` ficam ocultas), com o título "Escolher a pasta do DBeaver"; ele começa na
+    pasta de dados do DBeaver quando ela existe (RN-DBEAVER-004), e senão na pasta pessoal do usuário; nada vem da
+    tela. Desistir responde `canceled`.
+  - Serve qualquer uma destas, e o processo principal descobre qual é pelo que tem dentro: a pasta de dados (a que tem
+    `workspace6`); um workspace (a que tem projetos, como acima); um projeto (a que tem `.dbeaver` com um
+    `data-sources*.json`); ou a própria `.dbeaver`. Sem nenhum projeto nela: `notDbeaver`, e o diálogo diz "Esta pasta
+    não tem conexões do DBeaver. Escolha a pasta DBeaverData, o workspace ou um projeto." no campo da origem.
+  - A pasta escolhida não é lembrada: a próxima vez procura de novo nos lugares de sempre.
+
+- **RN-DBEAVER-006.** O que o processo principal copia, e como a API acha a cópia.
+  - Copia, de cada projeto, só estes arquivos da `.dbeaver`, quando existem: `data-sources.json`,
+    `data-sources-<sufixo>.json`, `credentials-config.json`, `credentials-config-<sufixo>.json` e
+    `project-settings.json`, em que o sufixo tem de 1 a 64 caracteres entre letras, dígitos, `-`, `_` e `.`; nenhum
+    outro arquivo, e nada fora da `.dbeaver`.
+  - Só arquivos comuns: o atalho (link simbólico) é recusado sem ser seguido, no arquivo e na pasta do projeto, e a
+    `.dbeaver` que é atalho também; assim nada fora da pasta do DBeaver é lido. O projeto, a `.dbeaver` ou o arquivo
+    que é atalho recusa a cópia inteira com `unreadable` e a frase "O DBeaver guarda esta pasta por um atalho (link
+    simbólico), e o Prism não segue atalhos. Escolha a pasta de verdade." Cada arquivo tem até 5 MiB, cada projeto até
+    41 arquivos, até 50 projetos, e tudo junto até 32 MiB; o que passar disso é recusado inteiro com `tooLarge`, sem
+    copiar nada.
+  - Cada arquivo é aberto só para leitura e conferido pelo `fstat` do próprio descritor (arquivo comum, o mesmo
+    dispositivo e o mesmo `inode` do `lstat`), e a cópia para ao passar de 5 MiB (o arquivo que cresceu no meio), como
+    na RN-IMPORT-018: a troca de um arquivo entre a verificação e a abertura não leva a outro.
+  - Confere antes, como a RN-IMPORT-018: a pasta `transfers` aceita gravação (`notWritable`) e tem o espaço da cópia
+    mais 64 MiB (`noSpace`); um arquivo que o sistema não deixa ler dá `unreadable`, com a frase do código do sistema
+    da RN-IMPORT-018, nunca o texto dele.
+  - As frases das recusas, no cartão do "Comece por aqui" (RN-DBEAVER-001) e no campo "Origem" (RN-DBEAVER-014):
+    - `tooLarge`: "O DBeaver tem mais do que o Prism importa de uma vez: até 50 projetos, 5 MB por arquivo e 32 MB de
+      configuração. Com muitos projetos, use “Escolher a pasta do DBeaver…” e escolha a pasta de um projeto.";
+    - `notWritable`: "Não foi possível gravar na pasta de dados do Prism para ler o DBeaver.";
+    - `noSpace`: "Não há espaço na pasta de dados do Prism para copiar as conexões do DBeaver.";
+    - `unreadable`: "Não foi possível ler os arquivos do DBeaver: <o motivo>.", com a frase do código do sistema da
+      RN-IMPORT-018, ou a frase do atalho acima.
+    Só o `notFound` diz "Não encontramos o DBeaver nos lugares de sempre…". Nas recusas acima, os botões são "Tentar de
+    novo" e "Escolher a pasta do DBeaver…".
+  - A cópia vai para `transfers/<sourceId>.dbeaver/`, uma pasta com o modo 0700 (no Windows, a lista de acesso herdada
+    da pasta de dados), em que `<sourceId>` é um identificador aleatório novo (36 caracteres, em minúsculas, com os
+    hifens). Dentro dela, uma subpasta por projeto, `1`, `2`…, também com o modo 0700, com os arquivos copiados com os
+    mesmos nomes, cada um com o modo 0600, e um `manifest.json` que o processo principal escreve por último: `{
+    "version": 1, "where": "standard" | "flatpak" | "snap" | "env" | "chosen", "projects": [{ "folder": "1", "name":
+    "General" }] }`, em que `name` é o nome da pasta do projeto, que o DBeaver mostra. Cada arquivo é escrito como na
+    RN-IMPORT-018 (`open(…, "wx", 0o600)`, `fsync`) e a pasta inteira é escrita como `<sourceId>.dbeaver.part` e
+    renomeada no fim: a API nunca vê uma cópia pela metade.
+  - O nome do projeto com caractere de controle ou de direção do texto (os da RN-PASTA-001) não serve: o seletor o
+    mostra como "Projeto 2" (pela posição no manifesto), desabilitado, com "O nome deste projeto no DBeaver tem um
+    caractere que o Prism não aceita.", e as conexões dele ficam de fora. O nome com mais de 60 caracteres é cortado
+    em 60 (sem partir um par de substitutos) na pasta que ele cria (RN-DBEAVER-011), e a origem guarda o nome inteiro
+    (RN-DBEAVER-018). A API confere isso; o processo principal escreve o nome como está.
+  - A cópia é rápida (arquivos de configuração) e termina antes da resposta: não há consulta de progresso.
+  - O canal é `prism:dbeaver-source`, com `{ mode: "find" }` (a procura da RN-DBEAVER-004) ou `{ mode: "choose" }`
+    (a pasta da RN-DBEAVER-005), e responde `found` com `{ sourceId, where, projects }` (a contagem dos projetos),
+    `notFound`, `canceled`, `notDbeaver`, `tooLarge`, `notWritable`, `noSpace` ou `unreadable` (com `message`). Nenhum
+    caminho, pasta ou nome de arquivo vai à tela, e nenhum canal recebe um. `prism:dbeaver-source-release`, com o
+    `sourceId`, apaga a cópia; a tela o pede ao fechar o diálogo sem importar, ao trocar de origem, quando a contagem
+    do "Comece por aqui" responde, quando o convite não acha conexão importável, no bloqueio e nas saídas, e o
+    processo principal faz o mesmo com as cópias de
+    uma janela que fecha, cai ou recarrega, e com todas no `before-quit`. O de outra janela, ou com um `sourceId` que
+    ele não conhece, não faz nada. O processo principal guarda no máximo uma cópia por janela: um novo `find` ou
+    `choose` solta a anterior da mesma janela (o `choose` desistido, `canceled`, não solta nada). Os dois canais têm
+    `assertFromApp` e o conteúdo validado dos dois lados, e entram no teste dos canais (`electron/channels.test.ts`).
+  - A API acha a cópia pelo `sourceId` (só o formato do identificador passa, e o caminho é montado por ela, dentro de
+    `transfers`), lê o `manifest.json` e os arquivos dele, e nada mais: um nome do manifesto que não é `1` a `50`, ou um
+    arquivo que não é um dos nomes acima, é ignorado. Ela apaga a cópia depois da importação que terminou com sucesso
+    (também a que não criou nem atualizou nada); a recusa da importação (`FOLDER_NOT_FOUND`, `IMPORT_EMPTY`,
+    `IMPORT_INVALID`, `DBEAVER_LIMITS_EXCEEDED`) a deixa, e o diálogo continua com a origem, a prévia e as marcas. Ela
+    a apaga também na partida, com o resto da pasta `transfers` (RN-EXPORT-018), e quando o cofre fecha (o 401
+    `VAULT_LOCKED` e o 503 `VAULT_UNAVAILABLE` da gravação incluídos). A prévia e a contagem não apagam: cada pedido
+    lê a cópia de novo.
+  - A cópia tem as senhas do DBeaver na cifra dele, que qualquer um com a chave pública abre: ela fica na pasta de
+    dados do usuário do sistema, com o mesmo acesso dos arquivos originais, e vive só até a importação ou o diálogo
+    fechar. Só um diálogo aberto segura uma cópia: a do "Comece por aqui" é solta logo depois da contagem
+    (RN-DBEAVER-001), e a do convite que não achou conexão importável, na hora (RN-DBEAVER-002); o convite que acha
+    passa a cópia ao diálogo, que abre em seguida.
+  - O log do processo principal registra a procura e a cópia com o `sourceId`, o `where`, quantos projetos, quantos
+    arquivos, os bytes e a duração; nunca um caminho, o nome de um projeto ou de um arquivo (RN-LOG-001).
+
+### A leitura, na API
+
+- **RN-DBEAVER-007.** A leitura de cada projeto, nos três pedidos (a contagem, a prévia e a importação).
+  - `project-settings.json` é lido primeiro (os dois campos vêm do DBeaver Enterprise e Team, e o DBeaver Community
+    só os respeita):
+    - com `secureProject` verdadeiro, o próprio `data-sources.json` é cifrado com a senha do projeto, e o projeto não é
+      lido: as conexões dele ficam de fora, o seletor do projeto diz "protegido por senha de projeto"
+      (RN-DBEAVER-014), e a prévia de "Todos os projetos" avisa (`protectedProjects`, RN-DBEAVER-015);
+    - com só `useProjectPassword` verdadeiro, as conexões são lidas, mas o `credentials-config` é cifrado com a senha
+      do projeto e não é aberto: as conexões vêm sem senha (com o usuário do `data-sources*.json`, quando ele tem um),
+      com o aviso das senhas protegidas (`credentialsProtected`, RN-DBEAVER-015). O DBeaver Community faz o mesmo
+      quando a pessoa aceita abrir o projeto sem as credenciais.
+    O `project-settings.json` que não existe, ou que não é um JSON, é ignorado.
+  - Cada `data-sources*.json` é lido com `System.Text.Json`, até 64 níveis, sem comentários. O que não é um objeto JSON
+    deixa de fora só aquele arquivo, e a prévia diz "Um arquivo de conexões do projeto General não pôde ser lido."
+    Quando nenhum arquivo do projeto pôde ser lido, o projeto inteiro fica de fora, com a mesma frase no plural.
+  - Do arquivo, só `folders`, `connections` e `connection-types`; o resto (`virtual-models`, `network-profiles`,
+    `auth-profiles`, `saved-filters`, `drivers`, `external-configurations`) é ignorado. As pastas vêm só do
+    `data-sources.json` (os outros não as têm, no DBeaver); a conexão dos outros que aponta para uma pasta que não
+    existe cria a pasta pelo caminho, como o DBeaver faz.
+  - O mesmo ID de conexão em dois arquivos do projeto: vale o do `data-sources.json` e, entre os outros, o do primeiro
+    na ordem alfabética ordinal do nome do arquivo (assim um `data-sources-backup.json` esquecido na `.dbeaver` não
+    ganha do principal); o outro fica de fora com "O ID desta conexão se repete no projeto.".
+  - A conexão com `origin` (a que vem de uma fonte externa do DBeaver, e não do arquivo) fica de fora sem aparecer.
+  - O que o projeto traz conta nos limites da importação (RN-TRANSF-010): até 2.000 conexões e 2.000 pastas no total
+    (as pastas dos projetos contam), até 32 níveis contados do lugar escolhido (a pasta do projeto é um nível). Além
+    disso, 422 `DBEAVER_LIMITS_EXCEEDED`: "O DBeaver tem mais do que o Prism importa de uma vez: até 2.000 conexões,
+    2.000 pastas e 32 níveis de pastas." e, com mais de um projeto na origem, "Escolha um projeto só." no fim. A
+    contagem (`scan`) não confere esses limites: devolve as contagens de cada projeto, que é o que o seletor do
+    projeto precisa. A prévia e a importação os conferem para o projeto escolhido (ou para todos).
+  - As chaves das pastas e das conexões da prévia são geradas pela API (`p1` para cada projeto, `f1`, `c1`…), na ordem
+    dos projetos do manifesto, das pastas pelo caminho e das conexões pela ordem do arquivo; elas são estáveis para a
+    mesma cópia com as mesmas escolhas, que é o que a importação refaz. O ID do DBeaver é a origem (RN-DBEAVER-018),
+    nunca a chave.
+  - A partir daqui, o que foi lido é posto na forma do conteúdo do arquivo do Prism (as pastas e as conexões da
+    RN-TRANSF-007, com o `effective` de cada conexão) e segue pelo mesmo caminho: a análise e as recusas por item
+    (RN-TRANSF-010, etapa 7, e RN-TRANSF-014), a colocação e os conflitos (RN-TRANSF-012), o nunca mais fraca
+    (RN-TRANSF-013) e a gravação (RN-TRANSF-014). Uma regra de campo só existe num lugar.
+
+- **RN-DBEAVER-008.** As senhas: decifrar o `credentials-config.json`.
+  - A API decifra com o `Aes` do .NET (sem pacote novo, RN-ABERTO-002): AES-128 em CBC, com o preenchimento PKCS #7 e
+    a chave fixa do DBeaver Community, a da constante `LOCAL_KEY_CACHE` do `BaseProjectImpl` dele, que o
+    `DefaultValueEncryptor` recebe (a mesma do comando do dono); o IV são os 16 primeiros bytes do arquivo, e o resto é
+    o conteúdo cifrado. O arquivo com menos de 32 bytes, ou com um tamanho que não é múltiplo de 16, não é decifrado.
+  - A chave fica numa constante, com o comentário de que ela é pública (está no código aberto do DBeaver) e não protege
+    nada: quem tem o arquivo tem as senhas. Por isso o Prism trata o que sai dele como segredo, e o põe no cofre
+    cifrado. A chave não é configurável, e a constante não é usada para mais nada (seção 8, item 8).
+  - O `credentials-config` que não existe no projeto, ou que tem 0 byte, não é erro nem aviso: as conexões vêm só com o
+    usuário do `data-sources*.json`, quando ele tem um.
+  - O conteúdo decifrado é um JSON `{ "<ID da conexão>": { "#connection": { "user": "…", "password": "…" }, … } }`.
+    Do nó `#connection`, só `user` e `password`; os nós `network/<túnel>` (o usuário e a senha do túnel SSH) e as
+    entradas `profile:<…>` são ignorados.
+  - Um `credentials-config` que não decifra (o preenchimento não confere), que não é um JSON nessa forma, ou que
+    ninguém deixa ler, não impede a importação: as conexões daquele arquivo vêm só com o usuário do
+    `data-sources*.json`, quando ele tem um, e a prévia mostra, no tom de atenção, uma vez por projeto: "As senhas do
+    DBeaver não puderam ser lidas: o arquivo não está no formato que o Prism conhece (o DBeaver pode estar guardando as
+    senhas no armazenamento seguro do sistema). As conexões vêm só com o usuário." Com mais de um projeto, a frase
+    começa com "No projeto Vendas, as senhas…".
+  - O usuário e a senha de cada conexão, como o `DataSourceSerializerModern` do DBeaver os lê: os do `#connection` do
+    ID dela e, por cima deles, o `user` e o `password` não vazios que o `configuration` da conexão tiver no próprio
+    `data-sources*.json` (o DBeaver os aceita ali e os aplica por último). A senha vem sempre que um dos dois a traz,
+    com ou sem `save-password`, como no DBeaver (que liga o "Salvar senha" da conexão que tem senha). A conexão com
+    `save-password` verdadeiro que fica sem senha (nem no `#connection` nem no `configuration`) entra sem senha e é
+    contada em `savedPasswordMissing` (RN-DBEAVER-015). Com o modelo de autenticação
+    (`auth-model`) diferente de `native`, nenhum dos dois vem, e a conexão vem sem usuário e senha, com "o login do
+    DBeaver (<modelo>)" no que ficou de fora (RN-DBEAVER-013); o `postgres_pgpass` traz o usuário, sem a senha, que
+    vinha do arquivo pgpass. A senha vazia é sem senha, e a senha sem usuário não vem (RN-TRANSF-015).
+  - Os bytes do arquivo decifrado, a cópia da chave usada no `Aes` e os buffers do JSON são zerados assim que o JSON é
+    lido, como no cofre (RN-TRANSF-010); os textos do usuário e da senha vivem só até a resposta ou a gravação. O erro
+    ao decifrar ou ao ler vai ao log só com a classe da exceção, nunca com a mensagem (a do `JsonException` traz um
+    pedaço do texto).
+  - Nada é decifrado na tela nem no processo principal, e nada é enviado para fora do computador: o Prism não fala com
+    o DBeaver, nem com a internet, para isso.
+
+### O que vira o quê
+
+- **RN-DBEAVER-009.** O banco.
+  - Pelo `provider` e pelo `driver` da conexão no `data-sources*.json` (nunca pelo começo do ID dela, que é só o driver
+    de quando ela foi criada):
+    - PostgreSQL: o provedor `postgresql` com o driver `postgres-jdbc` ou `postgresql`;
+    - Db2: o provedor `db2` com o driver `db2` (o Db2 para Linux, Unix e Windows);
+    - Informix: o provedor `generic` com o driver `informix`.
+  - Os outros ficam na prévia desmarcados e desabilitados, com "O Prism ainda não tem este banco (MySQL)." O nome entre
+    parênteses é o do banco quando o Prism o conhece pelo driver (MySQL, MariaDB, Oracle, SQL Server, SQLite, Db2 for
+    z/OS, Db2 for IBM i, Greenplum, Redshift, CockroachDB…) e, senão, o `driver` como veio, cortado em 60 caracteres.
+    Os PostgreSQL de outros fornecedores (os outros drivers do provedor `postgresql`) entram nessa lista: o Prism não
+    os testou.
+  - A conexão migrada pelo DBeaver (com `original-provider` e `original-driver`) vale pelo `provider` e pelo `driver`
+    de agora.
+
+- **RN-DBEAVER-010.** O servidor: o host, a porta e o banco de dados.
+  - Com `configuration.configurationType` `MANUAL` ou ausente, valem os campos: `host`, `port` (um inteiro de 1 a
+    65.535, como texto ou como número JSON), `database` e, no Informix, `server`. A `url` é ignorada: o DBeaver a refaz
+    dos campos ao conectar. Com `host`, `port`, `server` e `database` todos vazios e a `url` preenchida, vale a `url`,
+    como no DBeaver, pelas regras abaixo.
+  - Com `URL`, vale a `url`, lida pela API, sem diferenciar maiúsculas no começo:
+    - PostgreSQL: `jdbc:postgresql://<host>[:<porta>][/<banco>][?…]`; o host pode ser um IPv6 entre colchetes, e, com
+      vários hosts separados por vírgula, vale o primeiro;
+    - Db2: `jdbc:db2://<host>[:<porta>]/<banco>[:<propriedades>;]`;
+    - Informix: `jdbc:informix-sqli://<host>:<porta>/[<banco>][:<propriedades>]`, com as propriedades separadas por
+      `;` e o servidor em `INFORMIXSERVER=`, sem diferenciar maiúsculas.
+    A URL que não casa deixa a conexão não importável, com "Não foi possível ler a URL JDBC desta conexão." e, na
+    dica, só o começo da URL, até o fim do host e da porta (`jdbc:informix-sqli://ifx-dev.exemplo.invalid:55080/…`):
+    a URL é cortada antes do primeiro `/`, `?`, `;` ou `,` depois do `//` e, sem `//`, depois do esquema
+    (`jdbc:informix-sqli:…`); com um `@` antes do corte (um usuário escrito no endereço), só o esquema fica. O que vem
+    depois, que pode trazer `user=` e `password=`, nunca vai à tela, à resposta nem ao log (RN-CONN-001). O Prism não
+    adivinha. As propriedades da URL que casa também não vão à tela: dela só saem o host, a porta, o banco de dados e
+    o servidor Informix.
+  - A porta ausente é a padrão do DBeaver para o banco: 5432 no PostgreSQL e 50000 no Db2. No Informix, que o DBeaver
+    sempre escreve com a porta, a ausente deixa a conexão não importável ("A conexão não tem porta.").
+  - O banco de dados ausente: no PostgreSQL, `postgres`, o padrão do DBeaver; no Db2 e no Informix, a conexão não é
+    importável ("A conexão não tem banco de dados: o Prism precisa de um.").
+  - O valor com uma variável do DBeaver (`${…}`) no host, na porta, no banco de dados ou no usuário deixa a conexão não
+    importável: "A conexão usa variáveis do DBeaver (${…}), que o Prism não tem."
+  - O Informix: o Prism conecta pela porta DRDA, sem o `INFORMIXSERVER` (seção 9), e o DBeaver, pelo protocolo SQLI, com
+    ele. Sem a porta DRDA do servidor preenchida (RN-DBEAVER-015), a conexão nova vem com a porta do DBeaver, como está (e a
+    que já existe fica com a dela, RN-DBEAVER-017), e o servidor não é gravado (o Prism não tem o campo): ele aparece na prévia, na segunda linha da conexão, e no que ficou de fora. Toda conexão Informix sem a porta DRDA do servidor preenchida leva na prévia a
+    marca "porta do DBeaver", com a dica "O DBeaver fala com o Informix pelo protocolo SQLI, e o Prism, pela porta
+    DRDA, que costuma ser outra (a sugerida é 9089). Se conectar falhar, troque a porta em Editar conexão: a do DBeaver
+    era <porta>." O Prism não troca a porta sozinho: a DRDA de cada servidor é a que o DBA configurou. Quem a sabe a
+    informa no diálogo, no campo "Porta DRDA do Informix" de cada servidor (RN-DBEAVER-015): o campo preenchido troca a
+    porta de toda conexão Informix importada daquele servidor, nova ou sobrescrita, e a marca "porta do DBeaver" sai
+    dela; o campo vazio deixa tudo como está acima.
+  - O nome é o `name` da conexão. Ele, o host, o banco de dados e o usuário passam pelas regras e pela normalização da
+    criação (RN-CONN-010), e a conexão que não passa não é importável, com a frase da regra (RN-TRANSF-014).
+
+- **RN-DBEAVER-011.** As pastas e os projetos.
+  - As pastas do DBeaver (`folders`, pelo caminho com `/`, e o `folder` de cada conexão) viram pastas do Prism, com as
+    aninhadas e as conexões dentro, e as vazias também. A chave no formato antigo (o nome com `parent`) vale pelo
+    caminho que o DBeaver monta. O pedaço vazio de um caminho (`a//b`) é ignorado. A descrição da pasta fica de fora.
+  - O projeto `General` vai para o lugar escolhido, sem pasta. Cada outro projeto vira uma pasta com o nome dele, no
+    lugar escolhido, com a estrutura dele dentro, também quando é o único escolhido: assim a mesma importação dá a
+    mesma árvore, e a reimportação acha as pastas pelo nome (RN-TRANSF-012).
+  - O nome da pasta do DBeaver (e o do projeto, RN-DBEAVER-006) com mais de 60 caracteres é cortado em 60, sem partir
+    um par de substitutos, e a dica da pasta na prévia diz "O nome da pasta foi cortado em 60 caracteres."; duas pastas
+    irmãs que ficam com o mesmo nome cortado são a mesma. A pasta que já existe com o mesmo nome no mesmo lugar é a
+    mesma, como na RN-TRANSF-012, e a que ainda não passa nas regras (RN-PASTA-001: o caractere de controle ou de
+    direção do texto) leva o que tem dentro, com o motivo.
+  - As pastas do DBeaver não têm ambiente, cor nem proteções: as do Prism nascem sem eles.
+
+- **RN-DBEAVER-012.** Os ambientes e as proteções, pelo tipo de conexão.
+  - O tipo da conexão é o `configuration.type`; ausente, `dev`, como no DBeaver. Ele é procurado nos
+    `connection-types` do próprio arquivo e, sem ele lá, nos três do DBeaver: `dev` (Development, branco), `test`
+    (Test, `214,250,207`) e `prod` (Production, `250,207,207`), com as confirmações de cada um (só o `prod` tem
+    "Confirmar execução SQL").
+  - O ambiente da conexão no Prism é o nome do tipo, com a cor dele, gravado na própria conexão:
+    - os três do DBeaver, reconhecidos pelo ID (`dev`, `test`, `prod`) e não pelo nome, com o nome padrão em inglês
+      (ou sem nome), viram "Desenvolvimento", "Teste" e "Produção"; renomeados pela pessoa no DBeaver, ficam com o
+      nome dela;
+    - os criados pela pessoa ficam com o nome como está, aparado; o nome com mais de 30 caracteres é cortado em 30
+      (sem partir um par de substitutos), e a dica da conexão na prévia diz "O nome do tipo de conexão foi cortado em
+      30 caracteres.";
+    - o nome com caractere de controle ou de direção do texto deixa a conexão sem ambiente, e a prévia diz "O tipo de
+      conexão tem um caractere que o Prism não aceita: a conexão vem sem ambiente.".
+  - A cor: a da própria conexão (`configuration.color`), quando ela tem uma, vence a do tipo. O DBeaver grava a cor
+    como `"R,G,B"` em decimal; ela vira `#RRGGBB` em maiúsculas (`250,207,207` vira `#FACFCF`). O branco
+    (`255,255,255`) é "sem cor" no DBeaver. A cor da conexão que é branca ou inválida (que não é três inteiros de 0 a
+    255) não conta: vale a do tipo; se esta também for branca ou inválida, o ambiente vem só com o nome, e o Prism
+    mostra a etiqueta na cor neutra.
+  - "Somente leitura": a conexão com `read-only` verdadeiro vem com "Somente leitura" (RN-PROT-002). Também vem com
+    ele a conexão, ou o tipo dela, que tem `edit.data`, `edit.meta`, `edit.execute` ou `import.data` em
+    `security.permission-restrictions` (as permissões que o DBeaver tira): o Prism não tem restrição por tipo de
+    comando, e o somente leitura é a mais próxima sem ficar mais fraca. O que ficou de fora diz "as restrições de
+    permissão (viraram somente leitura)" (RN-DBEAVER-013).
+  - "Confirmar antes de executar": o tipo com "Confirmar execução SQL" (`confirm-execute`) vem com "Todos os
+    comandos" (RN-PROT-001). O DBeaver pergunta antes de todo comando que não é um `SELECT` (o `INSERT`, o `UPDATE`
+    com `WHERE`, o `CREATE`, o `CALL`), e "Só comandos irreversíveis" deixaria a maior parte deles passar sem
+    pergunta: seria mais fraca. "Todos os comandos" pergunta também antes do `SELECT`; quem achar demais muda depois,
+    no "Editar conexão". Na prévia, a conexão leva a marca "confirma todos os comandos" (RN-TRANSF-011) com a dica
+    "No DBeaver, o tipo <nome do tipo> pergunta antes de todo comando que não é SELECT. O Prism não tem essa escolha:
+    “Só comandos irreversíveis” deixaria passar o INSERT e o UPDATE com WHERE, então a conexão vem com “Todos os
+    comandos”, que pergunta também antes do SELECT. Mude em Editar conexão se achar demais." no lugar da dica da
+    RN-TRANSF-011, que fala da pasta do arquivo.
+  - O "Confirmar alteração de dados" do tipo (`confirm-data-change`, a pergunta antes de salvar as edições da grade)
+    sozinho não vira proteção: o Prism não tem uma que pergunte só no "Salvar", e "Todos os comandos" perguntaria a
+    cada `SELECT` em toda conexão de teste (o tipo `test` do DBeaver o tem). Ele vai para o que ficou de fora.
+  - O que vale na origem, para o nunca mais fraca (RN-TRANSF-013), é isso: o ambiente, o somente leitura (o do
+    `read-only` e o das restrições de permissão) e a confirmação da própria conexão (as pastas do DBeaver não têm
+    proteções). Posta num lugar que já protege mais, ela fica com o mais forte (RN-PROT-004).
+  - A verificação periódica é a padrão (ligada, 30 segundos, a consulta do banco, RN-VERIF-001): o DBeaver não tem
+    uma.
+
+- **RN-DBEAVER-013.** O que fica de fora, por conexão.
+  - A conexão importável que tem algo que o Prism não grava leva na prévia a marca "ficou de fora", com a lista na
+    dica, na ordem: "o servidor Informix (<nome>)"; "o túnel SSH" e "o proxy" (os `handlers` ligados, que o DBeaver só
+    grava ligados; "sem ele, a conexão pode não alcançar o servidor"); "as propriedades do driver" (`properties` não
+    vazias, e `provider-properties` só quando tem alguma chave que não começa por `@dbeaver-`: as que começam são
+    opções do próprio DBeaver, o `INTERNAL_PROP_PREFIX` dele, e ficam de fora sem aparecer); "os comandos de
+    inicialização" (`bootstrap.query`, e `bootstrap.defaultCatalog`
+    e `defaultSchema`, como "o banco e o esquema padrão"); "o auto-commit desligado" (`bootstrap.autocommit` falso: as
+    abas novas seguem Configurações › Transações, RN-CONFIG-007); "os comandos antes e depois de conectar" (`events`);
+    "o login do DBeaver (<modelo>)" (RN-DBEAVER-008); "a confirmação antes de salvar as edições" (RN-DBEAVER-012); "as
+    restrições de permissão (viraram somente leitura)" (`security.permission-restrictions`, RN-DBEAVER-012); e "os
+    filtros do navegador" (`filters`, e os `navigator-*`).
+  - Nada disso impede a importação: a conexão entra com o que o Prism tem. A senha de proteção da edição do DBeaver
+    (`lockPassword`), o `keepAlive`, os `tags`, as `custom-properties`, a pasta do cliente (`home`) e o
+    `virtual-model-id` ficam de fora sem aparecer.
+
+### O diálogo
+
+- **RN-DBEAVER-014.** O "Importar do DBeaver", numa página só, o "Importar conexões" da RN-TRANSF-009 com outra
+  origem.
+  - O título é "Importar do DBeaver", com "O Prism lê as conexões, as pastas e os tipos de conexão do DBeaver. Nada é
+    mudado no DBeaver."
+  - "Origem", no lugar de "Arquivo" e da "Senha de exportação": "DBeaver neste computador" ("DBeaver (Flatpak) neste
+    computador", "… (Snap)…"; com `DBEAVER_DATA`, "DBeaver da pasta de DBEAVER_DATA") ou "Pasta escolhida", com o
+    botão "Escolher a pasta do DBeaver…" (RN-DBEAVER-005). Aberto pela entrada do menu ou de Configurações, o diálogo
+    procura sozinho ao abrir ("Procurando o DBeaver neste computador…"), e aberto pelo "Comece por aqui" também (o
+    painel já soltou a cópia dele, RN-DBEAVER-001); aberto pelo convite, usa a cópia que o convite fez. Sem o DBeaver nos lugares de sempre (`notFound`), a origem diz "Não
+    encontramos o DBeaver nos lugares de sempre.", com "Escolher a pasta do DBeaver…". As outras recusas do processo
+    principal aparecem no campo com as frases da RN-DBEAVER-006 e os botões "Tentar de novo" e "Escolher a pasta do
+    DBeaver…", sem aviso de erro (RN-AVISO-004).
+  - "Projeto", só quando a origem tem mais de um projeto: "Todos os projetos" (o padrão) e cada projeto, na ordem do
+    manifesto, com quantas conexões o Prism importa dele ("General, 18 conexões"; "Vendas, 1 conexão"; "Legado, nenhuma
+    conexão que o Prism importe"). O projeto protegido por senha de projeto (`secureProject`, RN-DBEAVER-007) aparece
+    desabilitado, com "protegido por senha de projeto", e o de nome que o Prism não aceita (RN-DBEAVER-006), também. Com
+    um projeto só, o campo não aparece.
+  - "Levar as senhas", uma caixa ligada por padrão, com a ajuda "Desligada, as conexões vêm só com o usuário, e o
+    Prism pede a senha na primeira vez que você conectar." Ela fica acima da árvore e não aparece quando nenhuma
+    conexão da origem tem senha.
+  - "Porta DRDA do Informix", só quando a seleção tem conexões Informix (as marcadas na árvore): uma tabela pequena,
+    com uma linha por servidor do DBeaver distinto (o host, a porta SQLI e o `INFORMIXSERVER`) e, em cada uma, um campo
+    opcional "Porta DRDA", de 1 a 65.535. O campo preenchido vira a porta de toda conexão Informix importada daquele
+    servidor, nova ou sobrescrita (RN-DBEAVER-010 e 017); o vazio deixa como está, a porta do DBeaver com a marca
+    "porta do DBeaver". Os valores preenchidos continuam ao trocar o projeto, "Levar as senhas" e "Onde colocar", e a
+    troca de origem os apaga.
+  - "Onde colocar", como na RN-TRANSF-009.
+  - A prévia (RN-DBEAVER-015) aparece sozinha quando há origem, sem um botão "Abrir": não há senha para digitar.
+    Trocar o projeto, "Levar as senhas", a porta DRDA ou "Onde colocar" a refaz ("Atualizando a prévia…"), e as marcas continuam;
+    trocar a origem a apaga e pede outra. Um pedido de cada vez, como na RN-TRANSF-009.
+  - No rodapé, "Cancelar" (ou "Agora não", no convite, RN-DBEAVER-002) e "Importar" ("Importando…"), este
+    desabilitado até haver prévia com algo marcado. Cancelar, Esc e o fechar apagam a cópia (RN-DBEAVER-006);
+    enquanto "Importando…" o diálogo não fecha.
+  - O diálogo fica na área de trabalho, aberto pela página dela (como o "Nova conexão"), e não pelo navegador: o
+    "Comece por aqui", o convite e Configurações › Importar também o abrem. A entrada de Configurações leva à área de
+    trabalho e abre o diálogo ali. O "Importar conexões" aberto pelo "Comece por aqui" e por Configurações também fica
+    na área de trabalho, com as regras da RN-TRANSF-009. Feita a importação, o navegador faz o que faz depois do
+    "Importar conexões" (RN-TRANSF-014): lê as listas de novo, abre as pastas até o que entrou e escolhe a primeira
+    linha importada, ou a primeira atualizada quando nada foi criado, com o foco nela. Com o navegador escondido
+    (RN-NAV-008), a importação o mostra antes de escolher a linha e levar o foco a ela.
+
+- **RN-DBEAVER-015.** A prévia.
+  - É a da RN-TRANSF-011, com estas diferenças.
+  - O resumo: "O DBeaver tem 24 conexões em 5 pastas; o Prism importa 22: 22 com usuário, 1 com a senha.", com as
+    partes que são zero fora ("…; o Prism importa 22, sem usuário nem senha."), e o projeto no começo quando um só
+    está escolhido ("O projeto General tem…"). Com "Levar as senhas" desligada, "com a senha" sai. Sem conexão que o
+    Prism importe: "O DBeaver não tem conexões que o Prism importe (PostgreSQL, Db2 ou Informix).", com a árvore
+    mostrando as que não podem, e "Importar" desabilitado se também não houver pasta.
+  - A frase "Confira os servidores antes de importar…" da RN-TRANSF-011 só aparece com a origem "Pasta escolhida": a
+    pasta pode ser de outra pessoa. A do DBeaver deste computador é da própria pessoa.
+  - A árvore é a do "Importar conexões": as pastas dos projetos e as do DBeaver, abertas, com as caixas, a busca e
+    "Marcar todas" e "Desmarcar todas". A conexão mostra a etiqueta do banco, o nome, o ambiente (RN-DBEAVER-012) e o
+    cadeado e, na segunda linha, "pg-dev.exemplo.invalid:5432 / pedidos · usuário fulano · com senha"; no Informix,
+    "ifx-dev.exemplo.invalid:55080 / estoque · servidor ifx_dev_tcp · usuário fulano · com senha". Com "Levar as senhas" desligada, "· sem
+    senha".
+  - "Porta DRDA do Informix", entre os avisos e a árvore, só quando há conexão Informix marcada: uma tabela pequena com
+    uma linha por servidor do DBeaver (o host, a porta SQLI e o `INFORMIXSERVER`, nesta ordem, sem repetição), cada uma
+    com um campo opcional para a porta DRDA (um inteiro de 1 a 65.535). O que se digita fica no diálogo e vale para as
+    conexões marcadas daquele servidor; a segunda linha delas mostra a porta digitada, e a prévia se refaz quando a
+    pessoa para de digitar. Campo vazio, a porta é a do DBeaver, com a marca abaixo.
+  - As marcas à direita são as da RN-TRANSF-011 (o conflito de nome, o que a importação grava para não ficar mais
+    fraca, o não importável com o motivo), mais:
+    - "já existe no Prism", na conexão cuja origem já está numa conexão do cofre (RN-DBEAVER-017), com a dica "Esta
+      conexão já foi importada do DBeaver: ela está em Estoque / Production PRD, com o nome DATA FIX. Se ficar
+      marcada, você escolhe ao importar se ela é sobrescrita." Ela não é um conflito de nome;
+    - "porta do DBeaver", no Informix cujo servidor está sem porta DRDA no campo (RN-DBEAVER-010);
+    - "ficou de fora", com a lista (RN-DBEAVER-013).
+  - Os avisos ficam acima da árvore:
+    - no tom de atenção, o do projeto protegido que "Todos os projetos" deixou de fora (`protectedProjects`): "O
+      projeto Vendas está protegido por senha de projeto e não foi lido.";
+    - no tom de atenção, o das senhas que não puderam ser lidas (`credentialsUnreadable`, RN-DBEAVER-008);
+    - no tom de atenção, o das senhas protegidas por senha de projeto (`credentialsProtected`, RN-DBEAVER-007): "As
+      senhas do projeto Vendas estão protegidas por senha de projeto e não foram lidas. As conexões vêm sem senha.";
+    - no tom de atenção, o das senhas que deviam estar e não estão (`savedPasswordMissing`, RN-DBEAVER-008): "3
+      conexões têm “Salvar senha” no DBeaver, mas o arquivo não traz a senha (o DBeaver pode estar guardando as senhas
+      no armazenamento seguro do sistema). Elas vêm só com o usuário." ("1 conexão tem…");
+    - no tom de informação, o das senhas que o DBeaver não guardou (`withoutSavedPassword`): "8 conexões estão sem
+      “Salvar senha” no DBeaver e vêm só com o usuário.".
+  - Abaixo da árvore, a escolha dos conflitos de nome da RN-TRANSF-012, quando há. A caixa "Manter as consultas de
+    verificação" não aparece: o DBeaver não tem consulta de verificação.
+  - No rodapé, a conta: "20 conexões e 5 pastas marcadas", com ", 3 já existem no Prism" antes do fim quando há.
+  - A senha nunca vai à tela: a prévia diz só se a conexão leva senha (`hasPassword`).
+  - Cada pedido lê a cópia e decifra de novo; a API não guarda nada entre um pedido e outro.
+
+- **RN-DBEAVER-016.** A gravação.
+  - "Importar", sem nenhuma conexão marcada que já existe no Prism, grava direto. Com alguma, aparece antes a pergunta
+    da RN-DBEAVER-017.
+  - `POST api/user/connections/dbeaver/import` leva a origem, o projeto, o lugar, "Levar as senhas", as chaves
+    marcadas, a escolha dos conflitos de nome e as chaves das que já existem que podem ser sobrescritas. A API lê a
+    cópia de novo (RN-DBEAVER-007 e 008), confere tudo de novo e grava como na RN-TRANSF-014: UMA gravação do cofre,
+    tudo ou nada, contra o documento mais recente, com a geração do cofre lida antes da leitura e conferida dentro da
+    gravação (401 `VAULT_LOCKED` se mudou), o lugar que sumiu como 404 `FOLDER_NOT_FOUND`, e os IDs novos. Na mesma
+    gravação, o cofre ganha a data da importação e o convite feito (RN-DBEAVER-018).
+  - A conexão criada pela importação guarda a origem dela (RN-DBEAVER-018).
+  - O aviso diz o que aconteceu: "12 conexões e 4 pastas importadas do DBeaver." (só com a parte que não é zero, e
+    "1 conexão e 1 pasta importadas do DBeaver."), com ", 2 com outro nome" e ", 3 atualizadas" antes do ponto quando
+    há; a atenção quando o "Não importar" deixou conexões de fora, com a frase da RN-TRANSF-014; e, sem nada criado e
+    nada atualizado, "Nada foi importado do DBeaver: tudo o que estava marcado já existia." Só com atualizações:
+    "3 conexões atualizadas do DBeaver."
+  - Depois da gravação com sucesso, a API apaga a cópia (RN-DBEAVER-006). A recusa da importação deixa a cópia, e o
+    diálogo fica aberto com a origem, a prévia e as marcas, para a pessoa corrigir (o lugar que sumiu, o que ficou
+    marcado) e importar de novo; só o 404 `DBEAVER_SOURCE_MISSING` faz o diálogo pedir a origem de novo sozinho.
+  - O log registra a importação com o `sourceId`, os projetos lidos, as contagens (criadas, atualizadas, juntadas às
+    pastas que existiam, com outro nome, deixadas de fora, não importáveis, com as senhas, as que não decifraram, as
+    que ficaram com algo de fora, por item da lista da RN-DBEAVER-013) e os IDs criados e atualizados, nunca nomes,
+    hosts, usuários, senhas, IDs do DBeaver, nomes de projetos ou caminhos (RN-LOG-001).
+
+### Reimportar
+
+- **RN-DBEAVER-017.** A conexão que já existe, e sobrescrever.
+  - A conexão do DBeaver "já existe no Prism" quando alguma conexão do cofre tem a mesma origem: o mesmo ID do DBeaver
+    e o mesmo projeto (pelo nome, sem diferenciar maiúsculas), onde quer que ela esteja na árvore do Prism. Com mais de
+    uma (uma cópia de cofre antigo, por exemplo), vale a primeira na ordem da árvore. A conexão feita à mão no Prism,
+    sem origem, com o mesmo nome no mesmo lugar, é o conflito de nome da RN-TRANSF-012, e nunca é sobrescrita.
+  - Ao clicar em "Importar" com alguma dessas marcada, abre a pergunta, que ocupa a janela: "3 conexões do DBeaver já
+    existem no Prism. Sobrescrever?" ("1 conexão do DBeaver já existe no Prism. Sobrescrever?"), com "Sobrescrever
+    troca o nome, o servidor (host e porta), o banco de dados, o usuário, a senha e o ambiente delas pelo que está no
+    DBeaver; no Informix, a porta fica a do Prism, menos a do servidor que teve a porta DRDA preenchida. A pasta, a verificação e as proteções que você ligou no Prism
+    continuam." e os botões:
+    - "Sobrescrever todas": importa, e as que já existem são atualizadas;
+    - "Escolher quais…": mostra na própria pergunta a lista delas, cada uma com a caixa (todas marcadas), o nome no
+      Prism, o caminho e o que muda ("host ifx-dev.exemplo.invalid → ifx-hml.exemplo.invalid", "usuário", "senha", "ambiente Teste → Produção";
+      "nada muda" quando tudo é igual); desmarcar é manter a do Prism como está. O botão vira "Importar e sobrescrever
+      as marcadas";
+    - "Não sobrescrever nenhuma": importa só as novas; as que já existem ficam como estão e não entram de novo;
+    - "Cancelar" (o foco começa nele, e Esc cancela): volta ao diálogo, sem gravar.
+  - Quando alguma delas está conectada, em qualquer janela (o registro de sessões da API, que é um só, seção 8, item 3), a
+    pergunta diz "2 delas estão conectadas: o servidor, o usuário e a senha novos valem na próxima conexão; a proteção
+    e o ambiente valem já, no próximo comando (RN-PROT-006).", e a linha dela na lista, "Esta conexão está conectada: o
+    servidor, o usuário e a senha novos valem na próxima conexão." A sessão aberta continua no servidor e com o usuário
+    que tinha.
+  - Sobrescrever, na mesma gravação da importação (RN-DBEAVER-016), muda na conexão do Prism: o nome, o banco, o host,
+    a porta (menos no Informix, abaixo), o banco de dados, o usuário, a senha (só com "Levar as senhas" ligada e a senha vinda do DBeaver; senão
+    fica a do Prism) e o ambiente (gravado na própria conexão, como na importação). Fica como estava: o ID (os scripts
+    e as abas que a usam continuam ligados), a pasta, a verificação, a data de criação e a origem; a data de alteração
+    é a da importação.
+  - No Informix a porta não é sobrescrita, a não ser que a pessoa tenha preenchido a "Porta DRDA do Informix" do
+    servidor dela (RN-DBEAVER-015): a do DBeaver é a do protocolo SQLI, e a do Prism é a DRDA (RN-DBEAVER-010), que a
+    pessoa pode ter trocado depois de importar. Com o campo vazio, a conexão Informix que já existe fica com a porta que
+    tem, e `overwrite.port` é falso para ela; com o campo preenchido, a porta dela passa a ser a digitada, e
+    `overwrite.port` é verdadeiro quando a digitada é outra que a que ela tem.
+  - A senha do Prism só vai para o servidor e para o usuário para os quais foi gravada (RN-CONN-004, aqui também com o
+    usuário): se o host, a porta ou o usuário mudam e a senha não vem do DBeaver, a conexão fica sem senha
+    (RN-TRANSF-015), e a lista da pergunta diz "o host muda e a senha não vem: ela fica sem senha" ("o usuário muda e a
+    senha não vem: ela fica sem senha"). No Informix sem a porta DRDA preenchida, só o host e o usuário contam, porque a porta não muda.
+  - As proteções nunca ficam mais fracas: o somente leitura fica ligado se estava ligado no Prism ou no DBeaver, e a
+    confirmação é a mais forte das duas. Isso não pede a senha do Prism (RN-PROT-003): só aumenta.
+  - O nome novo que já está tomado por outra conexão na pasta da conexão do Prism não muda o nome: ela fica com o dela,
+    e a lista diz "o nome fica: já há uma DATA FIX nesta pasta".
+  - A conexão que outra janela excluiu entre a prévia e a gravação vira uma conexão nova, esteja a chave dela em
+    `overwrite` ou não; a que ela mudou é sobrescrita pelo que estiver no cofre na hora da gravação.
+  - As chaves que vão em `overwrite` têm de ser de conexões marcadas; a chave marcada que já existe e não está em
+    `overwrite` não é importada nem tocada.
+
+- **RN-DBEAVER-018.** O que o cofre guarda do DBeaver.
+  - Cada conexão criada pela importação do DBeaver guarda a origem dela: `origin`, com `source` (`"dbeaver"`),
+    `project` (o nome do projeto, inteiro, até 255 caracteres, também quando a pasta dele foi cortada em 60,
+    RN-DBEAVER-006) e `id` (o ID da conexão no DBeaver, até 128 caracteres). Editar, renomear e mover a
+    conexão mantêm a origem; duplicar não a leva (a cópia é uma conexão do Prism, RN-CONN-016), e a exportação também
+    não (RN-TRANSF-006): numa importação do arquivo, ela chega sem origem. As rotas das conexões não a devolvem; ela só
+    serve à prévia.
+  - O cofre guarda, do usuário, `dbeaver`, com `invitedAt` (quando o convite foi feito, RN-DBEAVER-001 e 002) e
+    `lastImportAt` (a última importação que gravou algo), as duas em UTC, nulas até acontecer.
+  - Os dois campos são novos e opcionais, e o formato do cofre não muda: o leitor do conteúdo do cofre (o
+    `System.Text.Json` com os padrões da web, sem recusar o campo que não conhece) ignora os campos desconhecidos, e
+    uma versão anterior do Prism que abra o cofre os ignora. Quem implementa confirma isso contra a 0.4.0, como a seção
+    39 fez com o `resultPlace`; se ela não ignorar, o formato sobe para o 5 (RN-VERSAO-005). Uma versão anterior que
+    grave o cofre os perde: o convite volta, e a reimportação vê as conexões de antes como conflitos de nome, e não
+    como "já existe".
+  - `GET api/user/connections/dbeaver` devolve `{ invitedAt, lastImportAt }`, e `PUT api/user/connections/dbeaver/invite`
+    grava o `invitedAt` com a hora da API (204; o que já tem data fica com ela).
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `GET api/user/connections/dbeaver` | 200 `{ invitedAt, lastImportAt }` | |
+| `PUT api/user/connections/dbeaver/invite` | 204 | |
+| `POST api/user/connections/dbeaver/scan` `{ sourceId }` | 200 `{ where, projects: [{ name, connections, importable, withPassword, protected, nameInvalid, credentialsUnreadable, credentialsProtected }] }` | 404 `DBEAVER_SOURCE_MISSING`; 422 `DBEAVER_SOURCE_INVALID`, `IMPORT_INVALID` |
+| `POST api/user/connections/dbeaver/import/preview` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts? }` | 200 `{ folders, connections, notes }` | 404 `DBEAVER_SOURCE_MISSING`, `DBEAVER_PROJECT_NOT_FOUND`, `FOLDER_NOT_FOUND`; 422 `DBEAVER_SOURCE_INVALID`, `DBEAVER_LIMITS_EXCEEDED`, `IMPORT_INVALID` |
+| `POST api/user/connections/dbeaver/import` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts?, items, onConflict, overwrite }` | 200 `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }` | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
+
+Notas:
+
+- `sourceId`: o identificador da cópia (RN-DBEAVER-006); fora do formato, 422 `IMPORT_INVALID` no campo. A cópia que
+  não existe (apagada, de outra execução, ou com o manifesto ausente) é 404 `DBEAVER_SOURCE_MISSING`: "A cópia do
+  DBeaver não existe mais. Procure o DBeaver de novo." A tela pede outra origem sozinha.
+- `DBEAVER_SOURCE_INVALID`: nenhum projeto da cópia pôde ser lido (todos os `data-sources*.json` malformados, ou todos
+  os projetos protegidos ou com nome que o Prism não aceita): "O Prism não conseguiu ler as conexões deste DBeaver."
+  Com algum projeto lido, os outros são avisos da prévia, e não uma recusa.
+- A contagem (`scan`) não confere os limites de conexões, pastas e níveis: devolve as contagens de cada projeto. A
+  prévia e a importação os conferem para o projeto escolhido (ou para todos), com `DBEAVER_LIMITS_EXCEEDED`.
+- `project`: o nome de um projeto do manifesto (comparação exata), ou ausente e nulo para todos. O que não está no
+  manifesto, ou está protegido, é 404 `DBEAVER_PROJECT_NOT_FOUND`.
+- `withPasswords`: booleano, "Levar as senhas"; ausente ou nulo é verdadeiro, e o que não é booleano é 422
+  `IMPORT_INVALID`.
+- `drdaPorts`: a porta DRDA de cada servidor Informix do DBeaver (RN-DBEAVER-014), `[{ host, port, server, drdaPort }]`, em
+  que `host`, `port` (a porta SQLI) e `server` (nulo sem `INFORMIXSERVER`) são os da conexão na prévia (`host`,
+  `dbeaverPort` e `server`), comparados como vêm, e `drdaPort` é um inteiro de 1 a 65.535. Ausente ou nulo é nenhuma, até
+  2.000; o servidor repetido, ou a porta fora do intervalo, é 422 `IMPORT_INVALID` em `DrdaPorts`; o servidor que
+  nenhuma conexão Informix do pedido tem é ignorado. A prévia e a importação a recebem iguais: a porta preenchida vale
+  para a conexão nova e para a sobrescrita.
+- `where`, `projects`: o lugar da cópia (RN-DBEAVER-006) e, de cada projeto, o nome (o "Projeto 2" quando o nome não
+  serve), quantas conexões ele tem, quantas o Prism importa, quantas destas têm senha, se é protegido (`secureProject`),
+  se o nome não serve (`nameInvalid`), se o `credentials-config` não pôde ser lido e se ele é protegido por senha de
+  projeto (`credentialsProtected`, o `useProjectPassword`). É o que o "Comece por aqui" e o seletor do projeto
+  mostram.
+- A prévia: `folders` e `connections` com os campos da prévia da seção 34, mais, em cada conexão, `server` (o servidor
+  Informix, ou nulo), `dbeaverPort` (a porta SQLI do DBeaver no Informix, ou nulo; `port` é a que a conexão teria) e
+  `drdaPort` (a porta DRDA de `drdaPorts` aplicada, ou nulo; com ela, `port` é ela e a marca "porta do DBeaver" não
+  aparece), `authModel` (o modelo de autenticação do DBeaver, cortado em 60, ou nulo; é o `<modelo>` do que ficou de
+  fora), `dbeaverType` (o nome do tipo de conexão no DBeaver, cortado em 30, para a dica da marca
+  "confirma todos os comandos", RN-DBEAVER-012; nulo quando o nome tem caractere de controle ou de direção do texto,
+  e a dica diz então "o tipo desta conexão"), `existing` (`{ connectionID, name, path, connected, host, port, database, userName, environmentName }` quando ela já existe no Prism, ou nulo;
+  `connected`: a API o preenche com o registro de sessões, de todas as janelas; os demais campos são o que ela tem hoje, para a
+  pergunta de sobrescrever dizer "host a → b", e nunca a senha), `overwrite`
+  (`{ name, engine, host, port, database, userName, password, environment, keepsName, dropsPassword }`, o que
+  sobrescrever mudaria, com cada campo verdadeiro quando muda, ou nulo quando ela não existe; `port` é falso no
+  Informix sem `drdaPort`, RN-DBEAVER-017, e `dropsPassword` é verdadeiro quando o host, a porta ou o usuário mudam e a senha não vem)
+  e `leftOut` (a lista dos
+  códigos da RN-DBEAVER-013: `informixServer`, `sshTunnel`, `proxy`, `driverProperties`, `bootstrap`,
+  `autocommitOff`, `events`, `authModel`, `confirmDataChange`, `permissions`, `navigatorFilters`, `environmentCut`,
+  `environmentInvalid`) e, em cada pasta, `nameCut` (o nome cortado em 60, RN-DBEAVER-011). `verificationQuery` vem
+  sempre nula. `notes` traz os avisos da prévia:
+  `protectedProjects`, `credentialsUnreadable`, `credentialsProtected`, `unreadableFiles` e `unreadableProjects` (os nomes dos projetos; os de `unreadableProjects`
+  são os que ficaram de fora por inteiro, com nenhum arquivo legível, e também estão em `unreadableFiles`) e
+  `withoutSavedPassword` e `savedPasswordMissing` (as contagens). A senha nunca vem; os textos que vêm do DBeaver
+  seguem o corte de 200 caracteres do item não importável (RN-TRANSF-011). A URL que não casa volta só com o começo,
+  cortada no primeiro `/`, `?`, `;` ou `,` depois do `//` (RN-DBEAVER-010), e nunca inteira.
+- `items`, `onConflict`: como na importação do arquivo (RN-TRANSF-014). `overwrite`: as chaves das conexões marcadas
+  que já existem e devem ser sobrescritas, até 2.000; ausente ou nulo é nenhuma. Uma chave que não está em `items`,
+  que é de pasta ou que vem repetida é 422 `IMPORT_INVALID`. A chave de uma conexão que não está no cofre (a excluída
+  desde a prévia) não é erro: ela entra como conexão nova (RN-DBEAVER-017).
+- Resposta da importação: as da seção 34, mais `updatedIDs`, os IDs das conexões sobrescritas.
+- `DBEAVER_LIMITS_EXCEEDED` tem a frase da RN-DBEAVER-007.
+- Os comandos e as respostas que levam a prévia, as credenciais lidas ou o `sourceId` escrevem só o nome do tipo no
+  `ToString()` (RN-LOG-001). As rotas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as
+  demais) e têm o corpo pequeno (o conteúdo vem da cópia, e não do pedido): `RequestSizeLimit` de 1 MiB.
+- O processo principal (RN-DBEAVER-006): `prism:dbeaver-source` `{ mode }` → `found { sourceId, where, projects }`,
+  `notFound`, `canceled`, `notDbeaver`, `tooLarge`, `notWritable`, `noSpace` ou `unreadable { message }`; e
+  `prism:dbeaver-source-release` `{ sourceId }`.
+
+### Testes e sondas
+
+- As fixtures do DBeaver são sintéticas, escritas à mão: um workspace com `General` e mais um projeto, pastas
+  aninhadas, os três bancos por campos e por URL, um MySQL, um Informix com servidor, um `prod`, um tipo criado, uma cor
+  da conexão, um túnel, um `save-password` falso, um `save-password` verdadeiro sem senha no arquivo, um `pgpass`, uma
+  variável, um `data-sources-2.json` com o par dele, um `data-sources-backup.json` com um ID repetido, um
+  `credentials-config.json` ausente e um de 0 byte, um `project-settings.json` com `secureProject` e outro com só
+  `useProjectPassword`, um tipo com `permission-restrictions`, `provider-properties` só com chaves `@dbeaver-`, uma
+  pasta com mais de 60 caracteres e uma URL que não casa com `;password=` nela, com os hosts no domínio reservado
+  `.invalid` e senhas inventadas. O
+  `credentials-config.json` é cifrado no próprio teste, com um IV conhecido, a partir de um JSON escrito à mão; um
+  teste confere também um arquivo com o IV aleatório e um com o preenchimento errado. O arquivo que o dono mandou de
+  exemplo tem dados de verdade e nunca entra no repositório, em fixture, em teste ou em log.
+- A API tem o teste do log (como o `ConnectionTransfersLogTests`): depois da contagem, da prévia e da importação, nada
+  do que veio do DBeaver (usuário, senha, host, nome, ID, projeto) está em `logs/`. A URL com `;password=` não aparece
+  nem na resposta da prévia nem em `logs/`.
+- A API tem os testes da reimportação: a conexão Informix sobrescrita fica com a porta do Prism, ou com a porta DRDA preenchida, e a nova também vem com ela; o usuário trocado sem
+  senha nova deixa a conexão sem senha; a chave de `overwrite` de uma conexão excluída entra como nova; e a recusa da
+  importação não apaga a cópia.
+- O processo principal tem os testes da procura (as raízes de cada sistema, com uma pasta pessoal falsa, e a pasta de
+  dados que é um atalho, como a do Snap), do diálogo de pasta (as quatro formas de pasta e a sem projeto), do atalho
+  recusado dentro do workspace, do arquivo trocado entre o `lstat` e a abertura, dos limites, da cópia única por
+  janela e da limpeza, em pastas temporárias de verdade, como o `transfer-source.test.ts`.
+- **S-DBEAVER-1.** No Windows, no macOS e no Linux (o pacote de sempre, o Flatpak e o Snap), com o DBeaver Community
+  de agora instalado e duas conexões criadas nele: a procura acha a pasta, e a contagem e a prévia batem com o que o
+  DBeaver mostra, com as senhas. Também: o caminho do Snap; a versão da Microsoft Store (MSIX) no Windows, que pode
+  guardar os dados em `%LOCALAPPDATA%\Packages\…`; o que o DBeaver 26.2 grava em `provider-properties` numa conexão
+  nova de cada banco; e mudar o tipo Production em Preferências e conferir se o `data-sources.json` reflete a
+  mudança. O que não puder ser exercitado é dito no relatório, e nunca dado como passando.
+- **S-DBEAVER-2.** Uma conexão Informix importada do DBeaver, com a porta SQLI dele, contra o contêiner do Informix:
+  o que o driver da IBM responde ao conectar, e se a frase dele diz o bastante para a pessoa trocar a porta; e a mesma
+  conexão com a porta DRDA.
+- **S-DBEAVER-3.** O DBeaver com o armazenamento seguro do sistema ligado, onde ele oferecer: o que fica no
+  `credentials-config.json` e o que a prévia diz.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-TRANSF-001**: o espaço vazio e a pasta ganham "Importar do DBeaver…" e "Importar do DBeaver aqui…".
+- **RN-TRANSF-006**: a origem do DBeaver não vai no arquivo da exportação.
+- **RN-TRANSF-012**: a única exceção ao "nunca muda nem sobrescreve" é a reimportação do DBeaver, que sobrescreve
+  quando a pessoa confirma.
+- **RN-NAV-003**: o menu do espaço vazio ganha "Importar do DBeaver…".
+- **RN-NAV-007**: o "Comece por aqui" no primeiro uso, e o estado vazio com os atalhos para importar.
+- **RN-MENU-001**: a pasta e o espaço vazio ganham importar do DBeaver.
+- **RN-CONFIG-001**: Configurações ganha a seção Importar (RN-CONFIG-011).
+- **RN-CONN-016**: a cópia não leva a origem do DBeaver.
+- **RN-IMPORT-017**: a pasta `transfers` também guarda a cópia do DBeaver.
+- **RN-EXPORT-018**: a limpeza da partida apaga também as pastas da cópia do DBeaver, com o que têm dentro.
+- **RN-LOG-001**: do DBeaver, só os identificadores e as contagens, também no log do processo principal.
+- **RN-VERSAO-002**: o que o Prism lê do DBeaver não é contrato.
+- **Seção 6**: as rotas do DBeaver.
+- **Seção 8**: o item 8, a chave pública do DBeaver numa constante (e no `AGENTS.md`, o item 9).
+- **Seção 9**: o "Comece por aqui", o "Importar do DBeaver", a pergunta de sobrescrever e a seção Importar não estão
+  no canvas.
+
+E a regra nova de Configurações:
+
+- **RN-CONFIG-011.** Configurações › Importar, depois de Conta, com o título "Importar" e "Traga as conexões de outro
+  programa." Tem "Importar do DBeaver…", que leva à área de trabalho e abre o "Importar do DBeaver" (RN-DBEAVER-014),
+  quantas vezes a pessoa quiser, e, embaixo, a data da última importação do DBeaver deste usuário (RN-DBEAVER-018):
+  "Última importação do DBeaver: 20/10/2026, 14:32." (na hora local, no formato da máquina), ou "Você ainda não
+  importou do DBeaver." Tem também "Importar conexões do Prism…", que abre o "Importar conexões" (RN-TRANSF-009) na
+  raiz. A data é do cofre, e não das preferências: ela segue o usuário. Fora do app, "Importar do DBeaver…" fica
+  desabilitado, com "Importar do DBeaver só funciona no app do Prism."
+
+### Fica para depois
+
+- O DataGrip e os outros programas (o dono pediu só o DBeaver por agora).
+- Importar o túnel SSH, o proxy e as propriedades do driver.
+- Ler as senhas do armazenamento seguro do sistema (o Gerenciador de Credenciais do Windows, o Keychain, o libsecret)
+  quando o DBeaver as guarda lá, e os projetos com senha de projeto do DBeaver Enterprise.
+- Manter o Prism sincronizado com o DBeaver (hoje é uma importação, quando a pessoa pede).
+- Ler o `dbeaver.ini` (o `-data`) e a variável `DBEAVER_WORKSPACE`, que o `RuntimeUtils` do DBeaver lê, para achar o
+  workspace escolhido no DBeaver; os projetos ligados de fora do workspace, as pastas antigas (`~/.dbeaver4`) e as
+  fontes externas (`origin`).
+- Um campo do servidor Informix no Prism (o `INFORMIXSERVER`), se a sonda S-DBEAVER-2 mostrar que a pessoa precisa
+  dele; e trocar a porta de várias conexões Informix de uma vez fora da importação.
+- Ligar a uma conexão do DBeaver uma conexão que a pessoa criou à mão no Prism, para que a reimportação a sobrescreva
+  em vez de criar uma "(cópia)" ou deixá-la de fora pelo conflito de nome.
+- Os PostgreSQL de outros fornecedores (Greenplum, Timescale, EDB, CockroachDB), o Db2 for z/OS e o Db2 for IBM i.
+- Uma proteção que pergunte só antes de salvar as edições da grade, para o "Confirmar alteração de dados" do DBeaver.

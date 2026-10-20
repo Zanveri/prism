@@ -51,6 +51,12 @@ public interface IDatabaseSessionService
 
     Task CloseAllAsync();
 
+    /// <summary>
+    /// RN-DBEAVER-017: se a conexão está conectada, em qualquer janela (o registro de sessões é um só, seção 8, item 3): tem ao menos uma sessão aberta do cofre da
+    /// geração <paramref name="vaultGeneration"/>. É o que a prévia do "Importar do DBeaver" diz da conexão que a reimportação sobrescreveria.
+    /// </summary>
+    bool HasSession(Guid connectionID, long vaultGeneration);
+
     /// <summary>RN-DRIVER-007: se há sessão aberta de algum destes bancos. O driver de um banco não é removido com sessão aberta dele.</summary>
     bool HasOpenSession(IReadOnlyCollection<EDatabaseEngine> engines);
 

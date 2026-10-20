@@ -5,6 +5,8 @@ using Prism.Infrastructure.ConnectionFiles.Clients;
 using Prism.Infrastructure.ConnectionFiles.Models;
 using Prism.Infrastructure.ConnectionFiles.Services;
 using Prism.Infrastructure.Databases.Clients;
+using Prism.Infrastructure.DbeaverSources.Clients;
+using Prism.Infrastructure.DbeaverSources.Services;
 using Prism.Infrastructure.Databases.Models;
 using Prism.Infrastructure.Databases.Services;
 using Prism.Infrastructure.Drivers;
@@ -76,6 +78,11 @@ public static class DependencyInjection
         // RN-IMPORT-007 a 011 e 017: o arquivo da importação, que o processo principal copia para a pasta `transfers`, e as prévias dele.
         services.AddTransient<IImportFileClient, ImportFileClient>();
         services.AddTransient<IImportPreviewService, ImportPreviewService>();
+
+        // RN-DBEAVER-006 a 008: a cópia dos arquivos do DBeaver que o processo principal faz na pasta `transfers`, e a cifra do `credentials-config.json` dele.
+        services.AddTransient<IDbeaverSourceClient, DbeaverSourceClient>();
+        // Singleton, como o registro das transferências: assina o fechamento do cofre para apagar as cópias (resolvido na subida, em `UseApi`).
+        services.AddSingleton<IDbeaverSourceService, DbeaverSourceService>();
 
         return services;
     }
