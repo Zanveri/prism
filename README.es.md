@@ -38,6 +38,9 @@ Descarga la versión más reciente desde la **[página de releases](https://gith
 | macOS Apple Silicon | `Prism-<versión>-mac-arm64.dmg` y `….zip` | los Mac con procesador M |
 | macOS Intel | `Prism-<versión>-mac-x64.dmg` y `….zip` | los Mac con procesador Intel |
 
+Los paquetes de macOS salen solo con las versiones estables: las betas salen para Windows y Linux. Si una versión salió sin el paquete
+de tu sistema, el comienzo de sus notas lo dice, y Prism solo ofrece la actualización que tiene paquete para tu sistema.
+
 El driver de PostgreSQL viene incluido. El de Db2 e Informix es el de IBM: Prism lo descarga por ti en **Configurações › Drivers**
 (Configuración › Drivers); IBM no lo publica para Mac con procesador Intel. Para verificar el paquete, compara su SHA-256 con la
 línea del archivo `SHA256SUMS` de la release.

@@ -36,6 +36,9 @@ arquivo do seu sistema:
 | macOS Apple Silicon | `Prism-<versão>-mac-arm64.dmg` e `….zip` | os Macs com processador M |
 | macOS Intel | `Prism-<versão>-mac-x64.dmg` e `….zip` | os Macs com processador Intel |
 
+Os pacotes de macOS saem só nas versões estáveis: os betas saem para Windows e Linux. Se uma versão saiu sem o pacote do seu sistema,
+o começo das notas dela diz isso, e o Prism só oferece a atualização que tem pacote para o seu sistema.
+
 O driver do PostgreSQL vai junto. O do Db2 e do Informix é o da IBM: o Prism o baixa para você em **Configurações › Drivers**
 (a IBM não o publica para Mac com processador Intel). Para conferir o pacote, compare o SHA-256 dele com a linha do arquivo
 `SHA256SUMS` da release.

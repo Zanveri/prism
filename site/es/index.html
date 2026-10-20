@@ -125,7 +125,7 @@
       <section id="descargar">
         <h2>Descargar e instalar</h2>
         <p class="botoes"><a class="botao botao-principal botao-grande" href="https://github.com/Zanveri/prism/releases">Descargar desde la página de releases</a></p>
-        <p><strong>Estable o beta.</strong> La versión estable más reciente aparece marcada como <strong>Latest</strong>: es la recomendada. Las betas salen con cada merge en <code>develop</code>, aparecen marcadas como <strong>Pre-release</strong> y pueden tener defectos.</p>
+        <p><strong>Estable o beta.</strong> La versión estable más reciente aparece marcada como <strong>Latest</strong>: es la recomendada. Las betas salen con cada merge en <code>develop</code>, aparecen marcadas como <strong>Pre-release</strong> y pueden tener defectos. <strong>Las betas salen solo para Windows y Linux</strong>: los paquetes de macOS vienen con las versiones estables. Si una versión salió sin el paquete de tu sistema, el comienzo de sus notas lo dice.</p>
         <p>En la página, abre la versión más nueva (la de arriba) y, en <strong>Assets</strong>, elige el archivo de tu sistema. En los nombres, <code>&lt;versión&gt;</code> es la de la release, como <code>0.1.0</code> o <code>0.1.1-beta.1</code>.</p>
 
         <div class="tabela">
@@ -386,7 +386,8 @@
           <li>La consulta no envía ningún identificador tuyo ni de la máquina.</li>
           <li>Antes de usar el archivo, Prism lo verifica contra dos sumas SHA-256: la de las notas de la release y la de <code>SHA256SUMS</code>. Si una falta o no coincide, borra el archivo y rechaza la actualización.</li>
           <li>En Windows, “Atualizar agora” ejecuta el instalador verificado, que reabre Prism. En Linux y macOS, Prism deja el paquete verificado en la carpeta de descargas y dice qué hacer.</li>
-          <li><strong>Canal beta.</strong> Con “Receber versões beta” (Recibir versiones beta) desactivado, que es lo predeterminado, Prism solo ofrece las versiones estables. Activado, ofrece también las betas, y el diálogo avisa que la versión es beta y puede tener defectos.</li>
+          <li><strong>Canal beta.</strong> Con “Receber versões beta” (Recibir versiones beta) desactivado, que es lo predeterminado, Prism solo ofrece las versiones estables. Activado, ofrece también las betas, y el diálogo avisa que la versión es beta y puede tener defectos. En macOS las betas no tienen paquete, así que la opción no cambia nada allí: las actualizaciones vienen con las versiones estables.</li>
+          <li><strong>Solo versiones con paquete para tu sistema.</strong> Si una versión más nueva salió sin el paquete de tu sistema (por ejemplo, un paquete que falló al generarse), Prism no la ofrece: ofrece la más nueva que tiene el paquete, con las notas hasta ella, y “Verificar atualizações” dice qué versión salió sin él.</li>
         </ul>
         <figure>
           <a href="../img/configuracoes-atualizacoes.png"><img src="../img/configuracoes-atualizacoes.png" width="1170" height="428" loading="lazy" alt="Configuración, sección Actualizaciones: verificar al abrir (activado), Recibir versiones beta (desactivado), la última verificación, la versión omitida y el botón Verificar actualizaciones"></a>
@@ -433,7 +434,7 @@
               <tr><td>“O cursor foi fechado.” (El cursor fue cerrado.)</td><td>Pasaron 5 minutos sin leer el resultado. Haz clic en “Executar de novo”.</td></tr>
               <tr><td>El texto de una pestaña de SQL desapareció.</td><td>El texto de las pestañas no se guarda. Copia a un archivo lo que no puedas perder.</td></tr>
               <tr><td>Prism me pidió la contraseña sin que yo saliera.</td><td>Fue el bloqueo por inactividad (10 minutos, por defecto). Cámbialo en Configurações › Segurança.</td></tr>
-              <tr><td>No aparece ninguna actualización.</td><td>Haz clic en “Verificar atualizações”. Para recibir betas, activa “Receber versões beta” en Configurações › Atualizações.</td></tr>
+              <tr><td>No aparece ninguna actualización.</td><td>Haz clic en “Verificar atualizações”. Para recibir betas, activa “Receber versões beta” en Configurações › Atualizações (en macOS no hay betas: las actualizaciones vienen con las versiones estables). Una versión que salió sin el paquete de tu sistema no se ofrece hasta la siguiente que lo tenga.</td></tr>
             </tbody>
           </table>
         </div>
