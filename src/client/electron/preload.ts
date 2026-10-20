@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { versionFromArgv, windowIdFromArgv } from "./app-version";
+import type { DbeaverReleaseRequest, DbeaverSourceRequest } from "./dbeaver-messages";
 import type { ResultWindowFocus, ResultWindowNamed, ResultWindowRequest, ResultWindowTitle } from "./result-window-messages";
 import type { ChooseSourceRequest, CopyRequest, DeliverRequest, DestinationRequest, ReleaseRequest, RevealRequest, SourceRequest } from "./transfer-messages";
 import type { UpdatePreferences } from "./update/preferences";
@@ -34,6 +35,7 @@ export type PrismBridge = {
   workspace: PrismWorkspace;
   zoom: PrismZoom;
   transfers: PrismTransfers;
+  dbeaver: PrismDbeaver;
 };
 
 /**
@@ -64,6 +66,20 @@ export type PrismTransfers = {
   sourceStatus(request: SourceRequest): Promise<unknown>;
   /** Solta o arquivo: a cópia em andamento para, e a cópia que a API ainda não tomou é apagada. */
   releaseSource(request: SourceRequest): Promise<void>;
+};
+
+/**
+ * A procura e a cópia do DBeaver (RN-DBEAVER-004 a 006). O processo principal acha a pasta do DBeaver (ou abre o diálogo de pasta do sistema), copia os
+ * arquivos esperados para a pasta `transfers` da pasta de dados e responde só com o identificador da cópia (`dbeaverSourceReplySchema`); a API lê a cópia
+ * por ele. **Nenhum pedido leva um caminho, e nenhuma resposta devolve um.**
+ */
+export type PrismDbeaver = {
+  /** Há processo principal para procurar o DBeaver? Fora do Electron não há, e as entradas dizem que só funciona no app. */
+  available: boolean;
+  /** `find`: a procura nos lugares de sempre; `choose`: o diálogo de pasta (`dbeaverSourceReplySchema`). */
+  source(request: DbeaverSourceRequest): Promise<unknown>;
+  /** Apaga a cópia (a de outra janela, ou um identificador que não se conhece, não faz nada). */
+  release(request: DbeaverReleaseRequest): Promise<void>;
 };
 
 /**
@@ -321,6 +337,11 @@ const bridge: PrismBridge = {
     chooseSource: (request) => ipcRenderer.invoke("prism:transfer-source", request),
     sourceStatus: (request) => ipcRenderer.invoke("prism:transfer-source-status", request),
     releaseSource: (request) => ipcRenderer.invoke("prism:transfer-source-release", request),
+  },
+  dbeaver: {
+    available: true,
+    source: (request) => ipcRenderer.invoke("prism:dbeaver-source", request),
+    release: (request) => ipcRenderer.invoke("prism:dbeaver-source-release", request),
   },
   verification: {
     claim: (claim) => ipcRenderer.invoke("prism:verification-claim", claim),
