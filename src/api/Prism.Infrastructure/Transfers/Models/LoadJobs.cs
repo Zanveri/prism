@@ -64,7 +64,8 @@ public sealed record CopyJob(
     LoadSettings Load,
     long VaultGeneration,
     long WindowID,
-    Func<CancellationToken, Task<ETransferCancelReason?>> TargetStop)
+    Func<CancellationToken, Task<ETransferCancelReason?>> TargetStop,
+    IReadOnlyList<QueryParameter>? Parameters = null)
 {
     public override string ToString()
         => nameof(CopyJob);

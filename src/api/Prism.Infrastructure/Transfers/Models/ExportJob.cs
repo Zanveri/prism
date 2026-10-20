@@ -15,7 +15,9 @@ public sealed record ExportColumnChoice(int Position, string Name)
 /// posição e pelo nome (`CheckColumns`, nos Registros e no resultado) ou todas as do resultado, na ordem (na tabela, cujo `SELECT` já as escolhe); a
 /// contagem; o formato com as opções e o nome da origem; e a saída (BOM, o nome do arquivo dentro do .zip, a área de transferência).
 ///
-/// Leva a senha do banco e o comando: o `ToString()` não os imprime (RN-LOG-001).
+/// `Parameters` (RN-VAR-033) são os valores dos marcadores do comando, na ordem do texto: a contagem e a leitura os levam, na conexão à parte.
+///
+/// Leva a senha do banco, o comando e os valores: o `ToString()` não os imprime (RN-LOG-001).
 /// </summary>
 public sealed record ExportJob(
     Guid ConnectionID,
@@ -31,7 +33,8 @@ public sealed record ExportJob(
     string SourceName,
     bool Bom,
     string? ZipEntryName,
-    bool Clipboard)
+    bool Clipboard,
+    IReadOnlyList<QueryParameter>? Parameters = null)
 {
     public override string ToString()
         => nameof(ExportJob);

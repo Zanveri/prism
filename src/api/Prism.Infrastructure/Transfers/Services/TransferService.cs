@@ -425,7 +425,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         if (job.Count)
         {
             Advance(transfer, ETransferPhase.Counting);
-            var counted = await connection.CountExportAsync(job.Sql, required: false, token);
+            var counted = await connection.CountExportAsync(job.Sql, required: false, token, job.Parameters);
             if (counted.IsFailure)
                 return (null, DatabaseFailureOf(counted.Error), null);
 
@@ -434,7 +434,7 @@ internal sealed class TransferService : ITransferService, IAsyncDisposable
         }
 
         Advance(transfer, ETransferPhase.Reading);
-        var started = await connection.StartExportReadAsync(job.Sql, token);
+        var started = await connection.StartExportReadAsync(job.Sql, token, job.Parameters);
         if (started.IsFailure)
             return (null, DatabaseFailureOf(started.Error), null);
 
