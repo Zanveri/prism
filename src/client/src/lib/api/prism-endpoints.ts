@@ -18,6 +18,12 @@ export const prismEndpoints = {
   userConnectionsExport: "api/user/connections/export",
   userConnectionsImportPreview: "api/user/connections/import/preview",
   userConnectionsImport: "api/user/connections/import",
+  // Seção 40: importar do DBeaver (RN-DBEAVER-016 a 018).
+  userConnectionsDbeaver: "api/user/connections/dbeaver",
+  userConnectionsDbeaverInvite: "api/user/connections/dbeaver/invite",
+  userConnectionsDbeaverScan: "api/user/connections/dbeaver/scan",
+  userConnectionsDbeaverPreview: "api/user/connections/dbeaver/import/preview",
+  userConnectionsDbeaverImport: "api/user/connections/dbeaver/import",
   userDatabaseSessions: "api/user/database-sessions",
   userDatabaseSession: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}`,
   userDatabaseSessionDatabases: (id: string) => `api/user/database-sessions/${encodeURIComponent(id)}/databases`,
