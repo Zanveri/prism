@@ -21,6 +21,14 @@
 # AS PÁGINAS: o site de `site/` é publicado a cada merge na `develop` (o ramo padrão, o único que o ambiente `github-pages` deixa
 # publicar), sem esperar o empacotamento e sem que ninguém espere por ele. Na `main` não rodam.
 #
+# CADA PLATAFORMA É INDEPENDENTE (decisão do dono, 2026-10-20): o pacote de uma plataforma que falha, é cancelado ou fica sem runner
+# não segura o lançamento das outras. O `empacotar` espera `verificar` e `seguranca` (sem eles não há pacote), e o `lancar` roda
+# mesmo com o `empacotar` em falha: o `!cancelled()` (que, ao contrário do `success()` implícito, não pula o job por causa de um
+# `needs` que falhou) e os resultados de `verificar` e `seguranca` exigidos à mão; uma execução cancelada por alguém não lança.
+# Nunca `always()`: ele rodaria o lançamento até numa execução cancelada, e o `check-workflows.sh` o reprova. O que entra na release
+# é decidido pelo `publish-release.sh`, que publica as plataformas que vieram inteiras e recusa se nenhuma veio. O macOS só é
+# empacotado na `main` (o `if` do job dele, em `empacotar.yml`): num beta, a falta dele é o esperado.
+#
 # Nenhum workflow nem action de fora: só `actions/*` e `github/*`, fixadas pelo SHA do commit, e as daqui (.github/actions/).
 # Só runners hospedados pelo GitHub, com rótulo de imagem fixo. Nenhum segredo obrigatório: o único segredo, LEAK_GUARD_EXTRA,
 # só chega ao passo do leak-guard.
@@ -72,8 +80,11 @@ jobs:
 
   lancar:
     name: Lançar
-    needs: [verificar, empacotar]
-    if: needs.verificar.outputs.lanca == 'true'
+    needs: [verificar, seguranca, empacotar]
+    # `!cancelled()` tira o `success()` implícito: o lançamento roda mesmo com um pacote em falha, mas nunca com `verificar` ou
+    # `seguranca` sem sucesso, nunca sem o plano dizer que lança e nunca numa execução cancelada. O `empacotar` só fica de fora
+    # se foi pulado (o que `verificar` e `seguranca` com sucesso já impedem: a guarda é para o dia em que o `empacotar` ganhar um `if`).
+    if: ${{ !cancelled() && needs.verificar.result == 'success' && needs.seguranca.result == 'success' && needs.verificar.outputs.lanca == 'true' && needs.empacotar.result != 'skipped' }}
     uses: ./.github/workflows/lancar.yml
     permissions:
       contents: write

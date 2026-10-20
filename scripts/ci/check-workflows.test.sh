@@ -115,6 +115,25 @@ sabotage "action das páginas por tag (sem o SHA) reprova" "uses" .github/workfl
 sabotage "as páginas sem permissions: {} no topo reprovam" "permissions: {}" .github/workflows/paginas.yml 's/^permissions: {}$/permissions:\n  contents: read/'
 sabotage "o job de páginas que não está na tabela do docs/ci.md reprova" "docs/ci.md" docs/ci.md '/^| `paginas.yml` | `publicar` |/d'
 
+# --- o lançamento que roda com um pacote em falha, sem always() ---
+sabotage "always() no if do lançamento reprova (ele rodaria o lançamento até numa execução cancelada)" "always()" .github/workflows/pipeline.yml 's/!cancelled()/always()/'
+sabotage "always() com espaço e maiúscula também reprova" "always()" .github/workflows/pipeline.yml 's/!cancelled()/Always ()/'
+append "always() no if de um passo de um reutilizável reprova" "always()" .github/workflows/integrar.yml '      - name: Sempre
+        if: always()
+        run: bash scripts/ci/integration-api.sh'
+sabotage "always() numa action composta reprova" "always()" .github/actions/preparar-node/action.yml '0,/^    - name:/s//    - if: always()\n      shell: bash\n      run: echo oi\n    - name:/'
+
+# --- o macOS só na estável ---
+sabotage "o job de macOS sem o if pelo ramo reprova (ele rodaria também nos betas)" "macOS" .github/workflows/empacotar.yml "/^    if: github.ref_name == 'main'\$/d"
+sabotage "o job de macOS que roda também na develop reprova" "macOS" .github/workflows/empacotar.yml "s/^    if: github.ref_name == 'main'\$/    if: github.ref_name == 'develop'/"
+sabotage "o job de macOS com outra condição reprova" "macOS" .github/workflows/empacotar.yml "s/^    if: github.ref_name == 'main'\$/    if: github.ref_name != 'x'/"
+# O runner por expressão (matriz) não escapa da regra do macOS: o runs-on só pode ser um dos rótulos fixos, então um job de macOS sempre aparece como literal.
+sabotage "o job de macOS com o runner vindo da matriz e sem o if reprova (o runner tem de ser um rótulo fixo)" "runs-on" .github/workflows/empacotar.yml "/^    if: github.ref_name == 'main'\$/d;s/^    runs-on: macos-15\$/    runs-on: \${{ matrix.runner }}/;s/^        arquitetura: \[arm64, x64\]\$/        arquitetura: [arm64, x64]\n        runner: [macos-15]/"
+fresh
+sed -i.bak "s/^    if: github.ref_name == 'main'\$/    if: \${{ github.ref_name == 'main' }}/" "$work/tree/.github/workflows/empacotar.yml" && rm -f "$work/tree/.github/workflows/empacotar.yml.bak"
+run
+expect "o mesmo if escrito com \${{ }} também passa" 0 "os workflows seguem as regras"
+
 # --- os segredos ---
 sabotage "secrets: inherit reprova" "segredo" .github/workflows/pipeline.yml 's/^    secrets:$/    secrets: inherit\n    x-segredos:/'
 append "um segredo usado fora do passo do leak-guard reprova" "segredo" .github/workflows/integrar.yml '      - name: Vazar
