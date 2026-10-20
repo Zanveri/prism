@@ -809,6 +809,19 @@ img-src 'self' data:; font-src 'self'`, no `index.html`. Consequências que não
   abre, esquerda fecha, Enter abre a aba da tabela ou da visão, Shift+F10 e a tecla de menu abrem o menu; só uma linha entra
   no Tab. A largura do navegador é ajustável (arrastar a divisória ou setas nela, de 200 a 640 px; 320 px de saída, para os nomes de
   coluna caberem inteiros).
+- **Ir ao item pelas primeiras letras** (RN-ARVORE-009, pedido do dono, como no DBeaver; vale para esta árvore e para a da seção Scripts): digitar um
+  caractere imprimível (sem Ctrl, Alt nem Cmd, fora da composição de um acento) leva o foco E a escolha ao próximo item visível que começa por ele, com a
+  volta ao começo; os digitados até 1 s depois do anterior se juntam num texto (o primeiro item, a partir do atual incluído, que começa pelo texto todo), e
+  a mesma letra repetida percorre um a um os que começam por ela. A lógica é uma só e pura, `_lib/type-ahead.ts` (`typeAheadStep`, `isTypeAheadKey`, a janela
+  `typeAheadWindow`; compara pelo `fold` da busca: sem caixa e sem acento), com teste de tabela; `useTypeAhead` (`_lib/use-type-ahead.ts`) guarda o texto num
+  `useRef` e o que o indicador mostra num estado que some 1 s depois da última tecla; `typeAheadLabels` e `scriptTreeLabels` dão os nomes das linhas à vista
+  (a de Carregando… e a de erro, sem nome). Só as linhas à vista contam (com o "Filtrar objetos", as que ele mostra): nada se expande nem se busca. Na
+  `NavigatorList` o salto passa por `focusRow`, que pede a rolagem da lista virtual e tenta o foco a cada quadro até a linha existir (no meio-tempo o foco espera na própria árvore, com o destino em `pendingFocus`, para a linha de origem que sai da janela não o deixar cair no `body`; o `onKeyDown` da árvore segue o texto a partir desse destino, e a tecla desse intervalo não se perde); na `ScriptsTreeView` o
+  gancho vem da `ScriptsSection` (`typeAhead`, opcional: a árvore continua só desenhando) e o `focus()` rola a seção. O Espaço só entra no meio do texto (sozinho
+  é da linha); as teclas de antes (setas, Home, End, Enter, F2, Delete, Shift+F10, a tecla de menu) e o Ctrl+F não mudam. O `TypeAheadIndicator`
+  (`type-ahead-indicator.tsx`) é o cantinho sobre a lista ("Ir para: bat", sem tirar espaço dela; na seção Scripts, uma faixa `sticky` sem altura) e a região
+  `aria-live="polite"` sempre montada, que só anuncia o "Nenhum item começa com “xyz”". Testes: `type-ahead.test.ts`, `use-type-ahead.test.ts`,
+  `navigator.type-ahead.test.ts` (a `NavigatorList` com a lista virtual de mentira), `scripts-section.type-ahead.test.ts` e `type-ahead-indicator.test.ts`.
 - **O que o canvas tem e a fatia não**: ocultar o navegador, "Atualizar navegador" e o "+" de nova conexão no título dele, o botão "+" de aba;
   na barra do editor, "Explicar plano", "Formatar", o esquema da aba e a transação (a barra tem Executar e Cancelar,
   seção 9 da especificação, o Executar script, RN-SQL-019, a conexão da aba, RN-ARVORE-008, e o banco, RN-ARVORE-007); na área de resultado, "Mensagens" e "Plano de execução" (no lugar delas, depois de um script, as abas dele, RN-SQL-020; o "Exportar CSV" só existe
@@ -1260,7 +1273,7 @@ da lista traz a pasta (`folderID`, que o `scriptSummarySchema` exige: a lista de
   (RN-SCRIPT-006) e a marca do genérico.
 - **O teclado** (`scriptTreeMove` e `scriptTreeRowKey`): as setas para cima e para baixo sem dar a volta, Home e End; a direita abre a pasta fechada e, na
   aberta, vai à primeira linha de dentro; a esquerda fecha a aberta e, na fechada ou no script, vai à pasta pai. Enter e o duplo clique abrem e fecham a pasta
-  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha.
+  (a vazia, nada) e abrem o script; F2, Delete, Shift+F10 e a tecla de menu valem nas duas. A seta (`data-chevron`) também abre e fecha. Digitar as primeiras letras de um nome vai à linha à vista que começa por elas (RN-ARVORE-009, o item "Ir ao item pelas primeiras letras" da árvore do navegador).
 - **Os menus** (`scriptFolderMenu` e `scriptMenu`, em `saved-scripts.ts`): o botão direito no título da seção ou no espaço vazio dela (a seção tem a altura
   do que mostra, até 40% do navegador: o espaço vazio é a faixa sob a lista e as margens das linhas, e o texto da seção vazia), e Shift+F10 ou a tecla
   de menu no título, dão "Nova pasta" (na raiz); a pasta, "Nova subpasta", "Renomear" (F2), "Mover para…" e "Excluir" (Delete), este desabilitado na pasta que
