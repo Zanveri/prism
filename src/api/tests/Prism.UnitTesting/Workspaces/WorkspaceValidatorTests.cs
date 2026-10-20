@@ -42,10 +42,15 @@ public sealed class WorkspaceValidatorTests
             { "banco vazio", WorkspaceFakers.QueryTab(connectionID: Guid.CreateVersion7(), database: "") },
             { "banco longo demais", WorkspaceFakers.TableTab(database: new string('b', 129)) },
             { "banco com caractere de controle", WorkspaceFakers.QueryTab(connectionID: Guid.CreateVersion7(), database: "ven\ndas") },
+            { "lugar do resultado desconhecido", WorkspaceFakers.QueryTab(resultPlace: "flutuante") },
+            { "lugar do resultado vazio", WorkspaceFakers.QueryTab(resultPlace: "") },
+            { "lugar do resultado em maiúsculas", WorkspaceFakers.QueryTab(resultPlace: "TAB") },
+            { "tabela com o lugar do resultado no painel", WorkspaceFakers.TableTab() with { ResultPlace = "panel" } },
+            { "tabela com o lugar do resultado numa aba", WorkspaceFakers.TableTab() with { ResultPlace = "tab" } },
         };
 
     [Trait("SaveWorkspaceValidator", "SaveWorkspaceCommand")]
-    [Fact(DisplayName = "OK abas de consulta e de tabela, com e sem conexão, banco e script, e a ativa na lista")]
+    [Fact(DisplayName = "OK abas de consulta e de tabela, com e sem conexão, banco, script e lugar do resultado, e a ativa na lista")]
     public void Save_ShouldBeOK()
     {
         //Arrange
@@ -53,10 +58,12 @@ public sealed class WorkspaceValidatorTests
         var command = WorkspaceFakers.ReturnSaveWorkspaceCommandValid(
         [
             WorkspaceFakers.QueryTab(),
-            WorkspaceFakers.QueryTab(connectionID: Guid.CreateVersion7(), database: "vendas", scriptID: Guid.CreateVersion7(), dirty: true),
+            WorkspaceFakers.QueryTab(connectionID: Guid.CreateVersion7(), database: "vendas", scriptID: Guid.CreateVersion7(), dirty: true, resultPlace: "tab"),
+            WorkspaceFakers.QueryTab(resultPlace: "panel"),
+            WorkspaceFakers.QueryTab(resultPlace: "window"),
             WorkspaceFakers.TableTab(view: "structure"),
             WorkspaceFakers.TableTab(database: new string('b', 128), schema: "", view: "diagram"),
-        ], activeIndex: 3);
+        ], activeIndex: 5);
 
         //Act
         var result = validator.TestValidate(command);

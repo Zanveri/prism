@@ -43,7 +43,7 @@ public sealed class WorkspaceRepositoryTests
         var current = Document(VaultFakers.CreateWorkspace(0, VaultFakers.CreateQueryTab(sql: "SELECT 'antes'"), VaultFakers.CreateTableTab()));
         var connectionID = Guid.CreateVersion7();
         var scriptID = Guid.CreateVersion7();
-        var workspace = Workspace.Create([WorkspaceTab.CreateTable(connectionID, "vendas", "loja", "pedidos", "diagram"), WorkspaceTab.CreateQuery(connectionID, null, "SELECT 'depois'", scriptID, dirty: true, sqlTooLarge: false), WorkspaceTab.CreateQuery(null, null, "", null, dirty: false, sqlTooLarge: true)], 1);
+        var workspace = Workspace.Create([WorkspaceTab.CreateTable(connectionID, "vendas", "loja", "pedidos", "diagram"), WorkspaceTab.CreateQuery(connectionID, null, "SELECT 'depois'", scriptID, dirty: true, sqlTooLarge: false, resultPlace: "tab"), WorkspaceTab.CreateQuery(null, null, "", null, dirty: false, sqlTooLarge: true)], 1);
         var repository = CreateRepository(current);
 
         //Act
@@ -56,8 +56,8 @@ public sealed class WorkspaceRepositoryTests
         Assert.Equal(
         [
             new VaultWorkspaceTabRecord("table", connectionID, "vendas", null, null, false, false, "loja", "pedidos", "diagram"),
-            new VaultWorkspaceTabRecord("query", connectionID, null, "SELECT 'depois'", scriptID, true, false, null, null, null),
-            new VaultWorkspaceTabRecord("query", null, null, "", null, false, true, null, null, null),
+            new VaultWorkspaceTabRecord("query", connectionID, null, "SELECT 'depois'", scriptID, true, false, null, null, null, "tab"),
+            new VaultWorkspaceTabRecord("query", null, null, "", null, false, true, null, null, null, "panel"),
         ], _saved.Workspace.Tabs);
         Assert.Same(current.Folders, _saved.Folders);
         Assert.Same(current.Connections, _saved.Connections);
@@ -97,6 +97,23 @@ public sealed class WorkspaceRepositoryTests
         //Assert
         Assert.True(result.IsSuccess);
         Assert.Same(current, _saved);
+    }
+
+    [Trait("WorkspaceRepository", "Replace")]
+    [Fact(DisplayName = "OK só o lugar do resultado mudou: grava")]
+    public async Task Replace_WhenOnlyTheResultPlaceChanged_Saves()
+    {
+        //Arrange
+        var current = Document(VaultFakers.CreateWorkspace(0, VaultFakers.CreateQueryTab(sql: "SELECT 1")));
+        var changed = Workspace.Create([WorkspaceTab.CreateQuery(null, null, "SELECT 1", null, dirty: false, sqlTooLarge: false, resultPlace: "window")], 0);
+        var repository = CreateRepository(current);
+
+        //Act
+        await repository.Replace(changed, CancellationToken.None);
+
+        //Assert
+        Assert.NotSame(current, _saved);
+        Assert.Equal("window", Assert.Single(_saved!.Workspace.Tabs).ResultPlace);
     }
 
     [Trait("WorkspaceRepository", "Replace")]

@@ -40,7 +40,7 @@ public sealed class WorkspaceHandlersTests
         //Arrange
         var connectionID = Guid.CreateVersion7();
         var scriptID = Guid.CreateVersion7();
-        SetWorkspace(VaultFakers.CreateWorkspace(1, VaultFakers.CreateTableTab(connectionID: connectionID, database: "vendas", view: "diagram"), VaultFakers.CreateQueryTab(connectionID: connectionID, sql: "SELECT 'a'", scriptID: scriptID, dirty: true)));
+        SetWorkspace(VaultFakers.CreateWorkspace(1, VaultFakers.CreateTableTab(connectionID: connectionID, database: "vendas", view: "diagram"), VaultFakers.CreateQueryTab(connectionID: connectionID, sql: "SELECT 'a'", scriptID: scriptID, dirty: true, resultPlace: "window")));
 
         //Act
         var result = await new GetWorkspaceHandler(_vault.Object, Logger()).Handle(new GetWorkspaceCommand(), CancellationToken.None);
@@ -51,10 +51,27 @@ public sealed class WorkspaceHandlersTests
         Assert.Equal(["table", "query"], result.Value.Tabs.Select(tab => tab.Kind));
         var (table, query) = (result.Value.Tabs[0], result.Value.Tabs[1]);
         Assert.Equal((connectionID, "vendas", "loja", "clientes", "diagram"), (table.ConnectionID, table.Database, table.Schema, table.Table, table.View));
-        Assert.Equal((connectionID, "SELECT 'a'", scriptID, true, false), (query.ConnectionID, query.Sql, query.ScriptID, query.Dirty, query.SqlTooLarge));
+        Assert.Equal((connectionID, "SELECT 'a'", scriptID, true, false, "window"), (query.ConnectionID, query.Sql, query.ScriptID, query.Dirty, query.SqlTooLarge, query.ResultPlace));
+        Assert.Null(table.ResultPlace);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(result.Value, JsonSerializerOptions.Web));
         Assert.Equal(["tabs", "activeIndex"], json.RootElement.EnumerateObject().Select(property => property.Name));
-        Assert.Equal(["kind", "connectionID", "database", "sql", "scriptID", "dirty", "sqlTooLarge", "schema", "table", "view"], json.RootElement.GetProperty("tabs")[0].EnumerateObject().Select(property => property.Name));
+        Assert.Equal(["kind", "connectionID", "database", "sql", "scriptID", "dirty", "sqlTooLarge", "schema", "table", "view", "resultPlace"], json.RootElement.GetProperty("tabs")[0].EnumerateObject().Select(property => property.Name));
+    }
+
+    /// <summary>RN-ABAS-016 e a seção 24: a aba de consulta gravada antes da 0.5.0 não tem o lugar do resultado, e volta no painel; a de tabela, sem lugar.</summary>
+    [Trait("GetWorkspaceHandler", "GetWorkspaceCommand")]
+    [Fact(DisplayName = "OK a aba de consulta gravada sem o lugar do resultado volta no painel, e a de tabela, sem lugar")]
+    public async Task GetWorkspace_TabSavedWithoutTheResultPlace_ComesBackInThePanel()
+    {
+        //Arrange
+        SetWorkspace(VaultFakers.CreateWorkspace(0, VaultFakers.CreateQueryTab(sql: "SELECT 1", resultPlace: null), VaultFakers.CreateTableTab(), VaultFakers.CreateQueryTab(sql: "SELECT 2", resultPlace: "tab")));
+
+        //Act
+        var result = await new GetWorkspaceHandler(_vault.Object, Logger()).Handle(new GetWorkspaceCommand(), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["panel", null, "tab"], result.Value.Tabs.Select(tab => tab.ResultPlace));
     }
 
     [Trait("GetWorkspaceHandler", "GetWorkspaceCommand")]
@@ -96,7 +113,7 @@ public sealed class WorkspaceHandlersTests
         Workspace? replaced = null;
         _repository.Setup(r => r.Replace(It.IsAny<Workspace>(), It.IsAny<CancellationToken>())).Callback((Workspace workspace, CancellationToken _) => replaced = workspace).ReturnsAsync(UnitResult.Success<ApiErrorDto>());
         var connectionID = Guid.CreateVersion7();
-        var command = WorkspaceFakers.ReturnSaveWorkspaceCommandValid([WorkspaceFakers.QueryTab(database: "sem_conexao", sql: "SELECT 1", dirty: true), WorkspaceFakers.TableTab(connectionID: connectionID, schema: "loja", table: "pedidos", view: "structure")], activeIndex: 1);
+        var command = WorkspaceFakers.ReturnSaveWorkspaceCommandValid([WorkspaceFakers.QueryTab(database: "sem_conexao", sql: "SELECT 1", dirty: true), WorkspaceFakers.TableTab(connectionID: connectionID, schema: "loja", table: "pedidos", view: "structure"), WorkspaceFakers.QueryTab(resultPlace: "tab")], activeIndex: 1);
 
         //Act
         var result = await new SaveWorkspaceHandler(_repository.Object, Logger()).Handle(command, CancellationToken.None);
@@ -106,8 +123,9 @@ public sealed class WorkspaceHandlersTests
         Assert.NotNull(replaced);
         Assert.Equal(1, replaced.ActiveIndex);
         var (query, table) = (replaced.Tabs[0], replaced.Tabs[1]);
-        Assert.Equal((WorkspaceTab.QueryKind, null, null, "SELECT 1", false), (query.Kind, query.ConnectionID, query.Database, query.Sql, query.Dirty));
-        Assert.Equal((WorkspaceTab.TableKind, connectionID, "loja", "pedidos", "structure"), (table.Kind, table.ConnectionID, table.Schema, table.Table, table.View));
+        Assert.Equal((WorkspaceTab.QueryKind, null, null, "SELECT 1", false, "panel"), (query.Kind, query.ConnectionID, query.Database, query.Sql, query.Dirty, query.ResultPlace));
+        Assert.Equal((WorkspaceTab.TableKind, connectionID, "loja", "pedidos", "structure", null), (table.Kind, table.ConnectionID, table.Schema, table.Table, table.View, table.ResultPlace));
+        Assert.Equal("tab", replaced.Tabs[2].ResultPlace);
     }
 
     [Trait("SaveWorkspaceHandler", "SaveWorkspaceCommand")]

@@ -10,8 +10,8 @@ namespace Prism.TestingCore.Fakers.Workspaces;
 /// </summary>
 public static class WorkspaceFakers
 {
-    public static WorkspaceTabDto QueryTab(Guid? connectionID = null, string? database = null, string? sql = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false)
-        => new() { Kind = "query", ConnectionID = connectionID, Database = database, Sql = sql ?? RandomSql(), ScriptID = scriptID, Dirty = dirty, SqlTooLarge = sqlTooLarge };
+    public static WorkspaceTabDto QueryTab(Guid? connectionID = null, string? database = null, string? sql = null, Guid? scriptID = null, bool dirty = false, bool sqlTooLarge = false, string? resultPlace = null)
+        => new() { Kind = "query", ConnectionID = connectionID, Database = database, Sql = sql ?? RandomSql(), ScriptID = scriptID, Dirty = dirty, SqlTooLarge = sqlTooLarge, ResultPlace = resultPlace };
 
     public static WorkspaceTabDto TableTab(Guid? connectionID = null, string? database = null, string schema = "loja", string table = "clientes", string view = "data")
         => new() { Kind = "table", ConnectionID = connectionID ?? Guid.CreateVersion7(), Database = database, Schema = schema, Table = table, View = view };
