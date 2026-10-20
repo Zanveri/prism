@@ -165,6 +165,9 @@ internal sealed class DatabaseSessionService : IDatabaseSessionService, IAsyncDi
     public Task CloseAllAsync()
         => Task.WhenAll(Take(_ => true).Select(CloseSessionAsync));
 
+    public bool HasSession(Guid connectionID, long vaultGeneration)
+        => _sessions.Values.Any(session => session.Info.ConnectionID == connectionID && session.VaultGeneration == vaultGeneration && !session.Closed);
+
     public bool HasOpenSession(IReadOnlyCollection<EDatabaseEngine> engines)
         => _sessions.Values.Any(session => engines.Contains(session.Info.Engine));
 
