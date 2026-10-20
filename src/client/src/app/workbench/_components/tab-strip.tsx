@@ -65,8 +65,14 @@ type TabStripProps = {
   resultMarkOf?: (tabId: string, active: boolean) => ReactNode;
 };
 
-/** Os botões das pontas e o da lista: 28 px de largura e a altura da faixa. */
-const stripButton = "flex h-10 w-7 flex-none cursor-pointer items-center justify-center text-subtle transition-colors hover:bg-selected hover:text-ink";
+/**
+ * RN-ABAS-009 (seção 39): as medidas da faixa, menores que as do canvas a pedido do dono. A faixa tem 28 px de altura (mais a borda de baixo), e cada aba
+ * também, contando a borda de 2 px: 10 px antes do ícone (de 14 px), 6 px entre os itens e 4 px depois do X. O X tem 20 px desenhados, com o ícone de 12 px,
+ * numa área de clique de 24 px centrada nele (o alvo mínimo da WCAG 2.2, 2.5.8). Os botões das pontas e o da lista: 24 px de largura, a altura da faixa e
+ * o ícone de 14 px.
+ */
+const stripButton = "flex h-7 w-6 flex-none cursor-pointer items-center justify-center text-subtle transition-colors hover:bg-selected hover:text-ink";
+const stripIcon = "size-3.5";
 
 /**
  * A faixa de abas: uma linha só, que rola na horizontal. A roda comum rola as abas; com excedente, aparecem os botões de rolar nas
@@ -281,7 +287,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
           back();
         }}
         className={cn(
-          "flex flex-none items-center border-b-2 data-[drop=after]:shadow-[inset_-2px_0_0_var(--color-accent)]",
+          "flex h-7 flex-none items-stretch border-b-2 data-[drop=after]:shadow-[inset_-2px_0_0_var(--color-accent)]",
           selected ? "border-accent bg-panel text-ink" : "border-transparent text-muted hover:bg-panel/60 hover:text-ink",
         )}
       >
@@ -295,15 +301,17 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
           title={resultPlaceCopy.tab.hint(name)}
           onClick={() => show(entry)}
           onKeyDown={(event) => handleKeyDown(event, entry, index)}
-          className="flex h-10 cursor-pointer items-center gap-2 pr-1 pl-3.5"
+          className="flex cursor-pointer items-center gap-1.5 pr-1 pl-2.5"
         >
-          <ResultTabIcon />
-          <span className="max-w-[240px] truncate">{title}</span>
+          <ResultTabIcon className={stripIcon} />
+          <span className="max-w-[200px] truncate">{title}</span>
           {resultMarkOf?.(tab.id, selected) ?? null}
-          <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} />
+          <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} className="h-4 px-1.5 leading-4" />
         </button>
-        <button type="button" aria-label={resultPlaceCopy.tab.close(name)} title={resultPlaceCopy.tab.closeHint(shortcut)} onClick={back} className="mr-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-subtle transition-colors hover:bg-selected hover:text-ink">
-          <CloseIcon />
+        <button type="button" aria-label={resultPlaceCopy.tab.close(name)} title={resultPlaceCopy.tab.closeHint(shortcut)} onClick={back} className="group/close mr-0.5 flex size-6 flex-none cursor-pointer items-center justify-center self-center rounded-sm text-subtle">
+          <span className="flex size-5 items-center justify-center rounded-sm transition-colors group-hover/close:bg-selected group-hover/close:text-ink">
+            <CloseIcon className="size-3" />
+          </span>
         </button>
       </div>
     );
@@ -360,7 +368,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
       className="group/strip flex items-stretch border-b border-border bg-background px-2"
     >
       <button type="button" tabIndex={-1} aria-label={copy.scrollLeft} title={copy.scrollLeft} onClick={() => scrollBy(-1)} className={cn(stripButton, "hidden group-data-[left]/strip:flex")}>
-        <ChevronIcon className="rotate-90" />
+        <ChevronIcon className={cn(stripIcon, "rotate-90")} />
       </button>
 
       <div
@@ -404,7 +412,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
                 onClose("one", tab.id);
               }}
               className={cn(
-                "flex flex-none items-center border-b-2 data-[drop=after]:shadow-[inset_-2px_0_0_var(--color-accent)] data-[drop=before]:shadow-[inset_2px_0_0_var(--color-accent)]",
+                "flex h-7 flex-none items-stretch border-b-2 data-[drop=after]:shadow-[inset_-2px_0_0_var(--color-accent)] data-[drop=before]:shadow-[inset_2px_0_0_var(--color-accent)]",
                 selected ? "border-accent bg-panel text-ink" : "border-transparent text-muted hover:bg-panel/60 hover:text-ink",
               )}
             >
@@ -418,22 +426,26 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
                 title={label.label}
                 onClick={() => show(entry)}
                 onKeyDown={(event) => handleKeyDown(event, entry, index)}
-                className="flex h-10 cursor-pointer items-center gap-2 pr-1 pl-3.5"
+                className="flex cursor-pointer items-center gap-1.5 pr-1 pl-2.5"
               >
-                {tab.table ? <TableIcon /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} /> : <DocumentIcon />}
-                <span className="max-w-[240px] truncate">{titles.get(tab.id) ?? tab.title}</span>
+                {tab.table ? <TableIcon className={stripIcon} /> : script !== undefined ? <ScriptIconView icon={scriptIconOf(script)} color={script.color} className={stripIcon} /> : <DocumentIcon className={stripIcon} />}
+                <span className="max-w-[200px] truncate">{titles.get(tab.id) ?? tab.title}</span>
                 {/* RN-SCRIPT-001: o ponto da mudança não salva é desenho; o leitor de tela ouve o texto. */}
                 {label.unsaved ? (
                   <>
-                    <span aria-hidden data-unsaved className="size-2 flex-none rounded-full bg-accent" />
+                    <span aria-hidden data-unsaved className="size-1.5 flex-none rounded-full bg-accent" />
                     <span className="sr-only">{scriptsCopy.tab.unsaved}</span>
                   </>
                 ) : null}
                 {markOf?.(tab.id) ?? null}
-                <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} />
+                {/* Na faixa, o selo tem 16 px de altura, o texto de 11 px e 6 px de cada lado; no navegador e na barra do editor ele não muda. */}
+                <ShownEnvironmentPill environment={environmentOf(tab.connectionId)} className="h-4 px-1.5 leading-4" />
               </button>
-              <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="mr-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-subtle transition-colors hover:bg-selected hover:text-ink">
-                <CloseIcon />
+              {/* A área de clique (24 px) é o botão; o desenho (20 px, o fundo no hover) é o miolo, centrado nela. */}
+              <button type="button" aria-label={copy.close(tab.title)} title={copy.close(tab.title)} onClick={() => onClose("one", tab.id)} className="group/close mr-0.5 flex size-6 flex-none cursor-pointer items-center justify-center self-center rounded-sm text-subtle">
+                <span className="flex size-5 items-center justify-center rounded-sm transition-colors group-hover/close:bg-selected group-hover/close:text-ink">
+                  <CloseIcon className="size-3" />
+                </span>
               </button>
             </div>
           );
@@ -441,7 +453,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
       </div>
 
       <button type="button" tabIndex={-1} aria-label={copy.scrollRight} title={copy.scrollRight} onClick={() => scrollBy(1)} className={cn(stripButton, "hidden group-data-[right]/strip:flex")}>
-        <ChevronIcon className="-rotate-90" />
+        <ChevronIcon className={cn(stripIcon, "-rotate-90")} />
       </button>
 
       {tabs.length > 1 ? (
@@ -464,7 +476,7 @@ export function TabStrip({ tabs, activeTabId, connectionOf, environmentOf, scrip
           }}
           className={cn(stripButton, "ml-1 border-l border-border")}
         >
-          <ChevronIcon />
+          <ChevronIcon className={stripIcon} />
         </button>
       ) : null}
 

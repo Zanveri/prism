@@ -6,12 +6,13 @@ import { cn } from "@/lib/utils/cn";
 import { customSecondsLimits, intervalLabel, type AutoRefreshBlocker, type AutoRefreshState } from "../_lib/auto-refresh";
 import { autoRefreshGroups, isAutoRefreshAction, type AutoRefreshAction } from "../_lib/auto-refresh-menu";
 import { autoRefreshCopy } from "../_lib/auto-refresh.copy";
+import { controlHeight, iconControlSize, type ControlSize } from "../_lib/result-bar";
 import { menuGroupOf } from "./result-edit-dialogs";
 
 const copy = autoRefreshCopy;
 
 /** O botão de ícone da barra do resultado: o mesmo do zoom e dos botões de recolher e maximizar. */
-const iconButton = "flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted";
+const iconButton = "flex cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted";
 
 /** A hora da última atualização, como a barra a escreve ("14:32:05"). */
 export const lastTime = (at: number) => new Date(at).toLocaleTimeString("pt-BR");
@@ -50,6 +51,8 @@ type AutoRefreshBarProps = {
   expanded?: boolean;
   /** O menu abre para cima do botão: no rodapé dos Registros, embaixo dele só há a barra de status. */
   opensUp?: boolean;
+  /** RN-ABAS-009: 24 px na barra da área de resultado da aba de consulta; 28 px no rodapé dos Registros. */
+  size?: ControlSize;
 };
 
 /**
@@ -69,7 +72,7 @@ function opening(event: MouseEvent<HTMLButtonElement>, up: boolean): { point: { 
  * (o foco não cai no `body`, fora da aba, e o F5 da aba segue valendo); o X, que sai da página ao desligar (pelo clique ou porque ela parou sozinha), passa
  * o foco a ele. Nada aqui é região viva: o texto muda a cada atualização, e o leitor de tela não precisa ouvi-lo a cada 5 s.
  */
-export function AutoRefreshBar({ state, blocker, onOpenMenu, onOff, expanded = false, opensUp = false }: AutoRefreshBarProps) {
+export function AutoRefreshBar({ state, blocker, onOpenMenu, onOff, expanded = false, opensUp = false, size = "regular" }: AutoRefreshBarProps) {
   const on = state.status === "on" ? state : null;
   const stopped = state.status === "off" ? state.stopped : null;
 
@@ -98,7 +101,7 @@ export function AutoRefreshBar({ state, blocker, onOpenMenu, onOff, expanded = f
           const { point, keyboard } = opening(event, opensUp);
           onOpenMenu(point, keyboard);
         }}
-        className={on === null ? iconButton : "flex h-7 min-w-0 cursor-pointer items-center gap-1.5 rounded-sm px-1.5 text-xs text-ink transition-colors hover:bg-selected"}
+        className={on === null ? cn(iconButton, iconControlSize[size]) : cn("flex min-w-0 cursor-pointer items-center gap-1.5 rounded-sm px-1.5 text-xs text-ink transition-colors hover:bg-selected", controlHeight[size])}
       >
         <TimerIcon className={cn(on !== null && "text-accent", on?.running === true && "animate-pulse")} />
         {on === null ? null : <span className="truncate">{onText(on)}</span>}
@@ -114,7 +117,7 @@ export function AutoRefreshBar({ state, blocker, onOpenMenu, onOff, expanded = f
             onOff();
             opener?.focus();
           }}
-          className={iconButton}
+          className={cn(iconButton, iconControlSize[size])}
         >
           <CloseIcon />
         </button>
@@ -126,7 +129,7 @@ export function AutoRefreshBar({ state, blocker, onOpenMenu, onOff, expanded = f
 type AutoRefreshControlProps = Omit<AutoRefreshBarProps, "onOpenMenu" | "onOff" | "expanded"> & { onChoose: (action: AutoRefreshAction) => void };
 
 /** O controle com o menu dos intervalos (`autoRefreshGroups`, os mesmos do submenu da grade), que abre logo abaixo do botão (ou acima, `opensUp`). */
-export function AutoRefreshControl({ state, blocker, opensUp, onChoose }: AutoRefreshControlProps) {
+export function AutoRefreshControl({ state, blocker, opensUp, size, onChoose }: AutoRefreshControlProps) {
   const [menu, setMenu] = useState<{ point: { x: number; y: number }; keyboard: boolean } | null>(null);
   const choose = (action: string) => {
     if (isAutoRefreshAction(action)) onChoose(action);
@@ -134,7 +137,7 @@ export function AutoRefreshControl({ state, blocker, opensUp, onChoose }: AutoRe
 
   return (
     <>
-      <AutoRefreshBar state={state} blocker={blocker} opensUp={opensUp} expanded={menu !== null} onOpenMenu={(point, keyboard) => setMenu({ point, keyboard })} onOff={() => onChoose("autoRefresh:off")} />
+      <AutoRefreshBar state={state} blocker={blocker} opensUp={opensUp} size={size} expanded={menu !== null} onOpenMenu={(point, keyboard) => setMenu({ point, keyboard })} onOff={() => onChoose("autoRefresh:off")} />
       {menu === null ? null : (
         <ContextMenu label={copy.menu.label} point={menu.point} initialFocus={menu.keyboard ? "first" : "menu"} groups={autoRefreshGroups(state).map((group) => menuGroupOf(group, choose))} onClose={() => setMenu(null)} />
       )}

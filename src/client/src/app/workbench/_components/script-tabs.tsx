@@ -108,7 +108,7 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
         tabIndex={selected ? 0 : -1}
         title={item === "statistics" ? undefined : commandHint(entryAt(run, item).target.sql)}
         onClick={() => choose(item)}
-        className={cn("flex h-9 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2.5 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
+        className={cn("flex h-7 max-w-64 flex-none cursor-pointer items-center border-b-2 px-2 whitespace-nowrap", selected ? "border-accent font-semibold text-ink" : "border-transparent text-muted hover:text-ink")}
       >
         <span className="truncate">{label}</span>
       </button>
@@ -192,7 +192,7 @@ export function ScriptWaitingMark({ runner }: { runner: QueryRunner }) {
 
   return (
     <>
-      <span aria-hidden data-script-waiting title={scriptRunCopy.error.waiting} className="size-2 flex-none rounded-full bg-danger" />
+      <span aria-hidden data-script-waiting title={scriptRunCopy.error.waiting} className="size-1.5 flex-none rounded-full bg-danger" />
       <span className="sr-only">{scriptRunCopy.error.waiting}</span>
     </>
   );

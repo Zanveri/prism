@@ -3,6 +3,7 @@ import { useState, type ComponentProps } from "react";
 import { ContextMenu } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { iconControlSize } from "../_lib/result-bar";
 import { placeButtonLabel, type PlaceMenuItem } from "../_lib/result-place";
 import { resultPlaceCopy } from "../_lib/result-place.copy";
 import type { ResultPlace } from "../_lib/workbench-model";
@@ -36,8 +37,8 @@ export function ResultPlaceIcon(props: ComponentProps<"svg">) {
   );
 }
 
-/** O botão de ícone da barra do resultado: o mesmo do zoom, da atualização automática e dos botões de recolher e maximizar. */
-const iconButton = "flex size-7 cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink";
+/** O botão de ícone da barra do resultado: o mesmo do zoom, da atualização automática e dos botões de recolher e maximizar (24 px, RN-ABAS-009). */
+const iconButton = cn("flex cursor-pointer items-center justify-center rounded-sm text-muted transition-colors hover:bg-selected hover:text-ink", iconControlSize.bar);
 
 type ResultPlaceButtonProps = {
   place: ResultPlace;

@@ -614,7 +614,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             onRerun={handleRerun}
             editing={edits.editing}
             banner={<EditsBanner {...edits.banner} />}
-            autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} onChoose={auto.choose} />}
+            autoRefresh={<AutoRefreshControl state={auto.state} blocker={auto.blocker} size="bar" onChoose={auto.choose} />}
             filter={
               base === null ? undefined : (
                 <RecordsFilter
