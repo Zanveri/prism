@@ -573,8 +573,8 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET api/user/connections/dbeaver` | 200 `{ invitedAt, lastImportAt }` (RN-DBEAVER-018, seção 40) | |
 | `PUT api/user/connections/dbeaver/invite` | 204 (o convite do DBeaver feito, RN-DBEAVER-002) | |
 | `POST api/user/connections/dbeaver/scan` `{ sourceId }` | 200 `{ where, projects }`, os projetos da cópia do DBeaver com as contagens (RN-DBEAVER-006 e 007) | 404 `DBEAVER_SOURCE_MISSING`; 422 `DBEAVER_SOURCE_INVALID`, `IMPORT_INVALID` |
-| `POST api/user/connections/dbeaver/import/preview` `{ sourceId, project?, targetFolderID?, withPasswords }` | 200 `{ folders, connections, notes }` (RN-DBEAVER-015) | 404 `DBEAVER_SOURCE_MISSING`, `DBEAVER_PROJECT_NOT_FOUND`, `FOLDER_NOT_FOUND`; 422 `DBEAVER_SOURCE_INVALID`, `DBEAVER_LIMITS_EXCEEDED`, `IMPORT_INVALID` |
-| `POST api/user/connections/dbeaver/import` `{ sourceId, project?, targetFolderID?, withPasswords, items, onConflict, overwrite }` | 200 `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }` (RN-DBEAVER-016 e 017) | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
+| `POST api/user/connections/dbeaver/import/preview` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts? }` | 200 `{ folders, connections, notes }` (RN-DBEAVER-015) | 404 `DBEAVER_SOURCE_MISSING`, `DBEAVER_PROJECT_NOT_FOUND`, `FOLDER_NOT_FOUND`; 422 `DBEAVER_SOURCE_INVALID`, `DBEAVER_LIMITS_EXCEEDED`, `IMPORT_INVALID` |
+| `POST api/user/connections/dbeaver/import` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts?, items, onConflict, overwrite }` | 200 `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }` (RN-DBEAVER-016 e 017) | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
 | `PUT api/user/password` `{ currentPassword, newPassword }` | 204 (troca a senha e recifra o cofre, RN-COFRE-013) | 422 `INVALID_PASSWORD` (a atual não confere), `PASSWORD_INVALID` (a nova), `PASSWORD_UNCHANGED`; 401 `VAULT_LOCKED` no quinto erro |
 | `POST api/user/database-sessions` `{ connectionID, database?, transactionMode?, isolationLevel? }` (`database`: outro banco do mesmo servidor, RN-ARVORE-006) | 201 `{ id, connectionID, engine, database, serverVersion, transaction, transactionsAvailable }` | 404 `CONNECTION_NOT_FOUND`; 422 `DATABASE_NAME_INVALID` (vazio, mais de 128 caracteres ou com caractere de controle), `DATABASE_CONNECTION_FAILED`, `DRIVER_NOT_INSTALLED`, `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` (RN-TX-013), `CONNECTION_CREDENTIALS_MISSING` (a conexão sem usuário ou sem senha, RN-TRANSF-016) |
 | `PATCH api/user/database-sessions` `{ id, transactionMode?, isolationLevel? }` | 200 a sessão, com `transaction` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_OPEN`; 422 `TRANSACTION_MODE_INVALID`, `ISOLATION_LEVEL_INVALID`, `TRANSACTIONS_NOT_AVAILABLE` |
@@ -10056,8 +10056,8 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
   - O valor com uma variável do DBeaver (`${…}`) no host, na porta, no banco de dados ou no usuário deixa a conexão não
     importável: "A conexão usa variáveis do DBeaver (${…}), que o Prism não tem."
   - O Informix: o Prism conecta pela porta DRDA, sem o `INFORMIXSERVER` (seção 9), e o DBeaver, pelo protocolo SQLI, com
-    ele. A conexão nova vem com a porta do DBeaver, como está (a que já existe fica com a dela, RN-DBEAVER-017), e o
-    servidor não é gravado (o Prism não tem o campo): ele aparece na prévia, na segunda linha da conexão, e no que ficou de fora. Toda conexão Informix leva na prévia a
+    ele. Sem a porta DRDA do servidor preenchida (RN-DBEAVER-015), a conexão nova vem com a porta do DBeaver, como está (e a
+    que já existe fica com a dela, RN-DBEAVER-017), e o servidor não é gravado (o Prism não tem o campo): ele aparece na prévia, na segunda linha da conexão, e no que ficou de fora. Toda conexão Informix sem a porta DRDA do servidor preenchida leva na prévia a
     marca "porta do DBeaver", com a dica "O DBeaver fala com o Informix pelo protocolo SQLI, e o Prism, pela porta
     DRDA, que costuma ser outra (a sugerida é 9089). Se conectar falhar, troque a porta em Editar conexão: a do DBeaver
     era <porta>." O Prism não troca a porta sozinho: a DRDA de cada servidor é a que o DBA configurou. Quem a sabe a
@@ -10161,9 +10161,15 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
   - "Levar as senhas", uma caixa ligada por padrão, com a ajuda "Desligada, as conexões vêm só com o usuário, e o
     Prism pede a senha na primeira vez que você conectar." Ela fica acima da árvore e não aparece quando nenhuma
     conexão da origem tem senha.
+  - "Porta DRDA do Informix", só quando a seleção tem conexões Informix (as marcadas na árvore): uma tabela pequena,
+    com uma linha por servidor do DBeaver distinto (o host, a porta SQLI e o `INFORMIXSERVER`) e, em cada uma, um campo
+    opcional "Porta DRDA", de 1 a 65.535. O campo preenchido vira a porta de toda conexão Informix importada daquele
+    servidor, nova ou sobrescrita (RN-DBEAVER-010 e 017); o vazio deixa como está, a porta do DBeaver com a marca
+    "porta do DBeaver". Os valores preenchidos continuam ao trocar o projeto, "Levar as senhas" e "Onde colocar", e a
+    troca de origem os apaga.
   - "Onde colocar", como na RN-TRANSF-009.
   - A prévia (RN-DBEAVER-015) aparece sozinha quando há origem, sem um botão "Abrir": não há senha para digitar.
-    Trocar o projeto, "Levar as senhas" ou "Onde colocar" a refaz ("Atualizando a prévia…"), e as marcas continuam;
+    Trocar o projeto, "Levar as senhas", a porta DRDA ou "Onde colocar" a refaz ("Atualizando a prévia…"), e as marcas continuam;
     trocar a origem a apaga e pede outra. Um pedido de cada vez, como na RN-TRANSF-009.
   - No rodapé, "Cancelar" (ou "Agora não", no convite, RN-DBEAVER-002) e "Importar" ("Importando…"), este
     desabilitado até haver prévia com algo marcado. Cancelar, Esc e o fechar apagam a cópia (RN-DBEAVER-006);
@@ -10252,7 +10258,7 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
   - Ao clicar em "Importar" com alguma dessas marcada, abre a pergunta, que ocupa a janela: "3 conexões do DBeaver já
     existem no Prism. Sobrescrever?" ("1 conexão do DBeaver já existe no Prism. Sobrescrever?"), com "Sobrescrever
     troca o nome, o servidor (host e porta), o banco de dados, o usuário, a senha e o ambiente delas pelo que está no
-    DBeaver; no Informix, a porta fica a do Prism. A pasta, a verificação e as proteções que você ligou no Prism
+    DBeaver; no Informix, a porta fica a do Prism, menos a do servidor que teve a porta DRDA preenchida. A pasta, a verificação e as proteções que você ligou no Prism
     continuam." e os botões:
     - "Sobrescrever todas": importa, e as que já existem são atualizadas;
     - "Escolher quais…": mostra na própria pergunta a lista delas, cada uma com a caixa (todas marcadas), o nome no
@@ -10279,7 +10285,7 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
   - A senha do Prism só vai para o servidor e para o usuário para os quais foi gravada (RN-CONN-004, aqui também com o
     usuário): se o host, a porta ou o usuário mudam e a senha não vem do DBeaver, a conexão fica sem senha
     (RN-TRANSF-015), e a lista da pergunta diz "o host muda e a senha não vem: ela fica sem senha" ("o usuário muda e a
-    senha não vem: ela fica sem senha"). No Informix, só o host e o usuário contam, porque a porta não muda.
+    senha não vem: ela fica sem senha"). No Informix sem a porta DRDA preenchida, só o host e o usuário contam, porque a porta não muda.
   - As proteções nunca ficam mais fracas: o somente leitura fica ligado se estava ligado no Prism ou no DBeaver, e a
     confirmação é a mais forte das duas. Isso não pede a senha do Prism (RN-PROT-003): só aumenta.
   - O nome novo que já está tomado por outra conexão na pasta da conexão do Prism não muda o nome: ela fica com o dela,
@@ -10314,8 +10320,8 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
 | `GET api/user/connections/dbeaver` | 200 `{ invitedAt, lastImportAt }` | |
 | `PUT api/user/connections/dbeaver/invite` | 204 | |
 | `POST api/user/connections/dbeaver/scan` `{ sourceId }` | 200 `{ where, projects: [{ name, connections, importable, withPassword, protected, nameInvalid, credentialsUnreadable, credentialsProtected }] }` | 404 `DBEAVER_SOURCE_MISSING`; 422 `DBEAVER_SOURCE_INVALID`, `IMPORT_INVALID` |
-| `POST api/user/connections/dbeaver/import/preview` `{ sourceId, project?, targetFolderID?, withPasswords }` | 200 `{ folders, connections, notes }` | 404 `DBEAVER_SOURCE_MISSING`, `DBEAVER_PROJECT_NOT_FOUND`, `FOLDER_NOT_FOUND`; 422 `DBEAVER_SOURCE_INVALID`, `DBEAVER_LIMITS_EXCEEDED`, `IMPORT_INVALID` |
-| `POST api/user/connections/dbeaver/import` `{ sourceId, project?, targetFolderID?, withPasswords, items, onConflict, overwrite }` | 200 `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }` | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
+| `POST api/user/connections/dbeaver/import/preview` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts? }` | 200 `{ folders, connections, notes }` | 404 `DBEAVER_SOURCE_MISSING`, `DBEAVER_PROJECT_NOT_FOUND`, `FOLDER_NOT_FOUND`; 422 `DBEAVER_SOURCE_INVALID`, `DBEAVER_LIMITS_EXCEEDED`, `IMPORT_INVALID` |
+| `POST api/user/connections/dbeaver/import` `{ sourceId, project?, targetFolderID?, withPasswords, drdaPorts?, items, onConflict, overwrite }` | 200 `{ folderIDs, connectionIDs, updatedIDs, mergedFolders, renamed, skipped }` | as da prévia, mais 422 `IMPORT_EMPTY`, `IMPORT_INVALID`; 401 `VAULT_LOCKED` quando o cofre muda antes da gravação |
 
 Notas:
 
@@ -10331,33 +10337,39 @@ Notas:
   manifesto, ou está protegido, é 404 `DBEAVER_PROJECT_NOT_FOUND`.
 - `withPasswords`: booleano, "Levar as senhas"; ausente ou nulo é verdadeiro, e o que não é booleano é 422
   `IMPORT_INVALID`.
+- `drdaPorts`: a porta DRDA de cada servidor Informix do DBeaver (RN-DBEAVER-014), `[{ host, port, server, drdaPort }]`, em
+  que `host`, `port` (a porta SQLI) e `server` (nulo sem `INFORMIXSERVER`) são os da conexão na prévia (`host`,
+  `dbeaverPort` e `server`), comparados como vêm, e `drdaPort` é um inteiro de 1 a 65.535. Ausente ou nulo é nenhuma, até
+  2.000; o servidor repetido, ou a porta fora do intervalo, é 422 `IMPORT_INVALID` em `DrdaPorts`; o servidor que
+  nenhuma conexão Informix do pedido tem é ignorado. A prévia e a importação a recebem iguais: a porta preenchida vale
+  para a conexão nova e para a sobrescrita.
 - `where`, `projects`: o lugar da cópia (RN-DBEAVER-006) e, de cada projeto, o nome (o "Projeto 2" quando o nome não
   serve), quantas conexões ele tem, quantas o Prism importa, quantas destas têm senha, se é protegido (`secureProject`),
   se o nome não serve (`nameInvalid`), se o `credentials-config` não pôde ser lido e se ele é protegido por senha de
   projeto (`credentialsProtected`, o `useProjectPassword`). É o que o "Comece por aqui" e o seletor do projeto
   mostram.
 - A prévia: `folders` e `connections` com os campos da prévia da seção 34, mais, em cada conexão, `server` (o servidor
-  Informix, ou nulo), `dbeaverType` (o nome do tipo de conexão no DBeaver, cortado em 30, para a dica da marca
+  Informix, ou nulo), `dbeaverPort` (a porta SQLI do DBeaver no Informix, ou nulo; `port` é a que a conexão teria) e
+  `drdaPort` (a porta DRDA de `drdaPorts` aplicada, ou nulo; com ela, `port` é ela e a marca "porta do DBeaver" não
+  aparece), `authModel` (o modelo de autenticação do DBeaver, cortado em 60, ou nulo; é o `<modelo>` do que ficou de
+  fora), `dbeaverType` (o nome do tipo de conexão no DBeaver, cortado em 30, para a dica da marca
   "confirma todos os comandos", RN-DBEAVER-012; nulo quando o nome tem caractere de controle ou de direção do texto,
-  e a dica diz então "o tipo desta conexão"), `existing` (`{ connectionID, name, path, connected }` quando ela já existe no Prism, ou nulo;
-  `connected`: a API o preenche com o registro de sessões, de todas as janelas), `overwrite`
+  e a dica diz então "o tipo desta conexão"), `existing` (`{ connectionID, name, path, connected, host, port, database, userName, environmentName }` quando ela já existe no Prism, ou nulo;
+  `connected`: a API o preenche com o registro de sessões, de todas as janelas; os demais campos são o que ela tem hoje, para a
+  pergunta de sobrescrever dizer "host a → b", e nunca a senha), `overwrite`
   (`{ name, engine, host, port, database, userName, password, environment, keepsName, dropsPassword }`, o que
-  sobrescrever mudaria, com cada campo verdadeiro quando muda, ou nulo quando ela não existe; `port` é sempre falso no
-  Informix, RN-DBEAVER-017, e `dropsPassword` é verdadeiro quando o host, a porta ou o usuário mudam e a senha não vem)
+  sobrescrever mudaria, com cada campo verdadeiro quando muda, ou nulo quando ela não existe; `port` é falso no
+  Informix sem `drdaPort`, RN-DBEAVER-017, e `dropsPassword` é verdadeiro quando o host, a porta ou o usuário mudam e a senha não vem)
   e `leftOut` (a lista dos
   códigos da RN-DBEAVER-013: `informixServer`, `sshTunnel`, `proxy`, `driverProperties`, `bootstrap`,
   `autocommitOff`, `events`, `authModel`, `confirmDataChange`, `permissions`, `navigatorFilters`, `environmentCut`,
   `environmentInvalid`) e, em cada pasta, `nameCut` (o nome cortado em 60, RN-DBEAVER-011). `verificationQuery` vem
   sempre nula. `notes` traz os avisos da prévia:
-  `protectedProjects`, `credentialsUnreadable`, `credentialsProtected` e `unreadableFiles` (os nomes dos projetos) e
+  `protectedProjects`, `credentialsUnreadable`, `credentialsProtected`, `unreadableFiles` e `unreadableProjects` (os nomes dos projetos; os de `unreadableProjects`
+  são os que ficaram de fora por inteiro, com nenhum arquivo legível, e também estão em `unreadableFiles`) e
   `withoutSavedPassword` e `savedPasswordMissing` (as contagens). A senha nunca vem; os textos que vêm do DBeaver
   seguem o corte de 200 caracteres do item não importável (RN-TRANSF-011). A URL que não casa volta só com o começo,
   cortada no primeiro `/`, `?`, `;` ou `,` depois do `//` (RN-DBEAVER-010), e nunca inteira.
-- `drdaPorts`: na prévia e na importação, opcional, até 200: as portas DRDA digitadas, `{ host, port, server, drdaPort }`
-  (o host, a porta SQLI e o `INFORMIXSERVER` do DBeaver, como a prévia os dá, e a porta nova, de 1 a 65.535); a conexão
-  Informix cujo host (sem diferenciar maiúsculas), porta e servidor casam com uma delas é gravada com a `drdaPort`, nova
-  ou sobrescrita, e a prévia calcula `overwrite.port` e `dropsPassword` com ela. Ausente ou nulo é nenhuma; a repetida ou
-  fora da faixa é 422 `IMPORT_INVALID`.
 - `items`, `onConflict`: como na importação do arquivo (RN-TRANSF-014). `overwrite`: as chaves das conexões marcadas
   que já existem e devem ser sobrescritas, até 2.000; ausente ou nulo é nenhuma. Uma chave que não está em `items`,
   que é de pasta ou que vem repetida é 422 `IMPORT_INVALID`. A chave de uma conexão que não está no cofre (a excluída
@@ -10387,7 +10399,7 @@ Notas:
 - A API tem o teste do log (como o `ConnectionTransfersLogTests`): depois da contagem, da prévia e da importação, nada
   do que veio do DBeaver (usuário, senha, host, nome, ID, projeto) está em `logs/`. A URL com `;password=` não aparece
   nem na resposta da prévia nem em `logs/`.
-- A API tem os testes da reimportação: a conexão Informix sobrescrita fica com a porta do Prism; o usuário trocado sem
+- A API tem os testes da reimportação: a conexão Informix sobrescrita fica com a porta do Prism, ou com a porta DRDA preenchida, e a nova também vem com ela; o usuário trocado sem
   senha nova deixa a conexão sem senha; a chave de `overwrite` de uma conexão excluída entra como nova; e a recusa da
   importação não apaga a cópia.
 - O processo principal tem os testes da procura (as raízes de cada sistema, com uma pasta pessoal falsa, e a pasta de
