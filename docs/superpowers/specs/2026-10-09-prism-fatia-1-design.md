@@ -10875,7 +10875,7 @@ SELECT p.id, p.criado, p.valor
     que começa por eles é uma consulta (RN-VAR-011); e o nome que começa e termina por `$` (`$a$`) ou que é `$`
     seguido só de dígitos (`$1`), que o leitor do PostgreSQL leria como o começo de um `$a$ … $a$` ou como um
     marcador. A frase diz o que fazer: "<nome> não pode ser nome de variável: escolha outro."; e, para os da lista
-    fechada, o que o nome é ("date é o nome das funções de data: escolha outro nome, como data.").
+    fechada, que o nome é do Prism ("date é um nome do Prism; escolha outro, por exemplo data ou dia.").
   - A lista dos nomes que não podem ser nome faz parte do contrato da linguagem (RN-VERSAO-002): só cresce numa versão
     que quebra o contrato. Uma função nova dentro de `Math`, `random` ou `date` não quebra, porque não é um nome.
   - Um nome se declara uma vez no script ("<nome> já foi declarada na linha <n>."), e só se usa depois da declaração
