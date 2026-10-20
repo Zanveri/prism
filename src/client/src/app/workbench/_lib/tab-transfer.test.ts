@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { readTransfer, serializeTab, type TabSnapshot } from "./tab-transfer";
+import { Random } from "./variables/random";
+import { ScriptRun } from "./variables/run";
+import { readScript } from "./variables/script";
 import type { RowsState, RunnerState } from "./use-query-runner";
 import type { QueryTab } from "./workbench-model";
 
@@ -210,5 +213,48 @@ describe("a aba de consulta que salvou a edição vai com a grade salva (RN-EDIT
     const state = roundTrip(serializeTab(snapshot({ state: saved })))?.state as RowsState;
 
     expect(state.sourceRows).toEqual([1, null]);
+  });
+});
+
+describe("o comando com variáveis e os valores da aba passam com ela (RN-VAR-023 e 033)", () => {
+  const sent = {
+    sql: "select * from pedido where id = $1 and ids in ($2, $3)",
+    params: [
+      { type: "number" as const, value: "7", variable: "id", item: null },
+      { type: "number" as const, value: "1", variable: "ids", item: 0 },
+      { type: "number" as const, value: "2", variable: "ids", item: 1 },
+    ],
+    replacements: [
+      { name: "id", kind: "parameter" as const, start: 28, end: 31, sentStart: 28, sentEnd: 30, firstParameter: 0, parameterCount: 1 },
+      { name: "ids", kind: "list" as const, start: 41, end: 45, sentStart: 40, sentEnd: 46, firstParameter: 1, parameterCount: 2 },
+    ],
+  };
+  const bound: RowsState = { ...rows, target: { sql: "select * from pedido where id = @id and ids in (@ids)", offset: 10, engine: 1, sent } };
+
+  it("o texto do editor, o enviado, os parâmetros e o mapa das posições chegam inteiros", () => {
+    const state = roundTrip(serializeTab(snapshot({ state: bound })))?.state as RowsState;
+    expect(state.target).toEqual(bound.target);
+  });
+
+  it("um parâmetro com uma terceira chave estranha não atravessa: o schema não o aceita calado", () => {
+    const transfer = JSON.parse(JSON.stringify(serializeTab(snapshot({ state: bound })))) as { result: { target: { sent: { params: object[] } } } };
+    transfer.result.target.sent.params[0] = { type: "bitcoin", value: "7", variable: "id", item: null };
+    expect(readTransfer(transfer)).toBeNull();
+  });
+
+  it("os valores da aba vão e voltam, com o contador de avaliações", () => {
+    const model = readScript("let x = 5\nconst nome = 'Ana'\nlet ids = [1, 2]", undefined, { blankLines: true });
+    const run = new ScriptRun(model, { random: new Random([1, 2, 3, 4]), clock: () => 0, now: () => 1 });
+    for (const item of model.items) run.evaluate(item.index);
+    const values = { values: run.tab, counter: run.counter };
+
+    const adopted = roundTrip(serializeTab(snapshot({ values })));
+    expect(adopted?.values.counter).toBe(3);
+    expect([...(adopted?.values.values.keys() ?? [])].sort()).toEqual(["ids", "nome", "x"]);
+    expect(adopted?.values.values.get("nome")?.value).toEqual(run.tab.get("nome")?.value);
+  });
+
+  it("a aba sem valores chega sem valores", () => {
+    expect(roundTrip(serializeTab(snapshot()))?.values.values.size).toBe(0);
   });
 });

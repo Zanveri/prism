@@ -344,8 +344,8 @@ export function checkScript(model: ScriptModel, clock: Clock = () => performance
   return errors.sort((a, b) => a.offset - b.offset);
 }
 
-/** Os itens (as atribuições) que a execução deste item precisa avaliar antes (RN-VAR-020 e 023), com os valores que a aba já tem. */
-export function dependencyPlan(model: ScriptModel, index: number, tab: TabValues): number[] {
+/** As atribuições de cada nome, na ordem do texto, e a última de `name` acima de `before`. */
+function assignmentsIndex(model: ScriptModel): (name: string, before: number) => number | null {
   const assignmentsOf = new Map<string, number[]>();
   for (const item of model.items) {
     if (item.parsed === null) continue;
@@ -353,22 +353,26 @@ export function dependencyPlan(model: ScriptModel, index: number, tab: TabValues
     if (list === undefined) assignmentsOf.set(item.parsed.name, [item.index]);
     else list.push(item.index);
   }
-
-  /** A última atribuição de `name` acima de `before`. */
-  const lastAbove = (name: string, before: number): number | null => {
+  return (name, before) => {
     const list = assignmentsOf.get(name);
     if (list === undefined) return null;
     let found: number | null = null;
     for (const candidate of list) if (candidate < before) found = candidate;
     return found;
   };
+}
 
-  const currentCache = new Map<number, boolean>();
-  /** O valor que a aba tem serve: o texto é o mesmo e foi avaliado depois da última avaliação de cada atribuição de que depende (e essas, pela mesma regra). */
+/**
+ * Se o valor que a aba tem serve à atribuição `at` (RN-VAR-020 e 023): o texto dela é o mesmo de quando foi avaliada e foi avaliada depois da última avaliação de cada
+ * atribuição de que depende (e essas, pela mesma regra).
+ */
+function currentChecker(model: ScriptModel, tab: TabValues): (at: number) => boolean {
+  const lastAbove = assignmentsIndex(model);
+  const cache = new Map<number, boolean>();
   const isCurrent = (at: number): boolean => {
-    const cached = currentCache.get(at);
+    const cached = cache.get(at);
     if (cached !== undefined) return cached;
-    currentCache.set(at, false);
+    cache.set(at, false);
 
     const item = model.items[at];
     const parsed = item.parsed;
@@ -388,9 +392,40 @@ export function dependencyPlan(model: ScriptModel, index: number, tab: TabValues
         }
       }
     }
-    currentCache.set(at, current);
+    cache.set(at, current);
     return current;
   };
+  return isCurrent;
+}
+
+/**
+ * As variáveis declaradas cujo valor na aba está desatualizado (RN-VAR-023 e 024): a declaração mudou depois de a variável ser avaliada, ou uma atribuição de que ela
+ * depende foi avaliada de novo depois. A variável que ainda não tem valor não está aqui (ela é "sem valor"). A atribuição que vale para o valor é a de texto igual ao
+ * que a aba guardou; sem nenhuma (o texto mudou), é desatualizado.
+ */
+export function staleNames(model: ScriptModel, tab: TabValues): Set<string> {
+  const isCurrent = currentChecker(model, tab);
+  const stale = new Set<string>();
+  const byName = new Map<string, number[]>();
+  for (const item of model.items) {
+    if (item.parsed === null) continue;
+    const list = byName.get(item.parsed.name);
+    if (list === undefined) byName.set(item.parsed.name, [item.index]);
+    else list.push(item.index);
+  }
+  for (const [name, entry] of tab) {
+    const candidates = byName.get(name);
+    if (candidates === undefined) continue;
+    const matching = candidates.filter((at) => model.items[at].text === entry.text);
+    if (matching.length === 0 || !matching.some(isCurrent)) stale.add(name);
+  }
+  return stale;
+}
+
+/** Os itens (as atribuições) que a execução deste item precisa avaliar antes (RN-VAR-020 e 023), com os valores que a aba já tem. */
+export function dependencyPlan(model: ScriptModel, index: number, tab: TabValues): number[] {
+  const lastAbove = assignmentsIndex(model);
+  const isCurrent = currentChecker(model, tab);
 
   const plan = new Set<number>();
   const visit = (at: number) => {
