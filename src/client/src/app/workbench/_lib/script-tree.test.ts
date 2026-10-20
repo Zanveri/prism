@@ -11,6 +11,7 @@ import {
   scriptFolderPath,
   scriptFolderRefusal,
   scriptKey,
+  scriptTreeLabels,
   scriptTreeMove,
   scriptTreeRowKey,
   visibleScriptRows,
@@ -99,6 +100,15 @@ describe("as linhas à vista e o teclado da árvore (RN-SCRIPT-008)", () => {
 
     expect([key("Enter"), key("F2"), key("Delete"), key("F10", true), key("ContextMenu")]).toEqual(["enter", "rename", "delete", "menu", "menu"]);
     expect([key("F10"), key("a")]).toEqual([null, null]);
+  });
+});
+
+describe("scriptTreeLabels (os nomes do type-ahead, RN-ARVORE-009)", () => {
+  it("o nome da pasta ou do script de cada linha à vista, na ordem da árvore", () => {
+    const tree = buildScriptTree(folders, scripts);
+
+    expect(scriptTreeLabels(visibleScriptRows(tree, new Set()))).toEqual(["Fechamento", "Anual", "Mensal", "Abril", "abril", "relatório", "Rascunhos", "álamo", "Zeta"]);
+    expect(scriptTreeLabels(visibleScriptRows(tree, new Set([folderKey("f1")])))).toEqual(["Fechamento", "Rascunhos", "álamo", "Zeta"]);
   });
 });
 

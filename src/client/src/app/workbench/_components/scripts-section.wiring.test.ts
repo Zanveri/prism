@@ -178,3 +178,12 @@ describe("ScriptsSection: a recusa do \"Editar script…\" fica no campo dela (R
     expect(rt.toast.success).not.toHaveBeenCalled();
   });
 });
+
+describe("ScriptsSection: ir à linha pelas primeiras letras (RN-ARVORE-009)", () => {
+  it("a seção dá à árvore o gancho do type-ahead, sem texto no começo", () => {
+    const { typeAhead } = elementsOf(rt.render(() => ScriptsSection())).find((element) => element.type === ScriptsTreeView)!.props as unknown as ComponentProps<typeof ScriptsTreeView>;
+
+    expect(typeof typeAhead?.press).toBe("function");
+    expect(typeAhead?.shown).toBeNull();
+  });
+});

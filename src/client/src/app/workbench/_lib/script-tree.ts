@@ -107,6 +107,9 @@ export function scriptTreeMove(key: string, rows: readonly ScriptTreeRow[], inde
   return null;
 }
 
+/** Os nomes que o type-ahead compara (RN-ARVORE-009), um por linha à vista: o da pasta ou o do script, sem a marca do genérico. */
+export const scriptTreeLabels = (rows: readonly ScriptTreeRow[]): string[] => rows.map(({ node }) => (node.kind === "folder" ? node.folder.name : node.script.name));
+
 /** O que a linha faz com as outras teclas: Enter (a pasta abre e fecha, o script abre), F2 renomeia, Delete exclui, Shift+F10 e a tecla de menu abrem o menu. */
 export function scriptTreeRowKey(event: { key: string; shiftKey: boolean }): "enter" | "rename" | "delete" | "menu" | null {
   if (event.key === "Enter") return "enter";
