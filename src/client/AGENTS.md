@@ -2562,8 +2562,9 @@ da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017)
   `SentSqlButton` na barra do resultado e nas linhas das Estatísticas, e "Ver o SQL enviado" na pergunta de erro) mostra o `sentSql` do alvo.
 - **Provisório, até as partes seguintes.** A pergunta dos valores que faltam (RN-VAR-021) ainda não existe: a declaração sem valor é recusada na conferência. O
   "Executar com valores…" e a aba de execução (RN-VAR-026 a 029) não existem, e a variável de consulta, o `random.of` e o tipo de coluna ainda são recusados pelas frases
-  provisórias da linguagem. O `sql-editor.tsx` ainda não conhece as declarações (a marca, os erros sublinhados, o valor no fim da linha, o autocompletar, e o
-  `runTarget`/`scriptTargets` que as separam): com o cursor numa declaração o Ctrl+Enter só chega ao executor se o editor chamar o `onRun`.
+  provisórias da linguagem. O editor conhece as declarações (a seção "O editor e as variáveis", abaixo) e recebe os valores da aba pela prop `variables`;
+  o `runTarget`/`scriptTargets` ainda usam o `statementAt`, então o destaque de execução (RN-SQL-018) de uma declaração avaliada pelo Ctrl+Enter não existe. O Ctrl+Enter chega ao `onRun` mesmo
+  com o texto só de declarações (a tecla não consulta `isRunnable`, e `hasStatement` já conta o `let`), e a aba o desvia para o `runItem` quando o texto declara variáveis.
 
 ## O editor e as variáveis (seção 41: RN-VAR-025, RN-CONFIG-004)
 
@@ -2579,16 +2580,25 @@ Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere,
   o autocompletar deduz daí os métodos); `value` é o texto do valor como o painel o escreve (`7`, `'Ana'`, `[1, 2, 3]`), que o editor só corta (200 caracteres na dica do ponteiro, 60 com `…` no
   fim da linha); `stale` é o valor de antes de a declaração mudar, que não aparece no fim da linha e na dica leva "desatualizado". **Quem avisa a mudança do texto da declaração é o armazém**: ele
   marca `stale` quando a declaração (ou uma de que ela depende) muda, e `subscribe` avisa. O editor também esconde, por conta própria, o valor da declaração que a pessoa acabou de mexer
-  (até a leitura seguinte), mas é o `stale` que o mantém escondido depois. O editor não conhece a origem nem a hora da avaliação: a dica do ponteiro mostra "nome: tipo = valor" (a especificação
-  diz também a origem e a hora; o armazém da frente 3 não as entrega por esta prop).
+  (RN-VAR-025), e a leitura seguinte (300 ms) não o devolve: ele só volta quando o armazém assume (marca `stale`, 400 ms depois da última tecla) ou traz uma avaliação nova, ou quando a pessoa
+  desfaz a mudança. A origem e a hora vêm em `from` ("diálogo · 14:32:05"), e a dica do ponteiro mostra "nome: tipo = valor · origem · hora" (sem `from`, só "nome: tipo = valor"). `short` é o texto do
+  fim da linha quando difere do `value` (a lista leva o " · 3 itens"); sem ele o editor corta o `value` em 60.
+- **A ligação na aba.** `QueryTabPanel` (a aba de consulta e a de script são a mesma, e o único lugar onde o `SqlEditor` é montado) chama `useEditorVariables` (`use-tab-variables.ts`): o
+  `declaredValues` do armazém do executor (`runner.values`) com a leitura do texto de agora, entregue a um armazém por aba (`editor-variables.ts`, de identidade estável, para o editor não se religar)
+  que só avisa o editor quando o tipo, o valor, a origem ou o `stale` de algum nome mudou. O texto que a aba lê é o do editor (`liveEditors`), com o atraso da aba (`updateTab`, 400 ms), e o editor
+  esconde por conta própria o valor da declaração que a pessoa acabou de mexer até lá. O fluxo inteiro (declarar, Alt+X, o painel, a dica do ponteiro e o fim da linha, o F5 e a atualização automática
+  com os mesmos parâmetros) tem teste em `editor-variables.test.ts`, e a ligação na aba em `query-tab.test.ts`.
 - **A leitura em segundo plano.** `analyze` roda 300 ms depois da última tecla (a primeira, ao abrir o editor, sem espera), e o atraso cresce com o que a leitura custou (quatro vezes o custo, de
   300 ms a 2 s), então um script grande é lido menos vezes. Entre uma leitura e outra as marcas só acompanham a edição (`RangeSet.map`): a tecla nunca espera pela leitura. Texto sem `let`, `const`, `@` nem `//` não
-  é lido; acima de 300.000 caracteres (`analysisMaxChars`; medido: 0,4 a 0,5 ms por 1.000 caracteres, e a leitura do script é o custo) não é lido e o editor fica sem as marcas. A execução em seco do
+  é lido; acima de 100.000 caracteres (`analysisMaxChars`; medido: 0,4 a 0,5 ms por 1.000 caracteres, e a leitura do script é o custo; 165 a 200 ms para 190.000 com 500 declarações e 3.000 comandos com `@v`) não é lido e o editor fica sem as marcas.
+  **Decisão (RN-VAR-014):** a leitura do editor roda na thread da tela, e não no Worker que a especificação pede. Ela não avalia o que depende da hora, da sorte ou do banco, a execução em seco
+  tem 40 ms e o texto lido tem esse teto, de modo que a pausa de uma leitura fica abaixo de 50 ms; mover `readScript` e `checkScript` ao Worker custaria uma cópia do texto a cada pausa e um
+  segundo canal de resposta. Se a medida passar disso, o caminho é o Worker (`evaluator-host`), e não subir o teto. A execução em seco do
   `checkScript` (os erros de tipo que se sabem sem o banco) tem 40 ms (`dryRunBudgetMs`): passado o tempo, o que só ela acharia é descartado, e os erros da leitura (`staticDiagnostics`) ficam. O
   `readScript` não tem versão incremental: o orçamento é a pausa, o atraso adaptativo e o teto. Os testes que leem a árvore do `lang-sql` usam `freezeParseBudget`.
 - **O que cada coisa usa.** O realce e os erros vêm de `readScript` e `checkScript`; o `@nome` e a dica dele, de `findAtReferences` (`at-names.ts`); o corpo de rotina, de `statementHasBody`. Os textos entre aspas
-  duplas e as crases das declarações são pintados como texto (o `lang-sql` os leria como nome entre aspas), e o `//` como comentário, só nos lugares da RN-VAR-001 (dentro das declarações e entre os itens); o
-  `//` dentro de um comando é SQL, e a dica diz. As marcas ficam por dentro das cores do `lang-sql` (`Prec.highest`) e, por garantia, a cor vale também para os pedaços que o `lang-sql` pintou por dentro.
+  duplas e as crases das declarações são pintados como texto (o `lang-sql` os leria como nome entre aspas), e o `//` como comentário, só nos lugares da RN-VAR-001 (dentro das declarações e entre os itens, e só no script que declara alguma variável: sem nenhuma a execução é a de sempre, que não conhece
+  o `//`, e ele vai ao banco como está); o `//` dentro de um comando, ou em um script sem declaração, é SQL, e a dica diz. As marcas ficam por dentro das cores do `lang-sql` (`Prec.highest`) e, por garantia, a cor vale também para os pedaços que o `lang-sql` pintou por dentro.
   O comentário colado ao valor (`i--`, `a //2`) só leva a dica quando o `--` ou o `//` está sem espaço antes dele, ou o resto da linha é só um número ou o nome de uma variável: `let x = 5 // nota` é um comentário
   comum e não leva dica (a especificação cita `a // b`, que não se distingue de um comentário no fim da linha).
 - **A cor da variável** é a ficha `--color-syntax-variable` (a especificação a chama de `--editor-variable`: o nome segue as outras fichas de sintaxe, e o teste de contraste a confere em cada um dos temas (os seis do canvas e o Kanagawa)
