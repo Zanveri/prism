@@ -2435,8 +2435,8 @@ guardadas se editam").
 
 ## A linguagem das variáveis (seção 41: RN-VAR-001 a 018, 020 e 036, RN-SQL-009)
 
-Parte 9, frente 1: só a linguagem, pura, em `src/app/workbench/_lib/variables/`. Ainda não há tela: nem a marca no editor, nem o painel das variáveis, nem a
-execução ligada ao `use-query-runner`; as frentes seguintes só chamam o que está aqui. A API não lê nada disto: o texto que ela recebe já vem com os
+Parte 9, frente 1: a linguagem, pura, em `src/app/workbench/_lib/variables/`. A execução ligada ao `use-query-runner` e o painel das variáveis são a frente 3
+(a seção seguinte); a marca no editor é da frente 4. As frentes seguintes só chamam o que está aqui. A API não lê nada disto: o texto que ela recebe já vem com os
 marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
 
 - **Os arquivos.** `lexer.ts` e `parser.ts` (o leitor da gramática inteira da RN-VAR-002; o que fica para depois é lido e recusado pela conferência com as frases
@@ -2519,6 +2519,51 @@ marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
   passos) leva 1,6 a 2,4 s dos 5 s; a troca de uma lista de 10.000 valores leva 60 a 280 ms nos três bancos; o host para um Worker que não volta em 250 ms (mais 10 a 45
   ms) e em 5 s (mais 1 a 4 ms), e o Worker seguinte responde em 20 a 62 ms. Não exercitados: o app empacotado (a política de conteúdo e o endereço do Worker feito pelo
   Vite), Windows e macOS, e uma chamada nativa que passe de verdade dos 250 ms.
+
+## Executar com variáveis e ver os valores (seção 41: RN-VAR-012, 018 a 024, 032 e 033, RN-SQL-009, RN-SEG-001)
+
+Parte 9, frente 3: o executor da aba, os valores da aba, o painel "Variáveis", o "SQL enviado" e os `params` em tudo o que executa de novo. O texto do editor segue sendo
+da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017), e a API só recebe `{ type, value }` (`requestParams`).
+
+- **O alvo guarda o comando trocado** (RN-VAR-033). `RunTarget.sent` (um `BoundCommand`: `sql` com os marcadores, `params` com `variable` e `item`, `replacements`, o mapa
+  das posições) vive ao lado do `sql` do editor, e é ele que o F5, o "Executar de novo", o filtro, a atualização automática, "Executar este comando", a exportação e a
+  cópia mandam (`sentTextOf`, `queryParamsOf`, `parametersOf`, em `command-wire.ts`): o `random` não sorteia de novo e as variáveis nunca são avaliadas de novo. A
+  exportação leva `source.params` (`ExportOrigin.params`, `requestSource`) e o corpo das rotas `transfers` vai a 16 MiB (`limits.transferBodyBytes`, `maxRequestBytes`,
+  `maxImportRequestBytes`; a tela confere o corpo escrito em JSON antes de mandar). `sameCommand` compara o texto enviado, o filtro e o tipo e o valor de cada
+  parâmetro. O `executeQuery` leva `params` só quando há; `QUERY_PARAMETERS_MISMATCH` e `QUERY_INVALID` são erros do comando no script (quatro escolhas), e no comando
+  avulso vão ao aviso central com a frase da API. A posição do erro do banco volta ao texto do editor por `editorOffset` (RN-SQL-009), e o filtro do resultado a
+  deixa sem marca, como antes. A passagem da aba para outra janela leva o alvo inteiro (`sent` no schema de `electron/window-messages.ts`: o texto do editor, o
+  enviado, os parâmetros e o mapa) e os valores da aba (`values`, dado puro de `wire.ts`, reconstruído pelos construtores da linguagem). A janela do resultado
+  (RN-ABAS-017) não precisa de nada: é a mesma tela, com o mesmo executor.
+- **Os valores da aba** (RN-VAR-023) são do executor: `runner.values` (`variables/tab-values.ts`, `createTabValuesStore`) com `snapshot()` (imutável, outro objeto a
+  cada mudança: `{ values, counter }`), `subscribe(listener)` (devolve a função que desfaz) e `replace`/`clear`. `declaredValues(snapshot, model)` é o que o editor lê: por
+  nome declarado, `{ type, value, stale, detail, origin, at }` (`type` como `typeLabel`, `value` até 60 caracteres como no fim da linha, `detail` até 200 para a dica,
+  `stale` quando o texto da declaração mudou ou uma atribuição de que ela depende foi avaliada de novo: `staleNames`, a mesma regra do `dependencyPlan`). O contador de
+  avaliações e os valores saem com o `retire()` (aba fechada, banco ou conexão trocados, bloqueio, "Sair"), que também larga o Worker; o `release()` (Desconectar) não os
+  esquece. `runner.reveal` (`createRevealStore`) é o pedido de trazer o painel à frente (`serial` cresce a cada pedido). **Quem liga o editor** lê `runner.values` com
+  `useSyncExternalStore` e a leitura do texto (`readScript`), e chama `declaredValues`; a frente do editor não precisa de mais nada daqui.
+- **O executor** (`createQueryRunner`). `runner.runItem({ doc, engine, from, to }, hooks)` é o Ctrl+Enter (RN-VAR-020) e `runner.runScriptDoc(...)` o Alt+X (RN-VAR-019);
+  `doc` é o texto inteiro do editor (`{ text, blankLines }`) e `from` a `to` o que vai (a seleção, o texto inteiro, ou o cursor com `from` igual a `to`). O `query-tab`
+  os chama quando o texto declara variáveis (`variableRange`, pelo `liveEditors.snapshot`, e não pelos argumentos do `onRun`/`onRunScript` do editor), e sem
+  declarações o caminho é o de sempre (`run`, `runScript`). Os ganchos (`RunHooks`): `confirm(make)` devolve `true` ou a resposta da pessoa (é o `confirmed` do
+  `useCommandConfirmation`) e `begin()` roda quando a execução vai mesmo começar (o filtro do resultado sai, a área recolhida volta, o destaque acende). A ordem do Alt+X:
+  a conferência (`planScript`: `checkScript` filtrado aos itens que vão e às atribuições de que dependem; a declaração sem valor é recusada com a frase provisória), a
+  avaliação no Worker de toda atribuição que vai e das de fora da seleção que a aba não tem em dia (`evaluateIndices`, um pedido só: `preparing` impede outro), a troca dos
+  `@nome` de cada comando com os valores daquele ponto (`scopeBefore`, `bindItem`), a pergunta da proteção com os valores como literais (`confirmedOf`,
+  `numberedScriptQuestion`: o número é o do item no script, e o comando com uma variável `sql` é irreversível na dúvida, `irreversibleOfCommand`, com o trecho dela marcado
+  em `ranges`) e então o laço (`runScriptNow(commands, declarations, closing)`). A declaração toma o valor já avaliado (atualiza o painel e as Estatísticas, `ScriptEntry.kind`
+  `declaration`, "—" nas linhas, os totais "Declarações avaliadas" à parte); no erro dela só valem "Parar" e "Tentar de novo" (que a avalia de novo), e o diálogo
+  desabilita "Pular" e "Pular todos os erros" com o motivo. O Ctrl+Enter numa declaração só avalia (o resultado na tela fica, o painel vem à frente com a linha dela);
+  no comando, `dependencyPlan` diz o que avaliar antes e o valor que a aba tem serve quando está em dia. Erro da conferência ou da avaliação: `RunnerState`
+  `variableErrors` (a lista "Erros nas variáveis" com a linha de cada um; o clique leva o cursor, `editor-goto.ts`, pelo `EditorView.findFromDOM`), o aviso "O script não foi
+  executado: N erros nas variáveis." e nada executado. `variable-execution.ts` é o planejamento (puro), `variable-run.copy.ts` os textos.
+- **A tela.** O painel "Variáveis" (`variables-panel.ts` é o modelo, puro: as linhas, `navigate`, `copyTextOf`; `variables-panel.tsx` o `treegrid`) é uma aba logo antes de
+  "Estatísticas" (`ScriptTab` ganhou `"variables"`; sem script, `ResultTabs` traz "Resultado" e "Variáveis"). O "SQL enviado" (`sent-sql-dialog.tsx`, com o botão
+  `SentSqlButton` na barra do resultado e nas linhas das Estatísticas, e "Ver o SQL enviado" na pergunta de erro) mostra o `sentSql` do alvo.
+- **Provisório, até as partes seguintes.** A pergunta dos valores que faltam (RN-VAR-021) ainda não existe: a declaração sem valor é recusada na conferência. O
+  "Executar com valores…" e a aba de execução (RN-VAR-026 a 029) não existem, e a variável de consulta, o `random.of` e o tipo de coluna ainda são recusados pelas frases
+  provisórias da linguagem. O `sql-editor.tsx` ainda não conhece as declarações (a marca, os erros sublinhados, o valor no fim da linha, o autocompletar, e o
+  `runTarget`/`scriptTargets` que as separam): com o cursor numa declaração o Ctrl+Enter só chega ao executor se o editor chamar o `onRun`.
 
 ## Proteções da conexão e da pasta (RN-PROT-001 a 006)
 
