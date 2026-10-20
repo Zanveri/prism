@@ -416,3 +416,30 @@ describe("o botão 'Onde mostrar o resultado' na barra (RN-ABAS-014)", () => {
     expect(withBar()).toMatch(/<span data-place=""><\/span><\/div>/);
   });
 });
+
+describe("as medidas da barra da área de resultado (RN-ABAS-009, seção 39)", () => {
+  const records = { name: "estoque.pedido", onRefresh: noop, onCancel: noop, onExport: noop, waiting: false, disconnected: false };
+  const exporter = { blocker: null, onExport: noop };
+  const panel = (props: Partial<Parameters<typeof ResultPanel>[0]>) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { ...rowsState, read: true }, connected: true, onLoadMore: noop, onCount: noop, onRerun: noop, ...props })));
+  const classOf = (markup: string, pattern: RegExp) => /class="([^"]*)"/.exec(pattern.exec(markup)?.[0] ?? "")?.[1].split(" ") ?? [];
+
+  it("na aba de consulta, o título \"Resultado\" tem 28 px com a borda de 2 px e 8 px de cada lado, e os botões da barra, 24 px", () => {
+    const markup = panel({ exporter, actions: createElement(ResultActions, { mode: "split", onAction: noop }) });
+
+    expect(classOf(markup, /<h2[^>]*>/)).toEqual(expect.arrayContaining(["h-7", "px-2", "border-b-2"]));
+    expect(classOf(markup, /<button[^>]*title="Exportar todas as linhas deste resultado[^"]*"[^>]*>/)).toContain("h-6");
+    expect(classOf(markup, /<button[^>]*>Contar total<\/button>/)).toContain("h-6");
+    expect(classOf(markup, /<button[^>]*aria-label="Diminuir o zoom da grade"[^>]*>/)).toContain("size-6");
+    expect(classOf(markup, /<button[^>]*aria-label="Recolher a área de resultado"[^>]*>/)).toContain("size-6");
+  });
+
+  it("nos Registros, a barra e o rodapé ficam com as medidas de antes: o título de 36 px e os botões de 28 px", () => {
+    const markup = panel({ records, exporter });
+
+    expect(classOf(markup, /<h2[^>]*>/)).toEqual(expect.arrayContaining(["h-9", "px-2.5"]));
+    expect(classOf(markup, /<button[^>]*aria-label="Diminuir o zoom da grade"[^>]*>/)).toContain("size-7");
+    expect(classOf(markup, /<button[^>]*>Contar total<\/button>/)).toContain("h-7");
+    expect(classOf(markup, /<button[^>]*title="Exportar todas as linhas da tabela[^"]*"[^>]*>/)).toContain("h-7");
+  });
+});

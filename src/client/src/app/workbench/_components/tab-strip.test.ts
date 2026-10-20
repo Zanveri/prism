@@ -45,7 +45,7 @@ describe("a faixa de abas (D2)", () => {
     expect(markup).toMatch(/role="tablist"[^>]*class="[^"]*\boverflow-x-auto\b/);
     expect(markup).not.toMatch(/flex-wrap/);
     // As 12 abas (a moldura de cada uma) não encolhem para caber.
-    expect(markup.match(/class="flex flex-none items-center border-b-2/g)).toHaveLength(12);
+    expect(markup.match(/class="flex h-7 flex-none items-stretch border-b-2/g)).toHaveLength(12);
   });
 
   it("o título comprido encurta com reticências e leva o nome inteiro na dica (sozinha, a tabela aparece sem o esquema, RN-ABAS-008)", () => {
@@ -191,5 +191,63 @@ describe("a aba do resultado (RN-ABAS-012)", () => {
     const markup = renderResult([{ ...query("a", "x.sql"), resultPlace: "window" }, { ...table("t", "loja", "pedido"), resultPlace: "tab" }], "a", false);
 
     expect(markup).not.toContain("workbench-result-tab-");
+  });
+});
+
+describe("as medidas da faixa (RN-ABAS-009, seção 39)", () => {
+  const classOf = (tag: string) => /class="([^"]*)"/.exec(tag)?.[1].split(" ") ?? [];
+  const dirty: QueryTab = { ...query("q0", "Fechamento"), script: { id: "11111111-1111-4111-8111-111111111111", name: "Fechamento", savedSql: "", dirty: true } };
+  const production = () => ({ name: "PRD", color: "#FF8A7A", folder: null });
+
+  it("a aba tem 28 px contando a borda de 2 px; 10 px antes do ícone de 14 px, 6 px entre os itens; o título até 200 px", () => {
+    const markup = render([dirty, query("q1", "consulta.sql")], "q0", production);
+    const frame = /<div[^>]*data-tab-id="q0"[^>]*>/.exec(markup)?.[0] ?? "";
+    const tab = new RegExp(`<button[^>]*id="${tabElementId("q0")}"[^>]*>`).exec(markup)?.[0] ?? "";
+
+    expect(classOf(frame)).toEqual(expect.arrayContaining(["h-7", "border-b-2"]));
+    expect(classOf(tab)).toEqual(expect.arrayContaining(["pl-2.5", "gap-1.5", "pr-1"]));
+    expect(markup).toMatch(new RegExp(`id="${tabElementId("q0")}"[^>]*><svg[^>]*class="[^"]*\\bsize-3\\.5\\b`));
+    expect(markup).toMatch(/<span class="max-w-\[200px\] truncate">Fechamento<\/span>/);
+  });
+
+  it("a aba do resultado tem as mesmas medidas da aba: 28 px, ícone de 14 px, título até 200 px, o selo de 16 px e o X de 24 px com o desenho de 20 px", () => {
+    const markup = render([{ ...query("q0", "Fechamento"), resultPlace: "tab" }], "q0", production);
+    const frame = /<div[^>]*data-result-tab-id="q0"[^>]*>/.exec(markup)?.[0] ?? "";
+    const tab = /<button[^>]*role="tab"[^>]*id="workbench-result-tab-q0"[^>]*>/.exec(markup)?.[0] ?? "";
+    const close = /<button[^>]*aria-label="Voltar o resultado de Fechamento para o painel"[^>]*>(<span[^>]*>)<svg([^>]*)>/.exec(markup);
+
+    expect(classOf(frame)).toEqual(expect.arrayContaining(["h-7", "border-b-2"]));
+    expect(classOf(tab)).toEqual(expect.arrayContaining(["pl-2.5", "gap-1.5", "pr-1"]));
+    expect(markup).toMatch(/id="workbench-result-tab-q0"[^>]*><svg[^>]*class="[^"]*\bsize-3\.5\b/);
+    expect(markup).toMatch(/<span class="max-w-\[200px\] truncate">Resultado · Fechamento<\/span>/);
+    expect(classOf(/<span[^>]*>PRD<\/span>/.exec(markup.slice(markup.indexOf("workbench-result-tab-q0")))?.[0] ?? "")).toEqual(expect.arrayContaining(["h-4", "px-1.5"]));
+    expect(classOf(close?.[0] ?? "")).toEqual(expect.arrayContaining(["size-6", "mr-0.5", "self-center"]));
+    expect(classOf(close?.[1] ?? "")).toContain("size-5");
+  });
+
+  it("o ponto da mudança não salva tem 6 px, e o selo do ambiente, na faixa, 16 px de altura com 6 px de cada lado", () => {
+    const markup = render([dirty], "q0", production);
+
+    expect(classOf(/<span[^>]*data-unsaved[^>]*>/.exec(markup)?.[0] ?? "")).toContain("size-1.5");
+    expect(classOf(/<span[^>]*>PRD<\/span>/.exec(markup)?.[0] ?? "")).toEqual(expect.arrayContaining(["h-4", "px-1.5", "leading-4", "text-[11px]"]));
+  });
+
+  it("o X: a área de clique de 24 px, com o desenho de 20 px e o ícone de 12 px no meio, e 4 px depois dele", () => {
+    const markup = render([query("q0", "consulta.sql")], "q0");
+    const close = /<button[^>]*aria-label="Fechar consulta\.sql"[^>]*>(<span[^>]*>)<svg([^>]*)>/.exec(markup);
+
+    expect(classOf(close?.[0] ?? "")).toEqual(expect.arrayContaining(["size-6", "mr-0.5", "self-center"]));
+    expect(classOf(close?.[1] ?? "")).toContain("size-5");
+    expect(close?.[2]).toMatch(/class="[^"]*\bsize-3\b/);
+  });
+
+  it("as setas e o botão da lista: 28 px de altura e 24 px de largura, com o ícone de 14 px; o da lista com a borda à esquerda", () => {
+    const markup = render(twelve, "q0");
+    for (const label of ["Rolar as abas para a esquerda", "Rolar as abas para a direita", "Todas as abas"]) {
+      const button = new RegExp(`<button[^>]*aria-label="${label}"[^>]*><svg([^>]*)>`).exec(markup);
+      expect(classOf(button?.[0] ?? ""), label).toEqual(expect.arrayContaining(["h-7", "w-6"]));
+      expect(button?.[1], label).toMatch(/class="[^"]*\bsize-3\.5\b/);
+    }
+    expect(classOf(/<button[^>]*aria-label="Todas as abas"[^>]*>/.exec(markup)?.[0] ?? "")).toEqual(expect.arrayContaining(["border-l", "ml-1"]));
   });
 });
