@@ -259,7 +259,7 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
     try {
       const fileNames = fileNamesOf(choices, values, new Date());
       if (!clipboard) {
-        const reply = await chooseExportDestination({ suggestedName: fileNames.suggestedName, extension: fileNames.zip ? "zip" : fileNames.extension });
+        const reply = await chooseExportDestination({ suggestedName: fileNames.suggestedName, extension: fileNames.zip ? "zip" : fileNames.extension, ...(request.host.resultWindow === null ? {} : { resultWindow: request.host.resultWindow }) });
         // Desistir do diálogo de salvar deixa o assistente como estava.
         if (reply.status === "canceled") return;
         if (reply.status !== "chosen") {

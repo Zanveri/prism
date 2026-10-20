@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 
 import type { GridZoom } from "@/app/settings/_lib/preferences";
-import { ArrowDownIcon, ArrowsUpDownIcon, ArrowUpIcon } from "@/components/ui";
+import { ArrowDownIcon, ArrowsUpDownIcon, ArrowUpIcon, useHost } from "@/components/ui";
+import { isElement } from "@/lib/host/host";
 import { cn } from "@/lib/utils/cn";
 import { isMacPlatform } from "@/lib/utils/platform";
 
@@ -461,9 +462,18 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   // A altura estimada da linha é a do zoom (a de verdade, porque nada é medido), e o cabeçalho preso no topo é o `paddingStart`, da mesma altura.
   // O cabeçalho e o número da linha, presos, cobrem o começo da caixa: o `scrollPaddingStart` do mesmo tamanho faz o `scrollToIndex` deixar a célula ativa
   // logo depois deles, e não por baixo (RN-GRADE-001: a grade rola para manter a célula ativa à vista, também no Ctrl+Home, no PageUp e no Home).
+  // RN-ABAS-017: a área de resultado muda de página quando vai para a janela do resultado (ou volta). O virtualizador guarda a janela do elemento de rolagem
+  // (`ownerDocument.defaultView`) quando o liga, e o `ResizeObserver` dela com ela: o de outra janela não avisaria o tamanho. Ao mudar de página ele é desligado e
+  // ligado de novo na mesma passada, antes de pintar, e passa a observar pela janela de agora.
+  const hostDocument = useHost().document;
+  const [observedDocument, setObservedDocument] = useState(hostDocument);
+  const observing = observedDocument === hostDocument;
+  useLayoutEffect(() => {
+    if (!observing) setObservedDocument(hostDocument);
+  }, [observing, hostDocument]);
   // eslint-disable-next-line react-hooks/incompatible-library -- o virtualizador devolve funções que não se memorizam; nada aqui depende disso.
-  const rowVirtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => scroll.current, estimateSize: () => metrics.rowHeight, overscan: 6, paddingStart: metrics.rowHeight, scrollPaddingStart: metrics.rowHeight, observeElementOffset: observeRenderedOffset });
-  const columnVirtualizer = useVirtualizer({ horizontal: true, count: columns.length, getScrollElement: () => scroll.current, estimateSize: (index) => drawn[index], overscan: 2, paddingStart: metrics.gutterWidth, scrollPaddingStart: metrics.gutterWidth, observeElementOffset: observeRenderedOffset });
+  const rowVirtualizer = useVirtualizer({ enabled: observing, count: rows.length, getScrollElement: () => scroll.current, estimateSize: () => metrics.rowHeight, overscan: 6, paddingStart: metrics.rowHeight, scrollPaddingStart: metrics.rowHeight, observeElementOffset: observeRenderedOffset });
+  const columnVirtualizer = useVirtualizer({ enabled: observing, horizontal: true, count: columns.length, getScrollElement: () => scroll.current, estimateSize: (index) => drawn[index], overscan: 2, paddingStart: metrics.gutterWidth, scrollPaddingStart: metrics.gutterWidth, observeElementOffset: observeRenderedOffset });
   const virtualColumns = columnVirtualizer.getVirtualItems();
 
   // Uma largura mudou (a divisa, o zoom, o tipo no cabeçalho), ou a altura da linha (o zoom): o virtualizador só relê `estimateSize` quando lhe pedem, e
@@ -552,13 +562,14 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const wasOpen = useRef(editorOpen);
   useEffect(() => {
     const element = scroll.current;
-    if (wasOpen.current && !editorOpen && element !== null && (document.activeElement === document.body || element.contains(document.activeElement))) element.focus({ preventScroll: true });
+    const page = element?.ownerDocument;
+    if (wasOpen.current && !editorOpen && element != null && page != null && (page.activeElement === page.body || element.contains(page.activeElement))) element.focus({ preventScroll: true });
     wasOpen.current = editorOpen;
   }, [editorOpen]);
 
   /** A célula do evento, pela posição que ela leva (`data-row`, `data-col`), ou nula fora de uma. */
   function cellOf(target: EventTarget): GridCell | null {
-    const element = target instanceof Element ? target.closest<HTMLElement>("[data-col]") : null;
+    const element = isElement(target) ? target.closest<HTMLElement>("[data-col]") : null;
     if (element === null || scroll.current?.contains(element) !== true) return null;
     return { row: Number(element.dataset.row), column: Number(element.dataset.col) };
   }
@@ -567,7 +578,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
   /** O número da linha do evento (`data-rowheader`, RN-GRADE-001), ou nulo fora de um. */
   function rowHeaderOf(target: EventTarget): number | null {
-    const element = target instanceof Element ? target.closest<HTMLElement>("[data-rowheader]") : null;
+    const element = isElement(target) ? target.closest<HTMLElement>("[data-rowheader]") : null;
     if (element === null || scroll.current?.contains(element) !== true) return null;
     return Number(element.dataset.rowheader);
   }
@@ -620,22 +631,24 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       follow();
     }, 50);
     const settled = editing.onSelecting;
+    // RN-ABAS-017: o ponteiro é seguido na janela do elemento (a da aba ou a do resultado), e não na da tela que desenha.
+    const view = element.ownerDocument.defaultView ?? window;
     const stop = () => {
       clearInterval(timer);
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", stop);
+      view.removeEventListener("mousemove", move);
+      view.removeEventListener("mouseup", stop);
       if (drag.current === stop) drag.current = null;
       settled(false);
     };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", stop);
+    view.addEventListener("mousemove", move);
+    view.addEventListener("mouseup", stop);
     drag.current = stop;
     settled(true);
   }
 
   /** O nome da coluna do evento (`data-colheader`, RN-GRADE-021), ou nulo fora de um. */
   function columnHeaderOf(target: EventTarget): number | null {
-    const element = target instanceof Element ? target.closest<HTMLElement>("[data-colheader]") : null;
+    const element = isElement(target) ? target.closest<HTMLElement>("[data-colheader]") : null;
     if (element === null || scroll.current?.contains(element) !== true) return null;
     return Number(element.dataset.colheader);
   }
@@ -652,7 +665,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
     }
     if (event.button !== 0) return;
     // RN-GRADE-021: o botão de ordenar age no clique dele; o `mousedown` só é cancelado, e o foco fica na grade.
-    if (event.target instanceof Element && event.target.closest("[data-sort]") !== null) return void event.preventDefault();
+    if (isElement(event.target) && event.target.closest("[data-sort]") !== null) return void event.preventDefault();
     heldRow.current = column === null ? null : (editing.active?.row ?? 0);
     if (column !== null) {
       // RN-GRADE-022: o clique no nome escolhe a coluna inteira; Shift estende da coluna da âncora; Ctrl (Cmd no macOS) acrescenta ou tira, e o arraste com
@@ -716,7 +729,7 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
 
   /** O pé da célula, onde o menu aberto pelo teclado aparece; sem ela na página, o canto da grade. */
   function pointOf(cell: GridCell): { x: number; y: number } {
-    const rect = (document.getElementById(cellIdOf(cell.row, cell.column)) ?? scroll.current)?.getBoundingClientRect();
+    const rect = ((scroll.current?.ownerDocument ?? document).getElementById(cellIdOf(cell.row, cell.column)) ?? scroll.current)?.getBoundingClientRect();
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left, y: rect.bottom };
   }
 

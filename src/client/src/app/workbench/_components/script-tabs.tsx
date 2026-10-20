@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 
-import { Button } from "@/components/ui";
+import { Button, useHost } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
 import { commandHead, commandHint, entryAt, scriptTabKeyTarget, scriptTabsOf, type ScriptRun, type ScriptTab } from "../_lib/script-run";
@@ -39,6 +39,8 @@ type ScriptTabsProps = {
 export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTabsProps) {
   const list = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  // RN-ABAS-017: a faixa pode estar na página da janela do resultado, e o `ResizeObserver` é o da janela dela (e recriado quando a página muda).
+  const page = useHost().document;
   const tabs = scriptTabsOf(run);
   // A faixa estava sem largura (a aba de consulta escondida, ou a área de trabalho por baixo de outra tela) quando a escolhida pediu para aparecer.
   const revealPending = useRef(false);
@@ -60,12 +62,12 @@ export function ScriptTabs({ run, shown, idPrefix, panelId, onChoose }: ScriptTa
     const element = scroller.current;
     if (element === null) return;
 
-    const observer = new ResizeObserver(() => {
+    const observer = new (element.ownerDocument.defaultView ?? window).ResizeObserver(() => {
       if (revealPending.current) reveal();
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [reveal]);
+  }, [reveal, page]);
 
   // A aba escolhida pelo teclado cuja troca esperou a pergunta das alterações não salvas (RN-SQL-023). Quando a pergunta troca de aba ("Salvar" ou
   // "Descartar"), o foco vai a ela: o diálogo, ao fechar, o devolve à aba de antes, que já saiu da ordem do Tab, e as setas seguintes contariam a partir da

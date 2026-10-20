@@ -63,7 +63,8 @@ export function FormatStep({
     event.preventDefault();
     const next = destinations[target];
     choose(next);
-    document.getElementById(formatOptionId(idPrefix, next))?.focus();
+    // A página do elemento (RN-ABAS-017): o assistente pode estar na janela do resultado.
+    event.currentTarget.ownerDocument.getElementById(formatOptionId(idPrefix, next))?.focus();
   }
 
   const option = (candidate: Destination, icon: ReactNode, name: string, description: string) => {
