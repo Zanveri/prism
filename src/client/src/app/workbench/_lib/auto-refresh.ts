@@ -16,11 +16,17 @@ import type { RunnerState, RunTarget } from "./use-query-runner";
  * - esquece a execução que o executor abandonou para o comando da pessoa (`yielded`): o desfecho dela não conta, e quem diz se segue é o comando da pessoa.
  */
 
-/** Os intervalos do menu, em milissegundos: 5 s, 10 s, 30 s, 1 min e 5 min. */
-export const autoRefreshChoices: readonly number[] = [5_000, 10_000, 30_000, 60_000, 300_000];
+/** Os intervalos do menu, em milissegundos: 1 s (o primeiro, seção 39), 5 s, 10 s, 30 s, 1 min e 5 min. */
+export const autoRefreshChoices: readonly number[] = [1_000, 5_000, 10_000, 30_000, 60_000, 300_000];
 
-/** "Personalizado…": segundos inteiros, de 2 a 3.600 (uma hora). */
-export const customSecondsLimits = { min: 2, max: 3_600 } as const;
+/** "Personalizado…": segundos inteiros, de 1 a 3.600 (uma hora). */
+export const customSecondsLimits = { min: 1, max: 3_600 } as const;
+
+/**
+ * Quanto a execução automática roda antes de o controle dizer "atualizando…" (seção 39): em qualquer intervalo, para o controle não piscar a cada segundo no
+ * de 1 s, em que a leitura costuma voltar antes disso.
+ */
+export const runningShownAfterMs = 300;
 
 /** Por que a atualização automática parou sozinha: o erro, o cancelamento, o comando que não pôde ser executado, o comando que gravou, a sessão que caiu. */
 export type AutoRefreshStop = "failed" | "cancelled" | "notRun" | "writes" | "disconnected";
@@ -38,8 +44,8 @@ export type AutoRefreshState =
   /** Desligada; `stopped` é o motivo, quando ela parou sozinha, e fica até a próxima execução ou até a pessoa ligar de novo. */
   | { status: "off"; stopped: AutoRefreshStop | null }
   /**
-   * Ligada: o intervalo, a hora da última atualização (nula até a primeira), se uma execução automática está em andamento e a pausa que vale agora (a da
-   * edição antes da de fora de vista: é a que a pessoa vê).
+   * Ligada: o intervalo, a hora da última atualização (nula até a primeira), se uma execução automática está em andamento há mais de `runningShownAfterMs`
+   * (o "atualizando…" da barra; a que volta antes disso nunca aparece) e a pausa que vale agora (a da edição antes da de fora de vista: é a que a pessoa vê).
    */
   | { status: "on"; everyMs: number; lastAt: number | null; running: boolean; paused: AutoRefreshPause | null };
 
@@ -150,6 +156,8 @@ export function createAutoRefresh(deps: AutoRefreshDeps): AutoRefreshControl & A
   /** A execução automática foi pedida e ainda não terminou; `fired` conta as pedidas, para a resposta atrasada de uma não falar pela seguinte. */
   let firing = false;
   let fired = 0;
+  /** O prazo do "atualizando…" da execução automática em andamento. */
+  let shown: unknown = null;
 
   function publish(next: AutoRefreshState) {
     state = next;
@@ -168,6 +176,13 @@ export function createAutoRefresh(deps: AutoRefreshDeps): AutoRefreshControl & A
     timer = null;
   }
 
+  /** A execução automática acabou (ou foi abandonada): o "atualizando…" que ainda não apareceu não aparece mais. */
+  function unshow() {
+    if (shown === null) return;
+    clearTimer(shown);
+    shown = null;
+  }
+
   /** Marca a próxima execução para `dueAt`, se nada a impede agora; com a aba ocupada, quem marca é o fim do que a ocupa. */
   function arm() {
     disarm();
@@ -177,6 +192,7 @@ export function createAutoRefresh(deps: AutoRefreshDeps): AutoRefreshControl & A
 
   function off(stopped: AutoRefreshStop | null) {
     disarm();
+    unshow();
     target = null;
     firing = false;
     if (state.status !== "off" || state.stopped !== stopped) publish({ status: "off", stopped });
@@ -190,7 +206,10 @@ export function createAutoRefresh(deps: AutoRefreshDeps): AutoRefreshControl & A
 
     firing = true;
     const token = ++fired;
-    patchOn({ running: true });
+    shown = setTimer(() => {
+      shown = null;
+      if (firing && token === fired) patchOn({ running: true });
+    }, runningShownAfterMs);
     void deps.run(target).finally(() => {
       // O executor recusou sem chegar a executar (nada de "executando" no meio): não há o que esperar, e ela para.
       if (firing && token === fired && state.status === "on") off("notRun");
@@ -212,6 +231,7 @@ export function createAutoRefresh(deps: AutoRefreshDeps): AutoRefreshControl & A
     ran = null;
     const auto = firing;
     firing = false;
+    unshow();
     if (state.status !== "on") return;
 
     if (finished !== null) {
@@ -266,6 +286,7 @@ export function createAutoRefresh(deps: AutoRefreshDeps): AutoRefreshControl & A
       // O comando da pessoa entra no lugar: é o fim DELE que diz se segue (o mesmo comando) e que recomeça o tempo.
       firing = false;
       ran = null;
+      unshow();
       patchOn({ running: false });
     },
     lost: () => {

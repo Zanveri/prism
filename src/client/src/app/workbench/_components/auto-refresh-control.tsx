@@ -154,7 +154,7 @@ type AutoRefreshDialogProps = {
 };
 
 /**
- * O "Personalizado…" da atualização automática (RN-GRADE-014): os segundos, inteiros, de 2 a 3.600. Só desenha: quem chama confere o texto, liga e diz o
+ * O "Personalizado…" da atualização automática (RN-GRADE-014): os segundos, inteiros, de 1 a 3.600. Só desenha: quem chama confere o texto, liga e diz o
  * erro (`useAutoRefresh`). Montado ao abrir e desmontado ao fechar.
  */
 export function AutoRefreshDialog({ everyMs, error, onSubmit, onCancel }: AutoRefreshDialogProps) {
