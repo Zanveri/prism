@@ -246,11 +246,16 @@ describe("menuFor: o resto da árvore", () => {
   it("pasta: Nova conexão e Nova pasta (criam dentro dela), Renomear, Editar pasta…, Mover, Excluir, Exportar conexões…, Importar conexões aqui… e Copiar nome (RN-NAV-003 e RN-TRANSF-001)", () => {
     const groups = menuFor(folderNode, idle);
 
-    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "editFolder", "moveFolder", "deleteFolder"], ["exportConnections", "importHere"], ["copyName"]]);
-    expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "editFolder", "moveFolder", "deleteFolder", "exportConnections", "importConnections", "copy"]);
-    expect([byId(groups, "exportConnections")?.label, byId(groups, "importHere")?.label]).toEqual(["Exportar conexões…", "Importar conexões aqui…"]);
+    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["renameFolder", "editFolder", "moveFolder", "deleteFolder"], ["exportConnections", "importHere", "importDbeaverHere"], ["copyName"]]);
+    expect(flat(groups).map((item) => item.action.type)).toEqual(["newConnection", "newFolder", "renameFolder", "editFolder", "moveFolder", "deleteFolder", "exportConnections", "importConnections", "importDbeaver", "copy"]);
+    expect([byId(groups, "exportConnections")?.label, byId(groups, "importHere")?.label, byId(groups, "importDbeaverHere")?.label]).toEqual(["Exportar conexões…", "Importar conexões aqui…", "Importar do DBeaver aqui…"]);
     expect([byId(groups, "newConnection")?.label, byId(groups, "newFolder")?.label]).toEqual(["Nova conexão", "Nova pasta"]);
     expect(flat(groups).some((item) => item.disabled)).toBe(false);
+  });
+
+  it("pasta: o Importar do DBeaver aqui… (RN-DBEAVER-003) vem depois do Importar conexões aqui…, e fora do app fica desabilitado, com o motivo", () => {
+    expect(byId(menuFor(folderNode, idle), "importDbeaverHere")?.action).toEqual({ type: "importDbeaver" });
+    expect(byId(menuFor(folderNode, { ...idle, dbeaverAvailable: false }), "importDbeaverHere")).toMatchObject({ disabled: true, hint: "Importar do DBeaver só funciona no app do Prism." });
   });
 
   it("pasta: o Renomear (F2) muda só o nome, como o da conexão (RN-NAV-009), e o Editar pasta…, sem atalho, abre o diálogo inteiro (RN-PASTA-006)", () => {
@@ -329,14 +334,21 @@ describe("backgroundMenu: o botão direito no espaço vazio do navegador (RN-NAV
   it("Nova conexão e Nova pasta, que criam na raiz, sempre habilitadas, e, num grupo depois delas, Exportar conexões… e Importar conexões… (RN-TRANSF-001)", () => {
     const groups = backgroundMenu();
 
-    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["exportConnections", "importConnections"]]);
+    expect(ids(groups)).toEqual([["newConnection", "newFolder"], ["exportConnections", "importConnections", "importDbeaver"]]);
     expect(flat(groups).map((item) => [item.label, item.disabled ?? false])).toEqual([
       ["Nova conexão", false],
       ["Nova pasta", false],
       ["Exportar conexões…", false],
       ["Importar conexões…", false],
+      ["Importar do DBeaver…", false],
     ]);
-    expect(flat(groups).map((item) => item.action)).toEqual([{ type: "newConnection" }, { type: "newFolder" }, { type: "exportConnections" }, { type: "importConnections" }]);
+    expect(flat(groups).map((item) => item.action)).toEqual([{ type: "newConnection" }, { type: "newFolder" }, { type: "exportConnections" }, { type: "importConnections" }, { type: "importDbeaver" }]);
+  });
+
+  it("o Importar do DBeaver… vem depois do Importar conexões…, no mesmo grupo (RN-DBEAVER-003), e fora do app fica desabilitado, com o motivo", () => {
+    expect(byId(backgroundMenu(true, false), "importDbeaver")).toMatchObject({ disabled: true, hint: "Importar do DBeaver só funciona no app do Prism." });
+    // Sem nada no cofre, o Importar do DBeaver… continua: é para quem vai trazer as conexões.
+    expect(byId(backgroundMenu(false), "importDbeaver")?.disabled).toBeFalsy();
   });
 
   it("sem nenhuma pasta e nenhuma conexão no cofre, Exportar conexões… fica desabilitado, com o motivo; Importar conexões… continua", () => {

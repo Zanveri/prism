@@ -11,6 +11,13 @@ describe("as seções da tela de Configurações", () => {
     expect(settingsSections[0].id).toBe("account");
   });
 
+  it("Importar vem logo depois de Conta (RN-CONFIG-011), e funciona", () => {
+    expect(settingsSections.slice(0, 2).map((section) => [section.id, section.label, section.anchor, section.soon])).toEqual([
+      ["account", "Conta", "cfg-conta", false],
+      ["import", "Importar", "cfg-importar", false],
+    ]);
+  });
+
   it("cada seção tem uma âncora própria, no padrão do canvas (cfg-...)", () => {
     const anchors = settingsSections.map((section) => section.anchor);
 

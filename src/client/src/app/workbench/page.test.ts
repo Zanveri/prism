@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { newVerification, unprotected, type Connection } from "@/app/connections/_lib/connections.schema";
 import { connectionsQuery, foldersQuery } from "@/app/connections/_lib/connections.service";
+import { dbeaverStateQuery } from "@/app/connections/_lib/dbeaver.service";
 import { sessionQuery } from "@/app/sign-in/_lib/sign-in.service";
 import { pathsConfig } from "@/config/paths.config";
 
@@ -22,11 +23,14 @@ vi.mock("./_lib/workbench-state", () => ({ useWorkbench: () => ({ tabs: [], acti
 const now = "2026-10-15T12:00:00Z";
 const connection: Connection = { id: "c1", folderID: null, name: "MES", engine: 1, host: "pg", port: 5432, database: "mes", userName: "mes", hasPassword: true, environmentName: null, environmentColor: null, confirmCommands: null, readOnly: false, ...newVerification, protections: unprotected, createdAt: now, updatedAt: now };
 
-function render() {
+type Setup = { connections?: Connection[]; state?: { invitedAt: string | null; lastImportAt: string | null } };
+
+function render({ connections = [connection], state }: Setup = {}) {
   const client = new QueryClient();
   client.setQueryData(sessionQuery.queryKey, { unlocked: true, userName: "ana" });
   client.setQueryData(foldersQuery.queryKey, []);
-  client.setQueryData(connectionsQuery.queryKey, [connection]);
+  client.setQueryData(connectionsQuery.queryKey, connections);
+  if (state !== undefined) client.setQueryData(dbeaverStateQuery.queryKey, state);
 
   return renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(MemoryRouter, { initialEntries: [pathsConfig.workbench] }, createElement(WorkbenchPage))));
 }
@@ -38,5 +42,44 @@ describe("a área de trabalho na escala de texto do canvas (RN-CONFIG-009)", () 
 
     expect(root.split(" ")).toContain("text-sm");
     for (const part of ["data-top-bar", "data-navigator", "data-scripts", "data-tabs", "data-status-bar"]) expect(markup).toContain(part);
+  });
+});
+
+// RN-DBEAVER-001: o "Comece por aqui" no lugar do estado vazio, decidido pelo cofre sem conexão e pelo convite do DBeaver por fazer.
+describe("o primeiro uso da área de trabalho (RN-NAV-007 e RN-DBEAVER-001)", () => {
+  const panel = 'aria-label="Comece por aqui"';
+  const empty = "Nenhuma conexão salva";
+
+  it("sem conexão e com o convite por fazer, o \"Comece por aqui\" ocupa o lugar das abas e do estado vazio", () => {
+    const markup = render({ connections: [], state: { invitedAt: null, lastImportAt: null } });
+
+    expect(markup).toContain(panel);
+    expect(markup).not.toContain(empty);
+    expect(markup).not.toContain("data-tabs");
+  });
+
+  it("sem conexão e com o convite feito, fica o estado vazio, com os atalhos para importar", () => {
+    const markup = render({ connections: [], state: { invitedAt: "2026-10-20T12:00:00Z", lastImportAt: null } });
+
+    expect(markup).toContain(empty);
+    expect(markup).not.toContain(panel);
+    expect(markup).toContain("Importar conexões…");
+    expect(markup).toContain("Importar do DBeaver…");
+  });
+
+  it("enquanto o convite não responde, a área fica vazia: o estado vazio não pisca antes do painel", () => {
+    const markup = render({ connections: [] });
+
+    expect(markup).not.toContain(panel);
+    expect(markup).not.toContain(empty);
+    expect(markup).not.toContain("data-tabs");
+  });
+
+  it("com alguma conexão são as abas, convite feito ou não", () => {
+    for (const invitedAt of [null, "2026-10-20T12:00:00Z"]) {
+      const markup = render({ state: { invitedAt, lastImportAt: null } });
+      expect(markup).toContain("data-tabs");
+      expect(markup).not.toContain(panel);
+    }
   });
 });
