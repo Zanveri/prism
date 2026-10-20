@@ -38,3 +38,29 @@ describe("Resultados › o tipo de dado no cabeçalho das colunas (RN-CONFIG-006
     expect(render()).toContain("Desligado, o cabeçalho mostra só o nome da coluna, na grade da consulta e na dos registros.");
   });
 });
+
+/** Os botões de escolha do lugar do resultado, com o valor e se está marcado. */
+const placeRadios = (html: string) =>
+  [...html.matchAll(/<input([^>]*name="cfg-lugar-resultado"[^>]*)\/?>/g)].map(([, rest]) => ({ value: /value="(\w+)"/.exec(rest)?.[1], checked: rest.includes("checked") }));
+
+describe("Resultados › onde o resultado das abas novas aparece (RN-CONFIG-010)", () => {
+  it("é a escolha da densidade do navegador, com o rótulo e a ajuda, e vem no painel", () => {
+    const html = render();
+
+    expect(html).toContain("<legend");
+    expect(html).toContain("Onde o resultado das abas novas aparece");
+    expect(html).toContain("Vale para as abas de consulta abertas daqui em diante. Cada aba guarda o lugar dela, que o botão &#x27;Onde mostrar o resultado&#x27; da área de resultado troca.");
+    expect(placeRadios(html)).toEqual([
+      { value: "panel", checked: true },
+      { value: "tab", checked: false },
+    ]);
+  });
+
+  it("escolhida numa aba, aparece marcada; sem a janela do resultado, 'Numa janela' não aparece, e a gravada assim vale o painel", () => {
+    expect(placeRadios(render({ results: { resultPlace: "tab" } })).find((radio) => radio.checked)?.value).toBe("tab");
+    expect(placeRadios(render({ results: { resultPlace: "window" } }))).toEqual([
+      { value: "panel", checked: true },
+      { value: "tab", checked: false },
+    ]);
+  });
+});

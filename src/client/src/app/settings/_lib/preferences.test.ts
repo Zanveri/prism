@@ -16,7 +16,7 @@ const saved = {
   theme: "light",
   ui: { fontFamily: "Noto Sans", navigatorDensity: "compact" },
   editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false },
-  results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125 },
+  results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125, resultPlace: "tab" },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
 };
 
@@ -26,7 +26,7 @@ describe("o padrão das preferências", () => {
       theme: "dark",
       ui: { fontFamily: "IBM Plex Sans", navigatorDensity: "comfortable" },
       editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
-      results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100 },
+      results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
     });
   });
@@ -65,7 +65,7 @@ describe("a leitura tolerante", () => {
     expect(parsePreferences(raw)).toEqual({
       ...saved,
       editor: { ...saved.editor, fontFamily: "IBM Plex Mono", fontSize: 13 },
-      results: { nullText: "NULL", autoLoadMore: true, showColumnTypes: true, gridZoom: 100 },
+      results: { nullText: "NULL", autoLoadMore: true, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
     });
   });
 
@@ -110,6 +110,8 @@ describe("a leitura tolerante", () => {
     ["zoom da grade acima de 200%", { results: { gridZoom: 300 } }, ["results", "gridZoom"]],
     ["zoom da grade em texto", { results: { gridZoom: "100" } }, ["results", "gridZoom"]],
     ["zoom da grade como fator", { results: { gridZoom: 1.5 } }, ["results", "gridZoom"]],
+    ["lugar do resultado desconhecido", { results: { resultPlace: "flutuante" } }, ["results", "resultPlace"]],
+    ["lugar do resultado em maiúsculas", { results: { resultPlace: "TAB" } }, ["results", "resultPlace"]],
     ["bloqueio ligado que não é booleano", { security: { lockEnabled: 0 } }, ["security", "lockEnabled"]],
     ["minutos do bloqueio zero", { security: { lockAfterMinutes: 0 } }, ["security", "lockAfterMinutes"]],
     ["minutos do bloqueio acima de 240", { security: { lockAfterMinutes: 241 } }, ["security", "lockAfterMinutes"]],
@@ -136,7 +138,7 @@ describe("a leitura tolerante", () => {
 
     expect(parsed).toEqual({ ...defaultPreferences, theme: "system", results: { ...defaultPreferences.results, nullText: "—" } });
     expect(Object.keys(parsed).sort()).toEqual(["editor", "results", "security", "theme", "ui"]);
-    expect(Object.keys(parsed.results).sort()).toEqual(["autoLoadMore", "gridZoom", "nullText", "showColumnTypes"]);
+    expect(Object.keys(parsed.results).sort()).toEqual(["autoLoadMore", "gridZoom", "nullText", "resultPlace", "showColumnTypes"]);
   });
 
   it("aceita os limites do esquema", () => {

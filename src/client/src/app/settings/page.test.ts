@@ -190,11 +190,11 @@ describe("Resultados (RN-CONFIG-005)", () => {
     expect(autoLoad(html)).toContain("checked");
   });
 
-  it("'Linhas por busca' continua em breve, até a API: tem a etiqueta e o motivo, e nenhum campo (o único campo é o do nulo)", () => {
+  it("'Linhas por busca' continua em breve, até a API: tem a etiqueta e o motivo, e nenhum campo (os campos são o do nulo, as caixas e o lugar do resultado das abas novas, RN-CONFIG-010)", () => {
     const html = results(render().markup);
 
     expect(html).toMatch(/Linhas por busca<\/p><p[^>]*><span[^>]*>Em breve<\/span><span[^>]*>A página tem 200 linhas/);
-    expect([...html.matchAll(/<input\b[^>]*>/g)].map((match) => /id="([^"]*)"/.exec(match[0])?.[1] ?? "(checkbox)")).toEqual(["cfg-nulo", "(checkbox)", "cfg-tipo-cabecalho"]);
+    expect([...html.matchAll(/<input\b[^>]*>/g)].map((match) => /id="([^"]*)"/.exec(match[0])?.[1] ?? "(checkbox)")).toEqual(["cfg-nulo", "(checkbox)", "cfg-tipo-cabecalho", "(checkbox)", "(checkbox)"]);
   });
 });
 
