@@ -79,6 +79,7 @@ import { elementsOf } from "@/lib/testing/react-tree";
 import { editCell, editWholeColumn, noEdits } from "../_lib/record-edits";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { recordsCopy } from "../_lib/records.copy";
+import { filterHandoff } from "../_lib/filter-handoff";
 import { forgetExcept, recall, remember } from "../_lib/tab-memory";
 import { unsavedEdits } from "../_lib/unsaved-edits";
 import { isPersonBusy } from "../_lib/use-query-runner";
@@ -2047,5 +2048,145 @@ describe("QueryTabPanel: o resultado no painel, numa aba ou numa janela (seção
     Object.assign(view.props, { resultShown: true, editorShown: false, active: true });
     view.show();
     expect(hidden()).toBe(false);
+  });
+});
+
+describe("QueryTabPanel: o valor de uma chave estrangeira leva ao registro referenciado (RN-TABELA-007)", () => {
+  /** Monta a aba, deixa o alvo e as chaves chegarem e desenha de novo, como o React faria. */
+  async function ready(runner: ReturnType<typeof fakeRunner>, over: Partial<QueryTab> = {}) {
+    rt.catalog.set("pedido", [statusKey]);
+    const view = mount(runner, over);
+    view.show();
+    await settle();
+    return view;
+  }
+
+  it("a área de resultado recebe os links, o clique e o que vira link, e o clique abre a tabela referenciada com o filtro, na conexão e no banco da aba", async () => {
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })), { database: "outro" });
+    const { area } = view.show();
+
+    // O apelido não esconde a chave: a coluna `status` do resultado vem de `status_id`.
+    expect([...(area.follow?.links ?? [])]).toEqual([[1, { table: { schema: "loja", name: "pedido_status" }, column: "codigo" }]]);
+    expect(area.follow?.linkable?.("7")).toBe(true);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r1", null);
+
+    area.follow!.onFollow!(1, "7");
+
+    expect(filterHandoff.peek("c1", { schema: "loja", name: "pedido_status", database: "outro" })?.where).toBe("\"codigo\" = '7'");
+    expect(view.props.onOpenTable).toHaveBeenCalledWith("c1", { schema: "loja", name: "pedido_status", view: "data", database: "outro" });
+  });
+
+  it("com o resultado numa janela própria, a aba abre na janela da aba da consulta, que vem para a frente", async () => {
+    const onFocusWindow = vi.fn();
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    rt.catalog.set("pedido", [statusKey]);
+    const view = mount(runner);
+    Object.assign(view.props, { place: "window", onFocusWindow });
+    view.show();
+    await settle();
+
+    view.show().area.follow!.onFollow!(1, "7");
+
+    expect(view.props.onOpenTable).toHaveBeenCalledWith("c1", { schema: "loja", name: "pedido_status", view: "data" });
+    expect(onFocusWindow).toHaveBeenCalledWith("q1", "link");
+  });
+
+  it("a atualização automática (outro resultado da API, mesmo comando) não acrescenta pedido nenhum, e os links ficam os mesmos", async () => {
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    const view = await ready(runner);
+    const first = view.show().area.follow?.links;
+
+    for (const n of [2, 3, 4]) {
+      runner.state = rowsState({ id: n, resultId: `r${n}`, rows: [["10", "7"]] });
+      view.show();
+      await settle();
+    }
+
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(view.show().area.follow?.links).toBe(first);
+  });
+
+  it("outro comando pergunta de novo, e as colunas de outra forma também", async () => {
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    const view = await ready(runner);
+
+    runner.state = rowsState({ id: 2, resultId: "r2", target: { sql: "select id, status_id as status from loja.pedido", offset: 0, engine: pg }, rows: [["10", "7"]] });
+    view.show();
+    await settle();
+
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(2);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenLastCalledWith("s1", "r2", null);
+  });
+
+  it("sem sessão (a conexão desconectada), os valores são texto e nada se pergunta", async () => {
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })), { sessionId: null });
+
+    expect(view.show().area.follow?.links).toBeUndefined();
+    expect(rt.service.sqlTargetOrRefuse).not.toHaveBeenCalled();
+  });
+
+  it("com a aba escondida (a área de trabalho fora da tela), nada se pergunta até ela voltar à vista", async () => {
+    rt.screen.on = false;
+    const runner = fakeRunner(rowsState({ rows: [["10", "7"]] }));
+    const view = await ready(runner);
+
+    expect(rt.service.sqlTargetOrRefuse).not.toHaveBeenCalled();
+    expect(view.show().area.follow?.links).toBeUndefined();
+
+    rt.screen.on = true;
+    view.show();
+    await settle();
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledTimes(1);
+    expect(view.show().area.follow?.links?.size).toBe(1);
+  });
+
+  it("o alvo recusado ou falho deixa os valores como texto, sem aviso", async () => {
+    rt.service.sqlTargetOrRefuse.mockResolvedValue({ ok: false, error: { status: 422, code: "RESULT_NOT_EDITABLE", title: "Só leitura", detail: null, errors: null, extensions: { reason: "união de consultas" } } });
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })));
+    const { area, banner } = view.show();
+
+    expect(area.follow?.links).toBeUndefined();
+    expect(banner?.props.notice).toBeNull();
+    expect(banner?.props.failure).toBeNull();
+  });
+
+  it("o item 'Ir para o registro referenciado' do menu da célula só aparece na coluna que é link, e leva ao registro", async () => {
+    const view = await ready(fakeRunner(rowsState({ rows: [["10", "7"]] })));
+    const idsAt = async (column: number) => {
+      view.show().area.editing!.onMenu({ row: 0, column }, { x: 0, y: 0 }, false);
+      await settle();
+      return view.show().menu!.groups.flatMap(groupItems);
+    };
+
+    expect((await idsAt(0)).map((item) => item.id)).not.toContain("follow");
+    const items = await idsAt(1);
+    const follow = items.find((item) => item.id === "follow");
+    expect(follow).toBeDefined();
+    expect(follow?.disabled).toBeFalsy();
+
+    follow!.onSelect!();
+    expect(filterHandoff.peek("c1", { schema: "loja", name: "pedido_status" })?.where).toBe("\"codigo\" = '7'");
+  });
+
+  it("a aba guardada do script também tem os links, pelo alvo do resultado dela", async () => {
+    const first: RunTarget = { sql: "select * from loja.pedido where id < 5", offset: 0, engine: pg };
+    const last: RunTarget = { sql: "select * from loja.pedido", offset: 40, engine: pg };
+    const runner = fakeRunner(rowsState({ target: last }));
+    let run = createScriptRun(1, [first, last]);
+    run = withEntry(run, 0, { status: "ok", rows: { read: 1, more: false, total: null }, kept: true });
+    run = withEntry(run, 1, { status: "ok", rows: { read: 1, more: true, total: null }, kept: true });
+    runner.scriptState = { ...finishRun(run, "done"), results: [{ entry: 0, rows: rowsState({ id: 7, target: first, rows: [["1", "9"]], hasMore: false, resultId: "r0" }) }, { entry: 1, rows: runner.state as RowsState }], live: 1 };
+    rt.catalog.set("pedido", [statusKey]);
+    const view = mount(runner);
+    (view.show().area.tabs!.list as { props: ComponentProps<typeof ScriptTabs> }).props.onChoose(0);
+    view.show();
+    await settle();
+
+    const { area } = view.show();
+
+    expect(area.editing?.rows).toEqual([["1", "9"]]);
+    expect(area.follow?.links?.size).toBe(1);
+    expect(rt.service.sqlTargetOrRefuse).toHaveBeenCalledWith("s1", "r0", null);
   });
 });
