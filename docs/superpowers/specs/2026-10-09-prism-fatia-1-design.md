@@ -10060,7 +10060,10 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
     servidor não é gravado (o Prism não tem o campo): ele aparece na prévia, na segunda linha da conexão, e no que ficou de fora. Toda conexão Informix leva na prévia a
     marca "porta do DBeaver", com a dica "O DBeaver fala com o Informix pelo protocolo SQLI, e o Prism, pela porta
     DRDA, que costuma ser outra (a sugerida é 9089). Se conectar falhar, troque a porta em Editar conexão: a do DBeaver
-    era <porta>." O Prism não troca a porta sozinho: a DRDA de cada servidor é a que o DBA configurou.
+    era <porta>." O Prism não troca a porta sozinho: a DRDA de cada servidor é a que o DBA configurou. Quem a sabe a
+    informa no diálogo, no campo "Porta DRDA do Informix" de cada servidor (RN-DBEAVER-015): o campo preenchido troca a
+    porta de toda conexão Informix importada daquele servidor, nova ou sobrescrita, e a marca "porta do DBeaver" sai
+    dela; o campo vazio deixa tudo como está acima.
   - O nome é o `name` da conexão. Ele, o host, o banco de dados e o usuário passam pelas regras e pela normalização da
     criação (RN-CONN-010), e a conexão que não passa não é importável, com a frase da regra (RN-TRANSF-014).
 
@@ -10187,12 +10190,17 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
     cadeado e, na segunda linha, "pg-dev.exemplo.invalid:5432 / pedidos · usuário fulano · com senha"; no Informix,
     "ifx-dev.exemplo.invalid:55080 / estoque · servidor ifx_dev_tcp · usuário fulano · com senha". Com "Levar as senhas" desligada, "· sem
     senha".
+  - "Porta DRDA do Informix", entre os avisos e a árvore, só quando há conexão Informix marcada: uma tabela pequena com
+    uma linha por servidor do DBeaver (o host, a porta SQLI e o `INFORMIXSERVER`, nesta ordem, sem repetição), cada uma
+    com um campo opcional para a porta DRDA (um inteiro de 1 a 65.535). O que se digita fica no diálogo e vale para as
+    conexões marcadas daquele servidor; a segunda linha delas mostra a porta digitada, e a prévia se refaz quando a
+    pessoa para de digitar. Campo vazio, a porta é a do DBeaver, com a marca abaixo.
   - As marcas à direita são as da RN-TRANSF-011 (o conflito de nome, o que a importação grava para não ficar mais
     fraca, o não importável com o motivo), mais:
     - "já existe no Prism", na conexão cuja origem já está numa conexão do cofre (RN-DBEAVER-017), com a dica "Esta
       conexão já foi importada do DBeaver: ela está em Estoque / Production PRD, com o nome DATA FIX. Se ficar
       marcada, você escolhe ao importar se ela é sobrescrita." Ela não é um conflito de nome;
-    - "porta do DBeaver", no Informix (RN-DBEAVER-010);
+    - "porta do DBeaver", no Informix cujo servidor está sem porta DRDA no campo (RN-DBEAVER-010);
     - "ficou de fora", com a lista (RN-DBEAVER-013).
   - Os avisos ficam acima da árvore:
     - no tom de atenção, o do projeto protegido que "Todos os projetos" deixou de fora (`protectedProjects`): "O
@@ -10263,9 +10271,11 @@ RN-LOG-001, a RN-VERSAO-002 e as seções 6, 8 e 9. O canvas não desenha nada d
     fica a do Prism) e o ambiente (gravado na própria conexão, como na importação). Fica como estava: o ID (os scripts
     e as abas que a usam continuam ligados), a pasta, a verificação, a data de criação e a origem; a data de alteração
     é a da importação.
-  - No Informix a porta não é sobrescrita: a do DBeaver é a do protocolo SQLI, e a do Prism é a DRDA
-    (RN-DBEAVER-010), que a pessoa pode ter trocado depois de importar. A conexão Informix que já existe fica com a
-    porta que tem, e `overwrite.port` é sempre falso para ela.
+  - No Informix a porta não é sobrescrita, a não ser que a pessoa tenha preenchido a "Porta DRDA do Informix" do
+    servidor dela (RN-DBEAVER-015): a do DBeaver é a do protocolo SQLI, e a do Prism é a DRDA (RN-DBEAVER-010), que a
+    pessoa pode ter trocado depois de importar. Com o campo vazio, a conexão Informix que já existe fica com a porta que
+    tem, e `overwrite.port` é falso para ela; com o campo preenchido, a porta dela passa a ser a digitada, e
+    `overwrite.port` é verdadeiro quando a digitada é outra que a que ela tem.
   - A senha do Prism só vai para o servidor e para o usuário para os quais foi gravada (RN-CONN-004, aqui também com o
     usuário): se o host, a porta ou o usuário mudam e a senha não vem do DBeaver, a conexão fica sem senha
     (RN-TRANSF-015), e a lista da pergunta diz "o host muda e a senha não vem: ela fica sem senha" ("o usuário muda e a
@@ -10343,6 +10353,11 @@ Notas:
   `withoutSavedPassword` e `savedPasswordMissing` (as contagens). A senha nunca vem; os textos que vêm do DBeaver
   seguem o corte de 200 caracteres do item não importável (RN-TRANSF-011). A URL que não casa volta só com o começo,
   cortada no primeiro `/`, `?`, `;` ou `,` depois do `//` (RN-DBEAVER-010), e nunca inteira.
+- `drdaPorts`: na prévia e na importação, opcional, até 200: as portas DRDA digitadas, `{ host, port, server, drdaPort }`
+  (o host, a porta SQLI e o `INFORMIXSERVER` do DBeaver, como a prévia os dá, e a porta nova, de 1 a 65.535); a conexão
+  Informix cujo host (sem diferenciar maiúsculas), porta e servidor casam com uma delas é gravada com a `drdaPort`, nova
+  ou sobrescrita, e a prévia calcula `overwrite.port` e `dropsPassword` com ela. Ausente ou nulo é nenhuma; a repetida ou
+  fora da faixa é 422 `IMPORT_INVALID`.
 - `items`, `onConflict`: como na importação do arquivo (RN-TRANSF-014). `overwrite`: as chaves das conexões marcadas
   que já existem e devem ser sobrescritas, até 2.000; ausente ou nulo é nenhuma. Uma chave que não está em `items`,
   que é de pasta ou que vem repetida é 422 `IMPORT_INVALID`. A chave de uma conexão que não está no cofre (a excluída
@@ -10434,8 +10449,7 @@ E a regra nova de Configurações:
   workspace escolhido no DBeaver; os projetos ligados de fora do workspace, as pastas antigas (`~/.dbeaver4`) e as
   fontes externas (`origin`).
 - Um campo do servidor Informix no Prism (o `INFORMIXSERVER`), se a sonda S-DBEAVER-2 mostrar que a pessoa precisa
-  dele; um campo opcional "Porta DRDA do Informix" no "Importar do DBeaver", para que as conexões Informix não
-  precisem de uma troca manual de porta (sugestão ao dono); e trocar a porta de várias conexões Informix de uma vez.
+  dele; e trocar a porta de várias conexões Informix de uma vez fora da importação.
 - Ligar a uma conexão do DBeaver uma conexão que a pessoa criou à mão no Prism, para que a reimportação a sobrescreva
   em vez de criar uma "(cópia)" ou deixá-la de fora pelo conflito de nome.
 - Os PostgreSQL de outros fornecedores (Greenplum, Timescale, EDB, CockroachDB), o Db2 for z/OS e o Db2 for IBM i.
