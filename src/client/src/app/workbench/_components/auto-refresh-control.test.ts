@@ -148,6 +148,11 @@ describe("o \"Personalizado…\" (RN-GRADE-014)", () => {
     expect(field(dialog({ everyMs: 45_000, error: copy.dialog.invalid }))?.props).toMatchObject({ defaultValue: "45", error: copy.dialog.invalid });
   });
 
+  it("a ajuda e a recusa dizem de 1 a 3.600 segundos, com as palavras da especificação (seção 39)", () => {
+    expect(copy.dialog.description).toBe("O comando do resultado é executado de novo a cada intervalo, enquanto o resultado está à vista. O intervalo vai de 1 a 3.600 segundos (1 hora).");
+    expect(copy.dialog.invalid).toBe("Use um número inteiro de segundos, de 1 a 3.600.");
+  });
+
   it("enviar entrega o texto digitado, como está (quem confere é quem chama); cancelar fecha", () => {
     const onSubmit = vi.fn();
     const onCancel = vi.fn();
