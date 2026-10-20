@@ -234,7 +234,12 @@ export function statisticsSummary(run: ScriptRun): string {
   const progress = scriptProgress(run);
   if (progress !== null) return progress;
   const totals = scriptTotals(run);
-  return [copy.statistics.executed(totals.ok, totals.total), ...(totals.errors === 0 ? [] : [copy.statistics.withErrors(totals.errors)]), copy.statistics.totalTime(totals.elapsedMs)].join(" · ");
+  return [
+    ...(totals.total === 0 && totals.declarations > 0 ? [] : [copy.statistics.executed(totals.ok, totals.total)]),
+    ...(totals.declarations === 0 ? [] : [copy.statistics.declarationsEvaluated(totals.declarationsOk, totals.declarations)]),
+    ...(totals.errors === 0 ? [] : [copy.statistics.withErrors(totals.errors)]),
+    copy.statistics.totalTime(totals.elapsedMs),
+  ].join(" · ");
 }
 
 /** Quanto do começo do texto vai no título da aba e na coluna das Estatísticas. */
@@ -280,16 +285,16 @@ export function withSavedResult(run: ScriptRun, resultId: string, patch: Partial
   return { ...run, results };
 }
 
-/** As abas da área de resultado, na ordem: os resultados guardados e, por último, as Estatísticas. */
-export type ScriptTab = number | "statistics";
+/** As abas da área de resultado, na ordem: os resultados guardados, o painel Variáveis (RN-VAR-024, quando há) e, por último, as Estatísticas. */
+export type ScriptTab = number | "variables" | "statistics";
 
-/** As abas, na ordem: uma por resultado guardado, pelo número do comando, e as Estatísticas por último. */
-export function scriptTabsOf(run: ScriptRun): ScriptTab[] {
-  return [...run.results.map((result) => result.entry), "statistics"];
+/** As abas, na ordem: uma por resultado guardado, pelo número do comando, "Variáveis" (quando a aba tem variáveis avaliadas) e as Estatísticas por último. */
+export function scriptTabsOf(run: ScriptRun, variables = false): ScriptTab[] {
+  return [...run.results.map((result) => result.entry), ...(variables ? (["variables"] as const) : []), "statistics"];
 }
 
 /** As setas, Home e End na lista das abas (RN-SQL-020), como numa lista de abas: a seta dá a volta. Outra tecla: nulo, e ela segue o caminho dela. */
-export function scriptTabKeyTarget(key: string, tabs: readonly ScriptTab[], current: ScriptTab): ScriptTab | null {
+export function scriptTabKeyTarget<T extends ScriptTab | string>(key: string, tabs: readonly T[], current: T): T | null {
   const at = Math.max(0, tabs.indexOf(current));
   switch (key) {
     case "ArrowRight":
@@ -307,11 +312,13 @@ export function scriptTabKeyTarget(key: string, tabs: readonly ScriptTab[], curr
 
 /**
  * A aba à frente (RN-SQL-020): a que a pessoa escolheu, enquanto ela existe; senão, enquanto o script roda, as Estatísticas, que se preenchem; no fim, a do
- * último comando, quando ele devolveu linhas (a do cursor aberto), ou as Estatísticas.
+ * último comando, quando ele devolveu linhas (a do cursor aberto), ou as Estatísticas; o script só de declarações, o painel Variáveis (quando a aba o tem).
  */
-export function shownScriptTab(run: ScriptRun, chosen: ScriptTab | null): ScriptTab {
-  if (chosen !== null && (chosen === "statistics" || run.results.some((result) => result.entry === chosen))) return chosen;
-  return run.live !== null && run.results.some((result) => result.entry === run.live) ? run.live : "statistics";
+export function shownScriptTab(run: ScriptRun, chosen: ScriptTab | null, variables = false): ScriptTab {
+  if (chosen !== null && (chosen === "statistics" || (chosen === "variables" && variables) || run.results.some((result) => result.entry === chosen))) return chosen;
+  if (run.live !== null && run.results.some((result) => result.entry === run.live)) return run.live;
+  // RN-VAR-024: o script sem comando nenhum traz o painel Variáveis à frente; com comandos, as Estatísticas, como sempre.
+  return variables && run.totals.total === 0 && run.size > 0 ? "variables" : "statistics";
 }
 
 /**
@@ -319,10 +326,10 @@ export function shownScriptTab(run: ScriptRun, chosen: ScriptTab | null): Script
  * termina. Nulo enquanto ele não acabou.
  */
 export function scriptEndToast(run: ScriptRun, tab: string | null = null): { tone: "success" | "warning"; message: string } | null {
-  const { ok, total, errors } = scriptTotals(run);
+  const { ok, total, errors, declarations } = scriptTotals(run);
   switch (run.phase) {
     case "done":
-      return errors === 0 ? { tone: "success", message: copy.toasts.done(tab, total) } : { tone: "warning", message: copy.toasts.doneWithErrors(tab, errors, ok, total) };
+      return errors === 0 ? { tone: "success", message: copy.toasts.done(tab, total, declarations) } : { tone: "warning", message: copy.toasts.doneWithErrors(tab, errors, ok, total) };
     case "stopped":
       return { tone: "warning", message: copy.toasts.stopped(tab, ok, total) };
     case "cancelled":

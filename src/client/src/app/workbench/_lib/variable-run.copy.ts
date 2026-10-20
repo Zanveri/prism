@@ -19,5 +19,6 @@ export const variableRunCopy = {
 
   /** RN-VAR-022: o erro numa declaração só deixa "Parar" e "Tentar de novo"; "Pular" fica desabilitado, com este motivo. */
   skipDisabled: (name: string) => `Sem o valor de ${name}, os comandos que a usam não têm como rodar.`,
+  declaration: "Declaração",
   declarationTitle: (number: number, total: number) => `A declaração ${number.toLocaleString("pt-BR")} de ${total.toLocaleString("pt-BR")} falhou`,
 } as const;

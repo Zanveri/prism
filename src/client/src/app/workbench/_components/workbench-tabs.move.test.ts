@@ -11,11 +11,11 @@ const rt = await vi.hoisted(async () => {
   const { createHookRuntime } = await import("@/lib/testing/react-hooks");
 
   /** O executor de uma aba, com a execução automática em andamento até a prova soltar (`finish`). */
-  type FakeRunner = { state: unknown; getState: () => unknown; autoRunSettled: () => Promise<void>; autoRefresh: { pause: ReturnType<typeof vi.fn> }; sessionOf: () => string | null; finish: () => void };
+  type FakeRunner = { values: { snapshot: () => unknown }; state: unknown; getState: () => unknown; autoRunSettled: () => Promise<void>; autoRefresh: { pause: ReturnType<typeof vi.fn> }; sessionOf: () => string | null; finish: () => void };
   function makeRunner(state: unknown): FakeRunner {
     let finish = () => {};
     const settled = new Promise<void>((resolve) => (finish = resolve));
-    const runner: FakeRunner = { state, getState: () => runner.state, autoRunSettled: () => settled, autoRefresh: { pause: vi.fn() }, sessionOf: () => "s-1", finish: () => finish() };
+    const runner: FakeRunner = { values: { snapshot: () => ({ values: new Map(), counter: 0 }) }, state, getState: () => runner.state, autoRunSettled: () => settled, autoRefresh: { pause: vi.fn() }, sessionOf: () => "s-1", finish: () => finish() };
     return runner;
   }
 

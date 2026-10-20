@@ -115,3 +115,24 @@ describe("a passagem para outra janela", () => {
     expect(valuesFromTransfer({ counter: 3, entries: [{ name: "x" } as never] })).toBe(emptyTabValues);
   });
 });
+
+describe("createRevealStore (RN-VAR-020 e 024)", () => {
+  test("cada pedido tem um número novo, mesmo o mesmo pedido de novo, e avisa", async () => {
+    const { createRevealStore } = await import("./tab-values");
+    const store = createRevealStore();
+    const listener = vi.fn();
+    const off = store.subscribe(listener);
+    expect(store.getState()).toEqual({ serial: 0, name: null });
+
+    store.reveal("x");
+    store.reveal("x");
+    expect(store.getState()).toEqual({ serial: 2, name: "x" });
+    store.reveal(null);
+    expect(store.getState()).toEqual({ serial: 3, name: null });
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    off();
+    store.reveal("y");
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+});

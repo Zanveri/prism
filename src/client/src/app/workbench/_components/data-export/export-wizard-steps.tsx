@@ -9,7 +9,7 @@ import { fieldAria } from "@/lib/utils/form";
 
 import { dataExportCopy } from "../../_lib/data-export/data-export.copy";
 import { dataFormats, isTextFormat, type Binary, type DataFormat, type FieldProblems, type FormatOptions } from "../../_lib/data-export/export-options";
-import type { ExportOrigin, SourceColumn } from "../../_lib/data-export/export-source";
+import { originCommandText, type ExportOrigin, type SourceColumn } from "../../_lib/data-export/export-source";
 import type { WizardRefusal } from "../../_lib/data-export/export-wizard";
 import { DatabaseTargetIcon, DataFormatIcon } from "./format-icons";
 
@@ -155,6 +155,7 @@ export function CheckboxRow({
 /** RN-EXPORT-005: as colunas da origem, "Contar as linhas antes" e a origem, só para ver. */
 export function ExtractionStep({
   origin,
+  engine,
   columns,
   loadError,
   onRetry,
@@ -168,6 +169,8 @@ export function ExtractionStep({
   problem,
 }: {
   origin: ExportOrigin;
+  /** O banco da origem: o comando com variáveis aparece com os valores no lugar, como literais dele (RN-EXPORT-015). */
+  engine?: Engine;
   columns: readonly SourceColumn[] | null;
   loadError: string | null;
   onRetry: () => void;
@@ -243,7 +246,7 @@ export function ExtractionStep({
 
       <section className="flex flex-col gap-1.5">
         <h3 className="font-medium">{e.origin}</h3>
-        <OriginText origin={origin} />
+        <OriginText origin={origin} engine={engine} />
         <p className="text-sm text-subtle">{e.noEdit}</p>
       </section>
     </div>
@@ -251,7 +254,7 @@ export function ExtractionStep({
 }
 
 /** A origem, só para ver: as linhas da tabela, o filtro e a ordem dos Registros, ou o comando do resultado (com o filtro dele). */
-function OriginText({ origin }: { origin: ExportOrigin }) {
+function OriginText({ origin, engine }: { origin: ExportOrigin; engine?: Engine }) {
   const e = dataExportCopy.extraction;
   const code = (text: string) => <pre className="max-h-32 overflow-auto rounded-md border border-border bg-panel p-2 font-editor text-sm break-words whitespace-pre-wrap text-ink">{text}</pre>;
   switch (origin.kind) {
@@ -270,7 +273,7 @@ function OriginText({ origin }: { origin: ExportOrigin }) {
       return (
         <>
           <p className="text-body">{e.command}</p>
-          {code(origin.sql)}
+          {code(originCommandText(origin, engine) ?? origin.sql)}
           {origin.filter === null || origin.filter === "" ? null : (
             <>
               <p className="text-body">{e.resultFilter}</p>
@@ -576,7 +579,8 @@ export function ExportConnection({ engine, name, database, environment, readOnly
   );
 }
 
-export type SummaryLine = { label: string; value: ReactNode; hint?: string };
+/** `action`: o que vem depois do valor (o botão "Ver o SQL enviado" da Origem, RN-EXPORT-015). */
+export type SummaryLine = { label: string; value: ReactNode; hint?: string; action?: ReactNode };
 
 /**
  * RN-EXPORT-015: as recusas no alto, o resumo em linhas de rótulo e valor, e os avisos no tom de atenção. `after` vem embaixo dos avisos: a caixa "Entendo que
@@ -601,6 +605,7 @@ export function ConfirmationStep({ refusals, lines, warnings, after }: { refusal
             <dt className="text-sm text-muted">{line.label}</dt>
             <dd title={line.hint} className="min-w-0 break-words text-ink">
               {line.value}
+              {line.action}
             </dd>
           </div>
         ))}

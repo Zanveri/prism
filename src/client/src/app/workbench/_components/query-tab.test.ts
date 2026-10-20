@@ -105,6 +105,7 @@ import type { SqlTarget } from "../_lib/record-edits.schema";
 import { CopyAdvancedDialog } from "./copy-as/copy-advanced-dialog";
 import { ConfigureCopyAsDialog } from "./copy-as/configure-copy-as-dialog";
 import { GenerateSqlDialog } from "./generate-sql/generate-sql-dialog";
+import { createRevealStore, createTabValuesStore } from "../_lib/variables/tab-values";
 
 const copy = recordsCopy.edit;
 /** PostgreSQL, como a API numera os bancos. */
@@ -153,6 +154,11 @@ function fakeRunner(initial: RunnerState) {
     sent: [] as RunTarget[],
     subscribe: () => () => {},
     getState: (): RunnerState => runner.state,
+    /** RN-VAR-023 e 024: os valores da aba e o pedido do painel Variáveis (vazios: o texto das provas não declara variáveis). */
+    values: createTabValuesStore(),
+    reveal: createRevealStore(),
+    runItem: vi.fn(() => Promise.resolve()),
+    runScriptDoc: vi.fn(() => Promise.resolve()),
     /** RN-GRADE-011: a recusa do filtro que o próximo `run` devolve (a API simulada respondendo 422 `FILTER_INVALID`). */
     refuse: null as FilterRefusal | null,
     run: vi.fn((target: RunTarget): Promise<FilterRefusal | void> => {

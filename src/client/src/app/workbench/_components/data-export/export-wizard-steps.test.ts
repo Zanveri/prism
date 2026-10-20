@@ -179,6 +179,11 @@ describe("a etapa Confirmação (RN-EXPORT-015)", () => {
     expect(html).toContain("As linhas são lidas de novo");
   });
 
+  it("a linha da Origem leva o botão depois do valor (o \"Ver o SQL enviado\" do comando com variáveis, RN-EXPORT-015)", () => {
+    const html = markup(createElement(ConfirmationStep, { refusals: [], lines: [{ label: "Origem", value: "Resultado de a.sql · SELECT 7", action: createElement("button", { type: "button" }, "Ver o SQL enviado") }], warnings: [] }));
+    expect(html).toMatch(/Resultado de a\.sql · SELECT 7<button type="button">Ver o SQL enviado<\/button>/);
+  });
+
   it("a linha \"Conexão\" tem a etiqueta do banco, o nome e o banco de dados, o ambiente e o cadeado do somente leitura, como o cabeçalho", () => {
     const connection = createElement(ExportConnection, { engine: 1, name: "Produção ERP", database: "erp", environment: { name: "Produção", color: "red", folder: null }, readOnlyHint: "Somente leitura pela pasta Clientes." });
     const html = markup(createElement(ConfirmationStep, { refusals: [], lines: [{ label: "Conexão", value: connection }], warnings: [] }));

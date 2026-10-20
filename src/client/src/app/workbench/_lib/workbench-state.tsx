@@ -505,13 +505,14 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       const adopted = readTransfer(raw);
       if (adopted === null) return;
 
-      const { tab, selection, state, memory, resultWindowLost } = adopted;
+      const { tab, selection, state, memory, resultWindowLost, values } = adopted;
       if (runners.has(tab.id)) return;
       // RN-ABAS-016: a janela do resultado da aba não fechou a tempo na janela de origem, e o resultado chegou no painel.
       if (resultWindowLost) toast.warning(resultPlaceCopy.windowFailed);
 
       rememberTransferred(tab.id, selection === null ? memory : { ...memory, selection });
-      runners.set(tab.id, createRunner(tab, { state, sessionId: tab.sessionId }));
+      // RN-VAR-023: os valores das variáveis vão com a aba para a janela que a recebe.
+      runners.set(tab.id, createRunner(tab, { state, sessionId: tab.sessionId, values }));
       setTabs((current) => {
         const at = index === undefined ? current.length : Math.min(index, current.length);
         return [...current.slice(0, at), tab, ...current.slice(at)];

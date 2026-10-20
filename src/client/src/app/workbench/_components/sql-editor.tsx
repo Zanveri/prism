@@ -163,17 +163,23 @@ export function flashEffect(state: EditorState, range: { from: number; to: numbe
  * O que "Executar" envia agora (`runTarget`) e o destaque dele (RN-SQL-018), que quem executa acende só quando o comando vai mesmo ao banco: com a
  * aba ocupada, sem conexão ou com a pergunta das alterações não salvas cancelada, nada foi enviado, e nada pode piscar.
  */
-function sendFrom(view: EditorView, engine: Engine | undefined, blankLines: boolean): { target: RunTarget; flash: () => void } {
+function sendFrom(view: EditorView, engine: Engine | undefined, blankLines: boolean): { target: RunTarget; flash: FlashRun } {
   const target = runTarget(view.state, engine, blankLines);
   const range = flashRangeOf(view.state, target);
+  const withoutSelection = view.state.selection.main.empty;
   return {
     target,
-    flash: () => {
-      const effect = flashEffect(view.state, range, target.sql);
+    flash: (item) => {
+      // O executor com variáveis diz qual item foi (RN-VAR-025): o comando ou a declaração que ele leu, e não o que o leitor sem declarações achou no cursor.
+      const shown = item === undefined ? range : withoutSelection ? { from: item.offset, to: item.offset + item.text.length } : null;
+      const effect = flashEffect(view.state, shown, item?.text ?? target.sql);
       if (effect !== null) view.dispatch({ effects: effect });
     },
   };
 }
+
+/** Acende o destaque (RN-SQL-018). Sem argumento, o do comando que `runTarget` achou; com o item do executor com variáveis, o dele. */
+export type FlashRun = (item?: { offset: number; text: string }) => void;
 
 /**
  * Se o texto tem comando, sem copiá-lo inteiro a cada tecla: quase sempre o começo já responde. O
@@ -229,7 +235,7 @@ type SqlEditorProps = {
    * Ctrl+Enter e o botão "Executar": `target` é o que vai ao executor, e `flash` acende o destaque do comando enviado (RN-SQL-018). Quem executa só
    * chama `flash` quando o comando vai mesmo ao banco, e depois da pergunta das alterações não salvas, quando ela vier.
    */
-  onRun: (target: RunTarget, flash: () => void) => void;
+  onRun: (target: RunTarget, flash: FlashRun) => void;
   /** RN-SQL-019: "Executar script": os comandos, na ordem. Quem executa pergunta das alterações não salvas antes, e recusa com a aba ocupada. */
   onRunScript?: (targets: RunTarget[]) => void;
   /**
@@ -281,7 +287,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const blankLinesNow = useRef(blankLineSeparates);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
 
-  const emitRun = useEffectEvent((target: RunTarget, flash: () => void) => onRun(target, flash));
+  const emitRun = useEffectEvent((target: RunTarget, flash: FlashRun) => onRun(target, flash));
   const emitChange = useEffectEvent((text: string) => onChange(text));
   const emitRunnable = useEffectEvent((runnable: boolean) => onRunnableChange(runnable));
   const emitEdited = useEffectEvent(() => onEdited());
