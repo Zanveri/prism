@@ -385,6 +385,31 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   abertos a partir de um banco usam a sessão dele. Desconectar a conexão fecha as sessões de todos os
   bancos dela. A lista fica em memória até "Atualizar" no nó da conexão (RN-ARVORE-002). O menu do
   banco tem "Nova consulta", que abre o editor na sessão dele.
+- **RN-ARVORE-009.** Ir ao item pelas primeiras letras (type-ahead; *Pedido do dono em 2026-10-20, como no
+  DBeaver.*). É o padrão de árvore do WAI-ARIA, o mesmo do DBeaver e do Explorador de Arquivos, e vale
+  para a árvore do navegador e para a da seção Scripts.
+  - Com o foco num item da árvore, digitar um caractere imprimível (letra, número, `_`, `.` etc.; sem
+    Ctrl, Alt nem Cmd; e não no meio da composição de um acento) leva o foco e a seleção, como a seta
+    faz, ao próximo item visível, abaixo do atual e voltando ao começo da árvore depois do último, cujo
+    nome começa por aquele caractere; a árvore rola até ele.
+  - Os caracteres digitados em seguida, cada um até 1 segundo depois do anterior, se juntam num texto: o
+    foco vai ao primeiro item visível, a partir do atual (incluído), cujo nome começa pelo texto inteiro
+    (`b`, `a`, `t` levam a `batch_pallet_items`; continuar com `ch_pr` leva a
+    `batch_produced_stock_pallet_…`). Passado 1 segundo sem tecla, o texto recomeça.
+  - A mesma letra repetida (`bbb`) percorre um a um os itens que começam por ela, como no Explorador.
+  - A comparação não diferencia maiúsculas, minúsculas nem acentos (`e` acha `Ética`) e é feita pelo nome
+    que o item mostra (o da tabela, da visão, da rotina, da coluna, do esquema, do banco, da conexão, da
+    pasta ou do grupo "Tabelas"), sem o selo do banco, do ambiente ou do "padrão" e sem a contagem.
+  - Só contam os itens visíveis: os filhos dos pais expandidos e, com o "Filtrar objetos" em uso, os que
+    ele mostra. Nada se expande, nada é buscado no banco (RN-ARVORE-002) e nada abre.
+  - Sem item que comece pelo texto, o foco fica onde está e o indicador diz “Nenhum item começa com
+    xyz”.
+  - Um indicador discreto, sobre a lista e no canto do pé dela (sem tirar espaço dos itens), mostra o
+    texto digitado ("Ir para: bat") enquanto o texto dura. O "nenhum item" é anunciado ao leitor de tela
+    (`aria-live="polite"`); o item achado já é anunciado pelo foco.
+  - O Espaço no meio do texto, depois do primeiro caractere, entra no texto; sozinho, faz o que faz hoje.
+    Toda tecla que a árvore já usa (setas, Home, End, Enter, F2, Delete, Shift+F10 e a tecla de menu)
+    continua como está, e Ctrl+F continua indo ao "Filtrar objetos".
 
 ### 5.5 Editor e resultado
 
