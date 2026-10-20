@@ -35,4 +35,10 @@ internal static class TransferLimits
     /// </summary>
     public const int ExportRequestBytes = 1024 * 1024;
     public const int ImportRequestBytes = 6 * 1024 * 1024;
+
+    /// <summary>
+    /// Seção 40, rotas: o corpo das rotas do "Importar do DBeaver" é pequeno, porque o conteúdo vem da cópia, e não do pedido: o `sourceId`, o projeto, as
+    /// chaves marcadas (até 4.000), as portas DRDA e as chaves de `overwrite` cabem em 1 MiB.
+    /// </summary>
+    public const int DbeaverRequestBytes = 1024 * 1024;
 }

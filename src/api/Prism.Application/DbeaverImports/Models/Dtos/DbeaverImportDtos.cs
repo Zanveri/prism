@@ -89,13 +89,21 @@ public sealed record DbeaverPreviewConnectionDto : ImportPreviewConnectionDto
         => nameof(DbeaverPreviewConnectionDto);
 }
 
-/// <summary>A conexão do Prism que já veio deste DBeaver: o ID, o nome, o caminho das pastas dela (`Estoque / Produção`, vazio na raiz) e se está conectada em alguma janela.</summary>
+/// <summary>
+/// A conexão do Prism que já veio deste DBeaver: o ID, o nome, o caminho das pastas dela (`Estoque / Produção`, vazio na raiz), se está conectada em alguma janela e o
+/// que ela tem hoje (o host, a porta, o banco de dados, o usuário e o nome do ambiente), para a pergunta de sobrescrever dizer "host a → b". A senha nunca vem.
+/// </summary>
 public sealed record DbeaverExistingDto
 {
     public Guid ConnectionID { get; init; }
     public string Name { get; init; } = string.Empty;
     public string Path { get; init; } = string.Empty;
     public bool Connected { get; init; }
+    public string Host { get; init; } = string.Empty;
+    public int Port { get; init; }
+    public string Database { get; init; } = string.Empty;
+    public string UserName { get; init; } = string.Empty;
+    public string? EnvironmentName { get; init; }
 
     public override string ToString()
         => nameof(DbeaverExistingDto);
