@@ -81,6 +81,8 @@ import { EditorToolbar } from "./editor-toolbar";
 import { EditsBanner } from "./edits-banner";
 import { QueryTabPanel } from "./query-tab";
 import { ResultActions } from "./result-actions";
+import { ResultPlaceButton } from "./result-place-button";
+import { ResultSplitter } from "./result-splitter";
 import { ResultPanel } from "./result-panel";
 import { SqlEditor } from "./sql-editor";
 import { UnsavedEditsDialog } from "./unsaved-edits-dialog";
@@ -1938,5 +1940,90 @@ describe("QueryTabPanel: depois do Salvar com a coluna inteira (RN-EDIT-019 e 02
     expect(runner.keepSaved).toHaveBeenLastCalledWith("r0", { rows: [["1", "b"]], truncated: new Map(), generated: new Map() });
     expect(runner.rerun).not.toHaveBeenCalled();
     expect(view.show().area.kept?.note).toBe("Coluna status atualizada em 40 linhas; esta aba mostra só as que leu. Executar este comando lê todas de novo.");
+  });
+});
+
+describe("QueryTabPanel: o resultado no painel, numa aba ou numa janela (seção 39: RN-PAINEL-001, RN-ABAS-011, 014 e 015)", () => {
+  /** A aba com o lugar dado e o botão da barra ligado (`onPlace`), como `WorkbenchTabs` a desenha. */
+  function placed(runner: ReturnType<typeof fakeRunner>, place: "panel" | "tab", over: Record<string, unknown> = {}) {
+    const view = mount(runner);
+    const onPlace = vi.fn();
+    const onToggleEntry = vi.fn();
+    Object.assign(view.props, { place, onPlace, onToggleEntry, editorShown: place === "panel", resultShown: true, ...over });
+    return Object.assign(view, { onPlace, onToggleEntry });
+  }
+  const placeButton = (view: Pick<ReturnType<typeof mount>, "show">) => view.show().area.placeControl as { type: unknown; props: ComponentProps<typeof ResultPlaceButton> };
+
+  it("no painel: o botão 'Onde mostrar o resultado' com o painel marcado, antes do recolher e do maximizar, e a divisória", () => {
+    const view = placed(fakeRunner(rowsState()), "panel");
+    const { area, found } = view.show();
+
+    expect(placeButton(view).type).toBe(ResultPlaceButton);
+    expect(placeButton(view).props.place).toBe("panel");
+    expect(placeButton(view).props.items.map((item) => [item.label, item.checked])).toEqual([
+      ["No painel", true],
+      ["Numa aba", false],
+    ]);
+    expect((area.actions as { type: unknown }).type).toBe(ResultActions);
+    expect(found.some((element) => element.type === ResultSplitter)).toBe(true);
+  });
+
+  it("numa aba: sem a divisória, sem recolher nem maximizar, e a área nunca recolhida; o que o painel tinha fica guardado e volta", () => {
+    const view = placed(fakeRunner(rowsState()), "panel");
+    (view.show().area.actions as { props: ComponentProps<typeof ResultActions> }).props.onAction("collapse");
+    expect(view.show().area.collapsed).toBe(true);
+
+    Object.assign(view.props, { place: "tab" });
+    const { area, found } = view.show();
+    expect(area.actions).toBeUndefined();
+    expect(area.collapsed).toBe(false);
+    expect(found.some((element) => element.type === ResultSplitter)).toBe(false);
+    expect(placeButton(view).props.place).toBe("tab");
+
+    Object.assign(view.props, { place: "panel" });
+    expect(view.show().area.collapsed).toBe(true);
+  });
+
+  it("numa aba, executar não mexe no que o painel guardou (no painel, executar com a área recolhida a restaura)", () => {
+    const runner = fakeRunner(rowsState());
+    const view = placed(runner, "panel");
+    (view.show().area.actions as { props: ComponentProps<typeof ResultActions> }).props.onAction("collapse");
+    Object.assign(view.props, { place: "tab" });
+    view.show().editor.onRun(command, noFlash);
+
+    Object.assign(view.props, { place: "panel" });
+    expect(view.show().area.collapsed).toBe(true);
+  });
+
+  it("o botão troca o lugar pela aba (`onPlace`)", () => {
+    const view = placed(fakeRunner(rowsState()), "panel");
+    placeButton(view).props.onChoose("tab");
+
+    expect(view.onPlace).toHaveBeenCalledWith("q1", "tab");
+  });
+
+  it("o F6 numa aba, do editor, pede a aba do resultado; já tratado (o campo da célula, um menu), nada", () => {
+    const view = placed(fakeRunner(rowsState()), "tab");
+    const event = { key: "F6", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, defaultPrevented: false, preventDefault: vi.fn(), target: {} };
+    view.show().keys(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(view.onToggleEntry).toHaveBeenCalledWith("q1", "result");
+
+    view.onToggleEntry.mockClear();
+    view.show().keys({ ...event, defaultPrevented: true });
+    expect(view.onToggleEntry).not.toHaveBeenCalled();
+  });
+
+  it("a atualização automática espera o resultado à vista, e não a aba da consulta: numa aba, com a da consulta ativa, ela espera (RN-ABAS-015)", () => {
+    const runner = fakeRunner(rowsState());
+    const hidden = () => runner.autoRefresh.pause.mock.calls.filter(([reason]) => reason === "hidden").at(-1)?.[1];
+    const view = placed(runner, "tab", { resultShown: false });
+    view.show();
+    expect(hidden()).toBe(true);
+
+    Object.assign(view.props, { resultShown: true, editorShown: false, active: true });
+    view.show();
+    expect(hidden()).toBe(false);
   });
 });

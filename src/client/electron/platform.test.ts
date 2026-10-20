@@ -41,8 +41,8 @@ describe("applicationMenuTemplate", () => {
 describe("menuShortcutIgnored: F5 e Ctrl+R nunca recarregam a janela, e F5 e F11 chegam à tela (RN-GRADE-012 e RN-GRADE-013)", () => {
   const input = (key: string, over: Partial<{ type: string; control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) => ({ type: "keyDown", key, control: false, meta: false, shift: false, alt: false, ...over });
 
-  it("F5 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe", () => {
-    for (const key of ["F5", "F11"]) {
+  it("F5, F6 e F11, com ou sem modificador, não vão ao menu (o Recarregar e o Tela cheia do menu de desenvolvimento): a tela os recebe (o F6 alterna entre o editor e o resultado, RN-ABAS-014)", () => {
+    for (const key of ["F5", "F6", "F11"]) {
       expect(menuShortcutIgnored(input(key)), key).toBe(true);
       expect(menuShortcutIgnored(input(key, { control: true })), key).toBe(true);
       expect(menuShortcutIgnored(input(key, { shift: true })), key).toBe(true);

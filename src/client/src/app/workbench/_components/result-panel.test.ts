@@ -406,3 +406,13 @@ describe("o \"Exportar…\" da área de resultado (RN-EXPORT-001)", () => {
     expect(markup).toMatch(/<span id="[^"]+" class="sr-only">Não há resultado para exportar.<\/span>/);
   });
 });
+
+describe("o botão 'Onde mostrar o resultado' na barra (RN-ABAS-014)", () => {
+  const withBar = (actions?: ReturnType<typeof createElement>) =>
+    renderToStaticMarkup(createElement(MemoryRouter, null, createElement(ResultPanel, { state: { status: "idle" }, connected: false, onLoadMore: noop, onCount: noop, onRerun: noop, placeControl: createElement("span", { "data-place": "" }), actions })));
+
+  it("vem logo antes dos botões do fim da barra (no painel, o recolher e o maximizar), e sem eles fica na ponta direita", () => {
+    expect(withBar(createElement("span", { "data-actions": "" }))).toMatch(/<span data-place=""><\/span><span data-actions=""><\/span><\/div>/);
+    expect(withBar()).toMatch(/<span data-place=""><\/span><\/div>/);
+  });
+});

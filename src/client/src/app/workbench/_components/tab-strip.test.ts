@@ -147,3 +147,49 @@ describe("o ícone e a cor da aba de um script (RN-SCRIPT-006)", () => {
     expect(iconOf(missing, "a")).not.toContain("data-script-icon");
   });
 });
+
+describe("a aba do resultado (RN-ABAS-012)", () => {
+  const withResult = (id: string, title: string): QueryTab => ({ ...query(id, title), resultPlace: "tab" });
+  const renderResult = (tabs: QueryTab[], activeTabId: string, resultActive: boolean, extra: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(createElement(TabStrip, { tabs, activeTabId, resultActive, connectionOf: () => undefined, environmentOf: () => null, onSelect: noop, onClose: noop, windowId: 1, onReorder: noop, onMove: noop, onReceive: noop, ...extra }));
+
+  it("vem logo depois da aba dela, com 'Resultado · ' e o título dela, o ícone de grade, a dica com o F6, e aponta para o painel dela", () => {
+    const markup = renderResult([withResult("a", "consulta-2.sql"), query("b", "outra.sql")], "a", false);
+    const tabs = [...markup.matchAll(/<button[^>]*role="tab"[^>]*id="([^"]+)"[^>]*>/g)].map((match) => match[1]);
+
+    expect(tabs).toEqual([tabElementId("a"), "workbench-result-tab-a", tabElementId("b")]);
+    expect(markup).toMatch(/id="workbench-result-tab-a"[^>]*aria-selected="false"[^>]*aria-controls="workbench-result-panel-a"[^>]*tabindex="-1"[^>]*title="Resultado de consulta-2\.sql\. F6 alterna com a consulta\."/);
+    expect(markup).toContain(">Resultado · consulta-2.sql</span>");
+    // O X volta ao painel: o nome diz o que faz, e a dica o atalho.
+    expect(markup).toMatch(/aria-label="Voltar o resultado de consulta-2\.sql para o painel" title="Voltar para o painel \((Ctrl|Cmd)\+W\)"/);
+    // O arraste da aba do resultado é dela, e ela está na contagem das caixas da faixa.
+    expect(markup.match(/data-strip-entry=""/g)).toHaveLength(3);
+    expect(markup).toMatch(/<div[^>]*data-result-tab-id="a"[^>]*draggable="true"/);
+  });
+
+  it("ativa, ela é a selecionada e a única no Tab; a da consulta, não", () => {
+    const markup = renderResult([withResult("a", "consulta-2.sql")], "a", true);
+
+    expect(markup).toMatch(/id="workbench-result-tab-a"[^>]*aria-selected="true"[^>]*tabindex="0"/);
+    expect(markup).toMatch(new RegExp(`id="${tabElementId("a")}"[^>]*aria-selected="false"[^>]*tabindex="-1"`));
+  });
+
+  it("o ponto é o que `resultMarkOf` dá, depois do título, só na aba do resultado, sabendo se ela é a ativa", () => {
+    const calls: [string, boolean][] = [];
+    const markup = renderResult([withResult("a", "consulta-2.sql")], "a", false, {
+      resultMarkOf: (tabId: string, active: boolean) => {
+        calls.push([tabId, active]);
+        return createElement("span", { "data-mark": tabId });
+      },
+    });
+
+    expect(calls).toEqual([["a", false]]);
+    expect(markup).toMatch(/Resultado · consulta-2\.sql<\/span><span data-mark="a">/);
+  });
+
+  it("sem o resultado numa aba (no painel, numa janela sem a janela do resultado, ou a aba de tabela), não há aba do resultado", () => {
+    const markup = renderResult([{ ...query("a", "x.sql"), resultPlace: "window" }, { ...table("t", "loja", "pedido"), resultPlace: "tab" }], "a", false);
+
+    expect(markup).not.toContain("workbench-result-tab-");
+  });
+});
