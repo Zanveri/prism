@@ -1539,6 +1539,2104 @@
       ],
       "type": "itens",
       "count": 1
+    },
+    {
+      "name": "a declaração no começo do texto no PostgreSQL",
+      "engine": 1,
+      "input": "let total = 10\nSELECT @total",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let total = 10"
+        ],
+        [
+          "statement",
+          "SELECT @total"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": [
+            "declaration",
+            "let total = 10"
+          ]
+        },
+        {
+          "offset": 15,
+          "item": [
+            "statement",
+            "SELECT @total"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a declaração no começo do texto no Db2",
+      "engine": 2,
+      "input": "const alfa = 3\nSELECT @alfa",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "const alfa = 3"
+        ],
+        [
+          "statement",
+          "SELECT @alfa"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 2,
+          "item": [
+            "declaration",
+            "const alfa = 3"
+          ]
+        },
+        {
+          "offset": 15,
+          "item": [
+            "statement",
+            "SELECT @alfa"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a declaração no começo do texto no Informix",
+      "engine": 3,
+      "input": "let x: number = 1\nSELECT @x",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let x: number = 1"
+        ],
+        [
+          "statement",
+          "SELECT @x"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 7,
+          "item": [
+            "declaration",
+            "let x: number = 1"
+          ]
+        },
+        {
+          "offset": 18,
+          "item": [
+            "statement",
+            "SELECT @x"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois do ; que termina um comando no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1;\nlet a = 1;\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 12,
+          "item": [
+            "declaration",
+            "let a = 1;"
+          ]
+        },
+        {
+          "offset": 24,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois do ; que termina um comando no Db2",
+      "engine": 2,
+      "input": "SELECT 1;\nconst b = 2;\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "const b = 2;"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "const b = 2;"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois do ; que termina um comando no Informix",
+      "engine": 3,
+      "input": "SELECT 1 FROM t;\nlet c = 2;\nSELECT @c",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 FROM t"
+        ],
+        [
+          "declaration",
+          "let c = 2;"
+        ],
+        [
+          "statement",
+          "SELECT @c"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 21,
+          "item": [
+            "declaration",
+            "let c = 2;"
+          ]
+        },
+        {
+          "offset": 35,
+          "item": [
+            "statement",
+            "SELECT @c"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a declaração depois do ; na mesma linha no Db2",
+      "engine": 2,
+      "input": "SELECT 1; let a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 1,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois da linha em branco ligada no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\nlet a = 1\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 20,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 21,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois da linha em branco ligada no Db2",
+      "engine": 2,
+      "input": "SELECT 1\n\nconst b = 2\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "const b = 2"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 16,
+          "item": [
+            "declaration",
+            "const b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois da linha em branco ligada no Informix",
+      "engine": 3,
+      "input": "SELECT 1 FROM t\n\nlet a = 1\n\nSELECT 2 FROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 FROM t"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2 FROM t"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 16,
+          "item": [
+            "statement",
+            "SELECT 1 FROM t"
+          ]
+        },
+        {
+          "offset": 27,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois da linha em branco desligada no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\nlet a = 1\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false,
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 21,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "depois da linha em branco desligada no Db2",
+      "engine": 2,
+      "input": "SELECT 1 FROM t\n\nconst b = 2\n\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 FROM t"
+        ],
+        [
+          "declaration",
+          "const b = 2"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false,
+      "cursors": [
+        {
+          "offset": 17,
+          "item": [
+            "declaration",
+            "const b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha que começa por let termina o comando de cima no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\nlet a = 1\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 19,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha que começa por const termina o comando de cima no Db2 com a linha em branco desligada",
+      "engine": 2,
+      "input": "UPDATE t SET a = 1\nconst b = 2\nSELECT @b",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "UPDATE t SET a = 1"
+        ],
+        [
+          "declaration",
+          "const b = 2"
+        ],
+        [
+          "statement",
+          "SELECT @b"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false,
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "UPDATE t SET a = 1"
+          ]
+        },
+        {
+          "offset": 20,
+          "item": [
+            "declaration",
+            "const b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha que começa por let termina o comando de cima no Informix",
+      "engine": 3,
+      "input": "SELECT 1 FROM t\nlet a = 1\nSELECT 2 FROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 FROM t"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "SELECT 2 FROM t"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 16,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 26,
+          "item": [
+            "statement",
+            "SELECT 2 FROM t"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha que começa por let termina o comando aberto por vírgula no Db2",
+      "engine": 2,
+      "input": "SELECT 1,\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1,"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": [
+            "statement",
+            "SELECT 1,"
+          ]
+        },
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "let seguido de = não é declaração no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\nlet = 5",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\nlet = 5"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1\nlet = 5"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o nome que começa por let não é declaração no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\nletter = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\nletter = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1\nletter = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "LET depois de uma linha não termina o comando no Db2",
+      "engine": 2,
+      "input": "SELECT 1\nLET x = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\nLET x = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1\nLET x = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Let depois de uma linha em branco não começa item no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\nLet x = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\n\nLet x = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1\n\nLet x = 1"
+          ]
+        },
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "SELECT 1\n\nLet x = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o modelo com quebra de linha e let dentro no PostgreSQL",
+      "engine": 1,
+      "input": "let a = `x\nlet b = 1`\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = `x\nlet b = 1`"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let a = `x\nlet b = 1`"
+          ]
+        },
+        {
+          "offset": 22,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o let dentro de um texto antes do ; no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 'a\nlet b = 1';\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 'a\nlet b = 1'"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "SELECT 'a\nlet b = 1'"
+          ]
+        },
+        {
+          "offset": 22,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o let num comentário de linha no meio do comando no Db2",
+      "engine": 2,
+      "input": "SELECT 1\n-- let a = 1\nFROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\n-- let a = 1\nFROM t"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 22,
+          "item": [
+            "statement",
+            "SELECT 1\n-- let a = 1\nFROM t"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o let num nome entre aspas com linha em branco no Db2",
+      "engine": 2,
+      "input": "SELECT \"a\n\nlet b\" FROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT \"a\n\nlet b\" FROM t"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "SELECT \"a\n\nlet b\" FROM t"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "os $$ do PostgreSQL seguidos de ; e de SQL",
+      "engine": 1,
+      "input": "SELECT $$\nlet x = 1\n$$;\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT $$\nlet x = 1\n$$"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "SELECT $$\nlet x = 1\n$$"
+          ]
+        },
+        {
+          "offset": 24,
+          "item": [
+            "statement",
+            "SELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o let dentro do CREATE FUNCTION do Db2 com BEGIN",
+      "engine": 2,
+      "input": "CREATE FUNCTION f() RETURNS INT\nBEGIN\nlet x = 1;\nEND",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE FUNCTION f() RETURNS INT\nBEGIN\nlet x = 1;\nEND"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 38,
+          "item": [
+            "statement",
+            "CREATE FUNCTION f() RETURNS INT\nBEGIN\nlet x = 1"
+          ]
+        }
+      ],
+      "count": 1
+    },
+    {
+      "name": "o let depois do END de um CREATE PROCEDURE do Db2 vai junto com o bloco",
+      "engine": 2,
+      "input": "CREATE PROCEDURE p()\nBEGIN\nSELECT 1;\nEND\nlet a = 1\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\nBEGIN\nSELECT 1;\nEND\nlet a = 1\nSELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 41,
+          "item": [
+            "statement",
+            "END\nlet a = 1\nSELECT 2"
+          ]
+        }
+      ],
+      "count": 1
+    },
+    {
+      "name": "o LET do SPL em maiúsculas dentro do CREATE PROCEDURE do Informix",
+      "engine": 3,
+      "input": "CREATE PROCEDURE p()\nLET x = 1;\nEND PROCEDURE;\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\nLET x = 1;\nEND PROCEDURE"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 21,
+          "item": [
+            "statement",
+            "CREATE PROCEDURE p()\nLET x = 1"
+          ]
+        },
+        {
+          "offset": 47,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ],
+      "count": 2
+    },
+    {
+      "name": "o Let do SPL dentro do CREATE FUNCTION do Informix",
+      "engine": 3,
+      "input": "CREATE FUNCTION f() RETURNING INT;\nLet x = 1;\nEND FUNCTION;\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE FUNCTION f() RETURNING INT;\nLet x = 1;\nEND FUNCTION"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 35,
+          "item": [
+            "statement",
+            "Let x = 1"
+          ]
+        }
+      ],
+      "count": 2
+    },
+    {
+      "name": "a linha de baixo com * continua no PostgreSQL",
+      "engine": 1,
+      "input": "let a = 2\n* 3\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 2\n* 3"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 2\n* 3"
+          ]
+        },
+        {
+          "offset": 14,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha de baixo com ?? continua no Db2",
+      "engine": 2,
+      "input": "let a = b\n?? 0\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = b\n?? 0"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = b\n?? 0"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha de baixo com === continua no Informix",
+      "engine": 3,
+      "input": "let ok = 1\n=== 1\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let ok = 1\n=== 1"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let ok = 1\n=== 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha de baixo com ? continua no PostgreSQL",
+      "engine": 1,
+      "input": "let a = true\n? 1 : 2\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = true\n? 1 : 2"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 13,
+          "item": [
+            "declaration",
+            "let a = true\n? 1 : 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha de baixo com ( termina no Db2",
+      "engine": 2,
+      "input": "let a = 1\n(2)",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "(2)"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "(2)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha de baixo com WITH termina no PostgreSQL",
+      "engine": 1,
+      "input": "let a = 1\nWITH x AS (SELECT 2) SELECT * FROM x",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "statement",
+          "WITH x AS (SELECT 2) SELECT * FROM x"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "WITH x AS (SELECT 2) SELECT * FROM x"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o ; dentro de [ ] da declaração não termina no PostgreSQL",
+      "engine": 1,
+      "input": "let a = [1;\n2]\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = [1;"
+        ],
+        [
+          "statement",
+          "2]\nSELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 12,
+          "item": [
+            "statement",
+            "2]\nSELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o ; dentro de ( ) da declaração não termina no Db2",
+      "engine": 2,
+      "input": "let a = (1;\n2)\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (1;"
+        ],
+        [
+          "statement",
+          "2)\nSELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 12,
+          "item": [
+            "statement",
+            "2)\nSELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o ; dentro de { } da declaração não termina no Informix",
+      "engine": 3,
+      "input": "let o = { a: 1;\n b: 2 }\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let o = { a: 1;"
+        ],
+        [
+          "statement",
+          "b: 2 }\nSELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 17,
+          "item": [
+            "statement",
+            "b: 2 }\nSELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o ; dentro de um texto com aspa dupla da declaração no Db2",
+      "engine": 2,
+      "input": "let a = \"x;y\"\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = \"x;y\""
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "declaration",
+            "let a = \"x;y\""
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a barra que escapa a aspa no texto da declaração no Informix",
+      "engine": 3,
+      "input": "let s = 'it\\'s; x'\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let s = 'it\\'s; x'"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 14,
+          "item": [
+            "declaration",
+            "let s = 'it\\'s; x'"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o ; e o // depois dele na mesma linha da declaração no Db2",
+      "engine": 2,
+      "input": "let a = 1; // c\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1; // c"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let a = 1; // c"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a consulta com ) dentro de um texto no Informix",
+      "engine": 3,
+      "input": "let a = (SELECT ')' FROM t)\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (SELECT ')' FROM t)"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 20,
+          "item": [
+            "declaration",
+            "let a = (SELECT ')' FROM t)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a consulta com ) dentro de um comentário de bloco no PostgreSQL",
+      "engine": 1,
+      "input": "let a = (SELECT 1 /* ) */)\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (SELECT 1 /* ) */)"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 18,
+          "item": [
+            "declaration",
+            "let a = (SELECT 1 /* ) */)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a consulta com ) dentro de um nome entre aspas no Db2",
+      "engine": 2,
+      "input": "let a = (SELECT \")\" FROM t)\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (SELECT \")\" FROM t)"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 20,
+          "item": [
+            "declaration",
+            "let a = (SELECT \")\" FROM t)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o parêntese aberto na declaração e a linha de baixo com SELECT no Informix",
+      "engine": 3,
+      "input": "let a = (\nSELECT 1\n)\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = (\nSELECT 1\n)"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = (\nSELECT 1\n)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o // no topo é comentário no PostgreSQL",
+      "engine": 1,
+      "input": "// nota\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 8,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o // no topo antes da declaração no Db2",
+      "engine": 2,
+      "input": "// nota\nconst a = 1\nSELECT @a",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "// nota\nconst a = 1"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 8,
+          "item": [
+            "declaration",
+            "// nota\nconst a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o // acima da declaração no Informix",
+      "engine": 3,
+      "input": "SELECT 1;\n// o total\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "// o total\nlet a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "// o total\nlet a = 1"
+          ]
+        },
+        {
+          "offset": 0,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o // entre comandos SQL no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1;\n// oops\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "// oops\nSELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "// oops\nSELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o // no fim da declaração no Informix",
+      "engine": 3,
+      "input": "let a = 1 // trailing\nSELECT 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1 // trailing"
+        ],
+        [
+          "statement",
+          "SELECT 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 13,
+          "item": [
+            "declaration",
+            "let a = 1 // trailing"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o -- acima da declaração fica fora dela no PostgreSQL",
+      "engine": 1,
+      "input": "-- c\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 5,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o comentário solto entre a linha em branco e o comando de baixo no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\n-- x\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "-- x\nSELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 15,
+          "item": [
+            "statement",
+            "-- x\nSELECT 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a linha em branco com espaços e tabulação separa no Db2",
+      "engine": 2,
+      "input": "SELECT 1\n \t\nSELECT 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "SELECT 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor na linha em branco depois de ; e antes de declaração no Db2",
+      "engine": 2,
+      "input": "SELECT 1;\n\nconst b = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "const b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "const b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o cursor na linha em branco entre duas declarações no PostgreSQL",
+      "engine": 1,
+      "input": "let a = 1\n\nlet b = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "declaration",
+          "let b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "declaration",
+            "let a = 1"
+          ]
+        },
+        {
+          "offset": 11,
+          "item": [
+            "declaration",
+            "let b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "as linhas em branco no começo do texto antes de SELECT no Informix",
+      "engine": 3,
+      "input": "\n\nSELECT 1 FROM t",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 FROM t"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": null
+        },
+        {
+          "offset": 1,
+          "item": null
+        },
+        {
+          "offset": 2,
+          "item": [
+            "statement",
+            "SELECT 1 FROM t"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição depois de outra declaração no Informix",
+      "engine": 3,
+      "input": "let n = 0\nn = n + 1\nSELECT @n",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let n = 0"
+        ],
+        [
+          "reassignment",
+          "n = n + 1"
+        ],
+        [
+          "statement",
+          "SELECT @n"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "reassignment",
+            "n = n + 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição com ; no fim depois de declaração",
+      "engine": null,
+      "input": "let a = 1\na = 2;\nSELECT @a",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "reassignment",
+          "a = 2;"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "reassignment",
+            "a = 2;"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b não declarada depois do ; é item no Db2",
+      "engine": 2,
+      "input": "SELECT 1;\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "reassignment",
+            "b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b não declarada depois de outra declaração no PostgreSQL",
+      "engine": 1,
+      "input": "let a = 1\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1"
+        ],
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "reassignment",
+            "b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "b não declarada no começo do texto no Informix",
+      "engine": 3,
+      "input": "b = 2",
+      "seed": null,
+      "value": [
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": [
+            "reassignment",
+            "b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição depois da linha em branco no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 10,
+          "item": [
+            "reassignment",
+            "b = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição depois da linha em branco com o UPDATE fechado no Db2",
+      "engine": 2,
+      "input": "UPDATE t SET a = 1\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "UPDATE t SET a = 1"
+        ],
+        [
+          "reassignment",
+          "b = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 19,
+          "item": [
+            "statement",
+            "UPDATE t SET a = 1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição com o SET aberto no fim da linha no Db2",
+      "engine": 2,
+      "input": "UPDATE t SET\n\na = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "UPDATE t SET\n\na = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 14,
+          "item": [
+            "statement",
+            "UPDATE t SET\n\na = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição com o parêntese aberto no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT (1\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT (1\n\nb = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 11,
+          "item": [
+            "statement",
+            "SELECT (1\n\nb = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição com WHERE no fim no Informix",
+      "engine": 3,
+      "input": "SELECT a FROM t WHERE\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT a FROM t WHERE\n\nb = 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 23,
+          "item": [
+            "statement",
+            "SELECT a FROM t WHERE\n\nb = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reatribuição depois da linha em branco desligada fica no comando no Informix",
+      "engine": 3,
+      "input": "SELECT 1 FROM t\n\nb = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1 FROM t\n\nb = 2"
+        ]
+      ],
+      "type": "itens",
+      "blankLines": false,
+      "cursors": [
+        {
+          "offset": 17,
+          "item": [
+            "statement",
+            "SELECT 1 FROM t\n\nb = 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a === depois da linha em branco não é reatribuição nem começa item no Db2",
+      "engine": 2,
+      "input": "SELECT 1\n\na === 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1\n\na === 2"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 10,
+          "item": [
+            "statement",
+            "SELECT 1\n\na === 2"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a seleção com comando e declaração separados pela linha em branco no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\nlet a = 1",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "let a = 1"
+        ]
+      ],
+      "type": "itens",
+      "count": 2
+    },
+    {
+      "name": "a seleção com ; e declaração no Db2",
+      "engine": 2,
+      "input": "SELECT 1;\nconst b = 2",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "declaration",
+          "const b = 2"
+        ]
+      ],
+      "type": "itens",
+      "count": 2
+    },
+    {
+      "name": "a seleção com duas declarações e um comando no Informix",
+      "engine": 3,
+      "input": "let a = 1;\nlet b = 2;\nSELECT @a",
+      "seed": null,
+      "value": [
+        [
+          "declaration",
+          "let a = 1;"
+        ],
+        [
+          "declaration",
+          "let b = 2;"
+        ],
+        [
+          "statement",
+          "SELECT @a"
+        ]
+      ],
+      "type": "itens",
+      "count": 3
+    },
+    {
+      "name": "WITH nome AS ( começa comando depois da linha em branco no PostgreSQL",
+      "engine": 1,
+      "input": "SELECT 1\n\nWITH x AS (SELECT 2)\nSELECT * FROM x",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "SELECT 1"
+        ],
+        [
+          "statement",
+          "WITH x AS (SELECT 2)\nSELECT * FROM x"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 9,
+          "item": [
+            "statement",
+            "SELECT 1"
+          ]
+        },
+        {
+          "offset": 31,
+          "item": [
+            "statement",
+            "WITH x AS (SELECT 2)\nSELECT * FROM x"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o DELETE com ; e o SELECT depois da linha em branco no PostgreSQL",
+      "engine": 1,
+      "input": "DELETE FROM t WHERE id = 1;\n\nSELECT * FROM t;",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "DELETE FROM t WHERE id = 1"
+        ],
+        [
+          "statement",
+          "SELECT * FROM t"
+        ]
+      ],
+      "type": "itens",
+      "cursors": [
+        {
+          "offset": 0,
+          "item": [
+            "statement",
+            "DELETE FROM t WHERE id = 1"
+          ]
+        },
+        {
+          "offset": 28,
+          "item": [
+            "statement",
+            "SELECT * FROM t"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o comando depois do END PROCEDURE do Informix é outro item, fora do corpo",
+      "engine": 3,
+      "input": "CREATE PROCEDURE p()\nLET a = 1;\nEND PROCEDURE;\nSELECT @x",
+      "seed": null,
+      "value": [
+        [
+          "statement",
+          "CREATE PROCEDURE p()\nLET a = 1;\nEND PROCEDURE"
+        ],
+        [
+          "statement",
+          "SELECT @x"
+        ]
+      ],
+      "type": "itens"
     }
   ]
 }

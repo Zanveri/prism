@@ -422,6 +422,275 @@
         "message": "As expressões do script levaram mais de 5 s e foram paradas."
       },
       "clockStep": 100
+    },
+    {
+      "name": "o nome de 64 caracteres cabe",
+      "engine": null,
+      "input": "let a§ = 7",
+      "seed": null,
+      "value": 7,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "b",
+        "times": 63
+      }
+    },
+    {
+      "name": "o nome de 65 caracteres passa",
+      "engine": null,
+      "input": "let a§ = 7",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "O nome pode ter até 64 caracteres."
+      },
+      "expand": {
+        "token": "§",
+        "text": "b",
+        "times": 64
+      }
+    },
+    {
+      "name": "65.536 bytes com ç cabem",
+      "engine": null,
+      "input": "const s = '§'\nconst n = s.length",
+      "seed": null,
+      "value": 32762,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "ç",
+        "times": 32762
+      }
+    },
+    {
+      "name": "65.537 bytes com ç e um x passam",
+      "engine": null,
+      "input": "const s = '§x'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "A declaração de s passou de 64 KiB."
+      },
+      "expand": {
+        "token": "§",
+        "text": "ç",
+        "times": 32762
+      }
+    },
+    {
+      "name": "16.381 emojis de 4 bytes cabem",
+      "engine": null,
+      "input": "const s = '§'\nconst n = s.length",
+      "seed": null,
+      "value": 32762,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "😀",
+        "times": 16381
+      }
+    },
+    {
+      "name": "16.382 emojis de 4 bytes passam",
+      "engine": null,
+      "input": "const s = '§'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "A declaração de s passou de 64 KiB."
+      },
+      "expand": {
+        "token": "§",
+        "text": "😀",
+        "times": 16382
+      }
+    },
+    {
+      "name": "dois textos de 40 KiB cabem: o limite é por declaração",
+      "engine": null,
+      "input": "const a = '§'\nconst b = '§'\nconst n = a.length + b.length",
+      "seed": null,
+      "value": 80000,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "x",
+        "times": 40000
+      }
+    },
+    {
+      "name": "a lista com 63 parênteses dentro cabe em 64 níveis",
+      "engine": null,
+      "input": "const r = [§1¶].length",
+      "seed": null,
+      "value": 1,
+      "type": "number",
+      "expand": [
+        {
+          "token": "§",
+          "text": "(",
+          "times": 63
+        },
+        {
+          "token": "¶",
+          "text": ")",
+          "times": 63
+        }
+      ]
+    },
+    {
+      "name": "64 níveis de objetos cabem",
+      "engine": null,
+      "input": "const r = §1¶†",
+      "seed": null,
+      "value": 1,
+      "type": "number",
+      "expand": [
+        {
+          "token": "§",
+          "text": "{ a: ",
+          "times": 64
+        },
+        {
+          "token": "¶",
+          "text": " }",
+          "times": 64
+        },
+        {
+          "token": "†",
+          "text": ".a",
+          "times": 64
+        }
+      ]
+    },
+    {
+      "name": "uma cadeia de 64 chamadas cabe",
+      "engine": null,
+      "input": "const r = 'a'§",
+      "seed": null,
+      "value": "a",
+      "type": "string",
+      "expand": {
+        "token": "§",
+        "text": ".trim()",
+        "times": 64
+      }
+    },
+    {
+      "name": "o modelo de 1.000.000 cabe",
+      "engine": null,
+      "input": "const s = 'x'.padStart(500000, 'x')\nconst n = `${s}${s}`.length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o padEnd de 1.000.000 cabe",
+      "engine": null,
+      "input": "const n = 'x'.padEnd(1000000, 'x').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o padEnd de 1.000.001 passa",
+      "engine": null,
+      "input": "const n = 'x'.padEnd(1000001, 'x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "o toUpperCase de 1.000.000 unidades cabe",
+      "engine": null,
+      "input": "const n = 'ΐ'.padStart(333333, 'ΐ').padEnd(333334, 'a').toUpperCase().length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o toUpperCase que dá 1.000.001 passa",
+      "engine": null,
+      "input": "const n = 'ΐ'.padStart(333333, 'ΐ').padEnd(333335, 'a').toUpperCase()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "o replaceAll de 1.000.000 cabe",
+      "engine": null,
+      "input": "const n = 'x'.padStart(333333, 'x').padEnd(333334, 'z').replaceAll('x', 'yyy').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o replaceAll que dá 1.000.001 passa",
+      "engine": null,
+      "input": "const n = 'x'.padStart(333333, 'x').padEnd(333335, 'z').replaceAll('x', 'yyy')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "o join de 10 textos que dá 1.000.000 cabe",
+      "engine": null,
+      "input": "const t = 'x'.padStart(99999, 'x')\nconst u = 'x'.padStart(100000, 'x')\nconst n = [t, t, t, t, t, t, t, t, t, u].join(',').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "o join de 10 textos que dá 1.000.001 passa",
+      "engine": null,
+      "input": "const t = 'x'.padStart(99999, 'x')\nconst u = 'x'.padStart(100001, 'x')\nconst n = [t, t, t, t, t, t, t, t, t, u].join(',')",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "999.998 unidades e um emoji dão 1.000.000 e cabem",
+      "engine": null,
+      "input": "const s = 'x'.padStart(999998, 'x')\nconst n = (s + '😀').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "a concatenação de 9.999 itens com um a mais cabe",
+      "engine": null,
+      "input": "const l = 'x'.padStart(9999, ',').split(',')\nconst n = l.concat(['y']).length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "a concatenação que dá 10.001 itens passa",
+      "engine": null,
+      "input": "const l = 'x'.padStart(9999, ',').split(',')\nconst n = l.concat(['y', 'z']).length",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "A lista passou de 10.000 itens."
+      }
     }
   ]
 }

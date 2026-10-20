@@ -1576,6 +1576,762 @@
       "seed": null,
       "value": "$&$&",
       "type": "string"
+    },
+    {
+      "name": "const f = Math.max",
+      "engine": null,
+      "input": "const f = Math.max",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "Math.max é uma função, e funções não são valores aqui: chame-a, como Math.max(…)."
+      }
+    },
+    {
+      "name": "a['constructor'] num objeto a",
+      "engine": null,
+      "input": "const a = { b: 1 }\nconst r = a['constructor']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "a['con' + 'structor']",
+      "engine": null,
+      "input": "const a = { b: 1 }\nconst r = a['con' + 'structor']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "a?.constructor com a objeto",
+      "engine": null,
+      "input": "const a = { b: 1 }\nconst r = a?.constructor",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 14,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "a?.['__proto__']",
+      "engine": null,
+      "input": "const a = { b: 1 }\nconst r = a?.['__proto__']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "__proto__ não pode ser lido."
+      }
+    },
+    {
+      "name": "o join de 2.000 textos de 100.000 caracteres, sem guardar a lista",
+      "engine": null,
+      "input": "const s = 'x'.padStart(100000, 'x')\nconst r = [§s].join('')",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      },
+      "expand": {
+        "token": "§",
+        "text": "s, ",
+        "times": 1999
+      }
+    },
+    {
+      "name": "setTimeout com texto",
+      "engine": null,
+      "input": "const r = setTimeout('1')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "setTimeout não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "fetch com um texto",
+      "engine": null,
+      "input": "const r = fetch('x')",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "fetch não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "f() com f uma variável",
+      "engine": null,
+      "input": "let f = 1\nconst r = f()",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "f não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "random.int como valor",
+      "engine": null,
+      "input": "const f = random.int",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "random.int é uma função, e funções não são valores aqui: chame-a, como random.int(…)."
+      }
+    },
+    {
+      "name": "função dentro de uma lista",
+      "engine": null,
+      "input": "const r = [Math.max]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "Math.max é uma função, e funções não são valores aqui: chame-a, como Math.max(…)."
+      }
+    },
+    {
+      "name": "função dentro de um objeto",
+      "engine": null,
+      "input": "const r = { a: Math.max }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "Math.max é uma função, e funções não são valores aqui: chame-a, como Math.max(…)."
+      }
+    },
+    {
+      "name": "função passada como argumento",
+      "engine": null,
+      "input": "const r = Math.min(Math.max)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "Math.max é uma função, e funções não são valores aqui: chame-a, como Math.max(…)."
+      }
+    },
+    {
+      "name": "Math.max.call sem os parênteses",
+      "engine": null,
+      "input": "const r = Math.max.call",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "call não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.max.constructor",
+      "engine": null,
+      "input": "const r = Math.max.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.__proto__",
+      "engine": null,
+      "input": "const r = Math.__proto__",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "__proto__ não pode ser lido."
+      }
+    },
+    {
+      "name": "Math.hasOwnProperty",
+      "engine": null,
+      "input": "const r = Math.hasOwnProperty",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "hasOwnProperty não pode ser lido."
+      }
+    },
+    {
+      "name": "date.valueOf()",
+      "engine": null,
+      "input": "const r = date.valueOf()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "valueOf não pode ser lido."
+      }
+    },
+    {
+      "name": "random.toString()",
+      "engine": null,
+      "input": "const r = random.toString()",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "o prototype de Date",
+      "engine": null,
+      "input": "const r = Date.prototype",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "prototype não pode ser lido."
+      }
+    },
+    {
+      "name": "o toString de um objeto escrito",
+      "engine": null,
+      "input": "const r = { a: 1 }.toString",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "o hasOwnProperty de um objeto escrito",
+      "engine": null,
+      "input": "const r = { a: 1 }.hasOwnProperty",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "hasOwnProperty não pode ser lido."
+      }
+    },
+    {
+      "name": "o prototype de uma lista escrita",
+      "engine": null,
+      "input": "const r = [1].prototype",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "prototype não pode ser lido."
+      }
+    },
+    {
+      "name": "o valueOf de um booleano",
+      "engine": null,
+      "input": "const r = true.valueOf",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "valueOf não pode ser lido."
+      }
+    },
+    {
+      "name": "o toString de um número entre parênteses",
+      "engine": null,
+      "input": "const r = (1).toString",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "o then de um texto",
+      "engine": null,
+      "input": "const r = 'a'.then",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "then não pode ser lido."
+      }
+    },
+    {
+      "name": "o constructor de uma data guardada",
+      "engine": null,
+      "input": "const d = date.today()\nconst r = d.constructor",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o constructor de um objeto guardado",
+      "engine": null,
+      "input": "const o = { a: 1 }\nconst r = o.constructor",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o constructor de uma data e hora escrita",
+      "engine": null,
+      "input": "const r = new Date().constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 22,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o constructor depois do length",
+      "engine": null,
+      "input": "const r = [1].length.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 22,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o constructor de um caractere do texto",
+      "engine": null,
+      "input": "const r = 'a'[0].constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "chave prototype num objeto",
+      "engine": null,
+      "input": "const r = { prototype: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "prototype não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave valueOf num objeto",
+      "engine": null,
+      "input": "const r = { valueOf: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "valueOf não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave then num objeto",
+      "engine": null,
+      "input": "const r = { then: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "then não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave call num objeto",
+      "engine": null,
+      "input": "const r = { call: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "call não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave constructor entre aspas",
+      "engine": null,
+      "input": "const r = { 'constructor': 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "constructor não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave __proto__ depois de outro campo",
+      "engine": null,
+      "input": "const r = { a: 1, __proto__: 2 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 19,
+        "message": "__proto__ não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave constructor dentro de outro objeto",
+      "engine": null,
+      "input": "const r = { a: { constructor: 1 } }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 18,
+        "message": "constructor não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "chave __proto__ com escape \\u",
+      "engine": null,
+      "input": "const r = { \"\\u005f_proto__\": 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "__proto__ não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "nome __proto__",
+      "engine": null,
+      "input": "let __proto__ = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "__proto__ não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "nome call",
+      "engine": null,
+      "input": "let call = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "call não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "nome com escape para constructor",
+      "engine": null,
+      "input": "let \\u0063onstructor = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "Escapes \\u não valem em nomes."
+      }
+    },
+    {
+      "name": "nome parecido com o vedado é comum",
+      "engine": null,
+      "input": "const constructors = 2\nconst r = constructors",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "o campo por [ ] de um objeto",
+      "engine": null,
+      "input": "const o = { a: 1 }\nconst r = o['a']",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "o campo por [ ] que não existe, objeto com um campo",
+      "engine": null,
+      "input": "const o = { a: 1 }\nconst r = o['b']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "O objeto o não tem o campo b. Os campos são: a."
+      }
+    },
+    {
+      "name": "o campo calculado com o nome de um campo",
+      "engine": null,
+      "input": "const o = { id: 7 }\nconst k = 'id'\nconst r = o[k]",
+      "seed": null,
+      "value": 7,
+      "type": "number"
+    },
+    {
+      "name": "o campo calculado que não existe",
+      "engine": null,
+      "input": "const o = { id: 7 }\nconst k = 'nome'\nconst r = o[k]",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "O objeto o não tem o campo nome. Os campos são: id."
+      }
+    },
+    {
+      "name": "o campo calculado com o nome vedado",
+      "engine": null,
+      "input": "const o = { id: 7 }\nconst k = 'constructor'\nconst r = o[k]",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o campo por [ ] com escape para constructor",
+      "engine": null,
+      "input": "const o = { id: 7 }\nconst r = o['\\u0063onstructor']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "o campo por [ ] com escape \\x para __proto__",
+      "engine": null,
+      "input": "const o = { id: 7 }\nconst r = o['\\x5f_proto__']",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "__proto__ não pode ser lido."
+      }
+    },
+    {
+      "name": "o comprimento de um texto",
+      "engine": null,
+      "input": "const r = 'abc'.length",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "o comprimento de uma lista escrita",
+      "engine": null,
+      "input": "const r = [1, 2].length",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "in procura um campo herdado",
+      "engine": null,
+      "input": "const o = { a: 1 }\nconst r = 'constructor' in o",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 25,
+        "message": "O operador in não existe aqui."
+      }
+    },
+    {
+      "name": "instanceof",
+      "engine": null,
+      "input": "const o = { a: 1 }\nconst r = o instanceof Object",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "O operador instanceof não existe aqui."
+      }
+    },
+    {
+      "name": "x--1 é x e um comentário",
+      "engine": null,
+      "input": "const x = 5\nconst r = x--1",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "padStart no limite cabe",
+      "engine": null,
+      "input": "const r = 'a'.padStart(1000000, 'a').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "padEnd que passa do limite",
+      "engine": null,
+      "input": "const r = 'a'.padEnd(1000001)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "toLowerCase de 1.000.000 de İ, que dá 2.000.000",
+      "engine": null,
+      "input": "const s = 'İ'.padStart(1000000, 'İ')\nconst r = s.toLowerCase()",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      }
+    },
+    {
+      "name": "toLowerCase no limite, de 500.000 İ",
+      "engine": null,
+      "input": "const s = 'İ'.padStart(500000, 'İ')\nconst r = s.toLowerCase().length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "toUpperCase no limite, de 500.000 ß",
+      "engine": null,
+      "input": "const s = 'ß'.padStart(500000, 'ß')\nconst r = s.toUpperCase().length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "replaceAll no limite",
+      "engine": null,
+      "input": "const s = 'a'.padStart(500000, 'a')\nconst r = s.replaceAll('a', 'bb').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "join no limite, de 10 textos de 100.000",
+      "engine": null,
+      "input": "const s = 'x'.padStart(100000, 'x')\nconst r = [§s].join('').length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "s, ",
+        "times": 9
+      }
+    },
+    {
+      "name": "String de uma lista que passa do limite",
+      "engine": null,
+      "input": "const s = 'x'.padStart(1000, 'x')\nconst l = [§s]\nconst r = String(l)",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 11,
+        "message": "O texto passou de 1.000.000 de caracteres."
+      },
+      "expand": {
+        "token": "§",
+        "text": "s, ",
+        "times": 1099
+      }
+    },
+    {
+      "name": "concat no limite da lista",
+      "engine": null,
+      "input": "const l = 'x'.padStart(5000, ',').split(',')\nconst r = l.concat(l).length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "lista espalhada no limite",
+      "engine": null,
+      "input": "const l = 'x'.padStart(5000, ',').split(',')\nconst r = [...l, ...l].length",
+      "seed": null,
+      "value": 10000,
+      "type": "number"
+    },
+    {
+      "name": "lista de 10.000 itens cabe",
+      "engine": null,
+      "input": "const n = [§1].length",
+      "seed": null,
+      "value": 10000,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "1, ",
+        "times": 9999
+      }
+    },
+    {
+      "name": "Math.max com 10.000 números espalhados",
+      "engine": null,
+      "input": "const l = [§0]\nconst r = Math.max(...l)",
+      "seed": null,
+      "value": 0,
+      "type": "number",
+      "expand": {
+        "token": "§",
+        "text": "0, ",
+        "times": 9999
+      }
+    },
+    {
+      "name": "modelo no limite",
+      "engine": null,
+      "input": "const s = 'x'.padStart(500000, 'x')\nconst r = `${s}${s}`.length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "a junção de dois textos no limite",
+      "engine": null,
+      "input": "const s = 'x'.padStart(500000, 'x')\nconst r = (s + s).length",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "sessenta e cinco parênteses não cabem",
+      "engine": null,
+      "input": "const r = §1¶",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 76,
+        "message": "A expressão de r passou de 64 níveis."
+      },
+      "expand": [
+        {
+          "token": "§",
+          "text": "(",
+          "times": 65
+        },
+        {
+          "token": "¶",
+          "text": ")",
+          "times": 65
+        }
+      ]
     }
   ]
 }

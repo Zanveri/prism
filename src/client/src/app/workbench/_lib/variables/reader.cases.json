@@ -1970,6 +1970,1519 @@
         "column": 8,
         "message": "O tipo any não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
       }
+    },
+    {
+      "name": "o false",
+      "engine": null,
+      "input": "let a = false",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "! de um booleano",
+      "engine": null,
+      "input": "let a = !false",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "dois ! seguidos",
+      "engine": null,
+      "input": "let a = !!0",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "dois - unários seguidos",
+      "engine": null,
+      "input": "let a = - -1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "- binário depois de - unário",
+      "engine": null,
+      "input": "let a = 1 - -1",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "+ e - unários juntos",
+      "engine": null,
+      "input": "let a = +-1",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "! antes de ===",
+      "engine": null,
+      "input": "let a = !true === false",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "=== encadeado",
+      "engine": null,
+      "input": "let a = 1 === 1 === true",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "!== e === com && no meio",
+      "engine": null,
+      "input": "let a = 1 !== 2 && 3 === 3",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "&& antes de || nos dois lados",
+      "engine": null,
+      "input": "let a = false || true && false",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "&& encadeado",
+      "engine": null,
+      "input": "let a = 1 && 2 && 3",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "?? antes do ? :",
+      "engine": null,
+      "input": "let a = null ?? 1 ? 2 : 3",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "?? na saída falsa do ? :",
+      "engine": null,
+      "input": "let a = 0 ? 1 : null ?? 3",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "?? abaixo de ===",
+      "engine": null,
+      "input": "let a = null ?? 1 === 1",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "?? com && entre parênteses",
+      "engine": null,
+      "input": "let a = null ?? (1 && 0)",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "% e * com a mesma precedência",
+      "engine": null,
+      "input": "let a = 7 % 4 * 2",
+      "seed": null,
+      "value": 6,
+      "type": "number"
+    },
+    {
+      "name": "** antes de *",
+      "engine": null,
+      "input": "let a = 2 * 3 ** 2",
+      "seed": null,
+      "value": 18,
+      "type": "number"
+    },
+    {
+      "name": "** à esquerda de *",
+      "engine": null,
+      "input": "let a = 2 ** 3 * 2",
+      "seed": null,
+      "value": 16,
+      "type": "number"
+    },
+    {
+      "name": "- binário depois de *",
+      "engine": null,
+      "input": "let a = 2 - 3 * 2",
+      "seed": null,
+      "value": -4,
+      "type": "number"
+    },
+    {
+      "name": "- unário antes de *",
+      "engine": null,
+      "input": "let a = -2 * 3",
+      "seed": null,
+      "value": -6,
+      "type": "number"
+    },
+    {
+      "name": "- unário antes do membro",
+      "engine": null,
+      "input": "let a = -'abc'.length",
+      "seed": null,
+      "value": -3,
+      "type": "number"
+    },
+    {
+      "name": "+ e - com a mesma precedência, à esquerda",
+      "engine": null,
+      "input": "let a = 10 - 4 + 1",
+      "seed": null,
+      "value": 7,
+      "type": "number"
+    },
+    {
+      "name": "soma antes de relacional e de igualdade",
+      "engine": null,
+      "input": "let a = 1 + 2 < 4 === true",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "potência de potência com parênteses",
+      "engine": null,
+      "input": "let a = (2 ** 3) ** 2",
+      "seed": null,
+      "value": 64,
+      "type": "number"
+    },
+    {
+      "name": "texto com + e ===",
+      "engine": null,
+      "input": "let a = 'a' + 'b' === 'ab'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "expoente sem sinal",
+      "engine": null,
+      "input": "let a = 1e3",
+      "seed": null,
+      "value": 1000,
+      "type": "number",
+      "exact": "1e3"
+    },
+    {
+      "name": "E maiúsculo no expoente",
+      "engine": null,
+      "input": "let a = 1E3",
+      "seed": null,
+      "value": 1000,
+      "type": "number"
+    },
+    {
+      "name": "expoente com + e decimal",
+      "engine": null,
+      "input": "let a = 1.5E+2",
+      "seed": null,
+      "value": 150,
+      "type": "number"
+    },
+    {
+      "name": "expoente negativo",
+      "engine": null,
+      "input": "let a = 1e-3",
+      "seed": null,
+      "value": 0.001,
+      "type": "number",
+      "exact": "1e-3"
+    },
+    {
+      "name": "_ na mantissa e no expoente",
+      "engine": null,
+      "input": "let a = 1_0e1_0",
+      "seed": null,
+      "value": 100000000000,
+      "type": "number"
+    },
+    {
+      "name": "_ no decimal, o zero do fim guardado",
+      "engine": null,
+      "input": "let a = 1_000.5_0",
+      "seed": null,
+      "value": 1000.5,
+      "type": "number",
+      "exact": "1000.50"
+    },
+    {
+      "name": "milhão com _",
+      "engine": null,
+      "input": "let a = 1_000_000",
+      "seed": null,
+      "value": 1000000,
+      "type": "number"
+    },
+    {
+      "name": "ponto no começo com expoente",
+      "engine": null,
+      "input": "let a = .5e1",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "zero decimal",
+      "engine": null,
+      "input": "let a = 0.0",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "zero à esquerda do decimal",
+      "engine": null,
+      "input": "let a = 0.10",
+      "seed": null,
+      "value": 0.1,
+      "type": "number",
+      "exact": "0.10"
+    },
+    {
+      "name": "12.345 é exato e o texto é o do JavaScript",
+      "engine": null,
+      "input": "let a = 12.345",
+      "seed": null,
+      "value": 12.345,
+      "type": "number"
+    },
+    {
+      "name": "0.1 + 0.2 como no JavaScript",
+      "engine": null,
+      "input": "let a = 0.1 + 0.2",
+      "seed": null,
+      "value": 0.30000000000000004,
+      "type": "number"
+    },
+    {
+      "name": "inteiro fora da faixa vale como texto exato",
+      "engine": null,
+      "input": "let a = 9007199254740993",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "+ unário num literal fora da faixa mantém o texto",
+      "engine": null,
+      "input": "let a = +9007199254740993",
+      "seed": null,
+      "value": 9007199254740992,
+      "type": "number",
+      "exact": "9007199254740993"
+    },
+    {
+      "name": "Math.PI",
+      "engine": null,
+      "input": "let a = Math.PI",
+      "seed": null,
+      "value": 3.141592653589793,
+      "type": "number"
+    },
+    {
+      "name": "Math.E",
+      "engine": null,
+      "input": "let a = Math.E",
+      "seed": null,
+      "value": 2.718281828459045,
+      "type": "number"
+    },
+    {
+      "name": "?. seguido de .5 com x zero",
+      "engine": null,
+      "input": "let x = 0\nlet y = x?.5:1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "Math.abs de número negativo",
+      "engine": null,
+      "input": "let a = Math.abs(-2)",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "Math.round de -2.5",
+      "engine": null,
+      "input": "let a = Math.round(-2.5)",
+      "seed": null,
+      "value": -2,
+      "type": "number"
+    },
+    {
+      "name": "Math.max com espalha no meio",
+      "engine": null,
+      "input": "let a = Math.max(1, ...[5, 2], 3)",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "escape \\r",
+      "engine": null,
+      "input": "let a = 'a\\rb'",
+      "seed": null,
+      "value": "a\rb",
+      "type": "string"
+    },
+    {
+      "name": "escape \\b",
+      "engine": null,
+      "input": "let a = '\\b'",
+      "seed": null,
+      "value": "\b",
+      "type": "string"
+    },
+    {
+      "name": "escape \\f",
+      "engine": null,
+      "input": "let a = '\\f'",
+      "seed": null,
+      "value": "\f",
+      "type": "string"
+    },
+    {
+      "name": "escape \\v",
+      "engine": null,
+      "input": "let a = '\\v'",
+      "seed": null,
+      "value": "\u000b",
+      "type": "string"
+    },
+    {
+      "name": "aspa dupla escapada",
+      "engine": null,
+      "input": "let a = \"a\\\"b\"",
+      "seed": null,
+      "value": "a\"b",
+      "type": "string"
+    },
+    {
+      "name": "crase escapada no texto",
+      "engine": null,
+      "input": "let a = 'a\\`b'",
+      "seed": null,
+      "value": "a`b",
+      "type": "string"
+    },
+    {
+      "name": "crase escapada no modelo",
+      "engine": null,
+      "input": "let a = `a\\`b`",
+      "seed": null,
+      "value": "a`b",
+      "type": "string"
+    },
+    {
+      "name": "cifrão escapado no modelo",
+      "engine": null,
+      "input": "let a = `a\\$b`",
+      "seed": null,
+      "value": "a$b",
+      "type": "string"
+    },
+    {
+      "name": "cifrão escapado no texto",
+      "engine": null,
+      "input": "let a = '\\$'",
+      "seed": null,
+      "value": "$",
+      "type": "string"
+    },
+    {
+      "name": "escape \\u{} curto",
+      "engine": null,
+      "input": "let a = '\\u{41}'",
+      "seed": null,
+      "value": "A",
+      "type": "string"
+    },
+    {
+      "name": "escape \\x com letras maiúsculas",
+      "engine": null,
+      "input": "let a = '\\x4A'",
+      "seed": null,
+      "value": "J",
+      "type": "string"
+    },
+    {
+      "name": "escape \\u com acento",
+      "engine": null,
+      "input": "let a = '\\u00e9'",
+      "seed": null,
+      "value": "é",
+      "type": "string"
+    },
+    {
+      "name": "\\X é outro caractere",
+      "engine": null,
+      "input": "let a = '\\X'",
+      "seed": null,
+      "value": "X",
+      "type": "string"
+    },
+    {
+      "name": "\\U não é \\u",
+      "engine": null,
+      "input": "let a = '\\U0041'",
+      "seed": null,
+      "value": "U0041",
+      "type": "string"
+    },
+    {
+      "name": "quebra CRLF precedida de barra some",
+      "engine": null,
+      "input": "let a = 'a\\\r\nb'",
+      "seed": null,
+      "value": "ab",
+      "type": "string"
+    },
+    {
+      "name": "par substituto escapado",
+      "engine": null,
+      "input": "let a = '\\uD83D\\uDE00'",
+      "seed": null,
+      "value": "😀",
+      "type": "string"
+    },
+    {
+      "name": "aspa simples dentro de aspas duplas",
+      "engine": null,
+      "input": "let a = \"it's\"",
+      "seed": null,
+      "value": "it's",
+      "type": "string"
+    },
+    {
+      "name": "barra invertida escapada no fim",
+      "engine": null,
+      "input": "let a = 'a\\\\'",
+      "seed": null,
+      "value": "a\\",
+      "type": "string"
+    },
+    {
+      "name": "cifrão sem chave no modelo é texto",
+      "engine": null,
+      "input": "let a = `a$b`",
+      "seed": null,
+      "value": "a$b",
+      "type": "string"
+    },
+    {
+      "name": "${ no texto de aspas simples não interpola",
+      "engine": null,
+      "input": "let a = '${1}'",
+      "seed": null,
+      "value": "${1}",
+      "type": "string"
+    },
+    {
+      "name": "\\${ no modelo é texto",
+      "engine": null,
+      "input": "let a = `\\${1}`",
+      "seed": null,
+      "value": "${1}",
+      "type": "string"
+    },
+    {
+      "name": "\\n no modelo",
+      "engine": null,
+      "input": "let a = `a\\nb`",
+      "seed": null,
+      "value": "a\nb",
+      "type": "string"
+    },
+    {
+      "name": "número dentro do ${} vira texto",
+      "engine": null,
+      "input": "let a = `${1}`",
+      "seed": null,
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "name": "booleano dentro do ${}",
+      "engine": null,
+      "input": "let a = `${true}x`",
+      "seed": null,
+      "value": "truex",
+      "type": "string"
+    },
+    {
+      "name": "} dentro de texto dentro do ${}",
+      "engine": null,
+      "input": "let a = `a${'}'}b`",
+      "seed": null,
+      "value": "a}b",
+      "type": "string"
+    },
+    {
+      "name": "lista de textos com os três tipos de aspa",
+      "engine": null,
+      "input": "let a = ['a', \"b\", `c`]",
+      "seed": null,
+      "value": [
+        "a",
+        "b",
+        "c"
+      ],
+      "type": "string[]"
+    },
+    {
+      "name": "comentário de linha antes da declaração no topo",
+      "engine": null,
+      "input": "-- um comentário\nlet a = 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "comentário de bloco antes da declaração",
+      "engine": null,
+      "input": "/* topo */ let a = 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "comentário de bloco com quebra dentro da declaração",
+      "engine": null,
+      "input": "let a = /* um\nlinhas */ 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "comentário de bloco não aninha",
+      "engine": null,
+      "input": "let a = /* /* */ 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "// dentro de texto não é comentário",
+      "engine": null,
+      "input": "let a = 'a//b'",
+      "seed": null,
+      "value": "a//b",
+      "type": "string"
+    },
+    {
+      "name": "-- dentro de texto não é comentário",
+      "engine": null,
+      "input": "let a = 'a--b'",
+      "seed": null,
+      "value": "a--b",
+      "type": "string"
+    },
+    {
+      "name": "/* dentro de texto não é comentário",
+      "engine": null,
+      "input": "let a = 'a/*b'",
+      "seed": null,
+      "value": "a/*b",
+      "type": "string"
+    },
+    {
+      "name": "comentário de linha e a linha seguinte com +",
+      "engine": null,
+      "input": "let a = 1 -- um\n+ 2",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "comentário de bloco no fim da declaração",
+      "engine": null,
+      "input": "let a = 1 /* c */\nlet b = a + 1",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "NFC na declaração e NFD na reatribuição",
+      "engine": null,
+      "input": "let café = 1\ncafé = 2",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "NFD na declaração e NFC na leitura",
+      "engine": null,
+      "input": "let á = 1\nlet b = á + 1",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "nome com letras gregas",
+      "engine": null,
+      "input": "let α = 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "nome com ideogramas",
+      "engine": null,
+      "input": "let 変数 = 5",
+      "seed": null,
+      "value": 5,
+      "type": "number"
+    },
+    {
+      "name": "dígito no meio do nome",
+      "engine": null,
+      "input": "let a1b2 = 3",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "$ no fim do nome",
+      "engine": null,
+      "input": "let a$ = 3",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "$ no meio do nome, sem começar e terminar nele",
+      "engine": null,
+      "input": "let a$b$ = 4",
+      "seed": null,
+      "value": 4,
+      "type": "number"
+    },
+    {
+      "name": "$ seguido de dígito e letra",
+      "engine": null,
+      "input": "let $1a = 2",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "_ sozinho",
+      "engine": null,
+      "input": "let _ = 1",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "nome que começa por select",
+      "engine": null,
+      "input": "let selecione = 4",
+      "seed": null,
+      "value": 4,
+      "type": "number"
+    },
+    {
+      "name": "trim numa variável de texto",
+      "engine": null,
+      "input": "let s = 'a '\nlet a = s.trim()",
+      "seed": null,
+      "value": "a",
+      "type": "string"
+    },
+    {
+      "name": "encadeamento de métodos",
+      "engine": null,
+      "input": "let a = 'abc'.toUpperCase().length",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "toFixed depois de parênteses",
+      "engine": null,
+      "input": "let a = (1.5).toFixed(2)",
+      "seed": null,
+      "value": "1.50",
+      "type": "string"
+    },
+    {
+      "name": "membro em cadeia",
+      "engine": null,
+      "input": "let o = { x: { y: 2 } }\nlet a = o.x.y",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "índice em lista literal",
+      "engine": null,
+      "input": "let a = [1, 2][1]",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "índice de texto",
+      "engine": null,
+      "input": "let a = 'abc'[1]",
+      "seed": null,
+      "value": "b",
+      "type": "string"
+    },
+    {
+      "name": "chave com texto simples",
+      "engine": null,
+      "input": "let o = { 'a-b': 1 }",
+      "seed": null,
+      "value": {
+        "a-b": 1
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "chave com aspas duplas",
+      "engine": null,
+      "input": "let o = { \"k\": 'v' }",
+      "seed": null,
+      "value": {
+        "k": "v"
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "objeto dentro de objeto com lista",
+      "engine": null,
+      "input": "let o = { a: { b: [1] } }",
+      "seed": null,
+      "value": {
+        "a": {
+          "b": [
+            1
+          ]
+        }
+      },
+      "type": "objeto"
+    },
+    {
+      "name": "anotação number[] com itens",
+      "engine": null,
+      "input": "let a: number[] = [1, 2]",
+      "seed": null,
+      "value": [
+        1,
+        2
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "anotação string",
+      "engine": null,
+      "input": "let a: string = 'x'",
+      "seed": null,
+      "value": "x",
+      "type": "string"
+    },
+    {
+      "name": "anotação boolean",
+      "engine": null,
+      "input": "let a: boolean = true",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "anotação Date de dia",
+      "engine": null,
+      "input": "let a: Date = new Date('2026-10-20')",
+      "seed": null,
+      "value": "2026-10-20",
+      "type": "Date (dia)"
+    },
+    {
+      "name": "new Date de instante sem segundos",
+      "engine": null,
+      "input": "let a = new Date('2026-10-20T10:30')",
+      "seed": null,
+      "value": "2026-10-20 10:30:00",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "new Date com segundos e espaço no lugar do T",
+      "engine": null,
+      "input": "let a = new Date('2026-10-20 10:30:15')",
+      "seed": null,
+      "value": "2026-10-20 10:30:15",
+      "type": "Date (instante)"
+    },
+    {
+      "name": "const sql",
+      "engine": null,
+      "input": "const t: sql = 'pedido'",
+      "seed": null,
+      "value": "pedido",
+      "type": "sql"
+    },
+    {
+      "name": "número ou nulo com valor",
+      "engine": null,
+      "input": "let a: number | null = 5",
+      "seed": null,
+      "value": 5,
+      "type": "number | null"
+    },
+    {
+      "name": "número ou nulo com null",
+      "engine": null,
+      "input": "let a: number | null = null",
+      "seed": null,
+      "value": null,
+      "type": "number | null"
+    },
+    {
+      "name": "lista ou nulo com null",
+      "engine": null,
+      "input": "let ids: number[] | null = null",
+      "seed": null,
+      "value": null,
+      "type": "number[] | null"
+    },
+    {
+      "name": "lista de Date anotada",
+      "engine": null,
+      "input": "let d: Date[] = [new Date('2026-10-20')]",
+      "seed": null,
+      "value": [
+        "2026-10-20"
+      ],
+      "type": "Date[]"
+    },
+    {
+      "name": "reatribuição de um número ou nulo",
+      "engine": null,
+      "input": "let a: number | null = 1\na = null",
+      "seed": null,
+      "value": null,
+      "type": "number | null"
+    },
+    {
+      "name": "espaço antes do ;",
+      "engine": null,
+      "input": "let a = 1 ;",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "const com ; colado no seguinte",
+      "engine": null,
+      "input": "const a = 1;const b = a + 1;",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "a linha seguinte com * continua",
+      "engine": null,
+      "input": "let a = 2\n* 3",
+      "seed": null,
+      "value": 6,
+      "type": "number"
+    },
+    {
+      "name": "a linha seguinte com ** continua",
+      "engine": null,
+      "input": "let a = 2\n** 3",
+      "seed": null,
+      "value": 8,
+      "type": "number"
+    },
+    {
+      "name": "a linha seguinte com === continua",
+      "engine": null,
+      "input": "let a = 1\n=== 1",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a linha seguinte com !== continua",
+      "engine": null,
+      "input": "let a = 1\n!== 1",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "a linha seguinte com < continua",
+      "engine": null,
+      "input": "let a = 1\n< 2",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "a linha seguinte com && continua",
+      "engine": null,
+      "input": "let a = true\n&& false",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "a linha seguinte com - continua",
+      "engine": null,
+      "input": "let a = 1\n- 2",
+      "seed": null,
+      "value": -1,
+      "type": "number"
+    },
+    {
+      "name": "let como nome",
+      "engine": null,
+      "input": "let let = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "let não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "null como nome",
+      "engine": null,
+      "input": "let null = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "null não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "true como nome",
+      "engine": null,
+      "input": "let true = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "true não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "await como nome",
+      "engine": null,
+      "input": "let await = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "await não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "enum como nome",
+      "engine": null,
+      "input": "let enum = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "enum não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "static como nome",
+      "engine": null,
+      "input": "let static = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "static não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "self como nome",
+      "engine": null,
+      "input": "let self = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "self não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "require como nome",
+      "engine": null,
+      "input": "let require = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "require não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "JSON como nome",
+      "engine": null,
+      "input": "let JSON = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "JSON não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "Function como nome",
+      "engine": null,
+      "input": "let Function = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "Function não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "caller é vedado como nome",
+      "engine": null,
+      "input": "let caller = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "caller não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "valueOf é vedado como nome",
+      "engine": null,
+      "input": "let valueOf = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "valueOf não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "arguments é vedado como nome",
+      "engine": null,
+      "input": "let arguments = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "arguments não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "$12 não pode ser nome",
+      "engine": null,
+      "input": "let $12 = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "$12 não pode ser nome de variável: escolha outro."
+      }
+    },
+    {
+      "name": "\\u{} em nome é recusado",
+      "engine": null,
+      "input": "let a\\u{62} = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 6,
+        "message": "Escapes \\u não valem em nomes."
+      }
+    },
+    {
+      "name": "\\u no começo do nome é recusado",
+      "engine": null,
+      "input": "let \\u0061 = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 5,
+        "message": "Escapes \\u não valem em nomes."
+      }
+    },
+    {
+      "name": "nome declarado de novo na mesma linha",
+      "engine": null,
+      "input": "let a = 1; let a = 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "a já foi declarada na linha 1."
+      }
+    },
+    {
+      "name": "const declarada de novo com let",
+      "engine": null,
+      "input": "const a = 1\nlet a = 2",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 5,
+        "message": "a já foi declarada na linha 1."
+      }
+    },
+    {
+      "name": "const reatribuída",
+      "engine": null,
+      "input": "const a = 1\na = 2",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 1,
+        "message": "a é const e não pode receber outro valor (linha 1)."
+      }
+    },
+    {
+      "name": "reatribuição de nome não declarado",
+      "engine": null,
+      "input": "b = 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 1,
+        "message": "b não foi declarada: escreva let b = 2."
+      }
+    },
+    {
+      "name": "reatribuição de nome não declarado depois de uma declaração",
+      "engine": null,
+      "input": "let a = 1\nb = 2",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 1,
+        "message": "b não foi declarada: escreva let b = 2."
+      }
+    },
+    {
+      "name": "nome sem = nem : depois",
+      "engine": null,
+      "input": "let a 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 7,
+        "message": "Esperava = ou : depois de a."
+      }
+    },
+    {
+      "name": "dois-pontos sem tipo",
+      "engine": null,
+      "input": "let a: = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "Esperava o tipo depois de :."
+      }
+    },
+    {
+      "name": "dois-pontos no fim do texto",
+      "engine": null,
+      "input": "let a:",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 7,
+        "message": "Esperava o tipo depois de :."
+      }
+    },
+    {
+      "name": "parêntese que continua na linha de baixo",
+      "engine": null,
+      "input": "let a = (1 +\n2",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 2,
+        "message": "Esperava ) para fechar o ( da linha 1."
+      }
+    },
+    {
+      "name": "?? seguido de && sem parênteses",
+      "engine": null,
+      "input": "let a = 1 ?? 2 && 3",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "?? não se mistura com && nem com || sem parênteses."
+      }
+    },
+    {
+      "name": "?? seguido de || depois de null",
+      "engine": null,
+      "input": "let a = null ?? 1 || 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 19,
+        "message": "?? não se mistura com && nem com || sem parênteses."
+      }
+    },
+    {
+      "name": "-x ** 2 com variável",
+      "engine": null,
+      "input": "let x = 2\nlet a = -x ** 2",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 12,
+        "message": "Use parênteses: (-x) ** 2 ou -(x ** 2)."
+      }
+    },
+    {
+      "name": "+2 ** 2 com unário +",
+      "engine": null,
+      "input": "let a = +2 ** 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "Use parênteses: (-x) ** 2 ou -(x ** 2)."
+      }
+    },
+    {
+      "name": "^ é operador de bits que não existe",
+      "engine": null,
+      "input": "let a = 1 ^ 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O operador ^ não existe aqui."
+      }
+    },
+    {
+      "name": ">> é operador de bits que não existe",
+      "engine": null,
+      "input": "let a = 1 >> 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O operador >> não existe aqui."
+      }
+    },
+    {
+      "name": ">>> é operador de bits que não existe",
+      "engine": null,
+      "input": "let a = 1 >>> 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "O operador >>> não existe aqui."
+      }
+    },
+    {
+      "name": "atribuição dentro de parênteses",
+      "engine": null,
+      "input": "let a = (b = 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "O operador = não existe aqui."
+      }
+    },
+    {
+      "name": "do não existe aqui",
+      "engine": null,
+      "input": "let a = do",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "do não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "try não existe aqui",
+      "engine": null,
+      "input": "let a = try",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "try não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "export não existe aqui",
+      "engine": null,
+      "input": "let a = export",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "export não existe aqui: as variáveis do Prism não têm laços, funções nem import."
+      }
+    },
+    {
+      "name": "== dentro de parênteses",
+      "engine": null,
+      "input": "let a = (1 == 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 12,
+        "message": "Use === ou !==: o == do JavaScript converte os tipos antes de comparar."
+      }
+    },
+    {
+      "name": "vírgula a mais entre declarações",
+      "engine": null,
+      "input": "let a = 1, b = 2, c = 3",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 10,
+        "message": "Uma variável por let: let a = 1; let b = 2."
+      }
+    },
+    {
+      "name": "consulta somada depois de SELECT",
+      "engine": 1,
+      "input": "let n = (SELECT count(*) FROM t) + 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "Uma consulta só pode ser o valor inteiro da variável: let x = (SELECT …)"
+      }
+    },
+    {
+      "name": "consulta depois de uma conta",
+      "engine": 1,
+      "input": "let n = 1 + (SELECT 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "Uma consulta só pode ser o valor inteiro da variável: let x = (SELECT …)"
+      }
+    },
+    {
+      "name": "consulta dentro de lista",
+      "engine": 1,
+      "input": "let l = [(SELECT 1)]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 10,
+        "message": "Uma consulta só pode ser o valor inteiro da variável: let x = (SELECT …)"
+      }
+    },
+    {
+      "name": "random.of somado",
+      "engine": 1,
+      "input": "let x = random.of(pedido.id) + 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 9,
+        "message": "random.of só pode ser o valor inteiro da variável: let x = random.of(pedido.id)."
+      }
+    },
+    {
+      "name": "função que é variável",
+      "engine": null,
+      "input": "let f = 1\nlet a = f(1)",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 9,
+        "message": "f não é uma função: as funções são as da lista da RN-VAR-009."
+      }
+    },
+    {
+      "name": "constructor como membro",
+      "engine": null,
+      "input": "let a = 'x'.constructor",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "constructor não pode ser lido."
+      }
+    },
+    {
+      "name": "toString como membro",
+      "engine": null,
+      "input": "let a = 'x'.toString",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "toString não pode ser lido."
+      }
+    },
+    {
+      "name": "constructor como chave de objeto",
+      "engine": null,
+      "input": "let o = { constructor: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "constructor não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "__proto__ como chave de objeto",
+      "engine": null,
+      "input": "let o = { __proto__: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "__proto__ não pode ser chave de objeto."
+      }
+    },
+    {
+      "name": "tipo object não existe",
+      "engine": null,
+      "input": "let a: object = 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 8,
+        "message": "O tipo object não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o | null e o de uma coluna (tabela.coluna)."
+      }
     }
   ]
 }

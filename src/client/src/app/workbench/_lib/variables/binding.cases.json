@@ -1404,16 +1404,27 @@
       }
     },
     {
-      "name": "32 dígitos no Informix",
+      "name": "32 dígitos no Informix é recusado: o driver guarda até 31",
       "engine": 3,
       "input": "let n = 11111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "O número tem 32 dígitos, e o Informix guarda até 31 pelo driver."
+      }
+    },
+    {
+      "name": "31 dígitos no Informix",
+      "engine": 3,
+      "input": "let n = 1111111111111111111111111111111\nSELECT @n",
       "seed": null,
       "value": {
         "sql": "SELECT ?",
         "params": [
           [
             "number",
-            "11111111111111111111111111111111",
+            "1111111111111111111111111111111",
             "@n"
           ]
         ]
@@ -1428,7 +1439,7 @@
       "error": {
         "line": 2,
         "column": 8,
-        "message": "O número tem 35 dígitos, e o Informix guarda até 32."
+        "message": "O número tem 35 dígitos, e o Informix guarda até 31 pelo driver."
       }
     },
     {
@@ -1447,6 +1458,56 @@
         ]
       },
       "type": "comando"
+    },
+    {
+      "name": "100 dígitos no PostgreSQL vão como texto: a API aceita até 100 caracteres",
+      "engine": 1,
+      "input": "let n = 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "number",
+            "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "101 dígitos no PostgreSQL é recusado: a API aceita até 100 caracteres",
+      "engine": 1,
+      "input": "let n = 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "O número tem 101 caracteres, e o Prism manda até 100."
+      }
+    },
+    {
+      "name": "o decimal de 101 caracteres no PostgreSQL é recusado",
+      "engine": 1,
+      "input": "let n = 0.111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "O número tem 101 caracteres, e o Prism manda até 100."
+      }
+    },
+    {
+      "name": "o número de 101 caracteres no Db2 é recusado pelos dígitos",
+      "engine": 2,
+      "input": "let n = 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "O número tem 101 dígitos, e o Db2 guarda até 31."
+      }
     },
     {
       "name": "o expoente no Db2 não conta dígitos",
@@ -1581,6 +1642,1187 @@
         ]
       },
       "type": "comando"
+    },
+    {
+      "name": "o $1 dentro de um texto no PostgreSQL fica",
+      "engine": 1,
+      "input": "let id = 1\nSELECT '$1' FROM t WHERE id = @id",
+      "seed": null,
+      "value": {
+        "sql": "SELECT '$1' FROM t WHERE id = $1",
+        "params": [
+          [
+            "number",
+            "1",
+            "@id"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT '$1' FROM t WHERE id = 1"
+    },
+    {
+      "name": "o $1 no Db2 não é marcador e fica",
+      "engine": 2,
+      "input": "let id = 1\nSELECT $1 FROM t WHERE id = @id",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1 FROM t WHERE id = ?",
+        "params": [
+          [
+            "number",
+            "1",
+            "@id"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT $1 FROM t WHERE id = 1"
+    },
+    {
+      "name": "o $1 entre aspas duplas no PostgreSQL fica",
+      "engine": 1,
+      "input": "let id = 1\nSELECT \"$1\" FROM t WHERE id = @id",
+      "seed": null,
+      "value": {
+        "sql": "SELECT \"$1\" FROM t WHERE id = $1",
+        "params": [
+          [
+            "number",
+            "1",
+            "@id"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o ? entre aspas duplas no Db2 fica",
+      "engine": 2,
+      "input": "let id = 1\nSELECT \"?\" FROM t WHERE id = @id",
+      "seed": null,
+      "value": {
+        "sql": "SELECT \"?\" FROM t WHERE id = ?",
+        "params": [
+          [
+            "number",
+            "1",
+            "@id"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o ? no comentário de linha do Informix fica",
+      "engine": 3,
+      "input": "let id = 1\n-- ?\nSELECT 1 FROM t WHERE id = @id",
+      "seed": null,
+      "value": {
+        "sql": "-- ?\nSELECT 1 FROM t WHERE id = ?",
+        "params": [
+          [
+            "number",
+            "1",
+            "@id"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o comando sem variáveis com $1 vai como está, sem parâmetros",
+      "engine": 1,
+      "input": "SELECT $1",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": []
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o comando sem variáveis com ? vai como está, sem parâmetros",
+      "engine": 2,
+      "input": "SELECT ?",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": []
+      },
+      "type": "comando"
+    },
+    {
+      "name": "a numeração recomeça em cada comando",
+      "engine": 1,
+      "input": "let a = 1\nlet b = 2\nSELECT @a, @b;\nSELECT @b, @a",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1, $2",
+        "params": [
+          [
+            "number",
+            "2",
+            "@b"
+          ],
+          [
+            "number",
+            "1",
+            "@a"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 2, 1"
+    },
+    {
+      "name": "a lista e o valor repetidos numeram os ? na ordem do texto",
+      "engine": 2,
+      "input": "let ids = [1, 2]\nlet c = 3\nSELECT 1 WHERE x IN (@ids) AND y = @c AND z IN (@ids)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE x IN (?, ?) AND y = ? AND z IN (?, ?)",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "2",
+            "@ids[1]"
+          ],
+          [
+            "number",
+            "3",
+            "@c"
+          ],
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "2",
+            "@ids[1]"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "a lista com espaços dentro dos parênteses",
+      "engine": 1,
+      "input": "let ids = [1, 2]\nSELECT 1 WHERE id IN ( @ids )",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE id IN ( $1, $2 )",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "2",
+            "@ids[1]"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1 WHERE id IN ( 1, 2 )"
+    },
+    {
+      "name": "a lista antes de outro item: (@ids, 9)",
+      "engine": 1,
+      "input": "let ids = [1, 2]\nSELECT 1 WHERE id IN (@ids, 9)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE id IN ($1, $2, 9)",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "2",
+            "@ids[1]"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "a lista depois de outro item: (0, @ids)",
+      "engine": 1,
+      "input": "let ids = [1, 2]\nSELECT 1 WHERE id IN (0, @ids)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE id IN (0, $1, $2)",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "2",
+            "@ids[1]"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "a lista de 2 no IN do Informix",
+      "engine": 3,
+      "input": "let ids = [4, 5]\nSELECT 1 WHERE id IN (@ids)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE id IN (?, ?)",
+        "params": [
+          [
+            "number",
+            "4",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "5",
+            "@ids[1]"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1 WHERE id IN (4, 5)"
+    },
+    {
+      "name": "o null no meio da lista do NOT IN vai como parâmetro nulo",
+      "engine": 1,
+      "input": "let ids = [1, null, 3]\nSELECT 1 WHERE id NOT IN (@ids)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE id NOT IN ($1, $2, $3)",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            null,
+            "@ids[1]"
+          ],
+          [
+            "number",
+            "3",
+            "@ids[2]"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1 WHERE id NOT IN (1, NULL, 3)"
+    },
+    {
+      "name": "a lista vazia no NOT IN é recusada",
+      "engine": 1,
+      "input": "let ids: number[] = []\nSELECT 1 WHERE id NOT IN (@ids)",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 27,
+        "message": "@ids está vazia, e IN () não existe em SQL: nada foi executado."
+      }
+    },
+    {
+      "name": "a lista depois de SOME é recusada",
+      "engine": 1,
+      "input": "let ids = [1, 2]\nSELECT 1 WHERE id = SOME(@ids)",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 26,
+        "message": "Use IN (@ids): a lista vira vários valores, e o ANY do PostgreSQL espera uma lista do banco."
+      }
+    },
+    {
+      "name": "a lista seguida de um operador dentro dos parênteses é recusada",
+      "engine": 1,
+      "input": "let ids = [1, 2]\nSELECT 1 WHERE id IN (@ids + 1)",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 23,
+        "message": "@ids é uma lista e só entra numa lista entre parênteses, como IN (@ids)."
+      }
+    },
+    {
+      "name": "a lista depois de IN sem parênteses é recusada",
+      "engine": 1,
+      "input": "let ids = [1, 2]\nSELECT 1 WHERE id IN @ids",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 22,
+        "message": "@ids é uma lista e só entra numa lista entre parênteses, como IN (@ids)."
+      }
+    },
+    {
+      "name": "a lista de texto com aspa no IN",
+      "engine": 1,
+      "input": "let n = [\"O'Brien\", 'a']\nSELECT 1 WHERE n IN (@n)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE n IN ($1, $2)",
+        "params": [
+          [
+            "text",
+            "O'Brien",
+            "@n[0]"
+          ],
+          [
+            "text",
+            "a",
+            "@n[1]"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1 WHERE n IN ('O''Brien', 'a')"
+    },
+    {
+      "name": "o sql usado duas vezes troca as duas",
+      "engine": 1,
+      "input": "const t: sql = 'pedido'\nSELECT @t, @t FROM @t",
+      "seed": null,
+      "value": {
+        "sql": "SELECT pedido, pedido FROM pedido",
+        "params": []
+      },
+      "type": "comando",
+      "sent": "SELECT pedido, pedido FROM pedido"
+    },
+    {
+      "name": "o sql e a lista: os marcadores vêm depois do sql",
+      "engine": 1,
+      "input": "const t: sql = 'pedido'\nlet ids = [1, 2]\nSELECT * FROM @t WHERE id IN (@ids)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT * FROM pedido WHERE id IN ($1, $2)",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            "2",
+            "@ids[1]"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o sql com ; dentro de um texto não são dois comandos",
+      "engine": 1,
+      "input": "const t: sql = \"'a;b'\"\nSELECT @t",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 'a;b'",
+        "params": []
+      },
+      "type": "comando",
+      "sent": "SELECT 'a;b'"
+    },
+    {
+      "name": "o sql com $1 dentro de um texto não é marcador",
+      "engine": 1,
+      "input": "const t: sql = \"'$1'\"\nSELECT @t",
+      "seed": null,
+      "value": {
+        "sql": "SELECT '$1'",
+        "params": []
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o sql com ? no Informix é recusado",
+      "engine": 3,
+      "input": "const t: sql = 'a = ?'\nSELECT * FROM @t",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 15,
+        "message": "O valor de t (sql) tem um marcador de parâmetro (? ou $1), que o Prism não sabe numerar."
+      }
+    },
+    {
+      "name": "o sql e o ? numerado no Db2",
+      "engine": 2,
+      "input": "const t: sql = 'pedido'\nlet id = 3\nSELECT * FROM @t WHERE id = @id",
+      "seed": null,
+      "value": {
+        "sql": "SELECT * FROM pedido WHERE id = ?",
+        "params": [
+          [
+            "number",
+            "3",
+            "@id"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT * FROM pedido WHERE id = 3"
+    },
+    {
+      "name": "o número com _ vai sem o _",
+      "engine": 1,
+      "input": "let n = 1_000\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "number",
+            "1000",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1000"
+    },
+    {
+      "name": "o número começado em ponto vai com o zero antes do ponto",
+      "engine": 1,
+      "input": "let n = .5\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "number",
+            "0.5",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 0.5"
+    },
+    {
+      "name": "o expoente com + vai sem o +",
+      "engine": 1,
+      "input": "let n = 1.5e+300\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "number",
+            "1.5e300",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1.5e300"
+    },
+    {
+      "name": "o maior inteiro seguro vai inteiro",
+      "engine": 1,
+      "input": "let n = 9007199254740991\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "number",
+            "9007199254740991",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 9007199254740991"
+    },
+    {
+      "name": "o bigint máximo vai com o texto exato",
+      "engine": 1,
+      "input": "let n = 9223372036854775807\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "number",
+            "9223372036854775807",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 9223372036854775807"
+    },
+    {
+      "name": "o decimal no Db2 vai pelo texto",
+      "engine": 2,
+      "input": "let n = 12.50\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "number",
+            "12.50",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 12.50"
+    },
+    {
+      "name": "35 dígitos no Db2 é recusado",
+      "engine": 2,
+      "input": "let n = 11111111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "O número tem 35 dígitos, e o Db2 guarda até 31."
+      }
+    },
+    {
+      "name": "33 dígitos no Informix é recusado",
+      "engine": 3,
+      "input": "let n = 111111111111111111111111111111111\nSELECT @n",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 8,
+        "message": "O número tem 33 dígitos, e o Informix guarda até 31 pelo driver."
+      }
+    },
+    {
+      "name": "o instante com milissegundos no PostgreSQL",
+      "engine": 1,
+      "input": "let d = new Date('2026-10-20T10:30:15.250')\nSELECT @d",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "timestamp",
+            "2026-10-20 10:30:15.250-03",
+            "@d"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT '2026-10-20 10:30:15.250-03'"
+    },
+    {
+      "name": "o instante de 2018 leva o deslocamento do horário de verão",
+      "engine": 1,
+      "input": "let d = new Date('2018-01-15T10:30:15.250')\nSELECT @d",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "timestamp",
+            "2018-01-15 10:30:15.250-02",
+            "@d"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT '2018-01-15 10:30:15.250-02'"
+    },
+    {
+      "name": "o instante com milissegundos no Informix tem o literal DATETIME de 5 casas",
+      "engine": 3,
+      "input": "let d = new Date('2026-10-20T10:30:15.250')\nSELECT @d",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "timestamp",
+            "2026-10-20 10:30:15.250",
+            "@d"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT DATETIME (2026-10-20 10:30:15.25000) YEAR TO FRACTION(5)"
+    },
+    {
+      "name": "o instante com milissegundos no Db2 vai entre aspas",
+      "engine": 2,
+      "input": "let d = new Date('2026-10-20T10:30:15.250')\nSELECT @d",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "timestamp",
+            "2026-10-20 10:30:15.250",
+            "@d"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT '2026-10-20 10:30:15.250'"
+    },
+    {
+      "name": "o booleano verdadeiro no Informix vai como 't'",
+      "engine": 3,
+      "input": "let b = true\nSELECT @b",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "boolean",
+            "true",
+            "@b"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 't'"
+    },
+    {
+      "name": "o booleano verdadeiro no Db2 vai entre aspas",
+      "engine": 2,
+      "input": "let b = true\nSELECT @b",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "boolean",
+            "true",
+            "@b"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'true'"
+    },
+    {
+      "name": "o null de number no Informix vai como NULL",
+      "engine": 3,
+      "input": "let x: number | null = null\nSELECT @x",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "number",
+            null,
+            "@x"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT NULL"
+    },
+    {
+      "name": "o null de boolean no PostgreSQL vai como NULL",
+      "engine": 1,
+      "input": "let x: boolean | null = null\nSELECT @x",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "boolean",
+            null,
+            "@x"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT NULL"
+    },
+    {
+      "name": "o null de data de instante no Db2",
+      "engine": 2,
+      "input": "let x: Date | null = null\nSELECT @x",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "timestamp",
+            null,
+            "@x"
+          ]
+        ]
+      },
+      "type": "comando"
+    },
+    {
+      "name": "a aspa e a barra invertida no PostgreSQL: E'' com a barra dobrada",
+      "engine": 1,
+      "input": "let n = \"it's\\\\\"\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "it's\\",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT E'it''s\\\\'"
+    },
+    {
+      "name": "a barra invertida no Informix fica como está",
+      "engine": 3,
+      "input": "let n = 'a\\\\b'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "a\\b",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a\\b'"
+    },
+    {
+      "name": "o retorno de carro no PostgreSQL vai como \\r dentro de E'…'",
+      "engine": 1,
+      "input": "let n = 'só\\rCR'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "só\rCR",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT E'só\\rCR'"
+    },
+    {
+      "name": "o retorno de carro no Db2 vai por CHR(13)",
+      "engine": 2,
+      "input": "let n = 'só\\rCR'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "só\rCR",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'só' || CHR(13) || 'CR'"
+    },
+    {
+      "name": "o retorno de carro no Informix vai por CHR(13)",
+      "engine": 3,
+      "input": "let n = 'só\\rCR'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "só\rCR",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'só' || CHR(13) || 'CR'"
+    },
+    {
+      "name": "CRLF no PostgreSQL: a quebra fica dentro do E'…'",
+      "engine": 1,
+      "input": "let n = 'a\\r\\nb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "a\r\nb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT E'a\\r\nb'"
+    },
+    {
+      "name": "CRLF no Db2: o retorno por CHR(13) e a quebra dentro das aspas",
+      "engine": 2,
+      "input": "let n = 'a\\r\\nb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "a\r\nb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a' || CHR(13) || '\nb'"
+    },
+    {
+      "name": "CRLF no Informix: os dois por CHR",
+      "engine": 3,
+      "input": "let n = 'a\\r\\nb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "a\r\nb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a' || CHR(13) || CHR(10) || 'b'"
+    },
+    {
+      "name": "a tabulação dentro das aspas no PostgreSQL",
+      "engine": 1,
+      "input": "let n = 'a\\tb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "a\tb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a\tb'"
+    },
+    {
+      "name": "a tabulação no Informix vai por CHR(9)",
+      "engine": 3,
+      "input": "let n = 'a\\tb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "a\tb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a' || CHR(9) || 'b'"
+    },
+    {
+      "name": "a aspa e a quebra no PostgreSQL",
+      "engine": 1,
+      "input": "let n = \"O'\\nB\"\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "O'\nB",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'O''\nB'"
+    },
+    {
+      "name": "a aspa e a quebra no Informix",
+      "engine": 3,
+      "input": "let n = \"O'\\nB\"\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "O'\nB",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'O''' || CHR(10) || 'B'"
+    },
+    {
+      "name": "a barra invertida e a quebra no PostgreSQL: o E'' vale para o literal inteiro",
+      "engine": 1,
+      "input": "let n = \"a\\\\b\\nc\"\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "a\\b\nc",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT E'a\\\\b\nc'"
+    },
+    {
+      "name": "a barra invertida e a quebra no Informix",
+      "engine": 3,
+      "input": "let n = \"a\\\\b\\nc\"\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "a\\b\nc",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a\\b' || CHR(10) || 'c'"
+    },
+    {
+      "name": "a aspa e o retorno de carro no PostgreSQL: a aspa dobrada dentro do E''",
+      "engine": 1,
+      "input": "let n = 'O\\'Brien\\r'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "O'Brien\r",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT E'O''Brien\\r'"
+    },
+    {
+      "name": "o valor sem literal (ESC) fica com o marcador no PostgreSQL",
+      "engine": 1,
+      "input": "let a = 'x\\x1b'\nlet b = 'y'\nSELECT @a, @b",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1, $2",
+        "params": [
+          [
+            "text",
+            "x\u001b",
+            "@a"
+          ],
+          [
+            "text",
+            "y",
+            "@b"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT $1, 'y'"
+    },
+    {
+      "name": "o valor sem literal (ESC) fica com o marcador no Db2",
+      "engine": 2,
+      "input": "let n = 'a\\x1bb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?",
+        "params": [
+          [
+            "text",
+            "a\u001bb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT ?"
+    },
+    {
+      "name": "dois valores sem literal ficam com os marcadores no Db2",
+      "engine": 2,
+      "input": "let a = 'x\\x1b'\nlet b = 'y\\x1b'\nSELECT @a, @b",
+      "seed": null,
+      "value": {
+        "sql": "SELECT ?, ?",
+        "params": [
+          [
+            "text",
+            "x\u001b",
+            "@a"
+          ],
+          [
+            "text",
+            "y\u001b",
+            "@b"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT ?, ?"
+    },
+    {
+      "name": "um item da lista sem literal fica com o seu marcador",
+      "engine": 1,
+      "input": "let n = ['a', 'b\\x1bc']\nSELECT 1 WHERE n IN (@n)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE n IN ($1, $2)",
+        "params": [
+          [
+            "text",
+            "a",
+            "@n[0]"
+          ],
+          [
+            "text",
+            "b\u001bc",
+            "@n[1]"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1 WHERE n IN ('a', $2)"
+    },
+    {
+      "name": "o controle C1 entre aspas vai como literal no PostgreSQL",
+      "engine": 1,
+      "input": "let n = 'a\\x85b'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "a\u0085b",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a\u0085b'"
+    },
+    {
+      "name": "a marca de direção U+202E vai como texto no PostgreSQL",
+      "engine": 1,
+      "input": "let n = 'a\\u202eb'\nSELECT @n",
+      "seed": null,
+      "value": {
+        "sql": "SELECT $1",
+        "params": [
+          [
+            "text",
+            "a\u202eb",
+            "@n"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 'a\u202eb'"
+    },
+    {
+      "name": "a lista com null no SQL enviado vai com NULL",
+      "engine": 1,
+      "input": "let ids = [1, null, 3]\nSELECT 1 WHERE id IN (@ids)",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE id IN ($1, $2, $3)",
+        "params": [
+          [
+            "number",
+            "1",
+            "@ids[0]"
+          ],
+          [
+            "number",
+            null,
+            "@ids[1]"
+          ],
+          [
+            "number",
+            "3",
+            "@ids[2]"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "SELECT 1 WHERE id IN (1, NULL, 3)"
+    },
+    {
+      "name": "os valores de exatamente 4 MiB cabem",
+      "engine": 1,
+      "input": "let s = 'x'.padStart(1000000, 'x')\nlet t = 'x'.padStart(194304, 'x')\nSELECT 1 WHERE a = @s OR b = @s OR c = @s OR d = @s OR e = @t",
+      "seed": null,
+      "value": {
+        "sql": "SELECT 1 WHERE a = $1 OR b = $2 OR c = $3 OR d = $4 OR e = $5",
+        "paramCount": 5
+      },
+      "type": "comando"
+    },
+    {
+      "name": "o comando de definição com variável que não é sql leva o parâmetro",
+      "engine": 1,
+      "input": "let v = 5\nCREATE TABLE t (a INT DEFAULT @v)",
+      "seed": null,
+      "value": {
+        "sql": "CREATE TABLE t (a INT DEFAULT $1)",
+        "params": [
+          [
+            "number",
+            "5",
+            "@v"
+          ]
+        ]
+      },
+      "type": "comando",
+      "sent": "CREATE TABLE t (a INT DEFAULT 5)"
     }
   ]
 }

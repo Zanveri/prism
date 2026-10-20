@@ -1262,6 +1262,1116 @@
         "column": 13,
         "message": "x não existe em number."
       }
+    },
+    {
+      "name": "boolean + texto junta o texto",
+      "engine": null,
+      "input": "const r = true + 'a'",
+      "seed": null,
+      "value": "truea",
+      "type": "string"
+    },
+    {
+      "name": "data de dia + texto junta a data",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20) + 'x'",
+      "seed": null,
+      "value": "2026-10-20x",
+      "type": "string"
+    },
+    {
+      "name": "texto + data de instante junta com a hora",
+      "engine": null,
+      "input": "const r = 'a' + date.of(2026, 10, 20, 10, 30)",
+      "seed": null,
+      "value": "a2026-10-20 10:30:00",
+      "type": "string"
+    },
+    {
+      "name": "texto + data com milissegundos junta com .fff",
+      "engine": null,
+      "input": "const r = 'a' + date.of(2026, 10, 20, 10, 30, 5, 250)",
+      "seed": null,
+      "value": "a2026-10-20 10:30:05.250",
+      "type": "string"
+    },
+    {
+      "name": "número + número e depois texto: a soma vem primeiro",
+      "engine": null,
+      "input": "const r = 1 + 2 + 'a'",
+      "seed": null,
+      "value": "3a",
+      "type": "string"
+    },
+    {
+      "name": "texto + número e depois número: a junção vem primeiro",
+      "engine": null,
+      "input": "const r = 'a' + 1 + 2",
+      "seed": null,
+      "value": "a12",
+      "type": "string"
+    },
+    {
+      "name": "texto + booleano + booleano",
+      "engine": null,
+      "input": "const r = 'a' + true + false",
+      "seed": null,
+      "value": "atruefalse",
+      "type": "string"
+    },
+    {
+      "name": "número com expoente junta com o texto exato",
+      "engine": null,
+      "input": "const r = 'x' + 1e3",
+      "seed": null,
+      "value": "x1e3",
+      "type": "string"
+    },
+    {
+      "name": "data + data é erro: não há texto",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) + date.of(2026, 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 31,
+        "message": "+ soma números ou junta textos; 2026-01-01 não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "false + número é erro",
+      "engine": null,
+      "input": "const r = false + 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "+ soma números ou junta textos; false não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "texto + lista é erro",
+      "engine": null,
+      "input": "const r = 'x' + [1]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "+ soma números ou junta textos; [1] não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "texto + objeto é erro",
+      "engine": null,
+      "input": "const r = 'x' + { a: 1 }",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "+ soma números ou junta textos; { a: 1 } não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "lista + a mesma lista é erro",
+      "engine": null,
+      "input": "const r = [1] + [1]",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "+ soma números ou junta textos; [1] não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "null + null é erro: não há texto para juntar",
+      "engine": null,
+      "input": "const r = null + null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "+ soma números ou junta textos; null não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "o primeiro + errado é o que aparece",
+      "engine": null,
+      "input": "const r = 1 + true + null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "+ soma números ou junta textos; true não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "o * da esquerda acusa antes do + da direita",
+      "engine": null,
+      "input": "const r = '5' * 2 + null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "* é só para números; '5' é string."
+      }
+    },
+    {
+      "name": "nome nulo com + no texto é erro",
+      "engine": null,
+      "input": "let nome: string | null = null\nconst r = '%' + nome + '%'",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 15,
+        "message": "Não dá para juntar null a um texto: use nome ?? ''."
+      }
+    },
+    {
+      "name": "nome com texto no + junta os dois lados",
+      "engine": null,
+      "input": "let nome: string | null = 'Ana'\nconst r = '%' + nome + '%'",
+      "seed": null,
+      "value": "%Ana%",
+      "type": "string"
+    },
+    {
+      "name": "?? tira o null antes de juntar",
+      "engine": null,
+      "input": "let nome: string | null = null\nconst r = '%' + (nome ?? '') + '%'",
+      "seed": null,
+      "value": "%%",
+      "type": "string"
+    },
+    {
+      "name": "nome nulo no modelo é erro",
+      "engine": null,
+      "input": "let nome: string | null = null\nconst r = `a${nome}b`",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 15,
+        "message": "Não dá para juntar null a um texto: use nome ?? ''."
+      }
+    },
+    {
+      "name": "?? dentro do modelo tira o null",
+      "engine": null,
+      "input": "let nome: string | null = null\nconst r = `a${nome ?? 'x'}b`",
+      "seed": null,
+      "value": "axb",
+      "type": "string"
+    },
+    {
+      "name": "reatribuição a null e depois + é erro",
+      "engine": null,
+      "input": "let nome: string | null = 'Ana'\nnome = null\nconst r = 'Oi ' + nome",
+      "seed": null,
+      "error": {
+        "line": 3,
+        "column": 17,
+        "message": "Não dá para juntar null a um texto: use nome ?? ''."
+      }
+    },
+    {
+      "name": "reatribuição a null com ?? volta ao texto",
+      "engine": null,
+      "input": "let nome: string | null = 'Ana'\nnome = null\nconst r = 'Oi ' + (nome ?? 'visita')",
+      "seed": null,
+      "value": "Oi visita",
+      "type": "string"
+    },
+    {
+      "name": "String(null) é o texto null",
+      "engine": null,
+      "input": "const r = String(null) === 'null'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "String(null) com ?? não cai no texto",
+      "engine": null,
+      "input": "const r = String(null) ?? 'vazio'",
+      "seed": null,
+      "value": "null",
+      "type": "string"
+    },
+    {
+      "name": "0.1 + 0.2 como no JavaScript",
+      "engine": null,
+      "input": "const r = 0.1 + 0.2",
+      "seed": null,
+      "value": 0.30000000000000004,
+      "type": "number"
+    },
+    {
+      "name": "expoente fracionário segue o JavaScript",
+      "engine": null,
+      "input": "const r = 2 ** 0.5",
+      "seed": null,
+      "value": 1.4142135623730951,
+      "type": "number"
+    },
+    {
+      "name": "resto com divisor negativo",
+      "engine": null,
+      "input": "const r = 7 % -3",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "-(2 ** 2) com parênteses",
+      "engine": null,
+      "input": "const r = -(2 ** 2)",
+      "seed": null,
+      "value": -4,
+      "type": "number"
+    },
+    {
+      "name": "* antes do + na conta",
+      "engine": null,
+      "input": "const r = 2 + 3 * 4",
+      "seed": null,
+      "value": 14,
+      "type": "number"
+    },
+    {
+      "name": "* com boolean à direita é erro",
+      "engine": null,
+      "input": "const r = 2 * true",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "* é só para números; true é boolean."
+      }
+    },
+    {
+      "name": "** com texto à esquerda é erro",
+      "engine": null,
+      "input": "const r = '5' ** 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "** é só para números; '5' é string."
+      }
+    },
+    {
+      "name": "% com texto à esquerda é erro",
+      "engine": null,
+      "input": "const r = '5' % 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "% é só para números; '5' é string."
+      }
+    },
+    {
+      "name": "/ entre dois textos é erro",
+      "engine": null,
+      "input": "const r = '5' / '5'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "/ é só para números; '5' é string."
+      }
+    },
+    {
+      "name": "- com texto à direita é erro",
+      "engine": null,
+      "input": "const r = 10 - '3'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "- é só para números; '3' é string."
+      }
+    },
+    {
+      "name": "- unário em null é erro",
+      "engine": null,
+      "input": "const r = -null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "- é só para números; null é null."
+      }
+    },
+    {
+      "name": "+ unário em boolean é erro",
+      "engine": null,
+      "input": "const r = +true",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "+ é só para números; true é boolean."
+      }
+    },
+    {
+      "name": "divisão por zero é erro",
+      "engine": null,
+      "input": "const r = 1 / 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "zero dividido por zero dá NaN, erro",
+      "engine": null,
+      "input": "const r = 0 / 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "resto por zero dá NaN, erro",
+      "engine": null,
+      "input": "const r = 5 % 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "potência que passa do double dá Infinity, erro",
+      "engine": null,
+      "input": "const r = 2 ** 1024",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "multiplicação que passa do double é erro",
+      "engine": null,
+      "input": "const r = 1e308 * 10",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "soma que passa do double é erro",
+      "engine": null,
+      "input": "const r = 1e308 + 1e308",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 17,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "divisão negativa por zero é erro",
+      "engine": null,
+      "input": "const r = -1 / 0",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "A conta deu um número que não existe (divisão por zero?)."
+      }
+    },
+    {
+      "name": "é é maior que z pelas unidades UTF-16",
+      "engine": null,
+      "input": "const r = 'é' > 'z'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "texto igual em <= é verdadeiro",
+      "engine": null,
+      "input": "const r = 'a' <= 'a'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "prefixo é menor que o texto maior",
+      "engine": null,
+      "input": "const r = 'ab' < 'abc'",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "data depois da anterior",
+      "engine": null,
+      "input": "const r = date.of(2026, 10, 20) > date.of(2026, 10, 19)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "dia e instante à meia-noite são o mesmo instante em >=",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) >= date.of(2026, 1, 1, 0, 0, 0)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "instante à meia-noite não é maior que o dia",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1, 0, 0, 0) > date.of(2026, 1, 1)",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "instante de um segundo depois é maior",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1, 10, 0) < date.of(2026, 1, 1, 10, 0, 1)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "fim de fevereiro é menor que o primeiro de março",
+      "engine": null,
+      "input": "const r = date.of(2026, 2, 28) < date.of(2026, 3, 1)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "texto com número em >= é erro",
+      "engine": null,
+      "input": "const r = 'a' >= 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": ">= compara números com números, textos com textos e datas com datas."
+      }
+    },
+    {
+      "name": "1.0 === 1 é verdadeiro",
+      "engine": null,
+      "input": "const r = 1.0 === 1",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "null === número é falso",
+      "engine": null,
+      "input": "const r = null === 0",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "null !== número é verdadeiro",
+      "engine": null,
+      "input": "const r = null !== 0",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "booleanos diferentes não são iguais",
+      "engine": null,
+      "input": "const r = true === false",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "!== de datas iguais é falso",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) !== date.of(2026, 1, 1)",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "datas de dias diferentes não são iguais",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) === date.of(2026, 1, 2)",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "dia e instante no mesmo instante são iguais",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) === date.of(2026, 1, 1, 0, 0, 0)",
+      "seed": null,
+      "value": true,
+      "type": "boolean"
+    },
+    {
+      "name": "data e texto não são iguais",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) === '2026-01-01'",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "=== de lista com número é erro",
+      "engine": null,
+      "input": "const r = [1] === 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "=== não compara listas nem objetos."
+      }
+    },
+    {
+      "name": "!== de objetos é erro",
+      "engine": null,
+      "input": "const r = {} !== {}",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 14,
+        "message": "!== não compara listas nem objetos."
+      }
+    },
+    {
+      "name": "== é recusado",
+      "engine": null,
+      "input": "const r = 1 == 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "Use === ou !==: o == do JavaScript converte os tipos antes de comparar."
+      }
+    },
+    {
+      "name": "!= é recusado",
+      "engine": null,
+      "input": "const r = 'a' != 'b'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "Use === ou !==: o == do JavaScript converte os tipos antes de comparar."
+      }
+    },
+    {
+      "name": "== com null é recusado",
+      "engine": null,
+      "input": "const r = null == null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "Use === ou !==: o == do JavaScript converte os tipos antes de comparar."
+      }
+    },
+    {
+      "name": "== de datas é recusado",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) == date.of(2026, 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 31,
+        "message": "Use === ou !==: o == do JavaScript converte os tipos antes de comparar."
+      }
+    },
+    {
+      "name": "! de número fracionário é falso",
+      "engine": null,
+      "input": "const r = !1.5",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "texto '0' é verdadeiro",
+      "engine": null,
+      "input": "const r = !'0'",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "! de data é falso: a data é verdadeira",
+      "engine": null,
+      "input": "const r = !date.of(2026, 1, 1)",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "&& devolve o lado da esquerda quando é falso",
+      "engine": null,
+      "input": "const r = '' && 'a'",
+      "seed": null,
+      "value": "",
+      "type": "string"
+    },
+    {
+      "name": "&& devolve o lado da direita quando o da esquerda é verdadeiro",
+      "engine": null,
+      "input": "const r = 'a' && 'b'",
+      "seed": null,
+      "value": "b",
+      "type": "string"
+    },
+    {
+      "name": "|| encadeado para no primeiro verdadeiro",
+      "engine": null,
+      "input": "const r = '' || 'x' || 'y'",
+      "seed": null,
+      "value": "x",
+      "type": "string"
+    },
+    {
+      "name": "? : aninhado é à direita",
+      "engine": null,
+      "input": "const r = false ? 1 : true ? 2 : 3",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "lista vazia é verdadeira no ? :",
+      "engine": null,
+      "input": "const r = [] ? 'sim' : 'não'",
+      "seed": null,
+      "value": "sim",
+      "type": "string"
+    },
+    {
+      "name": "data é verdadeira no ? :",
+      "engine": null,
+      "input": "const r = date.of(2026, 1, 1) ? 'sim' : 'não'",
+      "seed": null,
+      "value": "sim",
+      "type": "string"
+    },
+    {
+      "name": "texto '0' é verdadeiro no ? :",
+      "engine": null,
+      "input": "const r = '0' ? 1 : 2",
+      "seed": null,
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "?? só troca o null, não o falso",
+      "engine": null,
+      "input": "const r = false ?? true",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "?? encadeado pula os nulls",
+      "engine": null,
+      "input": "const r = null ?? null ?? 3",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "?. com campo existente devolve o campo",
+      "engine": null,
+      "input": "const o = { x: 4 }\nconst r = o?.x",
+      "seed": null,
+      "value": 4,
+      "type": "number"
+    },
+    {
+      "name": "?. na cadeia com objeto que não é nulo",
+      "engine": null,
+      "input": "const o = { a: { b: 2 } }\nconst r = o?.a.b",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "?. com null e ?? cai no texto",
+      "engine": null,
+      "input": "const o = null\nconst r = o?.x ?? 'vazio'",
+      "seed": null,
+      "value": "vazio",
+      "type": "string"
+    },
+    {
+      "name": "? : com texto e número é erro, pela ordem do texto",
+      "engine": null,
+      "input": "const r = true ? 'a' : 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "As duas saídas de ? : têm de ter o mesmo tipo: string e number."
+      }
+    },
+    {
+      "name": "índice igual ao tamanho da lista é erro",
+      "engine": null,
+      "input": "const l = [10, 20, 30]\nconst r = l[3]",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "l[3] não existe: a lista tem 3 itens."
+      }
+    },
+    {
+      "name": "índice de lista vazia é erro",
+      "engine": null,
+      "input": "const l: number[] = []\nconst r = l[0]",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 11,
+        "message": "l[0] não existe: a lista tem 0 itens."
+      }
+    },
+    {
+      "name": "índice de texto por variável",
+      "engine": null,
+      "input": "const s = 'abc'\nconst i = 2\nconst r = s[i]",
+      "seed": null,
+      "value": "c",
+      "type": "string"
+    },
+    {
+      "name": "índice de lista de textos",
+      "engine": null,
+      "input": "const l = ['a', 'b']\nconst r = l[1]",
+      "seed": null,
+      "value": "b",
+      "type": "string"
+    },
+    {
+      "name": "lista vazia tem zero de comprimento",
+      "engine": null,
+      "input": "const r = [].length",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "texto vazio tem zero de comprimento",
+      "engine": null,
+      "input": "const r = ''.length",
+      "seed": null,
+      "value": 0,
+      "type": "number"
+    },
+    {
+      "name": "espalhar no começo da lista",
+      "engine": null,
+      "input": "const a = [1, 2]\nconst r = [...a, 4]",
+      "seed": null,
+      "value": [
+        1,
+        2,
+        4
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "espalhar no meio da lista",
+      "engine": null,
+      "input": "const a = [2]\nconst r = [1, ...a, 3]",
+      "seed": null,
+      "value": [
+        1,
+        2,
+        3
+      ],
+      "type": "number[]"
+    },
+    {
+      "name": "ler cliente_id de null sem ?. é erro",
+      "engine": null,
+      "input": "let c = null\nconst r = c.cliente_id",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "Não dá para ler cliente_id de null."
+      }
+    },
+    {
+      "name": "campo que não existe num objeto com id e nome",
+      "engine": null,
+      "input": "const p = { id: 1, nome: 'Ana' }\nconst r = p.cpf",
+      "seed": null,
+      "error": {
+        "line": 2,
+        "column": 13,
+        "message": "O objeto p não tem o campo cpf. Os campos são: id, nome."
+      }
+    },
+    {
+      "name": "dependência fica com o valor de quando foi avaliada",
+      "engine": null,
+      "input": "let x = 1\nconst y = x * 2\nx = 5\nconst z = y",
+      "seed": null,
+      "value": 2,
+      "type": "number"
+    },
+    {
+      "name": "uso lê a última atribuição acima dele",
+      "engine": null,
+      "input": "let x = 1\nconst a = x\nx = 2\nconst b = a + x",
+      "seed": null,
+      "value": 3,
+      "type": "number"
+    },
+    {
+      "name": "texto reatribuído: a dependência guarda o valor antigo",
+      "engine": null,
+      "input": "let s = 'a'\nconst t = s + '!'\ns = 'b'\nconst u = t + s",
+      "seed": null,
+      "value": "a!b",
+      "type": "string"
+    },
+    {
+      "name": "cadeia de dependências com reatribuição",
+      "engine": null,
+      "input": "let a = 1\nconst b = a + 1\nconst c = b * 10\na = 5\nconst d = c + b + a",
+      "seed": null,
+      "value": 27,
+      "type": "number"
+    },
+    {
+      "name": "sorteio reatribuído não muda a declaração de cima",
+      "engine": null,
+      "input": "let x = random.int(1, 1000)\nconst y = x * 2\nx = random.int(1, 1000)\nconst z = y",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 1042,
+      "type": "number"
+    },
+    {
+      "name": "o sorteio é avaliado uma vez: a leitura seguinte é a mesma",
+      "engine": null,
+      "input": "const a = random.int(1, 1000)\nconst b = a",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "a soma de dois sorteios segue a ordem da esquerda",
+      "engine": null,
+      "input": "const a = random.int(1, 1000) + random.int(1, 1000)",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 522,
+      "type": "number"
+    },
+    {
+      "name": "lista de dois sorteios: a segunda posição leva a segunda saída",
+      "engine": null,
+      "input": "const a = [random.int(1, 1000), random.int(1, 1000)]\nconst b = a[1]",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 1,
+      "type": "number"
+    },
+    {
+      "name": "?? com null à esquerda gasta o gerador da direita",
+      "engine": null,
+      "input": "const a = null ?? random.int(1, 1000)",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "|| com 0 à esquerda gasta o gerador da direita",
+      "engine": null,
+      "input": "const a = 0 || random.int(1, 1000)",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "? : com a saída que não vai não gasta o gerador",
+      "engine": null,
+      "input": "const a = false ? random.int(1, 1000) : 3\nconst b = random.int(1, 1000)",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "?. com null no ?? não gasta o gerador",
+      "engine": null,
+      "input": "const o = null\nconst a = o?.x ?? 0\nconst b = random.int(1, 1000)",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "&& com 0 à esquerda não gasta o gerador",
+      "engine": null,
+      "input": "const a = 0 && random.int(1, 1000)\nconst b = random.int(1, 1000)",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "? : com a saída que vai gasta o gerador",
+      "engine": null,
+      "input": "const a = true ? random.int(1, 1000) : 3",
+      "seed": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "value": 521,
+      "type": "number"
+    },
+    {
+      "name": "- entre dois booleanos é erro: o primeiro",
+      "engine": null,
+      "input": "const r = true - false",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "- é só para números; true é boolean."
+      }
+    },
+    {
+      "name": "* com null à esquerda é erro",
+      "engine": null,
+      "input": "const r = null * 2",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 16,
+        "message": "* é só para números; null é null."
+      }
+    },
+    {
+      "name": "/ com null à direita é erro",
+      "engine": null,
+      "input": "const r = 2 / null",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "/ é só para números; null é null."
+      }
+    },
+    {
+      "name": "< entre texto e data é erro",
+      "engine": null,
+      "input": "const r = 'a' < date.of(2026, 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "< compara números com números, textos com textos e datas com datas."
+      }
+    },
+    {
+      "name": "número + data é erro: a data não é texto",
+      "engine": null,
+      "input": "const r = 1 + date.of(2026, 1, 1)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 13,
+        "message": "+ soma números ou junta textos; 2026-01-01 não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "lista + texto é erro",
+      "engine": null,
+      "input": "const r = [1] + 'a'",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 15,
+        "message": "+ soma números ou junta textos; [1] não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "objeto + número é erro",
+      "engine": null,
+      "input": "const r = { a: 1 } + 1",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 20,
+        "message": "+ soma números ou junta textos; { a: 1 } não é nenhum dos dois."
+      }
+    },
+    {
+      "name": "null === texto é falso",
+      "engine": null,
+      "input": "const r = null === 'a'",
+      "seed": null,
+      "value": false,
+      "type": "boolean"
     }
   ]
 }

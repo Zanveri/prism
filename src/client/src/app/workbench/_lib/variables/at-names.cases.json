@@ -1565,9 +1565,1777 @@
       "inBody": true
     },
     {
-      "name": "o comando comum de um script com rotina é variável",
+      "name": "depois do + (PostgreSQL)",
+      "engine": 1,
+      "input": "1+@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do - (PostgreSQL)",
+      "engine": 1,
+      "input": "1-@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do * (PostgreSQL)",
+      "engine": 1,
+      "input": "1*@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do / (PostgreSQL)",
+      "engine": 1,
+      "input": "1/@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do % (PostgreSQL)",
+      "engine": 1,
+      "input": "1%@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do + (Db2)",
+      "engine": 2,
+      "input": "1+@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do - (Db2)",
+      "engine": 2,
+      "input": "1-@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do * (Db2)",
+      "engine": 2,
+      "input": "1*@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do / (Db2)",
+      "engine": 2,
+      "input": "1/@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do % (Db2)",
+      "engine": 2,
+      "input": "1%@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do + (Informix)",
       "engine": 3,
-      "input": "SELECT @x",
+      "input": "1+@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do - (Informix)",
+      "engine": 3,
+      "input": "1-@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do * (Informix)",
+      "engine": 3,
+      "input": "1*@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do / (Informix)",
+      "engine": 3,
+      "input": "1/@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do % (Informix)",
+      "engine": 3,
+      "input": "1%@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "um espaço Unicode antes (ideográfico) (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT　@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "um espaço Unicode antes (ideográfico) (Db2)",
+      "engine": 2,
+      "input": "SELECT　@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "um espaço Unicode antes (ideográfico) (Informix)",
+      "engine": 3,
+      "input": "SELECT　@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "um espaço Unicode antes (NBSP) (Db2)",
+      "engine": 2,
+      "input": "SELECT @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "um espaço Unicode antes (NBSP) (Informix)",
+      "engine": 3,
+      "input": "SELECT @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "retorno de carro e quebra de linha antes (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT\r\n@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "retorno de carro e quebra de linha antes (Db2)",
+      "engine": 2,
+      "input": "SELECT\r\n@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "retorno de carro e quebra de linha antes (Informix)",
+      "engine": 3,
+      "input": "SELECT\r\n@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ! (Db2)",
+      "engine": 2,
+      "input": "a !@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ~ (Db2)",
+      "engine": 2,
+      "input": "a ~@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ^ (Db2)",
+      "engine": 2,
+      "input": "a ^@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do & (Db2)",
+      "engine": 2,
+      "input": "a &@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do . (Db2)",
+      "engine": 2,
+      "input": "t.@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o ` antes do @ é variável (Db2)",
+      "engine": 2,
+      "input": "`@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ! (Informix)",
+      "engine": 3,
+      "input": "a !@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ~ (Informix)",
+      "engine": 3,
+      "input": "a ~@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ^ (Informix)",
+      "engine": 3,
+      "input": "a ^@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do & (Informix)",
+      "engine": 3,
+      "input": "a &@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do . (Informix)",
+      "engine": 3,
+      "input": "t.@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o ` antes do @ é variável (Informix)",
+      "engine": 3,
+      "input": "`@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do { (Db2)",
+      "engine": 2,
+      "input": "SELECT {@x}",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do ? (Informix)",
+      "engine": 3,
+      "input": "SELECT ?@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois do | sozinho (Informix)",
+      "engine": 3,
+      "input": "a |@x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "depois da aspa dupla (Db2)",
+      "engine": 2,
+      "input": "\"a\"@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois da aspa simples (Db2)",
+      "engine": 2,
+      "input": "'a'@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do # (Db2)",
+      "engine": 2,
+      "input": "a #@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do $ (Db2)",
+      "engine": 2,
+      "input": "a$@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do _ (Db2)",
+      "engine": 2,
+      "input": "a_@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois de um dígito (Db2)",
+      "engine": 2,
+      "input": "1@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois de uma letra acentuada (Db2)",
+      "engine": 2,
+      "input": "é@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "o @ antes do @ (Db2)",
+      "engine": 2,
+      "input": "SELECT @@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois da aspa dupla (Informix)",
+      "engine": 3,
+      "input": "\"a\"@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois da aspa simples (Informix)",
+      "engine": 3,
+      "input": "'a'@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do # (Informix)",
+      "engine": 3,
+      "input": "a #@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do $ (Informix)",
+      "engine": 3,
+      "input": "a$@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do _ (Informix)",
+      "engine": 3,
+      "input": "a_@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois de um dígito (Informix)",
+      "engine": 3,
+      "input": "1@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois de uma letra acentuada (Informix)",
+      "engine": 3,
+      "input": "é@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "o @ antes do @ (Informix)",
+      "engine": 3,
+      "input": "SELECT @@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do ~ (PostgreSQL)",
+      "engine": 1,
+      "input": "a ~@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do ! (PostgreSQL)",
+      "engine": 1,
+      "input": "a !@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do ^ (PostgreSQL)",
+      "engine": 1,
+      "input": "a ^@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do & (PostgreSQL)",
+      "engine": 1,
+      "input": "a &@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do ? (PostgreSQL)",
+      "engine": 1,
+      "input": "a ?@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do # (PostgreSQL)",
+      "engine": 1,
+      "input": "a #@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do . (PostgreSQL)",
+      "engine": 1,
+      "input": "t.@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois da aspa dupla (PostgreSQL)",
+      "engine": 1,
+      "input": "\"a\"@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "depois do { (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT {@x}",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "o @ antes do @ (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @@x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "operator",
+          "@x"
+        ]
+      ]
+    },
+    {
+      "name": "o - depois do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x-1",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o fim da linha depois do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x\nFROM t",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o :: depois do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x::int",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o [ depois do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @ids[0]",
+      "seed": null,
+      "value": [
+        "@ids"
+      ],
+      "type": "@nome",
+      "declared": [
+        "ids"
+      ]
+    },
+    {
+      "name": "o espaço não-quebrável depois do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x FROM t",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o € depois do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x€",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o $ no nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x$",
+      "seed": null,
+      "value": [
+        "@x$"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x$"
+      ]
+    },
+    {
+      "name": "o _ no começo do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @_x",
+      "seed": null,
+      "value": [
+        "@_x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "_x"
+      ]
+    },
+    {
+      "name": "o acento no meio do nome (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @preçoMédio",
+      "seed": null,
+      "value": [
+        "@preçoMédio"
+      ],
+      "type": "@nome",
+      "declared": [
+        "preçoMédio"
+      ]
+    },
+    {
+      "name": "o dígito no nome, sem a variável (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x1",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "undeclared",
+          "@x1"
+        ]
+      ]
+    },
+    {
+      "name": "o dígito no nome (Db2)",
+      "engine": 2,
+      "input": "SELECT @x1",
+      "seed": null,
+      "value": [
+        "@x1"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x1"
+      ]
+    },
+    {
+      "name": "o _ no meio do nome (Db2)",
+      "engine": 2,
+      "input": "SELECT @x_1",
+      "seed": null,
+      "value": [
+        "@x_1"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x_1"
+      ]
+    },
+    {
+      "name": "o dígito no nome, sem a variável (Db2)",
+      "engine": 2,
+      "input": "SELECT @x1",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "undeclared",
+          "@x1"
+        ]
+      ]
+    },
+    {
+      "name": "o dígito no nome, sem a variável (Informix)",
+      "engine": 3,
+      "input": "SELECT @x1",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": [
+        [
+          "undeclared",
+          "@x1"
+        ]
+      ]
+    },
+    {
+      "name": "o # depois do nome (Db2)",
+      "engine": 2,
+      "input": "SELECT @x#",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": []
+    },
+    {
+      "name": "o # depois do nome (Informix)",
+      "engine": 3,
+      "input": "SELECT @x#",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": []
+    },
+    {
+      "name": "o @ depois do nome (Db2)",
+      "engine": 2,
+      "input": "SELECT @x@",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "hints": []
+    },
+    {
+      "name": "as maiúsculas diferenciam (Db2)",
+      "engine": 2,
+      "input": "SELECT @TOTAL",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "total"
+      ],
+      "hints": [
+        [
+          "differentCase",
+          "@TOTAL"
+        ]
+      ]
+    },
+    {
+      "name": "as maiúsculas diferenciam (Informix)",
+      "engine": 3,
+      "input": "SELECT @TOTAL",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "total"
+      ],
+      "hints": [
+        [
+          "differentCase",
+          "@TOTAL"
+        ]
+      ]
+    },
+    {
+      "name": "usado antes da declaração (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @x;\nlet x = 1",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "usado antes da declaração (Db2)",
+      "engine": 2,
+      "input": "SELECT @x;\nlet x = 1",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "usado antes da declaração (Informix)",
+      "engine": 3,
+      "input": "SELECT @x;\nlet x = 1",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "@p sem campo (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @p FROM t",
+      "seed": null,
+      "value": [
+        "@p"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@p sem campo (Db2)",
+      "engine": 2,
+      "input": "SELECT @p FROM t",
+      "seed": null,
+      "value": [
+        "@p"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@p sem campo (Informix)",
+      "engine": 3,
+      "input": "SELECT @p FROM t",
+      "seed": null,
+      "value": [
+        "@p"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "a lista de objetos (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @linhas FROM t",
+      "seed": null,
+      "value": [
+        "@linhas"
+      ],
+      "type": "@nome",
+      "declared": [
+        "linhas"
+      ]
+    },
+    {
+      "name": "a lista de objetos (Informix)",
+      "engine": 3,
+      "input": "SELECT @linhas FROM t",
+      "seed": null,
+      "value": [
+        "@linhas"
+      ],
+      "type": "@nome",
+      "declared": [
+        "linhas"
+      ]
+    },
+    {
+      "name": "@p.campo com p nulo (Db2)",
+      "engine": 2,
+      "input": "WHERE c = @p.cliente_id",
+      "seed": null,
+      "value": [
+        "@p.cliente_id"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@p.campo com p um número (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @n.quantidade FROM t",
+      "seed": null,
+      "value": [
+        "@n.quantidade"
+      ],
+      "type": "@nome",
+      "declared": [
+        "n"
+      ]
+    },
+    {
+      "name": "@p. com espaço depois do ponto (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @p. campo",
+      "seed": null,
+      "value": [
+        "@p"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@p.campo com parêntese depois (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @p.campo(1)",
+      "seed": null,
+      "value": [
+        "@p.campo"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@p.campo com campo que começa por _ (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @p._x",
+      "seed": null,
+      "value": [
+        "@p._x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@p.campo com campo acentuado (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @p.endereço",
+      "seed": null,
+      "value": [
+        "@p.endereço"
+      ],
+      "type": "@nome",
+      "declared": [
+        "p"
+      ]
+    },
+    {
+      "name": "@esquema.tabela com variável sql (Db2)",
+      "engine": 2,
+      "input": "SELECT * FROM @esquema.pedido",
+      "seed": null,
+      "value": [
+        "@esquema.pedido"
+      ],
+      "type": "@nome",
+      "declared": [
+        "esquema"
+      ]
+    },
+    {
+      "name": "@esquema.tabela com variável sql (Informix)",
+      "engine": 3,
+      "input": "SELECT * FROM @esquema.pedido",
+      "seed": null,
+      "value": [
+        "@esquema.pedido"
+      ],
+      "type": "@nome",
+      "declared": [
+        "esquema"
+      ]
+    },
+    {
+      "name": "@esquema.tabela.coluna lê um nível (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT @esquema.pedido.id FROM t",
+      "seed": null,
+      "value": [
+        "@esquema.pedido"
+      ],
+      "type": "@nome",
+      "declared": [
+        "esquema"
+      ]
+    },
+    {
+      "name": "dentro da consulta de uma variável (PostgreSQL)",
+      "engine": 1,
+      "input": "let total = (SELECT count(*) FROM pedido WHERE cliente_id = @cliente_id)",
+      "seed": null,
+      "value": [
+        "@cliente_id"
+      ],
+      "type": "@nome",
+      "declared": [
+        "total",
+        "cliente_id"
+      ]
+    },
+    {
+      "name": "dentro da consulta de uma variável (Db2)",
+      "engine": 2,
+      "input": "let total = (SELECT count(*) FROM pedido WHERE cliente_id = @cliente_id)",
+      "seed": null,
+      "value": [
+        "@cliente_id"
+      ],
+      "type": "@nome",
+      "declared": [
+        "total",
+        "cliente_id"
+      ]
+    },
+    {
+      "name": "dentro da consulta de uma variável (Informix)",
+      "engine": 3,
+      "input": "let total = (SELECT count(*) FROM pedido WHERE cliente_id = @cliente_id)",
+      "seed": null,
+      "value": [
+        "@cliente_id"
+      ],
+      "type": "@nome",
+      "declared": [
+        "total",
+        "cliente_id"
+      ]
+    },
+    {
+      "name": "dentro da consulta, com texto e variável (PostgreSQL)",
+      "engine": 1,
+      "input": "let n = (SELECT count(*) FROM t WHERE a = '@x' AND b = @x)",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "n",
+        "x"
+      ]
+    },
+    {
+      "name": "dentro do corpo com $$ em CREATE PROCEDURE (PostgreSQL)",
+      "engine": 1,
+      "input": "CREATE PROCEDURE p() LANGUAGE sql AS $$ SELECT @x $$",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "inBody": true
+    },
+    {
+      "name": "dentro do CREATE FUNCTION com LET (Informix)",
+      "engine": 3,
+      "input": "CREATE FUNCTION f()\nLET a = @x;\nEND FUNCTION",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ],
+      "inBody": true
+    },
+    {
+      "name": "depois de uma função do PostgreSQL, fora do corpo (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT 1;\nCREATE FUNCTION f() RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\nSELECT @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "-- com @ depois do comando, até o fim do texto (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT 1 -- @x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "-- com @ depois do comando, até o fim do texto (Db2)",
+      "engine": 2,
+      "input": "SELECT 1 -- @x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "-- com @ depois do comando, até o fim do texto (Informix)",
+      "engine": 3,
+      "input": "SELECT 1 -- @x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "/* com @ antes do comando (Db2)",
+      "engine": 2,
+      "input": "/* @x */ SELECT @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "/* com @ antes do comando (Informix)",
+      "engine": 3,
+      "input": "/* @x */ SELECT @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "// não é comentário no SQL (PostgreSQL)",
+      "engine": 1,
+      "input": "// @x\nSELECT @x",
+      "seed": null,
+      "value": [
+        "@x",
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "{ @x } com espaços (Informix)",
+      "engine": 3,
+      "input": "SELECT { @x } 1, @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "E'' com a barra no fim do texto (PostgreSQL)",
+      "engine": 1,
+      "input": "WHERE a = E'a\\\\' AND b = @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "a barra numa aspa comum não escapa (PostgreSQL)",
+      "engine": 1,
+      "input": "WHERE a = 'a\\' AND b = @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "a aspa dobrada continua o texto (Informix)",
+      "engine": 3,
+      "input": "WHERE a = 'it''s @x' AND b = @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "$tag$ com outro tag dentro (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT $f$ @x $g$ @x $f$",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "$$ com $tag$ dentro (PostgreSQL)",
+      "engine": 1,
+      "input": "SELECT $$ $f$ @x $$, @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "dentro do texto (Db2)",
+      "engine": 2,
+      "input": "WHERE a = '@x' AND b = @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "dentro do texto (Informix)",
+      "engine": 3,
+      "input": "WHERE a = '@x' AND b = @x",
+      "seed": null,
+      "value": [
+        "@x"
+      ],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "nome entre aspas duplas (Db2)",
+      "engine": 2,
+      "input": "SELECT \"@x\" FROM t",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "nome entre aspas duplas (Informix)",
+      "engine": 3,
+      "input": "SELECT \"@x\" FROM t",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o terminador @ sozinho no fim da linha (Db2)",
+      "engine": 2,
+      "input": "SELECT 1\n@",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "@ com espaço não é nome (Db2)",
+      "engine": 2,
+      "input": "SELECT @ x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "@ com espaço não é nome (Informix)",
+      "engine": 3,
+      "input": "SELECT @ x",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "x"
+      ]
+    },
+    {
+      "name": "o @extschema@ no Db2",
+      "engine": 2,
+      "input": "SELECT @extschema@",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "extschema"
+      ],
+      "hints": []
+    },
+    {
+      "name": "o @extschema@ no Informix",
+      "engine": 3,
+      "input": "SELECT @extschema@",
+      "seed": null,
+      "value": [],
+      "type": "@nome",
+      "declared": [
+        "extschema"
+      ],
+      "hints": []
+    },
+    {
+      "name": "a @> seguido de @x é variável (PostgreSQL)",
+      "engine": 1,
+      "input": "a @> @x",
       "seed": null,
       "value": [
         "@x"
