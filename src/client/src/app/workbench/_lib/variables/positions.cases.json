@@ -1,0 +1,280 @@
+{
+  "rule": "RN-SQL-009: a posição do erro do banco (do texto enviado, com os marcadores) levada ao texto do editor. Fora dos marcadores, pela diferença de tamanho; dentro de um marcador, de uma lista expandida ou do texto de um sql, ao começo do @nome.",
+  "cases": [
+    {
+      "name": "o erro antes de qualquer marcador",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 39,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 10,
+      "at": "FROM"
+    },
+    {
+      "name": "o erro no começo do marcador",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 56,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 27,
+      "at": "@c"
+    },
+    {
+      "name": "o erro logo depois do marcador",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 58,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 29,
+      "at": " AND id"
+    },
+    {
+      "name": "o erro no começo da lista expandida",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 70,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 41,
+      "at": "@ids"
+    },
+    {
+      "name": "o erro no meio da lista expandida",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 70,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 45,
+      "at": "@ids"
+    },
+    {
+      "name": "o erro no fim da lista expandida",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 70,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 49,
+      "at": "@ids"
+    },
+    {
+      "name": "o erro depois da lista expandida",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 74,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 51,
+      "at": ") AND z"
+    },
+    {
+      "name": "o erro no fim do comando, depois de tudo",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 84,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 61,
+      "at": "zz"
+    },
+    {
+      "name": "o erro no último marcador de uma lista",
+      "engine": 1,
+      "input": "let c = 7\nlet ids = [1, 2, 3]\nSELECT * FROM t WHERE c = @c AND id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 80,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = $1 AND id IN ($2, $3, $4) AND z = zz",
+      "dbPosition": 57,
+      "at": "z = zz"
+    },
+    {
+      "name": "Db2: o erro no marcador ?",
+      "engine": 2,
+      "input": "let c = 7\nSELECT * FROM t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 36,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = ? AND z = zz",
+      "dbPosition": 27,
+      "at": "@c"
+    },
+    {
+      "name": "Db2: o erro depois do marcador",
+      "engine": 2,
+      "input": "let c = 7\nSELECT * FROM t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 47,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = ? AND z = zz",
+      "dbPosition": 37,
+      "at": "zz"
+    },
+    {
+      "name": "Informix: o erro antes do marcador",
+      "engine": 3,
+      "input": "let c = 7\nSELECT * FROM t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 26,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE c = ? AND z = zz",
+      "dbPosition": 17,
+      "at": "WHERE"
+    },
+    {
+      "name": "Informix: o erro no segundo ? de uma lista",
+      "engine": 3,
+      "input": "let ids = [1, 2]\nSELECT * FROM t WHERE id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 46,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE id IN (?, ?) AND z = zz",
+      "dbPosition": 33,
+      "at": "@ids"
+    },
+    {
+      "name": "Informix: o erro depois da lista",
+      "engine": 3,
+      "input": "let ids = [1, 2]\nSELECT * FROM t WHERE id IN (@ids) AND z = zz",
+      "seed": null,
+      "value": 60,
+      "type": "posição",
+      "sentSql": "SELECT * FROM t WHERE id IN (?, ?) AND z = zz",
+      "dbPosition": 44,
+      "at": "zz"
+    },
+    {
+      "name": "o erro dentro do texto de um sql",
+      "engine": 1,
+      "input": "const t: sql = 'pedido_longo'\nlet c = 1\nSELECT * FROM @t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 54,
+      "type": "posição",
+      "sentSql": "SELECT * FROM pedido_longo WHERE c = $1 AND z = zz",
+      "dbPosition": 19,
+      "at": "@t"
+    },
+    {
+      "name": "o erro no começo do texto de um sql",
+      "engine": 1,
+      "input": "const t: sql = 'pedido_longo'\nlet c = 1\nSELECT * FROM @t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 54,
+      "type": "posição",
+      "sentSql": "SELECT * FROM pedido_longo WHERE c = $1 AND z = zz",
+      "dbPosition": 15,
+      "at": "@t"
+    },
+    {
+      "name": "o erro depois do texto de um sql",
+      "engine": 1,
+      "input": "const t: sql = 'pedido_longo'\nlet c = 1\nSELECT * FROM @t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 57,
+      "type": "posição",
+      "sentSql": "SELECT * FROM pedido_longo WHERE c = $1 AND z = zz",
+      "dbPosition": 28,
+      "at": "WHERE"
+    },
+    {
+      "name": "o erro no marcador depois de um sql",
+      "engine": 1,
+      "input": "const t: sql = 'pedido_longo'\nlet c = 1\nSELECT * FROM @t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 67,
+      "type": "posição",
+      "sentSql": "SELECT * FROM pedido_longo WHERE c = $1 AND z = zz",
+      "dbPosition": 38,
+      "at": "@c"
+    },
+    {
+      "name": "o erro no fim, depois de um sql e de um marcador",
+      "engine": 1,
+      "input": "const t: sql = 'pedido_longo'\nlet c = 1\nSELECT * FROM @t WHERE c = @c AND z = zz",
+      "seed": null,
+      "value": 78,
+      "type": "posição",
+      "sentSql": "SELECT * FROM pedido_longo WHERE c = $1 AND z = zz",
+      "dbPosition": 49,
+      "at": "zz"
+    },
+    {
+      "name": "o emoji antes do erro: o banco conta caracteres, o editor unidades",
+      "engine": 1,
+      "input": "let n = 'x'\nSELECT '😀😀' AS a, @n AS b, zz",
+      "seed": null,
+      "value": 41,
+      "type": "posição",
+      "sentSql": "SELECT '😀😀' AS a, $1 AS b, zz",
+      "dbPosition": 28,
+      "at": "zz"
+    },
+    {
+      "name": "o emoji antes do marcador",
+      "engine": 1,
+      "input": "let n = 'x'\nSELECT '😀😀' AS a, @n AS b, zz",
+      "seed": null,
+      "value": 32,
+      "type": "posição",
+      "sentSql": "SELECT '😀😀' AS a, $1 AS b, zz",
+      "dbPosition": 19,
+      "at": "@n"
+    },
+    {
+      "name": "o emoji antes de um erro dentro do texto",
+      "engine": 1,
+      "input": "let n = 'x'\nSELECT '😀😀' AS a, @n AS b, zz",
+      "seed": null,
+      "value": 26,
+      "type": "posição",
+      "sentSql": "SELECT '😀😀' AS a, $1 AS b, zz",
+      "dbPosition": 13,
+      "at": "AS a"
+    },
+    {
+      "name": "depois de vários marcadores",
+      "engine": 1,
+      "input": "let a = 'x'\nlet b = 'y'\nSELECT @a, @b, @a, zz",
+      "seed": null,
+      "value": 43,
+      "type": "posição",
+      "sentSql": "SELECT $1, $2, $3, zz",
+      "dbPosition": 20,
+      "at": "zz"
+    },
+    {
+      "name": "o segundo de dois marcadores",
+      "engine": 1,
+      "input": "let a = 'x'\nlet b = 'y'\nSELECT @a, @b, @a, zz",
+      "seed": null,
+      "value": 35,
+      "type": "posição",
+      "sentSql": "SELECT $1, $2, $3, zz",
+      "dbPosition": 12,
+      "at": "@b"
+    },
+    {
+      "name": "o comando sem variáveis não muda a posição",
+      "engine": 1,
+      "input": "let a = 1\nSELECT 1,\n  zz",
+      "seed": null,
+      "value": 22,
+      "type": "posição",
+      "sentSql": "SELECT 1,\n  zz",
+      "dbPosition": 13,
+      "at": "zz"
+    }
+  ]
+}
