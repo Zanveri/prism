@@ -24,6 +24,8 @@ import { scriptMark, scriptMarkEffects } from "../_lib/script-mark";
 import { keywordCase } from "../_lib/sql-keyword-case";
 import { hasStatement, scriptStatements, statementAt } from "../_lib/sql-statements";
 import type { RunTarget } from "../_lib/use-query-runner";
+import { variablesCompletion, type VariablesCompletion } from "../_lib/variables-completion";
+import { connectVariables, reanalyzeVariables, setShowVariableValues, variablesEditor, type VariablesStore } from "../_lib/variables-extension";
 import { workbenchCopy } from "../_lib/workbench.copy";
 
 /** Quanto o editor espera, depois da última tecla, para entregar o texto a quem o guarda. */
@@ -253,6 +255,12 @@ type SqlEditorProps = {
   onEdited: () => void;
   /** RN-LINK-001: o Ctrl+clique no nome de uma tabela ou visão que o catálogo do banco da aba conhece. Sem ele (a aba sem conexão), nada vira link. */
   onOpenTable?: (table: { schema: string; name: string }) => void;
+  /**
+   * RN-VAR-025: os valores das variáveis da aba, do armazém de quem executa (RN-VAR-023). O editor lê o tipo e o valor de cada uma, na dica do ponteiro e no fim da
+   * linha da declaração, e se inscreve para ser avisado quando mudam. `value` é o texto como o painel Variáveis o escreve (o editor corta em 200 caracteres na dica e
+   * em 60 no fim da linha); `stale` diz que o valor é de antes de a declaração mudar. Sem a propriedade, o editor pinta e confere as declarações, e não mostra valores.
+   */
+  variables?: VariablesStore;
 };
 
 /** O macOS usa o ⌘ onde os outros usam o Ctrl (RN-LINK-001). */
@@ -266,14 +274,14 @@ const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.l
  * guarda com atraso, para uma tecla não redesenhar a área de trabalho. Ctrl+Enter executa
  * (RN-SQL-001). Tab recua; Esc e depois Tab saem do editor pelo teclado.
  */
-export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable }: SqlEditorProps) {
+export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, engine, connectionId, database, autoFocus, errorAt, onRun, onRunScript, runningAt = null, onChange, onRunnableChange, onEdited, onOpenTable, variables }: SqlEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const { preferences } = usePreferences();
   // Com "seguir o sistema", o esquema vem do sistema, e muda com o app aberto.
   const systemIsLight = useSyncExternalStore(subscribeSystemScheme, systemPrefersLight, () => false);
   const dark = resolveScheme(preferences.theme, systemIsLight) === "dark";
-  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, blankLineSeparates } = preferences.editor;
+  const { fontFamily, fontSize, tabSize, autocomplete, uppercaseKeywords, blankLineSeparates, showVariableValues } = preferences.editor;
   // Os nomes sugeridos são os da árvore da conexão DESTA aba, que ela passa por propriedade: as abas ficam todas montadas, e ler a aba ativa
   // daria ao editor de uma aba os nomes da conexão de outra.
   const queryClient = useQueryClient();
@@ -285,6 +293,9 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const engineNow = useRef(engine);
   // RN-SQL-018: a linha em branco separa os comandos? Lida na hora de executar: não muda nada no editor, e não precisa de compartimento.
   const blankLinesNow = useRef(blankLineSeparates);
+  // RN-VAR-025: o armazém dos valores de agora, lido pelo autocompletar na hora do pedido (o tipo de cada variável).
+  const variablesNow = useRef(variables);
+  const variableCompletion = useRef<VariablesCompletion | null>(null);
   const appliedToggles = useRef(`${autocomplete}|${uppercaseKeywords}`);
 
   const emitRun = useEffectEvent((target: RunTarget, flash: FlashRun) => onRun(target, flash));
@@ -303,7 +314,11 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     return tableLinkAt(sql, offset, engineNow.current, catalogCache.current.catalog, defaultSchemasOf(engineNow.current, userName), tokens);
   });
   const openLink = useEffectEvent((link: TableLink) => onOpenTable?.({ schema: link.schema, name: link.name }));
-  const completionFor = useEffectEvent(() => sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels() }));
+  const completionFor = useEffectEvent(() => {
+    // O autocompletar das variáveis guarda o script lido da versão do texto: um só por editor, criado na primeira vez que a lista é montada.
+    variableCompletion.current ??= variablesCompletion({ engine: () => engineNow.current, blankLines: () => blankLinesNow.current, values: () => variablesNow.current?.snapshot() ?? null });
+    return sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels(), variables: variableCompletion.current });
+  });
 
   useEffect(() => {
     if (host.current === null) return;
@@ -342,8 +357,9 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           syntaxHighlighting(highlight),
           themeSlot.of(editorTheme(initial.editor, initial.dark)),
           tabSlot.of(tabSettings(initial.editor.tabSize)),
-          caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine) : []),
+          caseSlot.of(initial.uppercaseKeywords ? keywordCase(initial.engine, () => blankLinesNow.current) : []),
           errorMark,
+          variablesEditor({ engine: () => engineNow.current, blankLines: () => blankLinesNow.current }),
           runFlash,
           scriptMark,
           tableLinks({ engine: () => engineNow.current, find: (sql, offset, tokens) => findLink(sql, offset, tokens), open: (link) => openLink(link), mac: isMac }),
@@ -384,8 +400,24 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   }, [initial]);
 
   useEffect(() => {
+    if (blankLinesNow.current === blankLineSeparates) return;
     blankLinesNow.current = blankLineSeparates;
+    // Onde a linha em branco separa os comandos decide quais itens são declarações (RN-VAR-001): o script se lê de novo.
+    view.current?.dispatch({ effects: reanalyzeVariables.of(null) });
   }, [blankLineSeparates]);
+
+  // RN-VAR-025: os valores das variáveis da aba (tipo e valor na dica do ponteiro, o valor no fim da linha). O armazém avisa a cada mudança; sem armazém, nenhum valor.
+  useEffect(() => {
+    variablesNow.current = variables;
+    const editor = view.current;
+    if (editor === null) return;
+    return connectVariables(editor, variables, () => view.current === editor);
+  }, [variables]);
+
+  // RN-CONFIG-004: "Mostrar o valor das variáveis no fim da linha", ao vivo.
+  useEffect(() => {
+    view.current?.dispatch({ effects: setShowVariableValues.of(showVariableValues) });
+  }, [showVariableValues]);
 
   // A fonte, o tamanho, a tabulação e o esquema de cor mudam no editor que já existe, sem recriá-lo.
   useEffect(() => {
@@ -404,7 +436,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     if (editor === null || key === appliedToggles.current) return;
 
     appliedToggles.current = key;
-    editor.dispatch({ effects: [completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engineNow.current) : [])] });
+    editor.dispatch({ effects: [completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engineNow.current, () => blankLinesNow.current) : [])] });
   }, [autocomplete, uppercaseKeywords]);
 
   // O banco mudou com o editor montado: a gramática, as maiúsculas e o completar passam a ser os dele, e "há o que executar?" é refeito pelas regras dele.
@@ -413,7 +445,15 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     if (editor === null || engine === engineNow.current) return;
 
     engineNow.current = engine;
-    editor.dispatch({ effects: [languageSlot.reconfigure(sql({ dialect: dialectOf(engine) })), completionSlot.reconfigure(autocomplete ? completionFor() : []), caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engine) : [])] });
+    editor.dispatch({
+      effects: [
+        languageSlot.reconfigure(sql({ dialect: dialectOf(engine) })),
+        completionSlot.reconfigure(autocomplete ? completionFor() : []),
+        caseSlot.reconfigure(uppercaseKeywords ? keywordCase(engine, () => blankLinesNow.current) : []),
+        // O banco decide onde o `@` é operador, o que é corpo de rotina e como o `E'...'` se lê (RN-VAR-015): o script se lê de novo.
+        reanalyzeVariables.of(null),
+      ],
+    });
     emitRunnable(isRunnable(editor.state, engine));
   }, [engine, autocomplete, uppercaseKeywords]);
 
