@@ -57,6 +57,43 @@ assert "um grupo que não existe falha, em vez de devolver uma lista vazia que f
 assert "e não escreve nada na saída padrão" unknown_group_is_silent
 assert "um grupo inexistente ao lado de um válido também falha (a lista parcial não passa com 0)" unknown_group_next_to_valid_fails
 
+# --- as plataformas que vieram inteiras (a falha de uma não segura as outras) ---
+
+# listing <versão> <grupo>...: um arquivo de nomes com os arquivos desses grupos; sai com o caminho dele.
+listing() {
+  local version=$1
+  shift
+  mkdir -p "$work/listas"
+  local file="$work/listas/$RANDOM$RANDOM"
+  package_files "$version" "$@" > "$file"
+  echo "$file"
+}
+groups_of() { present_groups "$@" | paste -sd ' ' -; }
+groups_in_order() { [ "$(package_groups | paste -sd ' ' -)" = "win linux mac-arm64 mac-x64" ]; }
+all_four_are_whole() { [ "$(groups_of 1.2.3 "$(listing 1.2.3 win linux mac-arm64 mac-x64)")" = "win linux mac-arm64 mac-x64" ]; }
+only_win_is_whole() { [ "$(groups_of 1.2.3 "$(listing 1.2.3 win mac-x64)")" = "win mac-x64" ]; }
+one_file_is_not_whole() { local file; file=$(listing 1.2.3 win linux); grep -vx 'Prism-1.2.3-linux-amd64.deb' "$file" > "$file.novo"; [ "$(groups_of 1.2.3 "$file.novo")" = "win" ]; }
+other_version_is_not_whole() { [ -z "$(groups_of 1.2.3 "$(listing 1.2.4 win linux)")" ]; }
+beta_version_is_exact() { [ "$(groups_of 1.2.3-beta.1 "$(listing 1.2.3-beta.1 linux)")" = "linux" ] && [ -z "$(groups_of 1.2.3 "$(listing 1.2.3-beta.1 linux)")" ]; }
+a_piece_of_a_name_is_not_a_name() { local file="$work/listas/pedaco"; mkdir -p "$work/listas"; sed 's/^/x-/' <<< "$(package_files 1.2.3 win)" > "$file"; [ -z "$(groups_of 1.2.3 "$file")" ]; }
+empty_list_has_no_group() { : > "$work/vazia"; [ -z "$(groups_of 1.2.3 "$work/vazia")" ]; }
+beta_expects_windows_and_linux() { [ "$(expected_groups beta)" = "win linux" ]; }
+stable_expects_all_four() { [ "$(expected_groups stable)" = "win linux mac-arm64 mac-x64" ]; }
+unknown_kind_fails() { ! expected_groups rc 2> /dev/null; }
+labels_are_for_people() { [ "$(group_label win) $(group_label linux) $(group_label mac-arm64) $(group_label mac-x64)" = "Windows Linux macOS (Apple Silicon) macOS (Intel)" ]; }
+assert "os grupos de packages.txt, na ordem do arquivo" groups_in_order
+assert "com os dez arquivos, os quatro grupos estão inteiros" all_four_are_whole
+assert "um grupo ausente não conta, e os outros sim (a falha de uma plataforma não esconde as outras)" only_win_is_whole
+assert "um grupo com um arquivo a menos não está inteiro" one_file_is_not_whole
+assert "arquivos de outra versão não contam" other_version_is_not_whole
+assert "o beta é procurado pelo nome inteiro da versão dele" beta_version_is_exact
+assert "um pedaço de nome não é o nome" a_piece_of_a_name_is_not_a_name
+assert "uma lista vazia não tem grupo" empty_list_has_no_group
+assert "um beta espera o Windows e o Linux (o macOS só é empacotado na estável)" beta_expects_windows_and_linux
+assert "uma estável espera as quatro plataformas" stable_expects_all_four
+assert "um tipo de lançamento desconhecido falha" unknown_kind_fails
+assert "cada grupo tem o nome que se diz a quem usa" labels_are_for_people
+
 # --- a origem das atualizações gravada no pacote (RN-ATUALIZA-001 e RN-GITHUB-005) ---
 
 # Um app.asar de mentira: bytes quaisquer em volta do package.json, que o electron-builder escreve com dois espaços de recuo.

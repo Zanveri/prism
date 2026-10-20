@@ -2,7 +2,8 @@
 # O `gh` de mentira do release.test.sh: só entende `gh api` nas formas que o publish-release.sh usa, e faz o que a documentação
 # da API de releases do GitHub diz (o rascunho não tem tag; publicar cria a tag no `target_commitish`, ou usa a que já existe; um
 # anexo com o mesmo nome é recusado; o envio que falha no caminho pode deixar um anexo vazio, em estado "starter"; a release de um
-# commit que acrescenta ou muda arquivos de .github/workflows/ em relação ao ramo padrão responde 404 ao GITHUB_TOKEN).
+# commit que acrescenta ou muda arquivos de .github/workflows/ em relação ao ramo padrão responde 404 ao GITHUB_TOKEN; o anexo, lido
+# com `Accept: application/octet-stream`, devolve o conteúdo, e sem ele, o JSON dele).
 #
 # Estado na pasta $FAKE: releases.json (a lista), calls (uma linha por pedido: "MÉTODO código endereço"), gh.argv (os argumentos
 # de cada chamada) e uploads (o nome de cada anexo recebido). As falhas de cada caso são arquivos em $FAKE (veja `flag`).
@@ -90,6 +91,14 @@ def respond(code, body, endpoint, method):
     sys.exit(0)
 
 
+def respond_bytes(data, endpoint, method):
+    with open(path("calls"), "a") as handle:
+        handle.write(f"{method} 200 {endpoint}\n")
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+    sys.exit(0)
+
+
 def main():
     argv = sys.argv[1:]
     with open(path("gh.argv"), "a") as handle:
@@ -152,6 +161,20 @@ def main():
         if not found:
             respond(404, {"message": "Not Found"}, endpoint, method)
         respond(200, found[0], endpoint, method)
+
+    if method == "GET" and match_asset:
+        asset_id = int(match_asset.group(1))
+        for release in releases:
+            for asset in release["assets"]:
+                if asset["id"] == asset_id:
+                    if "Accept: application/octet-stream" not in headers:
+                        respond(200, asset, endpoint, method)
+                    try:
+                        with open(path(f"asset-{asset_id}"), "rb") as handle:
+                            respond_bytes(handle.read(), endpoint, method)
+                    except FileNotFoundError:
+                        respond_bytes(b"", endpoint, method)
+        respond(404, {"message": "Not Found"}, endpoint, method)
 
     if method == "GET" and match_tag:
         found = [r for r in releases if r["tag_name"] == match_tag.group(1) and not r["draft"]]
@@ -246,6 +269,8 @@ def main():
             data = handle.read()
         asset_id = next_id("asset")
         broken = flag_value("upload-grava-e-502") == name
+        with open(path(f"asset-{asset_id}"), "wb") as handle:
+            handle.write(b"" if broken else data)
         asset = {
             "id": asset_id,
             "name": name,

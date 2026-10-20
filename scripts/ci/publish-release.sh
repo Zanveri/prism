@@ -8,13 +8,22 @@
 #  - não lança (o beta saiu de um commit à frente, ou a main sem commit novo desde a maior estável): o aviso à vista e saída 0, sem
 #    escrever nada;
 #  - já lançada daqui (a tag do beta, ou a da maior estável na main, aponta para este commit): confere que a release está publicada
-#    e completa, e sai;
+#    e que os anexos dela são os do SHA256SUMS dela, e sai;
 #  - lança: o caminho abaixo, nesta ordem.
 #
+# CADA PLATAFORMA É INDEPENDENTE (decisão do dono, 2026-10-20): o pacote de uma plataforma que falha (ou é cancelado, ou fica sem
+# runner) não segura o lançamento das outras. A release leva os GRUPOS de packages.txt que vieram INTEIROS em src/client/release
+# (todos os arquivos do grupo, com a versão da tag); um grupo com um arquivo só fica de fora, com todos os arquivos dele, e nenhum
+# grupo inteiro é recusa (nada é publicado). O que a pipeline espera é Windows e Linux num beta e as quatro plataformas numa estável
+# (o macOS só é empacotado na main: packages.sh, `expected_groups`); uma plataforma esperada que não veio sai no log e como aviso à
+# vista (::warning::), com o job verde, e as notas da release dizem a quem usa essa plataforma por que a versão não chega (release-
+# notes.sh). O SHA256SUMS e as somas das notas listam só o que entrou. Releases são imutáveis: a plataforma que faltou NÃO é
+# acrescentada depois; ela volta na próxima versão.
+#
 # O caminho, nesta ordem (o que a documentação de releases imutáveis recomenda: rascunho, anexos, publicação):
-#  1. as conferências de antes de escrever: o plano, os pacotes (os dez da lista de packages.txt, com a versão da tag) e o
-#     SHA256SUMS, as notas (release-notes.sh: a seção do changelog numa estável, se ela existir; senão, e num beta, o git-cliff desde a
-#     tag anterior; na estável, a estável anterior) e o
+#  1. as conferências de antes de escrever: o plano, os pacotes (os grupos inteiros da lista de packages.txt, com a versão da tag) e
+#     o SHA256SUMS, as notas (release-notes.sh: a seção do changelog numa estável, se ela existir; senão, e num beta, o git-cliff desde
+#     a tag anterior; na estável, a estável anterior) e o
 #     commit, que não pode acrescentar nem mudar arquivo de .github/workflows/ em relação ao ramo padrão (a API de releases
 #     responde 404 a um GITHUB_TOKEN nesse caso: ele não pode ter a permissão de workflows);
 #  2. o RASCUNHO da release: um rascunho com a mesma tag e este commit, deixado por uma tentativa que parou no meio, é retomado;
@@ -22,12 +31,16 @@
 #     rascunho não cria a tag;
 #  3. os ANEXOS: cada pacote e o SHA256SUMS. Um anexo que já está no rascunho com a mesma soma SHA-256 é pulado; um com outra soma,
 #     ou pela metade (o envio que falha pode deixar um anexo "starter"), é apagado e enviado de novo; um anexo que não é da lista é
-#     apagado. Depois, o rascunho é relido e conferido: os onze nomes, todos completos, cada soma igual à do arquivo;
+#     apagado. Depois, o rascunho é relido e conferido: os nomes desta execução (os pacotes que entraram e o SHA256SUMS), todos
+#     completos, cada soma igual à do arquivo;
 #  4. a PUBLICAÇÃO (draft=false), que é o que cria a tag, no commit desta execução. Antes dela, a tag é procurada no remoto pelo
 #     nome EXATO: se ela já existe (alguém a criou, ou outra execução publicou), nada é publicado;
-#  5. a conferência: a tag aponta para este commit e a release publicada tem os onze anexos. Se a release não saiu imutável (as
-#     releases imutáveis desligadas no repositório), o aviso fica à vista: a garantia que o README dá depende delas.
-# Repetir o job depois de uma falha em qualquer ponto é seguro: o que já foi feito é conferido e pulado. Nenhum pedido que cria,
+#  5. a conferência: a tag aponta para este commit e a release publicada tem os anexos que o SHA256SUMS DELA lista, mais ele, e
+#     nenhum outro (o SHA256SUMS é lido da própria release). Se a release não saiu imutável (as releases imutáveis desligadas no
+#     repositório), o aviso fica à vista: a garantia que o README dá depende delas.
+# Repetir o job depois de uma falha em qualquer ponto é seguro: o que já foi feito é conferido e pulado. O conjunto esperado de uma
+# retomada é o que ESTA execução trouxe; uma release já publicada, por outro lado, é conferida contra o SHA256SUMS dela, e não contra
+# a lista inteira de packages.txt: uma release sem o macOS, publicada de propósito, é uma release completa. Nenhum pedido que cria,
 # muda ou apaga é repetido pelo script; só as leituras (GET) são repetidas, até três vezes, num erro passageiro.
 #
 # O único token é o GITHUB_TOKEN do job (GH_TOKEN, com `contents: write` só neste job). O `gh` roda com uma pasta de configuração
@@ -38,7 +51,7 @@
 # Uso (só na pipeline): bash scripts/ci/publish-release.sh --expect <tag>
 #      … --remote <remoto>      só para os testes: o remoto de mentira (a pipeline nunca passa isto)
 # Variáveis: GH_TOKEN, e as padrão do GitHub Actions: GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_REF_NAME e GITHUB_SHA.
-# Precisa de bash, git, gh, jq, sha256sum e, num beta (ou numa estável sem seção no changelog), do Docker (a imagem do git-cliff).
+# Precisa de bash, git, gh, jq, sha256sum, awk e, num beta (ou numa estável sem seção no changelog), do Docker (a imagem do git-cliff).
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -96,11 +109,14 @@ mkdir "$tmp/gh"
 
 # --- o gh: uma pasta de configuração própria e vazia, nada que mude o que ele faz ou escreve ---
 
+# O que o servidor deve devolver: o JSON da API (o padrão), ou, para baixar o conteúdo de um anexo, o próprio arquivo
+# (`gh_accept=application/octet-stream gh_get …`).
+gh_accept=application/vnd.github+json
 gh_api() {
   env -u GH_DEBUG -u DEBUG -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u GITHUB_TOKEN -u GH_REPO -u GH_PATH -u GH_BROWSER \
     GH_CONFIG_DIR="$tmp/gh" GH_HOST="$gh_host" GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1 \
     GH_PAGER=cat PAGER=cat NO_COLOR=1 CLICOLOR=0 GH_SPINNER_DISABLED=1 \
-    gh api -H 'Accept: application/vnd.github+json' "$@"
+    gh api -H "Accept: $gh_accept" "$@"
 }
 
 # gh_get <arquivo de saída> <argumentos do gh api>: uma LEITURA, repetida até três vezes num erro.
@@ -159,19 +175,74 @@ assets_problem() {
   [ "$name" -eq $(( ${#files[@]} + 1 )) ] || echo "a release tem $name anexos, e eram $(( ${#files[@]} + 1 ))."
 }
 
-# verify_published <tag>: a release publicada dessa tag existe, aponta para este commit e tem os anexos desta lista.
+# listed_problem <SHA256SUMS> <versão> <arquivo com os nomes listados>: por que o SHA256SUMS de uma release não é de uma release que
+# o app instala, ou nada se é: linha fora do formato (que o app ignora), nome repetido, nada listado, ou um nome que não é de um
+# grupo inteiro de packages.txt (um pacote solto, ou de outra versão). Deixa os nomes listados, um por linha, no arquivo `names`.
+listed_problem() {
+  local sums=$1 version=$2 names=$3 count=0 group groups
+  [ -s "$sums" ] || { echo "o SHA256SUMS está vazio."; return 0; }
+  if grep -qvE '^[0-9a-f]{64}  [A-Za-z0-9][A-Za-z0-9._-]*$' "$sums"; then echo "o SHA256SUMS tem linha fora do formato \"<64 dígitos hexadecimais>  <nome do arquivo>\"."; return 0; fi
+  awk '{ print $2 }' "$sums" > "$names"
+  [ -z "$(sort "$names" | uniq -d)" ] || { echo "o SHA256SUMS lista o mesmo arquivo mais de uma vez."; return 0; }
+  groups=$(present_groups "$version" "$names") || { echo "não consegui ler os grupos de packages.txt."; return 0; }
+  [ -n "$groups" ] || { echo "o SHA256SUMS não lista nenhuma plataforma inteira (packages.txt, com a versão $version)."; return 0; }
+  for group in $groups; do count=$((count + $(package_files "$version" "$group" | wc -l))); done
+  [ "$count" -eq "$(wc -l < "$names" | tr -d ' ')" ] || echo "o SHA256SUMS lista arquivo que não é de uma plataforma inteira de packages.txt (ou que não é da versão $version)."
+}
+
+# published_problem <release> <SHA256SUMS> <nomes>: por que os anexos de uma release PUBLICADA não são os do SHA256SUMS dela, ou nada se
+# são: os nomes têm de ser exatamente os que ele lista mais ele, cada um completo e, quando o GitHub dá a soma, com a soma que o
+# SHA256SUMS diz (e o próprio SHA256SUMS com a soma do arquivo que foi lido).
+published_problem() {
+  local release=$1 sums=$2 names=$3 hash name state digest actual
+  if [ "$(jq -r '[.assets[].name] | sort | join(" ")' "$release")" != "$( { cat "$names"; echo SHA256SUMS; } | sort | paste -sd ' ' -)" ]; then
+    echo "os anexos da release não são os que o SHA256SUMS dela lista (mais ele): $(jq -r '[.assets[].name] | sort | join(" ")' "$release")."
+    return 0
+  fi
+  while read -r hash name; do
+    state=$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .state' "$release")
+    digest=$(jq -r --arg name "$name" '.assets[] | select(.name == $name) | .digest // ""' "$release")
+    [ "$state" = uploaded ] || { echo "o anexo $name não está completo (estado \"$state\")."; return 0; }
+    if [ -n "$digest" ] && [ "$digest" != "sha256:$hash" ]; then echo "o anexo $name não tem a soma que o SHA256SUMS da release diz."; return 0; fi
+  done < "$sums"
+  digest=$(jq -r '.assets[] | select(.name == "SHA256SUMS") | .digest // ""' "$release")
+  actual=$(sha256sum < "$sums" | cut -d ' ' -f 1)
+  if [ -n "$digest" ] && [ "$digest" != "sha256:$actual" ]; then echo "o SHA256SUMS que li não tem a soma do anexo SHA256SUMS da release."; fi
+}
+
+# verify_published <tag> [SHA256SUMS desta execução]: a release publicada dessa tag existe, aponta para este commit e tem os anexos
+# que o SHA256SUMS DELA lista, mais ele, e nenhum outro. Uma release publicada sem o macOS, de propósito, é uma release completa, e
+# por isso ela é conferida contra a lista dela, e não contra a lista inteira de packages.txt. Com o SHA256SUMS desta execução, o da
+# release tem de ser o mesmo. Escreve em `published_groups` as plataformas inteiras que a release traz.
 verify_published() {
-  local tag=$1 now problem
+  local tag=$1 local_sums=${2:-} now sums_id problem
   now=$(remote_ref_commit "refs/tags/$tag") || fail "não consegui reler a tag $tag no remoto. Confira-a à mão."
   [ "$now" = "$commit" ] || fail "a tag $tag aponta para ${now:-nada}, e não para o commit desta execução ($commit)."
   gh_get "$tmp/publicada.json" "repos/$repo/releases/tags/$tag" || fail "a tag $tag existe neste commit e não achei a release publicada dela: a tag foi criada fora do lançamento, ou a release foi apagada. Confira à mão: nada foi publicado agora."
   [ "$(jq -r '.draft' "$tmp/publicada.json")" = false ] || fail "a release $tag não está publicada."
-  local names
-  names=$(jq -r '[.assets[].name] | sort | join(" ")' "$tmp/publicada.json")
-  [ "$names" = "$(printf '%s\n' "${files[@]}" SHA256SUMS | sort | paste -sd ' ' -)" ] || fail "a release publicada $tag não tem os anexos da lista (packages.txt e o SHA256SUMS). Ela não pode ser completada se for imutável: confira à mão."
+  sums_id=$(jq -r '[.assets[] | select(.name == "SHA256SUMS")] | if length == 1 then .[0].id | tostring else empty end' "$tmp/publicada.json")
+  [[ "$sums_id" =~ ^[0-9]+$ ]] || fail "a release publicada $tag não tem o SHA256SUMS (ou ele está repetido): ela não diz quais pacotes tem. Ela não pode ser completada se for imutável: confira à mão."
+  gh_accept=application/octet-stream gh_get "$tmp/sums-publicado" "repos/$repo/releases/assets/$sums_id" || fail "não consegui ler o SHA256SUMS da release publicada $tag. Nada foi publicado agora; repita o job."
+  problem=$(listed_problem "$tmp/sums-publicado" "$release_version" "$tmp/nomes-publicados")
+  [ -n "$problem" ] || problem=$(published_problem "$tmp/publicada.json" "$tmp/sums-publicado" "$tmp/nomes-publicados")
+  [ -n "$problem" ] || [ -z "$local_sums" ] || cmp -s "$local_sums" "$tmp/sums-publicado" || problem="o SHA256SUMS da release não é o desta execução."
+  [ -z "$problem" ] || fail "a release publicada $tag não confere com o SHA256SUMS dela: $problem Ela não pode ser completada se for imutável: confira à mão."
+  published_groups=$(present_groups "$release_version" "$tmp/nomes-publicados")
   if [ "$(jq -r '.immutable // false' "$tmp/publicada.json")" != true ]; then
     ci_warning "Release mutável" "a release $tag não é imutável: as releases imutáveis não estão ligadas no repositório, e um pacote publicado ainda pode ser trocado. A garantia das atualizações que o README descreve conta com elas (docs/ci.md, lista de conferência)."
   fi
+}
+
+# left_out_warning <grupo>...: as plataformas que a pipeline ESPERA deste lançamento (`expected_groups`) e que não estão entre os
+# grupos dados saem no log e como aviso à vista, com o job verde: a versão sai sem elas, e quem as usa continua na anterior.
+left_out_warning() {
+  local group left=
+  for group in $expected_list; do
+    case " $* " in *" $group "*) ;; *) left="${left:+$left; }$(group_label "$group")" ;; esac
+  done
+  [ -n "$left" ] || return 0
+  echo "publish-release: a release $tag sai SEM o pacote de: $left."
+  ci_warning "Plataforma sem pacote" "a release $tag sai sem o pacote de: $left. O pacote não veio inteiro dos jobs de empacotar (falhou, foi cancelado ou ficou sem runner); as outras plataformas saem mesmo assim, e as notas da release dizem a quem usa essa que a versão não chega a ela. A plataforma volta na próxima versão: uma release publicada não recebe anexo depois."
 }
 
 # --- a decisão de agora, e o plano ---
@@ -190,13 +261,13 @@ release_version=${tag#v}
 prerelease=false
 [[ "$release_version" != *-* ]] || prerelease=true
 name=$(release_name "$release_version")
-groups=(win linux mac-arm64 mac-x64)
-list=$(package_files "$release_version" "${groups[@]}") || exit 1
-files=()
-while IFS= read -r file; do files+=("$file"); done <<< "$list"
+if [ "$prerelease" = true ]; then kind=beta; else kind=stable; fi
+expected_list=$(expected_groups "$kind") || exit 1
 
 if [ "$decision" = done ]; then
   verify_published "$tag"
+  # shellcheck disable=SC2086 # a lista é de palavras simples (nomes de grupo)
+  left_out_warning $published_groups
   echo "publish-release: o $name já foi lançado deste commit (a tag $tag e a release existem). Nada a publicar."
   ci_summary "**Já lançada.** $name, tag $tag, commit $commit."
   exit 0
@@ -205,11 +276,32 @@ fi
 
 # --- 1. as conferências de antes de escrever ---
 
-missing=0
-for file in "${files[@]}"; do
-  [ -f "src/client/release/$file" ] || { echo "publish-release: faltou $file" >&2; missing=1; }
+# Os grupos de packages.txt que vieram INTEIROS (todos os arquivos, com a versão da tag): são eles, e só eles, que entram na release.
+: > "$tmp/locais"
+for path in src/client/release/*; do
+  if [ -f "$path" ]; then printf '%s\n' "${path##*/}" >> "$tmp/locais"; fi
 done
-[ "$missing" -eq 0 ] || fail "faltam pacotes em src/client/release (vêm dos jobs de empacotar, com a versão $release_version). Nada foi publicado."
+present=$(present_groups "$release_version" "$tmp/locais") || fail "não consegui ler os grupos de packages.txt. Nada foi publicado."
+files=()
+for group in $(package_groups); do
+  group_files=$(package_files "$release_version" "$group") || exit 1
+  if printf '%s\n' "$present" | grep -qx -- "$group"; then
+    while IFS= read -r file; do files+=("$file"); done <<< "$group_files"
+    continue
+  fi
+  absent=
+  while IFS= read -r file; do
+    grep -qxF -- "$file" "$tmp/locais" || absent="${absent:+$absent, }$file"
+  done <<< "$group_files"
+  if [ "$absent" = "$(printf '%s' "$group_files" | paste -sd ',' - | sed 's/,/, /g')" ]; then
+    echo "publish-release: o pacote de $(group_label "$group") não veio (nenhum arquivo do grupo $group, com a versão $release_version)." >&2
+  else
+    echo "publish-release: o pacote de $(group_label "$group") veio INCOMPLETO e fica de fora, com todos os arquivos dele (faltou: $absent)." >&2
+  fi
+done
+[ "${#files[@]}" -gt 0 ] || fail "nenhuma plataforma veio com os pacotes inteiros em src/client/release (vêm dos jobs de empacotar, com a versão $release_version): não há o que publicar. Nada foi publicado."
+# shellcheck disable=SC2086 # a lista é de palavras simples (nomes de grupo)
+left_out_warning $present
 # Cada linha é "<soma>  <arquivo>", com dois espaços, escrita aqui mesmo: o formato é contrato com o atualizador do app.
 (cd src/client/release && for file in "${files[@]}"; do printf '%s  %s\n' "$(sha256sum < "$file" | cut -d ' ' -f 1)" "$file"; done) > "$tmp/SHA256SUMS"
 mv "$tmp/SHA256SUMS" src/client/release/SHA256SUMS
@@ -312,6 +404,6 @@ fi
 
 # --- 5. a conferência ---
 
-verify_published "$tag"
+verify_published "$tag" src/client/release/SHA256SUMS
 echo "publish-release: $name publicado. A tag $tag aponta para $commit."
-ci_summary "**Publicado:** $name ($([ "$prerelease" = true ] && echo pré-lançamento || echo estável)), tag $tag, commit $commit, com $(( ${#files[@]} + 1 )) anexos."
+ci_summary "**Publicado:** $name ($([ "$prerelease" = true ] && echo pré-lançamento || echo estável)), tag $tag, commit $commit, com $(( ${#files[@]} + 1 )) anexos (plataformas: $(for group in $present; do printf '%s; ' "$(group_label "$group")"; done | sed 's/; $//'))."
