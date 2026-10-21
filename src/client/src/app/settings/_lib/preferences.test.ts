@@ -55,7 +55,7 @@ describe("a leitura tolerante", () => {
   });
 
   it("os modos de tema são os seis do canvas e o do sistema, e o padrão é o Prism Escuro", () => {
-    expect([...themeModes].sort()).toEqual(["dark", "dracula", "github-light", "light", "monokai", "nord", "system"]);
+    expect([...themeModes].sort()).toEqual(["dark", "dracula", "github-light", "kanagawa", "light", "monokai", "nord", "system"]);
     expect(defaultPreferences.theme).toBe("dark");
   });
 

@@ -8,7 +8,7 @@ import { css, dark, light, paletteOf, themeBlock, type Palette } from "@/lib/tes
 
 /** Os temas além do Prism Escuro e do Prism Claro: cada um é um bloco de CSS que troca as fichas e fica com as do esquema dele nas demais. */
 const extraThemes = themeModes.filter((mode): mode is Exclude<ThemeId, "dark" | "light"> => mode !== "dark" && mode !== "light" && mode !== "system");
-const names: Record<ThemeId, string> = { dark: "Prism Escuro", light: "Prism Claro", monokai: "Monokai", dracula: "Dracula", nord: "Nord", "github-light": "GitHub Claro" };
+const names: Record<ThemeId, string> = { dark: "Prism Escuro", light: "Prism Claro", monokai: "Monokai", dracula: "Dracula", nord: "Nord", "github-light": "GitHub Claro", kanagawa: "Kanagawa" };
 
 /** Todos os temas do app. Cada um passa pela mesma bateria de contraste: quem acrescenta um tema acrescenta o bloco dele no CSS e o nome aqui. */
 const themes = (["light", "dark", ...extraThemes] as const).map((id) => ({ id, name: names[id], ...paletteOf(id) }));
@@ -104,8 +104,8 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
 });
 
 describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
-  it("são Monokai, Dracula, Nord e GitHub Claro, cada um com o seu bloco no CSS", () => {
-    expect(extraThemes).toEqual(["monokai", "dracula", "nord", "github-light"]);
+  it("cada tema adicional tem o seu bloco no CSS", () => {
+    expect(extraThemes).toEqual(["monokai", "dracula", "nord", "github-light", "kanagawa"]);
     for (const id of extraThemes) expect(css, id).toContain(`:root[data-theme="${id}"]`);
   });
 
@@ -115,7 +115,7 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
 
       expect(scheme, id).toBe(themeSchemes[id as keyof typeof themeSchemes]);
     }
-    expect(themeSchemes).toEqual({ dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light" });
+    expect(themeSchemes).toEqual({ dark: "dark", light: "light", monokai: "dark", dracula: "dark", nord: "dark", "github-light": "light", kanagawa: "dark" });
   });
 
   it("um bloco só troca fichas que existem: nenhum token inventado", () => {
@@ -138,9 +138,10 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
     dracula: { bg: "#282A36", painel: "#21222C", linha: "#44475A", fg: "#F8F8F2", kw: "#FF79C6", str: "#F1FA8C", num: "#BD93F9", com: "#9AA5CE", rolagem: "#6272A4" },
     nord: { bg: "#2E3440", painel: "#272C36", linha: "#434C5E", fg: "#D8DEE9", kw: "#81A1C1", str: "#A3BE8C", num: "#B48EAD", com: "#9AA6BD", rolagem: "#4C566A" },
     "github-light": { bg: "#FFFFFF", painel: "#F6F8FA", linha: "#D1D9E0", fg: "#1F2328", kw: "#CF222E", str: "#0A3069", num: "#0550AE", com: "#59636E", rolagem: "#AFB8C1" },
+    kanagawa: { bg: "#1F1F28", painel: "#1A1A22", linha: "#54546D", fg: "#DCD7BA", kw: "#7E9CD8", str: "#98BB6C", num: "#DCA561", com: "#9C987D", rolagem: "#54546D" },
   };
   const tokenOf = { bg: "background", painel: "panel", linha: "border", fg: "ink", kw: "syntax-keyword", str: "syntax-string", num: "syntax-number", com: "subtle", rolagem: "border-strong" } as const;
-  const lifted: Record<string, string[]> = { monokai: ["kw", "num"], dracula: [], nord: ["kw", "num", "com"], "github-light": [] };
+  const lifted: Record<string, string[]> = { monokai: ["kw", "num"], dracula: [], nord: ["kw", "num", "com"], "github-light": [], kanagawa: [] };
 
   it.each(extraThemes)("o tema %s usa as cores do canvas, menos as que sozinhas não passam em 4,5:1 (e essas são as únicas trocadas)", (id) => {
     const theme = themes.find((candidate) => candidate.id === id)!;
@@ -163,9 +164,9 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   // As fichas que cada bloco troca, nem uma a mais. As do canvas todo bloco troca; qualquer outra é uma decisão de cor, e entra em `swapped`
   // com o motivo conferido logo abaixo: a cor que o tema herdaria do esquema dele não passa em alguma superfície dele.
   const fromCanvas = ["background", "panel", "raised", "selected", "selection", "border", "border-strong", "ink", "body", "muted", "subtle", ...syntaxText];
-  const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [] };
+  const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [], kanagawa: ["accent", "postgres", "db2", "informix", "danger", "success"] };
   // RN-LINK-001: o azul de link de cada tema (o canvas não o desenha): o do Prism nos dois do Prism, o da paleta do tema nos outros quatro.
-  const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7" } as const;
+  const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7", kanagawa: "#7e9cd8" } as const;
 
   it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
     expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...swapped[id]].sort());

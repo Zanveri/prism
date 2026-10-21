@@ -437,11 +437,11 @@ describe("Sobre", () => {
 describe("Aparência: tema", () => {
   const cards = (markup: string) => [...markup.matchAll(/<button type="button" aria-pressed="(true|false)"[^>]*>[\s\S]*?<span class="font-semibold">([^<]*)<\/span>/g)].map((match) => [match[2], match[1]]);
   const followSystem = (markup: string) => /<input type="checkbox"([^>]*)\/?>[\s\S]*?Seguir o modo claro ou escuro do sistema/.exec(markup)?.[1] ?? "";
-  const names = ["Prism Escuro", "Prism Claro", "Monokai", "Dracula", "Nord", "GitHub Claro"];
-  /** Os seis cartões, com só o do tema dado marcado. */
+  const names = ["Prism Escuro", "Prism Claro", "Monokai", "Dracula", "Nord", "GitHub Claro", "Kanagawa"];
+  /** Os cartões, com só o do tema dado marcado. */
   const only = (name: string) => names.map((candidate) => [candidate, String(candidate === name)]);
 
-  it("por padrão o tema é o Escuro, e há seis, na ordem do canvas: Prism Escuro, Prism Claro, Monokai, Dracula, Nord e GitHub Claro", () => {
+  it("por padrão o tema é o Escuro, seguido pelos temas disponíveis", () => {
     const { markup } = render();
 
     expect(cards(markup)).toEqual(only("Prism Escuro"));
@@ -456,6 +456,7 @@ describe("Aparência: tema", () => {
     ["dracula", "Dracula"],
     ["nord", "Nord"],
     ["github-light", "GitHub Claro"],
+    ["kanagawa", "Kanagawa"],
   ] as const)("mostra o tema que o usuário escolheu (%s), e a prévia é a dele", (theme, name) => {
     const { markup } = render({ theme });
 

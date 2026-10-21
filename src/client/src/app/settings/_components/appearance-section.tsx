@@ -48,7 +48,7 @@ function ThemeCard({ option, selected, onPick }: { option: ThemeOption; selected
 }
 
 /**
- * Aparência: tema (RN-CONFIG-001 e RN-CONFIG-003) e fontes (RN-CONFIG-008). Um dos seis temas do canvas, ou o do sistema: a escolha vai para as preferências do
+ * Aparência: tema (RN-CONFIG-001 e RN-CONFIG-003) e fontes (RN-CONFIG-008). Um dos temas disponíveis, ou o do sistema: a escolha vai para as preferências do
  * usuário, e quem aplica o tema na tela é o `ThemeSync`, na hora. Com "seguir o sistema" ligado o cartão marcado é o do Prism no modo que
  * o sistema está usando agora (Escuro ou Claro); escolher um cartão desliga o "seguir", e desligá-lo fica no tema que a tela já mostrava.
  *

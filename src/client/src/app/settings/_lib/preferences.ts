@@ -12,10 +12,10 @@ import { appFonts, fontNameSchema } from "./fonts";
  */
 
 /**
- * Os temas do canvas (RN-CONFIG-001 e RN-CONFIG-003): o Prism Escuro (`dark`) e o Prism Claro (`light`), Monokai, Dracula, Nord e GitHub Claro.
+ * Os temas do Prism (RN-CONFIG-001 e RN-CONFIG-003): o Prism Escuro (`dark`) e o Prism Claro (`light`), Monokai, Dracula, Nord, GitHub Claro e Kanagawa.
  * "system" não é um tema, e sim "seguir o sistema": o CSS decide, pelo `prefers-color-scheme`, entre o Prism Escuro e o Prism Claro.
  */
-export const themeModes = ["dark", "light", "system", "monokai", "dracula", "nord", "github-light"] as const;
+export const themeModes = ["dark", "light", "system", "monokai", "dracula", "nord", "github-light", "kanagawa"] as const;
 
 /**
  * Os passos do zoom da grade do resultado (RN-GRADE-010), em porcentagem: 100% é o tamanho de antes do zoom existir. Uma preferência só, a mesma para as

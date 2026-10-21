@@ -234,6 +234,32 @@
     --color-link: #0967d7;
   }
 
+  :root[data-theme="kanagawa"] {
+    color-scheme: dark;
+    --color-background: #1f1f28;
+    --color-panel: #1a1a22;
+    --color-raised: #2a2a35;
+    --color-selected: #292936;
+    --color-border: #54546d;
+    --color-border-strong: #54546d;
+    --color-selection: #292936;
+    --color-ink: #dcd7ba;
+    --color-body: #c8c3a7;
+    --color-muted: #b8b396;
+    --color-subtle: #9c987d;
+    --color-accent: #7e9cd8;
+    --color-postgres: #7e9cd8;
+    --color-db2: #98bb6c;
+    --color-informix: #e46876;
+    --color-danger: #e46876;
+    --color-success: #98bb6c;
+    --color-syntax-keyword: #7e9cd8;
+    --color-syntax-string: #98bb6c;
+    --color-syntax-number: #dca561;
+    --color-syntax-comment: #9c987d;
+    --color-link: #7e9cd8;
+  }
+
   /* A pilha da interface que vem com o app: a reserva da escolhida (RN-CONFIG-008). Fora do `@theme`, para não virar classe. */
   :root {
     --font-app-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;

@@ -36,6 +36,7 @@ export const settingsCopy = {
       dracula: { name: "Dracula", kind: "escuro" },
       nord: { name: "Nord", kind: "escuro" },
       githubLight: { name: "GitHub Claro", kind: "claro" },
+      kanagawa: { name: "Kanagawa", kind: "escuro" },
     },
     preview: "Prévia",
     followSystem: "Seguir o modo claro ou escuro do sistema",
