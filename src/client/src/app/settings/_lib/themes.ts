@@ -39,5 +39,5 @@ export const themePreviews: Record<ThemeId, ThemePreview> = {
   dracula: { bg: "#282A36", painel: "#21222C", linha: "#44475A", fg: "#F8F8F2", kw: "#FF79C6", str: "#F1FA8C", num: "#BD93F9", com: "#9AA5CE", rolagem: "#6272A4" },
   nord: { bg: "#2E3440", painel: "#272C36", linha: "#434C5E", fg: "#D8DEE9", kw: "#98B2CC", str: "#A3BE8C", num: "#C5A7BF", com: "#A5B0C4", rolagem: "#4C566A" },
   "github-light": { bg: "#FFFFFF", painel: "#F6F8FA", linha: "#D1D9E0", fg: "#1F2328", kw: "#CF222E", str: "#0A3069", num: "#0550AE", com: "#59636E", rolagem: "#AFB8C1" },
-  kanagawa: { bg: "#1F1F28", painel: "#1A1A22", linha: "#54546D", fg: "#DCD7BA", kw: "#7E9CD8", str: "#98BB6C", num: "#DCA561", com: "#727169", rolagem: "#54546D" },
+  kanagawa: { bg: "#1F1F28", painel: "#1A1A22", linha: "#54546D", fg: "#DCD7BA", kw: "#7E9CD8", str: "#98BB6C", num: "#DCA561", com: "#9C987D", rolagem: "#54546D" },
 };

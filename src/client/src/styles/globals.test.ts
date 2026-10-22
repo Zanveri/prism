@@ -164,12 +164,20 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   // As fichas que cada bloco troca, nem uma a mais. As do canvas todo bloco troca; qualquer outra é uma decisão de cor, e entra em `swapped`
   // com o motivo conferido logo abaixo: a cor que o tema herdaria do esquema dele não passa em alguma superfície dele.
   const fromCanvas = ["background", "panel", "raised", "selected", "selection", "border", "border-strong", "ink", "body", "muted", "subtle", ...syntaxText];
-  const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [], kanagawa: ["accent", "postgres", "db2", "informix", "danger", "success"] };
+  // Kanagawa fornece estes tons na própria paleta; Nord troca `danger` porque a ficha herdada não passa no contraste.
+  const paletteColors: Record<string, Record<string, string>> = {
+    kanagawa: { accent: "#819fdc", postgres: "#7e9cd8", db2: "#98bb6c", informix: "#ea7f89", danger: "#ea7f89", success: "#98bb6c" },
+  };
+  const swapped: Record<string, string[]> = { monokai: [], dracula: [], nord: ["danger"], "github-light": [], kanagawa: [] };
   // RN-LINK-001: o azul de link de cada tema (o canvas não o desenha): o do Prism nos dois do Prism, o da paleta do tema nos outros quatro.
   const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7", kanagawa: "#7e9cd8" } as const;
 
   it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
-    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...swapped[id]].sort());
+    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...Object.keys(paletteColors[id] ?? {}), ...swapped[id]].sort());
+  });
+
+  it.each(Object.entries(paletteColors.kanagawa))("Kanagawa usa o tom %s da paleta", (token, color) => {
+    expect(themes.find((theme) => theme.id === "kanagawa")!.palette[token]).toBe(color);
   });
 
   it.each(extraThemes)("o azul de link do tema %s é o da paleta dele (o do GitHub Claro, escurecido o mínimo para passar na linha selecionada)", (id) => {
@@ -245,9 +253,9 @@ describe("todos os temas", () => {
     }
   });
 
-  it("são seis, e cada modo de tema (menos o do sistema) é um deles", () => {
+  it("são sete, e cada modo de tema (menos o do sistema) é um deles", () => {
     expect(themes.map((theme) => theme.id).sort()).toEqual(themeModes.filter((mode) => mode !== "system").sort());
-    expect(themes).toHaveLength(6);
+    expect(themes).toHaveLength(7);
   });
 });
 
