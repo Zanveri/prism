@@ -947,7 +947,8 @@ Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
 troca de senha, explicar plano, formatar SQL, exportar CSV, salvar e abrir arquivos `.sql`
 (o texto das abas se perde ao fechar o app), trocar de banco dentro da mesma conexão,
-atualização automática, assinatura de código, roteiro de aceite completo em macOS e Linux
+atualização automática, assinatura de código com Developer ID e notarização (a do macOS é ad hoc,
+RN-ABERTO-006), roteiro de aceite completo em macOS e Linux
 (a seção 14 cobre só a geração dos pacotes), mais de uma janela.
 
 ## 14. Código aberto
@@ -998,10 +999,18 @@ a infraestrutura da Zanveri, com pacotes para todas as plataformas gerados na pi
   os minutos da pipeline, em que o de macOS é o mais caro): os dois jobs de macOS só rodam no merge
   em `main`, e um beta sai com Windows e Linux. **Cada plataforma é independente:** o pacote de uma
   que falha, é cancelada ou fica sem máquina não segura o lançamento das outras (RN-VERSAO-008).
-  Nenhum pacote é assinado nesta fatia, e o README diz o que isso implica em cada sistema. Onde
-  o driver da IBM não existir para a plataforma, o pacote sai sem Db2 e Informix naquela
-  plataforma, e o README e a tela dizem isso; PostgreSQL funciona em todas. *Alterada a pedido do
-  dono em 2026-10-20: a falha do pacote de uma plataforma não segura o lançamento das outras.*
+  Os pacotes de Windows e de Linux não são assinados nesta fatia; o de macOS leva **assinatura
+  ad hoc, sem Developer ID nem notarização** (não pede certificado nem conta da Apple), e o README
+  diz o que isso implica em cada sistema: com ela o macOS deixa de dar o app como "danificado" e
+  diz só que não pode verificá-lo, e a pessoa o libera uma vez em Ajustes do Sistema › Privacidade
+  e Segurança › "Abrir Mesmo Assim" (macOS 15 em diante) ou pelo clique com o botão direito ›
+  Abrir (até o macOS 14). Onde o driver da IBM não existir para a plataforma, o pacote sai sem
+  Db2 e Informix naquela plataforma, e o README e a tela dizem isso; PostgreSQL funciona em todas.
+  *Alterada a pedido do dono em 2026-10-20: a falha do pacote de uma plataforma não segura o lançamento das outras.
+  Alterada a pedido do dono em 2026-10-24 (issue #33): o pacote de macOS sem nenhuma assinatura era
+  dado como danificado e só abria com `xattr` no Terminal; agora leva a assinatura ad hoc. Ainda
+  não foi aberto num Mac de verdade (o pacote de macOS só sai na estável), e as versões até a
+  0.4.x continuam precisando do `xattr`, que o README mantém para elas.*
 - **RN-ABERTO-007.** Runner próprio: nenhum. O projeto usa só os runners hospedados pelo GitHub,
   e nenhum runner próprio é ligado ao repositório. A proteção que cabe à configuração do
   repositório fica numa lista de conferência em `docs/ci.md`: o token padrão dos workflows só de
@@ -1129,7 +1138,8 @@ com as fontes, está em os registros internos do projeto.
   `docs/versionamento.md`, escritos para quem nunca lançou uma versão.
 
 Fica para depois, por depender de assinatura de código ou de infraestrutura que o projeto ainda
-não tem: assinatura e notarização dos pacotes, repositórios apt e rpm, automação que abre o
+não tem: assinatura com Developer ID e notarização dos pacotes (o de macOS já leva a ad hoc,
+RN-ABERTO-006), repositórios apt e rpm, automação que abre o
 pull request de lançamento, apagar pré-lançamentos antigos, e a conferência de versão entre a interface e a API na partida. A
 verificação e a instalação de atualizações estão na seção 17.
 
@@ -1326,10 +1336,13 @@ dia.
   validação do certificado nunca é desligada. A tela não ganha nenhuma permissão de rede. A
   consulta não envia identificador do usuário nem da máquina; o servidor vê o que qualquer
   requisição HTTP mostra (o endereço de rede e a versão do Prism).
-- **RN-ATUALIZA-009.** Sem assinatura de código (seção 14), a garantia de uma atualização é a do
-  HTTPS do GitHub somada às duas somas da RN-ATUALIZA-005 e às releases imutáveis (um pacote
+- **RN-ATUALIZA-009.** Sem assinatura de código de um desenvolvedor (seção 14: assinatura ad hoc
+  no macOS, sem Developer ID nem notarização, e nada assinado no Windows e no Linux), a garantia de
+  uma atualização é a do HTTPS do GitHub somada às duas somas da RN-ATUALIZA-005 e às releases imutáveis (um pacote
   publicado não pode ser trocado). O README e a tela dizem isso. Assinar as releases com uma
-  chave do projeto fica para depois.
+  chave do projeto fica para depois. *Alterada a pedido do dono em 2026-10-24 (issue #33): a
+  assinatura ad hoc do macOS não muda a garantia, nem a instalação: no macOS a RN-ATUALIZA-006 só
+  deixa o pacote conferido na pasta de downloads, e o app não verifica assinatura nenhuma.*
 - **RN-ATUALIZA-010.** Canal beta (decisão do dono em 2026-10-12): Configurações › Atualizações
   ganha "Receber versões beta", desligado por padrão, guardado com as outras preferências de
   atualização (vale para a instalação, RN-ATUALIZA-007). Ligado, a consulta considera também os
