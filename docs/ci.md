@@ -227,7 +227,9 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   e roda `pnpm dist -- <plataforma>` de `src/client`. Windows no `windows-2025` (instalador `nsis` e zip); Linux no contêiner
   `electronuserland/builder:24-05.26`, fixado por digest (AppImage, deb, rpm e tar.gz); macOS no `macos-15`, Apple Silicon, uma
   arquitetura por job (dmg e zip de `arm64`, e de `x64` pelo `--x64` do electron-builder), porque o dmg só se gera no macOS. O script
-  confere no fim que todos os arquivos de `scripts/ci/packages.txt` saíram.
+  confere no fim que todos os arquivos de `scripts/ci/packages.txt` saíram. **O pacote de macOS leva assinatura ad hoc** (`identity: "-"`
+  no `electron-builder.yml`; issue #33): ela não usa certificado, keychain nem segredo, então o job não ganhou nada além do que já tinha.
+  O Windows e o Linux saem sem assinatura.
 - **O instalador do Windows, instalado de verdade** (`check-windows-installer.sh`, no job `windows`, logo depois de empacotar; seção 25
   da especificação, RN-INSTALA-001 a 004). O runner é administrador e não mostra o pedido de permissão do Windows, então o script
   confere os modos que a linha de comando e a instalação existente escolhem, em silêncio: `/S /currentuser` (o `Prism.exe` em
@@ -679,7 +681,9 @@ Cada passo é uma chamada a um arquivo de `scripts/ci/`; rode o arquivo. Para co
 ## O que a pipeline não faz
 
 - **Configurar o repositório**: a lista de conferência acima é manual (inclusive ligar o GitHub Pages por Actions, o item 13).
-- **Assinatura de código e notarização**: nenhum pacote é assinado. O README diz o que isso implica em cada sistema.
+- **Assinatura de código e notarização**: o pacote de Windows e o de Linux não são assinados, e o de macOS leva só a assinatura ad hoc
+  (sem Developer ID, sem notarização). O README diz o que isso implica em cada sistema. O que faltaria para o macOS abrir sem aviso
+  nenhum está em [Notarizar o pacote de macOS](#notarizar-o-pacote-de-macos), abaixo.
 - **Publicação em loja** e **repositórios apt e rpm**.
 - **Atualizar o app de alguém**: ela publica o que o atualizador lê (a release, as notas com as somas, os pacotes e o `SHA256SUMS`);
   quem procura, mostra, baixa, confere e instala é o app, quando o usuário manda.
@@ -688,6 +692,26 @@ Cada passo é uma chamada a um arquivo de `scripts/ci/`; rode o arquivo. Para co
 - **Apagar um lançamento** ou os betas antigos.
 - **Cache entre execuções**, de propósito.
 - **Rodar em pull request**: quem revisa roda as verificações na própria máquina ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+
+### Notarizar o pacote de macOS
+
+Fica para quando o projeto tiver uma conta no Apple Developer Program (paga, do dono). **Nada disto existe hoje: nenhum segredo e nenhum
+passo novo na pipeline.** Com ela, o macOS deixaria de avisar na primeira abertura, e o que entraria é:
+
+- **Um certificado "Developer ID Application"**, em `.p12` com senha, para assinar no lugar da ad hoc. O `electron-builder.yml` trocaria
+  `identity: "-"` pelo nome do certificado e ligaria o `hardenedRuntime` (a notarização o exige; hoje ele fica desligado só porque, sem notarização, nada precisa dele, e não porque o
+  app deixaria de abrir: o modelo de entitlements do electron-builder já traz `disable-library-validation`, que um arquivo próprio teria de
+  manter enquanto a assinatura fosse ad hoc, e traz também JIT e memória executável); as entitlements do Electron e do .NET teriam de ser
+  conferidas num Mac (não verificado). O `dist.mjs` hoje tira as `CSC_*` do ambiente no macOS, e essa trava sairia junto.
+- **A notarização**, que o electron-builder faz depois de assinar quando acha no ambiente as variáveis da Apple (`notarize: false` sairia
+  do `electron-builder.yml`): ou a chave de API do App Store Connect (`APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, a opção que
+  o electron-builder recomenda), ou `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` e `APPLE_TEAM_ID`.
+- **Os segredos**, então, seriam o `.p12` em base64 (`CSC_LINK`) e a senha dele (`CSC_KEY_PASSWORD`), mais os da notarização acima. Entrariam
+  como segredos do repositório e seriam lidos **só pelo passo "Empacotar" do job `macos`** do `empacotar.yml`, nunca pelos outros jobs nem
+  por um passo que rode código de terceiro; a tabela de "Variáveis e segredos" e o "Por onde o token passa" teriam de ser atualizados.
+  Como o `macos` só roda na `main`, os segredos só existiriam para o merge de lançamento.
+- **O que conferir**, no merge em `main`: `codesign --verify --deep --strict` e `spctl --assess --type execute` no `.app`, e o dmg aberto
+  num Mac que nunca viu o Prism.
 
 ## Atualizar as versões fixadas
 

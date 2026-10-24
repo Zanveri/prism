@@ -323,8 +323,9 @@ atualização. A consulta é feita sem credencial: num repositório privado ela 
 
 Por depender de assinatura de código ou de infraestrutura que o projeto ainda não tem:
 
-- assinatura e notarização dos pacotes, e assinatura das releases com uma chave do projeto (hoje a garantia de uma atualização é o
-  HTTPS do GitHub somado às duas somas e às releases imutáveis);
+- assinatura com Developer ID e notarização dos pacotes (o de macOS já sai com a assinatura ad hoc, sem nenhuma das duas), e
+  assinatura das releases com uma chave do projeto (hoje a garantia de uma atualização é o HTTPS do GitHub somado às duas somas e às
+  releases imutáveis);
 - aplicar a atualização sozinho no Linux e no macOS, e atualização em segundo plano;
 - repositórios apt e rpm;
 - automação que abre o pull request de lançamento;
