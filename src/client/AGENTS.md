@@ -3298,8 +3298,9 @@ fechar não apaga as abas.
   foco do campo (`mousedown` cancelado).
 - **Autocompletar** (RN-CONFIG-004; `_lib/sql-completion.ts`; a única dependência nova foi o `@codemirror/autocomplete`, em 6.20.3 exato, a
   versão que a trava já resolvia): as palavras-chave do dialeto da aba e os **nomes que a árvore já carregou** daquela conexão (esquemas,
-  tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: o que a árvore
-  não abriu não existe para o autocompletar, e nenhuma chamada à API sai por causa dele. Depois de `esquema.` saem as tabelas; depois de
+  tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: `sql-completion.ts` só
+  lê; o que a árvore não abriu não existe para ele, e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
+  (`sql-catalog-completion.ts`, logo abaixo), são de outro módulo. Depois de `esquema.` saem as tabelas; depois de
   `tabela.` ou de um apelido, as colunas com o tipo; as tabelas de qualquer esquema carregado aparecem também sem o esquema (o `public` do
   PostgreSQL sem ele, os outros com `esquema.`). A lista abre sem nada escolhido (`selectOnOpen: false`: Enter e Tab seguem como eram),
   filtra por prefixo, Esc a fecha e Ctrl+Espaço a abre. **Depois de um ponto não entra palavra-chave nenhuma** (`keywordsSource`): a fonte de
@@ -3313,6 +3314,39 @@ fechar não apaga as abas.
   PostgreSQL, as "reservadas" e as "reservadas, podem ser função ou tipo" (`verbose`, `freeze`, `isnull`…): o teste as confere contra o que um
   PostgreSQL 18 devolve em `pg_get_keywords()`, categorias R e T; ao subir de versão do PostgreSQL, rode a consulta de novo. Db2 e Informix usam
   as palavras-chave do SQL padrão.
+- **As colunas de `nome.` e a junção** (RN-CONFIG-004 e RN-SQL-025; pedido do dono em 2026-10-24): as duas únicas coisas que o autocompletar busca no banco,
+  em três módulos puros e uma fonte fina. `_lib/sql-references.ts` lê o comando do cursor (`statementAt` + `sqlTokens`, o leitor do projeto, então texto,
+  comentário e `$tag$` nunca são nome): `analyzeAt` devolve as tabelas e os apelidos do `FROM`/`JOIN`/`UPDATE`/`INTO` **do nível do cursor** (a subconsulta
+  `SELECT`/`WITH` mais de dentro em que ele está, ou o comando; os grupos entre parênteses viram um item e o que está dentro não conta; a chamada de função e a
+  subconsulta da lista não são tabela, mas o apelido delas entra em `used`; `OUTER` do Informix vem antes da tabela e o `USING` só traz tabela em `DELETE`/`MERGE`), os níveis de fora
+  (`outerReferences`, um grupo por subconsulta que contém o cursor, do mais de dentro ao comando: só `resolveQualifier` os usa, para o `p.` de uma subconsulta correlacionada
+  achar o apelido de fora; a junção e `used` ficam no nível do cursor), o que o cursor pede (`member`, `join`, `on` ou `none`) e `usesAliases`. A palavra
+  do cursor é tirada do texto antes de ler (a aspa aberta, e a que a tela fechou, também), e o `;` antes do cursor, fora de parênteses, faz o comando ser outro.
+  `resolveQualifier`/`resolveReference` acham a tabela pelo catálogo da árvore (`linkCatalog` e o esquema padrão de `defaultSchemasOf`, como o link da
+  RN-LINK-001; o apelido vale mais que o nome do catálogo). `_lib/sql-join.ts` monta as sugestões a partir de `TableLink` (`linksOf`: a chave vista de cada
+  lado, `own` e `other` na ordem da chave): `joinSuggestions` (depois de `JOIN`), `onSuggestions` (depois de `ON`), `aliasFor` (as iniciais das partes do nome
+  por `_`, só letras, 2, 3… quando em uso ou reservada) e `writtenTable` (`sqlName`, com o esquema fora da lista padrão; no Informix, sempre com ele). O apelido
+  gerado vai cru e em minúsculas (nunca por `sqlName`, que no Db2 o poria entre aspas); o já escrito no comando vai como está. A chave que liga uma tabela a si
+  mesma sai nos dois sentidos, com apelido novo. **O escopo da junção**: `joinScope` (em `sql-references.ts`; `Reference.start` é onde o nome da tabela começa) dá à fonte só as tabelas escritas ANTES
+  do cursor, sem o alvo do `INSERT INTO` (`via: "into"`); depois de `ON`, só as que vêm antes da tabela do `JOIN`. As escritas adiante continuam em `used` (o apelido novo
+  não as repete), mas não ligam nada nem pedem as chaves delas. `_lib/sql-catalog-completion.ts` (`catalogCompletion`) é a fonte: `sources` (colunas e junção) e `owns`, que
+  cala a fonte de nomes do `lang-sql` onde as colunas são das novas (`unlessOwned` em `sqlCompletion`), para nenhuma coluna sair duas vezes; as colunas do
+  cache saem de `columnOptions` (a mesma montagem do `completionNamespace`) e as aspas abertas voltam por `requoted`. As fontes usam `unlessQuiet` das
+  variáveis como as outras. **A busca**: só com a sessão da árvore da conexão e do banco já aberta (`getQueryData(databaseSessionKey(...))`; nada abre nem
+  reabre sessão), uma vez por lista (`fetchQuery` divide a requisição em andamento), com `meta: { silent: true }` (sem aviso). As colunas vão pela
+  `columnsQuery` (a chave `table-structure` da Estrutura, o dado cru) e a lista pronta é posta também na chave `tree` do nível `columns` (`columnNodes`, o mesmo mapa da
+  árvore); a que uma das duas já tem em dia vale e vai para a outra (`cachedColumns`), então o navegador e a Estrutura não perguntam de novo. As chaves vão por
+  `foreignKeysQuery` e `referencedByQuery` (`table-structure.service.ts`, a rota `referenced-by` da RN-CAT-004, `referencingForeignKeySchema`), na mesma chave da
+  Estrutura. **O "Atualizar"**: o `invalidateQueries` só busca de novo a consulta que alguém observa, e a lista que o autocompletar buscou sozinho não tem
+  observador; por isso `listOf` olha `isInvalidated` (`peek`), busca de novo a invalidada (o `fetchQuery` busca mesmo com `staleTime` infinito) e, se a busca falha
+  ou não há sessão, responde a velha (e, na falha, devolve a consulta ao estado de antes, velha e sem o erro, com `invalidateQueries({ refetchType: "none" })`).
+  O "Atualizar" do navegador também invalida a família da Estrutura sob o nó (`invalidateStructure`/`structureScopes`, `table-structure.service.ts`), porque o
+  `treePrefixes` só conhece a `tree`. A lista que falha vira nada, entra nas marcas de `catalog-fetch-failures.ts` (por conexão e sessão, para não repetir a cada tecla;
+  o "Atualizar" do navegador e o da Estrutura as esquecem por `forgetFailedLists`) e sai do cache se ninguém a observa e nunca veio, para a árvore não mostrar um erro que a pessoa não
+  pediu. O resultado é síncrono quando tudo está no cache (a lista não pisca) e uma promessa quando falta algo, descartada se `context.aborted`. Sem conexão
+  na aba ou com o texto de mais de 200.000 caracteres, nada. A conferência rápida `mayAsk` (um ponto, ou `JOIN`/`ON` e o espaço, antes do cursor) poupa a
+  leitura do comando a cada tecla. O editor cria um `catalogCompletion` por editor e lê a conexão, o banco e o usuário na hora (`useEffectEvent`), como o
+  `readLevels`; a `boost` das junções cai na ordem (a lista abre com elas no topo).
 - **Converter palavras-chave para maiúsculas** (RN-CONFIG-004; `_lib/sql-keyword-case.ts`): converte a palavra que a pessoa acabou de digitar, na
   MESMA transação da tecla (um Ctrl+Z desfaz a palavra e o caractere), só numa inserção do teclado cujo primeiro caractere termina a palavra
   (espaço, vírgula, parêntese, ponto e vírgula, quebra de linha); colar, aceitar uma sugestão e desfazer não convertem. Só o que está na lista
