@@ -10,13 +10,14 @@ import { readScript } from "./script";
 import { scanMarkers } from "./markers";
 import { fromWire, toWire } from "./wire";
 import { plain, testNow } from "./cases-runner";
-import { typeLabel } from "./values";
+import { typeLabel, type Value } from "./values";
 
 /*
  * Os testes de propriedade da linguagem das variáveis: 10.000 textos e árvores por execução, de uma semente que cada execução sorteia (a de `PRISM_PROPERTY_SEED`,
  * se estiver no ambiente) e que as mensagens de falha trazem, para repetir o caso. As propriedades: nada que se escreve derruba a leitura nem a avaliação, todo erro
  * aponta para dentro do texto, o resultado de uma árvore é o que o gerador calculou à parte, o ambiente fica como estava, o `random.int` fica no intervalo, os
- * marcadores contam como foram montados e os valores atravessam o Worker sem mudar.
+ * marcadores contam como foram montados, os valores atravessam o Worker sem mudar, todo valor que sai é um registro da linguagem (de uma das espécies, congelado,
+ * sem protótipo, sem função) e a mesma semente dá o mesmo resultado em um script inteiro.
  */
 
 const cases = 10_000;
@@ -77,6 +78,53 @@ function randomText(random: Gen): string {
   return text;
 }
 
+const valueKinds: ReadonlySet<string> = new Set(["number", "string", "boolean", "null", "date", "list", "object", "sql"]);
+
+/** O valor que sai da linguagem (RN-VAR-014): de uma das espécies, congelado, sem protótipo, sem função, e assim por dentro (itens, campos, campos da data). */
+function expectLanguageValue(value: Value, context: string): void {
+  expect(typeof value, context).toBe("object");
+  expect(value, context).not.toBeNull();
+  expect(valueKinds.has(value.kind), `${context}: espécie ${String(value.kind)}`).toBe(true);
+  expect(Object.isFrozen(value), `${context}: ${value.kind} sem congelar`).toBe(true);
+  expect(Object.getPrototypeOf(value), `${context}: ${value.kind} com protótipo`).toBeNull();
+  expect(Object.getOwnPropertySymbols(value), context).toEqual([]);
+  for (const name of Object.getOwnPropertyNames(value)) expect(typeof (value as unknown as Record<string, unknown>)[name], `${context}: ${value.kind}.${name}`).not.toBe("function");
+
+  switch (value.kind) {
+    case "number":
+      expect(typeof value.value, context).toBe("number");
+      expect(Number.isFinite(value.value), context).toBe(true);
+      break;
+    case "string":
+      expect(typeof value.value, context).toBe("string");
+      break;
+    case "boolean":
+      expect(typeof value.value, context).toBe("boolean");
+      break;
+    case "sql":
+      expect(typeof value.text, context).toBe("string");
+      break;
+    case "date":
+      expect(Object.isFrozen(value.fields), `${context}: campos da data sem congelar`).toBe(true);
+      break;
+    case "list":
+      expect(Array.isArray(value.items), context).toBe(true);
+      expect(Object.isFrozen(value.items), `${context}: itens da lista sem congelar`).toBe(true);
+      for (const item of value.items) expectLanguageValue(item, context);
+      break;
+    case "object":
+      expect(value.fields instanceof Map, context).toBe(true);
+      expect(Object.isFrozen(value.fields), `${context}: campos do objeto sem congelar`).toBe(true);
+      for (const [key, field] of value.fields) {
+        expect(typeof key, context).toBe("string");
+        expectLanguageValue(field, context);
+      }
+      break;
+    case "null":
+      break;
+  }
+}
+
 describe("propriedades da linguagem das variáveis", () => {
   test(`texto sorteado: ler, conferir e avaliar nunca falham por fora e todo erro aponta para dentro do texto (semente ${baseSeed})`, () => {
     const random = generator(baseSeed);
@@ -100,6 +148,7 @@ describe("propriedades da linguagem das variáveis", () => {
           expect(error.column, context).toBeGreaterThanOrEqual(1);
           expect(error.message, context).not.toBe("");
         }
+        for (const result of report.results) if (result.ok) expectLanguageValue(result.stored.value, context);
         // Os itens cobrem o texto sem se sobrepor, na ordem.
         let end = 0;
         for (const item of model.items) {
@@ -354,5 +403,87 @@ describe("propriedades da linguagem das variáveis", () => {
         expect(at, context).toBe(statement.start + replacement.start);
       }
     }
+  }, timeout);
+
+  // Os scripts sorteados que de fato dão valores: pedaços que cobrem as espécies (o número exato, o texto, a data, a lista, o objeto, o `sql`) e cada função do `random`.
+  const expressions = [
+    "1", "-2.5", "123456789012345678901234567890", "0.1 + 0.2", "'texto'", "`n=${1 + 2}`", "'abc'.toUpperCase()", "true", "!false", "null", "[1, 2, 3]", "['a', 'b']", "[null, 1]",
+    "{ a: 1, b: 'x' }", "{ a: [1, 2], b: { c: null } }", "date.of(2026, 2, 28)", "date.of(2026, 2, 28, 10, 30)", "date.today()", "random.int(1, 6)", "random.int(0, 2 ** 40)",
+    "random.decimal(0, 1, 3)", "random.bool()", "random.uuid()", "random.string(8)", "random.pick([1, 2, 3])", "random.date(date.of(2026, 1, 1), date.of(2026, 12, 31))", "Math.random()",
+    "[random.int(1, 9), random.int(1, 9)]", "{ id: random.int(1, 99), nome: random.string(5) }",
+  ];
+
+  function valueScript(random: Gen): string {
+    const lines: string[] = [];
+    const count = random.int(1, 6);
+    for (let index = 0; index < count; index++) {
+      if (random.chance(0.1)) lines.push(`const v${index}: sql = ${random.pick(["'ORDER BY id'", "'pedido'"])}`);
+      else lines.push(`${random.pick(["const", "let"])} v${index} = ${random.pick(expressions)}`);
+    }
+    return lines.join("\n");
+  }
+
+  test(`todo valor que sai é uma das espécies, congelado, sem protótipo e sem função, também depois de atravessar o Worker (semente ${baseSeed})`, () => {
+    const random = generator(baseSeed + 6);
+    let produced = 0;
+    for (let round = 0; round < cases; round++) {
+      const engine = random.pick(engines);
+      const text = valueScript(random);
+      const context = `semente ${baseSeed}, caso ${round}, motor ${engine ?? "-"}: ${JSON.stringify(text)}`;
+      const report = evaluateScript(readScript(text, engine), config(engine, [round + 1, 5, 6, 7]));
+      expect(report.checkErrors, context).toEqual([]);
+      for (const result of report.results) {
+        expect(result.ok, context).toBe(true);
+        if (!result.ok) continue;
+        produced++;
+        expectLanguageValue(result.stored.value, context);
+        // O que a aba guarda também: cada valor guardado é um registro da linguagem.
+        const back = fromWire(JSON.parse(JSON.stringify(toWire(result.stored.value))) as unknown);
+        expectLanguageValue(back, `${context} (depois do Worker)`);
+        expect(plain(back), context).toEqual(plain(result.stored.value));
+      }
+      for (const stored of report.tab.values()) expectLanguageValue(stored.value, context);
+    }
+    // Os pedaços sorteados são todos válidos: nenhum caso ficou sem valor.
+    expect(produced).toBeGreaterThanOrEqual(cases);
+  }, timeout);
+
+  /** O resultado inteiro de um script, como dado: erros da conferência, valor e tipo de cada atribuição (ou o erro dela). */
+  function snapshot(report: ReturnType<typeof evaluateScript>): string {
+    return JSON.stringify({
+      check: report.checkErrors.map((error) => [error.offset, error.line, error.column, error.message]),
+      results: report.results.map((result) =>
+        result.ok ? { name: result.stored.name, value: toWire(result.stored.value), type: typeLabel(result.stored.type), origin: result.stored.origin } : { error: [result.error.offset, result.error.line, result.error.column, result.error.message] },
+      ),
+      counter: report.counter,
+    });
+  }
+
+  test(`a mesma semente dá o mesmo resultado em um script inteiro, do texto ao valor, e outra semente dá outro (semente ${baseSeed})`, () => {
+    const random = generator(baseSeed + 7);
+    let different = 0;
+    let drawing = 0;
+    for (let round = 0; round < cases; round++) {
+      const engine = random.pick(engines);
+      // Metade dos scripts vem do texto qualquer (erros inclusive), a outra metade dos que dão valores.
+      const fromValues = random.chance(0.5);
+      const text = fromValues ? valueScript(random) : randomText(random);
+      const seed: Seed = [random.int(1, 0x7fffffff), random.int(0, 0x7fffffff), random.int(0, 0x7fffffff), random.int(0, 0x7fffffff)];
+      const context = `semente ${baseSeed}, caso ${round}, motor ${engine ?? "-"}: ${JSON.stringify(text)}`;
+
+      // Cada passagem lê o texto de novo, com um gerador novo da mesma semente.
+      const first = snapshot(evaluateScript(readScript(text, engine, { blankLines: true }), config(engine, seed)));
+      const second = snapshot(evaluateScript(readScript(text, engine, { blankLines: true }), config(engine, seed)));
+      expect(second, context).toBe(first);
+
+      // Num script que dá valores e tem um `random.uuid` (122 bits sorteados), outra semente tem de dar outro resultado: a igualdade acima não é vazia.
+      if (fromValues && text.includes("random.uuid()")) {
+        drawing++;
+        const other: Seed = [seed[0] ^ 0x5a5a5a5a || 1, seed[1] + 1, seed[2], seed[3]];
+        if (snapshot(evaluateScript(readScript(text, engine, { blankLines: true }), config(engine, other))) !== first) different++;
+      }
+    }
+    expect(drawing).toBeGreaterThan(50);
+    expect(different).toBe(drawing);
   }, timeout);
 });

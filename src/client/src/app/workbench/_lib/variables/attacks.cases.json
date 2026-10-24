@@ -2295,6 +2295,22 @@
       }
     },
     {
+      "name": "Math.max com 10.001 números espalhados",
+      "engine": null,
+      "input": "const l = [§0]\nconst r = Math.max(...l)",
+      "seed": null,
+      "error": {
+        "line": 1,
+        "column": 11,
+        "message": "A lista passou de 10.000 itens."
+      },
+      "expand": {
+        "token": "§",
+        "text": "0, ",
+        "times": 10000
+      }
+    },
+    {
       "name": "modelo no limite",
       "engine": null,
       "input": "const s = 'x'.padStart(500000, 'x')\nconst r = `${s}${s}`.length",
