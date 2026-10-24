@@ -1695,6 +1695,12 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     abaixo). A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
+    **Ao abrir** (RN-EDIT-001), o texto vem todo selecionado e à mostra desde o começo (F2, Enter, duplo clique, "Editar célula", também a edição de várias
+    células e o valor com quebra de linha; o Tab, na célula seguinte): `selectEditorText` (`cell-editing.ts`, pura sobre o que o campo expõe) faz
+    `setSelectionRange(0, fim, "backward")`, com o cursor no começo, e zera `scrollLeft` e `scrollTop` (o Chromium rola até o fim da seleção). Aberto pelo primeiro
+    caractere digitado, o cursor fica depois dele (`typed`, que a grade tira de `touched` no momento de abrir). Quem chama é a referência (callback) da área de
+    texto, estável (`useCallback` sem dependências), então roda só ao entrar na tela e não a cada tecla; a `key` do `CellEditor` é a célula, para o campo do Tab
+    ser outro. Sem DOM nos testes: o teste chama a referência com um campo falso. Conferido só nos testes, não numa janela.
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
     com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
   - **A faixa** (`_components/edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
@@ -1782,8 +1788,12 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
       papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
       tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
       `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
-      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) exclui as linhas inteiras escolhidas, e só elas
-      (`choseWholeRows`): com um retângulo, também o que cobre todas as colunas, ou só com a célula ativa, não faz nada (RN-EDIT-015).
+      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) marca na hora, sem pergunta, as linhas das células escolhidas
+      (RN-EDIT-015): `deleteKeyRows` (as `selectedRows`, as do Alt+Delete; nenhuma com colunas inteiras ou sem seleção, e então a tecla segue sem `preventDefault`)
+      → `onDeleteRows` → `deleteKey`, que confere o mesmo motivo da barra que o Alt+Delete dá (a faixa) e chama `removeRows` com essas linhas, o mesmo do
+      Alt+Delete e do menu. Não há diálogo, estado de pergunta nem texto de pergunta: o dono não quis (2026-10-24); a confirmação é a de sempre, a exclusão é
+      uma pendência e nada sai do banco antes do "Salvar" (o "Desfazer alteração" e o "Descartar" valem). As linhas ficam pintadas pela marca de exclusão que
+      já existe.
     - **Duplicar linha(s)** (`duplicateRows`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), até 1.000 linhas de uma
       vez (`duplicateLimit`), uma linha nova no fim da grade para cada linha da seleção, na ordem da grade (`addRow` com as colunas copiadas; a busca dos
       valores completos é uma só, para todas; o que não vem não duplica nenhuma, com a coluna e o número da linha na frase do plural; depois, a seleção é das
@@ -1881,7 +1891,7 @@ desenha e avisa.
   - **As perguntas**: `activeCell`, `selectedRows` (as linhas da seleção, as que têm uma célula escolhida, pela posição, em ordem: é sobre elas que agem o
     copiar, o "Gerar SQL", "Duplicar/Excluir linhas" e "Copiar número de linha(s)"), `selectedColumns`, `selectedCells` (um gerador, linha a linha),
     `rowSpan` e `columnSpan` (o que a grade desenha em cada linha à vista e no cabeçalho), `isSelected`, `selectionSize` (`{ rows, cells, whole }`, a
-    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `choseWholeRows` (o Delete).
+    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `deleteKeyRows` (as linhas do Delete sozinho, RN-EDIT-015).
   - **O recorte** (`sliceOf(selection, layout, source, scope)`, `scope` `cells` (o padrão), `rows` ou `loaded`, os três do "O que copiar" da RN-GRADE-003):
     um `SelectionSlice`, que é o `GridSlice` dos formatos (`grid-export`) com `positions` e `columnIndexes` (de volta à grade), `newRows` (as linhas novas
     ainda não salvas, pelo índice no recorte: não têm número na grade, e o "Copiar como SQL" as deixa de fora) e `generated` (as células "gerado pelo
@@ -1894,7 +1904,7 @@ desenha e avisa.
 - **O que a grade recebe** (`GridEditing`): `selection` e `layout` (para desenhar), `onSelection(change)` (cada gesto, pela função pura), `onSelecting(on)`
   (o arraste e a tecla com Shift presa: a contagem só muda quando a seleção para), `status` (a contagem, "3 linhas escolhidas" ou "12 células escolhidas",
   nula com uma célula ou nenhuma; a `ResultPanel` a põe ao lado do resumo, num `role="status"` que fica na página também vazio), `onCopy()` (a seleção),
-  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho) e `onRowMenu(row, point)` (o botão direito no
+  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho, que marca as linhas na hora) e `onRowMenu(row, point)` (o botão direito no
   número da linha). `onActivate(cell)` continua sendo o clique (`select`), e `onMenu` escolhe antes a célula de fora da seleção.
 - **A grade** (`result-grid.tsx`): `aria-multiselectable`, `aria-selected` em cada célula desenhada (escolhida, e não só a ativa), o fundo de escolha
   (`bg-selected`, o do item escolhido do navegador; a pendente escolhida, `bg-accent/35`), o número da linha (`data-rowheader`, que o clique e o botão direito
@@ -1907,7 +1917,7 @@ desenha e avisa.
   `movementOf` (`grid-cursor.ts`) diz se a tecla é de movimento, se estende e se é vertical; o PageUp e o PageDown andam `pageRows` linhas e, com Ctrl, Alt ou
   Cmd, não são da grade (o Ctrl+Shift+PageUp/PageDown move a aba, RN-ABAS-001); `selectsAll`, `selectsRows` (Shift+Espaço, antes do "começar a digitar"),
   `copiesAdvanced` e `deletesRows` estão em `grid-editing.ts`; o Esc é da grade quando a seleção não é só a célula ativa (`escapeCollapses`, pela forma, e não
-  pela contagem: a linha inteira de uma coluna só é uma célula, e o Delete a excluiria), e com a célula ativa só segue para quem está acima. O cabeçalho e o
+  pela contagem: a linha inteira de uma coluna só é uma célula), e com a célula ativa só segue para quem está acima. O cabeçalho e o
   número da linha, presos, são o `scrollPaddingStart` dos dois virtualizadores: o `scrollToIndex` da célula ativa (Ctrl+Home, PageUp, Home) a deixa logo
   depois deles, e não por baixo. Nada disto foi conferido numa janela:
   o vitest não tem DOM, e o arraste, a rolagem sozinha e o foco são para conferir sob Xvfb.
