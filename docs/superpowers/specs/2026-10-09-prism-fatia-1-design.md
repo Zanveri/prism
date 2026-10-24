@@ -1445,12 +1445,55 @@ Só da tela:
   derivadas das que ele define, e todo par de texto e fundo do tema passa no contraste (4,5:1
   para texto, 3:1 para texto grande e ícone), conferido por teste.
 - **RN-CONFIG-004.** Editor de SQL: autocompletar ao digitar (palavras-chave do banco da aba e os
-  nomes já carregados na árvore daquela conexão: esquemas, tabelas, visões e colunas; nunca
-  dispara consulta ao banco) e converter palavras-chave para maiúsculas ao digitar. Os dois têm
+  nomes já carregados na árvore daquela conexão: esquemas, tabelas, visões e colunas; só busca no
+  banco o que o segundo item abaixo diz) e converter palavras-chave para maiúsculas ao digitar. Os dois têm
   chave de ligar e desligar. Com as variáveis (seção 41), o autocompletar completa também os nomes declarados,
   depois de `@` e dentro das declarações, e as funções da linguagem; a conversão para maiúsculas não muda nada
   dentro das declarações; e o Editor de SQL ganha "Mostrar o valor das variáveis no fim da linha", ligada por
   padrão (RN-VAR-025). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
+  - As colunas de `nome.`: depois de `nome.` (também com letras depois do ponto), onde `nome` é uma tabela ou
+    visão do catálogo que a árvore já carregou (com ou sem o esquema, com ou sem aspas) ou o apelido de uma
+    tabela no comando em que o cursor está (`FROM pedidos p`, `JOIN clientes AS c`, `UPDATE pedidos p`, a
+    lista com vírgulas, o `OUTER` do Informix e o `USING` do `DELETE`; as subconsultas e os apelidos delas não
+    contam, e numa subconsulta vale também o apelido das consultas de fora, o de dentro escondendo o de fora),
+    a lista mostra as colunas dela, com o tipo, sem repetir nenhuma. Se as colunas ainda não estão no cache, são buscadas, e a lista abre quando
+    chegam, se o cursor ainda está lá. Dentro de texto, de comentário e de declaração de variável, nada.
+  - O que o autocompletar busca no banco é só isto: as colunas de uma tabela ou visão e as chaves
+    estrangeiras de uma tabela (RN-SQL-025), e só quando a sessão da árvore daquela conexão e daquele banco já
+    está aberta (nada conecta nem reconecta sozinho; com a conexão desconectada, fica o que já foi carregado).
+    Cada lista é buscada uma vez, pela mesma consulta que o navegador e a Estrutura usam, e fica no mesmo
+    cache: eles passam a mostrá-la sem perguntar de novo, e o "Atualizar" deles a refaz (a lista que o
+    "Atualizar" tornou velha é buscada de novo na vez seguinte, e a velha segue valendo se a busca falha).
+    Uma busca que falha não mostra nada e não avisa, e não se repete enquanto a sessão for a mesma, ou até o
+    "Atualizar" mandar tentar de novo.
+  - *Alterada a pedido do dono em 2026-10-24: o autocompletar deixa de ser só o cache da árvore (antes,
+    "nunca dispara consulta ao banco" e as colunas só saíam de tabelas que a pessoa já tinha aberto no
+    navegador); a tabela que a pessoa começa a escrever, e que ainda não foi aberta, já completa as colunas.*
+
+- **RN-SQL-025.** Completar a junção. *Pedido do dono em 2026-10-24, como no DBeaver.*
+  - Depois de `JOIN ` (também `INNER JOIN`, `LEFT`, `RIGHT` e `FULL`, com ou sem `OUTER`; não o `CROSS JOIN`
+    nem o `NATURAL JOIN`, que não têm `ON`), a lista sugere, no topo, as tabelas ligadas por chave
+    estrangeira, nos dois sentidos (as que a tabela do comando referencia e as que a referenciam), a alguma
+    tabela que já está no `FROM`/`JOIN`/`UPDATE` do comando, escrita antes do cursor (no nível dele: a subconsulta em
+    que ele está, ou o comando; o alvo do `INSERT INTO` e as tabelas escritas adiante não contam), com a condição pronta: `clientes c ON c.id = p.cliente_id`. A chave composta junta as colunas
+    com `AND`, na ordem da chave. O nome da tabela é escrito como o autocompletar escreve (RN-CONFIG-004:
+    `sqlName`, com o esquema quando não é o padrão da sessão). A sugestão mostra, ao lado, o nome da chave.
+  - O apelido da tabela nova: se alguma tabela do comando tem apelido (a subconsulta com apelido conta), a
+    nova ganha um: as iniciais das partes do nome separadas por `_` (`itens_pedido` → `ip`), em minúsculas, com
+    2, 3… quando o apelido já está em uso no comando ou é palavra reservada (`ordem_nota` → `on2`). Sem
+    apelidos no comando, a tabela nova entra pelo nome inteiro (`clientes ON clientes.id = pedidos.cliente_id`),
+    e só ganha apelido quando o nome já é de uma tabela do comando.
+  - Uma sugestão por chave; primeiro as que ligam à última tabela escrita, depois as das outras, na ordem do
+    comando; em cada tabela, as chaves dela e depois as que a referenciam. A tabela que já está no comando não
+    volta, menos a que se liga a si mesma, que ganha outro apelido (e, com a chave em dois sentidos, traz as
+    duas condições: a da linha pai e a das filhas).
+  - Depois de `JOIN tabela [AS] [apelido] ON `, a lista sugere as condições que ligam essa tabela às outras do
+    comando que vêm antes dela (`c.id = p.cliente_id`), as da última tabela escrita primeiro, com o nome da chave ao lado.
+  - Os dados: as chaves da tabela vêm da consulta da Estrutura (`foreign-keys`) e as que a referenciam, da rota
+    `GET …/tables/{table}/referenced-by` (RN-CAT-004), no mesmo cache da Estrutura; só se buscam as das tabelas
+    do comando que o catálogo da árvore conhece, e pela regra de busca da RN-CONFIG-004 (sessão da árvore já
+    aberta, uma vez por lista, falha sem aviso). Uma tabela cujas chaves não chegaram não liga nada. Dentro de
+    texto, de comentário e de declaração de variável, nada.
 - **RN-CONFIG-005.** Resultados: o texto que representa o valor nulo na grade, e "buscar mais
   linhas ao rolar até o fim da grade" (a grade pede a página seguinte sozinha, uma por vez, e
   para se o usuário cancelar; com a atualização automática do resultado ligada, RN-GRADE-014, a
@@ -11801,7 +11844,7 @@ SELECT p.id, p.criado, p.valor
 
 - **RN-VAR-030.** A inferência.
   - Quando: ao abrir o "Executar com valores…" e a pergunta dos valores (RN-VAR-021), para as variáveis que viram
-    campos, e nunca ao digitar (o editor não consulta o banco, RN-CONFIG-004). O Prism lê o SQL do script com o leitor
+    campos, e nunca ao digitar (a inferência não roda no editor; o que o autocompletar busca, as colunas de `tabela.` e as chaves da junção, é outra coisa, RN-CONFIG-004 e RN-SQL-025). O Prism lê o SQL do script com o leitor
     da tela e o catálogo das tabelas que ele cita (as consultas de colunas e de chaves estrangeiras que a tela já faz,
     RN-TABELA-003 e RN-ARVORE-003, pela sessão da árvore da conexão e do banco do diálogo, no mesmo cache da Estrutura).
   - **O tipo de coluna** (`let c: pedido.cliente_id`, RN-VAR-004) diz a coluna, e a inferência não é feita para ela.
