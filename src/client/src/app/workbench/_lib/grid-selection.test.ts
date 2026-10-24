@@ -8,7 +8,7 @@ import {
   afterSave,
   chosenWholeColumns,
   choseWholeColumns,
-  choseWholeRows,
+  deleteKeyRows,
   collapse,
   columnChoice,
   columnSpan,
@@ -124,7 +124,7 @@ describe("os gestos com o ponteiro (RN-GRADE-001)", () => {
     expect(activeCell(fromCell, layout)).toEqual(at(2, 3));
     expect(selectedRows(fromCell, layout)).toEqual([2]);
     expect(selectedColumns(fromCell, layout)).toEqual([0, 1, 2, 3]);
-    expect(choseWholeRows(fromCell, layout)).toBe(true);
+    expect(deleteKeyRows(fromCell, layout)).toEqual([2]);
     expect(activeCell(selectRow(emptySelection, 2, layout), layout)).toEqual(at(2, 0));
   });
 
@@ -217,11 +217,11 @@ describe("os gestos pelo teclado (RN-GRADE-001)", () => {
     const rectangle = extend(clicked(0, 1), at(2, 2), layout);
     const rows = wholeRows(rectangle);
 
-    expect(choseWholeRows(rectangle, layout)).toBe(false);
-    expect(choseWholeRows(rows, layout)).toBe(true);
+    expect(deleteKeyRows(rectangle, layout)).toEqual([0, 1, 2]);
+    expect(deleteKeyRows(rows, layout)).toEqual([0, 1, 2]);
     expect(selectedRows(rows, layout)).toEqual([0, 1, 2]);
     expect(selectedColumns(rows, layout)).toEqual([0, 1, 2, 3]);
-    expect(choseWholeRows(wholeRows(clicked(4, 0)), layout)).toBe(true);
+    expect(deleteKeyRows(wholeRows(clicked(4, 0)), layout)).toEqual([4]);
 
     const escaped = collapse(rows);
     expect(escaped.shape).toEqual({ kind: "cell" });
@@ -233,11 +233,11 @@ describe("os gestos pelo teclado (RN-GRADE-001)", () => {
     const row = selectRow(emptySelection, 1, narrow);
 
     expect(hasSeveralCells(row, narrow)).toBe(false);
-    expect(choseWholeRows(row, narrow)).toBe(true);
+    expect(deleteKeyRows(row, narrow)).toEqual([1]);
     expect(escapeCollapses(row)).toBe(true);
     const escaped = collapse(row);
     expect(escapeCollapses(escaped)).toBe(false);
-    expect(choseWholeRows(escaped, narrow)).toBe(false);
+    expect(deleteKeyRows(escaped, narrow)).toEqual([1]);
     expect(activeCell(escaped, narrow)).toEqual(at(1, 0));
 
     expect(escapeCollapses(wholeRows(select(emptySelection, at(2, 0), narrow)))).toBe(true);
@@ -246,11 +246,13 @@ describe("os gestos pelo teclado (RN-GRADE-001)", () => {
     expect(escapeCollapses(emptySelection)).toBe(false);
   });
 
-  it("o retângulo que cobre todas as colunas continua um retângulo: não vale como linhas inteiras para o Delete", () => {
+  it("o Delete age nas linhas da célula ativa, do retângulo e das linhas inteiras, as mesmas do Alt+Delete; sem nada escolhido, em nenhuma (RN-EDIT-015)", () => {
     const narrow: GridLayout = { read: 3, added: [], columns: 1 };
 
-    expect(choseWholeRows(select(emptySelection, at(1, 0), narrow), narrow)).toBe(false);
-    expect(choseWholeRows(extend(select(emptySelection, at(0, 0), narrow), at(2, 0), narrow), narrow)).toBe(false);
+    expect(deleteKeyRows(select(emptySelection, at(1, 0), narrow), narrow)).toEqual([1]);
+    expect(deleteKeyRows(extend(select(emptySelection, at(0, 0), narrow), at(2, 0), narrow), narrow)).toEqual([0, 1, 2]);
+    expect(deleteKeyRows(extend(clicked(0, 1), at(2, 2), layout), layout)).toEqual(selectedRows(extend(clicked(0, 1), at(2, 2), layout), layout));
+    expect(deleteKeyRows(emptySelection, layout)).toEqual([]);
   });
 
   it("PageUp e PageDown andam uma altura da área à vista; com Ctrl, Alt ou Cmd a tecla não é da grade (o Ctrl+Shift+PageUp move a aba)", () => {
@@ -291,7 +293,7 @@ describe("o que a grade desenha e o que as ações recebem", () => {
 
     expect(selectedRows(copies, layout)).toEqual([5, 6]);
     expect(activeCell(copies, layout)).toEqual(at(5, 2));
-    expect(choseWholeRows(copies, layout)).toBe(true);
+    expect(deleteKeyRows(copies, layout)).toEqual([5, 6]);
   });
 
   it("depois do Salvar que tirou as excluídas e pôs as novas como lidas, fica só a célula ativa, quando a linha dela continua", () => {
@@ -475,12 +477,12 @@ describe("as colunas inteiras (RN-GRADE-022)", () => {
     expect([...selectedCells(chosen, { read: 2, added: [], columns: 4 })]).toEqual([at(0, 0), at(0, 3), at(1, 0), at(1, 3)]);
   });
 
-  it("conta como várias células também com uma linha só, e não vale para o Delete", () => {
+  it("conta como várias células também com uma linha só, e o Delete não age com colunas inteiras", () => {
     const one: GridLayout = { read: 1, added: [], columns: 2 };
     const chosen = column(0, emptySelection, one);
 
     expect(hasSeveralCells(chosen, one)).toBe(true);
-    expect(choseWholeRows(chosen, one)).toBe(false);
+    expect(deleteKeyRows(chosen, one)).toEqual([]);
     expect(choseWholeColumns(chosen)).toBe(true);
     expect(choseWholeColumns(clicked(0, 0))).toBe(false);
     expect(chosenWholeColumns(chosen, one)).toEqual([0]);

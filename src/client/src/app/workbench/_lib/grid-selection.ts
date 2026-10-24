@@ -36,7 +36,8 @@ export type RowSet = { read: readonly RowRange[]; added: readonly number[] };
  * A forma da seleção: só a célula ativa (`cell`); um retângulo de células, nas linhas `rows` e nas colunas de `from` a `to` (`cells`); linhas inteiras
  * (`rows`); ou colunas inteiras (`columns`: as posições delas no resultado, em ordem e sem repetir, com todas as linhas do resultado, RN-GRADE-022). Um
  * retângulo é sempre um retângulo, também quando cobre todas as colunas ou todas as linhas: só o número da linha, o canto, o Shift+Espaço e o Ctrl+A escolhem
- * linhas inteiras, e só elas valem para o Delete (RN-EDIT-015); só o nome da coluna, no cabeçalho, e o Ctrl+Espaço escolhem colunas inteiras.
+ * linhas inteiras (o Delete age nas linhas de qualquer célula escolhida, menos colunas inteiras, RN-EDIT-015); só o nome da coluna, no cabeçalho, e o
+ * Ctrl+Espaço escolhem colunas inteiras.
  */
 export type SelectionShape = { kind: "cell" } | { kind: "cells"; rows: RowSet; from: number; to: number } | { kind: "rows"; rows: RowSet } | { kind: "columns"; columns: readonly number[] };
 
@@ -287,8 +288,8 @@ export function collapse(selection: GridSelection): GridSelection {
 }
 
 /**
- * Shift+Espaço: as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver; é o caminho do teclado até o Delete. Com colunas inteiras,
- * a linha inteira da célula ativa (RN-GRADE-022): as colunas não viram todas as linhas.
+ * Shift+Espaço: as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver; é o caminho do teclado até as linhas inteiras
+ * (RN-EDIT-014 e 015). Com colunas inteiras, a linha inteira da célula ativa (RN-GRADE-022): as colunas não viram todas as linhas.
  */
 export function wholeRows(selection: GridSelection): GridSelection {
   if (selection.shape.kind === "rows") return selection;
@@ -579,16 +580,19 @@ export function hasSeveralCells(selection: GridSelection, layout: GridLayout): b
 
 /**
  * RN-GRADE-001: o Esc volta a seleção para a célula ativa só, e é da grade sempre que ela não é só a célula ativa: também a linha inteira de uma coluna só
- * (uma célula, mas linhas inteiras, que o Delete excluiria, RN-EDIT-015) e as colunas inteiras. Com a célula ativa só, o Esc segue para quem está acima da
+ * (uma célula, mas linhas inteiras) e as colunas inteiras. Com a célula ativa só, o Esc segue para quem está acima da
  * grade.
  */
 export function escapeCollapses(selection: GridSelection): boolean {
   return selection.shape.kind !== "cell";
 }
 
-/** Linhas inteiras escolhidas (pelo número da linha, pelo canto, pelo Shift+Espaço ou pelo Ctrl+A): só elas valem para o Delete sozinho (RN-EDIT-015). */
-export function choseWholeRows(selection: GridSelection, layout: GridLayout): boolean {
-  return selection.shape.kind === "rows" && selectionSize(selection, layout).rows > 0;
+/**
+ * RN-EDIT-015: as linhas sobre as quais o Delete sozinho age, as mesmas do Alt+Delete (`selectedRows`): a da célula ativa, as do retângulo, as linhas
+ * inteiras escolhidas. Com colunas inteiras escolhidas (RN-GRADE-022), ou sem nada escolhido, nenhuma: a tecla não faz nada.
+ */
+export function deleteKeyRows(selection: GridSelection, layout: GridLayout): number[] {
+  return selection.shape.kind === "columns" ? [] : selectedRows(selection, layout);
 }
 
 /**

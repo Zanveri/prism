@@ -91,7 +91,7 @@ export type GridEditing = {
   onCopy: () => void;
   /** RN-GRADE-003: Ctrl+Shift+C abre o "Copiar avançado…", quando a grade o tem; sem célula ativa, nada. */
   onCopyAdvanced?: () => void;
-  /** RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas: com um retângulo, ou só com a célula ativa, não faz nada. */
+  /** RN-EDIT-015: o Delete sozinho, com alguma célula escolhida (menos colunas inteiras), marca na hora para exclusão as linhas da seleção, as do Alt+Delete. */
   onDeleteRows: () => void;
   /** Ctrl+S com o foco na grade. */
   onSave: () => void;
@@ -155,7 +155,7 @@ export function selectsColumns(event: KeyEvent): boolean {
 }
 
 /**
- * RN-EDIT-015: o Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, que exclui as linhas inteiras escolhidas. No macOS, a tecla "delete" (a de apagar para trás,
+ * RN-EDIT-015: o Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, que marca para exclusão as linhas das células escolhidas, sem perguntar. No macOS, a tecla "delete" (a de apagar para trás,
  * `Backspace`) e o fn+delete (`Delete`) também, sozinhas.
  */
 export function deletesRows(event: KeyEvent, platform: string): boolean {
@@ -189,7 +189,7 @@ export type RowShortcut = "newRow" | "duplicateRow" | "deleteRow";
  * (sem Ctrl, Shift nem Cmd). No Windows o AltGr chega como Ctrl+Alt: com ele o Insert duplica, e o Delete não faz nada. No macOS o Option faz o
  * papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert (e o Control+Option+Insert do DBeaver, sem Cmd) e Option+Delete, que é também a
  * tecla "delete" do Mac (a de apagar para trás, `Backspace`) e o fn+delete. Com Shift nada acontece: o Shift+Alt+Insert e o Ctrl+Shift+Alt+Insert do
- * DBeaver 26.1 ficam para depois. O Delete sozinho é `deletesRows`, que só vale com linhas inteiras escolhidas (RN-GRADE-001).
+ * DBeaver 26.1 ficam para depois. O Delete sozinho é `deletesRows`, que marca as linhas do mesmo modo, sem perguntar (RN-EDIT-015).
  */
 export function rowShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean }, platform: string): RowShortcut | null {
   if (!event.altKey || event.shiftKey) return null;

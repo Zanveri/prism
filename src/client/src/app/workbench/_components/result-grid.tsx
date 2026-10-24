@@ -11,7 +11,7 @@ import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-colum
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
 import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
-import { choseWholeColumns, choseWholeRows, collapse, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
+import { choseWholeColumns, collapse, deleteKeyRows, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
 import type { EditValue } from "../_lib/record-edits";
@@ -758,9 +758,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       else editing.onDeleteRow();
       return;
     }
-    // RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas; com um retângulo, colunas inteiras ou só a célula ativa, a tecla não faz nada.
+    // RN-EDIT-015: o Delete sozinho marca na hora para exclusão as linhas das células escolhidas (a ativa, um retângulo, linhas inteiras), como o Alt+Delete;
+    // com colunas inteiras, a tecla não faz nada.
     if (deletesRows(event, platform)) {
-      if (choseWholeRows(editing.selection, editing.layout)) {
+      if (deleteKeyRows(editing.selection, editing.layout).length > 0) {
         event.preventDefault();
         editing.onDeleteRows();
       }

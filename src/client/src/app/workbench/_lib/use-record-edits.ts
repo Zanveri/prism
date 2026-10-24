@@ -37,11 +37,11 @@ import {
   afterSave,
   chosenWholeColumns,
   choseWholeColumns,
-  choseWholeRows,
   collapse,
   contextCell,
   contextColumn,
   contextRow,
+  deleteKeyRows,
   emptySelection,
   hasSeveralCells,
   isSelected,
@@ -1491,10 +1491,18 @@ export function useRecordEdits({ tabId, runner, state, connectionId, database, s
     void (id === "duplicateRow" ? duplicateRows(rows) : removeRows(rows));
   }, [say, duplicateRows, removeRows, rowsNow]);
 
-  /** RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, como o "Excluir linhas"; com um retângulo, ou só com a célula ativa, nada. */
+  /**
+   * RN-EDIT-015: o Delete sozinho, com qualquer célula escolhida menos colunas inteiras (`deleteKeyRows`), marca na hora, sem pergunta, as linhas da seleção, as
+   * mesmas do Alt+Delete (`removeRows`). O que a barra mostraria desabilitado (a conexão somente leitura, a tabela sem chave, o resultado não editável, a aba
+   * ocupada…) vai à faixa, com o mesmo motivo do Alt+Delete. A exclusão é uma pendência como as outras: nada sai do banco antes do "Salvar".
+   */
   const deleteKey = useCallback(() => {
-    if (choseWholeRows(latest.current.selection, latest.current.layout)) rowAction("deleteRow");
-  }, [rowAction]);
+    const rows = deleteKeyRows(latest.current.selection, latest.current.layout);
+    if (rows.length === 0) return;
+    const reason = barOf(latest.current).find((button) => button.id === "deleteRow")?.reason ?? null;
+    if (reason !== null) return say(reason);
+    void removeRows(rows);
+  }, [say, removeRows]);
 
   /**
    * RN-EDIT-004 e 018: o que o "Desfazer alteração" faria agora, e o rótulo dele. Com colunas escolhidas inteiras, tira as alterações da coluna inteira delas e

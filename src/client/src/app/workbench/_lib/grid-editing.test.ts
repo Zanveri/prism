@@ -117,7 +117,7 @@ describe("os atalhos da linha com o foco na grade (RN-EDIT-015)", () => {
     expect(rowShortcut(key("Delete", { ctrlKey: true }), windows)).toBeNull();
   });
 
-  it("sem Alt não é atalho da linha: o Insert e o Delete sozinhos (o Delete espera a seleção de linhas) e o Backspace fora do macOS", () => {
+  it("sem Alt não é atalho da linha: o Insert e o Delete sozinhos (o Delete é `deletesRows`, RN-EDIT-015) e o Backspace fora do macOS", () => {
     expect(rowShortcut(key("Insert", { altKey: false }), windows)).toBeNull();
     expect(rowShortcut(key("Delete", { altKey: false }), windows)).toBeNull();
     expect(rowShortcut(key("Backspace"), windows)).toBeNull();
@@ -174,7 +174,7 @@ describe("as teclas da seleção (RN-GRADE-001 a 003 e RN-EDIT-015)", () => {
     expect(copiesAdvanced(key("c", { ctrlKey: true, shiftKey: true, altKey: true }))).toBe(false);
   });
 
-  it("o Delete sozinho exclui as linhas inteiras; com qualquer modificador, não; no macOS a \"delete\" (Backspace) também", () => {
+  it("o Delete sozinho marca para exclusão as linhas das células escolhidas; com qualquer modificador, não; no macOS a \"delete\" (Backspace) também", () => {
     expect(deletesRows(key("Delete"), "Win32")).toBe(true);
     expect(deletesRows(key("Delete", { altKey: true }), "Win32")).toBe(false);
     expect(deletesRows(key("Delete", { shiftKey: true }), "Win32")).toBe(false);

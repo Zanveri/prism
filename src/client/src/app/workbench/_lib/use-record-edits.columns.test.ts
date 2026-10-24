@@ -181,6 +181,7 @@ describe("as ações de linha com colunas inteiras (RN-GRADE-022, RN-EDIT-014 a 
     view.show().editing!.onDeleteRow();
     expect(view.show().banner.notice).toBe(selection.rows.chooseRows);
     view.show().editing!.onDeleteRows();
+    expect(view.show().editing!.marks.size).toBe(0);
     expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
   });
 
