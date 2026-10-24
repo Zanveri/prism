@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "@/lib/api/query-client";
 
 import { numberedScriptQuestion } from "./command-confirmation";
+import { gridFilterCopy } from "./grid-filter.copy";
+import { applyResultFilter, filterBaseOf } from "./result-filter";
 import { entriesOf, entryAt, scriptTotals, type ScriptRun } from "./script-run";
 import { createQueryRunner, type DocRange, type RunHooks, type RunnerState, type VariableErrorsState } from "./use-query-runner";
 import { variableRunCopy } from "./variable-run.copy";
@@ -19,7 +21,7 @@ type Call = { method: string; path: string; body: unknown };
 
 function fakeApi() {
   const calls: Call[] = [];
-  const answers: { route: string; answer: Response }[] = [];
+  const answers: { route: string; answer: Response | Promise<Response> }[] = [];
   vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
     const call = { method: init.method ?? "GET", path: url.replace(base, ""), body: typeof init.body === "string" ? (JSON.parse(init.body) as unknown) : undefined };
     calls.push(call);
@@ -31,7 +33,7 @@ function fakeApi() {
     calls,
     /** O corpo de cada comando enviado, na ordem. */
     sent: () => calls.filter((call) => `${call.method} ${call.path}` === queries).map((call) => call.body as { sql: string; params?: { type: string; value: string | null }[]; filter?: string }),
-    on: (route: string, answer: Response) => void answers.push({ route, answer }),
+    on: (route: string, answer: Response | Promise<Response>) => void answers.push({ route, answer }),
   };
 }
 
@@ -39,7 +41,13 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const problem = (status: number, type: string, extra: Record<string, unknown> = {}) => new Response(JSON.stringify({ type, title: `Título de ${type}`, status, ...extra }), { status });
 const session = (id: string) => json({ id, database: "mes" }, 201);
 const columns = [{ name: "id", type: "int8", kind: "number" }];
-const page = (rows: string[][] = [["1"]]) => json({ columns, rows, hasMore: false, elapsedMs: 40, truncatedCells: [], rowsAffected: null, resultID: "r1" });
+const page = (rows: string[][] = [["1"]], extra: Record<string, unknown> = {}) => json({ columns, rows, hasMore: false, elapsedMs: 40, truncatedCells: [], rowsAffected: null, resultID: "r1", ...extra });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => (resolve = done));
+  return { promise, resolve };
+}
 
 function setup(options: { evaluator?: Evaluator } = {}) {
   const api = fakeApi();
@@ -362,6 +370,40 @@ describe("Alt+X com variáveis (RN-VAR-019, 022 e 023)", () => {
     expect(runner.getState()).toEqual({ status: "idle" });
   });
 
+  it("o Cancelar com o comando parametrizado em andamento: o comando fica cancelado, o seguinte não roda, e as declarações já avaliadas ficam na aba (RN-SQL-022)", async () => {
+    const { api, runner, toast } = setup();
+    const hanging = deferred<Response>();
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, hanging.promise);
+    api.on(`POST ${sessions}/s1/queries/cancel`, new Response(null, { status: 204 }));
+    const text = "let x = 3\nconst y = x * 2\n\nselect pg_sleep(@y);\nselect @x;";
+    const done = runner.runScriptDoc(range(text));
+    await vi.waitFor(() => expect(api.sent()).toHaveLength(1));
+
+    // O comando está no banco: com os parâmetros da avaliação, e o executor ocupado.
+    expect(api.sent()[0]).toEqual({ sql: "select pg_sleep($1)", params: [{ type: "number", value: "6" }] });
+    expect(entriesOf(script(runner)).map((entry) => entry.status)).toEqual(["ok", "ok", "running", "pending"]);
+
+    await runner.cancel();
+    hanging.resolve(problem(422, "SQL_EXECUTION_FAILED", { detail: "canceling statement due to user request", sqlState: "57014", outcome: "canceled" }));
+    await done;
+
+    expect(api.calls.filter((call) => call.path === `${sessions}/s1/queries/cancel`)).toHaveLength(1);
+    expect(api.sent()).toHaveLength(1);
+    expect(entriesOf(script(runner)).map((entry) => [entry.kind, entry.status])).toEqual([
+      ["declaration", "ok"],
+      ["declaration", "ok"],
+      ["statement", "cancelled"],
+      ["statement", "notRun"],
+    ]);
+    expect(script(runner).phase).toBe("cancelled");
+    expect(runner.getState()).toEqual({ status: "cancelled" });
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    // O que foi avaliado antes do comando fica à mostra no painel Variáveis; o cancelamento não esquece nada.
+    expect([...runner.values.snapshot().values.keys()].sort()).toEqual(["x", "y"]);
+    expect(runner.values.snapshot().values.get("y")?.value).toMatchObject({ value: 6 });
+  });
+
   it("o QUERY_PARAMETERS_MISMATCH é erro do comando: a pergunta de erro tem as quatro escolhas", async () => {
     const { api, runner } = setup();
     api.on(`POST ${sessions}`, session("s1"));
@@ -427,6 +469,201 @@ describe("Alt+X com variáveis (RN-VAR-019, 022 e 023)", () => {
 
     expect(entryAt(script(runner), 0).status).toBe("ok");
     expect(runner.values.snapshot().values.get("total")?.value).toMatchObject({ value: 5 });
+  });
+});
+
+/** O resultado de um comando com variáveis na tela: `let id = 7` e `select … where id = @id`. */
+async function withResult(extra: { rows?: Response[] } = {}) {
+  const context = setup();
+  context.api.on(`POST ${sessions}`, session("s1"));
+  context.api.on(queries, page());
+  for (const answer of extra.rows ?? []) context.api.on(queries, answer);
+  const text = "let id = 7\n\nselect * from pedido where id = @id and nome = 'x';";
+  await context.runner.runItem(cursorIn(text, "select"));
+  const state = context.runner.getState();
+  if (state.status !== "rows") throw new Error("esperava linhas");
+  return { ...context, state, text };
+}
+
+describe("o filtro do resultado de um comando com variáveis (RN-GRADE-011 e RN-VAR-033)", () => {
+  const sentText = "select * from pedido where id = $1 and nome = 'x'";
+  const params = [{ type: "number", value: "7" }];
+
+  it("o pedido leva o texto enviado, os mesmos parâmetros e o filtro; nada é avaliado de novo, e o alvo do resultado guarda os três", async () => {
+    const { api, runner, state } = await withResult({ rows: [page([["2"]], { filterApplied: "merged" })] });
+    const counter = runner.values.snapshot().counter;
+
+    const base = filterBaseOf(state, null);
+    expect(base?.sent?.sql).toBe(sentText);
+    await runner.run({ ...(base as NonNullable<typeof base>), filter: "id > 3 ORDER BY id DESC" });
+
+    expect(api.sent()[1]).toEqual({ sql: sentText, params, filter: "id > 3 ORDER BY id DESC" });
+    expect(runner.values.snapshot().counter).toBe(counter);
+    const after = runner.getState();
+    if (after.status !== "rows") throw new Error("esperava linhas");
+    expect(after.filterApplied).toBe("merged");
+    expect(after.target.filter).toBe("id > 3 ORDER BY id DESC");
+    expect(after.target.sent?.sql).toBe(sentText);
+    expect(after.target.sent?.params.map((parameter) => parameter.value)).toEqual(["7"]);
+    expect(after.target.sql).toBe("select * from pedido where id = @id and nome = 'x'");
+
+    // O F5 com o filtro em vigor repete o texto enviado, os parâmetros e o filtro.
+    api.on(queries, page([["2"]], { filterApplied: "merged" }));
+    await runner.rerun();
+    expect(api.sent()[2]).toEqual({ sql: sentText, params, filter: "id > 3 ORDER BY id DESC" });
+  });
+
+  it("o @nome escrito no filtro não é variável: vai como está, sem avaliar nem trocar, e os parâmetros são os do comando", async () => {
+    const { api, runner, state } = await withResult({ rows: [page([["2"]], { filterApplied: "merged" })] });
+    const base = filterBaseOf(state, null) as NonNullable<ReturnType<typeof filterBaseOf>>;
+
+    await runner.run({ ...base, filter: "nome = @id" });
+
+    expect(api.sent()[1]).toEqual({ sql: sentText, params, filter: "nome = @id" });
+  });
+
+  it("o filtro com marcador de parâmetro é recusado pela API (FILTER_INVALID): o resultado de antes fica, a frase vai ao campo e o filtro em vigor volta ao de antes", async () => {
+    const { api, runner, state, toast } = await withResult();
+    api.on(queries, problem(422, "FILTER_INVALID", { detail: "O filtro não pode ter marcador de parâmetro ($1)." }));
+
+    const calls: string[] = [];
+    const deps = {
+      setDraft: (text: string) => calls.push(`draft:${text}`),
+      setApplied: (text: string) => calls.push(`applied:${text}`),
+      setProblem: (value: { message: string } | null) => calls.push(`problem:${value?.message ?? "-"}`),
+      setPinned: () => calls.push("pinned"),
+      run: (target: Parameters<typeof runner.run>[0]) => runner.run(target),
+    };
+    await applyResultFilter(filterBaseOf(state, null), "id = $1", "", state, deps);
+
+    expect(api.sent()[1]).toEqual({ sql: sentText, params, filter: "id = $1" });
+    expect(runner.getState()).toBe(state);
+    expect(calls.at(-2)).toBe("problem:O filtro não pode ter marcador de parâmetro ($1).");
+    expect(calls.at(-1)).toBe("applied:");
+    expect([...toast.error.mock.calls, ...toast.warning.mock.calls]).toEqual([]);
+
+    // O F5 depois da recusa executa de novo o comando de antes, sem filtro e com os mesmos parâmetros.
+    api.on(queries, page());
+    await runner.rerun();
+    expect(api.sent()[2]).toEqual({ sql: sentText, params });
+  });
+
+  it("a ordem do filtro com o ORDER BY do comando em marcador: a API embrulha (wrapped), e a tela mostra só leitura, com os marcadores e os valores como estavam", async () => {
+    const context = setup();
+    context.api.on(`POST ${sessions}`, session("s1"));
+    context.api.on(queries, page());
+    context.api.on(queries, page([["2"]], { filterApplied: "wrapped" }));
+    const text = "let col = 2\n\nselect id, nome from pedido order by id + @col;";
+    await context.runner.runItem(cursorIn(text, "select"));
+    const first = context.runner.getState();
+    if (first.status !== "rows") throw new Error("esperava linhas");
+    const orderedSent = "select id, nome from pedido order by id + $1";
+
+    await context.runner.run({ ...(filterBaseOf(first, null) as NonNullable<ReturnType<typeof filterBaseOf>>), filter: "ORDER BY nome" });
+
+    // A tela manda o mesmo texto e os mesmos parâmetros; quem decide juntar ou embrulhar é a API.
+    expect(context.api.sent()[1]).toEqual({ sql: orderedSent, params: [{ type: "number", value: "2" }], filter: "ORDER BY nome" });
+    const after = context.runner.getState();
+    if (after.status !== "rows") throw new Error("esperava linhas");
+    expect(after).toMatchObject({ filterApplied: "wrapped", readOnly: gridFilterCopy.result.wrapped });
+    expect(after.target.sent?.sql).toBe(orderedSent);
+    expect(after.target.sent?.params.map((parameter) => parameter.value)).toEqual(["2"]);
+  });
+
+  it("limpar o filtro executa de novo o comando sem ele, com o texto enviado e os parâmetros", async () => {
+    const { api, runner, state } = await withResult({ rows: [page([["2"]], { filterApplied: "merged" }), page()] });
+    const filtered = filterBaseOf(state, null) as NonNullable<ReturnType<typeof filterBaseOf>>;
+    await runner.run({ ...filtered, filter: "id > 3" });
+    const shown = runner.getState();
+
+    await applyResultFilter(filterBaseOf(shown, null), "", "id > 3", shown, { setDraft: () => {}, setApplied: () => {}, setProblem: () => {}, setPinned: () => {}, run: (target) => runner.run(target) });
+
+    expect(api.sent()[2]).toEqual({ sql: sentText, params });
+  });
+});
+
+describe("Executar este comando com parâmetros (RN-VAR-033 e RN-SQL-020)", () => {
+  /** Um avaliador que conta as chamadas. */
+  function counting() {
+    const real = inlineEvaluator();
+    const evaluator: Evaluator & { calls: number } = {
+      calls: 0,
+      evaluate(request) {
+        evaluator.calls++;
+        return real.evaluate(request);
+      },
+      dispose() {},
+    };
+    return evaluator;
+  }
+
+  it("repete os valores com que o comando rodou no Alt+X, sem avaliar as declarações de novo: o random, o contador e a aba ficam como estavam", async () => {
+    const evaluator = counting();
+    const { api, runner } = setup({ evaluator });
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    api.on(queries, page());
+    api.on(queries, page());
+    const text = "let x = random.int(1, 1000000000)\nselect @x;\nselect @x + 1;";
+    await runner.runScriptDoc(range(text));
+    const [firstSent] = api.sent();
+    const target = entryAt(script(runner), 1).target;
+    expect(target.sent?.params.map((parameter) => parameter.value)).toEqual([firstSent.params?.[0].value]);
+
+    const evaluations = evaluator.calls;
+    const before = runner.values.snapshot();
+    await runner.runCommand(target);
+
+    expect(api.sent()[2]).toEqual({ sql: "select $1", params: firstSent.params });
+    expect(evaluator.calls).toBe(evaluations);
+    const after = runner.values.snapshot();
+    expect(after.counter).toBe(before.counter);
+    expect(after.values.get("x")?.value).toEqual(before.values.get("x")?.value);
+    // O resultado é o do comando executado, com o mesmo alvo (o texto enviado e os parâmetros).
+    const state = runner.getState();
+    if (state.status !== "rows") throw new Error("esperava linhas");
+    expect(state.target.sent?.sql).toBe("select $1");
+    expect(state.target.sent?.params.map((parameter) => parameter.value)).toEqual([firstSent.params?.[0].value]);
+  });
+
+  it("um alvo com os parâmetros dele manda esses valores, e não os que a aba tem agora para a mesma variável", async () => {
+    const evaluator = counting();
+    const { api, runner } = setup({ evaluator });
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    api.on(queries, page());
+    api.on(queries, page());
+    // O comando rodou com `n = 5`; depois a aba passou a ter `n = 9` (outro Ctrl+Enter na declaração).
+    await runner.runScriptDoc(range("let n = 5\nselect @n;"));
+    const target = entryAt(script(runner), 1).target;
+    await runner.runItem(range("let n = 9\n", 0, 0));
+    expect(runner.values.snapshot().values.get("n")?.value).toMatchObject({ value: 9 });
+    const evaluations = evaluator.calls;
+
+    await runner.runCommand(target);
+
+    expect(api.sent().at(-1)).toEqual({ sql: "select $1", params: [{ type: "number", value: "5" }] });
+    expect(evaluator.calls).toBe(evaluations);
+    expect(runner.values.snapshot().values.get("n")?.value).toMatchObject({ value: 9 });
+  });
+
+  it("o alvo com a lista e o texto também repete tudo: um marcador por item, na ordem", async () => {
+    const evaluator = counting();
+    const { api, runner } = setup({ evaluator });
+    api.on(`POST ${sessions}`, session("s1"));
+    api.on(queries, page());
+    api.on(queries, page());
+    await runner.runScriptDoc(range("const ids = [1, 2, 3]\nconst nome = 'Ana'\nselect * from t where id in (@ids) and nome = @nome;"));
+    const target = entryAt(script(runner), 2).target;
+    const evaluations = evaluator.calls;
+
+    await runner.runCommand(target);
+
+    const [first, second] = api.sent();
+    expect(second).toEqual(first);
+    expect(second.sql).toBe("select * from t where id in ($1, $2, $3) and nome = $4");
+    expect(second.params).toEqual([{ type: "number", value: "1" }, { type: "number", value: "2" }, { type: "number", value: "3" }, { type: "text", value: "Ana" }]);
+    expect(evaluator.calls).toBe(evaluations);
   });
 });
 

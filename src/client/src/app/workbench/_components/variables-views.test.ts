@@ -131,6 +131,17 @@ describe("as Estatísticas com declarações (RN-VAR-022)", () => {
     expect(html).toContain("Com erro: 1");
   });
 
+  it("a coluna Nº conta a declaração como a linha 1, e os comandos seguem em 2 e 3 (RN-VAR-022)", () => {
+    const html = markup(createElement(ScriptStatistics, { run: run(), onViewSent: noop }));
+    // Cada linha da tabela (menos a de erro, que não tem número) traz o número na primeira célula e o comando na segunda.
+    const rows = [...html.matchAll(/<tr[^>]*><td[^>]*>(\d+)<\/td><td[^>]*>(.*?)<\/td>/g)].map((match) => ({ number: match[1], command: (match[2] ?? "").replace(/<[^>]*>/g, "") }));
+
+    expect(rows.map((row) => row.number)).toEqual(["1", "2", "3"]);
+    expect(rows[0]?.command).toContain("let total = 5");
+    expect(rows[1]?.command).toContain("select @total");
+    expect(rows[2]?.command).toContain("select 2");
+  });
+
   it("o botão do SQL enviado está só na linha do comando que levou variáveis", () => {
     const html = markup(createElement(ScriptStatistics, { run: run(), onViewSent: noop }));
     expect(html.split(`aria-label="${sentSqlCopy.hint}"`)).toHaveLength(2);
