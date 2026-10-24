@@ -28,6 +28,25 @@ export type CellContext = {
   row: RowContext;
 };
 
+/** O que `selectEditorText` precisa do campo de edição: o texto, a seleção e a rolagem (o que uma `HTMLTextAreaElement` tem). */
+export type EditorField = { value: string; scrollLeft: number; scrollTop: number; setSelectionRange: (start: number, end: number, direction?: "forward" | "backward" | "none") => void };
+
+/**
+ * RN-EDIT-001: a seleção do campo de edição quando ele abre. Aberto por F2, Enter, duplo clique, "Editar célula" ou Tab, o texto vem TODO selecionado (Delete
+ * apaga, digitar escreve por cima) e o campo mostra o começo dele: a seleção vai de trás para a frente, para o cursor ficar no início, e a rolagem volta ao
+ * zero (o Chromium rola até o fim da seleção). Aberto pelo primeiro caractere digitado (`typed`), o campo já traz só esse caractere, e o cursor fica depois dele.
+ */
+export function selectEditorText(field: EditorField, typed: boolean): void {
+  const end = field.value.length;
+  if (typed) {
+    field.setSelectionRange(end, end);
+    return;
+  }
+  field.setSelectionRange(0, end, "backward");
+  field.scrollLeft = 0;
+  field.scrollTop = 0;
+}
+
 const allowed: EditAccess = { editable: true };
 const denied = (reason: string): EditAccess => ({ editable: false, reason: copy.readOnly(reason) });
 

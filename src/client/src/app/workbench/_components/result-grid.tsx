@@ -837,6 +837,8 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const editorElement =
     editor === null ? null : (
       <CellEditor
+        key={`${editor.row}:${editor.column}`}
+        typed={editor.touched === true}
         label={editCopy.editorLabel(columns[editor.column]?.name ?? "", editor.row < read.length ? editCopy.rowLabel(editor.row + 1) : editCopy.newRowMark)}
         draft={editor.draft}
         hint={editor.hint ?? null}
