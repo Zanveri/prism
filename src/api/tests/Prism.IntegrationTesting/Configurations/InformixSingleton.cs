@@ -47,6 +47,10 @@ public static class InformixSingleton
             return _settings ??= StartAsync();
     }
 
+    /// <summary>Como conectar no mesmo contêiner, mas no banco sem log (<see cref="UnloggedDatabase"/>): sem transação, o `Commit manual` não existe e cada comando grava sozinho (RN-TX-013).</summary>
+    public static async Task<ConnectionSettings> GetUnloggedSettingsAsync()
+        => (await GetSettingsAsync()) with { Database = UnloggedDatabase };
+
     public static async Task DisposeAsync()
     {
         IContainer? container;

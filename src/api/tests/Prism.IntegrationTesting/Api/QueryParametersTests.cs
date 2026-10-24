@@ -633,14 +633,10 @@ public sealed class Db2QueryParametersTests : QueryParametersTests
     protected override string DefaultSchema => "DB2INST1";
 }
 
-[TestFixture]
-[Category("Api")]
-[Category("Informix")]
-public sealed class InformixQueryParametersTests : QueryParametersTests
+/// <summary>O Informix, no que o roteiro muda; o banco (com log ou sem) é de quem herda.</summary>
+public abstract class InformixQueryParametersBase : QueryParametersTests
 {
     protected override string Folded(string name) => name.ToLowerInvariant();
-
-    protected override Task<ConnectionSettings> StartDatabaseAsync() => InformixSingleton.GetSettingsAsync();
 
     protected override async Task<ApiHost> StartHostAsync()
         => await ApiHost.StartAsync(services => services.UseDriverSource(directory: IbmDriverSingleton.GetDirectoryAsync().GetAwaiter().GetResult()));
@@ -665,4 +661,24 @@ public sealed class InformixQueryParametersTests : QueryParametersTests
     protected override bool MinimumBigInt => false;
 
     protected override bool EmptyTextIsKept => false;
+}
+
+[TestFixture]
+[Category("Api")]
+[Category("Informix")]
+public sealed class InformixQueryParametersTests : InformixQueryParametersBase
+{
+    protected override Task<ConnectionSettings> StartDatabaseAsync() => InformixSingleton.GetSettingsAsync();
+}
+
+/// <summary>
+/// O mesmo roteiro no `prism_sem_log` (RN-VAR-032 e 033, "com log e sem log no Informix"): sem transação, cada comando grava sozinho, e o caminho dos parâmetros,
+/// do filtro, da contagem, da coluna inteira, da exportação e da cópia tem de dar o mesmo resultado que no banco com log.
+/// </summary>
+[TestFixture]
+[Category("Api")]
+[Category("Informix")]
+public sealed class InformixUnloggedQueryParametersTests : InformixQueryParametersBase
+{
+    protected override Task<ConnectionSettings> StartDatabaseAsync() => InformixSingleton.GetUnloggedSettingsAsync();
 }
