@@ -367,7 +367,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
           Prec.highest(keymap.of([{ key: "Mod-Enter", run }])),
           completionSlot.of(initial.autocomplete ? completionFor() : []),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-          EditorView.contentAttributes.of({ "aria-label": workbenchCopy.editor.label }),
+          EditorView.contentAttributes.of({ "aria-label": workbenchCopy.editor.label, "data-sql-editor": "" }),
           EditorView.domEventHandlers({ blur: flush }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {

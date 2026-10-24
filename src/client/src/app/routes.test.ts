@@ -2,6 +2,7 @@ import { isValidElement, type ReactNode } from "react";
 import type { RouteObject } from "react-router";
 import { describe, expect, it } from "vitest";
 
+import { TabHistory } from "@/app/_components/tab-history";
 import { VaultGuard } from "@/app/_components/vault-guard";
 import { LegacyConnectionsRedirect } from "@/app/connections/page";
 import { DriversRedirect } from "@/app/drivers/page";
@@ -69,8 +70,8 @@ describe("rotas: onde o estado da área de trabalho é montado", () => {
     expect(paths).toContain(pathsConfig.settings);
   });
 
-  it("o tema e as fontes do usuário (RN-CONFIG-008) e o atalho Ctrl+, são montados dentro do provedor, portanto do guard: sem o cofre aberto não há usuário nem cofre", () => {
-    for (const component of [ThemeSync, FontSync, SettingsShortcut]) {
+  it("o tema e as fontes do usuário (RN-CONFIG-008), o atalho Ctrl+, e o Voltar e Avançar das abas (RN-ABAS-018) são montados dentro do provedor, portanto do guard: sem o cofre aberto não há usuário nem cofre", () => {
+    for (const component of [ThemeSync, FontSync, SettingsShortcut, TabHistory]) {
       expect(elementsOf(providers[0].route.element).some((element) => element.type === component)).toBe(true);
       expect(placed.filter(({ route }) => elementsOf(route.element).some((element) => element.type === component))).toHaveLength(1);
     }
