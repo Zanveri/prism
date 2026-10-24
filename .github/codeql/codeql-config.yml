@@ -1,0 +1,8 @@
+# Configuração do CodeQL (lida pelo passo "Preparar o CodeQL" de seguranca.yml).
+#
+# Os projetos de teste da API (src/api/tests) nunca vão no pacote: são o que confere a API de fora. Os testes de integração mandam,
+# de propósito, uma senha à API sob teste (ChangePasswordTests), e a regra cs/sensitive-data-transmission lê isso como se fosse
+# código de produção a expor um dado sensível. Não é defeito, então esses projetos ficam fora da análise.
+# Os testes da interface (src/client) continuam analisados: os achados deles se corrigem no código.
+paths-ignore:
+  - src/api/tests

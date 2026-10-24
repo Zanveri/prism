@@ -9,7 +9,7 @@ const hub = readFileSync(new URL("./window-hub.ts", import.meta.url), "utf8");
 
 /** Os canais (`"prism:..."`) que um arquivo passa à chamada dada, como `ipcMain.handle(` ou `ipcRenderer.invoke(`, sem repetir. */
 const channelsOf = (source: string, call: string) => {
-  const pattern = new RegExp(`${call.replace(/[.()]/g, "\\$&")}\\(\\s*"(prism:[a-z-]+)"`, "g");
+  const pattern = new RegExp(`${call.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\(\\s*"(prism:[a-z-]+)"`, "g");
   return [...new Set([...source.matchAll(pattern)].map((match) => match[1]))].sort();
 };
 

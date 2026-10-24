@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { clickLabeled, elementsOf } from "@/lib/testing/react-tree";
+import { stripTags } from "@/lib/testing/text";
 
 import { createScriptRun, entryAt, finishRun, startEntry, withEntry } from "../_lib/script-run";
 import { scriptRunCopy } from "../_lib/script-run.copy";
@@ -134,7 +135,7 @@ describe("as Estatísticas com declarações (RN-VAR-022)", () => {
   it("a coluna Nº conta a declaração como a linha 1, e os comandos seguem em 2 e 3 (RN-VAR-022)", () => {
     const html = markup(createElement(ScriptStatistics, { run: run(), onViewSent: noop }));
     // Cada linha da tabela (menos a de erro, que não tem número) traz o número na primeira célula e o comando na segunda.
-    const rows = [...html.matchAll(/<tr[^>]*><td[^>]*>(\d+)<\/td><td[^>]*>(.*?)<\/td>/g)].map((match) => ({ number: match[1], command: (match[2] ?? "").replace(/<[^>]*>/g, "") }));
+    const rows = [...html.matchAll(/<tr[^>]*><td[^>]*>(\d+)<\/td><td[^>]*>(.*?)<\/td>/g)].map((match) => ({ number: match[1], command: stripTags(match[2] ?? "") }));
 
     expect(rows.map((row) => row.number)).toEqual(["1", "2", "3"]);
     expect(rows[0]?.command).toContain("let total = 5");

@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { stripTags } from "@/lib/testing/text";
+
 import { forgetExcept, remember } from "../../_lib/tab-memory";
 import type { QueryRunner } from "../../_lib/use-query-runner";
 import type { TableTab, TableView } from "../../_lib/workbench-model";
@@ -40,7 +42,7 @@ describe("a aba da tabela com a conexão desconectada pela pessoa: nada reconect
 
   it("conectada, a Estrutura abre em Colunas (carregando), com a lista das quatro seções e nenhum aviso de desconexão", () => {
     const markup = render("structure", { disconnected: false });
-    const tabs = [...markup.matchAll(/<button[^>]*role="tab"[^>]*aria-selected="(true|false)"[^>]*>([^]*?)<\/button>/g)].filter((match) => !/id="table-view-/.test(match[0])).map((match) => [match[1], match[2].replace(/<[^>]*>/g, "")]);
+    const tabs = [...markup.matchAll(/<button[^>]*role="tab"[^>]*aria-selected="(true|false)"[^>]*>([^]*?)<\/button>/g)].filter((match) => !/id="table-view-/.test(match[0])).map((match) => [match[1], stripTags(match[2])]);
 
     expect(markup).not.toContain("A conexão está desconectada.");
     expect(tabs).toEqual([
