@@ -207,6 +207,10 @@ livre no log. **A confirmar** na primeira execução: se o espaço dá.
   "skipped" (condição `github.event.repository.visibility == 'public'`). Ele pede `security-events: write` (a action exige; os achados
   vão para a aba de segurança) e `contents: read`
   ([README do codeql-action](https://github.com/github/codeql-action#workflow-permissions)). Um achado não reprova o job.
+  A configuração fica em `.github/codeql/codeql-config.yml` (o `config-file` do passo "Preparar o CodeQL"): ela deixa fora da análise
+  `src/api/tests`, os projetos de teste da API, que nunca vão no pacote e cujos testes de integração mandam uma senha à API sob teste
+  de propósito (a regra `cs/sensitive-data-transmission` leria isso como defeito). Os testes da interface (`src/client`) seguem
+  analisados; os achados deles se corrigem no código, sem comentário que silencie a regra.
 - **Segredos**: a varredura de segredos com bloqueio de envio é do GitHub, não da pipeline (lista de conferência, item 11).
 
 ### Empacotar
