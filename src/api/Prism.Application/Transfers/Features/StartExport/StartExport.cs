@@ -92,7 +92,7 @@ internal sealed class StartExportHandler(IConnectionQueries connectionQueries, I
         var output = request.Output ?? new();
         var columns = request.Columns!.OrderBy(column => column.Position).Select(column => new ExportColumnChoice(column.Position, column.Name!)).ToList();
         var settings = new ConnectionSettings(record.Engine, record.Host, record.Port, source.Database ?? record.Database, record.UserName, record.Password);
-        var job = new ExportJob(record.ID, settings, generation, request.WindowID, command.Value, columns, source.Kind == "query", request.Count, request.Format!, options!, source.Kind == "table" ? source.Table! : source.Name ?? ResultName, output.Bom, output.Zip ? output.EntryName : null, output.Clipboard, parameters);
+        var job = new ExportJob(record.ID, settings, generation, request.WindowID, command.Value, columns, source.Kind == "query", request.Count, ExportFormats.Canonical(request.Format!), options!, source.Kind == "table" ? source.Table! : source.Name ?? ResultName, output.Bom, output.Zip ? output.EntryName : null, output.Clipboard, parameters);
 
         var started = transferService.StartExport(job);
         if (started.IsFailure)

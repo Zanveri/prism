@@ -12,6 +12,13 @@ public static class ImportFormats
 
     public static bool Exists(string? format)
         => format is not null && All.Contains(format, StringComparer.Ordinal);
+
+    /// <summary>
+    /// O formato do pedido, já validado (`Exists`), como o nome da lista fechada o escreve. O trabalho e o log levam este nome, tirado da lista, e não
+    /// o texto que veio no pedido (RN-LOG-001); um nome fora da lista é erro de quem chama, que tem de validar antes.
+    /// </summary>
+    public static string Canonical(string format)
+        => All.First(known => string.Equals(known, format, StringComparison.Ordinal));
 }
 
 /// <summary>RN-IMPORT-004 a 006: as opções do leitor de um formato, já com o padrão do Prism no que o pedido não trouxe.</summary>
