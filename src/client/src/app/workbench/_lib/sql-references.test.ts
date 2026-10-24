@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Engine } from "@/components/ui";
 import { withoutCursor } from "@/lib/testing/text";
 
-import { analyzeAt, resolveName, resolveQualifier, resolveReference, type Reference } from "./sql-references";
+import { analyzeAt, joinScope, resolveName, resolveQualifier, resolveReference, type Reference } from "./sql-references";
 import type { LinkCatalog } from "./table-links";
 
 const postgres: Engine = 1;
@@ -55,6 +55,26 @@ describe("as tabelas e os apelidos do comando (RN-SQL-025)", () => {
 
   it("com o cursor num parêntese que não é subconsulta, vale o nível de cima", () => {
     expect(shown(read("select * from pedidos p where (p.|)")?.references ?? [])).toEqual(["from:pedidos p"]);
+  });
+
+  it("o OUTER do Informix (FROM a, OUTER b) traz a tabela, e a junção seguinte a enxerga", () => {
+    expect(shown(read("select * from pedidos p, outer clientes c where |", informix)?.references ?? [])).toEqual(["from:pedidos p", "from:clientes c"]);
+    expect(shown(read("select * from pedidos p, outer erp.clientes as c, outer itens where |", informix)?.references ?? [])).toEqual(["from:pedidos p", "from:erp.clientes c", "from:itens"]);
+
+    const joining = read("select * from pedidos p, outer clientes c join |", informix);
+    expect(shown(joining === null ? [] : joinScope(joining))).toEqual(["from:pedidos p", "from:clientes c"]);
+  });
+
+  it("o OUTER JOIN continua sendo só a junção", () => {
+    expect(shown(read("select * from pedidos p left outer join clientes c on 1=1 where |", informix)?.references ?? [])).toEqual(["from:pedidos p", "join:clientes c"]);
+  });
+
+  it("o USING do DELETE e do MERGE traz tabelas; o USING de uma junção ou de um índice não", () => {
+    expect(shown(read("delete from pedidos using clientes c, itens i where |")?.references ?? [])).toEqual(["from:pedidos", "from:clientes c", "from:itens i"]);
+    expect(shown(read("merge into pedidos p using clientes c on c.id = p.cliente_id when matched then delete |")?.references ?? [])).toEqual(["into:pedidos p", "from:clientes c"]);
+    expect(shown(read("select * from pedidos p join clientes c using (id) where |")?.references ?? [])).toEqual(["from:pedidos p", "join:clientes c"]);
+    expect(shown(read("create index ix on pedidos using btree (id) |")?.references ?? [])).toEqual([]);
+    expect(shown(read("select * from pedidos p join clientes c using (id), itens i where |")?.references ?? [])).toEqual(["from:pedidos p", "join:clientes c"]);
   });
 
   it("a chamada de função na lista não é tabela, mas o apelido dela conta como usado", () => {
@@ -205,9 +225,44 @@ describe("resolver os nomes pelo catálogo", () => {
     expect(resolveQualifier(["clientes"], references, catalog, standard)).toEqual({ schema: "erp", name: "produtos" });
   });
 
+  it("o apelido de fora de uma subconsulta correlacionada resolve; o de dentro esconde o de fora", () => {
+    const analysis = read("select * from pedidos p where exists (select 1 from itens i where i.pedido_id = p.|)");
+
+    expect(shown(analysis?.references ?? [])).toEqual(["from:itens i"]);
+    expect(analysis?.outerReferences.map(shown)).toEqual([["from:pedidos p"]]);
+    expect(resolveQualifier(["p"], analysis?.references ?? [], catalog, standard, analysis?.outerReferences)).toEqual({ schema: "public", name: "pedidos" });
+    expect(resolveQualifier(["p"], analysis?.references ?? [], catalog, standard)).toBeNull();
+
+    // Do mais de dentro para o mais de fora, e o comando por último; o primeiro nível que tem o apelido decide.
+    const nested = read("select * from erp.produtos p join clientes c on 1=1 where exists (select 1 from pedidos p where exists (select 1 from itens i where c.|))");
+    expect(nested?.outerReferences.map(shown)).toEqual([["from:pedidos p"], ["from:erp.produtos p", "join:clientes c"]]);
+    expect(resolveQualifier(["c"], nested?.references ?? [], catalog, standard, nested?.outerReferences)).toEqual({ schema: "public", name: "clientes" });
+    expect(resolveQualifier(["p"], nested?.references ?? [], catalog, standard, nested?.outerReferences)).toEqual({ schema: "public", name: "pedidos" });
+  });
+
+  it("sem subconsulta, não há níveis de fora; o parêntese que não é subconsulta também não é um", () => {
+    expect(read("select * from pedidos p where p.|")?.outerReferences).toEqual([]);
+    expect(read("select * from pedidos p where (p.|)")?.outerReferences).toEqual([]);
+  });
+
   it("uma tabela do comando que o catálogo não tem não resolve", () => {
     const [reference] = read("select * from inexistente i |")?.references ?? [];
 
     expect(resolveReference(reference, catalog, standard)).toBeNull();
+  });
+});
+
+describe("as tabelas que a junção pode usar (RN-SQL-025)", () => {
+  const scoped = (text: string) => shown(joinScope(read(text) as NonNullable<ReturnType<typeof read>>));
+
+  it.each([
+    ["depois de JOIN: as de antes do cursor", "select * from pedidos p join |", ["from:pedidos p"]],
+    ["depois de JOIN: as escritas adiante ficam de fora", "select * from pedidos p join | join clientes c on 1=1", ["from:pedidos p"]],
+    ["depois de ON: só as que vêm antes da tabela do JOIN", "select * from itens i join pedidos p on | join clientes c on 1=1", ["from:itens i"]],
+    ["o alvo do INSERT INTO não está no escopo do FROM", "insert into itens select * from pedidos p join |", ["from:pedidos p"]],
+    ["o UPDATE conta", "update pedidos p set x = 1 from clientes c join |", ["update:pedidos p", "from:clientes c"]],
+    ["fora de JOIN e ON, nada", "select p.| from pedidos p", []],
+  ])("%s", (_name, text, expected) => {
+    expect(scoped(text)).toEqual(expected);
   });
 });

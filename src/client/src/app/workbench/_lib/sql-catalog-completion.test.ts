@@ -35,7 +35,9 @@ vi.mock("@/lib/api/prism-api", async (importOriginal) => ({
   },
 }));
 
+import { forgetFailedLists } from "./catalog-fetch-failures";
 import { catalogCompletion } from "./sql-catalog-completion";
+import { invalidateStructure } from "./table-structure.service";
 import { sqlCompletion } from "./sql-completion";
 
 freezeParseBudget();
@@ -49,12 +51,19 @@ const columnRows = (...names: string[]) => names.map((name, index) => ({ name, t
 const ok = (data: unknown) => Promise.resolve({ ok: true, data });
 
 /** Cada rota da API com o que ela responde, por tabela. */
-type Catalog = { columns?: Record<string, unknown[]> };
+type Catalog = { columns?: Record<string, unknown[]>; foreignKeys?: Record<string, unknown[]>; referencedBy?: Record<string, unknown[]> };
+
+const fk = (name: string, columns: string[], table: string, referencedColumns: string[]) => ({ name, columns, referencedSchema: "public", referencedTable: table, referencedColumns });
+const refd = (name: string, table: string, columns: string[], referencedColumns: string[]) => ({ name, referencingSchema: "public", referencingTable: table, columns, referencedColumns });
 
 const serve = (catalog: Catalog) => {
   api.respond = (endpoint) => {
-    const [, table] = /\/tables\/([^/]+)\/columns$/.exec(endpoint) ?? [];
-    return ok(catalog.columns?.[decodeURIComponent(table ?? "")] ?? []);
+    const [, table, kind] = /\/tables\/([^/]+)\/(columns|foreign-keys|referenced-by)$/.exec(endpoint) ?? [];
+    const decoded = decodeURIComponent(table ?? "");
+    if (kind === "columns") return ok(catalog.columns?.[decoded] ?? []);
+    if (kind === "foreign-keys") return ok(catalog.foreignKeys?.[decoded] ?? []);
+    if (kind === "referenced-by") return ok(catalog.referencedBy?.[decoded] ?? []);
+    return ok([]);
   };
 };
 
@@ -270,6 +279,154 @@ describe("as colunas de nome. (RN-CONFIG-004)", () => {
   });
 });
 
+describe("a junção (RN-SQL-025)", () => {
+  beforeEach(() => {
+    serve({
+      foreignKeys: { pedidos: [fk("fk_pedidos_cliente", ["cliente_id"], "clientes", ["id"])], itens_pedido: [fk("fk_itens_pedido", ["pedido_id"], "pedidos", ["id"])] },
+      referencedBy: { pedidos: [refd("fk_itens_pedido", "itens_pedido", ["pedido_id"], ["id"])], clientes: [refd("fk_pedidos_cliente", "pedidos", ["cliente_id"], ["id"])] },
+    });
+  });
+
+  it("depois de JOIN: busca as chaves das tabelas do comando (as dela e as que a referenciam) e sugere com a condição, no topo", async () => {
+    const [, join] = build().sources;
+    const asked = ask(join, "select * from pedidos p join |");
+    const result = await settled(asked.result);
+
+    expect(result?.options.map((option) => [option.label, option.detail])).toEqual([
+      ["clientes c ON c.id = p.cliente_id", "fk_pedidos_cliente"],
+      ["itens_pedido ip ON ip.pedido_id = p.id", "fk_itens_pedido"],
+    ]);
+    expect(result?.from).toBe(asked.at);
+    // Mais acima na lista: o `boost` de cada uma cai na ordem.
+    const boosts = result?.options.map((option) => option.boost ?? 0) ?? [];
+    expect(boosts[0]).toBeGreaterThan(boosts[1]);
+    expect(boosts[1]).toBeGreaterThan(0);
+
+    // Só as tabelas do comando: uma requisição por lista, duas por tabela.
+    expect(api.calls.map((call) => /tables\/([^/]+)\/([^/]+)$/.exec(call)?.slice(1).join(":"))).toEqual(expect.arrayContaining(["pedidos:foreign-keys", "pedidos:referenced-by"]));
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("as listas ficam no cache da Estrutura; o segundo pedido responde na hora e sem requisição", async () => {
+    const [, join] = build().sources;
+    await settled(ask(join, "select * from pedidos p join |").result);
+
+    const again = ask(join, "select * from pedidos p join cli|");
+    expect(again.result).not.toBeInstanceOf(Promise);
+    expect(labelsOf(again.result as CompletionResult)).toEqual(["clientes c ON c.id = p.cliente_id", "itens_pedido ip ON ip.pedido_id = p.id"]);
+    expect(api.calls).toHaveLength(2);
+    expect(queryClient.getQueryData(["table-structure", "c1", "public", "pedidos", "foreignKeys"])).toBeDefined();
+    expect(queryClient.getQueryData(["table-structure", "c1", "public", "pedidos", "referencedBy"])).toBeDefined();
+  });
+
+  it("várias tabelas no comando: duas requisições por tabela, as da última tabela primeiro", async () => {
+    const result = await settled(ask(build().sources[1], "select * from pedidos p join itens_pedido ip on ip.pedido_id = p.id join |").result);
+
+    expect(api.calls).toHaveLength(4);
+    // `itens_pedido` é a última escrita; as ligações dela vêm antes (pedidos já está no comando e não volta); a de `pedidos` com `clientes` vem depois.
+    expect(labelsOf(result)).toEqual(["clientes c ON c.id = p.cliente_id"]);
+  });
+
+  it("sem apelidos no comando, a tabela entra pelo nome inteiro", async () => {
+    const result = await settled(ask(build().sources[1], "select * from pedidos join |").result);
+
+    expect(labelsOf(result)).toEqual(["clientes ON clientes.id = pedidos.cliente_id", "itens_pedido ON itens_pedido.pedido_id = pedidos.id"]);
+  });
+
+  it("a tabela que o catálogo não conhece, ou a subconsulta, não pedem nada", async () => {
+    const [, join] = build().sources;
+
+    expect(await settled(ask(join, "select * from inexistente x join |").result)).toBeNull();
+    expect(await settled(ask(join, "select * from (select 1) s join |").result)).toBeNull();
+    expect(api.calls).toEqual([]);
+  });
+
+  it("o CROSS JOIN e o JOIN dentro de texto ou de comentário: nada", async () => {
+    const [, join] = build().sources;
+
+    for (const text of ["select * from pedidos p cross join |", "select 'join |' from pedidos p", "select * from pedidos p -- join |", "select * from pedidos p /* join | */"]) expect(await settled(ask(join, text).result), text).toBeNull();
+    expect(api.calls).toEqual([]);
+  });
+
+  it("depois de JOIN tabela ON: as condições que ligam a tabela às outras, buscando só as listas dela", async () => {
+    const result = await settled(ask(build().sources[1], "select * from pedidos p join clientes c on |").result);
+
+    expect(result?.options.map((option) => [option.label, option.detail])).toEqual([["c.id = p.cliente_id", "fk_pedidos_cliente"]]);
+    expect(api.calls.map((call) => /tables\/([^/]+)\//.exec(call)?.[1])).toEqual(["clientes", "clientes"]);
+  });
+
+  it("a condição já escrita: nada depois do AND", async () => {
+    expect(await settled(ask(build().sources[1], "select * from pedidos p join clientes c on c.id = p.cliente_id and |").result)).toBeNull();
+    expect(api.calls).toEqual([]);
+  });
+
+  it("sem a sessão da árvore aberta, só o que já está no cache; sem nada, nada, e nenhuma requisição", async () => {
+    queryClient.removeQueries({ queryKey: ["database-session", "c1"] });
+    const [, join] = build().sources;
+
+    expect(await settled(ask(join, "select * from pedidos p join |").result)).toBeNull();
+    expect(api.calls).toEqual([]);
+
+    queryClient.setQueryData(["table-structure", "c1", "public", "pedidos", "foreignKeys"], [fk("fk_pedidos_cliente", ["cliente_id"], "clientes", ["id"])]);
+    expect(labelsOf(await settled(ask(join, "select * from pedidos p join |").result))).toEqual(["clientes c ON c.id = p.cliente_id"]);
+    expect(api.calls).toEqual([]);
+  });
+
+  it("a busca que falha não mostra nada, não avisa e não se repete; o que já veio de outra tabela vale", async () => {
+    failing();
+    const [, join] = build().sources;
+
+    expect(await settled(ask(join, "select * from pedidos p join |").result)).toBeNull();
+    expect(await settled(ask(join, "select * from pedidos p join |").result)).toBeNull();
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("a lista que chega depois de o cursor sair dali é descartada", async () => {
+    expect(await settled(ask(build().sources[1], "select * from pedidos p join |", { aborted: true }).result)).toBeNull();
+  });
+
+  it("a chave composta, em ordem, e a que o catálogo do banco escreve com aspas", async () => {
+    serve({ foreignKeys: { pedidos: [{ name: "fk_empresa", columns: ["empresa", "Cliente Id"], referencedSchema: "public", referencedTable: "clientes", referencedColumns: ["empresa", "id"] }] } });
+    const result = await settled(ask(build().sources[1], "select * from pedidos p join |").result);
+
+    expect(labelsOf(result)).toEqual(['clientes c ON c.empresa = p.empresa AND c.id = p."Cliente Id"']);
+  });
+
+  it("a tabela de outro esquema é escrita com o esquema; a do esquema padrão, sem", async () => {
+    serve({ foreignKeys: { pedidos: [{ name: "fk_produto", columns: ["produto_id"], referencedSchema: "erp", referencedTable: "produtos", referencedColumns: ["id"] }] } });
+    const result = await settled(ask(build().sources[1], "select * from pedidos p join |").result);
+
+    expect(labelsOf(result)).toEqual(["erp.produtos p2 ON p2.id = p.produto_id"]);
+  });
+
+  it("só as tabelas escritas antes do cursor: um JOIN mais adiante ainda não existe no ON de agora", async () => {
+    const [, join] = build().sources;
+
+    // `c` entra depois: a condição `p.cliente_id = c.id` neste ON seria SQL inválido. Só a ligação de `ip` com `p` serve.
+    const on = await settled(ask(join, "select * from itens_pedido ip join pedidos p on | join clientes c on c.id = p.cliente_id").result);
+    expect(labelsOf(on)).toEqual(["p.id = ip.pedido_id"]);
+
+    // Depois de `JOIN`, as tabelas escritas adiante também não contam (nem pedem as chaves delas); só os nomes delas ficam fora dos apelidos novos.
+    const after = await settled(ask(join, "select * from pedidos p join | join clientes c on 1 = 1").result);
+    expect(labelsOf(after)).toEqual(["clientes c2 ON c2.id = p.cliente_id", "itens_pedido ip ON ip.pedido_id = p.id"]);
+    expect(api.calls.filter((call) => call.includes("/clientes/"))).toEqual([]);
+  });
+
+  it("o alvo do INSERT INTO não está no escopo do FROM: não conta como tabela do comando, e pode ser sugerido", async () => {
+    const result = await settled(ask(build().sources[1], "insert into itens_pedido select * from pedidos p join |").result);
+
+    expect(labelsOf(result)).toEqual(["clientes c ON c.id = p.cliente_id", "itens_pedido ip ON ip.pedido_id = p.id"]);
+    expect(api.calls.map((call) => /tables\/([^/]+)\//.exec(call)?.[1])).toEqual(["pedidos", "pedidos"]);
+  });
+
+  it("a quebra de linha em branco: o comando do cursor é o da preferência", async () => {
+    blankLines = true;
+    const result = await settled(ask(build().sources[1], "select * from clientes c\n\nselect * from pedidos p join |").result);
+
+    expect(labelsOf(result)).toEqual(["clientes c ON c.id = p.cliente_id", "itens_pedido ip ON ip.pedido_id = p.id"]);
+  });
+});
+
 describe("dentro da extensão do editor (sqlCompletion)", () => {
   /** As fontes que a extensão entrega à biblioteca (o `override`). */
   function sources(variables?: Parameters<typeof sqlCompletion>[0]["variables"]) {
@@ -313,5 +470,182 @@ describe("dentro da extensão do editor (sqlCompletion)", () => {
     expect(override).toHaveLength(2);
     for (const source of override) await settled(ask(source, "select p.| from pedidos p").result);
     expect(api.calls).toEqual([]);
+  });
+});
+
+describe("o Atualizar do navegador e da Estrutura refaz o que o autocompletar buscou (RN-CONFIG-004)", () => {
+  const treeColumns = ["tree", "c1", "schema", "public", "table", "pedidos", "columns"];
+  const structureColumns = ["table-structure", "c1", "public", "pedidos", "columns"];
+  const tablePath = { type: "table", connectionId: "c1", schema: "public", table: "pedidos" } as const;
+
+  it("a coluna nova depois do Atualizar: as colunas buscadas pelo autocompletar (sem nó aberto na árvore) são buscadas de novo", async () => {
+    const [columns] = build().sources;
+    expect(labelsOf(await settled(ask(columns, "select p.| from pedidos p").result))).toEqual(["id", "cliente_id", "total"]);
+
+    serve({ columns: { pedidos: columnRows("id", "cliente_id", "total", "obs") } });
+    // O mesmo que o navegador faz no nó da tabela: a árvore e a Estrutura, sem observador nenhum.
+    await queryClient.invalidateQueries({ queryKey: ["tree", "c1", "schema", "public", "table", "pedidos"] });
+    invalidateStructure(queryClient, tablePath, new Set());
+    expect(api.calls).toHaveLength(1);
+
+    const asked = ask(columns, "select p.| from pedidos p");
+    expect(asked.result).toBeInstanceOf(Promise);
+    expect(labelsOf(await settled(asked.result))).toEqual(["id", "cliente_id", "total", "obs"]);
+    expect(api.calls).toHaveLength(2);
+
+    // E vale: o próximo pedido responde na hora, e a árvore tem a lista nova.
+    expect(ask(columns, "select p.| from pedidos p").result).not.toBeInstanceOf(Promise);
+    expect(queryClient.getQueryData<NavNode[]>(treeColumns)?.map((row) => row.label)).toEqual(["id", "cliente_id", "total", "obs"]);
+    expect(api.calls).toHaveLength(2);
+  });
+
+  it("o Atualizar da conexão, do banco e do esquema também chega às listas da Estrutura", async () => {
+    await settled(ask(build().sources[0], "select p.| from pedidos p").result);
+
+    for (const path of [{ type: "connection", connectionId: "c1" }, { type: "database", connectionId: "c1" }, { type: "schema", connectionId: "c1", schema: "public" }] as const) {
+      queryClient.setQueryData(structureColumns, queryClient.getQueryData(structureColumns));
+      invalidateStructure(queryClient, path, new Set());
+      expect(queryClient.getQueryState(structureColumns)?.isInvalidated, path.type).toBe(true);
+    }
+  });
+
+  it("sem a sessão da árvore, a lista velha é a resposta; nada é buscado", async () => {
+    const [columns] = build().sources;
+    await settled(ask(columns, "select p.| from pedidos p").result);
+    invalidateStructure(queryClient, tablePath, new Set());
+    await queryClient.invalidateQueries({ queryKey: treeColumns });
+    queryClient.removeQueries({ queryKey: ["database-session", "c1"] });
+
+    expect(labelsOf(await settled(ask(columns, "select p.| from pedidos p").result))).toEqual(["id", "cliente_id", "total"]);
+    expect(api.calls).toHaveLength(1);
+  });
+
+  it("a busca da lista velha que falha: a velha segue valendo, a árvore não fica com o erro e o Atualizar tenta de novo", async () => {
+    const [columns] = build().sources;
+    await settled(ask(columns, "select p.| from pedidos p").result);
+    await queryClient.invalidateQueries({ queryKey: ["tree", "c1", "schema", "public", "table", "pedidos"] });
+    invalidateStructure(queryClient, tablePath, new Set());
+
+    failing();
+    expect(labelsOf(await settled(ask(columns, "select p.| from pedidos p").result))).toEqual(["id", "cliente_id", "total"]);
+    expect(labelsOf(await settled(ask(columns, "select p.| from pedidos p").result))).toEqual(["id", "cliente_id", "total"]);
+    expect(api.calls).toHaveLength(2);
+    expect(queryClient.getQueryState(structureColumns)).toMatchObject({ status: "success", isInvalidated: true });
+    expect(queryClient.getQueryState(treeColumns)?.status).toBe("success");
+
+    serve({ columns: { pedidos: columnRows("id", "obs") } });
+    invalidateStructure(queryClient, tablePath, new Set());
+    expect(labelsOf(await settled(ask(columns, "select p.| from pedidos p").result))).toEqual(["id", "obs"]);
+  });
+
+  it("a lista que nunca veio e falhou é tentada de novo depois do Atualizar (e da Estrutura)", async () => {
+    failing();
+    const [columns] = build().sources;
+    expect(await settled(ask(columns, "select p.| from pedidos p").result)).toBeNull();
+    expect(await settled(ask(columns, "select p.| from pedidos p").result)).toBeNull();
+    expect(api.calls).toHaveLength(1);
+
+    const everything = { columns: { pedidos: columnRows("id", "cliente_id", "total"), clientes: columnRows("id", "nome") } };
+    serve(everything);
+    forgetFailedLists(queryClient, "c1");
+    expect(labelsOf(await settled(ask(columns, "select p.| from pedidos p").result))).toEqual(["id", "cliente_id", "total"]);
+    expect(api.calls).toHaveLength(2);
+
+    failing();
+    queryClient.removeQueries({ queryKey: ["tree", "c1", "schema", "public", "table", "clientes"] });
+    expect(await settled(ask(columns, "select c.| from clientes c").result)).toBeNull();
+    invalidateStructure(queryClient, { type: "connection", connectionId: "c1" }, new Set());
+    serve(everything);
+    expect(labelsOf(await settled(ask(columns, "select c.| from clientes c").result))).toEqual(["id", "nome"]);
+  });
+
+  it("as chaves estrangeiras da junção: o Atualizar do nó da tabela as refaz", async () => {
+    serve({ foreignKeys: { pedidos: [fk("fk_pedidos_cliente", ["cliente_id"], "clientes", ["id"])] }, referencedBy: {} });
+    const [, join] = build().sources;
+    expect(labelsOf(await settled(ask(join, "select * from pedidos p join |").result))).toEqual(["clientes c ON c.id = p.cliente_id"]);
+
+    serve({ foreignKeys: { pedidos: [fk("fk_pedidos_cliente", ["cliente_id"], "clientes", ["id"]), fk("fk_pedidos_vendedor", ["vendedor_id"], "clientes", ["id"])] }, referencedBy: {} });
+    invalidateStructure(queryClient, tablePath, new Set());
+
+    const result = await settled(ask(join, "select * from pedidos p join |").result);
+    expect(result?.options.map((option) => option.detail)).toEqual(["fk_pedidos_cliente", "fk_pedidos_vendedor"]);
+  });
+
+  it("o banco cuja sessão caiu fica de fora do Atualizar (o navegador o reabre)", async () => {
+    await settled(ask(build().sources[0], "select p.| from pedidos p").result);
+    invalidateStructure(queryClient, { type: "connection", connectionId: "c1" }, new Set([undefined]));
+
+    expect(queryClient.getQueryState(structureColumns)?.isInvalidated).toBe(false);
+  });
+});
+
+describe("as colunas dividem o cache com a Estrutura (RN-CONFIG-004)", () => {
+  const treeColumns = ["tree", "c1", "schema", "public", "table", "pedidos", "columns"];
+  const structureColumns = ["table-structure", "c1", "public", "pedidos", "columns"];
+
+  it("as colunas que a Estrutura já tem respondem na hora, sem requisição, e vão para a árvore", () => {
+    queryClient.setQueryData(structureColumns, columnRows("id", "total"));
+    const asked = ask(build().sources[0], "select p.| from pedidos p");
+
+    expect(asked.result).not.toBeInstanceOf(Promise);
+    expect(labelsOf(asked.result as CompletionResult)).toEqual(["id", "total"]);
+    expect(api.calls).toEqual([]);
+    expect(queryClient.getQueryData<NavNode[]>(treeColumns)?.map((row) => row.label)).toEqual(["id", "total"]);
+  });
+
+  it("as colunas que o autocompletar busca ficam na chave da Estrutura (a vista não pergunta de novo) e na da árvore", async () => {
+    await settled(ask(build().sources[0], "select p.| from pedidos p").result);
+
+    expect(queryClient.getQueryData<{ name: string }[]>(structureColumns)?.map((row) => row.name)).toEqual(["id", "cliente_id", "total"]);
+    expect(queryClient.getQueryData<NavNode[]>(treeColumns)).toHaveLength(3);
+    expect(api.calls).toHaveLength(1);
+  });
+
+  it("a lista que a árvore já tem vale: nada é buscado", () => {
+    queryClient.setQueryData(treeColumns, [node("column", "id", "bigint")]);
+    const asked = ask(build().sources[0], "select p.| from pedidos p");
+
+    expect(labelsOf(asked.result as CompletionResult)).toEqual(["id"]);
+    expect(api.calls).toEqual([]);
+  });
+});
+
+describe("o apelido de fora de uma subconsulta correlacionada (RN-CONFIG-004)", () => {
+  it("busca as colunas da tabela do comando de fora", async () => {
+    const asked = ask(build().sources[0], "select * from pedidos p where exists (select 1 from itens_pedido i where i.pedido_id = p.|)");
+    const result = await settled(asked.result);
+
+    expect(labelsOf(result)).toEqual(["id", "cliente_id", "total"]);
+    expect(api.calls).toHaveLength(1);
+    expect(api.calls[0]).toContain("/tables/pedidos/columns");
+  });
+
+  it("o apelido de dentro esconde o de fora", async () => {
+    const result = await settled(ask(build().sources[0], "select * from pedidos p where exists (select 1 from itens_pedido p where p.|)").result);
+
+    expect(labelsOf(result)).toEqual(["id", "pedido_id"]);
+  });
+
+  it("a fonte de nomes se cala também ali", () => {
+    const completion = build();
+    const { doc, at } = withoutCursor("select * from pedidos p where exists (select 1 from itens_pedido i where i.pedido_id = p.|)");
+
+    expect(completion.owns(new CompletionContext(EditorState.create({ doc, extensions: [sql({ dialect: PostgreSQL })] }), at, false))).toBe(true);
+  });
+});
+
+describe("o OUTER do Informix e o USING do DELETE (RN-CONFIG-004)", () => {
+  it("o apelido da tabela depois de OUTER busca as colunas", async () => {
+    const informix: Engine = 3;
+    const completion = catalogCompletion({ queryClient, engine: () => informix, connectionId: () => "c1", database: () => undefined, userName: () => undefined, blankLines: () => false });
+    const result = await settled(ask(completion.sources[0], "select * from pedidos p, outer clientes c where c.|").result);
+
+    expect(labelsOf(result)).toEqual(["id", "nome"]);
+  });
+
+  it("o apelido da tabela do USING do DELETE busca as colunas", async () => {
+    const result = await settled(ask(build().sources[0], "delete from pedidos using clientes c where c.|").result);
+
+    expect(labelsOf(result)).toEqual(["id", "nome"]);
   });
 });

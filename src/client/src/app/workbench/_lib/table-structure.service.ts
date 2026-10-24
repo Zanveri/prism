@@ -2,7 +2,9 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { unwrap, type ApiResult } from "@/lib/api/prism-api";
 
-import { databaseMark, databaseSessionKey, databaseSessionQuery, getColumns, getForeignKeys, getIndexes, getReferencedBy, isSessionLost, keepUntilRefreshed, reopenDatabaseSession } from "./database-sessions.service";
+import { forgetFailedLists } from "./catalog-fetch-failures";
+import { databaseMark, databaseOfKey, databaseSessionKey, databaseSessionQuery, getColumns, getForeignKeys, getIndexes, getReferencedBy, isSessionLost, keepUntilRefreshed, reopenDatabaseSession } from "./database-sessions.service";
+import type { NavPath } from "./navigator-model";
 
 /**
  * As colunas, as chaves estrangeiras e os índices de uma tabela, como a Estrutura e o Diagrama os
@@ -23,6 +25,46 @@ export const structureKey = (connectionId: string, schema: string, table: string
 
 /** Tudo o que uma tabela guarda (as listas), para "Atualizar". */
 export const structurePrefix = (connectionId: string, schema: string, table: string, database?: string) => ["table-structure", connectionId, ...databaseMark(database), schema, table] as const;
+
+/** O que "Atualizar" invalida em um prefixo: o prefixo e, quando o prefixo sozinho pega mais do que o nó, o que filtra. */
+export type StructureScope = { queryKey: readonly unknown[]; predicate?: (query: { queryKey: readonly unknown[] }) => boolean };
+
+/**
+ * O que o "Atualizar" de um nó do navegador invalida da família da Estrutura (RN-CONFIG-004): as colunas e as chaves que o autocompletar busca sozinho não têm
+ * quem as mostre, e o `invalidateQueries` da árvore (`treePrefixes`) não chega a elas. A conexão, o banco, o esquema e a tabela pegam as listas de tudo o que está
+ * abaixo; o grupo de colunas e o de chaves estrangeiras (e as que apontam para a tabela), a lista delas. O banco da conexão não tem um começo de chave só seu, como
+ * em `treePrefixes`.
+ */
+export function structureScopes(path: NavPath): readonly StructureScope[] {
+  switch (path.type) {
+    case "folder":
+    case "objects":
+      return [];
+    case "connection":
+      return [{ queryKey: ["table-structure", path.connectionId] }];
+    case "database":
+      return [path.database === undefined ? { queryKey: ["table-structure", path.connectionId], predicate: (query) => databaseOfKey(query.queryKey) === undefined } : { queryKey: ["table-structure", path.connectionId, ...databaseMark(path.database)] }];
+    case "schema":
+      return [{ queryKey: ["table-structure", path.connectionId, ...databaseMark(path.database), path.schema] }];
+    case "table":
+      return [{ queryKey: structurePrefix(path.connectionId, path.schema, path.table, path.database) }];
+    case "tableLevel": {
+      const levels: StructureLevel[] = path.level === "foreignKeys" ? ["foreignKeys", "referencedBy"] : [path.level];
+      return levels.map((level) => ({ queryKey: structureKey(path.connectionId, path.schema, path.table, level, path.database) }));
+    }
+  }
+}
+
+/**
+ * "Atualizar" no navegador: invalida as listas da Estrutura sob o nó (`structureScopes`), menos as dos bancos de `skipped` (as sessões que caíram, que o navegador
+ * reabre), e esquece as listas que o autocompletar não conseguiu buscar, para a próxima tentar de novo.
+ */
+export function invalidateStructure(queryClient: QueryClient, path: NavPath, skipped: ReadonlySet<string | undefined>): void {
+  if (path.type === "folder") return;
+
+  forgetFailedLists(queryClient, path.connectionId);
+  for (const scope of structureScopes(path)) void queryClient.invalidateQueries({ queryKey: scope.queryKey, predicate: (query) => !skipped.has(databaseOfKey(query.queryKey)) && (scope.predicate?.(query) ?? true) });
+}
 
 /**
  * `enabled` é o sinal de que a vista pode falar com o banco: a aba está à vista e a pessoa não desconectou a conexão. Desligada, a
@@ -79,6 +121,8 @@ type TableName = { schema: string; name: string };
  * Devolve se uma sessão nova foi aberta (a tela avisa, RN-AVISO-003).
  */
 export async function refreshStructure(queryClient: QueryClient, connectionId: string, tables: readonly TableName[], database?: string): Promise<{ sessionReopened: boolean }> {
+  // A pessoa mandou refazer: as listas que o autocompletar não conseguiu buscar voltam a ser tentadas.
+  forgetFailedLists(queryClient, connectionId);
   const keys = tables.map((table) => structurePrefix(connectionId, table.schema, table.name, database));
   const sessionId = () => queryClient.getQueryData<{ id: string }>(databaseSessionKey(connectionId, database))?.id;
   const lost = () => keys.some((queryKey) => queryClient.getQueryCache().findAll({ queryKey }).some((query) => isSessionLost(query.state.error)));

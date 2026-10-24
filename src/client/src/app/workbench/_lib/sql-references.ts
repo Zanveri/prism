@@ -23,6 +23,8 @@ export type Reference = {
   via: "from" | "join" | "update" | "into";
   /** Onde ela acaba, no índice dos itens do nível do cursor: o `ON` de um `JOIN` é o item que vem logo depois. */
   next: number;
+  /** Onde o nome dela começa no texto do comando: quem está antes de quem, para a junção. */
+  start: number;
 };
 
 /** O que o cursor está pedindo. */
@@ -37,6 +39,12 @@ export type CursorContext =
 
 export type Analysis = {
   references: Reference[];
+  /**
+   * As tabelas dos níveis de fora do cursor, um grupo por nível, do mais de dentro para o mais de fora (o comando é o último): o `p.` de uma subconsulta
+   * correlacionada (`… where exists (select 1 from itens i where i.pedido_id = p.|)`) é o apelido do `FROM` de fora. Só `resolveQualifier` as usa; a junção e os
+   * apelidos em uso são do nível do cursor.
+   */
+  outerReferences: Reference[][];
   /** Os nomes que um apelido novo não pode repetir, em minúsculas: os apelidos (inclusive os das subconsultas) e os nomes das tabelas sem apelido. */
   used: Set<string>;
   /** Algum apelido no comando: as tabelas novas ganham um, e as condições usam os apelidos. */
@@ -91,6 +99,8 @@ function itemsOf(tokens: readonly SqlToken[], closes: readonly number[], first: 
 
 /** Lê as tabelas de um nível. As subconsultas da lista (`FROM (SELECT …) s`) e as chamadas (`FROM f(x) g`) não são tabela, mas o apelido delas conta como usado. */
 function readReferences(sql: string, items: readonly Item[], engine: Engine | undefined): { references: Reference[]; derived: string[] } {
+  // `DELETE FROM t USING x c` e `MERGE INTO t USING x c` trazem tabelas; fora deles o `USING` é de outra coisa (`JOIN … USING (colunas)`, `CREATE INDEX … USING gin`, `TYPE int USING …`).
+  const usingTables = items.some((item) => wordIs(item, "delete", "merge"));
   const references: Reference[] = [];
   const derived: string[] = [];
 
@@ -112,7 +122,8 @@ function readReferences(sql: string, items: readonly Item[], engine: Engine | un
   function readList(at: number, via: Reference["via"], listed: boolean): number {
     let cursor = at;
     for (;;) {
-      while (wordIs(items[cursor], "only", "lateral")) cursor++;
+      // `OUTER` (Informix, `FROM a, OUTER b`) e `ONLY`/`LATERAL` (PostgreSQL) vêm antes da tabela, não são nome dela.
+      while (wordIs(items[cursor], "only", "lateral", "outer")) cursor++;
       const item = items[cursor];
       if (item === undefined) return cursor;
 
@@ -139,7 +150,7 @@ function readReferences(sql: string, items: readonly Item[], engine: Engine | un
           const alias = aliasAt(target);
           const tail = names.slice(-2) as string[];
           const after = alias.alias === null ? target : alias.next + 1;
-          references.push({ schema: tail.length === 2 ? tail[0] : null, name: tail[tail.length - 1], alias: alias.alias?.folded ?? null, aliasText: alias.alias?.text ?? null, via, next: after });
+          references.push({ schema: tail.length === 2 ? tail[0] : null, name: tail[tail.length - 1], alias: alias.alias?.folded ?? null, aliasText: alias.alias?.text ?? null, via, next: after, start: parts[0].start });
           cursor = after;
         } else return target;
       } else return cursor;
@@ -157,6 +168,7 @@ function readReferences(sql: string, items: readonly Item[], engine: Engine | un
     else if (item.text === "join") index = readList(index + 1, "join", false) - 1;
     else if (item.text === "update") index = readList(index + 1, "update", true) - 1;
     else if (item.text === "into") index = readList(index + 1, "into", false) - 1;
+    else if (usingTables && item.text === "using" && isName(sql, items[index + 1]) && !isGroup(items[index + 1])) index = readList(index + 1, "from", true) - 1;
   }
 
   return { references, derived };
@@ -208,15 +220,19 @@ export function analyzeAt(sql: string, position: number, engine: Engine | undefi
   if (terminators > 0) return null;
 
   // O nível do cursor é a subconsulta mais de dentro que o contém (um grupo que começa por `SELECT` ou `WITH`); sem ela, o comando todo.
-  const scope = [...enclosing].reverse().find((open) => wordIs(tokens[open + 1], "select", "with"));
-  const items = scope === undefined ? itemsOf(tokens, closes, 0, tokens.length) : itemsOf(tokens, closes, scope + 1, closes[scope]);
+  const scopes = [...enclosing].reverse().filter((open) => wordIs(tokens[open + 1], "select", "with"));
+  const levelOf = (scope: number | undefined) => (scope === undefined ? itemsOf(tokens, closes, 0, tokens.length) : itemsOf(tokens, closes, scope + 1, closes[scope]));
+  const items = levelOf(scopes[0]);
   const { references, derived } = readReferences(blank, items, engine);
+  // Os níveis de fora, do mais de dentro para o mais de fora, e por último o comando (sem subconsulta, o nível do cursor já é o comando).
+  const outerLevels = scopes.length === 0 ? [] : [...scopes.slice(1), undefined];
+  const outerReferences = outerLevels.map((scope) => readReferences(blank, levelOf(scope), engine).references).filter((outer) => outer.length > 0);
 
   const used = new Set<string>([...derived, ...references.map((reference) => reference.alias ?? reference.name)].map((name) => name.toLowerCase()));
   const usesAliases = derived.length > 0 || references.some((reference) => reference.alias !== null);
 
   const context = contextAt(blank, tokens, items, references, before, partial, engine);
-  return { references, used, usesAliases, offset: statement.start, context: context.kind === "none" ? context : { ...context, from: context.from + statement.start } };
+  return { references, outerReferences, used, usesAliases, offset: statement.start, context: context.kind === "none" ? context : { ...context, from: context.from + statement.start } };
 }
 
 function contextAt(sql: string, tokens: readonly SqlToken[], items: readonly Item[], references: readonly Reference[], before: number, partial: { from: number; quoted: boolean }, engine: Engine | undefined): CursorContext {
@@ -253,6 +269,19 @@ function contextAt(sql: string, tokens: readonly SqlToken[], items: readonly Ite
   return none;
 }
 
+/**
+ * As tabelas que a junção pode usar na posição do cursor (RN-SQL-025): as que estão no `FROM`/`JOIN`/`UPDATE` ANTES dele. As escritas depois (um `JOIN` mais
+ * adiante) ainda não existem no `ON` de agora, e o alvo de um `INSERT INTO` não está no escopo do `FROM`. Depois de `JOIN tabela ON`, só as que vêm antes
+ * da tabela do `JOIN` (ela mesma fica de fora: é `context.table`).
+ */
+export function joinScope(analysis: Analysis): Reference[] {
+  const { context } = analysis;
+  if (context.kind !== "join" && context.kind !== "on") return [];
+
+  const limit = context.kind === "on" ? context.table.start : context.from - analysis.offset;
+  return analysis.references.filter((reference) => reference.via !== "into" && reference.start < limit);
+}
+
 /** Uma tabela do comando que o catálogo conhece. */
 export type ResolvedReference = { reference: Reference; schema: string; name: string };
 
@@ -277,13 +306,17 @@ export function resolveReference(reference: Reference, catalog: LinkCatalog, def
  * A tabela que `nome.` (as partes de `qualifier`) é no comando: o apelido de uma tabela (`FROM pedidos p`, `p.`), o nome de uma tabela escrita sem apelido ou, no
  * catálogo, `tabela.` e `esquema.tabela.`. Um apelido vale mais que um nome de tabela do catálogo. `null` quando é outra coisa (um esquema, um apelido de subconsulta).
  */
-export function resolveQualifier(qualifier: readonly string[], references: readonly Reference[], catalog: LinkCatalog, defaultSchemas: readonly string[] | null): { schema: string; name: string } | null {
+export function resolveQualifier(qualifier: readonly string[], references: readonly Reference[], catalog: LinkCatalog, defaultSchemas: readonly string[] | null, outerReferences: readonly (readonly Reference[])[] = []): { schema: string; name: string } | null {
   if (qualifier.length === 1) {
     const [name] = qualifier;
-    const aliased = references.find((reference) => reference.alias === name);
-    if (aliased !== undefined) return resolveName(aliased.schema, aliased.name, catalog, defaultSchemas);
-    const written = references.find((reference) => reference.alias === null && reference.name === name);
-    return resolveName(written?.schema ?? null, name, catalog, defaultSchemas);
+    // O nível do cursor primeiro, depois os de fora (o apelido de dentro esconde o de fora): o primeiro nível que tem o nome decide.
+    for (const level of [references, ...outerReferences]) {
+      const aliased = level.find((reference) => reference.alias === name);
+      if (aliased !== undefined) return resolveName(aliased.schema, aliased.name, catalog, defaultSchemas);
+      const written = level.find((reference) => reference.alias === null && reference.name === name);
+      if (written !== undefined) return resolveName(written.schema, name, catalog, defaultSchemas);
+    }
+    return resolveName(null, name, catalog, defaultSchemas);
   }
   return qualifier.length === 2 ? resolveName(qualifier[0], qualifier[1], catalog, defaultSchemas) : null;
 }
