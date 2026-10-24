@@ -3814,6 +3814,10 @@ $r = .\scripts\run-hidden.ps1 -Exe .\release\win-unpacked\Prism.exe -UserDataDir
   e os módulos do Node. O `electron-builder` copia para o app o que estiver em `dependencies`.
 - React e Electron em versão exata. O Electron está na 44.5.1 porque a 44.6 e a 44.7 tinham menos
   de três dias quando o projeto foi criado; subir quando a trava deixar.
+- O `undici` é dependência transitiva (`electron` > `@electron/get`, na linha 7.x, e `electron-builder` > `node-gyp`, na 6.x) e
+  não tem `overrides`: os intervalos dos pais já aceitam a versão corrigida, então o aviso de segurança se resolve só no
+  `pnpm-lock.yaml` (`pnpm update undici`, que regera o arquivo; nunca à mão). Só criar um `overrides` no
+  `pnpm-workspace.yaml` se um pai passar a pedir uma versão que não aceita a corrigida.
 - `vite` fica na linha 7 (o `electron-vite` 5 não aceita a 8) e `typescript` na 6.0 (o
   `typescript-eslint` não aceita a 7).
 - As travas do pnpm (`pnpm-workspace.yaml`) ficam ligadas. As únicas exceções, `semver@5.7.2` e `semver@6.3.1` (falsos
