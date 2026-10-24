@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils/cn";
 import { isMacPlatform } from "@/lib/utils/platform";
 
 import type { EditBarAction, EditBarButton } from "./edit-bar";
@@ -15,6 +16,39 @@ const shortcutCopy = recordsCopy.edit.shortcuts;
  * alteradas com o valor novo (a lida mostra o valor lido riscado ao lado) e a que falhou no último Salvar (destacada).
  */
 export type RowMark = { kind: "read" | "new"; deleted: boolean; pending: ReadonlyMap<number, EditValue>; failed: boolean };
+
+/**
+ * O fundo da linha excluída no passar do mouse: o vermelho a 10% sobre a superfície elevada (o mesmo 10% do repouso, sobre outro fundo). Mais que 10% sobre
+ * o elevado reprova o texto vermelho em 4,5:1 (Dracula, Nord e Kanagawa), por isso a que também falhou tem o seu abaixo.
+ */
+const deletedHover = "hover:bg-[color-mix(in_srgb,var(--color-danger)_10%,var(--color-raised))]";
+
+/** O passar do mouse da excluída que também falhou: mantém o 12% (o tom mais forte) sobre a metade do caminho entre o painel e o elevado, onde o texto ainda passa em 4,5:1. */
+const deletedFailedHover = "hover:bg-[color-mix(in_srgb,var(--color-danger)_12%,color-mix(in_srgb,var(--color-raised)_50%,var(--color-panel)))]";
+
+/** As classes que a marca da linha dá à linha da grade (`row`), ao número dela (`number`) e a cada célula (`cell`). */
+export type RowMarkClasses = { row: string; number: string; cell: string };
+
+/**
+ * RN-EDIT-004 e 015: como a grade pinta a linha pela marca. A marcada para exclusão fica riscada e vermelha: o texto das células em `text-danger` com
+ * `line-through`, o número da linha também, e um tom de vermelho no fundo (`bg-danger/10`; o passar do mouse troca o fundo elevado pelo mesmo vermelho sobre ele,
+ * para a linha seguir vermelha). A que falhou no último Salvar tem o tom mais forte (`bg-danger/15`) e o número em negrito vermelho; a excluída que também falhou
+ * mostra as duas coisas, com o tom a 12%, o máximo em que o texto vermelho ainda passa em 4,5:1 sobre o painel em todos os temas, também no passar do mouse
+ * (`globals.test.ts` lê os tons destas próprias classes e confere o contraste).
+ * A célula escolhida (`bg-selected`, que a grade põe por célula) e a ativa (o contorno) vêm por cima: a escolha cobre o tom, e o texto vermelho passa sobre ela.
+ * `rowChosen`: a linha tem células escolhidas, e o número dela fica destacado.
+ */
+export function rowMarkClasses(mark: RowMark | undefined, rowChosen: boolean): RowMarkClasses {
+  const deleted = mark?.deleted === true;
+  const failed = mark?.failed === true;
+  const row = deleted ? (failed ? `bg-danger/12 ${deletedFailedHover}` : `bg-danger/10 ${deletedHover}`) : cn("hover:bg-raised", failed && "bg-danger/15");
+
+  return {
+    row,
+    number: cn(rowChosen && "bg-selected font-semibold text-ink group-hover:bg-selected", deleted && "text-danger line-through", failed && "font-semibold text-danger"),
+    cell: deleted ? "text-danger line-through" : "",
+  };
+}
 
 /**
  * RN-GRADE-021: o botão de ordenar do cabeçalho, pelo mesmo caminho do "Ordenar" do menu (RN-TABELA-010 nos Registros, RN-GRADE-011 no resultado): a ordem

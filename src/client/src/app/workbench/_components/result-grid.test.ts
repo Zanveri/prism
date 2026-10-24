@@ -418,12 +418,52 @@ describe("a linha da grade editável (seção 22, RN-EDIT-001 e 004)", () => {
     expect(cell(markup, 1)).not.toContain("line-through");
   });
 
-  it("a linha marcada para exclusão fica riscada, e a que falhou no Salvar, destacada", () => {
+  it("a linha marcada para exclusão fica riscada e vermelha (o texto, o número e o fundo), e a que falhou no Salvar, destacada", () => {
     const deleted = renderEditable({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false } });
     const failed = renderEditable({ mark: { kind: "read", deleted: false, pending: new Map(), failed: true } });
+    const both = renderEditable({ mark: { kind: "read", deleted: true, pending: new Map(), failed: true } });
+    const rowHeader = (markup: string) => markup.match(/<div[^>]*role="rowheader"[^>]*>/)?.[0] ?? "";
 
     expect(cell(deleted, 1)).toContain("line-through");
+    expect(cell(deleted, 1)).toContain("text-danger");
+    expect(cell(deleted, 1)).not.toContain("text-subtle");
+    expect(rowHeader(deleted)).toContain("line-through");
+    expect(rowHeader(deleted)).toContain("text-danger");
+    expect(rowHeader(deleted)).toContain('title="Marcada para exclusão"');
+    expect(deleted).toMatch(/role="row"[^>]*bg-danger\/10/);
     expect(failed).toMatch(/role="row"[^>]*bg-danger\/15/);
+    expect(cell(failed, 1)).not.toContain("line-through");
+    expect(rowHeader(failed)).toContain("font-semibold");
+    expect(rowHeader(failed)).not.toContain("line-through");
+    // A excluída que falhou mostra as duas: riscada e vermelha, com o número em negrito.
+    expect(cell(both, 1)).toContain("line-through");
+    expect(rowHeader(both)).toContain("font-semibold");
+    expect(rowHeader(both)).toContain("line-through");
+    expect(both).toMatch(/role="row"[^>]*bg-danger\/12/);
+  });
+
+  it("a célula nula da linha excluída também fica vermelha, e o link da chave estrangeira, vermelho e riscado (o botão não herda o risco)", () => {
+    const deleted = { kind: "read" as const, deleted: true, pending: new Map(), failed: false };
+    const nulled = renderEditable({ mark: deleted }, ["1", null]);
+    const links = new Map([[0, { table: { schema: "producao", name: "ordem_producao" }, column: "id" }]]);
+    const button = (mark: typeof deleted) => renderEditable({ mark, links, onFollow: () => {} }).match(/<button[^>]*>/)?.[0] ?? "";
+
+    expect(cell(nulled, 1)).toContain("text-danger");
+    expect(cell(nulled, 1)).not.toContain("text-subtle");
+    expect(cell(renderEditable({ mark: { ...deleted, deleted: false } }, ["1", null]), 1)).toContain("text-subtle");
+    expect(button(deleted)).toContain("text-danger");
+    expect(button(deleted)).toContain("line-through");
+    expect(button(deleted)).not.toContain("text-postgres");
+    expect(button({ ...deleted, deleted: false })).toContain("text-postgres");
+  });
+
+  it("a célula escolhida da linha excluída continua escolhida (bg-selected) e vermelha, e a ativa mantém o contorno", () => {
+    const markup = renderEditable({ mark: { kind: "read", deleted: true, pending: new Map(), failed: false }, activeColumn: 1, selectedFrom: 1, selectedTo: 1 });
+
+    expect(cell(markup, 1)).toContain("bg-selected");
+    expect(cell(markup, 1)).toContain("outline-accent");
+    expect(cell(markup, 1)).toContain("text-danger");
+    expect(cell(markup, 1)).toContain("line-through");
   });
 
   it("sem a edição, a linha continua só leitura: `cell`, sem id nem posição", () => {

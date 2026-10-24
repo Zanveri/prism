@@ -1728,7 +1728,7 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     texto, estável (`useCallback` sem dependências), então roda só ao entrar na tela e não a cada tecla; a `key` do `CellEditor` é a célula, para o campo do Tab
     ser outro. Sem DOM nos testes: o teste chama a referência com um campo falso. Conferido só nos testes, não numa janela.
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
-    com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
+    com `+` no número; a excluída riscada e vermelha (texto e número `text-danger line-through`, fundo `bg-danger/10`, 12% se também falhou, com o tom mantido no passar do mouse; `rowMarkClasses`, em `grid-editing.ts`, decide as classes, e `globals.test.ts` confere o contraste do vermelho sobre o tom em cada tema); a que falhou no Salvar em `bg-danger/15` e o número em negrito vermelho; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
   - **A faixa** (`_components/edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
     erro do último Salvar (`role="alert"`), que fica até o próximo; e o motivo de só leitura, à vista. Salvar que gravou tudo avisa "N alterações
     salvas." e chama `onSaved`: os Registros leem de novo. Sem o alvo (as pendências lembradas voltam sem ele), o Salvar e o "Ver SQL" o perguntam

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { copiesAdvanced, copiesCell, deletesRows, editShortcuts, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarksOf, rowShortcut, savesEdits, selectsAll, selectsRows } from "./grid-editing";
+import { copiesAdvanced, copiesCell, deletesRows, editShortcuts, filterKey, gridRowOf, gridRowsOf, refreshKey, rowMarkClasses, rowMarksOf, rowShortcut, savesEdits, selectsAll, selectsRows } from "./grid-editing";
 import { addRow, deleteRow, editCell, editNewCell, noEdits } from "./record-edits";
 
 const rows = [
@@ -180,5 +180,48 @@ describe("as teclas da seleção (RN-GRADE-001 a 003 e RN-EDIT-015)", () => {
     expect(deletesRows(key("Delete", { shiftKey: true }), "Win32")).toBe(false);
     expect(deletesRows(key("Backspace"), "Win32")).toBe(false);
     expect(deletesRows(key("Backspace"), "MacIntel")).toBe(true);
+  });
+});
+
+describe("como a grade pinta a marca da linha (RN-EDIT-004 e 015)", () => {
+  const mark = (over: Partial<NonNullable<Parameters<typeof rowMarkClasses>[0]>> = {}) => ({ kind: "read" as const, deleted: false, pending: new Map<number, string | null>(), failed: false, ...over });
+  const classes = (value: string) => value.split(" ").filter(Boolean);
+
+  it.each([
+    { name: "a linha lida, sem marca", mark: undefined, chosen: false, row: ["hover:bg-raised"], number: [], cell: [] },
+    { name: "a linha lida com marca de célula alterada", mark: mark({ pending: new Map([[1, "paga"]]) }), chosen: false, row: ["hover:bg-raised"], number: [], cell: [] },
+    { name: "a linha marcada para exclusão: riscada, vermelha e com o fundo vermelho a 10%", mark: mark({ deleted: true }), chosen: false, row: ["bg-danger/10"], number: ["text-danger", "line-through"], cell: ["text-danger", "line-through"] },
+    { name: "a que só falhou no Salvar: o fundo a 15% e o número em negrito vermelho, sem riscar", mark: mark({ failed: true }), chosen: false, row: ["bg-danger/15", "hover:bg-raised"], number: ["font-semibold", "text-danger"], cell: [] },
+    { name: "a excluída que também falhou: as duas marcas, com o fundo a 12%", mark: mark({ deleted: true, failed: true }), chosen: false, row: ["bg-danger/12"], number: ["font-semibold", "text-danger", "line-through"], cell: ["text-danger", "line-through"] },
+    { name: "a linha nova", mark: mark({ kind: "new", pending: new Map([[1, "nova"]]) }), chosen: false, row: ["hover:bg-raised"], number: [], cell: [] },
+    { name: "a linha nova que falhou: só o destaque da falha", mark: mark({ kind: "new", failed: true }), chosen: false, row: ["bg-danger/15", "hover:bg-raised"], number: ["font-semibold", "text-danger"], cell: [] },
+    { name: "a linha lida escolhida: o número destacado, sem vermelho", mark: undefined, chosen: true, row: ["hover:bg-raised"], number: ["bg-selected", "font-semibold", "text-ink", "group-hover:bg-selected"], cell: [] },
+    { name: "a excluída escolhida: o número destacado continua riscado e vermelho (o vermelho vence o text-ink)", mark: mark({ deleted: true }), chosen: true, row: ["bg-danger/10"], number: ["bg-selected", "font-semibold", "text-danger", "line-through", "group-hover:bg-selected"], cell: ["text-danger", "line-through"] },
+  ])("$name", ({ mark: value, chosen, row, number, cell }) => {
+    const result = rowMarkClasses(value, chosen);
+
+    expect(classes(result.row), "linha").toEqual(expect.arrayContaining(row));
+    expect(classes(result.number).sort(), "número").toEqual([...number].sort());
+    expect(classes(result.cell).sort(), "célula").toEqual([...cell].sort());
+  });
+
+  it("a linha excluída não deixa o fundo do passar do mouse apagar o vermelho; as demais seguem com o fundo elevado", () => {
+    expect(rowMarkClasses(mark({ deleted: true }), false).row).toContain("color-mix(in_srgb,var(--color-danger)_10%,var(--color-raised))");
+    expect(rowMarkClasses(mark({ deleted: true }), false).row).not.toContain("hover:bg-raised");
+    expect(rowMarkClasses(mark({ deleted: true, failed: true }), false).row).not.toContain("hover:bg-raised");
+    // A que também falhou segue com o tom mais forte (12%) no passar do mouse, e não cai para o 10% da só excluída.
+    expect(rowMarkClasses(mark({ deleted: true, failed: true }), false).row).toContain("hover:bg-[color-mix(in_srgb,var(--color-danger)_12%,");
+    expect(rowMarkClasses(mark({ failed: true }), false).row).toContain("hover:bg-raised");
+  });
+
+  it("a excluída e a que falhou ficam distintas entre si: tons de fundo diferentes, e só a que falhou tem o número em negrito", () => {
+    const deleted = rowMarkClasses(mark({ deleted: true }), false);
+    const failed = rowMarkClasses(mark({ failed: true }), false);
+    const both = rowMarkClasses(mark({ deleted: true, failed: true }), false);
+
+    expect(new Set([deleted.row, failed.row, both.row]).size).toBe(3);
+    expect(deleted.number).not.toContain("font-semibold");
+    expect(failed.number).toContain("font-semibold");
+    expect(both.number).toContain("font-semibold");
   });
 });
