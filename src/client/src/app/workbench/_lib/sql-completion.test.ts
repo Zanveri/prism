@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Engine } from "@/components/ui";
 import { freezeParseBudget } from "@/lib/testing/parse-budget";
+import { withoutCursor } from "@/lib/testing/text";
 
 import type { NavKind, NavNode } from "./navigator-model";
 import type { CachedLevel } from "./navigator-search";
@@ -55,8 +56,7 @@ type Where = { engine?: Engine; dialect?: SQLDialect; explicit?: boolean };
 
 /** Roda a fonte de nomes no texto, com o cursor onde está o `|`. O resultado é o da fonte, sem a lista já filtrada: quem filtra pelo que foi digitado é a biblioteca. */
 function run(text: string, levels: readonly CachedLevel[], { engine = postgres, dialect = PostgreSQL, explicit = false }: Where = {}) {
-  const at = text.indexOf("|");
-  const doc = text.replace("|", "");
+  const { doc, at } = withoutCursor(text);
   const state = EditorState.create({ doc, extensions: [sql({ dialect })] });
   const result = namesSource(() => levels, dialect, engine)(new CompletionContext(state, at, explicit)) as CompletionResult | null;
 
@@ -469,8 +469,7 @@ describe("depois de um ponto só entram os nomes daquele objeto (E3)", () => {
    * digitado, sem diferenciar a caixa).
    */
   function suggest(text: string, { engine = postgres, dialect = PostgreSQL, explicit = false }: Where = {}): string[] {
-    const at = text.indexOf("|");
-    const doc = text.replace("|", "");
+    const { doc, at } = withoutCursor(text);
     const state = EditorState.create({ doc, extensions: [sql({ dialect })] });
 
     configured.length = 0;

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { clickLabeled } from "@/lib/testing/react-tree";
+import { stripTags } from "@/lib/testing/text";
 
 import { driversSchema, type Driver } from "../_lib/drivers.schema";
 import { DriverRow, DriverSections, type DriverRowHandlers } from "./driver-sections";
@@ -29,7 +30,7 @@ const noop = () => {};
 const handlers: DriverRowHandlers = { cancellingId: null, onInstall: noop, onCancel: noop, onRemove: noop };
 const renderRow = (item: Driver, overrides: Partial<DriverRowHandlers> = {}) => renderToStaticMarkup(createElement("ul", null, createElement(DriverRow, { driver: item, ...handlers, ...overrides })));
 const renderList = (list: Driver[]) => renderToStaticMarkup(createElement(DriverSections, { drivers: list, ...handlers }));
-const buttonsOf = (markup: string) => [...markup.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((match) => match[1].replace(/<[^>]+>/g, "").trim());
+const buttonsOf = (markup: string) => [...markup.matchAll(/<button[^>]*>(.*?)<\/button>/g)].map((match) => stripTags(match[1]).trim());
 
 describe("a lista agrupada (item B)", () => {
   const all = [

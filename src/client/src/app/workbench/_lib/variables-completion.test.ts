@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Engine } from "@/components/ui";
 import { freezeParseBudget } from "@/lib/testing/parse-budget";
+import { withoutCursor } from "@/lib/testing/text";
 
 // A configuração que `sqlCompletion` entrega à biblioteca: é por ela que o teste roda as fontes DE VERDADE do editor (o `override`), com as das variáveis junto.
 type CompletionConfig = NonNullable<Parameters<typeof autocompletion>[0]>;
@@ -33,8 +34,7 @@ type Where = { engine?: Engine; explicit?: boolean; values?: Record<string, Vari
 
 /** O texto com o cursor no `|`. Devolve o que a fonte das variáveis propõe (ou nulo). */
 function propose(text: string, { engine = postgres, explicit = false, values }: Where = {}) {
-  const at = text.indexOf("|");
-  const doc = text.replace("|", "");
+  const { doc, at } = withoutCursor(text);
   const state = EditorState.create({ doc, extensions: [sql({ dialect: PostgreSQL })] });
   const completion = variablesCompletion({ engine: () => engine, blankLines: () => true, values: () => (values === undefined ? null : new Map(Object.entries(values))) });
   const result = completion.sources[0](new CompletionContext(state, at, explicit)) as CompletionResult | null;
@@ -185,8 +185,7 @@ describe("as peças do autocompletar", () => {
 describe("na lista do editor (sqlCompletion)", () => {
   const run = (text: string) => {
     configured.length = 0;
-    const at = text.indexOf("|");
-    const doc = text.replace("|", "");
+    const { doc, at } = withoutCursor(text);
     const completion = variablesCompletion({ engine: () => postgres, blankLines: () => true, values: () => null });
     sqlCompletion({ dialect: PostgreSQL, engine: postgres, levels: () => [], variables: completion });
     const state = EditorState.create({ doc, extensions: [sql({ dialect: PostgreSQL })] });
