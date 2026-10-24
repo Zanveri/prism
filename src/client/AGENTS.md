@@ -3696,8 +3696,13 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   `Prism-<versão>-<sistema>-<arquitetura>.<extensão>` (o `${arch}` do electron-builder vira `x64`, `x86_64` ou `amd64`, conforme
   o formato). **O macOS sai uma arquitetura por vez**, porque há uma API só em `resources/api`: `build:api -- osx-arm64` e
   `dist -- mac arm64`, depois `build:api -- osx-x64` e `dist -- mac x64` (sem arquitetura, a da máquina). Os alvos de macOS no
-  `electron-builder.yml` não declaram `arch` de propósito: com `arch` lá, o `--arm64` não restringe e as duas saem de uma vez. Sem assinatura
-  e sem publicação: nenhum token, certificado ou variável de segredo. Windows e Linux são só x64.
+  `electron-builder.yml` não declaram `arch` de propósito: com `arch` lá, o `--arm64` não restringe e as duas saem de uma vez. Sem publicação e
+  sem certificado: nenhum token ou variável de segredo. Windows e Linux saem sem assinatura; o macOS sai com **assinatura ad hoc**
+  (issue #33): `identity: "-"`, `hardenedRuntime: false` e `notarize: false` no `electron-builder.yml`, que não pedem certificado nem
+  keychain (o comentário do arquivo diz o que cada linha faz e que não foi aberto num Mac de verdade). O `dist` tira as `CSC_*` do
+  ambiente no macOS (`builderEnvironment`, em `dist-plan.mjs`), para um certificado esquecido ali não mudar a assinatura. A atualização
+  no macOS não depende da assinatura: o app só baixa o `dmg`, confere as somas e o deixa na pasta de downloads (RN-ATUALIZA-006), sem
+  verificar assinatura nem mexer em quarentena. Windows e Linux são só x64.
 - **`PRISM_HOMEPAGE`** (só no `dist -- linux`): o `.deb` e o `.rpm` exigem a URL pública do projeto ("Please specify project
   homepage"), que não está no repositório; a pipeline a preenche. O `dist` valida a variável (`parseHomepage`: `https://` bem
   formada, sem usuário nem senha, senão falha dizendo só que é inválida) e a passa ao electron-builder em

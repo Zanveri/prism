@@ -369,7 +369,7 @@ describe("Atualizações (RN-ATUALIZA-007)", () => {
   });
 
   it("diz o que a atualização garante: o que a tela de versão nova já diz (soma SHA-256, pacotes sem assinatura)", () => {
-    expect(updates(render({}, { updates: defaults }).markup)).toContain("Os pacotes ainda não são assinados.");
+    expect(updates(render({}, { updates: defaults }).markup)).toContain("Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.");
   });
 });
 
