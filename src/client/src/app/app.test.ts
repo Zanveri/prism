@@ -2,6 +2,7 @@ import { isValidElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiGate } from "@/app/_components/api-gate";
+import { HistoryButtonsGuard } from "@/app/_components/history-buttons-guard";
 import { ToastProvider } from "@/components/ui";
 import { UpdateDialog } from "@/components/update/update-dialog";
 import { elementsOf, type Found } from "@/lib/testing/react-tree";
@@ -27,5 +28,11 @@ describe("a casca do app", () => {
 
     expect(elementsOf(gate?.props.children as never).some((element) => element.type === UpdateDialog)).toBe(false);
     expect(elementsOf(tree).filter((element) => element.type === UpdateDialog)).toHaveLength(1);
+  });
+
+  it("o guarda dos botões do mouse (RN-ABAS-018) é montado uma vez, dentro do ApiGate e fora das rotas, para valer no login também", () => {
+    const gate = direct.find((element) => element.type === ApiGate);
+
+    expect(elementsOf(gate?.props.children as never).filter((element) => element.type === HistoryButtonsGuard)).toHaveLength(1);
   });
 });
