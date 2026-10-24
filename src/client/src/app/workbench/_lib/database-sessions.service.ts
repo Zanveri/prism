@@ -11,12 +11,14 @@ import {
   databaseSessionSchema,
   foreignKeysSchema,
   indexesSchema,
+  referencingForeignKeysSchema,
   serverDatabasesSchema,
   type Column,
   type DatabaseObject,
   type DatabaseSchema,
   type DatabaseSession,
   type ForeignKey,
+  type ReferencingForeignKey,
   type ServerDatabase,
   type TableIndex,
 } from "./database-sessions.schema";
@@ -63,6 +65,11 @@ export function getIndexes(sessionId: string, schema: string, table: string): Pr
 
 export function getForeignKeys(sessionId: string, schema: string, table: string): Promise<ApiResult<ForeignKey[]>> {
   return apiRequest(prismEndpoints.userDatabaseSessionForeignKeys(sessionId, schema, table), { schema: foreignKeysSchema });
+}
+
+/** RN-CAT-004: as chaves estrangeiras que apontam para a tabela. */
+export function getReferencedBy(sessionId: string, schema: string, table: string): Promise<ApiResult<ReferencingForeignKey[]>> {
+  return apiRequest(prismEndpoints.userDatabaseSessionReferencedBy(sessionId, schema, table), { schema: referencingForeignKeysSchema });
 }
 
 /**

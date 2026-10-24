@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { databaseSessionSchema } from "./database-sessions.schema";
+import { databaseSessionSchema, referencingForeignKeysSchema } from "./database-sessions.schema";
 
 describe("databaseSessionSchema", () => {
   it("a resposta completa passa", () => {
@@ -26,5 +26,26 @@ describe("databaseSessionSchema", () => {
     expect(databaseSessionSchema.safeParse({ database: "mes" }).success).toBe(false);
     expect(databaseSessionSchema.safeParse({ id: "", database: "mes" }).success).toBe(false);
     expect(databaseSessionSchema.safeParse({ id: "s-1" }).success).toBe(false);
+  });
+});
+
+describe("referencingForeignKeysSchema (RN-CAT-004: GET …/referenced-by)", () => {
+  const key = { name: "fk_itens_pedido", referencingSchema: "public", referencingTable: "itens_pedido", columns: ["empresa", "pedido_id"], referencedColumns: ["empresa", "id"], onDelete: "CASCADE", onUpdate: null };
+
+  it("a resposta da API passa, com as colunas na ordem da chave", () => {
+    expect(referencingForeignKeysSchema.parse([key])).toEqual([key]);
+  });
+
+  it("as duas regras são opcionais (o banco pode não informar), e uma lista vazia passa", () => {
+    const bare = { name: key.name, referencingSchema: key.referencingSchema, referencingTable: key.referencingTable, columns: key.columns, referencedColumns: key.referencedColumns };
+
+    expect(referencingForeignKeysSchema.parse([bare])).toEqual([bare]);
+    expect(referencingForeignKeysSchema.parse([])).toEqual([]);
+  });
+
+  it("sem o nome, a tabela de origem ou as colunas, a resposta é recusada", () => {
+    expect(referencingForeignKeysSchema.safeParse([{ ...key, name: undefined }]).success).toBe(false);
+    expect(referencingForeignKeysSchema.safeParse([{ ...key, referencingTable: undefined }]).success).toBe(false);
+    expect(referencingForeignKeysSchema.safeParse([{ ...key, columns: "pedido_id" }]).success).toBe(false);
   });
 });

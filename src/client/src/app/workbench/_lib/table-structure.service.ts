@@ -2,7 +2,7 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 import { unwrap, type ApiResult } from "@/lib/api/prism-api";
 
-import { databaseMark, databaseSessionKey, databaseSessionQuery, getColumns, getForeignKeys, getIndexes, isSessionLost, keepUntilRefreshed, reopenDatabaseSession } from "./database-sessions.service";
+import { databaseMark, databaseSessionKey, databaseSessionQuery, getColumns, getForeignKeys, getIndexes, getReferencedBy, isSessionLost, keepUntilRefreshed, reopenDatabaseSession } from "./database-sessions.service";
 
 /**
  * As colunas, as chaves estrangeiras e os índices de uma tabela, como a Estrutura e o Diagrama os
@@ -17,11 +17,11 @@ import { databaseMark, databaseSessionKey, databaseSessionQuery, getColumns, get
  * A tabela de outro banco do servidor (RN-ARVORE-006) vem pela sessão da árvore daquele banco, e a chave leva a marca dele
  * (`databaseMark`) logo depois da conexão; as do banco da conexão são as de sempre.
  */
-export type StructureLevel = "columns" | "indexes" | "foreignKeys";
+export type StructureLevel = "columns" | "indexes" | "foreignKeys" | "referencedBy";
 
 export const structureKey = (connectionId: string, schema: string, table: string, level: StructureLevel, database?: string) => ["table-structure", connectionId, ...databaseMark(database), schema, table, level] as const;
 
-/** Tudo o que uma tabela guarda (as três listas), para "Atualizar". */
+/** Tudo o que uma tabela guarda (as listas), para "Atualizar". */
 export const structurePrefix = (connectionId: string, schema: string, table: string, database?: string) => ["table-structure", connectionId, ...databaseMark(database), schema, table] as const;
 
 /**
@@ -46,6 +46,12 @@ export const columnsQuery = (connectionId: string, schema: string, table: string
 export const indexesQuery = (connectionId: string, schema: string, table: string, queryClient: QueryClient, enabled = true, database?: string) => structureQuery("indexes", connectionId, schema, table, queryClient, enabled, getIndexes, database);
 
 export const foreignKeysQuery = (connectionId: string, schema: string, table: string, queryClient: QueryClient, enabled = true, database?: string) => structureQuery("foreignKeys", connectionId, schema, table, queryClient, enabled, getForeignKeys, database);
+
+/**
+ * RN-CAT-004 e RN-SQL-025: as chaves estrangeiras de outras tabelas que apontam para esta. Mesma família de chaves da Estrutura (`structureKey`, nível
+ * `referencedBy`): o "Atualizar" da vista, que refaz o prefixo da tabela, a refaz também.
+ */
+export const referencedByQuery = (connectionId: string, schema: string, table: string, queryClient: QueryClient, enabled = true, database?: string) => structureQuery("referencedBy", connectionId, schema, table, queryClient, enabled, getReferencedBy, database);
 
 /**
  * "Conectar", das vistas Estrutura e Diagrama de uma conexão que a pessoa desconectou: abre a sessão da árvore, como abrir o nó da

@@ -3,13 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiRequestError } from "@/lib/api/prism-api";
 
-import { columnsQuery, foreignKeysQuery, indexesQuery, structureKey, structurePrefix } from "./table-structure.service";
+import { columnsQuery, foreignKeysQuery, indexesQuery, referencedByQuery, structureKey, structurePrefix } from "./table-structure.service";
 
 const fakes = vi.hoisted(() => ({
   openSession: vi.fn(),
   getColumns: vi.fn(),
   getIndexes: vi.fn(),
   getForeignKeys: vi.fn(),
+  getReferencedBy: vi.fn(),
 }));
 
 vi.mock("./database-sessions.service", async (importOriginal) => {
@@ -21,6 +22,7 @@ vi.mock("./database-sessions.service", async (importOriginal) => {
     getColumns: fakes.getColumns,
     getIndexes: fakes.getIndexes,
     getForeignKeys: fakes.getForeignKeys,
+    getReferencedBy: fakes.getReferencedBy,
   };
 });
 
@@ -36,6 +38,7 @@ beforeEach(() => {
   fakes.getColumns.mockImplementation(() => ok([{ name: "id", type: "bigint", isNullable: false, isPrimaryKey: true, position: 1 }]));
   fakes.getIndexes.mockImplementation(() => ok([{ name: "pk", columns: ["id"], isUnique: true }]));
   fakes.getForeignKeys.mockImplementation(() => ok([]));
+  fakes.getReferencedBy.mockImplementation(() => ok([]));
 });
 
 describe("as consultas de catálogo da Estrutura e do Diagrama (RN-TABELA-003 e 004)", () => {
@@ -93,5 +96,23 @@ describe("as consultas de catálogo da Estrutura e do Diagrama (RN-TABELA-003 e 
 
   it("nome com barra, aspas e ponto não colide com outro: a chave guarda os nomes inteiros", () => {
     expect(structureKey(connection, "a.b", "c", "columns")).not.toEqual(structureKey(connection, "a", "b.c", "columns"));
+  });
+
+  it("as chaves que apontam para a tabela (RN-CAT-004): a rota referenced-by pela sessão da árvore, no cache da Estrutura", async () => {
+    const referencing = [{ name: "fk_item", referencingSchema: "s", referencingTable: "itens", columns: ["t_id"], referencedColumns: ["id"] }];
+    fakes.getReferencedBy.mockImplementation(() => ok(referencing));
+
+    expect(await queryClient.fetchQuery(referencedByQuery(connection, "s", "t", queryClient))).toEqual(referencing);
+    expect(fakes.getReferencedBy).toHaveBeenCalledWith("sessao-1", "s", "t");
+    expect(queryClient.getQueryData(structureKey(connection, "s", "t", "referencedBy"))).toEqual(referencing);
+  });
+
+  it("'Atualizar' a tabela refaz também as chaves que apontam para ela, e uma lista guardada não vai à API de novo", async () => {
+    await queryClient.fetchQuery(referencedByQuery(connection, "s", "t", queryClient));
+    await queryClient.fetchQuery(referencedByQuery(connection, "s", "t", queryClient));
+    expect(fakes.getReferencedBy).toHaveBeenCalledTimes(1);
+
+    await queryClient.invalidateQueries({ queryKey: structurePrefix(connection, "s", "t") });
+    expect(queryClient.getQueryState(structureKey(connection, "s", "t", "referencedBy"))?.isInvalidated).toBe(true);
   });
 });
