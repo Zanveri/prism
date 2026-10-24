@@ -9781,6 +9781,37 @@ RN-SQL-021, a RN-VERSAO-002 e as seções 9 e 24. A API ganha só o campo `resul
   - A ordem de entrega: "Numa aba" primeiro, que não depende de nada do outro documento, e depois "Numa janela". Se as
     sondas S-JANELA-1 a 3 mostrarem, numa plataforma, uma falha sem conserto barato, "Numa janela" não sai nela, a
     decisão volta para o dono com o que a sonda mostrou, e "Numa aba" sai do mesmo jeito.
+- **RN-ABAS-018.** Voltar e Avançar entre as abas, como no DBeaver. *Pedido do dono em 2026-10-24, como no DBeaver: o
+  botão "voltar" do mouse levava às Configurações (o Chromium voltava no histórico das rotas da janela, e a entrada
+  anterior era a delas) em vez de voltar à aba de antes.* Cada janela de abas guarda, só na memória, a ordem em que as
+  abas dela ficaram ativas (o histórico de navegação do DBeaver):
+  - Entra uma entrada a cada vez que a aba ativa da janela muda por qualquer caminho (o clique na aba,
+    as setas da faixa, abrir uma tabela pelo navegador, abrir um script, a aba nova, seguir uma chave estrangeira
+    nos Registros ou no resultado, a aba que fica ativa quando outra fecha), menos o próprio Voltar e Avançar. A mesma
+    aba duas vezes seguidas é uma entrada só. No máximo 50 entradas: sai a mais velha.
+  - **Voltar** ativa a entrada anterior; **Avançar**, a seguinte. Uma aba que fechou ou foi para outra janela sai do
+    histórico e é pulada. Ativar outra aba depois de voltar descarta as entradas à frente, como no navegador. Sem
+    entrada para onde ir, nada acontece (sem som, sem aviso).
+  - Voltar e Avançar ativam a aba como o clique nela a ativa (o mesmo caminho, e o foco na aba, como no clique). O
+    filtro que um seguir de chave estrangeira pôs na aba de destino continua lá. O histórico guarda a aba, e não a
+    vista: voltar a uma aba cujo resultado está numa aba mostra a consulta.
+  - **Os botões e as teclas.** Os botões "voltar" e "avançar" do mouse (os botões 4 e 5; `MouseEvent.button` 3 e 4),
+    em qualquer lugar da janela. Alt+← e Alt+→ no Windows e no Linux, com o foco em qualquer lugar da janela, inclusive
+    no editor de SQL (onde o Alt+← do CodeMirror, que anda pela sintaxe, deixa de valer, como no DBeaver), e menos num
+    campo de texto de uma linha ou área de texto (`input`, `textarea`, o campo de edição da célula, o filtro), onde a
+    tecla segue para o campo. No macOS, Cmd+[ e Cmd+], menos no editor de SQL e nos campos de texto, onde continuam o
+    que são (no editor, recuar e avançar o recuo). As teclas são tratadas na fase de captura da janela, antes do
+    componente com o foco: as setas são de muitos componentes (a faixa de abas, a grade, as árvores), e nenhum confere
+    o Alt. Com um diálogo, um menu ou uma lista aberta, ou com o cofre bloqueado, nada disto age (a tecla segue para
+    quem a tem).
+  - **Nunca o histórico das rotas.** Nenhum botão do mouse e nenhuma tecla volta ou avança uma rota da janela: o
+    Chromium não navega com eles (o clique é seguro em `mousedown`, `mouseup` e `auxclick`, na fase de captura). Nas
+    Configurações, Voltar (o botão do mouse, Alt+←, Cmd+[) volta à área de trabalho, como o "Voltar" da página, e
+    Avançar não faz nada. No login, no desbloqueio e nas demais telas fora da área de trabalho os botões do mouse não
+    fazem nada. A janela do resultado (RN-ABAS-013) não é uma janela de abas: é uma página em branco sem histórico, e
+    os botões não fazem nada nela.
+  - O histórico zera quando o cofre bloqueia e quando a janela sai do cofre, e não é guardado no espaço de trabalho
+    (RN-ABAS-006): na próxima entrada ele começa vazio.
 - **RN-CONFIG-010.** Configurações › Resultados ganha "Onde o resultado das abas novas aparece", com "No painel" (o
   padrão), "Numa aba" e "Numa janela", no mesmo controle de escolha da densidade do navegador (RN-NAV-011), e a ajuda
   "Vale para as abas de consulta abertas daqui em diante. Cada aba guarda o lugar dela, que o botão 'Onde mostrar o
