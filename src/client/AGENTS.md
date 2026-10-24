@@ -971,6 +971,32 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   `window.prism.windows.id`. Para provar que nada foi executado de novo, conte as linhas `ExecuteAsync` do log da API (`<dados>/logs/`); o
   "Carregar mais" aparece como `FetchNextAsync` na MESMA sessão.
 
+## Voltar e Avançar entre as abas (RN-ABAS-018)
+
+Pedido do dono, como no DBeaver: o botão "voltar" do mouse levava às Configurações, porque o Chromium andava no histórico das ROTAS da janela (`createHashRouter`) e a
+entrada anterior era a delas. A janela de abas passou a ter o histórico das ABAS, e nenhum botão nem tecla anda pelo das rotas.
+
+- **A conta é pura** (`_lib/tab-history.ts`, com teste de tabela): `recordTab` (uma entrada por mudança de aba ativa, a mesma duas vezes seguidas é uma só, no máximo 50, a
+  ativação depois de voltar descarta o que está à frente), `pruneHistory` (tira a aba que fechou ou foi para outra janela e junta as iguais que ficam lado a lado) e
+  `stepHistory` (Voltar e Avançar, depois de podar; sem entrada para ir, `tabId` nulo). O histórico é só memória, zera no bloqueio, e não vai ao espaço de trabalho.
+  `mouseHistoryAction` (botões 3 e 4 do `MouseEvent`) e `keyHistoryAction` (Alt+←/→ no Windows e no Linux, Cmd+[ e Cmd+] no macOS, e onde cada um vale conforme o foco) estão no
+  mesmo arquivo.
+- **O controlador** (`_lib/tab-history-controller.ts`, sem React): guarda o histórico e decide o que cada botão e tecla faz em cada tela (`HistoryScreen`): na área de trabalho,
+  ativa a aba; nas Configurações, o Voltar volta à área de trabalho (`navigate`, como o "Voltar" da página) e o Avançar não faz nada; nas outras telas, nada. Com um diálogo, menu ou lista
+  aberta, ou o cofre bloqueado, nada age (no mouse, vale o que havia ao APERTAR o botão: o menu e a lista fecham no `pointerdown` de qualquer botão, e ao soltar já não estariam no DOM;
+  `onPointerDown` guarda isso). `focusKindOf` separa o editor de SQL (`data-sql-editor`, posto nos atributos do conteúdo do CodeMirror), os campos de texto
+  (`input`, `textarea`, o que é editável, também o filtro) e o resto.
+- **O gancho** (`_lib/use-tab-history.ts`, montado por `TabHistory`, em `_components/tab-history.tsx`, ao lado do `SettingsShortcut` em `routes.tsx`): observa `activeTabId` e as abas
+  da janela do provedor (poda e registra, nessa ordem), zera quando a época do bloqueio muda, ativa a aba por `setActiveTab` (o caminho do clique na faixa) e põe o foco no
+  elemento da aba depois de ativa (`takeFocus`, como o clique deixa). **Os ouvintes (`keydown`, `pointerdown` e `mouseup`) são da fase de captura da `window`**: as setas são de muitos componentes (a faixa de abas, a
+  grade, as árvores, o CodeMirror), e nenhum confere o Alt; na bolha a tecla já teria sido gasta por quem tem o foco (sob o Xvfb, o Alt+→ com o foco numa aba andava para a aba do lado
+  e o histórico não via a tecla). A tecla tratada leva `preventDefault` e `stopPropagation`, então o Alt+← do CodeMirror não chega a valer; por isso não há tecla no mapa do editor.
+- **O Chromium não pode navegar** (`app/_lib/history-buttons.ts`, ligado por `HistoryButtonsGuard`, em `app.tsx` ao lado do roteador, valendo no login, no desbloqueio e em toda tela): `mousedown`, `mouseup` e `auxclick` dos botões 3 e 4 levam
+  `preventDefault` na captura. O gancho age no `mouseup`.
+- **Como conferir sob o Xvfb**: `xdotool click 8` é o "voltar" e `click 9` o "avançar", com o ponteiro sobre a janela (o `mousemove` do `xdotool` não andou neste Xvfb: `XWarpPointer`
+  com `ctypes`); `xdotool key alt+Left` e `alt+Right` são as teclas. As abas das sondas foram trocadas pelo `click()` do protocolo de depuração (o clique esquerdo de verdade do `xdotool` não ativou a aba nas tentativas), e para ver o defeito de antes basta abrir Configurações, fechá-las pelo "Voltar" da página e apertar o "voltar" do mouse: a rota ia para `#/settings`, e agora
+  nada muda na rota. Não conferido: o Windows (o `app-command` `browser-backward` que o Chromium pode receber do sistema; o processo principal não trata nada) e o macOS.
+
 ## Abas que voltam na próxima entrada (RN-ABAS-006)
 
 Seção 24 da especificação (issue 2 do repositório público). As abas de TODAS as janelas vão para o cofre do usuário pela API (`PUT api/user/workspace`, ver o
