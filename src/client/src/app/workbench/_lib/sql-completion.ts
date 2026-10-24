@@ -1,4 +1,4 @@
-import { autocompletion, type Completion, type CompletionResult, type CompletionSource } from "@codemirror/autocomplete";
+import { autocompletion, type Completion, type CompletionContext, type CompletionResult, type CompletionSource } from "@codemirror/autocomplete";
 import { keywordCompletionSource, schemaCompletionSource, type SQLDialect, type SQLNamespace } from "@codemirror/lang-sql";
 import { EditorState, type Extension } from "@codemirror/state";
 import type { QueryClient } from "@tanstack/react-query";
@@ -56,8 +56,9 @@ export function sqlName(name: string, engine: Engine | undefined): string {
 }
 
 /**
- * O que a árvore já carregou de um banco da conexão (esquemas, tabelas, visões, colunas): só lê o cache, e só o que já chegou. É a regra de "nunca
- * dispara consulta ao banco": `getQueriesData` não busca nada, e o que ainda não foi aberto na árvore simplesmente não existe aqui. `database` é o
+ * O que a árvore já carregou de um banco da conexão (esquemas, tabelas, visões, colunas): só lê o cache, e só o que já chegou. `getQueriesData` não busca
+ * nada, e o que ainda não foi aberto na árvore simplesmente não existe aqui; as colunas de `tabela.` e as chaves da junção que faltam são buscadas por
+ * `sql-catalog-completion.ts` (RN-CONFIG-004), e chegam aqui pelo mesmo cache. `database` é o
  * outro banco do servidor da aba (RN-ARVORE-006): cada banco completa com os nomes dele, e a lista dos bancos não é nome de nada.
  */
 export function cachedLevels(queryClient: QueryClient, connectionId: string, database?: string): CachedLevel[] {
@@ -69,6 +70,11 @@ export function cachedLevels(queryClient: QueryClient, connectionId: string, dat
 type Item = { name: string; view: boolean };
 
 const tableKey = (schema: string, table: string) => JSON.stringify([schema, table]);
+
+/** As sugestões das colunas de uma tabela ou visão, a partir das linhas da árvore (o nome como `sqlName` o escreve e o tipo ao lado). */
+export function columnOptions(nodes: readonly NavNode[], engine: Engine | undefined): NameCompletion[] {
+  return nodes.filter((node) => node.kind === "column").map((node) => named({ label: node.label, type: "property", ...(node.detail === undefined ? {} : { detail: node.detail }) }, sqlName(node.label, engine)));
+}
 
 /** O `lang-sql` abre um nível a cada ponto do nome: o ponto que faz parte do nome leva a barra. */
 const escapeDots = (name: string) => name.replaceAll(".", "\\.");
@@ -102,7 +108,7 @@ export function completionNamespace(levels: readonly CachedLevel[], engine: Engi
       objects.set(path.schema, [...(objects.get(path.schema) ?? []), ...nodes.map((node) => ({ name: node.label, view: path.objects === "views" }))]);
     }
     if (path?.type === "tableLevel" && path.level === "columns") {
-      columns.set(tableKey(path.schema, path.table), nodes.filter((node) => node.kind === "column").map((node) => named({ label: node.label, type: "property", ...(node.detail === undefined ? {} : { detail: node.detail }) }, written(node.label))));
+      columns.set(tableKey(path.schema, path.table), columnOptions(nodes, engine));
     }
   }
 
@@ -136,14 +142,14 @@ export function completionNamespace(levels: readonly CachedLevel[], engine: Engi
  * A sugestão de um nome do catálogo. `raw` é o nome como o catálogo o devolve (o rótulo) e `prefix`, o que vai antes dele no texto (o esquema, no nível de
  * cima); ficam na sugestão para a pessoa que já abriu as aspas receber a mesma coisa bem escrita (`namesSource`).
  */
-type NameCompletion = Completion & { raw: string; prefix: string };
+export type NameCompletion = Completion & { raw: string; prefix: string };
 
 /** A sugestão de um nome, com o que ela insere (`apply`) quando é outra coisa que o nome dela: o nome entre aspas, ou com o esquema na frente. */
 function named(completion: Completion, apply: string, prefix = ""): NameCompletion {
   return { ...(apply === completion.label ? completion : { ...completion, apply }), raw: completion.label, prefix };
 }
 
-const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.length === b.length && a.every((level, index) => level.key === b[index].key && level.nodes === b[index].nodes);
+export const sameLevels = (a: readonly CachedLevel[], b: readonly CachedLevel[]) => a.length === b.length && a.every((level, index) => level.key === b[index].key && level.nodes === b[index].nodes);
 
 /**
  * Os nomes da árvore, na hora de pedir a sugestão: lê o cache a cada pedido (o usuário abre nós da árvore enquanto escreve) e só refaz a
@@ -166,7 +172,7 @@ export function namesSource(read: () => readonly CachedLevel[], dialect: SQLDial
   };
 }
 
-function requoted(option: Completion): Completion {
+export function requoted(option: Completion): Completion {
   const { raw, prefix } = option as Partial<NameCompletion>;
   if (raw === undefined || prefix === undefined) return option;
 
@@ -179,6 +185,8 @@ type SqlCompletionOptions = {
   engine: Engine | undefined;
   /** Os níveis da árvore da conexão da aba, lidos a cada pedido. */
   levels: () => readonly CachedLevel[];
+  /** As colunas de `nome.` e a junção (RN-SQL-025), que buscam no banco o que a árvore ainda não trouxe (`sql-catalog-completion.ts`); sem isto, só o que a árvore já carregou. */
+  catalog?: { sources: readonly CompletionSource[]; owns: (context: CompletionContext) => boolean };
   /**
    * As variáveis (seção 41, RN-CONFIG-004): as fontes dos nomes declarados e, onde o SQL não completa (dentro de uma declaração, depois do `@` de uma variável), a
    * pergunta que cala as palavras-chave e os nomes da árvore.
@@ -188,6 +196,9 @@ type SqlCompletionOptions = {
 
 /** A fonte que se cala onde `quiet` diz que o SQL não completa. */
 const unlessQuiet = (source: CompletionSource, quiet: (state: EditorState, position: number) => boolean): CompletionSource => (context) => (quiet(context.state, context.pos) ? null : source(context));
+
+/** A fonte que se cala onde `owns` diz que outra fonte completa. */
+const unlessOwned = (source: CompletionSource, owns: (context: CompletionContext) => boolean): CompletionSource => (context) => (owns(context) ? null : source(context));
 
 /** A palavra em que o cursor está: letras (com acento ou não), números, `_` e `$`. Vazia logo depois de um ponto ou de um espaço. */
 const wordBeforeCursor = /[\p{L}\p{N}_$]*/u;
@@ -208,13 +219,16 @@ function keywordsSource(dialect: SQLDialect): CompletionSource {
 }
 
 /**
- * Autocompletar ao digitar (RN-CONFIG-004): palavras-chave do banco da aba e os nomes que a árvore já carregou, nada mais. Nenhuma tecla muda
+ * Autocompletar ao digitar (RN-CONFIG-004): palavras-chave do banco da aba, os nomes que a árvore já carregou e, com `catalog`, as colunas de `nome.` e a junção
+ * (RN-SQL-025). Nenhuma tecla muda
  * de significado: a lista abre sem nada escolhido (`selectOnOpen: false`), então Enter continua pulando linha e Tab, recuando, até a
  * pessoa descer com as setas até uma sugestão; Esc fecha a lista, e Ctrl+Espaço a abre. Sem ícones: o texto da sugestão (esquema, tabela, tipo
  * da coluna) já diz o que é, e o leitor de tela o lê.
  */
-export function sqlCompletion({ dialect, engine, levels, variables }: SqlCompletionOptions): Extension {
-  const sql = [keywordsSource(dialect), namesSource(levels, dialect, engine)];
+export function sqlCompletion({ dialect, engine, levels, catalog, variables }: SqlCompletionOptions): Extension {
+  // Onde a fonte das colunas completa `nome.`, a de nomes se cala: as colunas do cache saem de lá, com o tipo, e não duas vezes.
+  const names = namesSource(levels, dialect, engine);
+  const sql = [keywordsSource(dialect), catalog === undefined ? names : unlessOwned(names, catalog.owns), ...(catalog?.sources ?? [])];
 
   return [
     autocompletion({

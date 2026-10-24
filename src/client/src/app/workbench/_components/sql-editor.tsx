@@ -15,6 +15,7 @@ import { isMacPlatform } from "@/lib/utils/platform";
 
 import type { CachedLevel } from "../_lib/navigator-search";
 import { completionTheme, highlight } from "../_lib/completion-theme";
+import { catalogCompletion, type CatalogCompletion } from "../_lib/sql-catalog-completion";
 import { cachedLevels, sqlCompletion } from "../_lib/sql-completion";
 import { tableLinks } from "../_lib/table-link-extension";
 import { defaultSchemasOf, linkCatalog, tableLinkAt, type LinkCatalog, type TableLink } from "../_lib/table-links";
@@ -302,7 +303,7 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
   const emitChange = useEffectEvent((text: string) => onChange(text));
   const emitRunnable = useEffectEvent((runnable: boolean) => onRunnableChange(runnable));
   const emitEdited = useEffectEvent(() => onEdited());
-  // Os níveis da árvore são lidos na hora do pedido, da conexão desta aba (sem busca nenhuma: só o cache).
+  // Os níveis da árvore são lidos na hora do pedido, da conexão desta aba (só o cache: as colunas de `tabela.` e as chaves da junção quem busca é o `catalogCompletion`, RN-CONFIG-004).
   const readLevels = useEffectEvent(() => (connectionId === null ? [] : cachedLevels(queryClient, connectionId, database)));
   // RN-LINK-001: o catálogo é o do autocompletar (o cache da árvore do banco da aba, sem consulta nova), e o esquema padrão sai do usuário da conexão.
   const catalogCache = useRef<{ levels: CachedLevel[]; catalog: LinkCatalog } | null>(null);
@@ -314,10 +315,16 @@ export function SqlEditor({ ref, initialSql, tabId, initialSelection = null, eng
     return tableLinkAt(sql, offset, engineNow.current, catalogCache.current.catalog, defaultSchemasOf(engineNow.current, userName), tokens);
   });
   const openLink = useEffectEvent((link: TableLink) => onOpenTable?.({ schema: link.schema, name: link.name }));
+  // RN-SQL-025: as colunas de `nome.` e a junção buscam no banco o que a árvore ainda não trouxe, só com a sessão da árvore aberta. Uma por editor, criada na primeira vez.
+  const catalogCompletionRef = useRef<CatalogCompletion | null>(null);
+  const connectionNow = useEffectEvent(() => connectionId);
+  const databaseNow = useEffectEvent(() => database);
+  const userNameNow = useEffectEvent(() => (connectionId === null ? undefined : queryClient.getQueryData<{ id: string; userName: string }[]>(connectionsQuery.queryKey)?.find((connection) => connection.id === connectionId)?.userName));
   const completionFor = useEffectEvent(() => {
     // O autocompletar das variáveis guarda o script lido da versão do texto: um só por editor, criado na primeira vez que a lista é montada.
     variableCompletion.current ??= variablesCompletion({ engine: () => engineNow.current, blankLines: () => blankLinesNow.current, values: () => variablesNow.current?.snapshot() ?? null });
-    return sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels(), variables: variableCompletion.current });
+    catalogCompletionRef.current ??= catalogCompletion({ queryClient, engine: () => engineNow.current, connectionId: () => connectionNow(), database: () => databaseNow(), userName: () => userNameNow(), blankLines: () => blankLinesNow.current });
+    return sqlCompletion({ dialect: dialectOf(engineNow.current), engine: engineNow.current, levels: () => readLevels(), catalog: catalogCompletionRef.current, variables: variableCompletion.current });
   });
 
   useEffect(() => {
