@@ -45,11 +45,15 @@ The PostgreSQL driver ships with the app. The Db2 and Informix driver is IBM's: 
 Drivers** (Settings › Drivers); IBM does not publish it for Macs with an Intel processor. To verify a package, compare its
 SHA-256 with its line in the release's `SHA256SUMS` file.
 
-The packages are not signed yet, and the system warns you on first launch:
+The Windows and Linux packages are not signed, and the macOS ones carry only an ad-hoc signature (no Apple Developer ID, not
+notarized), so the system warns you on first launch:
 
 - **Windows:** under "Windows protected your PC", click **More info** and then **Run anyway**.
-- **macOS:** right-click the app and choose **Open**; on macOS 15 or newer, allow it in **System Settings › Privacy & Security ›
-  Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Prism.app`.
+- **macOS**, from the next stable release: open Prism once; macOS says it cannot verify the app. Then allow it, once, in **System
+  Settings › Privacy & Security** (scroll to "Security"), with **Open Anyway** (macOS 15 or newer), or, up to macOS 14, by
+  right-clicking the app and choosing **Open**. No Terminal command is needed.
+- **macOS, versions up to 0.4.x:** the system says the app is damaged. Run `xattr -dr com.apple.quarantine /Applications/Prism.app`
+  in the Terminal (with `sudo` if it asks for permission) and open it again.
 
 ## Documentation
 
