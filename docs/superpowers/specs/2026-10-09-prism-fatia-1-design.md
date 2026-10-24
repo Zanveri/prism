@@ -2559,7 +2559,9 @@ até lá, o que depende delas está a provar.
 - **RN-EDIT-004.** **Pendências** (dois passos: "Salvar" e, no Commit manual, Commit). Editar, definir nulo, criar
   linha, duplicar linha e excluir linha não vão ao banco: ficam pendentes na tela e destacados — a célula alterada
   mostra o valor lido riscado ao lado do novo (como no canvas), a linha nova (também a duplicada, RN-EDIT-016) é marcada
-  no número da linha, e a linha excluída aparece riscada. Uma faixa sobre a grade diz quantas alterações há ("3
+  no número da linha, e a linha excluída aparece riscada e pintada de vermelho (o texto das células e o número da linha em
+  vermelho e riscados, e um tom de vermelho no fundo; a que falhou no último "Salvar" tem o tom mais forte e o número em
+  negrito, e a excluída que falhou mostra as duas coisas). Uma faixa sobre a grade diz quantas alterações há ("3
   alterações não salvas", em que a da coluna inteira conta uma, com a linha "Em todas as linhas do resultado: preco =
   10.00." embaixo, RN-EDIT-018) e tem "Ver SQL", "Descartar" e "Salvar" (Ctrl+S com o foco na grade). "Descartar" joga
   fora só o que não foi salvo, sem mexer na transação. "Desfazer alteração" tira a pendência da célula ativa, ou, com
@@ -2572,7 +2574,8 @@ até lá, o que depende delas está a provar.
   pendências: "Salvar", "Descartar" e "Ver SQL" ficam nesta faixa, que não muda. *Alterada a pedido do dono em
   2026-10-16 (seção 33): entraram o duplicar e a barra de edição. Alterada a pedido do dono em 2026-10-17 (seção 37):
   "Desfazer alteração" age nas células escolhidas. Alterada a pedido do dono em 2026-10-19 (seção 38): a coluna inteira
-  conta como uma alteração, com a linha dela na faixa, e o "Desfazer alteração" a tira com a coluna escolhida.*
+  conta como uma alteração, com a linha dela na faixa, e o "Desfazer alteração" a tira com a coluna escolhida. Alterada a
+  pedido do dono em 2026-10-24: a linha marcada para exclusão fica riscada e pintada de vermelho.*
 - **RN-EDIT-005.** **Salvar** executa todas as pendências **numa transação só**, na sessão da aba: primeiro a alteração da
   coluna inteira, quando há (RN-EDIT-021), depois as exclusões, depois as alterações, depois as linhas novas, cada grupo
   na ordem em que foi feito. Cada alteração e cada exclusão é um
@@ -4184,7 +4187,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     edição na célula ativa (RN-GRADE-001), com o valor, como o F2, e, com outras células escolhidas na coluna
     dela, vale para todas, depois de conferi-las (RN-EDIT-017 e 018); "Adicionar linha" cria uma linha nova em branco;
     "Duplicar linha" duplica as linhas da seleção (RN-EDIT-016); "Excluir linha" marca para exclusão as linhas da
-    seleção, que ficam riscadas, e tira da grade as que são linhas novas. As linhas da seleção são as que têm uma
+    seleção, que ficam riscadas e vermelhas (RN-EDIT-004), e tira da grade as que são linhas novas. As linhas da seleção são as que têm uma
     célula escolhida (RN-GRADE-001); sem nada escolhido além da célula ativa, a linha dela. Com mais de uma, os dois
     últimos passam a "Duplicar linhas" e "Excluir linhas" (RN-EDIT-013).
   - Habilitar não custa consulta (RN-EDIT-010): enquanto o Prism não perguntou ao catálogo o que se edita naquele
@@ -4234,7 +4237,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     - "Duplicar linha" põe as cópias no fim da grade, na ordem das linhas de origem; a grade rola até a primeira, a
       seleção passa a ser as cópias, inteiras, e a célula ativa vai para a primeira delas, na primeira coluna
       editável (na duplicada que copiou a chave, na coluna da chave mais à esquerda na grade, RN-EDIT-016).
-    - "Excluir linha" deixa a seleção e a célula ativa onde estavam, com as linhas lidas riscadas. Tiradas linhas
+    - "Excluir linha" deixa a seleção e a célula ativa onde estavam, com as linhas lidas riscadas e vermelhas. Tiradas linhas
       novas, a seleção passa a ser a célula ativa, que vai para a linha que ficou no lugar da primeira tirada, ou
       para a de cima, quando não ficou nenhuma depois dela; sem linha nenhuma, não há célula ativa.
   - A atualização automática fica em pausa desde o começo da ação, como no menu, e a ação cujo resultado mudou no
@@ -4242,7 +4245,8 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
   - *Alterada a pedido do dono em 2026-10-17 (seção 37): "Duplicar linha" e "Excluir linha" agem nas linhas da
     seleção, com os motivos de várias linhas, o limite do duplicar e o que acontece depois. Alterada a pedido do
     dono em 2026-10-19 (seção 38): os botões das linhas com colunas inteiras, e o "Editar célula" com várias
-    células escolhidas na coluna.*
+    células escolhidas na coluna. Alterada a pedido do dono em 2026-10-24: a linha marcada para exclusão fica riscada e
+    pintada de vermelho.*
 - **RN-EDIT-015.** Os atalhos, com o foco na grade (e não no campo de edição de uma célula, que fica com as teclas
   dele).
   - F2 (e Enter) edita a célula ativa (e as outras escolhidas da coluna dela, RN-EDIT-017); Alt+Insert adiciona uma
@@ -4258,7 +4262,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     retângulo ou linhas inteiras, RN-GRADE-001), marca na hora para exclusão as linhas da seleção, sem pergunta
     nenhuma: as mesmas que o Alt+Delete marca, com as mesmas recusas, o mesmo limite e a mesma faixa quando não vale
     (RN-EDIT-014); uma linha nova ainda não salva simplesmente sai da grade. As linhas ficam pintadas com a marca de
-    exclusão de sempre (a linha riscada, em vermelho). Com colunas inteiras escolhidas (RN-GRADE-022), o Delete não faz
+    exclusão de sempre (a linha riscada e pintada de vermelho, RN-EDIT-004). Com colunas inteiras escolhidas (RN-GRADE-022), o Delete não faz
     nada. Ele não apaga o valor da célula (isso é o "Definir como nulo").
   - **A confirmação do Delete é a de sempre**: a exclusão é uma pendência, e nada vai ao banco antes do "Salvar" (e do
     Commit, no Commit manual, RN-EDIT-004 e 005); o "Desfazer alteração" e o "Descartar" valem. Não há diálogo nem
@@ -4283,7 +4287,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     2026-10-19 (seção 38): o F2 e o Enter editam as células escolhidas da coluna, e o Delete não faz nada com
     colunas inteiras. Alterada a pedido do dono em 2026-10-24: o Delete sozinho vale com qualquer célula escolhida
     (menos colunas inteiras) e marca na hora as linhas para exclusão, como o Alt+Delete, sem pergunta: o dono não quis o
-    diálogo, e a confirmação é o "Salvar".*
+    diálogo, e a confirmação é o "Salvar". A linha marcada para exclusão fica riscada e pintada de vermelho.*
 
 ### Duplicar linha
 
