@@ -347,6 +347,44 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     protected virtual IReadOnlyList<ColumnOrigin?>? ColumnOrigins(DbDataReader reader)
         => null;
 
+    /// <summary>RN-VAR-032: o dialeto do banco, para converter os parâmetros do comando do usuário. O PostgreSQL por padrão; os da IBM informam o deles.</summary>
+    protected virtual ESqlDialect QueryDialect => ESqlDialect.PostgreSql;
+
+    /// <summary>
+    /// RN-VAR-017 e 032: o parâmetro de um comando do usuário, convertido para o banco (<see cref="QueryParameterBinding"/>). Por padrão, o valor e o `DbType` quando
+    /// vem; cada driver põe o tipo dele (o `NpgsqlDbType.Unknown`, o `DB2Type`).
+    /// </summary>
+    protected virtual void BindQueryParameter(DbParameter parameter, BoundQueryParameter bound)
+    {
+        if (bound.DbType is { } type)
+            parameter.DbType = type;
+
+        parameter.Value = bound.Value ?? DBNull.Value;
+    }
+
+    /// <summary>RN-VAR-032: os parâmetros do comando do usuário, ligados na ordem do texto (`$1`, `$2`... no PostgreSQL, `?` nos outros).</summary>
+    private void BindQueryParameters(DbCommand command, IReadOnlyList<QueryParameter>? parameters)
+    {
+        if (parameters is null)
+            return;
+
+        foreach (var value in parameters)
+        {
+            var parameter = command.CreateParameter();
+            BindQueryParameter(parameter, QueryParameterBinding.Convert(QueryDialect, value));
+            command.Parameters.Add(parameter);
+        }
+    }
+
+    /// <summary>O parâmetro de um comando da edição: o valor convertido da edição (RN-EDIT-006), ou o do comando do usuário que a coluna inteira leva no `&lt;Q&gt;` (RN-VAR-033).</summary>
+    private void BindCommandParameter(DbParameter parameter, EditParameter value)
+    {
+        if (value.Query is { } query)
+            BindQueryParameter(parameter, QueryParameterBinding.Convert(QueryDialect, query));
+        else
+            BindEditParameter(parameter, value);
+    }
+
     /// <summary>RN-EDIT-006: o valor de um comando do "Salvar" no parâmetro. Por padrão, o valor convertido, com o tipo quando ele vem.</summary>
     protected virtual void BindEditParameter(DbParameter parameter, EditParameter value)
     {
@@ -584,7 +622,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             return true;
         }, cancellationToken);
 
-    public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken)
+    public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
         // RN-SQL-003: recusado aqui, sem ir ao banco. Um `BEGIN` deixaria a conexão dentro de uma transação que ninguém fecha.
         if (IsTransactionControl(sql))
@@ -595,7 +633,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (HasSeveralStatements(sql))
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
 
-        return await ExecuteWithoutRefusalAsync(sql, pageSize, cancellationToken);
+        return await ExecuteWithoutRefusalAsync(sql, pageSize, cancellationToken, parameters);
     }
 
     /// <summary>
@@ -603,7 +641,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// paginada (no PostgreSQL, a transação só de leitura, com a sessão no modo só de leitura do banco), e a recusa do banco por gravar é a resposta:
     /// nunca roda de novo fora da transação, como o comando de uma conexão comum. As recusas pelo texto do <see cref="ExecuteAsync"/> valem aqui também.
     /// </summary>
-    public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken)
+    public async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
         if (IsTransactionControl(sql))
             return new DatabaseFailure(EDatabaseFailure.TransactionControlNotSupported, TransactionControlMessage);
@@ -611,7 +649,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (HasSeveralStatements(sql))
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatementsMessage);
 
-        return await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token, readOnly: true), cancellationToken);
+        return await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token, readOnly: true, parameters: parameters), cancellationToken);
     }
 
     /// <summary>
@@ -619,20 +657,20 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// (<see cref="ProbeTransactionAsync"/>) precisa chegar ao banco com um `BEGIN`, como chegaria uma forma de abrir transação que o
     /// <see cref="SqlText"/> não conhecesse. Nenhum código do produto o chama direto.
     /// </summary>
-    internal async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteWithoutRefusalAsync(string sql, int pageSize, CancellationToken cancellationToken)
+    internal async Task<Result<QueryOutcome, DatabaseFailure>> ExecuteWithoutRefusalAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
         // RN-SQL-013: um `WITH` que grava nem passa pela tentativa. A transação só de leitura deixa passar gravação em tabela temporária,
         // e ela seria desfeita quando o cursor fechasse antes do fim.
         if (TriesAsRead(sql) && sql != _writesAfterTheFirstPage)
         {
-            var read = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token), cancellationToken);
+            var read = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: true, token, parameters: parameters), cancellationToken);
 
             // Qualquer outro erro da tentativa é o erro do comando, e volta como veio; a transação da tentativa já foi desfeita.
             if (read.IsSuccess || !IsWriteRefusal(read.Error))
                 return read;
         }
 
-        var executed = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: false, token), cancellationToken);
+        var executed = await RunAsync(nameof(ExecuteAsync), EDatabaseFailure.ExecutionFailed, token => ExecuteCommandAsync(sql, pageSize, paged: false, token, parameters: parameters), cancellationToken);
 
         // RN-SESSAO-005: depois de um comando executado até o fim a conexão não está dentro de uma transação. Do que deu certo, só o
         // comando utilitário pode ter aberto uma; o que veio com contagem de linhas ou com um conjunto de resultados não paga a
@@ -673,7 +711,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return page.Error with { Message = $"{page.Error.Message}\n{WritesAfterTheFirstPageMessage}" };
     }
 
-    public async Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken)
+    public async Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
         // Sem transação só de leitura, o que impede a contagem de gravar é o texto: o que não é uma leitura só nem vai ao banco.
         if (!MayBeCounted(sql))
@@ -683,7 +721,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         {
             // RN-SQL-006: contar é executar o comando de novo, como subconsulta. Dentro da transação só de leitura ele não grava outra vez.
             await BeginReadOnlyAsync(token);
-            var reader = await StartAsync(CountSql(sql), [], userCommand: true, token);
+            var reader = await StartAsync(CountSql(sql), [], userCommand: true, token, query: parameters);
             await reader.ReadAsync(token);
 
             // O total chega como inteiro de 32 bits nos drivers da IBM, de 64 no PostgreSQL tipado e como texto no formato de texto.
@@ -969,7 +1007,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
                 if (whole.ReadsKeys && keys is null)
                     return WholeColumnSql.NotSupported(WholeColumnSql.TooManyKeysReason, whole.Change);
 
-                var counted = keys?.Count ?? await CountWholeColumnRowsAsync(whole.CountSql, token);
+                var counted = keys?.Count ?? await CountWholeColumnRowsAsync(whole.CountSql, whole.CountParameters, token);
                 if (counted != confirmed)
                     return new DatabaseFailure(EDatabaseFailure.ResultChanged, WholeColumnSql.CountChanged(counted, confirmed), Change: whole.Change);
 
@@ -1072,7 +1110,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             }
 
             await BeginReadOnlyAsync(token);
-            var counted = await CountWholeColumnRowsAsync(whole.CountSql, token);
+            var counted = await CountWholeColumnRowsAsync(whole.CountSql, whole.CountParameters, token);
 
             return counted < 0 ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, "A contagem não devolveu nenhuma linha.") : Result.Success<long, DatabaseFailure>(counted);
         }, cancellationToken);
@@ -1215,7 +1253,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// Sem transação só de leitura, só a leitura só é contada (<see cref="MayBeCounted"/>), como no "Contar total". Com `required`, a recusa (e o comando
     /// que não pode ser contado) é a falha.
     /// </summary>
-    public async Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken)
+    public async Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
         if (!MayBeCounted(sql))
             return required ? new DatabaseFailure(EDatabaseFailure.ExecutionFailed, NotCountableMessage) : Result.Success<long?, DatabaseFailure>(null);
@@ -1226,7 +1264,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             if (savepoint)
                 await NonQueryAsync(CountSavepointSql, token);
 
-            var counted = await Send(nameof(CountExportAsync), EDatabaseFailure.ExecutionFailed, () => CountRowsAsync(CountSql(sql), token));
+            var counted = await Send(nameof(CountExportAsync), EDatabaseFailure.ExecutionFailed, () => CountRowsAsync(CountSql(sql), token, parameters));
 
             // O comando da contagem recusada ficou no campo, para o `Cancel`: sai daqui, descartado.
             if (_command is { } refused)
@@ -1248,10 +1286,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         return result.IsFailure ? result.Error : result.Value;
     }
 
-    public async Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
         => await RunAsync(nameof(StartExportReadAsync), EDatabaseFailure.ExecutionFailed, async token =>
         {
-            var reader = await StartAsync(sql, [], userCommand: true, token, behavior: ExportBehavior);
+            var reader = await StartAsync(sql, [], userCommand: true, token, behavior: ExportBehavior, query: parameters);
             _columns = [.. Enumerable.Range(0, reader.FieldCount).Select(ordinal => new QueryColumn(reader.GetName(ordinal), reader.GetDataTypeName(ordinal), ColumnKind(reader, ordinal)))];
 
             return _columns;
@@ -1380,7 +1418,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// tem até `pageSize` linhas (RN-SQL-016).
     /// </summary>
     /// <param name="readOnly">RN-PROT-006: o comando é de uma conexão somente leitura, e a sessão vai para o modo só de leitura do banco antes dele (ou sai dele, no de uma conexão que deixou de ser).</param>
-    private async Task<QueryOutcome> ExecuteCommandAsync(string sql, int pageSize, bool paged, CancellationToken cancellationToken, bool readOnly = false)
+    private async Task<QueryOutcome> ExecuteCommandAsync(string sql, int pageSize, bool paged, CancellationToken cancellationToken, bool readOnly = false, IReadOnlyList<QueryParameter>? parameters = null)
     {
         _utilityCommand = false;
         var started = Stopwatch.GetTimestamp();
@@ -1393,7 +1431,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         if (paged)
             await BeginReadOnlyAsync(cancellationToken);
 
-        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken);
+        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken, query: parameters);
         var requested = cancellationToken;
 
         // RN-SQL-010: no driver que não lança quando o cancelamento chega durante a leitura, o comando executado até o fim já rodou
@@ -1522,7 +1560,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         foreach (var value in edit.Parameters)
         {
             var parameter = command.CreateParameter();
-            BindEditParameter(parameter, value);
+            BindCommandParameter(parameter, value);
             command.Parameters.Add(parameter);
         }
 
@@ -1549,7 +1587,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
         foreach (var value in edit.Parameters)
         {
             var parameter = command.CreateParameter();
-            BindEditParameter(parameter, value);
+            BindCommandParameter(parameter, value);
             command.Parameters.Add(parameter);
         }
 
@@ -1571,9 +1609,9 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     }
 
     /// <summary>RN-EDIT-020: a contagem da coluna inteira, lida até o fim, dentro do comando em andamento. -1 quando o banco não devolveu linha (o corte do cancelamento no driver da IBM).</summary>
-    private async Task<long> CountWholeColumnRowsAsync(string sql, CancellationToken cancellationToken)
+    private async Task<long> CountWholeColumnRowsAsync(string sql, IReadOnlyList<QueryParameter>? parameters, CancellationToken cancellationToken)
     {
-        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken);
+        var reader = await StartAsync(sql, [], userCommand: true, cancellationToken, query: parameters);
 
         // O total chega como inteiro de 32 bits nos drivers da IBM e como texto no PostgreSQL, que lê o resultado em texto.
         var counted = await reader.ReadAsync(cancellationToken) ? Convert.ToInt64(reader.GetValue(0), CultureInfo.InvariantCulture) : -1;
@@ -1589,7 +1627,7 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     private async Task<IReadOnlyList<IReadOnlyList<string>>?> ReadKeysAsync(WholeColumnPlan whole, CancellationToken cancellationToken)
     {
         var positions = whole.KeyColumns!;
-        var reader = await StartAsync(whole.CountSql, [], userCommand: true, cancellationToken);
+        var reader = await StartAsync(whole.CountSql, [], userCommand: true, cancellationToken, query: whole.CountParameters);
         var kinds = positions.Select(position => ColumnKind(reader, position)).ToList();
         var keys = new List<IReadOnlyList<string>>();
 
@@ -1975,9 +2013,10 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// PostgreSQL não aceita outro comando na conexão. Os parâmetros são posicionais, e cada banco escreve o marcador dele (`$1`, `?`).
     /// </summary>
     /// <param name="userCommand">É comando do usuário: sem tempo limite, porque só para quando ele cancela (RN-SQL-010), e com o ajuste que o banco pede.</param>
+    /// <param name="query">RN-VAR-032: os parâmetros do comando do usuário (`$n` ou `?` do texto), ligados na ordem, cada um com o tipo do banco (<see cref="QueryParameterBinding"/>).</param>
     /// <param name="userText">O texto é da pessoa, mas o comando tem o prazo do driver (a consulta de verificação própria, RN-VERIF-001): leva o ajuste que o banco pede num texto dela.</param>
     /// <param name="behavior">RN-EXPORT-017: o leitor da exportação, no banco que lê o valor em pedaços, é sequencial.</param>
-    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken, bool userText = false, CommandBehavior behavior = CommandBehavior.Default)
+    private async Task<DbDataReader> StartAsync(string sql, IReadOnlyList<object> parameters, bool userCommand, CancellationToken cancellationToken, bool userText = false, CommandBehavior behavior = CommandBehavior.Default, IReadOnlyList<QueryParameter>? query = null)
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
@@ -1997,6 +2036,8 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
             command.Parameters.Add(parameter);
         }
 
+        BindQueryParameters(command, query);
+
         _command = command;
         _reader = behavior == CommandBehavior.Default ? await ExecuteReaderAsync(command, cancellationToken) : await command.ExecuteReaderAsync(behavior, cancellationToken);
 
@@ -2007,12 +2048,13 @@ internal abstract class AdoDatabaseConnection(ILogger logger) : IDatabaseConnect
     /// RN-EXPORT-017: a contagem da exportação, lida pelo próprio leitor, sem tocar no da leitura (que nem foi aberto). O comando fica no campo enquanto
     /// roda, para o `Cancel`; quem chama o tira dele quando a contagem é recusada.
     /// </summary>
-    private async Task<long> CountRowsAsync(string sql, CancellationToken cancellationToken)
+    private async Task<long> CountRowsAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null)
     {
         var command = _connection!.CreateCommand();
         command.CommandText = sql;
         command.CommandTimeout = 0;
         ConfigureUserCommand(command);
+        BindQueryParameters(command, parameters);
 
         _command = command;
         long total;

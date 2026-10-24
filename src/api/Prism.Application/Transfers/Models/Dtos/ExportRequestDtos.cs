@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Prism.Application.Transfers.Models.Dtos;
 
 /// <summary>
@@ -15,6 +17,12 @@ public sealed record ExportSourceDto
     public string? Sql { get; init; }
     public string? Filter { get; init; }
     public string? Name { get; init; }
+
+    /// <summary>
+    /// RN-VAR-032 e 033: os valores dos marcadores do `sql` (`$n` ou `?`), na ordem do texto, cada um `{ type, value }`, só na origem `query`. Chega como o JSON que veio, como
+    /// as opções, para a forma errada ser `EXPORT_OPTIONS_INVALID` (`IMPORT_OPTIONS_INVALID` na cópia) no campo `source.params[3].value`, e não o 400 do MVC.
+    /// </summary>
+    public JsonElement? Params { get; init; }
 
     public override string ToString()
         => nameof(ExportSourceDto);

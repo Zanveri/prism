@@ -252,10 +252,14 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
   arquivos, bytes, conexões criadas, atualizadas e de fora, senhas que não decifraram), os IDs do Prism, a duração e a
   classe do erro: nunca o usuário, a senha, o host, o nome de uma conexão, de uma pasta ou de um projeto, o ID do
   DBeaver, o conteúdo decifrado nem um caminho, também no log do processo principal (RN-DBEAVER-006, 008 e 016).
+  Das variáveis dos scripts, só as contagens (quantos parâmetros uma execução levou, quantos valores a rota dos
+  valores devolveu): nunca o valor de uma variável, de um parâmetro, da busca dos valores de uma coluna nem os
+  valores lembrados de um script, também no log do processo principal (RN-VAR-036).
   *Alterada a pedido do dono em 2026-10-16 (seção 34): entraram a exportação e
   a importação. Alterada a pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados.
   Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a cópia. Alterada a pedido do
-  dono em 2026-10-20 (seção 40): entrou a importação do DBeaver.*
+  dono em 2026-10-20 (seção 40): entrou a importação do DBeaver. Alterada a pedido do dono em 2026-10-20 (seção
+  41): entraram as variáveis dos scripts.*
 
 ## 5. Regras de negócio
 
@@ -334,8 +338,9 @@ com `@codemirror/lang-sql` (editor), fontes IBM Plex empacotadas no app (sem Goo
 Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser fechada.
 
 - **RN-SESSAO-001.** Cada conexão expandida na árvore usa uma sessão (a da árvore). Cada aba de
-  SQL usa a sua, aberta na primeira execução. Assim uma consulta demorada não trava a árvore
-  nem as outras abas.
+  SQL usa a sua, aberta na primeira execução, e a aba de execução do "Executar com valores…" (RN-VAR-029) também.
+  Assim uma consulta demorada não trava a árvore nem as outras abas. *Alterada a pedido do dono em 2026-10-20 (seção
+  41): entrou a aba de execução.*
 - **RN-SESSAO-002.** Uma sessão executa um comando por vez. Segundo comando do usuário
   (executar, carregar mais, Commit, Rollback, a troca de modo ou de nível e o "Salvar" das
   edições) enquanto o primeiro roda: 409 `SESSION_BUSY`. No Commit manual a contagem também
@@ -423,12 +428,18 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   comando só. No Db2 e no Informix a API repete a conferência e responde 422
   `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, porque o driver da IBM executaria os comandos um a um
   sem parar no erro.
+  Uma declaração de variável (`let`, `const` e a reatribuição, seção 41) é um item como um comando: com o cursor
+  nela, o Ctrl+Enter a avalia; e o comando que usa um `@nome` avalia antes as declarações de que depende, e vai
+  com os valores como parâmetros (RN-VAR-017 e 020). *Alterada a pedido do dono em 2026-10-20 (seção 41): entraram as declarações de variável.*
 - **RN-SQL-002.** Comandos são separados por `;` fora de texto entre aspas simples, de
   identificador entre aspas duplas, de comentário (`--` e `/* */`) e de `$tag$ ... $tag$` do
   PostgreSQL. Bloco que tem `;` no corpo (procedimento em Db2 ou Informix) é executado
   selecionando o bloco inteiro. Sem seleção, a linha em branco também separa o comando do cursor,
   pela RN-SQL-018 (mudou em 2026-10-15, pedido do dono, issue #7: antes só o `;` separava); a
-  seleção continua contada só pelo `;`.
+  seleção continua contada só pelo `;`. A declaração de variável também termina o comando de cima (RN-VAR-001).
+  O texto `E'…'` do PostgreSQL, em que a barra escapa a aspa (`E'it\'s'`), é texto também para o leitor da
+  tela, como já era para o da API: o `;` e o `@nome` de dentro dele não contam (RN-VAR-015). *Alterada a pedido do dono em 2026-10-20 (seção 41): a
+  declaração termina o comando, e o leitor da tela passou a conhecer o `E'…'`.*
 - **RN-SQL-003.** Qualquer comando SQL é aceito e enviado como está ao banco, sem ser dividido
   nem reescrito. Se o banco não aceita mais de um comando por envio, a recusa é a dele. A
   exceção são os comandos de controle de transação (`BEGIN`, `START TRANSACTION`, `COMMIT`,
@@ -440,6 +451,9 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   paginada por um cursor do servidor: o comando vai dentro de uma declaração de cursor, e o que
   o banco recusa ali é executado de novo como está, de modo que a mensagem e a posição do erro
   são as do comando digitado.
+  Com variáveis (seção 41), a tela troca os `@nome` pelos marcadores do banco antes de enviar e manda os valores em
+  `params` (RN-VAR-017); a API não reescreve nada, e o texto que ela recebe é o que vai ao banco. *Alterada a pedido
+  do dono em 2026-10-20 (seção 41).*
 - **RN-SQL-004.** Comando de leitura que devolve linhas: a API lê as **200 primeiras** e mantém
   o cursor aberto. A tela mostra "Primeiras 200 linhas" e o tempo.
 - **RN-SQL-013.** Comando que grava e devolve linhas (`UPDATE ... RETURNING`, por exemplo) é
@@ -471,7 +485,8 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
   própria área de resultado, e também não sai da aba. Enquanto conta de novo, o total anterior
   fica à vista, marcado como em recontagem, até chegar o novo; se a contagem falhar ou for
   cancelada, ele fica como estava, e o erro aparece como na primeira contagem. Vale nos Registros
-  e no resultado da aba de consulta.
+  e no resultado da aba de consulta. O comando com variáveis é contado com os mesmos parâmetros e os mesmos
+  valores com que foi executado (RN-VAR-033). *Alterada a pedido do dono em 2026-10-20 (seção 41): entraram os parâmetros.*
 - **RN-SQL-007.** O cursor fecha quando acaba, a cada nova execução na aba, ao fechar a aba e
   após 5 minutos sem leitura, para não segurar recurso no banco. Depois disso "Carregar mais"
   responde 409 `NO_OPEN_CURSOR` e a tela oferece executar de novo. No PostgreSQL, enquanto o
@@ -485,7 +500,10 @@ Uma **sessão** é uma conexão aberta com um banco, mantida pela API até ser f
 - **RN-SQL-009.** Erro do banco: 422 `SQL_EXECUTION_FAILED`, com a mensagem original (incluindo
   o detalhe e a dica, quando o banco manda), o SQLSTATE e a posição do erro quando o driver
   informa. O detalhe aparece na área de resultado, e um
-  toast de erro avisa que o comando falhou (RN-AVISO-004 e 005).
+  toast de erro avisa que o comando falhou (RN-AVISO-004 e 005). No comando com variáveis, a posição que o
+  banco dá é a do texto enviado, com os marcadores, e a tela a leva ao texto do editor pelo mapa das posições:
+  fora dos marcadores, pela diferença de tamanho; dentro de um marcador, de uma lista expandida ou do texto de
+  um `sql`, ao começo do `@nome` (RN-VAR-033). *Alterada a pedido do dono em 2026-10-20 (seção 41): entrou o texto enviado.*
 - **RN-SQL-010.** "Cancelar" interrompe o comando em execução na sessão, inclusive uma contagem
   em andamento. Não afeta um cursor aberto e parado. Um comando que terminou antes de o
   cancelamento chegar é dado como concluído, não como cancelado. Quando o comando termina em
@@ -614,18 +632,21 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `GET .../schemas/{schema}/tables/{table}/checks` | 200 lista (RN-CAT-005) | as mesmas |
 | `GET .../schemas/{schema}/views/{view}/definition` | 200 `{ definition }` (RN-CAT-006) | as mesmas |
 | `GET .../schemas/{schema}/diagram` | 200 `{ tables, foreignKeys }` (RN-CAT-008) | as mesmas |
+| `POST .../schemas/{schema}/tables/{table}/values` `{ column, description?, search?, offset?, limit?, total? }` (os valores de uma coluna, RN-VAR-035, seção 41) | 200 `{ kind, values: [{ value, description, truncated }], hasMore, total }` | 404 `DATABASE_SESSION_NOT_FOUND`, `VALUES_TABLE_NOT_FOUND`; 409 `SESSION_BUSY`; 422 `VALUES_INVALID` (no campo), `SQL_EXECUTION_FAILED` |
+| `POST .../schemas/{schema}/tables/{table}/values/check` `{ column, values }` (RN-VAR-035) | 200 `{ missing }` | as mesmas, mais 422 `QUERY_INVALID` nos `values` |
 | `GET api/user/database-sessions/{id}/properties` | 200 lista de `{ name, value }` (RN-CAT-010) | as mesmas |
-| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter?, keep? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`; `keep`: os resultados que continuam guardados para a edição, RN-SQL-024) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio; `keep` com mais de 20 resultados ou com uma entrada que não é um identificador), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem), `CONNECTION_READ_ONLY` (RN-PROT-002: o comando não é uma leitura) |
+| `POST api/user/database-sessions/{id}/queries` `{ sql, pageSize?, filter?, keep?, params? }` (`filter`: RN-GRADE-011; a página leva `filterApplied`; `keep`: os resultados que continuam guardados para a edição, RN-SQL-024; `params`: os valores dos marcadores, RN-VAR-032, seção 41) | 200 página ou linhas afetadas | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (SQL vazio; `keep` com mais de 20 resultados ou com uma entrada que não é um identificador; `params` fora da forma, no campo), `QUERY_PARAMETERS_MISMATCH` (os marcadores do texto e os valores não batem), `SQL_EXECUTION_FAILED`, `TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED` (também com filtro e mais de um comando), `FILTER_INVALID` (RN-GRADE-011: `;`, aspas, comentário ou parênteses sem par, mais de uma ordem; com `params`, um marcador no filtro), `CONNECTION_READ_ONLY` (RN-PROT-002: o comando não é uma leitura) |
 | `POST .../queries/next` | 200 página | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_CURSOR`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/count` | 200 `{ total }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_QUERY_TO_COUNT`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` |
 | `POST .../queries/cancel` | 204 | 404 `DATABASE_SESSION_NOT_FOUND` |
+| `POST .../queries/variable` `{ sql, params?, maxRows? }` (a consulta de uma variável, RN-VAR-034, seção 41) | 200 `{ columns, rows, elapsedMs }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (no campo), `QUERY_PARAMETERS_MISMATCH`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `VARIABLE_QUERY_NOT_READ`, `VARIABLE_QUERY_TOO_LARGE` (com `reason` e `limit`), `SQL_EXECUTION_FAILED` (com `outcome` quando cancelada) |
 | `POST api/user/database-sessions/{id}/transaction/commit` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`, `TRANSACTION_FAILED`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone` quando o banco desfez) |
 | `POST api/user/database-sessions/{id}/transaction/rollback` | 200 `{ transaction, commands }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `NO_OPEN_TRANSACTION`; 422 `SQL_EXECUTION_FAILED` (com `transactionUndone`: a conexão caiu, e a transação já estava perdida) |
 | `POST .../queries/edit-target` `{ resultID, catalogSessionID?, purpose? }` (`resultID`: o do resultado atual ou o de um guardado, RN-SQL-024; `purpose`: `edit`, o padrão, ou `sql`, o pedido do "Gerar SQL", RN-GRADE-020, seção 37) | 200 `{ tables, columns, rowOperations, oneAtATime }`, cada tabela com `kind` e `keyColumns` (RN-GRADE-020) | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE` (com `reason`), `SQL_EXECUTION_FAILED`, `EDIT_INVALID` (`purpose` fora da lista), `CONNECTION_READ_ONLY` (RN-PROT-002; não com `purpose: sql`) |
 | `POST .../queries/edits` `{ resultID, changes }` (`resultID`: como no `edit-target`; `changes` pode ter uma `updateAll`, a coluna inteira, RN-EDIT-023, seção 38) | 200 `{ applied, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED` (também quando a contagem ou o `UPDATE` da coluna inteira não dá o `rows` confirmado, RN-EDIT-021), `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ALL_ROWS_NOT_SUPPORTED` (com `change`, `column` e `reason`), `EDIT_ROW_MISMATCH` (com `change` e `rowsAffected`; no Informix sem log, também o da coluna inteira, com `applied`), `SQL_EXECUTION_FAILED` (com `change`, e `outcome` quando cancelado; no Informix sem log, `applied`, e `outcome: unknown` quando a coluna inteira falha no meio), `CONNECTION_READ_ONLY` (RN-PROT-002) |
 | `POST .../queries/edits/preview` `{ resultID, changes }` (`resultID`: como no `edit-target`) | 200 `{ statements: [{ sql, values, note? }], oneAtATime }` (com a coluna inteira, a contagem e o `UPDATE` dela primeiro, cada um com a `note` dele, RN-EDIT-023) | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `RESULT_CHANGED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ALL_ROWS_NOT_SUPPORTED` (com `change`, `column` e `reason`), `CONNECTION_READ_ONLY` (RN-PROT-002) |
 | `POST .../queries/edits/count` `{ resultID, changes }` (`changes` com só a `updateAll`: a contagem da coluna inteira, antes da pergunta do "Salvar", RN-EDIT-019 e 023, seção 38) | 200 `{ rows, transaction }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `RESULT_CHANGED`, `TRANSACTION_FAILED`; 422 `RESULT_NOT_EDITABLE`, `EDIT_INVALID` (com `change` e `column`), `EDIT_ALL_ROWS_NOT_SUPPORTED` (com `change`, `column` e `reason`), `SQL_EXECUTION_FAILED` (com `outcome` quando cancelada), `CONNECTION_READ_ONLY` (RN-PROT-002) |
-| `POST api/user/transfers/exports` `{ source, columns, count, format, options, output, windowID }` (a exportação de dados, RN-EXPORT-016, seção 35) | 202 `{ id }`, o trabalho em segundo plano | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED` (3 em andamento); 422 `EXPORT_OPTIONS_INVALID` (no campo), `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING` (no campo `userName` ou `password`), `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
+| `POST api/user/transfers/exports` `{ source, columns, count, format, options, output, windowID }` (a exportação de dados, RN-EXPORT-016, seção 35; `source.params`: seção 41) | 202 `{ id }`, o trabalho em segundo plano | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED` (3 em andamento); 422 `EXPORT_OPTIONS_INVALID` (no campo, também em `source.params`), `QUERY_PARAMETERS_MISMATCH`, `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING` (no campo `userName` ou `password`), `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
 | `GET api/user/transfers` | 200 lista dos trabalhos do cofre aberto | |
 | `GET api/user/transfers/{id}` | 200 `{ id, kind, connectionID, targetConnectionID, windowID, state, phase, rows, committed, total, bytes, size, uncertain, summary, error, reason, startedAt, finishedAt }` (`kind`: `export`, `import` ou `copy`, seção 36) | 404 `TRANSFER_NOT_FOUND` |
 | `DELETE api/user/transfers/{id}` | 204 (cancela o trabalho que roda, em até 10 segundos, ou esquece o que terminou, e apaga o arquivo dele) | 404 `TRANSFER_NOT_FOUND` |
@@ -633,7 +654,7 @@ Todas exigem o token de lançamento. Erros no formato `ApiErrorDto` (`applicatio
 | `POST api/user/transfers/imports/preview` `{ fileID, format, reader, values, target, mapping? }` (o mapeamento e a prévia convertida, RN-IMPORT-009 a 011) | 200 `{ table, columns, mapping, shownColumns, rows }` | 404 `IMPORT_FILE_MISSING`, `CONNECTION_NOT_FOUND`, `IMPORT_TABLE_NOT_FOUND`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_FILE_UNREADABLE`, `IMPORT_FILE_TOO_LARGE`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_MAPPING_INVALID`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`, `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED` |
 | `POST api/user/transfers/imports` `{ fileID, format, reader, values, target, mapping, load, windowID }` (RN-IMPORT-014) | 202 `{ id }` | 404 `IMPORT_FILE_MISSING`, `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_FILE_TOO_LARGE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
 | `POST api/user/transfers/copies/preview` `{ source, columns, target, mapping? }` (o "Banco de dados", RN-IMPORT-024) | 200 `{ table, mapping }` | 404 `CONNECTION_NOT_FOUND`, `IMPORT_TABLE_NOT_FOUND`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_TARGET_NOT_TABLE`, `IMPORT_TARGET_IS_SOURCE`, `IMPORT_MAPPING_INVALID`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`, `DATABASE_CONNECTION_FAILED`, `SQL_EXECUTION_FAILED` |
-| `POST api/user/transfers/copies` `{ source, columns, count, target, mapping, load, windowID }` (RN-IMPORT-027) | 202 `{ id }` | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID`, `IMPORT_MAPPING_INVALID`, `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `IMPORT_TARGET_IS_SOURCE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
+| `POST api/user/transfers/copies` `{ source, columns, count, target, mapping, load, windowID }` (RN-IMPORT-027; `source.params`: seção 41) | 202 `{ id }` | 404 `CONNECTION_NOT_FOUND`; 409 `TRANSFER_LIMIT_REACHED`, `IMPORT_TARGET_BUSY`; 422 `IMPORT_OPTIONS_INVALID` (também em `source.params`), `QUERY_PARAMETERS_MISMATCH`, `IMPORT_MAPPING_INVALID`, `EXPORT_SOURCE_NOT_READ`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `FILTER_INVALID`, `IMPORT_TARGET_IS_SOURCE`, `CONNECTION_READ_ONLY`, `DATABASE_NAME_INVALID`, `CONNECTION_CREDENTIALS_MISSING`, `DRIVER_NOT_INSTALLED`; 401 `VAULT_LOCKED` quando o cofre muda antes de o trabalho entrar no registro |
 
 Página de resultado: `{ columns: [{ name, type, kind }], rows: string|null [][], hasMore,
 elapsedMs, truncatedCells: [linha, coluna][], totalRows }`, com `kind` em `text`, `number`,
@@ -681,7 +702,13 @@ altera, com `reason`; o detalhe do `RESULT_CHANGED` que começa por "O resultado
 rotas da importação do DBeaver (`api/user/connections/dbeaver`), com os campos e as recusas nas notas dela;
 `DBEAVER_SOURCE_MISSING` e `DBEAVER_PROJECT_NOT_FOUND` (404), a cópia do DBeaver que não existe mais e o projeto que não
 está nela; e `DBEAVER_SOURCE_INVALID` e `DBEAVER_LIMITS_EXCEEDED` (422), o DBeaver que não se lê e o que passa dos
-limites da importação (este só na prévia e na importação, não na contagem).
+limites da importação (este só na prévia e na importação, não na contagem). Com a seção 41: o `params` das consultas e
+o `source.params` da exportação e da cópia, a rota da consulta da variável e as dos valores de uma coluna, com os
+campos nas notas dela; `QUERY_PARAMETERS_MISMATCH` (422), os marcadores do texto que não batem com os valores, com
+`markers` e `values`; `VARIABLE_QUERY_NOT_READ` e `VARIABLE_QUERY_TOO_LARGE` (422), a consulta da variável que não é
+uma leitura e a que passa dos limites, esta com `reason` e `limit`; `VALUES_INVALID` (422, na forma do erro de campo)
+e `VALUES_TABLE_NOT_FOUND` (404), das rotas dos valores; e `SCRIPT_RUN_VALUES_INVALID` (422, no campo), dos valores
+lembrados de um script.
 
 Falha de disco ao ler ou gravar o cofre responde 503 `VAULT_UNAVAILABLE`, em qualquer rota que
 toque o cofre. Qualquer exceção não prevista responde 500 `INTERNAL_SERVER_ERROR` sem detalhe,
@@ -834,6 +861,13 @@ Entram no `AGENTS.md` do projeto, para que ninguém as "corrija" depois.
   (`Configuracoes`), com os três lado a lado; o diálogo é o "Importar conexões" (seção 34), com a origem no lugar do
   arquivo; a pergunta segue o `ConfirmarComando`; e o item de menu "Importar do DBeaver…" usa a seta para cima de
   "Importar…". Nenhum ícone novo: a logo do DBeaver não aparece.
+- O canvas não desenha as variáveis (seção 41): o realce, as dicas e o valor no fim da linha no editor, o painel
+  Variáveis, o "SQL enviado", a pergunta dos valores, o "Executar com valores…" e a aba de execução (RN-VAR-018 e
+  021 a 031). O painel segue a tabela das Estatísticas (RN-SQL-020), com as setas de abrir da árvore do navegador; a
+  pergunta e o diálogo seguem o "Importar conexões" (seção 34), com os campos de Configurações; o "SQL enviado"
+  segue o "Ver SQL"; o ícone de executar com `{x}` e o da aba de execução (o de executar) seguem o traço dos do
+  canvas (16 px, traço 1,5); e a cor da variável no editor é um token novo do tema, derivado como as cores que o
+  canvas não define (RN-CONFIG-003).
 
 ## 10. Riscos e sondas
 
@@ -997,23 +1031,25 @@ com as fontes, está em os registros internos do projeto.
 - **RN-VERSAO-001.** A versão do Prism segue o SemVer 2.0.0. A primeira versão é `0.1.0`. A tag
   de uma versão é `vX.Y.Z`; pré-lançamento é `vX.Y.Z-beta.N` (o formato `-rc.N` é aceito, mas não
   é usado nesta entrega). Não há ramo por versão (RN-VERSAO-008).
-- **RN-VERSAO-002.** O contrato que o número protege, já que um aplicativo não tem API pública: o formato do cofre
-  e a estrutura da pasta de dados, os arquivos de configuração quando existirem (o `zoom.json`, RN-ZOOM-001, e o
-  `result-window.json`, RN-ABAS-013), o arquivo da exportação das
-  conexões (com o número de formato próprio, RN-TRANSF-007), o que cada formato da exportação de dados escreve com
-  as mesmas escolhas (seção 35: uma opção nova, que começa com o comportamento de antes, não quebra), o que a
-  importação de dados lê com as mesmas escolhas (seção 36: o arquivo que uma versão importa, a seguinte importa com
-  os mesmos valores), e os atalhos e comandos documentados. A API HTTP local e a aparência ficam fora, e o que o Prism
-  lê do DBeaver também (seção 40): o formato é do DBeaver, que pode mudá-lo, e a leitura acompanha a versão dele de
-  agora; o que entra no cofre por ela é do contrato, como qualquer conexão. Enquanto a
-  versão for `0.x`, uma mudança que quebra esse contrato sobe o segundo número; a partir da `1.0.0`, sobe o
-  primeiro. Funcionalidade nova sobe o segundo número e correção sobe o terceiro, antes e depois da `1.0.0`. A
-  `1.0.0` sai quando o contrato estiver estável e o Prism estiver em uso no dia a dia. *Alterada a pedido do dono
-  em 2026-10-16 (seção 34): o arquivo da exportação passou a existir. Alterada a pedido do dono em 2026-10-16
-  (seção 35): entraram os formatos da exportação de dados. Alterada a pedido do dono em 2026-10-16 (seção 36):
-  entrou o que a importação de dados lê. Alterada a pedido do dono em 2026-10-20 (seção 39): os arquivos de
-  configuração passaram a ser nomeados, com o `result-window.json`. Alterada a pedido do dono em 2026-10-20 (seção
-  40): o que o Prism lê do DBeaver fica fora do contrato.*
+- **RN-VERSAO-002.** O contrato que o número protege, já que um aplicativo não tem API pública: o formato do cofre e a
+  estrutura da pasta de dados, os arquivos de configuração quando existirem (o `zoom.json`, RN-ZOOM-001, e o
+  `result-window.json`, RN-ABAS-013), o arquivo da exportação das conexões (com o número de formato próprio,
+  RN-TRANSF-007), o que cada formato da exportação de dados escreve com as mesmas escolhas (seção 35: uma opção nova,
+  que começa com o comportamento de antes, não quebra), o que a importação de dados lê com as mesmas escolhas (seção 36:
+  o arquivo que uma versão importa, a seguinte importa com os mesmos valores), os atalhos e comandos documentados, e a
+  linguagem das variáveis dos scripts (seção 41: o script que uma versão executa, a seguinte executa igual; uma função
+  nova dentro de `Math`, `random` ou `date` não quebra, e um nome novo na lista dos que não podem ser nome de variável,
+  RN-VAR-003, quebra). A API HTTP local e a aparência ficam fora, e o que o Prism lê do DBeaver também (seção 40): o
+  formato é do DBeaver, que pode mudá-lo, e a leitura acompanha a versão dele de agora; o que entra no cofre por ela é
+  do contrato, como qualquer conexão. Enquanto a versão for `0.x`, uma mudança que quebra esse contrato sobe o segundo
+  número; a partir da `1.0.0`, sobe o primeiro. Funcionalidade nova sobe o segundo número e correção sobe o terceiro,
+  antes e depois da `1.0.0`. A `1.0.0` sai quando o contrato estiver estável e o Prism estiver em uso no dia a dia.
+  *Alterada a pedido do dono em 2026-10-16 (seção 34): o arquivo da exportação passou a existir. Alterada a pedido do
+  dono em 2026-10-16 (seção 35): entraram os formatos da exportação de dados. Alterada a pedido do dono em 2026-10-16
+  (seção 36): entrou o que a importação de dados lê. Alterada a pedido do dono em 2026-10-20 (seção 39): os arquivos de
+  configuração passaram a ser nomeados, com o `result-window.json`. Alterada a pedido do dono em 2026-10-20 (seção 40):
+  o que o Prism lê do DBeaver fica fora do contrato. Alterada a pedido do dono em 2026-10-20 (seção 41): entrou a
+  linguagem das variáveis.*
 - **RN-VERSAO-003.** A versão mora em um lugar só: o campo `version` de
   `src/client/package.json`. A API recebe o mesmo número na publicação (`-p:Version=`), e
   nenhum `.csproj` declara versão. A tag de uma versão é sempre `v` + esse número, criada pelo lançamento (RN-VERSAO-008); a
@@ -1398,7 +1434,10 @@ Só da tela:
 - **RN-CONFIG-004.** Editor de SQL: autocompletar ao digitar (palavras-chave do banco da aba e os
   nomes já carregados na árvore daquela conexão: esquemas, tabelas, visões e colunas; nunca
   dispara consulta ao banco) e converter palavras-chave para maiúsculas ao digitar. Os dois têm
-  chave de ligar e desligar.
+  chave de ligar e desligar. Com as variáveis (seção 41), o autocompletar completa também os nomes declarados,
+  depois de `@` e dentro das declarações, e as funções da linguagem; a conversão para maiúsculas não muda nada
+  dentro das declarações; e o Editor de SQL ganha "Mostrar o valor das variáveis no fim da linha", ligada por
+  padrão (RN-VAR-025). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
 - **RN-CONFIG-005.** Resultados: o texto que representa o valor nulo na grade, e "buscar mais
   linhas ao rolar até o fim da grade" (a grade pede a página seguinte sozinha, uma por vez, e
   para se o usuário cancelar; com a atualização automática do resultado ligada, RN-GRADE-014, a
@@ -1416,7 +1455,7 @@ Só da tela:
   janelas, também nas do resultado (RN-ABAS-015), e então bloqueia:
   a API fecha o cofre (RN-COFRE-008, as sessões com os bancos se encerram) e a tela mostra o bloqueio, que pede a
   senha do MESMO usuário. Desbloquear devolve a área de trabalho com as abas e o texto de SQL como estavam; os
-  resultados que estavam na tela são descartados no bloqueio. O aviso antes do bloqueio diz quantas transações
+  resultados que estavam na tela, e os valores das variáveis das abas (RN-VAR-023), são descartados no bloqueio. O aviso antes do bloqueio diz quantas transações
   serão desfeitas, quantas alterações não salvas serão descartadas e quantas exportações com a entrega que falhou
   serão descartadas (RN-EXPORT-023), e, ao desbloquear, cada aba diz o que perdeu (RN-TX-007). Ao desbloquear, a
   árvore reabre a sessão das conexões que estavam abertas nela, e cada aba só volta a falar com o banco quando é
@@ -1430,7 +1469,8 @@ Só da tela:
   a senha lá. *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a verificação periódica. Alterada a
   pedido do dono em 2026-10-16 (seção 35): entrou a exportação de dados, e o aviso antes do bloqueio diz das
   entregas que falharam. Alterada a pedido do dono em 2026-10-16 (seção 36): entraram a importação de dados e a
-  cópia para outro banco. Alterada a pedido do dono em 2026-10-20 (seção 39): entraram as janelas do resultado.*
+  cópia para outro banco. Alterada a pedido do dono em 2026-10-20 (seção 39): entraram as janelas do resultado.
+  Alterada a pedido do dono em 2026-10-20 (seção 41): entraram os valores das variáveis.*
 - **RN-TABELA-005.** Registros: um campo de filtro recebe a condição (`WHERE`) que o usuário
   escreve, e o botão de ordenar no cabeçalho de uma coluna (RN-GRADE-021) ordena por ela
   (crescente, decrescente, sem ordem). A tela monta o `SELECT` com a condição e a ordem e mostra o comando que executou. A
@@ -2793,6 +2833,9 @@ Substitui, na seção 13, o "mais de uma janela" que ficava para depois.
     mudança não salva era só o texto e o banco.*
   - *Alterada a pedido do dono em 2026-10-16 (seção 33): a lista virou a árvore das pastas de
     scripts, e o script ganhou "Mover para…".*
+  - O script que declara variáveis no topo tem, logo depois de "Abrir", "Executar com valores…" (Shift+Alt+X),
+    que executa o script sem abri-lo, com os valores escolhidos num diálogo, numa aba de execução (RN-VAR-026 a
+    029). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
 - **RN-SCRIPT-004.** Nome de 1 a 200 caracteres, sem caractere de controle e único por usuário
   (sem diferenciar maiúsculas); SQL de até 1 MB.
 
@@ -2800,11 +2843,15 @@ Rotas (todas exigem o cofre aberto; 401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`
 
 | Rota | Sucesso | Recusas |
 | --- | --- | --- |
-| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, folderID, icon, color, updatedAt }`, sem o SQL (`icon` e `color`: RN-SCRIPT-006; `folderID`, nulo na raiz: RN-SCRIPT-007) | |
-| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, folderID, icon, color, sql, updatedAt }` | 404 `SCRIPT_NOT_FOUND` |
+| `GET api/user/scripts` | 200 lista de `{ id, name, connectionID, database, folderID, icon, color, declaresVariables, updatedAt }`, sem o SQL (`icon` e `color`: RN-SCRIPT-006; `folderID`, nulo na raiz: RN-SCRIPT-007; `declaresVariables`: RN-VAR-028, seção 41) | |
+| `GET api/user/scripts/{id}` | 200 `{ id, name, connectionID, database, folderID, icon, color, sql, runValues, updatedAt }` (`runValues`: os valores lembrados, RN-VAR-028, ou nulo) | 404 `SCRIPT_NOT_FOUND` |
 | `POST api/user/scripts` `{ name, sql, connectionID?, database?, folderID? }` (`folderID` ausente ou nulo: a raiz) | 201 | 404 `SCRIPT_FOLDER_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE` |
 | `PATCH api/user/scripts` `{ id, name?, sql?, connectionID?, database?, generic?, icon?, color?, folderID?, root? }` (`generic`: RN-SCRIPT-005; `icon` e `color`: RN-SCRIPT-006; `folderID` e `root`: RN-SCRIPT-009, seção 33) | 200 | 404 `SCRIPT_NOT_FOUND`, `SCRIPT_FOLDER_NOT_FOUND`; 409 `SCRIPT_ALREADY_EXISTS`; 422 `SCRIPT_NAME_INVALID`, `SCRIPT_TOO_LARGE`, `SCRIPT_PLACE_INVALID` (`generic` com `connectionID` ou `database`, ou `root: true` com um `folderID` não nulo), `SCRIPT_ICON_INVALID` (ícone fora da lista, cor fora de `#RRGGBB`) |
 | `DELETE api/user/scripts/{id}` | 204 | 404 `SCRIPT_NOT_FOUND` |
+| `PUT api/user/scripts/{id}/run-values` `{ values, connectionID?, database? }` (os valores lembrados do "Executar com valores…", RN-VAR-028, seção 41) | 204 | 404 `SCRIPT_NOT_FOUND`; 422 `SCRIPT_RUN_VALUES_INVALID` (no campo) |
+
+*Alterada a pedido do dono em 2026-10-20 (seção 41): entraram o `declaresVariables`, o `runValues` e a gravação dos
+valores lembrados.*
 
 ### Ir do editor para a tabela
 
@@ -2894,7 +2941,8 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   - Na próxima entrada do mesmo usuário, as abas voltam na janela principal, na ordem em que
     estavam.
   - Voltam desconectadas: nada conecta nem executa sozinho.
-  - O resultado, o cursor e as alterações não salvas da grade não voltam.
+  - O resultado, o cursor e as alterações não salvas da grade não voltam. A aba de execução de um script
+    (RN-VAR-029) não volta, nem os valores das variáveis das abas (RN-VAR-023).
   - A aba de consulta cuja conexão foi excluída volta sem conexão, como um script sem conexão. A aba
     de tabela cuja conexão foi excluída não volta, e a entrada avisa.
   - O texto de cada aba vai até 1 MB (RN-SCRIPT-004). O que passa disso não é gravado, e a aba volta
@@ -2903,7 +2951,8 @@ fechada, assim, ao reabrir já retorna as queries feitas".
   - A aba de consulta volta no lugar do resultado dela: a aba do resultado logo depois dela, ou a janela do resultado
     reaberta no tamanho e no lugar lembrados, com a área vazia (RN-ABAS-016).
 
-  *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou o lugar do resultado.*
+  *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou o lugar do resultado. Alterada a pedido do dono em
+  2026-10-20 (seção 41): a aba de execução e os valores das variáveis não voltam.*
 
 - **RN-ABAS-007.** Fechar o app (a última janela) pergunta só pelo que não volta: as alterações
   não salvas da grade (RN-EDIT-007) e as transferências em andamento: as exportações de dados
@@ -3064,6 +3113,11 @@ que valia só nos Registros e nunca chegou à tela.
     campo, como nos Registros (RN-TABELA-010), e executam. No resultado de um comando que não é só de leitura (o
     `read` falso da página), os dois ficam desabilitados, com o motivo, porque ordenar o executaria de novo
     (RN-GRADE-021).
+  - No comando com variáveis (seção 41), o filtro é aplicado ao texto enviado, com os mesmos parâmetros, e não pode
+    ter marcador de parâmetro (422 `FILTER_INVALID`, RN-VAR-032); o `@nome` escrito no filtro não é variável, e vai
+    como está. Quando o filtro trocaria o `ORDER BY` do comando e esse `ORDER BY` tem marcador, a API embrulha o
+    comando (`wrapped`) em vez de juntar, e os marcadores e os valores ficam como estavam. *Alterada a pedido do dono
+    em 2026-10-20 (seção 41).*
   - *Alterada a pedido do dono em 2026-10-19 (seção 38): entrou o botão de ordenar do cabeçalho, que escreve a ordem
     no campo, e ordenar fica desabilitado no resultado de um comando que não é só de leitura.*
 - **RN-TABELA-011.** O campo de filtro (dos Registros e do resultado) completa os nomes das colunas
@@ -3076,7 +3130,7 @@ que valia só nos Registros e nunca chegou à tela.
 - **RN-GRADE-012.** F5 atualiza, como no DBeaver (pedido de 2026-10-14: "F5 não atualiza os dados").
   - Nos Registros, F5 lê a tabela de novo, com o filtro e a ordem do campo: é o "Atualizar".
   - Na aba de consulta, F5 executa de novo o comando do resultado, com o filtro: é o "Executar de
-    novo".
+    novo". Com variáveis, com os mesmos valores, sem avaliar as declarações de novo (RN-VAR-033). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
   - Na Estrutura e no Diagrama, F5 recarrega a vista.
   - No navegador, F5 atualiza o nó escolhido, como o "Atualizar" do menu dele.
   - Com alterações não salvas na grade, F5 pergunta antes, como executar outro comando. Com um
@@ -3176,6 +3230,10 @@ respondia erro de sintaxe. Muda a RN-SQL-002, e a RN-SQL-001 passa a citar esta 
     pergunta das alterações não salvas da grade (RN-EDIT-007) cancelada, nada é enviado e nada é
     destacado; respondida a pergunta, o destaque vem depois dela.
   - A API não muda: continua recebendo um comando por execução.
+  - Com as variáveis (seção 41), `let` e `const` em minúsculas, e a reatribuição de um `let` declarado acima
+    (`nome = valor`), começam um item depois da linha em branco, como um comando, nas mesmas condições (o texto de
+    cima fechado); e a linha que começa por uma declaração termina o comando de cima também sem a linha em branco e
+    sem `;`, com a preferência ligada ou desligada (RN-VAR-001). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
 
 ## 27. Complemento de 2026-10-15, versão 0.4.0: a conexão da aba de consulta e os scripts genéricos (issue #9)
 
@@ -3301,7 +3359,8 @@ nos dados que estão sendo acompanhados".
     qualquer intervalo, para o controle não piscar a cada segundo no de 1 s. O texto abre os intervalos, para trocar. Desligada no meio de uma
     execução automática, a execução é abandonada na hora, como quando a pessoa executa um comando
     (abaixo): nada dela aparece, e o resultado de antes fica, com o cursor fechado (RN-SQL-007).
-  - Cada execução é a do F5 (RN-GRADE-012): o mesmo comando, com o mesmo filtro, lendo de novo a
+  - Cada execução é a do F5 (RN-GRADE-012): o mesmo comando, com o mesmo filtro e os mesmos parâmetros (o `random`
+    não sorteia de novo, e a consulta da variável não roda de novo, RN-VAR-033), lendo de novo a
     primeira página. A seleção da grade se perde, como em qualquer execução nova (RN-GRADE-001); a
     rolagem fica, quando as colunas são as mesmas. O total (RN-SQL-006) não é contado de novo
     sozinho. A grade não esmaece enquanto a execução automática roda: o controle diz
@@ -3358,7 +3417,7 @@ nos dados que estão sendo acompanhados".
     já avisou), e as células cortadas continuam marcadas.
   - Desliga quando a aba desconecta, fecha, troca de banco (RN-ARVORE-007) ou de conexão (RN-ARVORE-008), ou vai para outra janela
     (RN-ABAS-002 e 003), quando o cofre bloqueia (RN-SEG-001) e quando a pessoa executa outro
-    comando na aba (outro texto, outro filtro, outra ordem). Também quando a sessão da aba cai (a
+    comando na aba (outro texto, outro filtro, outra ordem, outros valores das variáveis). Também quando a sessão da aba cai (a
     API já não a conhece, ao carregar mais, ao contar ou na própria execução automática), com a
     nota: a execução automática não abre sessão nova, porque nada reconecta sozinho
     (RN-SESSAO-004). Levar a aba para outra janela a suspende desde o começo da mudança, e a
@@ -3370,7 +3429,9 @@ nos dados que estão sendo acompanhados".
     inatividade (RN-SEG-001): com ela ligada, o Prism bloqueia no prazo, e o bloqueio a desliga.
   - Não é gravada com as abas (RN-ABAS-006): as abas voltam com ela desligada.
   - *Alterada a pedido do dono em 2026-10-20 (seção 39): entrou o intervalo de 1 s, o "Personalizado…" passou a aceitar de 1 a 3.600 segundos, o
-    "atualizando…" espera 300 ms, e o resultado à vista vale também para a aba e a janela do resultado.*
+    "atualizando…" espera 300 ms, e o resultado à vista vale também para a aba e a janela do resultado. Alterada a
+    pedido do dono em 2026-10-20 (seção 41): cada execução leva os mesmos parâmetros, e outros valores são outro
+    comando.*
 - **Fica para depois:** uma marca na faixa de abas para a aba com a atualização automática ligada.
 
 ## 30. Complemento de 2026-10-15, versão 0.4.0: a área de trabalho mais enxuta (issue #14)
@@ -3427,7 +3488,7 @@ para a entrega 2 (seção 13). Entra agora, com as regras do Prism para cada com
 RN-SQL-001, a seção 13 e o "fica para depois" da seção 22, que citam o script, e a RN-SEG-001 (o
 script parado na pergunta de erro não segura o bloqueio); a seção 9 diz o que o canvas não desenha.
 A API não muda: continua recebendo um comando por execução (a seção 33 acrescenta a ele o `keep`,
-RN-SQL-024, para as abas do script se editarem).
+RN-SQL-024, para as abas do script se editarem, e a seção 41, os `params` das variáveis, RN-VAR-032).
 
 - **RN-SQL-019.** Executar script.
   - Onde: Alt+X no editor e com o foco em qualquer ponto da aba de consulta (a barra, o resultado, o
@@ -3448,16 +3509,15 @@ RN-SQL-024, para as abas do script se editarem).
     do texto, como na RN-SQL-001: o que vem depois dele vai junto, e para executar um bloco e depois
     outros comandos a pessoa seleciona as partes. Trecho só com espaços, `;` ou comentários não é
     comando e não aparece. Um comando só também é script: roda, e aparece como um script de um comando.
-  - Como roda: um comando por vez, na ordem, na sessão da aba, pelo caminho de "Executar" (cada um é
-    um `POST …/queries`, com o texto como está, RN-SQL-003). Valem as regras de uma execução: com
-    alterações não salvas na grade, a pergunta da RN-EDIT-007 vem antes; a atualização automática
-    desliga (RN-GRADE-014); o filtro do resultado sai (RN-GRADE-011); a área de resultado recolhida
-    volta (RN-PAINEL-001). Com um comando em andamento na aba, ou com a aba sem conexão
-    (RN-SCRIPT-003), nada roda, como no Ctrl+Enter. Na conexão que confirma antes de executar
-    (RN-PROT-001), a pergunta vem uma vez, antes do primeiro comando, com a lista dos comandos que a
-    pedem, e cancelada nada roda; na conexão somente leitura (RN-PROT-002), o comando que não é uma
-    leitura é recusado pela API, e a recusa é o erro dele (RN-SQL-021). *Alterada a pedido do dono em
-    2026-10-15 (seção 32).*
+  - Como roda: um comando por vez, na ordem, na sessão da aba, pelo caminho de "Executar" (cada um é um `POST
+    …/queries`, com o texto como está, ou com os marcadores no lugar dos `@nome`, RN-SQL-003 e RN-VAR-017). Valem as
+    regras de uma execução: com alterações não salvas na grade, a pergunta da RN-EDIT-007 vem antes; a atualização
+    automática desliga (RN-GRADE-014); o filtro do resultado sai (RN-GRADE-011); a área de resultado recolhida volta
+    (RN-PAINEL-001). Com um comando em andamento na aba, ou com a aba sem conexão (RN-SCRIPT-003), nada roda, como no
+    Ctrl+Enter. Na conexão que confirma antes de executar (RN-PROT-001), a pergunta vem uma vez, antes do primeiro
+    comando, com a lista dos comandos que a pedem, e cancelada nada roda; na conexão somente leitura (RN-PROT-002), o
+    comando que não é uma leitura é recusado pela API, e a recusa é o erro dele (RN-SQL-021). *Alterada a pedido do dono
+    em 2026-10-15 (seção 32).*
   - Enquanto roda: o editor marca o comando em execução, com o acento do tema, até o seguinte começar,
     e traz o comando à vista quando ele está fora dela; a marca some no fim. Se o texto foi editado
     depois de o script começar, a marca não aparece, porque o lugar já não é o mesmo. A barra da área
@@ -3472,6 +3532,11 @@ RN-SQL-024, para as abas do script se editarem).
     chegar à aba de consulta, o script roda dentro da transação da aba, comando a comando, sem
     confirmar nada sozinho, e o controle de transação digitado vale como na RN-TX-004.
   - Não é gravado com as abas (RN-ABAS-006): elas voltam com o texto, sem os resultados do script.
+  - As variáveis (seção 41): o texto pode ter declarações (`let`, `const` e a reatribuição), que são itens do
+    script como os comandos e são avaliadas na vez delas. Antes do primeiro item, o Prism confere as declarações e
+    o `@nome` dos comandos (com um erro, nada roda), pergunta os valores que faltam e faz a pergunta da proteção,
+    com as consultas das variáveis na lista (RN-VAR-012, 019 e 021). Cada comando com `@nome` vai com os valores
+    como parâmetros (RN-VAR-017). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
 - **RN-SQL-020.** Os resultados do script, como as abas de resultado e as estatísticas do DBeaver.
   - A área de resultado ganha abas no lugar do título "Resultado": uma para cada comando que devolveu
     linhas, com o número dele no script e o começo do texto ("3 · SELECT * FROM pedido…", com o texto
@@ -3538,8 +3603,14 @@ RN-SQL-024, para as abas do script se editarem).
     consulta-1.sql: 4 de 12 comandos executados." (atenção). O nome é o da aba no fim do script (ela
     pode ter sido renomeada, ou salva como script, enquanto ele rodava). O aviso de valores cortados
     (RN-AVISO-003) sai uma vez por script, e o de sessão reaberta, como sempre.
-  - *Alterada a pedido do dono em 2026-10-16 (seção 33): as abas dos outros comandos, que eram só
-    para leitura e sem o menu da grade, passaram a se editar (RN-SQL-023 e 024).*
+  - Com as variáveis (seção 41): as declarações entram na numeração, na barra e nas Estatísticas, que separam os
+    totais em "Comandos executados" e "Declarações avaliadas" (RN-VAR-022); a área ganha a aba "Variáveis", logo
+    antes das Estatísticas (RN-VAR-024); o resultado e a linha das Estatísticas de um comando com variáveis têm o
+    "SQL enviado" (RN-VAR-018); e "Executar este comando" executa o comando com os mesmos valores com que ele
+    rodou, sem avaliar as declarações de novo (RN-VAR-033).
+  - *Alterada a pedido do dono em 2026-10-16 (seção 33): as abas dos outros comandos, que eram só para leitura e sem o
+    menu da grade, passaram a se editar (RN-SQL-023 e 024). Alterada a pedido do dono em 2026-10-20 (seção 41): entraram
+    as declarações, o painel Variáveis e o "SQL enviado".*
 - **RN-SQL-021.** Erro num comando do script, como o diálogo de erro do DBeaver.
   - O script para, e um diálogo mostra o comando (o número e o texto) e o erro como veio (RN-SQL-009),
     com o SQLSTATE, e pergunta: "Parar" (o padrão, com o foco, e também o Esc), "Tentar de novo"
@@ -3555,16 +3626,16 @@ RN-SQL-024, para as abas do script se editarem).
     (RN-ABAS-012), e o diálogo aparece quando a
     pessoa vai até ela. Assim dois scripts parados em abas diferentes nunca abrem dois diálogos.
     *Alterada a pedido do dono em 2026-10-20 (seção 39): entraram a aba e a janela do resultado.*
-  - É erro do comando o que o banco respondeu (`SQL_EXECUTION_FAILED`) e a recusa da API para aquele
-    comando (`TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`,
-    `MULTIPLE_STATEMENTS_NOT_SUPPORTED` e, na conexão somente leitura, `CONNECTION_READ_ONLY`,
-    RN-PROT-002). O que não é do comando (a conexão que não abre, a sessão
-    ocupada, a API fora do ar ou com erro interno, a sessão que caiu) para o script sem perguntar: o
-    aviso central diz o que houve (RN-AVISO-004), o comando fica como "erro" e os seguintes, como "não
-    executado". A sessão que cai no primeiro comando é reaberta uma vez, como no Ctrl+Enter (seção 7);
-    a que cai depois dele não é, porque o que os comandos de antes deixaram nela (uma tabela
-    temporária, um `SET`) se perdeu: as Estatísticas dizem isso, e a pessoa executa o script de novo.
-    *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a recusa do somente leitura.*
+  - É erro do comando o que o banco respondeu (`SQL_EXECUTION_FAILED`) e a recusa da API para aquele comando
+    (`TRANSACTION_CONTROL_NOT_SUPPORTED`, `COMMAND_NOT_ALLOWED_IN_TRANSACTION`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, na
+    conexão somente leitura, `CONNECTION_READ_ONLY`, RN-PROT-002, e, no comando com variáveis,
+    `QUERY_PARAMETERS_MISMATCH` e o `QUERY_INVALID` dos `params`, seção 41). O que não é do comando (a conexão que não
+    abre, a sessão ocupada, a API fora do ar ou com erro interno, a sessão que caiu) para o script sem perguntar: o
+    aviso central diz o que houve (RN-AVISO-004), o comando fica como "erro" e os seguintes, como "não executado". A
+    sessão que cai no primeiro comando é reaberta uma vez, como no Ctrl+Enter (seção 7); a que cai depois dele não é,
+    porque o que os comandos de antes deixaram nela (uma tabela temporária, um `SET`) se perdeu: as Estatísticas dizem
+    isso, e a pessoa executa o script de novo. *Alterada a pedido do dono em 2026-10-15 (seção 32): entrou a recusa do
+    somente leitura.*
   - O editor marca a posição do erro, quando o banco a dá, no texto inteiro: no lugar do comando
     dentro do texto do editor, como faz com o comando do Ctrl+Enter (RN-SQL-009). Se o texto foi
     editado depois de o script começar, a marca não aparece.
@@ -3573,6 +3644,11 @@ RN-SQL-024, para as abas do script se editarem).
   - Enquanto o diálogo espera a resposta, o script não é comando em andamento para o bloqueio por
     inatividade (RN-SEG-001): passado o prazo, o Prism bloqueia, e o bloqueio para o script e tira os
     resultados dele, como tira o resultado de um comando.
+  - O erro numa declaração de variável (seção 41) só tem "Parar" e "Tentar de novo": "Pular" e "Pular todos os
+    erros" ficam desabilitados, com o motivo, porque sem o valor os comandos que a usam não rodam, e o "Pular
+    todos os erros" escolhido antes não a pula (RN-VAR-022). O erro que a conferência acha antes de executar
+    (RN-VAR-012) não abre o diálogo: nada roda. O diálogo tem "Ver o SQL enviado" no comando com variáveis
+    (RN-VAR-018). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
 - **RN-SQL-022.** Cancelar o script: "Cancelar", na barra do editor, interrompe o comando em andamento
   (RN-SQL-010) e para o script. O comando cancelado fica como "cancelado"; o que terminou antes de o
   cancelamento chegar fica como "ok", e o script para mesmo assim; com o desfecho incerto ou parcial
@@ -3629,6 +3705,11 @@ diz, de cada conexão e de cada pasta, as proteções que valem e de onde elas v
       com a lista dos comandos que pedem confirmação (cada um com o número dele no script; em "Todos
       os comandos", todos) e "Executar script" no lugar de "Executar mesmo assim". Confirmado, o
       script roda sem perguntar de novo; cancelado, nada roda;
+    - o "Executar com valores…" (RN-VAR-026), como o Executar script. As consultas das variáveis e as leituras do
+      `random.of` (seção 41) entram na lista dos comandos em "Todos os comandos"; em "Só comandos irreversíveis", o
+      comando que usa uma variável `sql` pede confirmação, na dúvida, porque o texto que entra pode tirar o `WHERE`
+      (RN-VAR-019); e o aviso mostra o comando com os valores que já se sabem (RN-VAR-018). *Alterada a pedido do dono
+      em 2026-10-20 (seção 41).*
     - o "Salvar" das edições (RN-EDIT-005): em "Todos os comandos" pergunta uma vez por "Salvar",
       com quantas alterações vão e o "Ver SQL" (RN-EDIT-008) no próprio aviso; em "Só comandos
       irreversíveis" não pergunta, porque cada comando dele é pela chave da linha, com `WHERE`. Com uma alteração
@@ -4259,8 +4340,8 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     precisa de cada resultado que a tela pede para guardar, pelo `resultID` dele: as colunas (o nome, o
     tipo e, no PostgreSQL, a origem, RN-EDIT-003, que o "Salvar" e a conversão da RN-EDIT-006 usam), a
     leitura do texto do comando (Db2 e Informix), o alvo da edição, quando já foi perguntado
-    (RN-EDIT-010), e o texto do comando como foi executado, com o filtro, que a coluna inteira executa de
-    novo dentro do `UPDATE` (RN-EDIT-020 e 023). Nunca as linhas, nem cursor, nem os valores completos das células cortadas: os
+    (RN-EDIT-010), e o texto do comando como foi executado, com o filtro e os parâmetros (RN-VAR-033), que a coluna
+    inteira executa de novo dentro do `UPDATE` (RN-EDIT-020 e 023). Nunca as linhas, nem cursor, nem os valores completos das células cortadas: os
     256 MB da RN-SQL-017 continuam só do resultado atual, e a rota das células responde 404
     `RESULT_NOT_FOUND` para um guardado. O que fica é pouco (não tem linhas) e morre com a sessão:
     ao fechar, ao cair e no bloqueio do cofre.
@@ -4321,6 +4402,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     iria se outra sessão a tivesse recriado (RN-EDIT-011).
   - *Alterada a pedido do dono em 2026-10-19 (seção 38): a sessão guarda também o texto do comando de cada resultado,
     e a rota da contagem da coluna inteira (`edits/count`) segue as mesmas recusas.*
+  - *Alterada a pedido do dono em 2026-10-20 (seção 41): o texto guardado leva os parâmetros das variáveis.*
 
 ### Pastas de scripts
 
@@ -5340,7 +5422,8 @@ e 13. O canvas não desenha nada disto (seção 9).
   - **O resultado da aba de consulta, e cada aba de resultado do script**: o comando que gerou aquele resultado,
     como foi executado, com o filtro do resultado quando há (RN-GRADE-011, que a API junta ao comando como no
     `queries`), executado de novo do começo. Na aba do script, é o comando daquele resultado (RN-SQL-020), e não
-    o texto do editor.
+    o texto do editor. O comando com variáveis vai como foi enviado, com os marcadores, e com os mesmos parâmetros
+    (`source.params`, RN-VAR-033); na cópia para outro banco (RN-IMPORT-022) também. *Alterada a pedido do dono em 2026-10-20 (seção 41).*
   - **Só leitura.** Exportar executa o comando de novo, e por isso só se exporta o comando que é uma leitura pela
     regra do somente leitura (RN-PROT-005), em qualquer conexão, somente leitura ou não, e que não gravou: o
     resultado que veio pelo caminho da RN-SQL-013 não se exporta. A página do resultado já diz isso (`read`,
@@ -5787,7 +5870,8 @@ e 13. O canvas não desenha nada disto (seção 9).
 - **RN-EXPORT-015.** Confirmação, e o "Exportar".
   - Um resumo, em linhas de rótulo e valor:
     - "Origem": "Todas as linhas de estoque.pedido"; "estoque.pedido, com o filtro e a ordem da aba", com o texto
-      deles; ou "Resultado de consulta-1.sql", com o começo do comando (o texto inteiro na dica);
+      deles; ou "Resultado de consulta-1.sql", com o começo do comando (o texto inteiro na dica); no comando com
+      variáveis, o texto com os valores no lugar, como no "SQL enviado" (RN-VAR-018), e o botão "Ver o SQL enviado";
     - "Conexão": a etiqueta do banco, o nome da conexão e o banco de dados, com o ambiente e o cadeado;
     - "Colunas": "Todas as 15 colunas" ou "12 de 15 colunas", com os nomes na dica; e "Conta as linhas antes" ou
       "Sem contar as linhas";
@@ -5811,7 +5895,7 @@ e 13. O canvas não desenha nada disto (seção 9).
     "Exportando…" ("Copiando…") e fica desabilitado, e o diálogo não fecha:
     1. sem a área de transferência, o processo principal abre o diálogo de salvar do sistema com o nome que
        sairia (RN-EXPORT-019); desistir dele deixa o assistente como estava, com o botão de volta;
-    2. a tela confere o tamanho do corpo (até 8 MiB, as notas das rotas) e pede o começo à API (`POST
+    2. a tela confere o tamanho do corpo (até 16 MiB, as notas das rotas) e pede o começo à API (`POST
        api/user/transfers/exports`);
     3. aceito o pedido (202), o assistente fecha, e a exportação aparece na barra de status (RN-EXPORT-021).
        Não há aviso de começo.
@@ -5827,11 +5911,13 @@ e 13. O canvas não desenha nada disto (seção 9).
       gravado. Preencha-o em Editar conexão e exporte de novo.", e no campo `password` "Esta conexão não tem
       senha gravada. Preencha-a em Editar conexão e exporte de novo.". A tela mostra essa recusa no alto da
       Confirmação, sem abrir o "Editar conexão" por cima do assistente: é a exceção à RN-TRANSF-016;
-    - o corpo do pedido acima de 8 MiB, que a tela confere antes de mandar e não manda: "O pedido passa de 8 MiB,
-      por causa do comando e dos nomes das colunas. Deixe colunas de fora na Extração.".
+    - o corpo do pedido acima de 16 MiB, que a tela confere antes de mandar e não manda: "O pedido passa de 16
+      MiB, por causa do comando, dos valores das variáveis e dos nomes das colunas. Deixe colunas de fora na Extração
+      ou use menos valores no comando.".
     - O 401 `VAULT_LOCKED` leva à entrada, como sempre.
   - *Alterada a pedido do dono em 2026-10-16 (seção 36): o limite é de todas as transferências, e a recusa diz
-    isso.*
+    isso. Alterada a pedido do dono em 2026-10-20 (seção 41): o corpo vai a 16 MiB, e a Origem do comando com
+    variáveis mostra os valores.*
 
 ### O trabalho na API
 
@@ -5841,14 +5927,14 @@ e 13. O canvas não desenha nada disto (seção 9).
     um é o fim dele (RN-EXPORT-017). Antes do 202 vêm, nesta ordem, e sem tocar no banco:
     1. a forma do pedido e as faixas que não dependem do banco (422 `EXPORT_OPTIONS_INVALID`, no campo), com o
        comando vazio ou de mais de 1 MB em UTF-8, o teto do SQL de um script (RN-SCRIPT-004), no campo
-       `source.sql`;
+       `source.sql`, e os `source.params` fora da forma da RN-VAR-032, no campo deles (seção 41);
     2. a conexão (404 `CONNECTION_NOT_FOUND`), o banco de dados pedido (422 `DATABASE_NAME_INVALID`), o usuário e
        a senha (422 `CONNECTION_CREDENTIALS_MISSING`) e o driver (422 `DRIVER_NOT_INSTALLED`), como na abertura
        de uma sessão. É a conexão que diz o banco (PostgreSQL, Db2 ou Informix), de que o passo seguinte depende;
     3. o que depende do banco da conexão: o comando, com mais de um comando 422
        `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, o filtro 422 `FILTER_INVALID` e a leitura 422
        `EXPORT_SOURCE_NOT_READ` (as três pela divisão e pela classificação do dialeto daquele banco,
-       RN-PROT-005); e as opções que mudam por banco (`rowsPerStatement` acima de 1 no Informix,
+       RN-PROT-005), e os marcadores contra os `source.params` (422 `QUERY_PARAMETERS_MISMATCH`, seção 41); e as opções que mudam por banco (`rowsPerStatement` acima de 1 no Informix,
        `EXPORT_OPTIONS_INVALID`);
     4. o limite (409 `TRANSFER_LIMIT_REACHED`).
   - O registro dos trabalhos é um só na API (`Singleton`, como o das sessões, decisão 3 da seção 8), e roda até
@@ -5906,7 +5992,8 @@ e 13. O canvas não desenha nada disto (seção 9).
     arquivo nem um caminho (RN-LOG-001). Os pedidos que levam o comando escrevem só o nome do tipo no
     `ToString()`.
   - *Alterada a pedido do dono em 2026-10-16 (seção 36): o registro e o limite são também das importações e das
-    cópias, e o número da janela passou a se chamar `windowID`, na forma dos identificadores da API.*
+    cópias, e o número da janela passou a se chamar `windowID`, na forma dos identificadores da API. Alterada a
+    pedido do dono em 2026-10-20 (seção 41): entraram os `source.params`.*
 
 - **RN-EXPORT-017.** A leitura.
   - O trabalho conecta com a conexão gravada (RN-EXPORT-002), com o prazo de espera de trava da conexão à parte
@@ -6314,9 +6401,10 @@ Notas:
   (`options.rowsPerStatement`, `columns`, `output.entryName`). `CONNECTION_CREDENTIALS_MISSING` vem na mesma
   forma, no campo `userName` ou `password`, como na abertura de uma sessão (RN-TRANSF-016), embora o pedido não
   tenha esses campos: é o campo que diz à tela qual falta (RN-EXPORT-015).
-- O `POST` aceita um corpo de até 8 MiB (`RequestSizeLimit`), por causa do comando e dos nomes das colunas (1 MB
-  de comando com caracteres de controle escapados como `\u00XX` já passa de 6 MB). A tela confere o tamanho do
-  corpo antes de mandar e não manda o que passa de 8 MiB (RN-EXPORT-015): acima disso a API responde 500 hoje,
+- O `POST` aceita um corpo de até 16 MiB (`RequestSizeLimit`), por causa do comando, dos valores dos parâmetros
+  (até 4 MiB, seção 41) e dos nomes das colunas (1 MB de comando com caracteres de controle escapados como
+  `\u00XX` já passa de 6 MB). A tela confere o tamanho do corpo antes de mandar e não manda o que passa de 16 MiB
+  (RN-EXPORT-015; era 8 MiB antes da seção 41): acima disso a API responde 500 hoje,
   e não 413 (o defeito conhecido de toda rota que lê corpo, seção 34). Todas exigem o cofre aberto (401
   `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais).
 
@@ -7051,7 +7139,7 @@ desenha nada disto (seção 9).
        "estoque"."pedido"` (com o esvaziamento) e `INSERT INTO "estoque"."pedido" ("id", "cliente") VALUES (…)`, com
        as colunas mapeadas; por que o aviso aparece; e "Importar mesmo assim" e "Cancelar", com o foco. Cancelar volta
        à Confirmação como estava;
-    2. a tela confere o tamanho do corpo (até 8 MiB, como o da exportação) e pede o começo à API (`POST
+    2. a tela confere o tamanho do corpo (até 16 MiB, como o da exportação) e pede o começo à API (`POST
        api/user/transfers/imports`);
     3. aceito o pedido (202), o assistente fecha, sem soltar o arquivo, que agora é do trabalho (RN-IMPORT-017), e a
        importação aparece na barra de status (RN-IMPORT-019). Não há aviso de começo.
@@ -7061,6 +7149,7 @@ desenha nada disto (seção 9).
     "importe de novo" no lugar de "exporte de novo"). O arquivo que sumiu (`IMPORT_FILE_MISSING`, a API que reiniciou)
     leva de volta ao Arquivo: "O arquivo escolhido não está mais com o Prism. Escolha o arquivo de novo." O 401
     `VAULT_LOCKED` leva à entrada, como sempre.
+  - *Alterada a pedido do dono em 2026-10-20 (seção 41): o corpo vai a 16 MiB, como o da exportação.*
 
 ### O trabalho na API
 
@@ -7765,8 +7854,8 @@ Notas:
   vêm na forma do erro de campo (`errors` e `errorCodes`), com o caminho do campo;
   `CONNECTION_CREDENTIALS_MISSING`, também, no campo `userName` ou `password` na importação, e `source.userName`,
   `source.password`, `target.userName` ou `target.password` na cópia.
-- Os `POST` aceitam um corpo de até 8 MiB (`RequestSizeLimit`), como o da exportação, e a tela confere antes de
-  mandar. Todas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais).
+- Os `POST` aceitam um corpo de até 16 MiB (`RequestSizeLimit`), como o da exportação (era 8 MiB antes da seção
+  41, que trouxe os `source.params` da cópia), e a tela confere antes de mandar. Todas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais).
 
 Os canais novos entre a tela e o processo principal, todos pedidos (`ipcRenderer.invoke`), no grupo `transfers` da
 ponte:
@@ -8741,7 +8830,9 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
     lidas. O comando é o texto que a API executou para aquele resultado, com o filtro do resultado já junto
     (RN-GRADE-011), que ela guarda com ele (RN-SQL-024), sem o que o leitor do comando (RN-PROT-005) acha depois do
     fim dele: o `;` do fim, os comentários e os espaços depois dele; abaixo ele é `<Q>`. A tela não manda o comando
-    de volta: ele é sempre o que deu as linhas e as posições da chave.
+    de volta: ele é sempre o que deu as linhas e as posições da chave. O comando com variáveis (seção 41) leva os
+    marcadores e os valores dele: o `<Q>` os tem, e a API os numera de novo em cada forma, depois dos do `SET`, e
+    tira os que a forma direta deixa de fora (RN-VAR-033). *Alterada a pedido do dono em 2026-10-20 (seção 41): entraram os parâmetros do `<Q>`.*
   - O `<Q>` é executado de novo pela contagem da pergunta, pela do "Salvar", dentro do `UPDATE` e pela leitura de
     novo depois dele (RN-EDIT-022): até quatro vezes. Uma função chamada pelo comando roda a cada vez; a gravação que
     a RN-PROT-005 reconhece faz o comando não ser uma leitura, e a coluna inteira não vale (RN-EDIT-018).
@@ -9421,6 +9512,8 @@ RN-SQL-021, a RN-VERSAO-002 e as seções 9 e 24. A API ganha só o campo `resul
       Enter, fecha com Esc e com o clique fora, e devolve o foco ao botão.
     - O botão tem `aria-haspopup="menu"` e `aria-expanded`, e o nome e a dica dizem o lugar de agora: "Onde mostrar o
       resultado: no painel", "… numa aba", "… numa janela".
+    - Não aparece na aba de execução (RN-VAR-029), que já é só o resultado. *Alterada a pedido do dono em
+      2026-10-20 (seção 41).*
   - No menu da aba da consulta (RN-ABAS-002 e 003), depois dos itens de mover, o submenu "Onde mostrar o resultado",
     com os mesmos três itens. No menu da aba do resultado, o mesmo submenu (RN-ABAS-012).
   - Arrastar a aba do resultado para fora de uma faixa a leva para "Numa janela" (RN-ABAS-010). Na janela do
@@ -9494,6 +9587,8 @@ RN-SQL-021, a RN-VERSAO-002 e as seções 9 e 24. A API ganha só o campo `resul
   - O resultado "à vista", de que depende a atualização automática (RN-GRADE-014):
     - no painel, a aba da consulta ativa, com a área de trabalho na tela, como antes;
     - numa aba, a aba do resultado ativa, com a área de trabalho na tela;
+    - na aba de execução (RN-VAR-029), ela ativa, com a área de trabalho na tela (*alterada a pedido do dono em
+      2026-10-20, seção 41*);
     - numa janela, a janela do resultado aberta e não minimizada, como o processo principal a informa (`isMinimized()`,
       pelo `prism:result-window-state`, RN-ABAS-017), qualquer que seja a aba ativa e a tela da janela da aba. Coberta
       por outra janela, ela continua à vista e atualizando: a visibilidade do documento dela não conta, porque o
@@ -10538,3 +10633,1640 @@ E a regra nova de Configurações:
   em vez de criar uma "(cópia)" ou deixá-la de fora pelo conflito de nome.
 - Os PostgreSQL de outros fornecedores (Greenplum, Timescale, EDB, CockroachDB), o Db2 for z/OS e o Db2 for IBM i.
 - Uma proteção que pergunte só antes de salvar as edições da grade, para o "Confirmar alteração de dados" do DBeaver.
+
+## 41. Complemento de 2026-10-20, versão 0.5.0: variáveis nos scripts, com a sintaxe do JavaScript
+
+Pedido do dono em 2026-10-20: "Adicione também a possibilidade de declarar variáveis temporárias em scripts SQL,
+seguindo um esquema parecido com o do dbeaver, mas muito melhor e mais fácil … Para declarar variáveis, o usuário deve
+escrever utilizando a sintaxe de java script, por exemplo: `let variável_1 = 10` ou `const variável_2 = 3`. O usuário
+poderá também criar variáveis do tipo let utilizando resultados de queries. Encontre uma forma boa de mostrar ao
+usuário o que uma variável possui de valores e integre junto a execução de scripts de SQL para que ele possa executar
+tudo junto de uma vez (que vai ser o padrão para o caso de variáveis locais). Queria também ter a possibilidade de
+atribuir variáveis de forma dinâmica … O usuário define as variáveis no topo do arquivo de script sql e criar uma nova
+opção do botão direito sobre o arquivo de script que tem variáveis, tipo "Executar com variáveis" (pense em um nome
+melhor). Dai abre um modal com as variáveis declaradas no topo daquele script e ele pode escrever o que ele deseja e
+executar sem precisar abrir o script, fazendo com que os resultados sejam exibidos em uma tab única (não sei se exibir
+o resultado dessa forma é boa, talvez pense em algo melhor). … talvez haja a necessidade de tipar as variáveis …
+seguindo a mesma tipagem de java script também. Seria bom também poder ter uns random pra complementar execuções de SQL
+dinâmicas e também alguma forma de ver se a tabela tem FK e a variável x aponta para aquela FK, dai restringir os
+possíveis valores apenas para os valores daquela FK … essa feature é gigante, pesquise, veja se isso já existe em algum
+outro visualizador de banco de dados, faça muitos testes, se ficar do jeito que eu penso, vai ficar incrível." Na mesma
+conversa, o jeito de usar no SQL: "pra utilizar as variáveis em selects, etc... utilizar @nome_variável, por exemplo,
+where id = @nome_variável".
+
+O que os outros fazem, pela pesquisa de 2026-10-20 (a documentação de cada um e os relatos de defeito deles):
+
+- O DBeaver tem `@set nome = valor` e as referências `${nome}` e `:nome`, o diálogo "Bind parameter(s)" a cada
+  execução e o painel de variáveis. A documentação diz que `${nome}` é colado no texto: a pessoa escreve as aspas
+  (`WHERE nome = '${nome}'`). Os relatos de defeito dele são, quase todos, de marcador achado onde não devia: o `::`
+  do PostgreSQL, a fatia `[:x]` de uma lista, o `$$`, o `?` dentro de um comentário.
+- O DataGrip acha os parâmetros por expressões regulares configuráveis e os cola no texto. O DbVisualizer é o mais
+  perto do que o dono pede: `${nome||padrão||tipo||opções}$`, com tipos, uma lista de escolhas, os valores usados da
+  última vez e a prévia do SQL final; com tipo, o valor vai ao banco como parâmetro. O SQL\*Plus e o SQL Developer
+  têm `&nome` e `DEFINE`, colados no texto, e `:nome`, de verdade parâmetro. O modo SQLCMD do SSMS tem `:setvar` e
+  `$(nome)`, colado, e desliga o autocompletar do editor. O `psql` tem `\set`, `\gset` (a linha de uma consulta vira
+  variáveis) e a regra de deixar como está o nome que não foi definido.
+- O Metabase liga uma variável a uma coluna ("field filter") e mostra os valores dela numa lista; o Redash e o
+  Grafana enchem uma lista com uma consulta. Nenhum deles acha sozinho, pelo SQL, que a variável é comparada com uma
+  chave estrangeira: isso é do Prism.
+- O pgAdmin não tem parâmetros no Query Tool (só as macros); o HeidiSQL liga os marcadores (`:p`) por aba, sem
+  variáveis; o Beekeeper e o TablePlus pedem os valores dos marcadores (`:nome`, `$1`, `?`), sem tipo nem lista; e o
+  Toad segue o SQL\*Plus (`&nome`, que pergunta até dentro de um comentário) e aceita `:v`.
+
+O que o Prism faz melhor: a declaração é JavaScript, que a pessoa já sabe escrever, com tipos e erros antes de
+executar; o valor vai sempre ao banco como parâmetro, e só o tipo `sql`, marcado como inseguro, entra no texto; só
+vira variável o `@nome` declarado no script, lido pelo mesmo leitor do SQL que já sabe onde estão os textos, os
+comentários e os nomes entre aspas (RN-SQL-002), e por isso nada que é SQL vira variável sem querer; os valores ficam
+à vista no painel, no editor e no fim da linha; o diálogo lembra os valores de cada script; e a escolha de um valor
+que existe na tabela que a chave estrangeira aponta vem do próprio SQL do script.
+
+O que já existia: a divisão do script em comandos (`sql-statements`, RN-SQL-002 e 018), o Executar script (Alt+X,
+RN-SQL-019 a 022), os scripts salvos e as pastas deles (seções 23 e 33), o catálogo com as chaves estrangeiras
+(RN-TABELA-003 e 007), os literais de cada banco (RN-EXPORT-011), a área de resultado no painel, numa aba ou numa
+janela (seção 39) e a API que guarda o comando de cada resultado e o executa de novo (a contagem, RN-SQL-006; a
+exportação e a cópia, seções 35 e 36; o F5, o filtro e a atualização automática, RN-GRADE-011, 012 e 014; a coluna
+inteira, RN-EDIT-020). Os comandos do usuário iam ao banco sem parâmetro nenhum: só o catálogo, a edição e a coluna
+inteira usavam `$1` e `?`.
+
+A versão: é funcionalidade nova, e entra na 0.5.0, com as seções 39 e 40 (RN-VERSAO-002). A linguagem das variáveis
+passa a ser contrato: o script que uma versão executa, a seguinte executa igual. O cofre ganha um campo opcional no
+script (os valores lembrados, RN-VAR-028), sem subir o formato.
+
+Esta seção:
+
+- define a linguagem das declarações, um pedaço do JavaScript com as anotações de tipo do TypeScript, lida e avaliada
+  pela própria tela, sem `eval`: onde ela vale, a gramática, os nomes, os tipos, os números, os textos, as datas, os
+  operadores, as funções que existem, o `random`, a variável de consulta, a ordem e os erros, os limites e a
+  segurança (RN-VAR-001 a 014);
+- diz como o `@nome` é achado no SQL e vai ao banco como parâmetro de cada banco, e o "SQL enviado" (RN-VAR-015 a
+  018);
+- junta as declarações ao Executar script e ao Ctrl+Enter, com a pergunta dos valores que faltam, as Estatísticas e
+  o erro numa declaração (RN-VAR-019 a 023);
+- mostra os valores no painel "Variáveis" e no editor (RN-VAR-024 e 025);
+- cria o "Executar com valores…", com o diálogo, os valores lembrados e a aba de execução (RN-VAR-026 a 029);
+- restringe os valores pela chave estrangeira que o SQL do script compara com a variável (RN-VAR-030 e 031);
+- e leva os parâmetros à API, a tudo o que ela executa de novo, e às rotas novas da consulta da variável e dos
+  valores de uma coluna (RN-VAR-032 a 036).
+
+As regras são uma família nova, RN-VAR-\*. Muda a RN-SQL-001, 002, 003, 006, 009, 018, 019, 020, 021 e 024, a
+RN-GRADE-011, 012 e 014, a RN-EDIT-020, a RN-EXPORT-002, 015 e 016, a RN-IMPORT-013, a RN-PROT-001, a RN-CONFIG-004,
+a RN-SCRIPT-003, a RN-ABAS-006, 014 e 015, a RN-SESSAO-001, a RN-SEG-001, a RN-LOG-001, a RN-VERSAO-002 e as seções 6,
+9, 23, 31, 35 e 36. O canvas não desenha
+nada disto (seção 9).
+
+### A linguagem
+
+Um exemplo do que a pessoa escreve, que as regras abaixo descrevem:
+
+```
+// Pedidos de um cliente num período
+let cliente_id: estoque.pedido.cliente_id      -- o cliente (sem valor: é perguntado)
+const inicio = date.addDays(date.today(), -30)
+const status = ['aberto', 'faturado']
+let total = (SELECT count(*) FROM estoque.pedido WHERE cliente_id = @cliente_id)
+
+SELECT p.id, p.criado, p.valor
+  FROM estoque.pedido p
+ WHERE p.cliente_id = @cliente_id
+   AND p.criado >= @inicio
+   AND p.status IN (@status);
+```
+
+- **RN-VAR-001.** Onde as declarações valem.
+  - Uma declaração começa por `let` ou `const`, em minúsculas, como no JavaScript, seguido de um espaço e de um nome
+    (RN-VAR-003). `LET`, `Let` e `CONST` não declaram nada: são SQL, e vão ao banco como estão (o editor avisa,
+    RN-VAR-025). Uma reatribuição é `nome = valor`, de um `let` declarado antes no texto.
+  - Só vale nas posições de comando do topo do script: no começo do texto, depois de um `;` que termina um comando,
+    depois da linha em branco que separa os comandos (RN-SQL-018) e logo depois de outra declaração. Fora delas o
+    texto é SQL. Dentro de um bloco com `;` no corpo (rotina, gatilho, bloco composto: os da RN-SQL-001), de um
+    `$tag$ ... $tag$`, de um texto, de um comentário ou de um nome entre aspas, `let` é SQL: o `LET` do SPL do
+    Informix dentro de `CREATE PROCEDURE` e de `CREATE FUNCTION` continua sendo SQL, em qualquer caixa. No Db2, o
+    bloco vai até o fim do texto (RN-SQL-001): uma declaração depois de um `CREATE PROCEDURE` já está dentro dele.
+  - Uma linha que começa por `let` ou `const` em minúsculas, seguido de um nome e então de `=`, `:` ou do fim da
+    declaração, termina o comando SQL de cima, também sem `;` e sem linha em branco, e com "A linha em branco separa
+    os comandos" desligada: nenhum dos três bancos tem comando, cláusula ou expressão que comece assim. A
+    reatribuição (`nome = valor`) não termina o comando de cima, porque `SET`, no `UPDATE`, tem a mesma forma: ela só
+    vale depois de um `;`, de outra declaração ou de uma linha em branco que separa, nas condições da RN-SQL-018 (o
+    texto de cima fechado: os parênteses equilibrados, sem vírgula, operador nem palavra que pede continuação no fim).
+    Assim `UPDATE t SET a = 1,`, a linha em branco e `b = 2` continuam um comando só. Numa posição de item, `b = 2`
+    com `b` não declarada é o erro "b não foi declarada: escreva let b = 2.": nenhum comando dos três bancos começa
+    assim.
+  - O fim da declaração:
+    - o `;` fora dos textos, dos parênteses, dos colchetes e das chaves da declaração, que vai com ela;
+    - ou a quebra de linha fora deles, quando o que veio até ali já é uma declaração completa e a próxima linha (sem
+      os espaços e os comentários) não começa por um operador que continua a expressão (`+ - * / % ** && || ?? ===
+      !== < <= > >= ? : .` e `?.`). A próxima linha que começa por `(`, `[` ou `` ` `` não continua: termina a
+      declaração (no JavaScript ela continuaria, e esse é o defeito mais conhecido do ponto e vírgula opcional; aqui
+      o comum é a linha de baixo ser SQL);
+    - ou o fim do texto.
+
+    Assim `let a = 10`, a quebra de linha e `SELECT … @a` são uma declaração e um comando, com ou sem `;` e com ou
+    sem linha em branco. O que a declaração não completa (o parêntese aberto, o `=` sem valor, o operador no fim da
+    linha) continua na linha seguinte.
+  - Os comentários dentro da declaração são os do SQL e os do JavaScript: `--` e `//` até o fim da linha, e
+    `/* … */`, sem aninhar. Por isso `x--1` é `x` seguido de um comentário (não há `--` na linguagem; o editor avisa,
+    RN-VAR-025). O `{` do Informix, dentro da declaração, é o de um objeto (RN-VAR-002), e não um comentário.
+  - O `//`, que não é comentário em nenhum dos três bancos, só é comentário dentro das declarações, no topo do script
+    (antes do primeiro comando SQL) e nas linhas logo acima de uma declaração ou de uma reatribuição. Noutro lugar
+    ele é texto do SQL, e vai ao banco como está (o editor avisa, RN-VAR-025).
+  - Cada declaração e cada reatribuição é um item do script, como um comando: o Ctrl+Enter com o cursor nela a
+    avalia (RN-VAR-020), e o Executar script a avalia na vez dela (RN-VAR-019). Nada dela vai ao banco, a não ser a
+    consulta da variável (RN-VAR-011) e a leitura do `random.of` (RN-VAR-010).
+  - As variáveis são da aba: os valores ficam na memória da tela enquanto a aba está aberta (RN-VAR-023), e não vão
+    ao cofre nem às abas que voltam (RN-ABAS-006). O que fica no script salvo é o texto das declarações.
+  - O "topo do script" são as declarações que vêm antes do primeiro comando SQL, com comentários e linhas em branco
+    entre elas. São elas que o "Executar com valores…" mostra como campos (RN-VAR-027).
+
+- **RN-VAR-002.** A gramática. É a de um pedaço do JavaScript (ECMAScript 2024), com a anotação de tipo do
+  TypeScript; o que não está aqui não existe, e o analisador o recusa com a mensagem da RN-VAR-012. Na notação abaixo,
+  `{ x }` é repetição (zero ou mais), `[ x ]` é opcional, `|` é escolha, e o texto entre aspas é literal.
+
+  ```
+  item           = declaração | reatribuição ;
+  declaração     = ( "let" | "const" ) nome [ ":" tipo ] [ "=" valor ] [ ";" ] ;
+  reatribuição   = nome "=" valor [ ";" ] ;
+  valor          = consulta | amostra | expressão ;
+  consulta       = "(" leitura ")" ;                  (* RN-VAR-011 *)
+  leitura        = SQL que começa por SELECT, WITH ou VALUES, em qualquer caixa,
+                   lido pelo leitor do SQL do banco da aba até o ")" que fecha ;
+  amostra        = "random" "." "of" "(" coluna [ "," expressão ] ")" ;   (* RN-VAR-010 *)
+
+  tipo           = tipo-simples [ "|" "null" ] ;      (* o sql, sem lista nem "| null", RN-VAR-004 *)
+  tipo-simples   = tipo-base [ "[" "]" ] ;               (* a lista; lista de lista não existe *)
+  tipo-base      = "number" | "string" | "boolean" | "Date" | "sql" | coluna ;
+  coluna         = nome-sql "." nome-sql [ "." nome-sql ] ;   (* tabela.coluna ou esquema.tabela.coluna *)
+  nome-sql       = nome sem aspas, nas regras de nome do banco (RN-LINK-001), ou entre aspas duplas ;
+
+  expressão      = condicional ;
+  condicional    = curto-circuito [ "?" expressão ":" expressão ] ;
+  curto-circuito = ou | coalescência ;
+  coalescência   = igualdade "??" igualdade { "??" igualdade } ;
+  ou             = e { "||" e } ;
+  e              = igualdade { "&&" igualdade } ;
+  igualdade      = relação { ( "===" | "!==" ) relação } ;
+  relação        = soma { ( "<" | "<=" | ">" | ">=" ) soma } ;
+  soma           = produto { ( "+" | "-" ) produto } ;
+  produto        = potência { ( "*" | "/" | "%" ) potência } ;
+  potência       = pós-fixo "**" potência | unário ;   (* "**" associa à direita *)
+  unário         = ( "!" | "-" | "+" ) unário | pós-fixo ;
+  pós-fixo       = primário { "." nome | "?." nome | "[" expressão "]" | "?." "[" expressão "]" | argumentos } ;
+  argumentos     = "(" [ argumento { "," argumento } [ "," ] ] ")" ;
+  argumento      = [ "..." ] expressão ;
+  primário       = número | texto | modelo | "true" | "false" | "null" | nome
+                 | lista | objeto | "(" expressão ")" | "new" "Date" argumentos ;
+  lista          = "[" [ item-da-lista { "," item-da-lista } [ "," ] ] "]" ;
+  item-da-lista  = [ "..." ] expressão ;
+  objeto         = "{" [ par { "," par } [ "," ] ] "}" ;
+  par            = ( nome | texto-simples ) ":" expressão ;
+
+  número         = dígitos [ "." dígitos ] [ expoente ] | "." dígitos [ expoente ] ;
+  dígitos        = dígito { [ "_" ] dígito } ;
+  expoente       = ( "e" | "E" ) [ "+" | "-" ] dígitos ;
+  texto-simples  = "'" { caractere | escape } "'" | '"' { caractere | escape } '"' ;
+  texto          = texto-simples ;
+  modelo         = "`" { caractere | escape | "${" expressão "}" } "`" ;
+  escape         = "\" ( "n" | "r" | "t" | "b" | "f" | "v" | "0" | "\" | "'" | '"' | "`" | "$"
+                 | "x" hex hex | "u" hex hex hex hex | "u{" hex { hex } "}" | quebra-de-linha
+                 | outro caractere que não seja dígito, letra x nem u ) ;
+  nome           = início-de-nome { resto-de-nome } ;   (* RN-VAR-003 *)
+  comentário     = "--" … fim da linha | "//" … fim da linha | "/*" … "*/" ;
+  ```
+
+  - O que segue o JavaScript ao pé da letra: a precedência e a associatividade dos operadores; o `??` que não se
+    mistura com `&&` nem com `||` sem parênteses (`a ?? b || c` é erro, `a ?? (b || c)` não); o operador unário
+    antes de `**` (`-x ** 2` é erro, `(-x) ** 2` e `-(x ** 2)` não); a vírgula no fim das listas, dos objetos e dos
+    argumentos; os escapes dos textos, menos o octal antigo (`\1` a `\7`, `\08`), recusado; o texto entre aspas
+    simples ou duplas não tem quebra de linha crua (só pelo escape `\n`, ou pela quebra precedida de `\`, que some),
+    e o modelo, entre crases, tem.
+  - O que não existe, e é recusado com a mensagem da RN-VAR-012: `var`, `function`, a função de seta (`=>`),
+    `class`, `if`, `for`, `while`, `do`, `switch`, `return`, `try`, `throw`, `import`, `export`, `await`, `yield`,
+    `this`, `super`, `new` com qualquer coisa que não seja `Date`, `typeof`, `void`, `delete`, `in`, `instanceof`, os
+    operadores de bits (`& | ^ ~ << >> >>>`), `++` e `--`, a atribuição dentro da expressão e as compostas (`+=`…),
+    a atribuição a um campo ou a um item (`a.b = 1`, `a[0] = 1`), a vírgula como operador, o `==` e o `!=`
+    (RN-VAR-008), a expressão regular (`/a+/`), a chave calculada e a forma curta no objeto (`{ [k]: 1 }`, `{ a }`),
+    o método no objeto, o modelo com etiqueta (`` sql`…` ``), o `bigint` (`10n`), os números em hexadecimal, octal e
+    binário (`0x1F`, `0o7`, `0b1`) e o inteiro com zero à esquerda (`010`, que o JavaScript antigo lê como octal: "010
+    não existe: escreva 10."; `0` e `0.5` valem).
+  - As chamadas só existem para as funções e os métodos da lista fechada (RN-VAR-009), resolvidos quando o texto é
+    lido, e não quando é avaliado: `Math.max(1, 2)` e `nome.trim()` existem; `f()`, com `f` uma variável, não ("f
+    não é uma função: as funções são as da lista da RN-VAR-009.").
+  - A consulta e o `random.of` só podem ser o valor inteiro da declaração ou da reatribuição, com ou sem anotação:
+    `let n = (SELECT count(*) FROM t)` sim, `let n = (SELECT count(*) FROM t) + 1` não. A conta vai numa declaração
+    seguinte (`const m = n + 1`). Um parêntese que começa por `SELECT`, `WITH` ou `VALUES`, em qualquer outro lugar
+    da expressão, é o erro "Uma consulta só pode ser o valor inteiro da variável: let x = (SELECT …)"; e o
+    `random.of` noutro lugar, "random.of só pode ser o valor inteiro da variável: let x = random.of(pedido.id).".
+
+- **RN-VAR-003.** Os nomes.
+  - O nome começa por uma letra do Unicode (a propriedade `ID_Start`), `_` ou `$`, e continua com letras, dígitos e
+    marcas (`ID_Continue`), `_` e `$`, como no JavaScript: `variável_1`, `preçoMédio`, `$total` e `_x` são nomes. O
+    escape `\u` no nome, que o JavaScript aceita, é recusado ("Escapes \u não valem em nomes."), como os caracteres de
+    formato e de direção do texto (U+200B a U+200F, U+202A a U+202E, U+2066 a U+2069, U+FEFF), que mudariam o que se
+    vê sem mudar o nome.
+  - O nome tem até 64 caracteres. É comparado depois de normalizado em NFC, porque "variável" escrito com o acento
+    junto e com o acento à parte tem de ser a mesma variável, e diferencia maiúsculas, como no JavaScript: `Total` e
+    `total` são duas. No SQL vale o mesmo (RN-VAR-015).
+  - Não podem ser nome: as palavras reservadas do JavaScript (`break case catch class const continue debugger default
+    delete do else enum export extends false finally for function if import in instanceof let new null return super
+    switch this throw true try typeof var void while with yield await implements interface package private protected
+    public static`), `undefined`, `NaN`, `Infinity`, os nomes da lista fechada (`Math`, `random`, `date`, `Date`,
+    `Number`, `String`), os do ambiente (`window`, `globalThis`, `self`, `document`, `process`, `require`, `module`,
+    `eval`, `Function`, `Object`, `Array`, `JSON`, `Reflect`, `Proxy`, `Symbol`) e os nomes vedados (RN-VAR-014:
+    `constructor`, `prototype`, `__proto__` e os demais); `select` e `values`, em qualquer caixa, porque um parêntese
+    que começa por eles é uma consulta (RN-VAR-011); e o nome que começa e termina por `$` (`$a$`) ou que é `$`
+    seguido só de dígitos (`$1`), que o leitor do PostgreSQL leria como o começo de um `$a$ … $a$` ou como um
+    marcador. A frase diz o que fazer: "<nome> não pode ser nome de variável: escolha outro."; e, para os da lista
+    fechada, que o nome é do Prism ("date é um nome do Prism; escolha outro, por exemplo data ou dia.").
+  - A lista dos nomes que não podem ser nome faz parte do contrato da linguagem (RN-VERSAO-002): só cresce numa versão
+    que quebra o contrato. Uma função nova dentro de `Math`, `random` ou `date` não quebra, porque não é um nome.
+  - Um nome se declara uma vez no script ("<nome> já foi declarada na linha <n>."), e só se usa depois da declaração
+    dele no texto ("<nome> é usada antes de ser declarada, na linha <n>."), como o `let` do JavaScript. O script é um
+    escopo só.
+
+- **RN-VAR-004.** Os tipos.
+  - Os valores são de sete espécies, e só delas: `number`, `string`, `boolean`, `null`, `Date`, a lista e o objeto,
+    mais o `sql`, um texto que entra cru no comando. Nunca uma função, um `Symbol`, um `undefined`, nem um objeto do
+    JavaScript.
+  - **A inferência.** Sem anotação, o tipo é o do valor: `let n = 10` é `number`; `let s = 'a'` é `string`; `let ok =
+    true` é `boolean`; `let d = date.today()` é `Date`; `let ids = [1, 2]` é `number[]`; `let nada = null` é `null`, e
+    só guarda `null`. A lista vazia sem anotação (`let l = []`) é recusada: "Anote o tipo da lista vazia: let l:
+    number[] = []". A lista mistura tipos só com o `null` (`[1, null]` é `(number | null)[]`, mostrado `number[]` com
+    a marca de nulo); `[1, 'a']` é erro ("A lista mistura number e string."). O objeto é o de uma consulta ou um
+    objeto escrito (`{ id: 1, nome: 'Ana' }`), com o tipo de cada campo. A variável de consulta tem o tipo do que a
+    consulta devolve, e por isso o tipo dela só se sabe depois de executá-la (RN-VAR-011); até lá, o que depende dela
+    é conferido na execução.
+  - **A anotação.** `number`, `string`, `boolean`, `Date`, `sql`, a lista de um deles (`number[]`, `Date[]`), o `|
+    null` no fim (`number | null`, `string[] | null`) e o tipo de uma coluna (abaixo). O objeto não se anota ("Objetos
+    não se anotam: o tipo vem da consulta."). Com anotação, o valor tem de caber nela, antes de executar quando o valor
+    é conhecido e na execução quando vem de uma consulta ou do diálogo: "<nome> é <tipo>, mas recebeu <valor>." (por
+    exemplo, "cliente_id é number, mas recebeu 'abc'.").
+  - **O `null`.** Só cabe no tipo que diz `| null`, ou no tipo `null`: `let x: number = null` é erro, `let x: number |
+    null = null` não. A reatribuição muda o valor, nunca o tipo: com `let x = null`, `x = 5` é o erro "x é null: para
+    guardar outro valor, anote o tipo, como let x: number | null = null".
+  - **A declaração sem valor** (`let x: number`) é perguntada antes de executar (RN-VAR-021); só o `let` pode ficar
+    sem valor, e só com anotação ("const <nome> precisa de um valor: const <nome> = …" e "Anote o tipo de <nome>, que
+    não tem valor: let <nome>: number").
+  - **O tipo de uma coluna.** `tabela.coluna` ou `esquema.tabela.coluna`, com os nomes nas regras de cada banco (sem
+    aspas, a caixa que o banco dá ao nome; entre aspas duplas, como está), e a tabela sem esquema no esquema padrão da
+    sessão, como na RN-LINK-001: `let c: pedido.cliente_id`. O Prism lê a coluna no catálogo (RN-TABELA-003 e
+    RN-ARVORE-003, as consultas que a tela já faz: na execução, pela sessão da aba; nos diálogos, pela da árvore,
+    RN-VAR-027) e dá à variável o tipo dela, pelo quadro abaixo, com o `| null` quando a coluna aceita nulo. A lista
+    dela é `pedido.cliente_id[]`. Ele também restringe os valores do diálogo (RN-VAR-030). A coluna que não existe é o
+    erro "A coluna pedido.cliente_idx não existe." (com o esquema escrito, "A coluna estoque.pedido.cliente_idx não
+    existe."); a binária, "A coluna foto é binária, e variável não guarda binário.".
+
+    | Tipo da coluna | PostgreSQL | Db2 | Informix |
+    | --- | --- | --- | --- |
+    | `number` | `smallint`, `integer`, `bigint`, `numeric`, `decimal`, `real`, `double precision`, os `serial` | `SMALLINT`, `INTEGER`, `BIGINT`, `DECIMAL`, `NUMERIC`, `REAL`, `DOUBLE`, `DECFLOAT` | `SMALLINT`, `INTEGER`, `INT8`, `BIGINT`, `SERIAL`, `SERIAL8`, `BIGSERIAL`, `DECIMAL`, `MONEY`, `SMALLFLOAT`, `FLOAT` |
+    | `boolean` | `boolean` | `BOOLEAN` | `BOOLEAN` |
+    | `Date`, de dia | `date` | `DATE` | `DATE`, `DATETIME YEAR TO DAY` |
+    | `Date`, de instante | `timestamp`, `timestamptz` | `TIMESTAMP` | os outros `DATETIME YEAR TO …` |
+    | `string` | o resto: `text`, `varchar`, `char`, `uuid`, `json`, `jsonb`, `time`, `interval`, os enumerados… | o resto: `CHAR`, `VARCHAR`, `CLOB`, `GRAPHIC`, `XML`, `TIME`… | o resto: `CHAR`, `NCHAR`, `VARCHAR`, `LVARCHAR`, `TEXT`, `CLOB`, `DATETIME HOUR TO …`, `INTERVAL`… |
+    | recusada | `bytea`, as listas (`integer[]`) | `BLOB`, `BINARY`, `VARBINARY`, `FOR BIT DATA` | `BYTE`, `BLOB` |
+
+  - **O `sql`.** Um texto que entra no comando como está, sem aspas e sem parâmetro (RN-VAR-017): o nome de uma
+    tabela, um pedaço de `ORDER BY`. Só ele faz isso, e a tela o marca como inseguro em todo lugar onde ele aparece
+    (RN-VAR-024, 025 e 027). A variável `sql` tem de ser `const` ("A variável sql <nome> tem de ser const.") e não pode
+    vir, direta ou indiretamente, de uma consulta nem do `random.of` ("Um valor sql não pode vir de uma consulta."):
+    assim o texto final de cada comando se sabe antes de o script começar, para a confirmação da RN-PROT-001, e o
+    banco nunca escreve o SQL que o Prism executa. Tem até 10.000 caracteres, sem U+0000. O texto vira `sql` só pela
+    anotação: `const t: sql = 'pedido'`. O `sql` não tem lista nem `| null` ("O tipo sql não tem lista nem | null.").
+    O texto do valor, lido sozinho pelo leitor do SQL do banco da aba, não pode terminar dentro de um texto, de um
+    nome entre aspas, de um comentário (de linha ou de bloco) nem de um `$tag$`, e tem os parênteses equilibrados:
+    "O valor de filtro (sql) termina dentro de um comentário e engoliria o resto do comando.". As variáveis `sql` são
+    avaliadas antes do primeiro comando, na ordem do texto, com as atribuições que não dependem do banco (RN-VAR-012).
+  - **A conversão.** Não há conversão escondida (RN-VAR-008). `Number(texto)` e `String(valor)` convertem
+    (RN-VAR-009), e o diálogo converte o que a pessoa escreve para o tipo do campo (RN-VAR-027).
+
+- **RN-VAR-005.** Os números.
+  - O `number` é o do JavaScript, um número de ponto flutuante de 64 bits, com as contas dele: `0.1 + 0.2` dá
+    `0.30000000000000004`, como no JavaScript, e `Math.round(x * 100) / 100` arredonda a duas casas. O resultado que
+    não é um número de verdade (`NaN`, `Infinity`: a divisão por zero, a raiz de negativo) é erro: "A conta deu um
+    número que não existe (divisão por zero?)."
+  - O número que veio do banco (a consulta, o `random.of`, a escolha do diálogo) ou que foi escrito no script guarda
+    também o texto exato dele, e vai ao banco por esse texto enquanto nenhuma conta o mudar, na forma canônica (sem
+    `_` nem `+`, com o zero antes do ponto: `.5` vai `0.5`): `12.345` vai `12.345`, `12.50` vai `12.50`, e o `bigint`
+    `9007199254740993` vai inteiro.
+  - Um número é **exato** quando o `double` mais próximo dele escreve o mesmo número (o `String(Number(texto))` do
+    JavaScript, os dois comparados como decimais, sem os zeros à esquerda e sem os zeros do fim depois do ponto):
+    `12.50`, `100.00`, `1e3` e `0.1` são exatos; `9007199254740993` e `1234567890123.4567` não são. Só a conta (`+ -
+    * / % **` e os unários sobre um resultado), a comparação e as funções de `Math`, o `Number`, o `toFixed`, o
+    `random.int` e o `random.decimal` recusam o número inexato, e com o erro, e não com um número errado em silêncio:
+    "<valor> passa do que o JavaScript conta sem perder precisão (9.007.199.254.740.991)." (no decimal, "<valor> tem
+    mais dígitos do que o JavaScript conta sem perder precisão."). O `-` ou o `+` unário direto num literal mantém o
+    texto exato (`-9007199254740993`). O `at`, o `slice`, o `concat`, o `...`, o `join`, o `String()`, o modelo, o `+`
+    com um texto, o `??`, o `? :`, o `random.pick` e o `random.of` levam o número como está, com o texto exato.
+  - O número escrito no script fora dessa faixa (`let id = 9007199254740993`) vale como texto exato, para ir ao
+    banco, com o mesmo erro se entrar numa conta.
+  - Para texto: o do JavaScript (`String(1e21)` é `1e+21`, `String(0.5)` é `0.5`), ou o texto exato.
+
+- **RN-VAR-006.** Os textos.
+  - Entre aspas simples, duplas ou crases, com os escapes do JavaScript (RN-VAR-002). No modelo, `${expressão}` entra
+    pelo texto do valor, menos o `null`, que é erro (RN-VAR-008).
+  - Até 1.000.000 de caracteres (unidades UTF-16), conferido antes de montar o texto, e não depois: "O texto passou
+    de 1.000.000 de caracteres."
+  - O texto não tem U+0000 ("O texto não pode ter o caractere U+0000.": o PostgreSQL o recusa, e os outros bancos o
+    tratam de modos diferentes) nem metade de um par UTF-16 ("O texto tem um caractere incompleto (\uD83D)."). As
+    marcas de direção e os caracteres de controle são texto como qualquer outro: vão ao banco como parâmetro.
+  - A comparação é a do JavaScript, pela ordem das unidades UTF-16, sem a língua: `'a' < 'b'`, `'B' < 'a'`.
+
+- **RN-VAR-007.** As datas.
+  - A `Date` da linguagem é um instante na hora local da máquina, sem fuso, como as colunas de data e de hora sem fuso
+    dos três bancos, e tem uma precisão: **de dia** (só a data, à meia-noite) ou **de instante** (a data e a hora, até
+    o milissegundo). A precisão diz como ela vai ao banco (RN-VAR-017).
+  - Ela guarda os campos do calendário (do ano ao milissegundo) e compara por eles. Converte para os milissegundos
+    desde 1970 só no `getTime` e no `new Date(ms)`, pelo fuso da máquina naquela data: na hora que a troca do horário
+    de verão repete, a primeira; na que ela pula, a de depois. Assim a hora que a pessoa escreveu não muda.
+  - A data tem de existir e ficar entre 0001-01-01 e 9999-12-31, o que os três bancos guardam: `new
+    Date('2026-02-30')` é o erro "A data 2026-02-30 não existe." (o JavaScript daria 2 de março), e `date.of(99, 1,
+    1)` é o ano 99, e não 1999. O `date.addDays`, o `date.addMonths`, o `date.addYears`, o `new Date(ms)` e o
+    `random.date` que passam da faixa dão "A data passou do ano 9999 (ou ficou antes do ano 1).". Uma data inválida
+    do JavaScript (`Invalid Date`) nunca vira valor.
+  - Nascem de dia: `date.today()`, `date.of(ano, mês, dia)`, `new Date('aaaa-mm-dd')`, a coluna de dia (RN-VAR-004) e
+    o que `date.addDays`, `date.addMonths`, `date.addYears`, `date.startOfMonth`, `date.endOfMonth` e `random.date`
+    fazem de uma de dia. Nascem de instante: `new Date()`, `new Date(ms)`, `new Date('aaaa-mm-ddThh:mm[:ss[.fff]]')`
+    (também com espaço no lugar do `T`), `date.of` com a hora e a coluna de instante.
+  - `new Date(texto)` só aceita essas formas, e ainda o fim `Z` ou `±hh:mm`, que diz o fuso do texto: o instante é
+    convertido para a hora local. Outra forma é erro ("new Date('20/10/2026') não é uma data: use 'aaaa-mm-dd' ou
+    'aaaa-mm-ddThh:mm:ss'."), e não o que cada navegador adivinharia. Diferente do JavaScript, `new Date('2026-10-20')`
+    é a meia-noite local, e não a de Greenwich: no Brasil, o JavaScript daria o dia 19 às 21 h.
+  - `new Date(ano, mês, …)`, com o mês de 0 a 11, não existe: "Use date.of(2026, 10, 20): o mês vai de 1 a 12.".
+  - Para texto (o `String()`, o modelo, o `+` com um texto, o painel): `aaaa-mm-dd` a de dia, e `aaaa-mm-dd
+    hh:mm:ss` a de instante, com `.fff` quando os milissegundos não são zero. O JavaScript daria "Tue Oct 20 2026
+    …", que muda com a máquina.
+  - A data que veio do banco guarda o texto exato dela, como o número (RN-VAR-005), e volta por ele: os microssegundos
+    de um `timestamp` não se perdem quando a data só passa de uma consulta para um comando.
+  - Comparar (`<`, `===`) e somar dias trabalham no calendário local: `date.addDays` muda a data e mantém a hora do
+    relógio, também na troca do horário de verão.
+
+- **RN-VAR-008.** Os operadores. Valem os do JavaScript, com os resultados dele, menos onde ele converteria um tipo em
+  silêncio: aqui isso é erro, com a frase.
+  - `+`: soma dois números, ou junta dois textos; com um texto e um número, um booleano ou uma data, junta o texto
+    ao texto do outro (RN-VAR-005 e 007). Com listas, objetos ou sem texto nenhum (`1 + true`), é erro: "+ soma
+    números ou junta textos; true não é nenhum dos dois." O `null` não se junta a texto, nem no `+` nem no `${…}` do
+    modelo: "Não dá para juntar null a um texto: use nome ?? ''." (`'%' + nome + '%'` com `nome` nulo daria `'%null%'`,
+    um `LIKE` que acha outra coisa). O `String(null)`, escrito pela pessoa, dá `null`.
+  - `- * / % **` e o `-` e o `+` unários: só números ("- é só para números; 'abc' é string."). No JavaScript `'5' * 2`
+    daria 10.
+  - `< <= > >=`: números com números, textos com textos e datas com datas ("< compara números com números, textos com
+    textos e datas com datas.").
+  - `===` e `!==`: como no JavaScript para os números, os textos, os booleanos e o `null`; duas datas são iguais
+    quando são o mesmo instante (no JavaScript, só se fossem o mesmo objeto); listas e objetos não se comparam ("===
+    não compara listas nem objetos."). `==` e `!=` são recusados: "Use === ou !==: o == do JavaScript converte os
+    tipos antes de comparar."
+  - `!`, `&&`, `||`, `? :` e o valor "falso" do JavaScript: `false`, `0`, `-0`, `''` e `null`; o resto é verdadeiro,
+    também a lista vazia. `&&` e `||` devolvem um dos dois lados, como no JavaScript. As duas saídas do `? :`, e os
+    dois lados do `||` e do `&&` quando o resultado é guardado, têm de ter o mesmo tipo, ou um deles `null` ("As duas
+    saídas de ? : têm de ter o mesmo tipo: number e string.").
+  - `??`: o lado esquerdo, quando não é `null`. `?.`: `null` quando o lado esquerdo é `null`.
+  - O membro: `.nome` e `["nome"]` leem o campo de um objeto, quando ele existe nele ("O objeto p não tem o campo x.
+    Os campos são: id, nome."); `.length` de um texto e de uma lista; e os métodos da RN-VAR-009. O índice: `lista[i]`
+    e `texto[i]`, com `i` inteiro de 0 até o tamanho menos 1 ("ids[5] não existe: a lista tem 3 itens."; o JavaScript
+    daria `undefined`); o índice negativo é recusado ("Use ids.at(-1) para contar do fim."). Ler um campo de `null` sem
+    o `?.` é erro: "Não dá para ler cliente_id de null."
+  - O `...` espalha uma lista dentro de outra (`[...a, 4]`) e nos argumentos de uma função da lista fechada
+    (`Math.max(...ids)`).
+
+- **RN-VAR-009.** As funções que existem: só estas, com estes argumentos. Um argumento de outro tipo é "<função>
+  espera <tipo> em <posição>, e recebeu <valor>."; um número de argumentos diferente, "<função> espera <n>
+  argumentos, e recebeu <m>.". O `?` marca o opcional. O que devolve `undefined` no JavaScript devolve `null` aqui.
+
+  | Nome | Assinatura | O que faz |
+  | --- | --- | --- |
+  | `Math.abs`, `ceil`, `floor`, `round`, `trunc`, `sign`, `sqrt` | `(x: number): number` | como no JavaScript (`Math.round(-2.5)` é `-2`) |
+  | `Math.pow` | `(x: number, y: number): number` | `x ** y` |
+  | `Math.min`, `Math.max` | `(...x: number[]): number` | de 1 a 10.000 números; sem nenhum é erro (o JavaScript daria `Infinity`) |
+  | `Math.random` | `(): number` | de 0 (inclusive) a 1 (exclusive), pelo gerador do script (RN-VAR-010) |
+  | `Math.PI`, `Math.E` | `number` | as constantes |
+  | `Number` | `(x: string \| number): number` | o texto, sem os espaços das pontas, tem de casar com `^[+-]?(\d+(\.\d+)?\|\.\d+)([eE][+-]?\d+)?$`, como `12`, `-3.5`, `1e3`; `''`, `'12abc'`, `'0x1F'`, `'Infinity'`, `'5.'` e `'1_000'` são erro ("Number('12abc') não é um número."), e não `0`, `NaN` nem `31` |
+  | `Number.isInteger` | `(x: number): boolean` | |
+  | `String` | `(x): string` | o texto do valor (RN-VAR-005 e 007); a lista, com os itens separados por vírgula; o objeto é erro |
+  | `x.toFixed` | `(casas?: number): string` | de 0 a 20 casas, como no JavaScript |
+  | `s.length` | `number` | as unidades UTF-16, como no JavaScript |
+  | `s.toUpperCase`, `toLowerCase`, `trim`, `trimStart`, `trimEnd` | `(): string` | sem a língua (como no JavaScript sem `toLocale…`); o resultado pode ter mais unidades que o texto (`'ß'` vira `'SS'`), e o tamanho final conta no limite antes de montar |
+  | `s.slice` | `(início: number, fim?: number): string` | como no JavaScript, com os índices negativos |
+  | `s.includes`, `startsWith`, `endsWith` | `(t: string): boolean` | |
+  | `s.indexOf` | `(t: string): number` | `-1` quando não acha |
+  | `s.padStart`, `padEnd` | `(tamanho: number, t?: string): string` | o tamanho final conta no limite do texto antes de montar |
+  | `s.split` | `(separador: string): string[]` | só texto, nunca expressão regular; até 10.000 pedaços |
+  | `s.replaceAll` | `(de: string, para: string): string` | só texto; o `$&` e os outros padrões do `para` não valem, e ele entra como está; o `de` vazio é erro ("replaceAll não aceita um texto vazio em de.") |
+  | `s.at` | `(i: number): string \| null` | |
+  | `l.length` | `number` | |
+  | `l.at` | `(i: number): T \| null` | |
+  | `l.includes` | `(x: T): boolean` | pela igualdade do `===` (RN-VAR-008) |
+  | `l.indexOf` | `(x: T): number` | |
+  | `l.join` | `(separador?: string): string` | de valores simples; o separador padrão é `,` |
+  | `l.slice` | `(início: number, fim?: number): T[]` | |
+  | `l.concat` | `(...listas: T[][]): T[]` | |
+  | `new Date` | `()`, `(ms: number)`, `(texto: string)` | RN-VAR-007 |
+  | `Date.now` | `(): number` | os milissegundos desde 1970, em UTC |
+  | `d.getFullYear`, `getMonth`, `getDate`, `getDay`, `getHours`, `getMinutes`, `getSeconds`, `getMilliseconds` | `(): number` | na hora local; `getMonth` de 0 a 11 e `getDay` de 0 (domingo) a 6, como no JavaScript |
+  | `d.getTime` | `(): number` | os milissegundos desde 1970 |
+  | `d.toISOString` | `(): string` | em UTC, com o `Z`, como no JavaScript |
+  | `date.today` | `(): Date` | hoje, de dia |
+  | `date.of` | `(ano, mês, dia, hora?, minuto?, segundo?, ms?: number): Date` | o mês de 1 a 12; sem a hora, de dia; com ela, de instante; a data que não existe (31 de abril) é erro, e não o 1º de maio |
+  | `date.addDays`, `addMonths`, `addYears` | `(d: Date, n: number): Date` | `n` inteiro, também negativo; o mês curto prende o dia no último (31/01 mais um mês é 28/02 ou 29/02) |
+  | `date.diffDays` | `(de: Date, até: Date): number` | os dias inteiros do calendário local entre as duas, negativo quando `até` vem antes |
+  | `date.startOfMonth`, `endOfMonth` | `(d: Date): Date` | o primeiro e o último dia do mês, de dia |
+  | `date.format` | `(d: Date): string` | o texto da RN-VAR-007 |
+  | `random.*` | | RN-VAR-010 |
+
+  Nenhuma função é um valor: `const f = Math.max` é "Math.max é uma função, e funções não são valores aqui: chame-a,
+  como Math.max(…)."
+
+- **RN-VAR-010.** O `random`.
+  - As funções:
+
+    | Nome | Assinatura | O que dá |
+    | --- | --- | --- |
+    | `random.int` | `(min: number, max: number): number` | um inteiro de `min` a `max`, os dois inclusive; os dois inteiros, `min` ≤ `max` ("random.int: min (10) é maior que max (1)."), e `max - min` até 2^53 - 1 |
+    | `random.decimal` | `(min: number, max: number, casas?: number): number` | de `min` a `max`, arredondado a `casas` (de 0 a 10; o padrão é 2) |
+    | `random.bool` | `(): boolean` | |
+    | `random.uuid` | `(): string` | um UUID da versão 4, em minúsculas |
+    | `random.string` | `(tamanho: number, letras?: string): string` | de 0 a 10.000 caracteres, das `letras` (até 256 caracteres; o padrão é `A-Z`, `a-z` e `0-9`) |
+    | `random.pick` | `(lista: T[]): T` | um item ("random.pick recebeu uma lista vazia.") |
+    | `random.date` | `(de: Date, até: Date): Date` | entre as duas, inclusive; de dia quando as duas são de dia |
+    | `random.of` | `(coluna)`, `(coluna, quantos: number)` | um valor que existe na coluna, ou uma lista de `quantos` valores diferentes (de 1 a 100) |
+
+  - O gerador é um só por execução (o script do Alt+X, o Ctrl+Enter, o "Executar com valores…"), um gerador
+    pseudoaleatório de 128 bits (o xoshiro128\*\*), com a semente tirada do `crypto.getRandomValues` no começo da
+    execução. Não serve de segredo: o `random.uuid` serve para dados de teste, e não para senha nem chave. Os testes
+    dão a semente (RN-VAR-014), e uma semente dá sempre a mesma sequência, também o `Math.random`.
+  - A semente são quatro palavras de 32 bits, o estado do gerador (nunca as quatro zero): a da produção vem do
+    `crypto.getRandomValues(new Uint32Array(4))`, e os testes dão as quatro. Cada saída é o próximo `uint32` do
+    xoshiro128\*\* de referência (Blackman e Vigna), e cada função a gasta assim, para as sequências de ouro se
+    escreverem à mão:
+    - `Math.random`: `u / 2^32`, com `u` uma saída;
+    - `random.int(min, max)`: com `n = max - min + 1` até 2^32, a rejeição sobre uma saída (descarta `u` a partir de
+      `2^32 - (2^32 mod n)`, e dá `min + u mod n`); acima de 2^32, duas saídas formam 53 bits (os 21 de cima da
+      primeira e os 32 da segunda), com a mesma rejeição;
+    - `random.decimal(min, max, casas)`: o `random.int` sobre os inteiros de `min × 10^casas` a `max × 10^casas`
+      (arredondados para dentro), dividido por `10^casas`;
+    - `random.bool`: o bit mais alto de uma saída;
+    - `random.pick`, `random.string` (cada letra) e o índice do `random.of`: o `random.int` sobre as posições;
+    - `random.date`: o `random.int` sobre os dias (de dia) ou os milissegundos (de instante) entre as duas;
+    - `random.uuid`: quatro saídas, em ordem, escritas como 16 bytes do mais alto ao mais baixo, com os bits da versão
+      (4) e da variante (`10`).
+  - `random.of(tabela.coluna)`: a coluna se escreve como no tipo de uma coluna (RN-VAR-004), sem aspas em volta, e
+    não é uma expressão. O valor sai dos valores diferentes e não nulos que existem nela, com a mesma chance para
+    cada um: a tela pede à API quantos são (a rota dos valores, RN-VAR-035, com `total`), sorteia a posição pelo
+    gerador do script e pede o valor daquela posição, na ordem dos valores. A lista sorteia posições diferentes. A
+    coluna sem valores é o erro "random.of(cliente.id): a coluna não tem valores."; a que tem menos valores que os
+    pedidos, "random.of(cliente.id, 10): a coluna só tem 3 valores.". A lista sorteia uma posição de cada vez, e
+    sorteia de novo a que já saiu. O tipo é o da coluna (RN-VAR-004). Como a consulta, o `random.of` só é o valor
+    inteiro da declaração (RN-VAR-002), e vai ao banco na vez dela, na sessão da aba: uma leitura do total e uma por
+    posição, em sequência, e por isso o `random.of(c, 100)` são 101 leituras (a sonda S-VAR-2 mede o tempo).
+
+- **RN-VAR-011.** A variável de consulta.
+  - `let total = (SELECT count(*) FROM pedido)`: o parêntese que começa por `SELECT`, `WITH` ou `VALUES` (depois dos
+    espaços e dos comentários) é uma consulta, lida pelo leitor do SQL do banco da aba (RN-SQL-002: os textos, os
+    nomes entre aspas, os comentários e o `$tag$` dele), até o `)` que a fecha. Ela pode usar as variáveis declaradas
+    antes (`@cliente_id`, RN-VAR-015), que vão como parâmetros.
+  - Tem de ser uma leitura, pela regra do somente leitura (RN-PROT-005), em qualquer conexão: "A consulta de total não
+    é uma leitura: um DELETE não é." A tela confere antes de executar, e a API confere de novo (RN-VAR-034). Uma
+    consulta que grava, com a avaliação que se repete (o Ctrl+Enter, o diálogo, o "Tentar de novo"), gravaria de
+    novo.
+  - Roda na sessão da aba, na vez dela no script, pela rota da consulta da variável (RN-VAR-034): ela vê o que os
+    comandos de antes deixaram na sessão (a tabela temporária, o `SET`), não troca o resultado na tela, não é o
+    "último comando que devolveu linhas" da contagem (RN-SQL-006), e não esquece os resultados que o script guarda
+    (RN-SQL-024). Ela fecha o cursor aberto da sessão, como todo comando (RN-SQL-007).
+  - **A forma do valor**, sem anotação, pelo que a consulta devolveu:
+    - 1 coluna e 1 linha: o valor da célula (`let total = (SELECT count(*) …)` é um `number`);
+    - 1 coluna e nenhuma linha: `null`, como a subconsulta escalar do SQL;
+    - 1 coluna e 2 linhas ou mais: a lista dos valores;
+    - 2 colunas ou mais e 1 linha: um objeto, com um campo por coluna (`@p.cliente_id`, RN-VAR-016);
+    - 2 colunas ou mais e nenhuma linha: `null`;
+    - 2 colunas ou mais e 2 linhas ou mais: a lista dos objetos.
+
+    Com anotação de lista (`let ids: number[] = (SELECT id FROM …)`), é sempre a lista, também com uma linha ou
+    nenhuma (a lista vazia). Com anotação de um valor só, a consulta que devolve mais de uma linha é erro: "A consulta
+    de ids devolveu 3 linhas, e ids é number: anote number[] para uma lista." Como a mesma consulta pode devolver uma
+    linha hoje e três amanhã, o editor sugere a anotação de lista na variável sem anotação cujo nome vai num `IN`
+    (RN-VAR-025).
+  - O tipo de cada valor vem do `kind` da coluna no resultado (RN-SQL-011, seção 6): `number`, `text` (`string`),
+    `datetime` (`Date`, de dia quando o tipo da coluna é de data, RN-VAR-004), `boolean`; a coluna `binary` é erro ("A
+    coluna foto é binária, e variável não guarda binário."), como o `NaN` e o `Infinity` de uma coluna de ponto
+    flutuante do PostgreSQL ("O valor NaN da coluna media não é um número do JavaScript."). O nulo da célula é `null`, e o tipo ganha o `| null`.
+  - Os nomes dos campos são os das colunas, como o banco os deu (a caixa dele). Duas colunas de mesmo nome são erro
+    ("A consulta de p tem duas colunas chamadas id: dê um apelido a uma delas."), como a coluna com um nome vedado
+    (RN-VAR-014: "A coluna __proto__ não pode ser campo de uma variável: dê outro apelido a ela.").
+  - Os valores vêm inteiros, sem o corte de 10.000 caracteres da grade (RN-SQL-011): uma variável com o texto cortado
+    mandaria ao banco outro valor.
+  - Os limites são os da RN-VAR-013; o erro do banco vem como veio (RN-SQL-009), e é o erro da declaração
+    (RN-VAR-022).
+
+- **RN-VAR-012.** A ordem da avaliação e os erros.
+  - **Antes de executar**, a tela lê o script inteiro (o que vai: a seleção ou o texto inteiro, RN-SQL-019) e confere,
+    sem falar com o banco: a gramática (RN-VAR-002), os nomes (RN-VAR-003), os tipos que se sabem (RN-VAR-004), o
+    `const` reatribuído, o `@nome` no SQL (RN-VAR-015 a 017: a lista fora de uma lista entre parênteses, o objeto
+    sem campo, o marcador já escrito no texto) e o `sql` que viria de uma consulta. Com algum erro, nada é executado:
+    a área de resultado mostra "Erros nas variáveis", a lista dos erros, cada um com a linha e a frase, que levam o
+    cursor ao lugar com Enter e com o clique; o editor os sublinha (RN-VAR-025); e o aviso de erro diz "O script não
+    foi executado: 2 erros nas variáveis." ("1 erro nas variáveis"; no Ctrl+Enter, "O comando não foi executado: …").
+    O foco fica no editor.
+  - Depois, também antes do primeiro comando: o Prism lê no catálogo os tipos de coluna (RN-VAR-004), pergunta os
+    valores que faltam (RN-VAR-021), avalia, uma vez só e na ordem do texto, toda atribuição que não depende do banco
+    (nem direta nem indiretamente de uma consulta ou de um `random.of`), entre elas as variáveis `sql`, e faz a
+    pergunta da proteção da conexão (RN-PROT-001), que mostra esses valores. O erro numa dessas etapas também não deixa
+    nada executar, com a mesma área.
+  - **Na execução**, cada item na vez dele, na ordem do texto. A atribuição que depende do banco (a consulta, o
+    `random.of` e a expressão que usa o valor de um deles) é avaliada nessa hora; a que já foi avaliada antes da
+    pergunta só toma o valor e atualiza o painel e as Estatísticas, sem avaliar de novo. Assim o que a pergunta da
+    proteção mostrou é o que vai. O gerador do `random` gasta primeiro nas atribuições avaliadas antes da pergunta, na
+    ordem do texto, e depois nas que dependem do banco, na vez delas. O comando vai ao banco com os valores que valem
+    naquele ponto: os da última atribuição acima dele no texto. Assim, com `let x = 1`, `SELECT @x`, `x = 2` e `SELECT
+    @x`, o primeiro comando leva 1 e o segundo leva 2.
+  - A expressão é avaliada da esquerda para a direita, como no JavaScript, e o `&&`, o `||`, o `??`, o `?.` e o `? :`
+    não avaliam o lado que não precisam (um `random` do lado que não vai não gasta o gerador).
+  - **As frases dos erros**, cada uma com "Linha <n>: " na frente na lista da área de resultado e sem ela na dica do
+    editor. As da gramática dizem o que o analisador esperava e o que veio: "Esperava o nome da variável depois de
+    let.", "Esperava = ou : depois de <nome>.", "Esperava o tipo depois de :.", "Esperava um valor depois de =.",
+    "Esperava ) para fechar o ( da linha <n>.", "O texto não terminou: falta a aspa de fechar.", "Uma variável por
+    let: let a = 1; let b = 2." (a vírgula depois de uma declaração), "<nome> é const e não pode receber outro valor
+    (linha <n>).", "<palavra> não
+    existe aqui: as variáveis do Prism não têm laços, funções nem import." (para `for`, `function`, `=>`, `import` e
+    as demais), "O operador <op> não existe aqui." (para os de bits, `in`, `instanceof`, `++`, `delete`, `typeof`, a
+    atribuição dentro da expressão), "?? não se mistura com && nem com || sem parênteses.", "Use parênteses: (-x) **
+    2 ou -(x ** 2).", "O tipo <t> não existe. Os tipos são number, string, boolean, Date, sql, a lista (number[]), o
+    | null e o de uma coluna (tabela.coluna).", "<membro> não existe em <tipo>." (o método que não está na lista
+    fechada) e "<membro> não pode ser lido." (os nomes vedados, RN-VAR-014). As outras estão nas regras de cada
+    assunto. Nenhuma traz um texto do JavaScript da tela (a pilha, o nome de uma classe, um `[object Object]`).
+
+- **RN-VAR-013.** Os limites. Passar de um deles é um erro da declaração (ou do comando), com a frase entre aspas, e
+  nada do que passou é montado antes da conferência.
+
+  | O quê | Limite | A frase |
+  | --- | --- | --- |
+  | declarações e reatribuições num script | 500 | "O script passou de 500 declarações." |
+  | o nome | 64 caracteres | "O nome pode ter até 64 caracteres." |
+  | o texto de uma declaração, sem a consulta | 64 KiB | "A declaração de <nome> passou de 64 KiB." |
+  | a profundidade da expressão (parênteses, listas, objetos, modelos dentro de modelos, chamadas) | 64 níveis | "A expressão de <nome> passou de 64 níveis." |
+  | os passos da avaliação (cada nó visitado conta um; uma operação que percorre um texto ou uma lista conta mais um por 1.000 unidades percorridas, o menor dos dois lados nas comparações) | 100.000 por declaração, 1.000.000 por execução | "A expressão de <nome> passou de 100.000 passos e foi parada." |
+  | o tempo da avaliação, sem a consulta | 250 ms por declaração e 5 s por execução, conferido a cada 100 passos e depois de cada operação que percorre mais de 10.000 unidades; e o Worker parado nesse tempo (RN-VAR-014) | "A expressão de <nome> levou mais de 250 ms e foi parada." |
+  | o texto | 1.000.000 de caracteres | RN-VAR-006 |
+  | a lista | 10.000 itens | "A lista passou de 10.000 itens." |
+  | o objeto | 100 campos | "O objeto passou de 100 campos." |
+  | a variável de consulta | 10.000 linhas, 100 colunas e 16 MiB de valores (o texto em UTF-8) | "A consulta de <nome> passou de 10.000 linhas." ("… de 100 colunas.", "… de 16 MiB.") |
+  | os parâmetros de um comando | 10.000, com o texto de todos até 4 MiB em UTF-8 | "O comando passaria de 10.000 parâmetros (12.345): divida a lista ou use uma tabela temporária." ("Os valores do comando passariam de 4 MiB.") |
+  | o `sql` | 10.000 caracteres | RN-VAR-004 |
+  | a soma dos valores guardados da aba | 128 MiB (o texto em UTF-16, 2 bytes por unidade) | "Os valores da aba passaram de 128 MiB: tire uma variável grande." |
+
+  - Os 250 ms e os passos param uma expressão grande (o texto de 1.000.000 de caracteres juntado várias vezes, a lista
+    de 10.000 itens espalhada em várias): sem laços, nada roda para sempre, mas a conta pode ficar cara, e uma chamada
+    nativa só (um `includes` de 1.000.000 de caracteres) não para no meio. Por isso o tempo tem a parada dura do
+    Worker (RN-VAR-014), e os passos ponderados ficam como a segunda defesa. A sonda S-VAR-4 mede os casos mais caros
+    dentro dos limites e confere que o Worker para cada um no prazo.
+  - Os 10.000 parâmetros ficam abaixo do teto do driver da IBM (32.767 marcadores, RN-EDIT-020) e do PostgreSQL (65.535).
+    A sonda S-VAR-3 confere um `IN` de 10.000 marcadores em cada banco; se um deles recusar, o limite daquele banco é o
+    maior que a sonda provou, e o guia da API o registra.
+
+- **RN-VAR-014.** A segurança do avaliador. A linguagem é lida e avaliada pelo código do próprio Prism, em
+  TypeScript, sem pacote de terceiros (RN-ABERTO-002) e sem gerar código: nunca `eval`, `new Function`, `setTimeout`
+  com texto nem `import()`, o que a política de conteúdo da tela já proíbe (`default-src 'self'`, sem `unsafe-eval`,
+  RN-SHELL-001). O avaliador anda sobre a árvore que o analisador montou, e cada nó dela é de uma lista fechada de
+  espécies; o que não está na árvore não existe, e nada do texto vira nome de propriedade do JavaScript.
+  - **Os valores são dados**, e nunca objetos do JavaScript da tela: cada um é um registro da linguagem (`{ kind:
+    "number", value, exact? }`, `{ kind: "string", value }`, `{ kind: "date", fields, precision, exact? }`, `{ kind:
+    "list", items }`, `{ kind: "object", fields }`, `{ kind: "sql", text }` e os outros), congelado. Os campos de um
+    objeto ficam num `Map`, e não em propriedades: um campo chamado `__proto__` ou `constructor` não chega a nada.
+    Nenhum valor é uma função, um `Symbol`, um `Proxy` nem um objeto com protótipo.
+  - **O membro se lê por uma regra positiva**, e não por uma lista de nomes proibidos: o campo de um objeto, pelo
+    `Map` dele; o `length` do texto e da lista; e os métodos do quadro da RN-VAR-009, pela espécie do valor e pelo
+    nome. O resto é "<membro> não existe em <tipo>.". O mesmo vale para o índice com texto (`p['id']`), que lê só o
+    campo, e para o calculado (`p['con' + 'structor']`), que é conferido depois de calculado.
+  - **As tabelas são `Map`s.** As tabelas das funções, dos métodos e dos espaços de nome (`Math`, `random`, `date`,
+    `Date`) são `Map`s (ou objetos de `Object.create(null)`), e a busca é por `Map.get` e `Map.has`, nunca por
+    `tabela[nome]`: um método chamado `constructor`, `__proto__` ou `hasOwnProperty` não acha nada do
+    `Object.prototype`. Os valores da aba (RN-VAR-023) e o mapa dos `runValues` lido da API (RN-VAR-028) também são
+    `Map`s, e o nome que não passa na RN-VAR-003 é ignorado ao ler.
+  - **As funções se resolvem ao ler o texto**: `Math.max`, `random.int`, `date.addDays`, `nome.trim` viram um nó de
+    chamada a uma função conhecida, na tabela da tela. `Math`, `random`, `date` e `Date` são nomes da tabela, e não
+    valores: `Math` sozinho é erro, e não há `.call`, `.apply` nem `.bind`, porque não há função que se leia.
+  - **Os nomes vedados** como membro, como chave de objeto e como nome de coluna da variável de consulta, com a frase
+    própria ("<membro> não pode ser lido.", "<chave> não pode ser chave de objeto.", RN-VAR-011): `constructor`,
+    `prototype`, `__proto__`, `__defineGetter__`, `__defineSetter__`, `__lookupGetter__`, `__lookupSetter__`,
+    `caller`, `callee`, `arguments`, `toString`, `valueOf`, `toLocaleString`, `hasOwnProperty`, `isPrototypeOf`,
+    `propertyIsEnumerable`, `call`, `apply`, `bind` e `then`. A lista existe para a frase e para os testes: a regra
+    positiva já os recusa.
+  - **Nada de conversão escondida**: o texto de um valor sai da função da linguagem (RN-VAR-005 e 007), e nunca do
+    `toString`, do `valueOf` nem do `Symbol.toPrimitive` de um objeto do JavaScript.
+  - **Os erros** são um tipo próprio, com a frase e a posição, e uma fronteira só em volta da avaliação os converte:
+    qualquer exceção do JavaScript que escape dela (um defeito do avaliador) vira "Erro interno do Prism ao avaliar
+    <nome>." e vai ao console de desenvolvimento, sem o valor.
+  - **O gerador do `random` tem semente** (RN-VAR-010): a função que avalia recebe o gerador, e os testes passam um
+    com semente fixa; a produção, um com a semente do `crypto.getRandomValues`.
+  - **Os limites** da RN-VAR-013 são conferidos antes de alocar: o `padStart`, o `random.string`, o `split` e a
+    junção de textos sabem o tamanho final antes de montá-lo. Toda função que devolve texto ou lista calcula o tamanho
+    final antes de montar e recusa o que passa do limite do tipo: também o `toUpperCase` e o `toLowerCase` (o
+    resultado pode ter mais unidades que o texto), o `replaceAll`, o `join`, o `String()` de uma lista, o `concat`, o
+    `...`, o `padEnd` e o modelo.
+  - **Onde roda.** A avaliação (não a consulta) roda num Worker dedicado, do próprio pacote da tela (a política de
+    conteúdo já o permite: o `default-src 'self'` vale para o `worker-src`, RN-SHELL-001), e a tela o termina
+    (`terminate()`) quando uma declaração passa de 250 ms ou a execução passa de 5 s, também no meio de uma chamada
+    nativa que não volta; o próximo pedido abre outro. O Worker recebe o texto e os valores como dados (a cópia
+    estruturada) e devolve dados; não fala com a API nem com o processo principal. A leitura do editor (RN-VAR-025),
+    que não avalia, roda nele também, para não travar a digitação.
+  - A segurança não depende de congelar os protótipos da tela, nem de uma lista de textos proibidos: depende de a
+    árvore só ter as espécies da gramática e de o avaliador só ler o que a regra positiva diz.
+
+### O `@nome` no SQL
+
+- **RN-VAR-015.** Como o `@nome` é achado.
+  - Quem acha é o leitor do SQL da tela (`sql-statements`, o mesmo do Ctrl+Enter e do Alt+X, RN-SQL-002), no banco da
+    aba: o `@` dentro de um texto entre aspas simples (também o `E'…'` do PostgreSQL, com o escape da barra, que o
+    leitor da tela passa a conhecer como o da API, RN-SQL-002), de um nome entre aspas duplas, de um comentário (os de
+    cada banco, também o entre chaves do Informix) e de um `$tag$ ... $tag$` nunca é variável.
+  - Fora deles, é variável o `@` seguido, sem espaço, de um nome (RN-VAR-003) **declarado no script** (ou no texto
+    acima do que vai, RN-VAR-019 e 020), quando:
+    - o caractere logo antes do `@` é o começo do comando, um espaço em branco (o espaço, a tabulação, a quebra de
+      linha ou outro espaço do Unicode), `(`, `[`, `,`, `;`, `:`, `=`, `>`, `+`, `-`, `*`, `/`, `%` ou o segundo `|`
+      de um `||`. No Db2 e no Informix, em que o `@` não é operador, vale também qualquer outro caractere que não
+      seja de nome (letra, dígito, `_`, `$`, `#`, `@`) nem aspa. No PostgreSQL, qualquer outro (`<`, `~`, `!`, `^`,
+      `&`, `?`, `|` sozinho, `#`, `` ` ``, as aspas, letra, dígito, `_`, `$`, `@`) deixa o `@` como SQL, porque ali
+      ele faz parte de um operador (`<@`);
+    - e o caractere logo depois do nome não é uma letra, um dígito, `_`, `$`, `#` nem `@`.
+
+    O nome é comparado como o da declaração: normalizado em NFC, diferenciando maiúsculas (RN-VAR-003).
+  - Assim continuam sendo SQL, como estão: os operadores do PostgreSQL com `@` (`@>`, `<@`, `@@`, `@?`, `@-@`, `^@`,
+    `?@>`, os do `ltree`; o `@` de valor absoluto seguido de espaço, `@ -5`); o `banco@servidor:tabela` e o
+    `'banco@servidor'` do Informix; o `END@`, o terminador `@` e os nomes com `@` do Db2; o `@extschema@` dos scripts
+    de extensão do PostgreSQL; e todo `@nome` que não foi declarado no script, sem erro (o editor dá uma dica discreta,
+    RN-VAR-025). Quem vem do SQL Server ou do MySQL e escreve `@x` sem declarar vê a dica e o erro do banco, como
+    antes.
+  - O caso que fica: no PostgreSQL, `@coluna` sem espaço é o valor absoluto da coluna. Se o script declara uma
+    variável com o mesmo nome, o `@coluna` vira a variável. O editor marca o `@nome` declarado com a cor da variável
+    (RN-VAR-025), e o "SQL enviado" (RN-VAR-018) mostra o parâmetro: quem quer o valor absoluto escreve `@ coluna`, ou
+    `abs(coluna)`.
+  - O `@nome` usado antes da declaração dele no texto é o erro "<nome> é usada antes de ser declarada, na linha <n>.",
+    e não SQL: o nome está declarado no script.
+  - O `@nome` vale em todo comando SQL do topo do script e dentro da consulta de uma variável (RN-VAR-011), e não
+    dentro dos corpos de rotina, gatilho e bloco composto (RN-VAR-001), que o banco guarda e executa depois: ali ele
+    vai como está.
+
+- **RN-VAR-016.** O campo de um objeto e a expressão.
+  - `@p.campo` é o campo de um objeto (a linha de uma consulta, RN-VAR-011, ou um objeto escrito): na execução,
+    quando o valor de `p` é um objeto, o `.campo` logo depois do nome (sem espaço, um nome nas regras da RN-VAR-003) é
+    lido dele, e o campo que não existe é erro ("O objeto p não tem o campo x. Os campos são: id, nome."). Vale um
+    nível só: `@p.endereco.cidade` lê `endereco` e deixa `.cidade` como SQL, que o banco recusa.
+  - Com uma variável `sql`, o `.` depois do nome é SQL: com `const esquema: sql = 'estoque'`, `FROM
+    @esquema.pedido` vira `FROM estoque.pedido`. Com qualquer outro valor que não é objeto, `@p.campo` é um erro do
+    comando: "p é null (a consulta de p não devolveu linhas), e não tem o campo cliente_id." e "p é number, e não tem
+    campos.". Como o valor da consulta só se sabe na execução, o editor só marca o campo quando o tipo já se sabe.
+  - O objeto sem campo (`@p`, com `p` um objeto) e a lista de objetos (`@linhas`) não vão ao banco: "p é uma linha
+    (objeto): use um campo, como @p.cliente_id." e "linhas é uma lista de linhas, que não vai para o SQL: faça a
+    consulta com uma coluna só.". O índice (`@ids[0]`) não existe no SQL: o `[` é do PostgreSQL (`@ids[0]` seria o
+    `@ids` seguido de `[0]`, que o banco recusa).
+  - **Não há forma de expressão no SQL** nesta versão: para `@{ids.length}`, declara-se outra variável (`const n =
+    ids.length`) e usa-se `@n`. Por quê: o `{` é o começo de um comentário no Informix, e o leitor do SQL o leria
+    assim; uma forma só (`@nome`) mantém o SQL legível, o "SQL enviado" simples e o editor sem uma segunda linguagem
+    dentro do SQL. Fica para depois, com outra marca que nenhum dos três bancos use.
+
+- **RN-VAR-017.** Os parâmetros de cada banco.
+  - O valor vai ao banco **como parâmetro**, e nunca colado no texto: a tela troca cada `@nome` (ou `@p.campo`) pelo
+    marcador do banco e manda os valores ao lado, com o tipo (RN-VAR-032). No PostgreSQL o marcador é `$1`, `$2`…, na
+    ordem em que aparecem no texto final, um número por ocorrência (o mesmo `@x` duas vezes são `$1` e `$2`, com o
+    mesmo valor); no Db2 e no Informix é `?`, um por ocorrência, na mesma ordem. O valor que é uma tentativa de
+    injeção (`'; DROP TABLE pedido; --`) é só um texto comparado com a coluna.
+  - **A lista** vira uma lista de marcadores, um por item, separados por `, `: `IN (@ids)`, com 3 itens, é `IN ($1,
+    $2, $3)` ou `IN (?, ?, ?)`; o `null` da lista é um parâmetro nulo. A lista só entra como item de uma lista entre
+    parênteses: o caractere antes dela (sem os espaços) é `(` ou `,`, e o de depois é `)` ou `,`; noutro lugar é o erro
+    "@ids é uma lista e só entra numa lista entre parênteses, como IN (@ids)." Depois de `ANY`, `ALL`, `SOME` ou
+    `ARRAY` (`= ANY(@ids)`), que no PostgreSQL esperam uma lista do banco e não vários valores, é "Use IN (@ids): a
+    lista vira vários valores, e o ANY do PostgreSQL espera uma lista do banco.". **A lista vazia é recusada** antes de
+    executar, porque `IN ()` não existe em SQL: "@ids está vazia, e IN () não existe em SQL: nada foi executado."
+    O `null` que é o único item de `IN (@x)` ou de `NOT IN (@x)` (a variável nula, ou a lista só com o `null`) também é
+    recusado, porque `IN (null)` nunca acha nada: "@ids é null (a consulta de ids não devolveu linhas), e IN (null)
+    nunca acha nada: anote ids: number[] para ter a lista, ou trate o caso.". O `null` entre outros itens continua
+    indo como parâmetro nulo (o editor avisa no `NOT IN`, RN-VAR-025).
+  - **O `sql`** é o único que entra no texto: o `@nome` é trocado pelo texto do valor, como está, antes de os
+    marcadores serem numerados. O texto que entrou não é lido de novo à procura de `@nome`. Depois da troca, a tela
+    conta de novo os comandos do texto final (RN-SQL-001) e os marcadores dele: "O valor de filtro (sql) fez o
+    comando virar 2 comandos: nada foi executado." e "O valor de filtro (sql) tem um marcador de parâmetro (? ou $1),
+    que o Prism não sabe numerar.". O que o valor abriria e não fecharia (um texto, um comentário) já foi recusado na
+    declaração (RN-VAR-004).
+  - **O marcador já escrito no texto.** No comando que tem variáveis, um `$1` (no PostgreSQL) ou um `?` (no Db2 e no
+    Informix) fora de texto, de comentário e de nome entre aspas é o erro "O comando já tem um marcador de parâmetro
+    ($1), e o Prism numera os das variáveis: tire o $1 do texto." No PostgreSQL o `?` não é marcador (é o operador do
+    `jsonb`), e fica. O comando sem variáveis vai como antes, sem parâmetros, com o marcador escrito e o erro do banco.
+  - **O comando de definição** (`CREATE`, `ALTER`, `DROP`, `GRANT`, `REVOKE`, `COMMENT`, `SET`…) com uma variável que
+    não é `sql` vai do mesmo jeito, com o parâmetro, e o banco costuma recusá-lo (no PostgreSQL, os comandos de
+    utilidade não aceitam `$1`): a recusa é a do banco, como veio, e o editor avisa antes (RN-VAR-025). Para um nome,
+    usa-se uma variável `sql`.
+  - **Os tipos**, por banco. O valor vai como texto no pedido à API (RN-VAR-032), e a API o converte:
+
+    | Valor | PostgreSQL | Db2 | Informix |
+    | --- | --- | --- | --- |
+    | `number` inteiro até ±9.007.199.254.740.991, ou o texto exato de um inteiro que cabe em 64 bits | o texto, de tipo desconhecido (`unknown`), que o servidor resolve pelo lugar | `BIGINT` | `BIGINT` (`INT8`); o -9.223.372.036.854.775.808, que o `INT8` não tem, vai como decimal (a S-VAR-1) |
+    | `number` com casas, ou inteiro maior | o texto, `unknown` | `DECIMAL`, pelo texto, até 31 dígitos; com mais, o erro "O número tem 35 dígitos, e o Db2 guarda até 31." (`DOUBLE` só para o número escrito com expoente, como `1.5e300`) | `DECIMAL`, até 31 dígitos pelo driver (a S-VAR-1 provou: com 32 o `DB2Decimal` lança e o servidor recusa pela porta DRDA); com mais, "O número tem 32 dígitos, e o Informix guarda até 31 pelo driver." (`FLOAT` só para o número escrito com expoente) |
+    | `string` | o texto, `unknown` | `VARCHAR`; acima de 32.672 bytes, `CLOB` | `VARCHAR` até 255 bytes; acima disso, o tipo do texto longo, como a edição já faz (o `BindEditParameter` do Informix) |
+    | `boolean` | `true` ou `false`, `unknown` | `BOOLEAN`, pelo `bool` do driver, sem `DB2Type` (o `DB2Type.Boolean` lança) | o texto `t` ou `f` (o literal do Informix, RN-EXPORT-011): a S-VAR-1 provou que o `bool` e o `0`/`1` dão -674 no `WHERE` contra uma coluna `BOOLEAN` |
+    | `Date` de dia | `aaaa-mm-dd`, `unknown` | `DATE` | `DATE` |
+    | `Date` de instante | `aaaa-mm-dd hh:mm:ss.fff` seguido do deslocamento da máquina naquela data (`-03`), `unknown`; o texto exato que veio do banco volta como veio | `TIMESTAMP` | `DATETIME YEAR TO FRACTION(5)` |
+    | `null` | o nulo, `unknown` | o nulo, com o tipo da variável (`VARCHAR` no tipo `null`) | o mesmo |
+
+    No PostgreSQL, todo valor vai como o literal entre aspas de antes iria: um texto de tipo desconhecido que o
+    servidor resolve pelo lugar onde está (`WHERE id = $1` vira o tipo de `id`, e o índice dela continua servindo),
+    como a edição já faz (RN-EDIT-006). Onde o lugar não diz o tipo (`SELECT $1`), o valor volta como texto. No Db2 e
+    no Informix o tipo vai com o valor (o `? + 1` e o `? || ?` passam assim, e a data e o booleano se comparam com a
+    coluna); o `SELECT ?` é recusado nos dois bancos mesmo com o tipo (SQL0418N no Db2, -201 no Informix), e onde o
+    banco recusar, a recusa vem como veio, e o guia da API diz o contorno (`CAST(@x AS INTEGER)`). O que
+    cada banco aceita em cada lugar (o `WHERE`, o `IN`, o `LIKE`, o `BETWEEN`, o `LIMIT`, o `FETCH FIRST`, o `FIRST`
+    e o `SKIP`, o `SELECT ?`, a conta, o `INSERT … VALUES`, o `UPDATE … SET`, a coluna de data comparada com o
+    instante e o contrário) é a sonda S-VAR-1, antes de dar a parte por pronta; onde ela contrariar este quadro, o
+    quadro muda com o que ela provou.
+  - Os horários são os da máquina. O `timestamp` sem fuso recebe a hora da máquina: o PostgreSQL ignora o
+    deslocamento no `timestamp`. O `timestamptz` do PostgreSQL recebe o instante, pelo deslocamento, e não depende do
+    fuso da sessão: `new Date()` comparado com uma coluna `timestamptz` é o agora, qualquer que seja o fuso do
+    servidor. No Db2 e no Informix o valor vai sem fuso.
+
+- **RN-VAR-018.** O "SQL enviado".
+  - Cada comando que levou variáveis guarda o texto que foi ao banco, com os marcadores, e os valores. A tela o mostra
+    de duas formas, num diálogo só de leitura, "SQL enviado", no desenho do "Ver SQL" (RN-EDIT-008: o SQL na fonte do
+    editor, num editor só de leitura com o realce, com "Copiar" e "Fechar"):
+    - o texto com os valores no lugar, como literais do banco (os da RN-EXPORT-011: o número como está, o texto entre
+      aspas com a aspa dobrada, o `E'…'` do PostgreSQL com a barra, a data e a hora na forma de cada banco), para
+      ler e para copiar e executar noutro lugar; o valor que não tem literal (o texto com um caractere de controle
+      que o literal não escreve) fica com o marcador, e uma linha de comentário no alto diz quais;
+    - e, abaixo, o quadro dos parâmetros: o marcador, a variável (`@ids[2]` para o terceiro item de uma lista), o tipo
+      e o valor; e uma linha por variável `sql` que entrou ("sql: @t (texto entrou no comando)").
+
+    O trecho que veio de uma variável `sql` aparece destacado, no fundo de atenção, no texto do "SQL enviado" e no da
+    confirmação da proteção.
+
+    O texto com os literais é só para ver: o que foi ao banco foram os parâmetros.
+  - Onde: na barra da área de resultado, o botão de ícone "SQL enviado", com a dica "Ver o SQL enviado, com os valores
+    das variáveis", só no resultado de um comando que levou variáveis; na linha do comando nas Estatísticas, o mesmo
+    botão, também nos comandos sem resultado e nos que falharam; e na pergunta de erro do script (RN-SQL-021), "Ver o
+    SQL enviado".
+  - A confirmação da proteção da conexão (RN-PROT-001) mostra cada comando com os valores que já se sabem quando ela
+    aparece (os escritos, os calculados antes da pergunta, os perguntados e os `sql`, RN-VAR-012) como literais, e o
+    `@nome` dos que ainda vão sair
+    de uma consulta como está, porque ela vem antes de qualquer coisa ir ao banco.
+
+### Executar
+
+- **RN-VAR-019.** O Executar script (Alt+X) com variáveis.
+  - O script com declarações executa inteiro pelo Alt+X, como qualquer script (RN-SQL-019): é o padrão para as
+    variáveis da aba. O que vai é o de sempre, a seleção ou o texto inteiro, dividido pelo mesmo leitor, agora em
+    itens: as declarações, as reatribuições e os comandos, na ordem do texto (RN-VAR-001).
+  - A ordem: as conferências antes de executar (RN-VAR-012), a leitura dos tipos de coluna, a pergunta dos valores que
+    faltam (RN-VAR-021), a avaliação do que não depende do banco, com as variáveis `sql` (RN-VAR-012), a pergunta da
+    proteção da conexão (RN-PROT-001) e então cada item na vez dele. Cancelada a pergunta dos valores ou a da proteção, nada roda, e a área fica como estava.
+  - No Alt+X toda declaração do que vai é avaliada de novo: os valores que a aba já tinha não servem, menos como
+    sugestão na pergunta dos valores. O `random` dá outros valores, e a consulta roda de novo.
+  - **A seleção** que usa um `@nome` declarado acima dela, fora dela, usa o valor que a aba já tem para ele, como o
+    Ctrl+Enter (RN-VAR-020): a declaração de fora sem valor na aba, ou com o texto mudado desde que foi avaliada, é
+    avaliada antes, sem entrar nas Estatísticas como item do script, e aparece no painel Variáveis.
+  - A conferência dos comandos que pedem confirmação (RN-PROT-001) inclui, em "Todos os comandos", as consultas das
+    variáveis e as leituras do `random.of` (mostradas como `random.of(estoque.cliente.id)`), cada uma com o número
+    dela no script, e trata o comando que usa uma variável `sql` como irreversível em "Só comandos irreversíveis", na
+    dúvida, porque o texto que entra pode tirar um `WHERE`.
+  - Na conexão somente leitura (RN-PROT-002), a consulta da variável, que é uma leitura pelo texto (RN-PROT-005; no
+    PostgreSQL em Auto-commit, também pela transação só de leitura, RN-VAR-034), roda; o comando que não é leitura é
+    recusado como antes.
+  - Um script só com declarações também é script: avalia, e o painel Variáveis vem à frente no fim (RN-VAR-024).
+
+- **RN-VAR-020.** O Ctrl+Enter com variáveis.
+  - Com o cursor numa declaração ou numa reatribuição (ou com a seleção de uma só), o Ctrl+Enter a avalia, com as
+    declarações de que ela depende, e o painel Variáveis vem à frente com a linha dela escolhida (RN-VAR-024). O
+    resultado que estava na tela fica: nenhum comando o substituiu (a consulta de uma variável fecha o cursor dele,
+    como todo comando, RN-VAR-034, e o "Carregar mais" dá lugar ao "Executar de novo", RN-SQL-007). Assim a pessoa refaz um `random` ou uma consulta
+    de variável sem executar o script.
+  - Com o cursor num comando que usa variáveis, o Ctrl+Enter executa só aquele comando (RN-SQL-001), com os valores
+    da última atribuição acima dele no texto de cada variável que ele usa (RN-VAR-012). O valor que a aba já tem
+    serve quando a atribuição que o deu tem o mesmo texto de quando foi avaliada e foi avaliada depois da última
+    avaliação de cada atribuição de que depende (e essas, pela mesma regra, RN-VAR-023); a atribuição sem valor na
+    aba, com o texto mudado ou desatualizada é avaliada antes, com as de que depende, na ordem do texto. Assim, com
+    `let x = random.int(1, 100)`, `const y = x * 2` e `SELECT @y`, o Ctrl+Enter em `x` e depois no `SELECT` avalia
+    `y` de novo. A
+    declaração sem valor que a aba ainda não tem é perguntada (RN-VAR-021). Assim o Ctrl+Enter repetido leva os mesmos
+    valores, e o `random` e a consulta não mudam a cada vez; para outros valores, Ctrl+Enter na declaração, ou o
+    Alt+X.
+  - As conferências da RN-VAR-012 valem só para o comando e para as atribuições de que ele depende: um erro numa
+    declaração que ele não usa não o impede (o editor continua sublinhando).
+  - A pergunta da proteção (RN-PROT-001) é uma só: lista as consultas de variável que vão rodar e o comando.
+  - A conta da seleção continua só pelo `;` (RN-SQL-002), mais as declarações: a seleção com uma declaração e outro
+    item (outra declaração ou um comando) tem mais de um item, também sem `;`, e é o aviso de hoje, de que uma
+    execução leva um comando só, com o Alt+X (RN-SQL-001).
+  - Com o cursor numa linha em branco logo depois de uma declaração, o Ctrl+Enter avalia a declaração, tenha ela `;`
+    ou não: avaliar de novo uma declaração não grava nada.
+
+- **RN-VAR-021.** A pergunta dos valores que faltam.
+  - A declaração sem valor (`let cliente_id: number`) é perguntada antes do primeiro comando, num diálogo só para todas
+    as do que vai: o diálogo do "Executar com valores…" (RN-VAR-027), o mesmo componente, no modo reduzido, sem a
+    parte "Onde" e só com os campos sem valor, com o título "Valores para executar", "O script declara 2 variáveis sem
+    valor. Escreva os valores para
+    continuar." (no singular, "1 variável"), um campo por variável, como os do "Executar com valores…"
+    (RN-VAR-027: o tipo, a lista, o `null`, a escolha pela chave estrangeira, RN-VAR-031), e "Executar" e "Cancelar".
+    O foco começa no primeiro campo; Enter executa quando os campos estão certos; Esc cancela, e nada roda.
+  - No Alt+X a pergunta vem toda vez, com os valores da vez anterior nesta aba já preenchidos. No Ctrl+Enter, só
+    quando a aba ainda não tem o valor. No "Executar com valores…", os campos já estão no diálogo dele, também os das
+    declarações sem valor depois do primeiro comando (RN-VAR-027), e não há outra pergunta.
+  - A resposta é o valor da declaração, com a origem "pergunta" no painel (RN-VAR-024), e fica na aba.
+
+- **RN-VAR-022.** As Estatísticas e o erro numa declaração.
+  - As declarações e as reatribuições são itens do script como os comandos: entram na numeração ("3 · let total =
+    (SELECT count(*) FROM pedido)", o número que a aba de resultado de um comando também usa, RN-SQL-020), na barra
+    ("Executando 3 de 12…") e nas Estatísticas, com a situação de sempre ("na fila", "executando", "ok", "erro",
+    "cancelado", "não executado"), as linhas (as que a consulta leu; "—" na declaração sem consulta) e o tempo (o da
+    consulta, ou o da avaliação, em milissegundos).
+  - Os totais das Estatísticas separam os dois: "Comandos executados: 8 de 9" (só os comandos SQL) e "Declarações
+    avaliadas: 3 de 3", este só no script que tem declarações; o tempo total soma os dois, sem o tempo das
+    perguntas.
+  - **O erro numa declaração** (o da avaliação, como o índice que não existe, o do tipo que só a execução vê, o da
+    consulta, como o banco o deu) para o script e abre a pergunta de erro do script (RN-SQL-021), com a declaração (o
+    número e o texto) e o erro. Só "Parar" (o padrão) e "Tentar de novo" (avalia a declaração outra vez, e roda a
+    consulta de novo) valem: "Pular" e "Pular todos os erros" ficam desabilitados, com o motivo "Sem o valor de total,
+    os comandos que a usam não têm como rodar.". Com "Pular todos os erros" já escolhido num comando antes, o erro
+    numa declaração para o script e pergunta do mesmo jeito.
+  - São erros da declaração, só com "Parar" e "Tentar de novo", o `SQL_EXECUTION_FAILED`, o `VARIABLE_QUERY_NOT_READ`
+    e o `VARIABLE_QUERY_TOO_LARGE` da consulta, e os erros do `random.of` (os da rota dos valores e os da RN-VAR-010).
+    São erros do comando, com as quatro escolhas, o `QUERY_PARAMETERS_MISMATCH` e o `QUERY_INVALID` dos `params`, que
+    a conferência da RN-VAR-012 deveria evitar e que chegam com a mensagem da API (RN-SQL-021).
+  - O que não é da declaração (a sessão que caiu, a API fora do ar) para o script sem perguntar, como num comando
+    (RN-SQL-021).
+  - "Cancelar" (RN-SQL-022) durante a consulta de uma variável a cancela no banco: a declaração fica como
+    "cancelado", e os itens seguintes como "não executado". A avaliação sem consulta não se cancela: ela para sozinha
+    nos 250 ms (RN-VAR-013 e 014).
+  - O comando que não pôde ser montado (a lista vazia, o `null` sozinho num `IN`, o objeto sem campo, o `@p.campo`
+    de um valor que não é objeto, o número com dígitos demais para o banco, o comando que passaria do limite de
+    parâmetros) é um erro do comando, com a frase, e segue a pergunta de erro de sempre, com as quatro escolhas.
+
+- **RN-VAR-023.** Os valores da aba.
+  - Os valores ficam na memória da tela, com a aba (o executor dela): cada atribuição avaliada guarda o valor, o
+    tipo, a origem (literal, expressão, `random`, consulta, pergunta, diálogo), a hora, o tempo, o texto que a deu e
+    a ordem da avaliação (um contador da aba), para o Ctrl+Enter saber se ainda vale (RN-VAR-020). Avaliar de novo uma
+    atribuição (o Ctrl+Enter nela, ou o Alt+X) deixa desatualizadas as que dependem dela, e o painel as marca como as
+    de texto mudado (RN-VAR-024). A soma dos valores guardados da aba tem o limite da RN-VAR-013.
+  - Saem ao fechar a aba, ao trocar o banco ou a conexão dela (RN-ARVORE-007 e 008: os valores de uma consulta são de
+    outro banco), no bloqueio por inatividade e no "Sair" (RN-SEG-001), como os resultados. Levar a aba para outra
+    janela (RN-ABAS-002) os leva junto. Não vão às abas que voltam na próxima entrada (RN-ABAS-006), nem ao cofre.
+  - A variável cuja declaração saiu do texto sai do painel na leitura seguinte do texto.
+
+### Ver os valores
+
+- **RN-VAR-024.** O painel "Variáveis".
+  - É uma aba da área de resultado, logo antes de "Estatísticas", fixa na ponta direita com ela (RN-SQL-020): "…
+    resultados | Variáveis | Estatísticas". Aparece quando a aba tem variáveis declaradas no texto e já avaliou
+    alguma: depois de um script com declarações, e depois de um Ctrl+Enter que avaliou uma (sem script, a área ganha
+    as abas "Resultado" e "Variáveis", no lugar do título "Resultado"). Some quando o texto não declara mais nada.
+  - No fim de um script, a regra da RN-SQL-020 continua (a aba do último comando com linhas vem à frente, ou as
+    Estatísticas); só o script sem comando nenhum, e o Ctrl+Enter numa declaração, trazem o painel à frente.
+  - É uma tabela em árvore (`role="treegrid"`), com cabeçalho: "Nome", "Tipo" (`number`, `string[]`, `Date (dia)`,
+    `sql`, `objeto`, com o `| null`), "Valor", "Origem" ("literal", "expressão", "random", "consulta", "pergunta",
+    "diálogo") e "Quando" (a hora local, `14:32:05`, e o tempo, "12 ms", na consulta). As variáveis vêm na ordem do
+    texto, uma linha por variável, com o valor da última atribuição dela que foi avaliada e a hora dessa avaliação. A
+    declarada que ainda não tem valor aparece com "sem valor", apagado; a que tem o valor de antes de a declaração
+    mudar, ou de antes de uma atribuição de que ela depende ser avaliada de novo (RN-VAR-023), com "desatualizado" ao
+    lado da hora.
+  - O valor: o simples, no texto da RN-VAR-005 e 007 (o texto entre aspas simples, `null` apagado como o `NULL` da
+    grade); o texto longo cortado em 200 caracteres, com o inteiro na dica (até 2.000) e no copiar. A lista e o objeto
+    abrem como árvore: a linha deles diz "3 itens" ou "2 campos" e mostra o começo (`[1, 2, 3]`, `{ id: 7, nome: 'Ana'
+    }`); aberta, um item ou um campo por linha. A lista longa mostra os 100 primeiros e "Mostrar mais 100 (de 1.234)".
+    O `sql` leva o ícone de atenção e a dica "Entra no comando como está, sem aspas nem parâmetro.".
+  - O teclado é o da árvore: as setas, Home e End, a seta para a direita abre e a para a esquerda fecha ou vai ao
+    pai; Ctrl+C copia o valor da linha (o simples como texto; a lista e o objeto como JSON); Enter, e o duplo clique,
+    leva o cursor do editor à declaração dela. O menu da linha tem "Copiar valor" e "Ir para a declaração".
+  - Com o resultado numa aba ou numa janela (RN-ABAS-011), o Enter, o duplo clique, o "Ir para a declaração" e o
+    clique num erro da lista "Erros nas variáveis" (RN-VAR-012) trazem antes o editor à frente, como o F6
+    (RN-ABAS-014), e levam o cursor à declaração ou ao erro. Na aba de execução (RN-VAR-029), que não tem editor,
+    abrem o script na linha dela, como "Abrir o script".
+  - É só para ver: os valores mudam pelo script, pelo Ctrl+Enter na declaração e pelos diálogos.
+
+- **RN-VAR-025.** O editor.
+  - **O realce.** `let` e `const` no topo do script, na cor das palavras-chave; o nome declarado, e cada `@nome`
+    declarado no SQL, na cor nova de variável do tema (`--editor-variable`, que passa no contraste de texto da
+    RN-CONFIG-003 sobre o fundo do editor em todos os temas); o `@nome` de uma variável `sql`, com um sublinhado
+    pontilhado no tom de atenção. Os textos, os números e os comentários das declarações têm as cores das do SQL. O
+    `@nome` que não foi declarado fica na cor do SQL.
+  - **Os erros**, sublinhados como o erro do banco (`.cm-sql-error`), com a frase na dica do ponteiro: os da gramática,
+    dos nomes, dos tipos que se sabem sem o banco, o `const` reatribuído, o `@nome` usado antes da declaração, a lista
+    fora de uma lista entre parênteses, o marcador já escrito num comando com variáveis (RN-VAR-012 a 017). A leitura
+    é a da execução, sem o banco, refeita 300 ms depois de a pessoa parar de digitar. O erro que só a execução vê (o
+    tipo que vem de uma consulta ou de uma coluna) aparece depois dela, até o texto mudar ali.
+  - **As dicas**, com o sublinhado pontilhado discreto, sem impedir nada:
+    - o `@nome` não declarado, onde ele seria variável (RN-VAR-015): "@cliente não é uma variável deste script, e vai
+      ao banco como está."; e, quando ele só difere de uma declarada pelas maiúsculas, "Você quis dizer @cliente_id?
+      Os nomes das variáveis diferenciam maiúsculas, como no JavaScript.";
+    - o `LET` ou o `CONST` em maiúsculas onde uma declaração valeria: "LET em maiúsculas não declara variável:
+      escreva let.";
+    - a variável sem anotação de lista, de uma consulta, usada num `IN`: "A consulta pode devolver uma linha só, e
+      ids vira um valor e não uma lista: anote ids: number[].";
+    - o comando de definição com uma variável que não é `sql` (RN-VAR-017): "Comandos CREATE, ALTER, DROP e GRANT não
+      costumam aceitar parâmetros, e o banco pode recusar @x. Para um nome, use uma variável sql.";
+    - o `@nome` declarado que ficou como SQL por causa do caractere de antes (RN-VAR-015): "Aqui o @x é o operador do
+      PostgreSQL (como <@); para a variável, escreva um espaço antes: < @x.";
+    - o `@x` declarado logo depois de `ORDER BY`, `GROUP BY` (ou de uma vírgula na lista deles), `FROM`, `JOIN`,
+      `INTO`, `UPDATE` ou `TABLE`: "Aqui o banco espera um nome, e @x vai como valor: o ORDER BY @x não ordena por
+      coluna. Para um nome, use uma variável sql.";
+    - o `NOT IN (@lista)` com uma lista que pode ter `null`: "NOT IN com null nunca é verdadeiro.";
+    - o `--` ou o `//` colado num valor dentro de uma declaração (`i--`, `a // b`): "-- e // começam um comentário
+      aqui."; e o `//` fora das posições em que é comentário (RN-VAR-001): "// não é comentário no SQL: use --.";
+    - o `let` ou o `const` em minúsculas dentro de um bloco que vai ao banco (o `CREATE PROCEDURE` e o `BEGIN` do Db2,
+      o `BEGIN ATOMIC` do PostgreSQL): "let dentro do bloco é SQL: declare as variáveis antes do bloco.";
+    - o `@x` declarado dentro do corpo de uma rotina (RN-VAR-015): "Dentro do corpo de uma rotina o @x vai ao banco
+      como está.".
+  - **A dica do ponteiro** sobre um `@nome` ou sobre o nome numa declaração: o nome, o tipo e o valor atual na aba,
+    cortado em 200 caracteres, a origem e a hora ("cliente_id: number = 7 · diálogo · 14:32:05"; com a escolha pela
+    chave, também "Valores de estoque.cliente (id)"), ou "cliente_id: number · ainda sem valor. Alt+X, ou Ctrl+Enter
+    na declaração, calcula.". No tema do autocompletar (`.cm-tooltip`).
+  - **O valor no fim da linha.** Depois de avaliada, a declaração mostra, no fim da última linha dela, o valor atual
+    na aba, na cor apagada do editor, sem ser texto (não se seleciona, não se copia, não entra no Ctrl+S): "= 7", "=
+    'Ana'", "= [1, 2, 3] · 3 itens", "= { id: 7, nome: 'Ana' }", "= 2026-10-20", "= null", cortado em 60 caracteres
+    com "…". Some quando a pessoa muda a declaração, até a próxima avaliação. Configurações › Editor SQL ganha "Mostrar
+    o valor das variáveis no fim da linha", ligada por padrão (RN-CONFIG-004).
+  - **O autocompletar** (RN-CONFIG-004) completa, depois de um `@` no SQL, os nomes declarados acima do cursor; e,
+    dentro das declarações, os nomes declarados, os da lista fechada (`Math.`, `random.`, `date.`, `Date.now`,
+    `Number`, `String`) e, depois de `.`, os métodos da espécie do valor, quando ela se sabe. Nunca consulta o banco.
+  - **A caixa das palavras-chave** (RN-CONFIG-004) não muda nada dentro das declarações: `null`, `true`, `false`, `let`
+    e os nomes continuam como a pessoa os escreveu, porque `NULL` e `TRUE` não são da linguagem.
+  - O comando que levou variáveis, executado sem seleção, é destacado como sempre (RN-SQL-018); a declaração avaliada
+    pelo Ctrl+Enter também.
+
+### Executar com valores…
+
+- **RN-VAR-026.** "Executar com valores…": o nome e onde fica.
+  - O nome é "Executar com valores…", e não "Executar com variáveis": o que a pessoa faz ali é escolher valores, e o
+    nome diz o que o diálogo pede. O atalho é Shift+Alt+X (no macOS, Shift+Cmd+Option+X, pelo mesmo motivo do Alt+X,
+    RN-SQL-019), ao lado do Alt+X do script. Nenhum outro atalho do Prism, dos mapas de teclas do editor (CodeMirror)
+    nem do menu do Electron usa essas teclas (um teste confere os três). Ele entra nos atalhos documentados, que o
+    número da versão protege (RN-VERSAO-002), como o F6 entrou pela seção 39.
+  - **No navegador**, no menu do script na seção Scripts (RN-SCRIPT-003), logo depois de "Abrir", só nos scripts que
+    declaram variáveis no topo (`declaresVariables`, RN-VAR-028): o primeiro item depois dos espaços e dos comentários
+    do texto é um `let` ou um `const`. Os outros scripts não têm o item, como o genérico não tem "Tornar genérico"
+    (RN-SCRIPT-005). O `declaresVariables` é uma aproximação que só decide se o item aparece: o diálogo lê o script
+    com o leitor da tela, e o script sem declarações no topo diz "Este script não declara variáveis.". O
+    Shift+Alt+X com o foco na árvore e o script escolhido nela faz o mesmo; com o foco numa aba, vale a aba
+    (abaixo). Abre o diálogo (RN-VAR-027) sem abrir
+    o script, e o resultado vai para uma aba de execução (RN-VAR-029).
+  - **Na barra do editor** da aba de consulta, logo depois de "Executar script", o botão de ícone "Executar com
+    valores…" (o ícone de executar com `{x}`, 16 px, traço 1,5), com a dica "Executar com valores… (Shift+Alt+X)", só
+    quando o texto do editor declara variáveis no topo. Ali ele abre o mesmo diálogo, com o texto do editor (e não o
+    gravado), a conexão e o banco da aba, e executa na própria aba, como o Alt+X com os campos do diálogo no lugar da
+    pergunta dos valores (RN-VAR-021): é o Alt+X para quem quer ver e mudar todos os valores do topo antes. O
+    Shift+Alt+X vale com o foco em qualquer ponto da aba, como o Alt+X.
+  - Na aba de execução, "Mudar os valores…" (RN-VAR-029) é o mesmo diálogo.
+
+- **RN-VAR-027.** O diálogo.
+  - O título: "Executar com valores · <nome do script>" (pela barra do editor, "Executar com valores · <título da
+    aba>"). Duas partes: "Onde" e "Valores". Os botões: "Cancelar" e "Executar"; e, aberto pelo navegador ou pela aba de
+    execução quando já há uma aba de execução daquele script, também "Executar numa aba nova".
+  - **Onde.** "Conexão" e "Banco de dados", na forma da "Tabela de destino" da cópia (RN-IMPORT-023: cada conexão com o
+    caminho das pastas, a etiqueta do banco e o ambiente; as conectadas primeiro). Vêm escolhidos: no script com
+    conexão, a dele e o banco dele; no genérico, os da última execução dele (RN-VAR-028), ou a única conexão conectada,
+    ou nenhuma ("Escolha a conexão."). A pessoa pode trocar, também num script com conexão: rodar o mesmo script na
+    conexão de homologação e na de produção é o caso comum, e as proteções da conexão escolhida valem (RN-PROT-001 e
+    002). Escolher uma conexão desconectada a conecta, como na cópia ("Conectando a DW…", com o erro do banco e
+    "Tentar de novo"). Na barra do editor, "Onde" mostra a conexão e o banco da aba, sem trocar (a troca é a do botão
+    da conexão, RN-ARVORE-008).
+  - **Valores.** Um campo por variável do topo do script (RN-VAR-001), na ordem do texto, com o nome e o tipo ("cliente_id
+    · number"), e a ajuda: o comentário de linha na mesma linha da declaração, depois dela, ou o comentário de linha
+    logo acima dela (`--` ou `//`), até 200 caracteres. O campo é o do tipo:
+    - `number`: um campo de texto, que aceita o número com ponto ("Use ponto nos decimais, como 3.5."; com a vírgula,
+      "Escreva um número, como 42 ou 3.5.");
+    - `string`: um campo de texto de uma linha, que cresce para várias quando o texto tem quebra de linha;
+    - `boolean`: um botão de liga e desliga, "Sim" e "Não";
+    - `Date`: o campo de data, e, na de instante, também o da hora (com os segundos); no `Date` sem valor nem coluna,
+      a hora é opcional, e sem ela a data é de dia;
+    - a lista: um campo de itens, em que Enter ou a vírgula fecham um item, cada item vira uma ficha com o X, e colar
+      várias linhas cria um item por linha; diz quantos itens tem. Colar separa por `\r\n`, `\n` ou `\r`; a linha vazia
+      do fim é descartada; as vazias do meio são descartadas nas listas de `number` e de `Date`, e viram um item vazio
+      nas de texto. O item de texto não é aparado, e a ficha marca com um ponto discreto o espaço no começo ou no fim
+      (a dica diz "1 espaço no fim");
+    - `| null`: a caixa "NULL" ao lado, que desabilita o campo;
+    - `sql`: um campo de texto na fonte do editor, com o ícone de atenção e "Entra no comando como está, sem aspas: confira o que
+      escreve.";
+    - a variável com os valores restritos pela chave estrangeira ou pela coluna: a escolha da RN-VAR-031;
+    - a variável de consulta e a do `random.of`: sem campo, com o texto da consulta (ou da chamada) e o valor
+      calculado, só para ver (abaixo).
+  - **O valor padrão** é o do script. A declaração com um literal (`= 10`, `= 'aberto'`, `= [1, 2]`, `= true`) vem com
+    ele preenchido. A declaração com outra expressão (`= date.addDays(date.today(), -30)`, `= random.int(1, 100)`, `=
+    inicio`) vem vazia, com a expressão escrita no campo como dica ("calculado: random.int(1, 100)"): vazia, a expressão
+    é avaliada na execução, na vez dela; escrita, o valor escrito vale no lugar da expressão. A declaração sem valor
+    vem vazia, e é obrigatória ("Escreva um valor para cliente_id."), menos com `| null`, em que a caixa "NULL" vale.
+    O valor lembrado da última execução (RN-VAR-028) vem no lugar do padrão, com a marca "da última vez" e o botão
+    "Voltar ao valor do script" (↺) ao lado.
+  - **A consulta** do topo é calculada quando o diálogo abre, uma vez, com os valores que os campos têm naquele
+    momento, na sessão da árvore da conexão e do banco escolhidos (RN-ARVORE-006), pela rota da consulta da variável
+    (RN-VAR-034), e mostra o valor como o painel (RN-VAR-024). A consulta que depende de um campo vazio e
+    obrigatório espera ("Calculada quando cliente_id tiver valor."). Mudar um campo de que ela depende a marca como
+    "desatualizada", sem calcular de novo sozinha; "Calcular de novo" a refaz. Ela não muda o que vai: na execução, ela
+    roda de novo na vez dela, na sessão da aba de execução. A conexão que pede confirmação de todos os comandos
+    (RN-PROT-001) não calcula sozinha: o diálogo mostra "Calcular" no lugar do valor. O `random.of` não é calculado
+    no diálogo: "Sorteado na execução.".
+  - As variáveis declaradas depois do primeiro comando não são campos, menos as que não têm valor (`let x: number`),
+    que ganham campo depois dos do topo, sob "Mais abaixo no script": sem o valor, o script não tem como rodar
+    (RN-VAR-021). Das outras, uma linha no fim diz "Mais 2 variáveis são calculadas durante o script.", com os nomes
+    na dica.
+  - **A conferência**, antes de executar: cada campo pelo tipo, com a frase no campo ("cliente_id é number, mas
+    recebeu 'abc'.", "Escolha uma data.", "A lista ids está vazia: escreva ao menos um valor.", quando a lista vai a
+    um `IN`); os restritos pela API (RN-VAR-031: "O valor 999 não existe em estoque.cliente (id)."); e o script
+    inteiro pela RN-VAR-012, com os valores do diálogo. Com um erro no script, o diálogo diz "O script tem erros nas
+    variáveis e não pode ser executado." com a lista (linha e frase), "Executar" fica desabilitado com o mesmo
+    motivo, e "Abrir o script" o abre na linha do primeiro erro. O foco vai ao primeiro campo com erro.
+  - O script com alterações não salvas numa aba aberta: o diálogo pelo navegador usa a versão gravada, e diz "O script
+    tem alterações não salvas numa aba: aqui vale a versão salva.".
+  - Executar fecha o diálogo, grava os valores lembrados (RN-VAR-028) e executa (RN-VAR-029, ou na própria aba pela
+    barra do editor), como o Alt+X: as conferências, a pergunta da proteção da conexão e os itens na ordem, com o valor
+    do campo no lugar da expressão de cada declaração que a pessoa escreveu.
+  - O diálogo tem o foco preso nele, abre com o foco no primeiro campo vazio e obrigatório (ou no primeiro campo), e o
+    Esc o fecha sem executar. Enter, fora de um campo de itens, de um de várias linhas e da escolha aberta, executa.
+
+- **RN-VAR-028.** Os valores lembrados.
+  - Ao executar pelo diálogo, o Prism lembra, para aquele script, o valor de cada campo que a pessoa escreveu ou
+    escolheu (os que ficaram com o padrão do script não), e, no script genérico, a conexão e o banco escolhidos. Ficam
+    no cofre do usuário, cifrados com o script (RN-SCRIPT-002), e não nas preferências, porque são dados: o cofre é
+    desta instalação, como as preferências, e o valor de um cliente não vai em texto aberto para o disco.
+  - O diálogo seguinte daquele script os traz (RN-VAR-027). O valor lembrado de uma variável que saiu do topo do
+    script, que mudou de tipo ou que não passa mais na conferência é esquecido em silêncio. "Esquecer os valores deste
+    script", no pé do diálogo, apaga os daquele script. O valor que faria os lembrados passarem de 64 KiB (as notas
+    das rotas) não é lembrado, e o diálogo diz isso uma vez, no campo: "Este valor é grande demais para ser
+    lembrado.".
+  - Pela barra do editor, os valores só são lembrados quando a aba é de um script salvo; na aba que não é, o diálogo
+    não grava nada e não mostra "Esquecer os valores deste script". Na de um script com alterações não salvas, lembra
+    no script gravado, pelos nomes que ainda existem nele.
+  - Rota: `PUT api/user/scripts/{id}/run-values` `{ values, connectionID?, database? }` grava, e o `GET
+    api/user/scripts/{id}` devolve `runValues` (seção 6). A lista dos scripts devolve `declaresVariables`, que a API
+    calcula pelo texto do script: depois dos espaços em branco e dos comentários (`--` e `//` até o fim da linha, `/*
+    … */` e, em qualquer banco, o `{ … }`), o texto começa por `let` ou `const` seguido de um espaço em branco
+    (espaço, tabulação ou quebra de linha) e de um nome. Os casos ficam em `src/test-fixtures/variables/declares.json`,
+    escritos à mão e lidos pelos testes da tela e da API. O cofre não muda de formato: o campo é novo e opcional, e
+    uma versão anterior do Prism que abra o cofre o ignora (quem implementa confirma, como na seção 39; se não
+    ignorar, o formato sobe para o 5, RN-VERSAO-005). A gravação que falha avisa ("Não foi possível lembrar os
+    valores: <motivo>.", no tom de atenção), e a execução segue. Excluir o script exclui os valores dele.
+
+- **RN-VAR-029.** A aba de execução.
+  - Pelo navegador, o resultado vai para uma aba própria, sem editor: a aba de execução. Não é a aba do resultado da
+    seção 39 (RN-ABAS-012), que mostra o resultado de uma aba de consulta: é uma aba com o executor e a sessão dela
+    (RN-SESSAO-001), na conexão e no banco do diálogo, que usa o mesmo componente da área de resultado.
+  - Na faixa, ela tem o ícone de executar (14 px), o título do script ("Pedidos do período"; "Pedidos do período (2)"
+    para a segunda do mesmo script), o selo do ambiente da conexão e o X. A dica: "Execução de Pedidos do período em
+    MES Produção · mes". O nome para o leitor de tela: "Execução de Pedidos do período". Ela abre logo depois da aba
+    ativa, ou depois da aba do resultado dela quando a ativa tem uma (RN-ABAS-012), e fica ativa. Os pontos da faixa
+    são os da aba de consulta: o de execução em andamento, o de resultado não visto e o vermelho da pergunta de erro
+    do script (RN-SQL-021).
+  - Pelo navegador, "Executar" reusa a aba de execução mais recente daquele script nesta janela que esteja na mesma
+    conexão e no mesmo banco do diálogo, e a ativa; não havendo, abre uma aba nova. "Executar numa aba nova" abre
+    sempre outra.
+  - O cabeçalho, acima da área de resultado:
+    - a conexão (a sigla do banco, o nome e o selo do ambiente) e o banco, e "Executado às 14:32:05" (durante a
+      execução, "Executando 3 de 12…", como a barra da área);
+    - os valores usados, em fichas: "cliente_id = 7 (Mercado Bom)" (com a descrição da escolha, RN-VAR-031), "inicio =
+      2026-09-20", "ids = [1, 2, 3]", "tabela = pedido" com o ícone de atenção do `sql`; cada ficha cortada em 40
+      caracteres, com o valor inteiro na dica, e as que não cabem numa linha num "+3", que abre a lista;
+    - os botões "Executar de novo" (Alt+X), com o nome "Executar o script de novo" para o leitor de tela e a dica
+      "Executar o script de novo, com os mesmos valores (Alt+X)",
+      "Mudar os valores…" (Shift+Alt+X) e "Abrir o script". Durante a execução, "Executar de novo" vira "Cancelar"
+      (RN-SQL-022). O "Executar de novo" da área de resultado (o do cursor fechado e o F5, RN-GRADE-012) continua
+      sendo o do comando daquele resultado.
+  - Abaixo, a área de resultado inteira, como a do Executar script: uma aba por comando com linhas, as Estatísticas,
+    o painel Variáveis, a pergunta de erro (RN-SQL-021), e tudo o que vale num resultado (a edição, o copiar, o
+    exportar, a atualização automática no do último comando, RN-SQL-020 e 023, e RN-ABAS-015). O botão "Onde mostrar o
+    resultado" (RN-ABAS-014) não aparece: ela já é só o resultado. O F6 não faz nada nela.
+  - "Executar de novo" lê o script de novo no cofre (a versão gravada agora, que pode ter mudado) e executa com os
+    mesmos valores e na mesma conexão, na mesma aba, substituindo os resultados. Se o topo do script mudou de um
+    jeito que os valores não servem mais (uma variável nova sem valor, um tipo trocado), abre o diálogo. O script
+    excluído: "O script Pedidos do período não existe mais.", e a aba fica como está.
+  - "Mudar os valores…" abre o diálogo com os valores desta aba; "Executar" executa nesta aba (trocando a sessão, se a
+    conexão ou o banco mudaram, como na RN-ARVORE-008), e "Executar numa aba nova" abre outra.
+  - "Abrir o script" abre o script numa aba de consulta (RN-SCRIPT-003), ou ativa a aba em que ele já está.
+  - Os atalhos da aba de consulta que dependem do editor (Ctrl+Enter, Ctrl+S, Ctrl+9) não fazem nada nela; o Alt+X e
+    o Shift+Alt+X são os dos botões; o F5, em qualquer ponto da aba (também com o foco nos botões do cabeçalho), é o
+    "Executar de novo" do resultado do último comando (RN-GRADE-012), como no script.
+  - Ela se move como a aba de consulta (RN-ABAS-001 a 003 e 010), levando o que a aba de consulta leva: a sessão, o
+    resultado do último comando, os valores e o cabeçalho. Fecha como ela, com as mesmas perguntas (RN-ABAS-004 e
+    RN-EDIT-007). Não volta na próxima entrada (RN-ABAS-006): o que ela tem é resultado, que não volta, e os valores
+    ficam lembrados no script (RN-VAR-028), a um clique de "Executar com valores…".
+  - O bloqueio por inatividade descarta os resultados e os valores dela, também as fichas do cabeçalho, como os de uma
+    aba de consulta (RN-SEG-001). No desbloqueio ela continua na faixa, e o cabeçalho mostra só a conexão e o banco; o
+    "Executar de novo" abre então o diálogo com os valores lembrados (RN-VAR-028), em vez de executar.
+
+### Os valores da chave estrangeira
+
+- **RN-VAR-030.** A inferência.
+  - Quando: ao abrir o "Executar com valores…" e a pergunta dos valores (RN-VAR-021), para as variáveis que viram
+    campos, e nunca ao digitar (o editor não consulta o banco, RN-CONFIG-004). O Prism lê o SQL do script com o leitor
+    da tela e o catálogo das tabelas que ele cita (as consultas de colunas e de chaves estrangeiras que a tela já faz,
+    RN-TABELA-003 e RN-ARVORE-003, pela sessão da árvore da conexão e do banco do diálogo, no mesmo cache da Estrutura).
+  - **O tipo de coluna** (`let c: pedido.cliente_id`, RN-VAR-004) diz a coluna, e a inferência não é feita para ela.
+    **A anotação de um tipo comum** (`let c: number`) desliga a inferência: a variável fica livre. É o jeito de
+    escapar de uma inferência que não serve.
+  - **Os lugares que contam**, em qualquer comando do script e na consulta de uma variável, em qualquer nível de
+    subconsulta, cada um no bloco de consulta mais de dentro em que está:
+    - a comparação de igualdade ou de diferença com uma coluna: `<coluna> = @v`, `@v = <coluna>`, `<coluna> <> @v`,
+      `<coluna> != @v`;
+    - o `IN`: `<coluna> IN (@v)` e `<coluna> NOT IN (@v)`, com `@v` uma lista ou um valor, também entre outros itens
+      (`IN (@a, @b)` conta para os dois);
+    - o `INSERT INTO <tabela> (c1, c2, …) VALUES (…)`, em que o item de posição N é só `@v`: a coluna cN da tabela,
+      em cada linha do `VALUES`;
+    - o `UPDATE <tabela> [[AS] apelido] SET c = @v`: a coluna c da tabela.
+
+    O lado da coluna é só a coluna, e o lado da variável é só o `@v`: com uma função, uma conversão (`@v::int`,
+    `CAST(@v AS …)`) ou uma conta de um dos lados, o lugar não conta.
+  - **A coluna** é `coluna`, `apelido.coluna`, `tabela.coluna` ou `esquema.tabela.coluna`, com ou sem aspas, nas
+    regras de nome de cada banco (RN-LINK-001). O qualificador é procurado entre as tabelas do `FROM` e dos `JOIN`
+    daquele bloco (e a tabela do `UPDATE`, do `DELETE` e do `INSERT`): primeiro como apelido, depois como nome de
+    tabela. A coluna sem qualificador só conta quando o bloco tem uma tabela só. A tabela sem esquema é a do esquema
+    padrão da sessão, como na RN-LINK-001. O apelido de uma tabela derivada, de um `WITH` ou de uma função de tabela,
+    e a coluna de um bloco de fora (a subconsulta correlacionada), não contam.
+  - **O que a coluna dá**, pelo catálogo:
+    - a coluna que é, sozinha, uma chave estrangeira: os valores da coluna referenciada, na tabela referenciada;
+    - nas comparações e no `IN` (e não no `INSERT` nem no `UPDATE … SET`, em que o valor costuma ser novo), a coluna
+      que é, sozinha, a chave primária da tabela dela: os valores dela mesma;
+    - no tipo de coluna, a coluna que não é chave estrangeira: os valores dela mesma;
+    - o resto: nada.
+  - **Quando desiste**, e a variável fica livre, sem aviso no campo: nenhum lugar conta; os lugares que contam dão
+    tabelas ou colunas diferentes (todos têm de dar a mesma); a chave estrangeira é de várias colunas; o tipo da
+    coluna não casa com o da variável (`number` com uma coluna de texto); a coluna é binária; a conexão não está
+    conectada e não conecta; o catálogo não responde em 5 segundos, ou falha; o script cita mais de 20 tabelas
+    diferentes nos lugares que contam; e o leitor não entende o bloco (um parêntese sem par, um texto que não fecha).
+    Na dúvida, livre: restringir um valor que a pessoa precisa seria pior que não ajudar.
+  - O tipo de coluna que não se resolve é erro (RN-VAR-004), e não livre: a pessoa o escreveu.
+
+- **RN-VAR-031.** A escolha no diálogo.
+  - O campo da variável restrita é uma caixa de escolha com busca (`role="combobox"`, com a lista `role="listbox"` e
+    o `aria-activedescendant`), com a nota "Valores de estoque.cliente (id)" (e, com a descrição, "…, com o nome").
+    Aberta, mostra os valores, cada um com a descrição ao lado ("7 — Mercado Bom"), na ordem dos valores, 100 por
+    vez, com "Carregar mais" no fim; a busca filtra pelo valor e pela descrição, sem diferenciar maiúsculas, 300 ms
+    depois de a pessoa parar de digitar, e a busca nova cancela a anterior. As setas andam, Enter escolhe, Esc fecha a
+    lista.
+  - A lista (`number[]`, `cliente.id[]`) escolhe vários, com as caixas de marcar na lista e os escolhidos como fichas
+    no campo; colar várias linhas confere cada uma.
+  - A pessoa pode digitar o valor em vez de escolher. O valor digitado, colado ou lembrado é conferido na API
+    (RN-VAR-035, `values/check`) quando sai do campo e antes de executar, e o que não existe é recusado no campo: "O
+    valor 999 não existe em estoque.cliente (id)." ("Os valores 998 e 999 não existem em …"). Na restrição pela chave
+    primária da própria coluna (RN-VAR-030), que serve para achar um valor e não para impedir a pergunta "existe?", o
+    que não existe é só um aviso no campo, no tom de atenção, que não impede executar: "O valor 999 não existe em
+    pedido (id).". O valor da expressão do script (o padrão) não é conferido: o script é de quem o escreveu.
+  - **A coluna de descrição** é a primeira coluna de texto da tabela referenciada (na ordem do catálogo), fora da
+    chave, cujo nome, sem diferenciar maiúsculas nem acentos, é `nome`, `name`, `descricao`, `description`, `desc`,
+    `titulo`, `title`, `label`, `rotulo`, `razao_social`, `fantasia`, `apelido` ou `sigla`, ou termina em `_nome`,
+    `_name`, `_descricao` ou `_desc`. Sem nenhuma, não há descrição: um texto qualquer ao lado (um CPF, um e-mail) não
+    ajudaria a escolher. A descrição é cortada em 200 caracteres.
+  - O valor longo demais, que a API mandou cortado (RN-SQL-011), aparece na lista apagado, com "O valor é longo demais
+    para escolher daqui: escreva-o.".
+  - A falha da API (o erro do banco, a sessão ocupada) aparece na lista, com "Tentar de novo", e o campo continua
+    aceitando o valor digitado, conferido quando a API voltar.
+
+### Na API
+
+- **RN-VAR-032.** A execução com parâmetros.
+  - `POST …/queries` ganha `params`, opcional: a lista dos valores dos marcadores do comando, na ordem, cada um `{
+    type, value }`, com `type` em `text`, `number`, `boolean`, `date` ou `timestamp`, e `value` um texto, ou nulo para
+    o parâmetro nulo (com o tipo, que o Db2 e o Informix usam). Sem `params`, ou com a lista vazia, o comando vai como
+    antes, sem parâmetros: o `$1` e o `?` do texto vão como estão, e o erro é do banco.
+  - A forma de cada `value`, conferida pela API, e a recusa é 422 `QUERY_INVALID`, no campo (`params[3].value`,
+    `params[3].type`), como o `keep` (RN-SQL-024), sem nada ir ao banco:
+    - `number`: `^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$`, até 100 caracteres;
+    - `boolean`: `true` ou `false`;
+    - `date`: `aaaa-mm-dd`, uma data que existe;
+    - `timestamp`: `aaaa-mm-dd hh:mm:ss`, com até 6 casas depois de um ponto, um instante que existe; no PostgreSQL,
+      também com o fuso no fim (`Z`, `+00`, `-03:00`), como o servidor o escreve, para o texto exato que veio dele
+      voltar como veio (RN-VAR-007);
+    - `text`: até 1.000.000 de caracteres, sem U+0000;
+    - a lista: até 10.000 entradas, com o texto de todas até 4 MiB em UTF-8 (RN-VAR-013); a entrada que não é um
+      objeto com essas duas chaves, ou o `type` fora da lista, também é `QUERY_INVALID`.
+  - **Os marcadores** se contam com o leitor do texto da API (o de cada banco, que não conta texto, nome entre aspas,
+    comentário nem `$tag$`, RN-PROT-005): no PostgreSQL, os `$n` do texto têm de ser exatamente `$1` a `$N`, cada um
+    pelo menos uma vez, com N o tamanho da lista; no Db2 e no Informix, o número de `?` tem de ser o tamanho da lista.
+    A diferença é 422 `QUERY_PARAMETERS_MISMATCH`, com `markers` e `values`: "O comando tem 3 marcadores, e vieram 2
+    valores." Com `params`, o filtro do resultado (RN-GRADE-011) não pode ter marcador: 422 `FILTER_INVALID`, "O
+    filtro não pode ter marcador de parâmetro ($1 ou ?)."; com o filtro, os marcadores continuam na mesma ordem, porque
+    ele entra sem marcador, depois do comando, ou o embrulha. Quando o filtro trocaria o `ORDER BY` do comando e esse
+    `ORDER BY` tem marcador, a API embrulha o comando (`wrapped`) em vez de juntar, e os marcadores e os valores
+    ficam como estavam.
+  - **A conversão** é a do quadro da RN-VAR-017, pela ligação de parâmetro que a edição já tem em cada banco (o
+    `EditParameter` com o `DbType` e o `BindEditParameter` de cada conexão, RN-EDIT-006), e não uma nova: no PostgreSQL,
+    o texto com o tipo desconhecido do Npgsql, nos marcadores de posição (o `EnableSqlRewriting` continua desligado, e
+    só o `$n` vale); no Db2 e no Informix, o valor convertido para o tipo do .NET (`long`, `double`, `string`, `bool`,
+    `DateTime`) com o `DB2Type` do quadro, na ordem dos `?`. O decimal vai pelo tipo decimal do driver da IBM ou pelo
+    texto com `CAST`, porque o `System.Decimal` guarda só 28 a 29 dígitos (a S-VAR-1 decidiu: o `DB2Decimal` do driver, até 31 dígitos nos dois). O valor que o tipo não
+    guarda (o expoente fora do `double`, os dígitos demais, a metade de um par UTF-16) é 422 `QUERY_INVALID` no campo,
+    nunca 500.
+  - Tudo o que vale para um comando vale com os parâmetros: a divisão e a recusa de mais de um comando
+    (`MULTIPLE_STATEMENTS_NOT_SUPPORTED`), o controle de transação (RN-SQL-003), a leitura do somente leitura no texto
+    com os marcadores (RN-PROT-005), a leitura pelo cursor e o caminho da RN-SQL-013, o cancelamento (RN-SQL-010), o
+    `keep` (RN-SQL-024) e a página com o `read` e o `editable`. O comando que o banco recusa por causa do parâmetro
+    (o `SELECT ?` sem tipo no Db2, o `$1` num comando de utilidade do PostgreSQL) é `SQL_EXECUTION_FAILED`, com a
+    mensagem como veio (RN-SQL-009). A posição do erro que o banco dá é a do texto enviado, e a tela a leva ao texto
+    do editor (RN-SQL-009).
+  - O corpo do pedido continua no limite de sempre do servidor (30.000.000 de bytes, o padrão do Kestrel): 1 MB de
+    comando e 4 MiB de valores cabem nele, menos quando quase tudo é caractere de controle, que o JSON escreve como
+    `\u00XX`. A tela confere o tamanho do corpo antes de mandar e não manda o que passa: "Os valores do comando
+    passam do tamanho que o Prism manda de uma vez: use menos valores.".
+
+- **RN-VAR-033.** O comando guardado e o que executa de novo.
+  - O que a sessão guarda de cada resultado (o atual e os guardados do script, RN-SQL-024; o último comando que
+    devolveu linhas, da contagem, RN-SQL-006) passa a ser o texto executado, com o filtro, **e os parâmetros dele**,
+    na memória da API, como o texto. Tudo o que a API e a tela executam de novo a partir de um resultado leva os
+    mesmos parâmetros e os mesmos valores, e nunca avalia as variáveis de novo:
+    - **a contagem** (RN-SQL-006): o `SELECT COUNT(*) FROM (<comando>) …`, na conexão à parte, com os parâmetros do
+      comando, que o embrulho não muda;
+    - **a coluna inteira** (RN-EDIT-020): o `<Q>` leva os marcadores e os valores dele. A API conhece cada marcador do
+      `<Q>` pelo leitor do texto (a posição e, no PostgreSQL, o número) e, ao montar cada forma, numera de novo, na
+      ordem do texto final, os que ficam, com os valores deles: no PostgreSQL, os do `SET` vêm primeiro (`$1` a `$k`)
+      e os do `<Q>` passam a `$k+1` em diante; na forma direta, que leva só a condição do `<Q>`, os marcadores fora
+      dela (no `SELECT`, por exemplo) saem com os valores deles, e os da condição são numerados de novo de `$k+1`, sem
+      buraco, porque o PostgreSQL não aceita um `$n` que o texto não usa; no Db2 e no Informix, os `?` do `SET` e
+      depois os do `<Q>` que ficaram, na ordem. O caminho por lotes do Informix executa o `<Q>` com os valores dele
+      para ler as chaves, e os lotes levam só os do `SET` e os das chaves;
+    - **a exportação e a cópia para outro banco** (RN-EXPORT-002 e RN-IMPORT-022): a tela manda o texto enviado, com
+      os marcadores, e os parâmetros (`source.params`), e não o texto do editor; a contagem e a leitura, na conexão
+      à parte, os levam;
+    - **o F5, o "Executar de novo", o filtro, a ordem do cabeçalho e a atualização automática** (RN-GRADE-011, 012 e
+      014), e o "Executar este comando" das abas do script (RN-SQL-020): a tela executa de novo o texto enviado com os
+      mesmos parâmetros, que ela guarda com o alvo de cada execução. O `random` não sorteia de novo e a consulta da
+      variável não roda de novo: para outros valores, executa-se o script de novo. A atualização automática compara o
+      comando, o filtro e os parâmetros para saber se é o mesmo comando (RN-GRADE-014);
+    - **o alvo da edição e o "Gerar SQL"** (`edit-target`, RN-EDIT-002 e RN-GRADE-020): o leitor do comando aceita os
+      marcadores no `WHERE` e nas outras cláusulas, como valores, sem mudar a leitura das tabelas e das colunas. O
+      que se edita é a tabela pela chave, e não o comando: os parâmetros não entram no `UPDATE` da linha;
+    - a leitura que o "Salvar" da coluna inteira faz de novo (RN-EDIT-022), com os mesmos valores.
+  - O alvo de cada execução na tela guarda o texto do editor (para a marca do script e a posição do erro), o texto
+    enviado, os parâmetros e o mapa das posições entre os dois (RN-SQL-009); a passagem da aba para outra janela
+    (RN-ABAS-002, `window-messages.ts`) leva os quatro, e o esquema dessas mensagens os confere (um campo que ele não
+    conhece some, e o resultado perderia os valores). A janela do resultado (RN-ABAS-017) não precisa de nada: ela é
+    desenhada pela mesma tela, com o mesmo executor.
+
+- **RN-VAR-034.** A consulta da variável.
+  - `POST …/queries/variable` `{ sql, params?, maxRows? }` executa a consulta de uma variável (RN-VAR-011) na sessão,
+    na vez dela (409 `SESSION_BUSY`, como um comando), e devolve `{ columns, rows, elapsedMs }`, com `columns` como
+    na página (`{ name, type, kind }`) e as linhas inteiras, com os valores no texto da grade (RN-SQL-011) mas sem o
+    corte de 10.000 caracteres.
+  - Confere, antes de ir ao banco: a forma (`sql` vazio ou de mais de 1 MB, `params` como na RN-VAR-032, `maxRows`
+    de 1 a 10.000, o padrão 10.000: 422 `QUERY_INVALID` no campo); um comando só (422
+    `MULTIPLE_STATEMENTS_NOT_SUPPORTED`); os marcadores (422 `QUERY_PARAMETERS_MISMATCH`); e a leitura pela RN-PROT-005
+    (422 `VARIABLE_QUERY_NOT_READ`, com o motivo no detalhe: "A consulta de uma variável tem de ser uma leitura: um
+    DELETE não é."). No PostgreSQL em Auto-commit ela roda numa transação só de leitura, como a leitura de um comando
+    (RN-SQL-013), e o que o banco recusar ali é a recusa dele; no Commit manual, dentro da transação da aba, e no Db2 e
+    no Informix, vale a leitura do texto.
+  - Lê até `maxRows` linhas e mais uma: com a linha a mais, ou com mais de 100 colunas, ou com mais de 16 MiB de
+    valores, para de ler, fecha a leitura e responde 422 `VARIABLE_QUERY_TOO_LARGE`, com `reason` (`rows`, `columns`
+    ou `bytes`) e o limite. O binário vem no texto da grade (`0x…`), e a tela o recusa (RN-VAR-011).
+  - Na sessão: fecha o cursor aberto, como todo comando (RN-SQL-007), e não muda mais nada que a tela veja: o
+    resultado atual continua o atual, com o `resultID`, a edição e os valores completos dele (RN-SQL-017); os
+    guardados continuam guardados (RN-SQL-024); e o último comando que devolveu linhas, o da contagem, continua o
+    dele. O "Carregar mais" do resultado atual, depois dela, é o 409 `NO_OPEN_CURSOR` de sempre.
+  - O "Cancelar" (`queries/cancel`, RN-SQL-010) a cancela, como a um comando, com o `outcome` de sempre.
+  - O erro do banco é 422 `SQL_EXECUTION_FAILED`, com a mensagem, o SQLSTATE e a posição (RN-SQL-009).
+  - O diálogo do "Executar com valores…" a usa na sessão da árvore (RN-VAR-027), que também espera a vez.
+
+- **RN-VAR-035.** Os valores de uma coluna.
+  - `POST …/schemas/{schema}/tables/{table}/values` `{ column, description?, search?, offset?, limit?, total? }`
+    devolve os valores diferentes e não nulos de uma coluna, para a escolha do diálogo (RN-VAR-031) e para o
+    `random.of` (RN-VAR-010): `{ kind, values: [{ value, description, truncated }], hasMore, total }`.
+    - `column` e `description` são nomes de colunas da tabela, conferidos no catálogo (as colunas que a rota de
+      colunas devolve), e nunca entram no texto sem ser conferidos: vão entre aspas duplas, com a aspa dobrada, como
+      nos Registros (RN-TABELA-002), com o esquema e a tabela. A coluna ou a descrição que não é da tabela, a binária
+      ou de objeto grande (`bytea`, `BLOB`, `CLOB`, `BYTE`, `TEXT` do Informix) e a descrição igual à coluna são 422
+      `VALUES_INVALID`, no campo. A tabela (ou a visão) que não existe é 404 `VALUES_TABLE_NOT_FOUND`.
+    - `search`: até 200 caracteres, sem caractere de controle; o valor ou a descrição contém o texto, sem diferenciar
+      maiúsculas, com o `!`, o `%` e o `_` do texto escapados com `!` (o `!` não quer dizer nada num texto de nenhum dos
+      três bancos; a barra quereria no PostgreSQL com `standard_conforming_strings` desligado). `offset`: de 0 a
+      1.000.000 (o padrão é 0). `limit`: de 0 a 200 (o padrão é 100; 0 só com `total`). `total`: booleano; verdadeiro, a
+      resposta traz quantos valores há (com a busca), e nulo quando falso. Fora disso, 422 `VALUES_INVALID`, no campo.
+    - A ordem é a dos valores, crescente, no banco. A API lê `limit` mais um, para saber o `hasMore`.
+    - O texto, por banco (a sonda S-VAR-2 confere os três, também o `LIKE` com o escape e a conversão para texto de
+      cada tipo de coluna):
+
+      ```
+      -- PostgreSQL
+      SELECT DISTINCT "c", "d" FROM "s"."t" WHERE "c" IS NOT NULL
+         AND ("c"::text ILIKE $1 ESCAPE '!' OR "d"::text ILIKE $1 ESCAPE '!')
+       ORDER BY "c" LIMIT 101 OFFSET 0
+      -- Db2
+      SELECT DISTINCT "c", "d" FROM "s"."t" WHERE "c" IS NOT NULL
+         AND (LOWER(VARCHAR("c")) LIKE LOWER(?) ESCAPE '!' OR LOWER(VARCHAR("d")) LIKE LOWER(?) ESCAPE '!')
+       ORDER BY "c" OFFSET 0 ROWS FETCH FIRST 101 ROWS ONLY
+      -- Informix
+      SELECT SKIP 0 FIRST 101 DISTINCT "c", "d" FROM "s"."t" WHERE "c" IS NOT NULL
+         AND (LOWER("c"::LVARCHAR) LIKE LOWER(?) ESCAPE '!' OR LOWER("d"::LVARCHAR) LIKE LOWER(?) ESCAPE '!')
+       ORDER BY "c"
+      ```
+
+      Sem a busca, sem a condição dela; sem a descrição, sem `"d"`. O `DISTINCT` com a descrição vale porque a
+      coluna referenciada é a chave da tabela dela, e a descrição é uma só por valor; no tipo de coluna que não é
+      chave, a descrição não vem. O `total` é `SELECT COUNT(DISTINCT "c") FROM … WHERE "c" IS NOT NULL` com a mesma
+      busca.
+    - `value` e `description` vêm no texto da grade (RN-SQL-011), com o corte de 10.000 caracteres (`truncated`
+      verdadeiro no valor cortado) e a descrição cortada em 200; `kind` é o da coluna, como na página.
+  - `POST …/schemas/{schema}/tables/{table}/values/check` `{ column, values }` diz quais dos valores não existem na
+    coluna: `values` é uma lista de 1 a 1.000 `{ type, value }`, na forma dos `params` (RN-VAR-032), e a resposta é
+    `{ missing }`, os índices dos que não existem, na ordem. A API executa `SELECT DISTINCT "c" FROM "s"."t" WHERE
+    "c" IN ($1, …)` (ou `?`), com os valores como parâmetros, e compara pelo valor do banco, não pelo texto: a API
+    converte os dois lados para o tipo da coluna e compara por ele (o número pelo valor, `7` e `7.0` iguais; o texto
+    de `CHAR` sem os espaços do fim; a data pelo dia e o instante pelo instante). O valor que não converte para o tipo
+    da coluna não existe, e vem em `missing`. As recusas são as da rota dos
+    valores, com `QUERY_INVALID` nos `values`.
+  - As duas rodam na sessão do pedido, na vez dela, como as consultas do catálogo (RN-ARVORE-006), e o "Cancelar"
+    delas é o da sessão. São leituras que o Prism monta: valem na conexão somente leitura (RN-PROT-002) e não
+    perguntam pela proteção (RN-PROT-001), como o catálogo, menos as do `random.of`, que entram na pergunta do script
+    como a consulta da variável (RN-VAR-019). Não fecham o cursor do resultado da sessão da aba,
+    porque rodam na sessão da árvore, menos o `random.of`, que roda na sessão da aba, na vez da declaração dele, e
+    fecha o cursor como a consulta da variável (RN-VAR-034).
+  - As recusas de sessão são as de sempre: 404 `DATABASE_SESSION_NOT_FOUND`, 409 `SESSION_BUSY`, e 422
+    `SQL_EXECUTION_FAILED` com o erro do banco.
+
+- **RN-VAR-036.** O log e a memória.
+  - Os valores das variáveis, os parâmetros, o texto da busca dos valores, os valores de uma coluna e os valores
+    lembrados nunca vão ao log, nem ao da API nem ao do processo principal (RN-LOG-001). Os pedidos e as respostas
+    que os levam escrevem só o nome do tipo no `ToString()`. O log de uma execução registra quantos parâmetros ela
+    levou, e o da rota dos valores, quantos valores devolveu.
+  - Na API, os parâmetros de um resultado ficam na memória da sessão com o texto dele (RN-VAR-033), até 4 MiB por
+    resultado, e morrem com ele: na execução seguinte, quando ele deixa de ser guardado, ao fechar e ao cair a sessão
+    e no bloqueio do cofre. Nunca vão ao disco.
+  - Na tela, os valores ficam no executor da aba (RN-VAR-023), e não no `localStorage` nem nas preferências.
+
+### Rotas e respostas
+
+| Rota | Sucesso | Recusas |
+| --- | --- | --- |
+| `POST .../queries` `{ sql, pageSize?, filter?, keep?, params? }` | como antes | as de antes; 422 `QUERY_INVALID` também nos `params` (no campo), `QUERY_PARAMETERS_MISMATCH` (com `markers` e `values`), e `FILTER_INVALID` também com um marcador no filtro e `params` |
+| `POST .../queries/variable` `{ sql, params?, maxRows? }` (RN-VAR-034) | 200 `{ columns, rows, elapsedMs }` | 404 `DATABASE_SESSION_NOT_FOUND`; 409 `SESSION_BUSY`, `TRANSACTION_FAILED`; 422 `QUERY_INVALID` (no campo), `QUERY_PARAMETERS_MISMATCH`, `MULTIPLE_STATEMENTS_NOT_SUPPORTED`, `VARIABLE_QUERY_NOT_READ`, `VARIABLE_QUERY_TOO_LARGE` (com `reason` e `limit`), `SQL_EXECUTION_FAILED` (com `outcome` quando cancelada) |
+| `POST .../schemas/{schema}/tables/{table}/values` `{ column, description?, search?, offset?, limit?, total? }` (RN-VAR-035) | 200 `{ kind, values: [{ value, description, truncated }], hasMore, total }` | 404 `DATABASE_SESSION_NOT_FOUND`, `VALUES_TABLE_NOT_FOUND`; 409 `SESSION_BUSY`; 422 `VALUES_INVALID` (no campo), `SQL_EXECUTION_FAILED` |
+| `POST .../schemas/{schema}/tables/{table}/values/check` `{ column, values }` | 200 `{ missing }` | as da rota dos valores, mais 422 `QUERY_INVALID` nos `values` |
+| `POST api/user/transfers/exports` e `POST api/user/transfers/copies` `{ source: { kind: "query", …, params? }, … }` | como antes | as de antes; os `source.params` fora da forma com `EXPORT_OPTIONS_INVALID` na exportação e `IMPORT_OPTIONS_INVALID` na cópia, no campo (`source.params[3].value`), e `QUERY_PARAMETERS_MISMATCH` |
+| `GET api/user/scripts` | como antes; cada script ganha `declaresVariables` | |
+| `GET api/user/scripts/{id}` | como antes, mais `runValues` (`{ values, connectionID, database, savedAt }`, ou nulo) | as de antes |
+| `PUT api/user/scripts/{id}/run-values` `{ values, connectionID?, database? }` (RN-VAR-028) | 204 | 404 `SCRIPT_NOT_FOUND`; 422 `SCRIPT_RUN_VALUES_INVALID` (no campo) |
+
+Notas:
+
+- `params`: RN-VAR-032. Cada entrada é `{ type, value }`, com `type` em `text`, `number`, `boolean`, `date` ou
+  `timestamp`, e `value` um texto ou nulo. A ordem é a dos marcadores no texto (no PostgreSQL, o `params[0]` é o
+  `$1`). Ausente, nulo ou vazio: o comando sem parâmetros, como antes.
+- `QUERY_PARAMETERS_MISMATCH` (422): o número de marcadores do texto não é o de valores, ou, no PostgreSQL, os `$n` não
+  são de `$1` a `$N` sem buraco. Leva `markers` e `values`, os dois números, e o detalhe "O comando tem 3 marcadores,
+  e vieram 2 valores.".
+- `VARIABLE_QUERY_NOT_READ` (422): a consulta da variável não é uma leitura (RN-PROT-005), com o motivo no detalhe.
+  `VARIABLE_QUERY_TOO_LARGE` (422): passou de um dos limites, com `reason` (`rows`, `columns` ou `bytes`) e `limit`.
+- `VALUES_INVALID` (422) vem na forma do erro de campo (`errors` e `errorCodes`), no campo (`column`, `description`,
+  `search`, `offset`, `limit`, `total`). `VALUES_TABLE_NOT_FOUND` (404): a tabela ou a visão não está no catálogo da
+  sessão.
+- `runValues.values`: um mapa do nome da variável para `{ type, value }`, com `type` em `number`, `text`, `boolean`,
+  `date`, `timestamp`, `sql` e `null` (`value` um texto, ou nulo no `null`), ou `{ type: "list", items }`, com os
+  itens na mesma forma, sem lista dentro de lista. Até 500 nomes, cada um um nome da RN-VAR-003, e até 64 KiB no
+  todo; `connectionID` e `database` como no script (RN-SCRIPT-005), ou nulos. Fora disso, 422
+  `SCRIPT_RUN_VALUES_INVALID`, no campo. A API guarda e devolve o que recebeu, sem interpretar os valores; a conexão
+  que não existe mais é ignorada pela tela, como a de um script (RN-SCRIPT-003). `savedAt` é a hora da gravação, em
+  UTC.
+- `declaresVariables`: RN-VAR-028. Calculado a cada leitura, pelo texto do cofre; não é gravado.
+- O `POST` da exportação e o da cópia passam a aceitar um corpo de até 16 MiB (`RequestSizeLimit`), por causa dos
+  valores (antes, 8 MiB, RN-EXPORT-015 e RN-IMPORT-013), e a tela confere o tamanho antes de mandar, como antes.
+- Todas exigem o cofre aberto (401 `VAULT_LOCKED` e 503 `VAULT_UNAVAILABLE`, como as demais). Os pedidos que levam
+  valores escrevem só o nome do tipo no `ToString()` (RN-VAR-036).
+
+### A ordem de entrega
+
+Cada passo sai num beta da 0.5.0 (`v0.5.0-beta.N`, RN-VERSAO-001) e dá valor sozinho:
+
+1. As sondas S-VAR-1 e S-VAR-3, antes do código da API, porque decidem o quadro da RN-VAR-017 e o limite da
+   RN-VAR-013; a S-VAR-4, junto do avaliador.
+2. A linguagem sem banco e o `@nome` (RN-VAR-001 a 009, 012 a 018 e 036, sem consulta, sem `random.of` e sem tipo de
+   coluna); os `params` e tudo o que executa de novo (RN-VAR-032 e 033); o Alt+X e o Ctrl+Enter (RN-VAR-019, 020, 022
+   e 023); o painel e o editor (RN-VAR-024 e 025). Já dá `let id = 10` e `WHERE id = @id`.
+3. A variável de consulta, o `random` sem o `random.of` e a pergunta dos valores que faltam (RN-VAR-010, 011, 021 e
+   034).
+4. O "Executar com valores…", a aba de execução e os valores lembrados (RN-VAR-026 a 029), com a S-VAR-5.
+5. A chave estrangeira: as rotas dos valores, o tipo de coluna, o `random.of`, a inferência e a escolha (RN-VAR-004 no
+   tipo de coluna, 010 no `random.of`, 030, 031 e 035), com a sonda S-VAR-2.
+
+### Testes e sondas
+
+A linguagem é pura e tem de ter muitos testes de tabela: cada caso é uma linha com a entrada e o que se espera (o
+valor, o tipo, ou a frase do erro com a linha e a coluna), em arquivos de casos escritos à mão, que não se regeram a
+partir do código. Os números abaixo são o mínimo de cada grupo, e o total passa de mil casos. Os arquivos de casos da
+linguagem ficam em `src/client/src/app/workbench/_lib/variables/*.cases.json`, um por grupo, cada caso com `name`,
+`engine` (ou nulo), `input`, `seed` (ou nulo) e o que se espera (`value` e `type`, ou `error` com `line`, `column` e
+`message`); os que a tela e a API leem juntos ficam em `src/test-fixtures/variables/`, que entra na tabela do
+AGENTS.md da raiz, ao lado das fixtures da exportação.
+
+- **O leitor da linguagem** (o analisador léxico e o sintático, RN-VAR-002 e 003), 250 casos: cada produção da
+  gramática, a precedência e a associatividade de cada par de operadores, o `??` com `&&` e `||`, o `-x ** 2`, a
+  vírgula no fim, os números (com `_`, com expoente, `.5`, os que não existem: `0x1F`, `10n`, `1__0`), os textos com
+  cada escape (e o octal recusado, a quebra de linha crua, a aspa que não fecha), o modelo com `${}` dentro de `${}`,
+  os comentários `--`, `//` e `/* */`, os nomes (acentuados, NFC e NFD iguais, `$`, os reservados, os do ambiente,
+  `select` e `values`, `$a$` e `$1`, o `\u` recusado, os caracteres de formato e de direção recusados), o `010`, o
+  `x?.5:1` (o `?` seguido de `.5`, e não o `?.`), o `let a = 1, b = 2`, e cada palavra e operador que não existe, com a
+  frase.
+- **Onde a declaração vale** (RN-VAR-001), nos três bancos, 120 casos: o começo do texto, depois do `;`, depois da linha
+  em branco com a preferência ligada e desligada, a linha que começa por `let` sem `;` e sem linha em branco, a
+  reatribuição depois do `;` e não depois de uma linha só (o `SET` do `UPDATE`), a reatribuição depois da linha em
+  branco com o comando de cima fechado e aberto (`UPDATE t SET a = 1,`), o `b = 2` não declarado, o `//` no topo,
+  acima de uma declaração e entre comandos SQL, o fim da declaração pela quebra de
+  linha (com a próxima linha começando por operador, por `(`, por `[`, por `SELECT`), o `;` dentro de um texto da
+  declaração, o modelo com `;` e com crase, a consulta com `)` dentro de um texto e de um comentário, o `LET` em
+  maiúsculas, o `let` do SPL dentro de `CREATE PROCEDURE` e de `CREATE FUNCTION` do Informix, o `let` depois de um
+  `CREATE PROCEDURE` do Db2 (dentro do bloco), dentro de `$$` e de `BEGIN ATOMIC … END` do PostgreSQL, o `let` num
+  texto, num comentário e num nome entre aspas, e as posições para o Ctrl+Enter (`statementAt`) em cada caso.
+- **Os tipos** (RN-VAR-004 a 007), 150 casos: a inferência de cada espécie, a lista vazia, a lista mista, o objeto, as
+  anotações (com `| null`, com `[]`, o objeto anotado recusado), o `null` e a reatribuição que muda o tipo, o `const`
+  sem valor, o `let` sem valor e sem anotação, o tipo de coluna com o quadro dos três bancos (cada tipo do catálogo,
+  com e sem nulo, o binário recusado), o `sql` (o `let` recusado, o que vem de uma consulta direta e indiretamente), os
+  números exatos (o `bigint` maior que 2^53 que vai inteiro e que recusa a conta, `12.50`, `100.00` e `1e3` exatos,
+  `1234567890123.4567` inexato, o `-` unário no literal, as funções que levam o número como está), as datas (cada forma
+  do `new Date`, o fuso convertido, as formas recusadas, a de dia e a de instante, o texto de cada uma, a meia-noite
+  local, a data que não existe, o ano 99, as bordas de 0001 e 9999, a hora que a troca do horário de verão pula e a
+  que ela repete), o `sql` com lista e com `| null`, e o valor `sql` que termina dentro de um texto, de um comentário
+  e de um `$tag$`.
+- **A avaliação** (RN-VAR-008 e 012), 200 casos: cada operador com cada par de espécies (o resultado ou a frase), a
+  conversão recusada (`'5' * 2`, `1 + true`), o `===` das datas, das listas e dos objetos, o `==` recusado, o curto-
+  circuito (o lado que não vai não gasta o gerador), o `?.`, o índice fora da lista, o negativo, o campo que não
+  existe, a ordem da esquerda para a direita, o `NaN` e o `Infinity` recusados, o `null` juntado a um texto no `+` e
+  no modelo, a última atribuição acima de cada comando, a avaliação uma vez só antes da pergunta (o `const t: sql =
+  random.pick(['pedido', 'item'])` com o mesmo texto na pergunta da proteção e no SQL enviado), e o Ctrl+Enter com
+  o valor que ficou desatualizado (o `x` sorteado de novo, e o `y = x * 2` avaliado de novo).
+- **As funções** (RN-VAR-009 e 010), 200 casos: cada função da lista com o caso comum, cada borda (o `slice` negativo,
+  o `split` com o separador vazio, o `padStart` no limite, o `replaceAll` com `$&`, o `date.addMonths` no fim do mês e
+  no ano bissexto, o `date.of` de uma data que não existe, o `date.diffDays` na troca do horário de verão, o
+  `Math.round` dos meios, o `Number` recusado) e cada recusa de argumento; e o `random`: com uma semente fixa, as
+  sequências de ouro de cada função (as primeiras 20 saídas de cada uma, escritas no arquivo de casos), os limites
+  (`min` > `max`, a lista vazia, o tamanho fora da faixa), a distribuição (o qui-quadrado de 10.000 sorteios do
+  `random.int(1, 6)` dentro da faixa) e o `random.of` com uma API falsa (o total, a posição, a lista sem repetição, a
+  coluna vazia, a que tem menos valores).
+- **Os ataques** (RN-VAR-014), 120 casos, cada um com a frase de recusa e a conferência de que nada mudou no ambiente (o
+  `Object.prototype` e o `Array.prototype` iguais antes e depois, nenhum global novo): `x.constructor`,
+  `x.constructor.constructor('return process')()`, `''.constructor`, `(1).constructor`, `true.constructor`,
+  `[].constructor`, `{}.constructor`, `a['constructor']`, `a['con' + 'structor']`, a chave feita num modelo,
+  `a?.constructor`, `a?.['__proto__']`, `constructor`, `Math.constructor`, `random.constructor`, `Math['max']`,
+  `Math.max.call`, `Math.max.apply`, `Math.max.bind`, `const f = Math.max`, `x.toString()`, `x.valueOf()`,
+  `x.hasOwnProperty('a')`, `x.__proto__`, `x.__defineGetter__`, `'a'.constructor()`, `'a'.__proto__()`,
+  `'a'.hasOwnProperty('length')` e `[].constructor()` (como método, e não só como campo, contra as tabelas que não são
+  `Map`s), os `runValues` com as chaves `__proto__` e `constructor`, `{ __proto__: { a: 1 } }`, `{ "__proto__": 1 }`, `{
+  constructor: 1 }`, a consulta com as colunas `"__proto__"`, `"constructor"` e `"toString"`, `window`, `globalThis`,
+  `self`, `document`, `process`, `require('fs')`, `import('x')`, `eval('1')`, `Function('return 1')`, `new Function`,
+  `new Array(1e9)`, `new Proxy({}, {})`, `new Date.constructor`, `Symbol()`, `for (;;) {}`, `while (true) {}`, `() =>
+  1`, `function f() {}`, `x => x`, `class A {}`, `this`, `arguments`, `new.target`, `super`, `a = b = c`, `a++`, `delete
+  a.b`, `a.b = 1`, `a[0] = 1`, `void 0`, `typeof x`, `/a+/`, `'a'.match`, `'a'.replace`, `'x'.repeat(1e9)`,
+  `'a'.padStart(1e9)`, `random.string(1e9)`, `[...Array(1e9)]`, mil parênteses abertos, uma lista de mil níveis, um
+  modelo dentro de modelo em mil níveis, a junção de um texto de 500.000 caracteres com ele mesmo várias vezes,
+  `Math.max(...lista)` com 10.001 itens, o `includes` de 1.000.000 de caracteres com um texto de 2.001 que quase casa,
+  5.000 `===` entre dois textos de 1.000.000 de caracteres, o `toUpperCase` de um texto de 1.000.000 de `ΐ` (que daria
+  3.000.000), o `replaceAll('', x)`, o `join` de 2.000 textos de 100.000 caracteres, a soma dos valores da aba acima de
+  128 MiB, o texto com U+0000, com metade de um par UTF-16, com as marcas de direção (que vão como texto), e o valor `';
+  DROP TABLE pedido; --` (que vai como parâmetro, conferido no teste da API).
+- **Os limites** (RN-VAR-013), 40 casos: cada um na borda e um a mais, com a frase, e a conferência de que o que passa
+  não é montado antes (a memória do teste não cresce além do limite); e o Worker terminado no meio de uma chamada
+  nativa (a tela recebe a frase dos 250 ms, e a avaliação seguinte abre outro Worker).
+- **A propriedade**: textos e árvores gerados ao acaso (com semente, 10.000 por execução dos testes) passam pelo
+  leitor e pelo avaliador, e nenhum deles lança uma exceção do JavaScript que não seja o erro da linguagem; todo valor
+  que sai é de uma das espécies, congelado, sem protótipo de objeto do JavaScript e sem função; e a mesma semente dá o
+  mesmo resultado.
+- **O `@nome` no SQL** (RN-VAR-015 e 016), nos três bancos, 150 casos: cada caractere antes e depois do `@` da regra
+  (também a tabulação, o `\r`, o `[` de `ARRAY[@a, @b]` e de `arr[@i]`, o `:` de `arr[1:@n]`, e o `<@x` que é variável
+  no Db2 e no Informix e SQL no PostgreSQL),
+  cada operador do PostgreSQL com `@` (do quadro da pesquisa: `@>`, `<@`, `@@`, `@?`, `@-@`, `^@`, `?@>`, `@ -5`, `@x`
+  como valor absoluto com e sem a variável declarada), o `banco@servidor:tabela` e o `'banco@servidor'` do Informix,
+  o `END@` e o nome com `@` e `#` do Db2, o `@extschema@`, o `@nome` dentro de texto (também `E'it\'s @x'` e o `$tag$`),
+  de comentário (também `{ @x }` do Informix e o aninhado do Db2) e de nome entre aspas, o não declarado, o de
+  maiúsculas diferentes, o usado antes da declaração, o `@p.campo` com objeto e com `sql`, o `@p` sem campo, a lista de
+  objetos, o `@p.campo` com `p` nulo e com `p` um número, e o `@x` dentro da consulta de uma variável e dentro do
+  corpo de uma rotina.
+- **A troca pelos marcadores** (RN-VAR-017 e 018), 100 casos: o texto enviado e os parâmetros de cada caso, nos três
+  bancos (a numeração do `$n`, o `?`, o mesmo `@x` duas vezes, a lista de 1, 3 e 10.000 itens, a lista vazia, a
+  lista fora de parênteses, o `ANY(@ids)`, o `null` na lista, o `null` sozinho no `IN` e no `NOT IN`, o número de 32
+  e de 35 dígitos no Db2 e no Informix, o `sql` com o texto que faz dois comandos, com `?` e com
+  `$1`, o marcador já escrito no texto, o comando sem variáveis que vai sem parâmetros, o limite de 10.000 e de 4 MiB),
+  o tipo de cada valor por banco, e o "SQL enviado" com os literais de cada banco (pelos casos da RN-EXPORT-024, que
+  ele reaproveita) e o valor sem literal.
+- **O mapa das posições** (RN-SQL-009), 30 casos: a posição do erro do banco antes, dentro e depois de um marcador, de
+  uma lista expandida e de um `sql`, de volta ao texto do editor.
+- **A inferência da chave** (RN-VAR-030), 120 casos, com um catálogo falso: cada forma que conta (`=`, `<>`, `!=`, `IN`,
+  `NOT IN`, `INSERT … VALUES` de uma e de várias linhas, `UPDATE … SET`), com e sem apelido, com `AS`, com o esquema,
+  com aspas e sem (a caixa de cada banco), a coluna sem qualificador numa tabela só e em duas, o `JOIN` (`INNER`,
+  `LEFT`, com `ON`), a subconsulta, a correlacionada, a tabela derivada, o `WITH`, a chave estrangeira de várias
+  colunas, a chave primária (nas comparações sim, no `INSERT` não), dois lugares que concordam e dois que não, a
+  conversão e a função num dos lados, o tipo que não casa, a anotação comum que desliga, o tipo de coluna, o catálogo
+  que falha e o que demora mais de 5 segundos, as 21 tabelas, e a coluna de descrição (cada nome da lista, os acentos,
+  a coluna da chave fora, nenhuma).
+- **Fixtures dos dois lados**: os casos de contagem de marcadores (o texto, o banco e o número de marcadores, com os
+  textos, os comentários de cada banco, o `$tag$`, o `E'…'`, o `?` do `jsonb` e o `$1$`) ficam em
+  `src/test-fixtures/variables/markers.json`, escritos à mão, lidos pelos testes da tela (a troca, RN-VAR-017) e pelos
+  da API (a conferência, RN-VAR-032), como as fixtures da exportação (RN-EXPORT-024): os dois leitores têm de contar
+  igual. Os do `declaresVariables` (RN-VAR-028) ficam em `src/test-fixtures/variables/declares.json`, do mesmo modo.
+- **A tela**, em testes de unidade, sem DOM (`react-tree`, `react-hooks`, `freezeParseBudget`): o executor no Alt+X com
+  declarações (a ordem, as conferências que não deixam nada rodar, a pergunta cancelada, a proteção com as consultas
+  na lista, o erro numa declaração com as escolhas desabilitadas, o "Pular todos os erros" que não pula a
+  declaração, o cancelamento na consulta), no Ctrl+Enter (o valor reaproveitado, o desatualizado, a dependência
+  avaliada antes, a declaração com o cursor), no F5, no filtro, na atualização automática e no "Executar este
+  comando" (os mesmos parâmetros; o `sameCommand` compara os parâmetros), a passagem da aba para outra janela e a do
+  resultado para a janela dele (os quatro campos do alvo passam pelo esquema), a numeração e os totais das
+  Estatísticas, o painel Variáveis (a árvore, a lista longa, o copiar, o teclado), o editor (o realce, os erros, as
+  dicas, a dica do ponteiro, o valor no fim da linha, o autocompletar, a caixa das palavras-chave que não toca as
+  declarações), o diálogo (cada campo por tipo, o padrão, o lembrado, a consulta calculada e desatualizada, a escolha
+  com a busca e a conferência, a conexão e o banco), a aba de execução (abrir, executar de novo com o script mudado e
+  excluído, mudar os valores, abrir o script, mover, fechar, o bloqueio, o lugar depois da aba do resultado, a aba
+  reusada pelo navegador), o menu do script, e o Shift+Alt+X, que nenhum mapa de teclas do app, do CodeMirror nem do
+  menu do Electron usa.
+- **A API**, em testes de unidade (com o `DbConnection` falso, que confere os parâmetros ligados): a validação dos
+  `params` (cada forma e cada borda), a contagem dos marcadores, o filtro com marcador, a conversão para cada banco, a
+  numeração de novo da coluna inteira em cada forma (o `<Q>` com marcadores no `SELECT`, que a forma direta tira), a
+  contagem, a exportação, a cópia, o `edit-target` com marcadores, a rota da consulta da variável (as formas, os
+  limites, a leitura recusada, o resultado atual, os guardados e o da contagem que não mudam), as rotas dos valores e
+  da conferência (cada recusa, o texto de cada banco, o escape da busca, a comparação pelo valor), os valores
+  lembrados, a leitura do cofre gravado com `runValues` pela fixture do formato 4 da 0.4.0 (como a seção 39 fez), o
+  filtro que embrulha quando o `ORDER BY` tem marcador, e o `declaresVariables`.
+- **A integração**, nos três bancos (o PostgreSQL, o Db2 e o Informix nos contêineres do Testcontainers, com log e sem
+  log no Informix), pela API em HTTP, para cada tipo de parâmetro: o inteiro numa coluna `INTEGER` e numa `BIGINT`, o
+  `bigint` maior que 2^53 pelo texto exato, o decimal exato numa `DECIMAL(18,4)`, o texto com aspas, barra, acento,
+  emoji, quebra de linha, vazio e com 40.000 caracteres, o booleano, a data de dia numa `DATE` e numa `TIMESTAMP`
+  (`DATETIME` no Informix), o instante numa `TIMESTAMP` e numa `DATE`, o nulo de cada tipo (no `INSERT` e no `WHERE`), a
+  lista de 3, de 1.000 e de 10.000 itens no `IN`, o `LIMIT`, o `FETCH FIRST` e o `FIRST` com parâmetro, o `SELECT @x`
+  sem tipo, a conta (`@x + 1`), o `LIKE`, o `BETWEEN`, o `INSERT … VALUES` e o `UPDATE … SET`; o valor de injeção, que
+  não muda nada; o marcador a mais e a menos; o filtro do resultado nas duas formas (junto e embrulhado) com os
+  parâmetros; a contagem; a coluna inteira nas três formas, com parâmetros no `<Q>`; a exportação e a cópia; a rota da
+  consulta da variável (as formas, os limites, a conexão somente leitura, a transação só de leitura do PostgreSQL, o
+  cursor fechado e o resultado mantido, o cancelamento no meio dela); as rotas dos valores (a página, a busca com `%` e
+  `_`, a descrição, o total, a recusa da coluna binária e da que não existe, a conferência); e o log (um texto de
+  sentinela nos valores, na busca e nos valores lembrados não aparece em `logs/`, como o `LogHygieneTests`).
+- **S-VAR-1.** O que cada banco aceita em cada lugar, para cada tipo do quadro da RN-VAR-017, pelos drivers do Prism (o
+  Npgsql e o `IBM.Data.Db2`), e não pelas ferramentas de linha de comando: os lugares da integração acima, mais o `$n`
+  dentro do cursor do servidor do PostgreSQL (o `DECLARE`, no Commit manual), na transação só de leitura e nos comandos
+  de utilidade (`EXPLAIN`, `CREATE TABLE … AS`, `COPY`); o booleano do Db2 e do Informix (`BOOLEAN`, o texto `t`/`f` ou
+  `0`/`1`), o `BOOLEAN` do Db2 comparado com uma coluna `SMALLINT` de 0 e 1, e a versão mínima do Db2 com `BOOLEAN`; a
+  data de dia comparada com a coluna de instante e o contrário; o instante numa `timestamptz` com a sessão num fuso
+  diferente do da máquina; o decimal de 31 e de 32 dígitos pelo tipo decimal do driver da IBM (ou pelo texto com
+  `CAST`); o `INT8` do Informix com -2^63; a barra dentro de um texto no Informix e no Db2 (se `'it\'s @x'` termina o
+  texto ali); o `@a + @b` de dois parâmetros sem tipo no PostgreSQL ("operator is not unique: unknown + unknown"), que o
+  guia contorna com `CAST`; e o `SKIP ?` e o `FIRST ?` do Informix. O que a sonda provar vira o quadro da RN-VAR-017 e o
+  guia da API (`src/api/AGENTS.md`).
+- **S-VAR-2.** O texto da rota dos valores em cada banco: a conversão para texto de cada tipo de coluna da busca
+  (`::text`, `VARCHAR()`, `::LVARCHAR`), o `LIKE … ESCAPE '!'` com `%`, `_` e `!` no texto (e com
+  `standard_conforming_strings` desligado no PostgreSQL), a comparação pelo valor do `values/check` (`7` e `7.0`, o
+  `CHAR` com espaços), o `DISTINCT` com a descrição, o `OFFSET`, o `SKIP` e o `FIRST`, o tempo do `random.of(c, 100)`, e
+  o tempo numa tabela de 1.000.000 de linhas com e sem índice na coluna (o registro diz o tempo; acima de 5 segundos na
+  página de 100, a busca da escolha passa a pedir 3 caracteres antes de buscar).
+- **S-VAR-3.** Um comando com 10.000 marcadores num `IN`, em cada banco (o tamanho do texto, o tempo da preparação), e
+  o maior que cada um aceita, se for menos (RN-VAR-013).
+- **S-VAR-4.** O tempo do avaliador nos casos mais caros dentro dos limites (RN-VAR-013), numa máquina comum de
+  desenvolvimento e no app empacotado, e o Worker que os para no prazo (o tempo do `terminate()` e o de abrir outro).
+- **S-VAR-5.** O Shift+Alt+X (e o Shift+Cmd+Option+X) no Windows, no macOS e no Linux, com dois leiautes de teclado
+  (o americano e o ABNT2): a tecla chega ao Prism, e nenhum atalho do sistema a toma.
+
+O que não puder ser exercitado é dito no relatório, e nunca dado como passando.
+
+### O que muda nas regras existentes
+
+Cada mudança está escrita, inteira, na própria regra; aqui fica só a lista.
+
+- **RN-SQL-001**: a declaração é um item para o Ctrl+Enter, e o comando com variáveis avalia antes as declarações de
+  que depende (RN-VAR-020).
+- **RN-SQL-002**: a declaração também termina um comando, e o leitor da tela passa a conhecer o `E'…'` do PostgreSQL,
+  como o da API.
+- **RN-SQL-003**: com variáveis, o texto que vai tem os marcadores no lugar dos `@nome`, e os valores vão nos `params`.
+- **RN-SQL-006**: a contagem leva os parâmetros do comando.
+- **RN-SQL-009**: a posição do erro de um comando com variáveis é levada do texto enviado ao texto do editor.
+- **RN-SQL-018**: depois da linha em branco, `let`, `const` e a reatribuição começam um item; a linha que começa por
+  uma declaração termina o comando de cima.
+- **RN-SQL-019**: o script tem declarações, avaliadas na ordem, com a pergunta dos valores e as consultas das
+  variáveis na pergunta da proteção.
+- **RN-SQL-020**: o painel Variáveis, a numeração com as declarações, as linhas delas nas Estatísticas, os totais, o
+  "SQL enviado" e o "Executar este comando" com os mesmos valores.
+- **RN-SQL-021**: o erro numa declaração só tem "Parar" e "Tentar de novo", o erro antes de executar não começa o
+  script, e o `QUERY_PARAMETERS_MISMATCH` e o `QUERY_INVALID` dos `params` são erros do comando.
+- **RN-SQL-024**: o que a sessão guarda de cada resultado tem os parâmetros.
+- **RN-GRADE-011**: com parâmetros, o filtro não tem marcador, e o comando é embrulhado quando o `ORDER BY` trocado
+  tem marcador.
+- **RN-GRADE-012**: o F5 executa de novo com os mesmos valores.
+- **RN-GRADE-014**: a atualização automática executa com os mesmos valores, e o mesmo comando inclui os parâmetros.
+- **RN-EDIT-020**: o `<Q>` com parâmetros, numerados de novo em cada forma.
+- **RN-EXPORT-002**: a exportação e a cópia do resultado de um comando com variáveis levam o texto enviado e os
+  parâmetros.
+- **RN-EXPORT-015**: o corpo do pedido vai a 16 MiB, e a Origem do comando com variáveis mostra os valores.
+- **RN-EXPORT-016**: a forma de `source.params`.
+- **RN-IMPORT-013**: o corpo do pedido vai a 16 MiB.
+- **RN-PROT-001**: o "Executar com valores…" e as consultas das variáveis perguntam, o comando com `sql` conta como
+  irreversível na dúvida, e a pergunta mostra os valores.
+- **RN-CONFIG-004**: o autocompletar das variáveis, a caixa das palavras-chave fora das declarações e o valor no fim da
+  linha.
+- **RN-SCRIPT-003**: o menu do script ganha "Executar com valores…".
+- **RN-ABAS-006**: a aba de execução não volta.
+- **RN-ABAS-014 e 015**: o "Onde mostrar o resultado" não aparece na aba de execução, e ela à vista é ela ativa.
+- **RN-SESSAO-001**: a aba de execução tem a sessão dela.
+- **RN-SEG-001**: o bloqueio descarta também os valores das variáveis.
+- **RN-LOG-001**: os valores das variáveis, os parâmetros, a busca e os valores lembrados não vão ao log.
+- **RN-VERSAO-002**: a linguagem das variáveis é contrato, com a lista dos nomes que não podem ser nome (RN-VAR-003).
+- **Seção 6**: o `params` das consultas, as rotas novas e os códigos novos (`QUERY_PARAMETERS_MISMATCH`,
+  `VARIABLE_QUERY_NOT_READ`, `VARIABLE_QUERY_TOO_LARGE`, `VALUES_INVALID`, `VALUES_TABLE_NOT_FOUND`,
+  `SCRIPT_RUN_VALUES_INVALID`), e o `source.params` da exportação e da cópia.
+- **Seção 9**: o canvas não desenha as variáveis.
+- **Seção 23**: as rotas dos scripts ganham `declaresVariables`, `runValues` e a gravação dos valores lembrados.
+- **Seção 31**: a introdução diz que a seção 41 acrescenta os `params` ao pedido de execução.
+- **Seções 35 e 36**: o corpo do `POST` da exportação e o da cópia vão a 16 MiB, por causa dos `source.params`.
+
+### Fica para depois
+
+- Funções definidas pela pessoa, laços (`for`) para gerar vários comandos e o `if`; o `map` e o `filter` com função de
+  seta.
+- Variáveis que valem em várias abas, ou por conexão; importar as variáveis de um arquivo.
+- O `random` com dados que parecem de verdade (nomes, CPF, CNPJ, e-mail, telefone) e o `random.seed(n)` na própria
+  linguagem, para um script que gera sempre os mesmos dados.
+- A forma de expressão no SQL (`@{ids.length}`), com uma marca que nenhum dos três bancos use (RN-VAR-016).
+- A variável de consulta que grava (`let novo = (INSERT … RETURNING id)`), e a consulta no meio de uma expressão.
+- O `bigint` (`10n`) e a conta decimal exata.
+- A lista como um parâmetro de lista do PostgreSQL (`= ANY(@ids)`).
+- O modo que cola os valores como literais no texto, para os comandos que não aceitam parâmetro (o DDL).
+- O `@nome` no filtro do resultado (RN-GRADE-011).
+- Escolher a coluna de descrição (o "Define description" do DBeaver) e a escolha pela chave estrangeira de várias
+  colunas.
+- Editar os valores no painel Variáveis.
+- A aba de execução que volta na próxima entrada, e executar o mesmo script em várias conexões de uma vez, lado a lado.

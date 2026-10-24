@@ -23,8 +23,12 @@ namespace Prism.Api.Controllers;
 [Route("api/user/transfers")]
 public sealed class UserTransfersController(IMediator mediator) : ControllerBase
 {
-    /// <summary>RN-EXPORT-015 e as notas da seção 6: o corpo vai até 8 MiB, por causa do comando (1 MB) e dos nomes das colunas. As rotas da importação e da cópia (seção 36) têm o mesmo teto.</summary>
-    private const long MaxExportRequestBytes = 8L * 1024 * 1024;
+    /// <summary>
+    /// RN-EXPORT-015 e as notas da seção 6: o corpo vai até 16 MiB, por causa do comando (1 MB), dos nomes das colunas e dos valores dos marcadores do comando
+    /// (`source.params`, até 4 MiB, que o JSON pode escrever em seis vezes o tamanho quando são caracteres de controle, seção 41). As rotas da importação e da cópia
+    /// (seção 36) têm o mesmo teto.
+    /// </summary>
+    private const long MaxExportRequestBytes = 16L * 1024 * 1024;
 
     /// <summary>202 com o `id` do trabalho, antes de falar com o banco: conectar, contar e ler acontecem nele.</summary>
     [HttpPost("exports")]

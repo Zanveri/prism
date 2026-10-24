@@ -9,7 +9,8 @@ public sealed record EditCommand(int Change, string Sql, IReadOnlyList<EditParam
 
 /// <param name="Value">O valor já convertido (Db2 e Informix) ou o texto (PostgreSQL, em que quem converte é o banco); nulo é NULL.</param>
 /// <param name="Type">O tipo do parâmetro, quando o valor sozinho não o diz (a data, que no C# é uma data e hora).</param>
-public sealed record EditParameter(object? Value, DbType? Type = null);
+/// <param name="Query">RN-VAR-033: o parâmetro do comando do usuário que a coluna inteira leva no `&lt;Q&gt;` (o valor e o tipo como a tela os mandou, convertidos pelo banco da conexão).</param>
+public sealed record EditParameter(object? Value, DbType? Type = null, QueryParameter? Query = null);
 
 /// <summary>
 /// RN-EDIT-005, 020 e 021: o "Salvar" planejado: a coluna inteira, quando há (executada primeiro), e depois os comandos por linha, na ordem da regra.
@@ -23,7 +24,8 @@ public sealed record EditPlan(WholeColumnPlan? WholeColumn, IReadOnlyList<EditCo
 /// </summary>
 /// <param name="Change">A posição da alteração no pedido.</param>
 /// <param name="Rows">O número de linhas que a pessoa confirmou; nulo na contagem da pergunta, que ainda não o tem.</param>
-public sealed record WholeColumnPlan(int Change, long? Rows, string CountSql, EditCommand? Update, IReadOnlyList<int>? KeyColumns = null, Func<IReadOnlyList<IReadOnlyList<string>>, Result<IReadOnlyList<WholeColumnBatch>, DatabaseFailure>>? Batches = null)
+/// <param name="CountParameters">RN-VAR-033: os parâmetros do <see cref="CountSql"/> (os do comando do resultado, no `&lt;Q&gt;`), na ordem do texto.</param>
+public sealed record WholeColumnPlan(int Change, long? Rows, string CountSql, EditCommand? Update, IReadOnlyList<int>? KeyColumns = null, Func<IReadOnlyList<IReadOnlyList<string>>, Result<IReadOnlyList<WholeColumnBatch>, DatabaseFailure>>? Batches = null, IReadOnlyList<QueryParameter>? CountParameters = null)
 {
     /// <summary>O caminho por lotes: a contagem lê as chaves, e o `UPDATE` vai por elas.</summary>
     public bool ReadsKeys => KeyColumns is not null;

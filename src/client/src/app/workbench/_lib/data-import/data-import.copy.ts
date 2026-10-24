@@ -284,7 +284,7 @@ export const dataImportCopy = {
     understand: (schema: string, table: string) => `Entendo que as linhas atuais de ${schema}.${table} serão apagadas.`,
     understandFirst: "Marque que entende que a tabela será esvaziada.",
     outsideElectron: "Importar só funciona no app do Prism.",
-    tooLarge: "O pedido passa de 8 MiB, por causa dos nomes das colunas. Deixe colunas de fora no Mapeamento.",
+    tooLarge: "O pedido passa de 16 MiB, por causa dos nomes das colunas. Deixe colunas de fora no Mapeamento.",
     limitReached: "Já há 3 transferências em andamento (exportações, importações ou cópias para outro banco). Espere uma terminar, ou cancele uma na barra de status.",
     connectionMissing: "A conexão não existe mais.",
     userNameMissing: "Esta conexão não tem usuário gravado. Preencha-o em Editar conexão e importe de novo.",

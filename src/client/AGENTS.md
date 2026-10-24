@@ -2433,6 +2433,185 @@ guardadas se editam").
   Configurações não abriu a pergunta; de volta à área de trabalho, ela apareceu com "Parar" focado, e "Parar" deu "Script parado na aba
   consulta-1.sql: 1 de 3 comandos executados.". A área vazia mostrou "… Alt+X executa os comandos da seleção ou do texto inteiro, um depois do outro.".
 
+## A linguagem das variáveis (seção 41: RN-VAR-001 a 018, 020 e 036, RN-SQL-009)
+
+Parte 9, frente 1: a linguagem, pura, em `src/app/workbench/_lib/variables/`. A execução ligada ao `use-query-runner` e o painel das variáveis são a frente 3
+(a seção seguinte); a marca no editor é da frente 4. As frentes seguintes só chamam o que está aqui. A API não lê nada disto: o texto que ela recebe já vem com os
+marcadores, e os valores vão ao lado, como parâmetros (RN-VAR-017).
+
+- **Os arquivos.** `lexer.ts` e `parser.ts` (o leitor da gramática inteira da RN-VAR-002; o que fica para depois é lido e recusado pela conferência com as frases
+  provisórias), `ast.ts`, `catalog.ts` (nomes fechados, palavras reservadas, membros dos espaços de nomes), `values.ts` (valores e tipos), `numbers.ts`,
+  `dates.ts`, `operators.ts`, `functions.ts` (as tabelas de funções e métodos, em `Map`), `evaluate.ts` (o avaliador), `meter.ts` (os limites), `random.ts`
+  (xoshiro128**), `script.ts` e `script-items.ts` (o script em itens), `run.ts` (a execução e a conferência), `at-names.ts` e `markers.ts` (o `@nome` e os
+  marcadores que já estão no texto), `bind.ts` (a troca), `sent-sql.ts` ("SQL enviado"), `positions.ts` (o mapa das posições), `wire.ts`,
+  `evaluator-service.ts`, `evaluator.worker.ts` e `evaluator-host.ts` (o Worker), `boundary.ts` (o único lugar que escreve no console) e
+  `variables.copy.ts` (os limites, `limits`, e as frases, `phrase`).
+- **O que a execução chama, nesta ordem.**
+  1. `readScript(source, engine?, { blankLines? }): ScriptModel` divide o script em itens (comando, declaração, reatribuição, RN-VAR-019), lê cada declaração e
+     acha os `@nome` de cada comando. Os itens têm `index`, `line`, `kind`, `parsed` (a declaração lida, ou nulo) e `error` (por que não leu). O
+     `sql-statements.ts` aprendeu o item de declaração por um `DeclarationReader` injetado (`declarationReader(engine)` em `script-items.ts`; `splitScript`,
+     `scriptItemAt`, `scriptItemCount`): o leitor do SQL não importa a linguagem. A declaração vira `;` e espaços na máscara, e as posições não mudam.
+  2. `staticDiagnostics(model): ItemDiagnostic[]` são os erros que se sabem sem executar (gramática, nomes, `const` reatribuído, `@nome` antes da declaração,
+     marcador já escrito no texto). `checkScript(model, clock?, now?)` é essa conferência mais a execução em seco do que é determinístico (RN-VAR-012).
+     **A tela mostra a conferência do script inteiro**: o serviço do Worker só devolve o erro dos itens pedidos, e o item que o leitor recusou não está na
+     lista (quem usa a variável recusada ouve "x não foi declarada", e a causa vem do `staticDiagnostics`).
+  3. `dependencyPlan(model, index, tab): number[]` diz quais atribuições avaliar antes do item (a regra do Ctrl+Enter, RN-VAR-020 e 023): as de que ele depende e
+     que a aba ainda não tem em dia (o texto da atribuição é o mesmo e foi avaliada depois das de que depende).
+  4. Avaliar: `new ScriptRun(model, { engine?, random, clock, now }, tab?, counter?)` e `run.evaluate(index): AssignmentResult` (`{ ok: true, stored, steps }` ou
+     `{ ok: false, error }`), `run.tab`, `run.counter`, `run.valueOf(name)`, `run.forget(name)`. `evaluateScript(model, config, tab?, counter?)` faz o script
+     inteiro. Em produção a avaliação roda no Worker (abaixo); o `ScriptRun` direto serve aos testes e às sondas.
+  5. Trocar: `run.bind(index): BindResult` devolve `{ ok: true, command: BoundCommand }`, com `command.sql` (os marcadores do banco: `$n` no PostgreSQL, `?` no
+     Db2 e no Informix; uma lista vira marcadores separados por `, `, só entre parênteses; o `sql` entra no texto), `command.params` (`{ type, value, variable,
+     item }`, o valor sempre como texto, ou `null`) e `command.replacements` (onde estava cada `@nome` e onde ficou o que o trocou). `bindCommand(text, engine,
+     declared, scope, types?)` é a função por baixo.
+  6. `sentSql(command, engine): SentSql` é o "SQL enviado" com os literais da exportação (`scriptLiteral`, `sqlLiteral`): `text`, `header` (o comentário do alto
+     quando um valor ficou só com o marcador), `rows` (o quadro dos parâmetros), `notes` e `sqlRanges`. `parameterLiteral(engine, parameter)` é o literal de um
+     parâmetro, ou nulo.
+  7. O erro do banco: `editorOffset(statementStart, command, databasePosition)` leva a posição do erro (1 em diante, no texto enviado) ao texto do editor; dentro
+     de um marcador, de uma lista expandida ou do texto de um `sql` cai no começo do `@nome` (`originalOffset` é a parte sem o começo do comando).
+- **O Worker** (RN-VAR-013 e 014). `EvaluatorHost({ createWorker, timers?, perItemMilliseconds?, perRunMilliseconds? })` com `evaluate(request): Promise<EvaluateOutcome>` e
+  `dispose()`; `createBrowserWorker()` abre o Worker do pacote. O pedido (`EvaluateRequest`) leva o texto do script, o banco, os índices dos itens, a aba, o
+  contador, a semente e a hora, tudo como dado; a resposta vem item a item (`start`, `item`, `done`, `failed`). O host termina o Worker (`terminate()`) quando uma
+  declaração passa de 250 ms ou a execução de 5 s, devolve `{ kind: "timeout" }` com a frase e abre outro Worker no pedido seguinte. O núcleo mede os mesmos 250 ms e os
+  passos sozinho (a segunda defesa). `handleEvaluateRequest(request, post, clock?)` é o corpo do Worker, e os testes o rodam sem Worker. Os valores atravessam por
+  `toWire`/`fromWire` (e `storedToWire`/`storedFromWire`, `typeToWire`/`typeFromWire`): a cópia estruturada perderia o congelamento e o `Map`, e o dado de fora só vira
+  valor pelos construtores da linguagem, que conferem a forma.
+- **Os valores.** Registros congelados e sem protótipo, de oito espécies: `number` (o `double` e, quando veio escrito, o texto exato `exact`, com `inexact` se o
+  `double` não o escreve inteiro; a conta e a comparação recusam o inexato), `string` (até 1.000.000 de unidades UTF-16, sem U+0000 nem metade de par), `boolean`,
+  `null`, `date` (campos do calendário e precisão `day` ou `instant`; as contas passam pela hora local da máquina), `list` (até 10.000 itens do mesmo tipo, sem lista de
+  lista), `object` (até 100 campos, num `Map` congelado: a chave nunca é propriedade) e `sql`. O tipo (`Type`) tem `nullable`, `list` e `never` (a lista vazia). A frase curta
+  de um valor é `displayValue`/`inlineValue`/`typeLabel`; o texto de uma interpolação é `textOf`.
+- **Segurança do avaliador (RN-VAR-014).** Nada do texto vira nome de propriedade do JavaScript: o membro se lê por regra positiva (campo de objeto pelo `Map`,
+  `length`, os métodos das tabelas), as palavras do JavaScript que a linguagem não tem são recusadas pelo leitor, e nenhum valor é função, `Symbol`, `undefined` nem
+  `Proxy`. O teste de ataques confere que `Object.prototype`, `Array.prototype` e os globais ficam como estavam. Sem `eval` nem `new Function`: a política de conteúdo
+  do app (`default-src 'self'`, RN-SHELL-001) vale para o Worker.
+- **Os limites** (`limits`, RN-VAR-013): 100.000 passos por declaração e 1.000.000 por execução, 250 ms por declaração e 5 s por execução, aninhamento 64, texto
+  1.000.000, lista 10.000, objeto 100 campos, declaração 64 KiB, 500 declarações, 10.000 parâmetros e 4 MiB, corpo do pedido 30.000.000 de bytes, valores da aba 128
+  MiB, `sql` 10.000 caracteres. As operações longas contam passos ponderados (`weigh`, 1 passo por 1.000 unidades). O relógio entra por parâmetro (`Clock`), e os testes
+  o falseiam.
+- **O `random`** (RN-VAR-010) é o xoshiro128** de Blackman e Vigna, um por execução, com a semente do `crypto.getRandomValues` na produção (`productionRandom()`); os
+  testes dão a semente (`new Random([a, b, c, d])`). `int` usa rejeição (uma saída até 2^32; duas, de 53 bits, acima), `float` é `u / 2^32` e `uuid` usa quatro
+  saídas com os bits de versão e variante. Não serve de segredo.
+- **As frases provisórias.** O que a gramática lê e esta frente ainda não executa é recusado, na conferência, com estas frases (em `phrase`; saem quando o passo
+  de cada uma entrar): `provisionalQuery` ("A variável de consulta chega numa próxima versão."), `provisionalSample` ("`random.of` chega numa próxima versão."),
+  `provisionalColumnType` ("O tipo de coluna chega numa próxima versão.") e `provisionalNoValue(nome)` ("`nome` não tem valor: escreva `= valor` (a pergunta dos
+  valores chega numa próxima versão)."). `StoredValue.origin` já traz `consulta`, `pergunta` e `diálogo` para quando elas entrarem.
+- **O log (RN-VAR-036).** Nenhuma exceção do JavaScript que escape do leitor, do conferidor ou do avaliador chega à pessoa: vira "Erro interno do Prism ao avaliar
+  <nome>." (`reportInternalError`), e ao console de desenvolvimento vai só o nome do tipo do erro, nunca a mensagem, o texto do script nem um valor. Nenhum outro arquivo
+  da linguagem usa o `console` (um teste confere).
+- **Os testes.** Os casos de tabela são `*.cases.json` escritos à mão a partir da especificação e nunca regerados do código (`reader`, `placement`, `types`,
+  `evaluation`, `functions`, `attacks`, `limits`, `at-names`, `binding`, `positions`), cada um com um `*.cases.test.ts` que os lê por `cases-runner.ts` (que fixa
+  `TZ=America/Sao_Paulo`, porque as datas valem na hora local). `properties.test.ts` sorteia 10.000 textos e árvores por execução, de uma semente nova a cada vez (a de
+  `PRISM_PROPERTY_SEED`, se estiver no ambiente) que a mensagem de falha traz. A fixture compartilhada com a API é `src/test-fixtures/variables/markers.json` (a conta
+  dos marcadores de cada banco; `markers.fixture.test.ts` a lê; a API tem de contar igual, RN-VAR-017).
+- **O contrato com a API (RN-VAR-017 e 032; `api-contract.test.ts`).** O pedido leva só `{ type, value }` em cada parâmetro: `requestParams(command.params)` tira o `variable`
+  e o `item`, que ficam na tela para o "SQL enviado" (uma terceira chave é 422 `QUERY_INVALID`). A tela recusa antes, com a frase dela, o que a API recusaria: o `number` de
+  mais de 100 caracteres, o decimal de mais de 31 dígitos no Db2 e no Informix (o driver; "pelo driver" na frase do Informix), a lista de mais de 10.000 valores e os
+  valores de mais de 4 MiB. O corpo de `POST queries` vai até 30.000.000 de bytes (`limits.requestBodyBytes`), o das rotas `transfers` (exportação e cópia, `source.params`)
+  até 16 MiB (`limits.transferBodyBytes`): quem monta o pedido da exportação confere `requestBodyBytes(sql, params)` contra o segundo. O `timestamp` com fuso só vai no
+  PostgreSQL; o texto exato de um instante que veio do Db2 pode ter até 12 casas, e a API aceita 6 (a consulta da variável, que traz esse texto, ainda não entrou). As
+  recusas voltam como `ApiError`: `QUERY_INVALID` (`errors["params[i].value"]`, `["params[i].type"]` ou `["params"]`, e o `errorCodes` do mesmo campo em `extensions`), na
+  exportação `EXPORT_OPTIONS_INVALID` e na cópia `IMPORT_OPTIONS_INVALID` em `source.params[i].value`, `QUERY_PARAMETERS_MISMATCH` com `extensions.markers` e `extensions.values`
+  (números; a tela e a API contam igual pela fixture, então ele só vem se o texto mudou no caminho) e `FILTER_INVALID` quando o filtro de um resultado com parâmetros
+  tem `$n` ou `?`. Os valores nunca vão a mensagem nenhuma.
+- **A sonda S-VAR-4** (Node 22 e Electron 44 sob Xvfb, numa VM de 4 vCPU a 2,1 GHz; o app empacotado não foi aberto): nenhuma declaração dentro dos limites passa de
+  ~45 ms (a conta mais longa que cabe em 64 KiB; o `replaceAll` sobre 1.000.000 de caracteres, 24 ms); a execução mais cara (400 declarações de 1.000 termos, 400.400
+  passos) leva 1,6 a 2,4 s dos 5 s; a troca de uma lista de 10.000 valores leva 60 a 280 ms nos três bancos; o host para um Worker que não volta em 250 ms (mais 10 a 45
+  ms) e em 5 s (mais 1 a 4 ms), e o Worker seguinte responde em 20 a 62 ms. Não exercitados: o app empacotado (a política de conteúdo e o endereço do Worker feito pelo
+  Vite), Windows e macOS, e uma chamada nativa que passe de verdade dos 250 ms.
+
+## Executar com variáveis e ver os valores (seção 41: RN-VAR-012, 018 a 024, 032 e 033, RN-SQL-009, RN-SEG-001)
+
+Parte 9, frente 3: o executor da aba, os valores da aba, o painel "Variáveis", o "SQL enviado" e os `params` em tudo o que executa de novo. O texto do editor segue sendo
+da pessoa; o que vai ao banco é o comando trocado pelos marcadores (RN-VAR-017), e a API só recebe `{ type, value }` (`requestParams`).
+
+- **O alvo guarda o comando trocado** (RN-VAR-033). `RunTarget.sent` (um `BoundCommand`: `sql` com os marcadores, `params` com `variable` e `item`, `replacements`, o mapa
+  das posições) vive ao lado do `sql` do editor, e é ele que o F5, o "Executar de novo", o filtro, a atualização automática, "Executar este comando", a exportação e a
+  cópia mandam (`sentTextOf`, `queryParamsOf`, `parametersOf`, em `command-wire.ts`): o `random` não sorteia de novo e as variáveis nunca são avaliadas de novo. A
+  exportação leva `source.params` (`ExportOrigin.params`, `requestSource`) e o corpo das rotas `transfers` vai a 16 MiB (`limits.transferBodyBytes`, `maxRequestBytes`,
+  `maxImportRequestBytes`; a tela confere o corpo escrito em JSON antes de mandar). `sameCommand` compara o texto enviado, o filtro e o tipo e o valor de cada
+  parâmetro. O `executeQuery` leva `params` só quando há; `QUERY_PARAMETERS_MISMATCH` e `QUERY_INVALID` são erros do comando no script (quatro escolhas), e no comando
+  avulso vão ao aviso central com a frase da API. A posição do erro do banco volta ao texto do editor por `editorOffset` (RN-SQL-009), e o filtro do resultado a
+  deixa sem marca, como antes. A passagem da aba para outra janela leva o alvo inteiro (`sent` no schema de `electron/window-messages.ts`: o texto do editor, o
+  enviado, os parâmetros e o mapa) e os valores da aba (`values`, dado puro de `wire.ts`, reconstruído pelos construtores da linguagem). A janela do resultado
+  (RN-ABAS-017) não precisa de nada: é a mesma tela, com o mesmo executor.
+- **Os valores da aba** (RN-VAR-023) são do executor: `runner.values` (`variables/tab-values.ts`, `createTabValuesStore`) com `snapshot()` (imutável, outro objeto a
+  cada mudança: `{ values, counter }`), `subscribe(listener)` (devolve a função que desfaz) e `replace`/`clear`. `declaredValues(snapshot, model)` é o que o editor lê: por
+  nome declarado, `{ type, value, stale, detail, origin, at }` (`type` como `typeLabel`, `value` até 60 caracteres como no fim da linha, `detail` até 200 para a dica,
+  `stale` quando o texto da declaração mudou ou uma atribuição de que ela depende foi avaliada de novo: `staleNames`, a mesma regra do `dependencyPlan`). O contador de
+  avaliações e os valores saem com o `retire()` (aba fechada, banco ou conexão trocados, bloqueio, "Sair"), que também larga o Worker; o `release()` (Desconectar) não os
+  esquece. `runner.reveal` (`createRevealStore`) é o pedido de trazer o painel à frente (`serial` cresce a cada pedido). **Quem liga o editor** lê `runner.values` com
+  `useSyncExternalStore` e a leitura do texto (`readScript`), e chama `declaredValues`; a frente do editor não precisa de mais nada daqui.
+- **O executor** (`createQueryRunner`). `runner.runItem({ doc, engine, from, to }, hooks)` é o Ctrl+Enter (RN-VAR-020) e `runner.runScriptDoc(...)` o Alt+X (RN-VAR-019);
+  `doc` é o texto inteiro do editor (`{ text, blankLines }`) e `from` a `to` o que vai (a seleção, o texto inteiro, ou o cursor com `from` igual a `to`). O `query-tab`
+  os chama quando o texto declara variáveis (`variableRange`, pelo `liveEditors.snapshot`, e não pelos argumentos do `onRun`/`onRunScript` do editor), e sem
+  declarações o caminho é o de sempre (`run`, `runScript`). Os ganchos (`RunHooks`): `confirm(make)` devolve `true` ou a resposta da pessoa (é o `confirmed` do
+  `useCommandConfirmation`) e `begin()` roda quando a execução vai mesmo começar (o filtro do resultado sai, a área recolhida volta, o destaque acende). A ordem do Alt+X:
+  a conferência (`planScript`: `checkScript` filtrado aos itens que vão e às atribuições de que dependem; a declaração sem valor é recusada com a frase provisória), a
+  avaliação no Worker de toda atribuição que vai e das de fora da seleção que a aba não tem em dia (`evaluateIndices`, um pedido só: `preparing` impede outro), a troca dos
+  `@nome` de cada comando com os valores daquele ponto (`scopeBefore`, `bindItem`), a pergunta da proteção com os valores como literais (`confirmedOf`,
+  `numberedScriptQuestion`: o número é o do item no script, e o comando com uma variável `sql` é irreversível na dúvida, `irreversibleOfCommand`, com o trecho dela marcado
+  em `ranges`) e então o laço (`runScriptNow(commands, declarations, closing)`). A declaração toma o valor já avaliado (atualiza o painel e as Estatísticas, `ScriptEntry.kind`
+  `declaration`, "—" nas linhas, os totais "Declarações avaliadas" à parte); no erro dela só valem "Parar" e "Tentar de novo" (que a avalia de novo), e o diálogo
+  desabilita "Pular" e "Pular todos os erros" com o motivo. O Ctrl+Enter numa declaração só avalia (o resultado na tela fica, o painel vem à frente com a linha dela);
+  no comando, `dependencyPlan` diz o que avaliar antes e o valor que a aba tem serve quando está em dia. Erro da conferência ou da avaliação: `RunnerState`
+  `variableErrors` (a lista "Erros nas variáveis" com a linha de cada um; o clique leva o cursor, `editor-goto.ts`, pelo `EditorView.findFromDOM`), o aviso "O script não foi
+  executado: N erros nas variáveis." e nada executado. `variable-execution.ts` é o planejamento (puro), `variable-run.copy.ts` os textos.
+- **A tela.** O painel "Variáveis" (`variables-panel.ts` é o modelo, puro: as linhas, `navigate`, `copyTextOf`; `variables-panel.tsx` o `treegrid`) é uma aba logo antes de
+  "Estatísticas" (`ScriptTab` ganhou `"variables"`; sem script, `ResultTabs` traz "Resultado" e "Variáveis"). O "SQL enviado" (`sent-sql-dialog.tsx`, com o botão
+  `SentSqlButton` na barra do resultado e nas linhas das Estatísticas, e "Ver o SQL enviado" na pergunta de erro) mostra o `sentSql` do alvo.
+- **Provisório, até as partes seguintes.** A pergunta dos valores que faltam (RN-VAR-021) ainda não existe: a declaração sem valor é recusada na conferência. O
+  "Executar com valores…" e a aba de execução (RN-VAR-026 a 029) não existem, e a variável de consulta, o `random.of` e o tipo de coluna ainda são recusados pelas frases
+  provisórias da linguagem. O editor conhece as declarações (a seção "O editor e as variáveis", abaixo) e recebe os valores da aba pela prop `variables`;
+  o `runTarget`/`scriptTargets` ainda usam o `statementAt`, então o destaque de execução (RN-SQL-018) de uma declaração avaliada pelo Ctrl+Enter não existe. O Ctrl+Enter chega ao `onRun` mesmo
+  com o texto só de declarações (a tecla não consulta `isRunnable`, e `hasStatement` já conta o `let`), e a aba o desvia para o `runItem` quando o texto declara variáveis.
+
+## O editor e as variáveis (seção 41: RN-VAR-025, RN-CONFIG-004)
+
+Parte 9, frente 4: o editor lê o script com a linguagem acima e pinta, confere, avisa e completa. Não executa nem avalia nada que fale com o banco.
+
+- **Os arquivos**, em `src/app/workbench/_lib/`. `variables-analysis.ts` é puro: `analyze(texto, banco, linhaEmBranco)` devolve as marcas (cores), os erros, as dicas, as variáveis
+  declaradas e onde cada declaração acaba (`EditorAnalysis`), sem CodeMirror. `variables-extension.ts` é a extensão: o estado (`variablesField`), a pausa
+  (`AnalysisScheduler`), a dica do ponteiro (`hoverAt`) e o valor no fim da linha. `variables-completion.ts` é o autocompletar. `variables-editor.copy.ts` tem as frases das dicas
+  (as dos erros são as da linguagem, `variables/variables.copy.ts`). `sql-keyword-case.ts` ganhou a regra das declarações. `sql-completion.ts` aceita `variables` (as fontes e a pergunta
+  que cala as palavras-chave e os nomes da árvore onde o SQL não completa).
+- **A prop.** `SqlEditor` recebe `variables?: VariablesStore` (`variables-extension.ts`): `{ snapshot(): ReadonlyMap<string, { type: string; value: string; stale: boolean }>; subscribe(listener: () => void): () => void }`.
+  É o armazém dos valores da aba (frente 3, RN-VAR-023); o editor só lê. A chave é o nome da variável. `type` é o tipo como o painel o escreve (`number`, `string[]`, `Date (dia)`, `number | null`:
+  o autocompletar deduz daí os métodos); `value` é o texto do valor como o painel o escreve (`7`, `'Ana'`, `[1, 2, 3]`), que o editor só corta (200 caracteres na dica do ponteiro, 60 com `…` no
+  fim da linha); `stale` é o valor de antes de a declaração mudar, que não aparece no fim da linha e na dica leva "desatualizado". **Quem avisa a mudança do texto da declaração é o armazém**: ele
+  marca `stale` quando a declaração (ou uma de que ela depende) muda, e `subscribe` avisa. O editor também esconde, por conta própria, o valor da declaração que a pessoa acabou de mexer
+  (RN-VAR-025), e a leitura seguinte (300 ms) não o devolve: ele só volta quando o armazém assume (marca `stale`, 400 ms depois da última tecla) ou traz uma avaliação nova, ou quando a pessoa
+  desfaz a mudança. A origem e a hora vêm em `from` ("diálogo · 14:32:05"), e a dica do ponteiro mostra "nome: tipo = valor · origem · hora" (sem `from`, só "nome: tipo = valor"). `short` é o texto do
+  fim da linha quando difere do `value` (a lista leva o " · 3 itens"); sem ele o editor corta o `value` em 60.
+- **A ligação na aba.** `QueryTabPanel` (a aba de consulta e a de script são a mesma, e o único lugar onde o `SqlEditor` é montado) chama `useEditorVariables` (`use-tab-variables.ts`): o
+  `declaredValues` do armazém do executor (`runner.values`) com a leitura do texto de agora, entregue a um armazém por aba (`editor-variables.ts`, de identidade estável, para o editor não se religar)
+  que só avisa o editor quando o tipo, o valor, a origem ou o `stale` de algum nome mudou. O texto que a aba lê é o do editor (`liveEditors`), com o atraso da aba (`updateTab`, 400 ms), e o editor
+  esconde por conta própria o valor da declaração que a pessoa acabou de mexer até lá. O fluxo inteiro (declarar, Alt+X, o painel, a dica do ponteiro e o fim da linha, o F5 e a atualização automática
+  com os mesmos parâmetros) tem teste em `editor-variables.test.ts`, e a ligação na aba em `query-tab.test.ts`.
+- **A leitura em segundo plano.** `analyze` roda 300 ms depois da última tecla (a primeira, ao abrir o editor, sem espera), e o atraso cresce com o que a leitura custou (quatro vezes o custo, de
+  300 ms a 2 s), então um script grande é lido menos vezes. Entre uma leitura e outra as marcas só acompanham a edição (`RangeSet.map`): a tecla nunca espera pela leitura. Texto sem `let`, `const`, `@` nem `//` não
+  é lido; acima de 100.000 caracteres (`analysisMaxChars`; medido: 0,4 a 0,5 ms por 1.000 caracteres, e a leitura do script é o custo; 165 a 200 ms para 190.000 com 500 declarações e 3.000 comandos com `@v`) não é lido e o editor fica sem as marcas.
+  **Decisão (RN-VAR-014):** a leitura do editor roda na thread da tela, e não no Worker que a especificação pede. Ela não avalia o que depende da hora, da sorte ou do banco, a execução em seco
+  tem 40 ms e o texto lido tem esse teto, de modo que a pausa de uma leitura fica abaixo de 50 ms; mover `readScript` e `checkScript` ao Worker custaria uma cópia do texto a cada pausa e um
+  segundo canal de resposta. Se a medida passar disso, o caminho é o Worker (`evaluator-host`), e não subir o teto. A execução em seco do
+  `checkScript` (os erros de tipo que se sabem sem o banco) tem 40 ms (`dryRunBudgetMs`): passado o tempo, o que só ela acharia é descartado, e os erros da leitura (`staticDiagnostics`) ficam. O
+  `readScript` não tem versão incremental: o orçamento é a pausa, o atraso adaptativo e o teto. Os testes que leem a árvore do `lang-sql` usam `freezeParseBudget`.
+- **O que cada coisa usa.** O realce e os erros vêm de `readScript` e `checkScript`; o `@nome` e a dica dele, de `findAtReferences` (`at-names.ts`); o corpo de rotina, de `statementHasBody`. Os textos entre aspas
+  duplas e as crases das declarações são pintados como texto (o `lang-sql` os leria como nome entre aspas), e o `//` como comentário, só nos lugares da RN-VAR-001 (dentro das declarações e entre os itens, e só no script que declara alguma variável: sem nenhuma a execução é a de sempre, que não conhece
+  o `//`, e ele vai ao banco como está); o `//` dentro de um comando, ou em um script sem declaração, é SQL, e a dica diz. As marcas ficam por dentro das cores do `lang-sql` (`Prec.highest`) e, por garantia, a cor vale também para os pedaços que o `lang-sql` pintou por dentro.
+  O comentário colado ao valor (`i--`, `a //2`) só leva a dica quando o `--` ou o `//` está sem espaço antes dele, ou o resto da linha é só um número ou o nome de uma variável: `let x = 5 // nota` é um comentário
+  comum e não leva dica (a especificação cita `a // b`, que não se distingue de um comentário no fim da linha).
+- **A cor da variável** é a ficha `--color-syntax-variable` (a especificação a chama de `--editor-variable`: o nome segue as outras fichas de sintaxe, e o teste de contraste a confere em cada um dos temas (os seis do canvas e o Kanagawa)
+  sobre as cinco superfícies, como as quatro de sintaxe). O `@nome` de uma variável `sql` leva o sublinhado pontilhado no tom do acento.
+- **O valor no fim da linha** é um `Decoration.widget` (não é texto do documento: não se seleciona, não se copia, não entra no `getText` nem no Ctrl+S) com `aria-hidden`. A preferência é
+  `editor.showVariableValues` (Configurações › Editor SQL, ligada por padrão; efeito `setShowVariableValues`).
+- **O autocompletar** lê o script de novo a cada versão do texto (o nome que a pessoa acabou de declarar tem de aparecer, e a leitura em segundo plano pode não ter rodado), até 200.000 caracteres. Depois de `@`
+  completa os declarados acima do comando; dentro do valor de uma declaração, os declarados acima, a lista fechada (`closedNames`), os membros de `Math.`/`random.`/`date.`/`Date.`/`Number.` e, depois de
+  `.`, os métodos da espécie do valor (`methodNames`), quando o tipo se sabe pelo armazém ou pela anotação. Não completa no nome, na anotação, em texto nem em comentário. Dentro das declarações e depois do `@` de uma variável
+  as palavras-chave e os nomes da árvore se calam. Segue a chave "Autocompletar ao digitar".
+- **A caixa das palavras-chave** (`keywordCase(banco, linhaEmBranco)`) não converte dentro de uma declaração ou reatribuição: pergunta ao `scriptItemAt`, e só quando o texto tem `let` ou `const`.
+- **O que muda de `SqlEditor`**: a prop `variables`; as preferências `blankLineSeparates` e o banco da aba disparam uma leitura nova (`reanalyzeVariables`).
+
 ## Proteções da conexão e da pasta (RN-PROT-001 a 006)
 
 Seção 32 da especificação, pedido do dono em 2026-10-15 ("um modal pedindo confirmação do usuário antes de executar qualquer comando em uma conexão ou

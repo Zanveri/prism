@@ -16,8 +16,88 @@ const count = z.number().int().min(0);
 /** O texto do editor que passa: 32 MB de texto é mais do que um editor aguenta. */
 const maxSqlLength = 32 * 1024 * 1024;
 
-/** RN-GRADE-011: `filter` é o texto do campo de filtro do resultado, que viaja com o comando para "Executar de novo" o repetir na outra janela. */
-const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), filter: z.string().max(maxSqlLength).optional() });
+/** RN-VAR-032: o tipo de um parâmetro. */
+const parameterTypeSchema = z.enum(["text", "number", "boolean", "date", "timestamp"]);
+
+/**
+ * RN-VAR-033: o comando com variáveis, trocado pelos marcadores: o texto enviado, os parâmetros (com `variable` e `item`, que ficam na tela para o "SQL
+ * enviado") e o mapa das posições entre o texto do editor e o enviado (RN-SQL-009). Um campo que o schema não conhecesse sumiria na passagem, e o resultado
+ * perderia os valores. Os limites são os da RN-VAR-013: 10.000 parâmetros, 1.000.000 de caracteres por valor.
+ */
+const sentCommandSchema = z.object({
+  sql: z.string().max(maxSqlLength),
+  params: z.array(z.object({ type: parameterTypeSchema, value: z.string().max(1_000_000).nullable(), variable: z.string().max(200), item: count.nullable() })).max(10_000),
+  replacements: z
+    .array(
+      z.object({
+        name: z.string().max(200),
+        kind: z.enum(["parameter", "list", "sql"]),
+        start: count,
+        end: count,
+        sentStart: count,
+        sentEnd: count,
+        firstParameter: count,
+        parameterCount: count,
+        text: z.string().max(maxSqlLength).optional(),
+      }),
+    )
+    .max(1_000_000),
+});
+
+/**
+ * RN-GRADE-011: `filter` é o texto do campo de filtro do resultado, que viaja com o comando para "Executar de novo" o repetir na outra janela. RN-VAR-033: `sent`
+ * leva o comando trocado pelos marcadores, para ele também repetir os mesmos valores (o texto do editor, o enviado, os parâmetros e o mapa, os quatro).
+ */
+const runTargetSchema = z.object({ sql: z.string().max(maxSqlLength), offset: count, engine: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(), filter: z.string().max(maxSqlLength).optional(), sent: sentCommandSchema.optional() });
+
+/**
+ * RN-VAR-023: os valores da aba (as variáveis avaliadas) vão com ela para a outra janela, como dados puros (`wire.ts` da linguagem: cada valor e cada tipo é um
+ * registro tagueado, e quem recebe os reconstrói pelos construtores da linguagem, que conferem a forma de novo). Aqui só se confere a forma e o tamanho.
+ */
+const wireDate = z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int(), z.number().int(), z.number().int(), z.number().int()]);
+type WireValueShape =
+  | { k: "number"; v: number; e?: string }
+  | { k: "string"; v: string }
+  | { k: "boolean"; v: boolean }
+  | { k: "null" }
+  | { k: "date"; f: z.infer<typeof wireDate>; p: "day" | "instant"; e?: string }
+  | { k: "list"; i: WireValueShape[] }
+  | { k: "object"; f: [string, WireValueShape][] }
+  | { k: "sql"; t: string };
+const wireValueSchema: z.ZodType<WireValueShape> = z.lazy(() =>
+  z.discriminatedUnion("k", [
+    z.object({ k: z.literal("number"), v: z.number().finite(), e: z.string().max(1000).optional() }),
+    z.object({ k: z.literal("string"), v: z.string().max(1_000_000) }),
+    z.object({ k: z.literal("boolean"), v: z.boolean() }),
+    z.object({ k: z.literal("null") }),
+    z.object({ k: z.literal("date"), f: wireDate, p: z.enum(["day", "instant"]), e: z.string().max(100).optional() }),
+    z.object({ k: z.literal("list"), i: z.array(wireValueSchema).max(10_000) }),
+    z.object({ k: z.literal("object"), f: z.array(z.tuple([z.string().max(1000), wireValueSchema])).max(100) }),
+    z.object({ k: z.literal("sql"), t: z.string().max(10_000) }),
+  ]),
+);
+type WireTypeShape = { t: "number" | "string" | "boolean" | "sql" | "null" | "never" } | { t: "date"; p?: "day" | "instant" } | { t: "list"; i: WireTypeShape } | { t: "object"; f: [string, WireTypeShape][] } | { t: "nullable"; o: WireTypeShape };
+const wireTypeSchema: z.ZodType<WireTypeShape> = z.lazy(() =>
+  z.discriminatedUnion("t", [
+    z.object({ t: z.enum(["number", "string", "boolean", "sql", "null", "never"]) }),
+    z.object({ t: z.literal("date"), p: z.enum(["day", "instant"]).optional() }),
+    z.object({ t: z.literal("list"), i: wireTypeSchema }),
+    z.object({ t: z.literal("object"), f: z.array(z.tuple([z.string().max(1000), wireTypeSchema])).max(100) }),
+    z.object({ t: z.literal("nullable"), o: wireTypeSchema }),
+  ]),
+);
+const storedValueSchema = z.object({
+  name: z.string().min(1).max(200),
+  value: wireValueSchema,
+  type: wireTypeSchema,
+  declared: wireTypeSchema,
+  origin: z.enum(["literal", "expressão", "random", "consulta", "pergunta", "diálogo"]),
+  at: z.number(),
+  ms: z.number(),
+  text: z.string().max(maxSqlLength),
+  order: count,
+  earlier: z.array(z.object({ text: z.string().max(maxSqlLength), order: count })).max(500).optional(),
+});
 
 const columnSchema = z.object({ name, type: name, kind: z.enum(["text", "number", "datetime", "boolean", "binary"]) });
 
@@ -110,6 +190,8 @@ export const tabTransferSchema = z.object({
   /** A seleção do editor (o cursor é a seleção vazia), em posições do texto. */
   editor: z.object({ anchor: count, head: count }).nullable(),
   result: resultSchema.nullable(),
+  /** RN-VAR-023: as variáveis avaliadas da aba e o contador de avaliações dela; a aba as leva para a outra janela. Nunca vão às abas que voltam na próxima entrada. */
+  values: z.object({ counter: count, entries: z.array(storedValueSchema).max(500) }).optional(),
   memory: memorySchema,
   /**
    * RN-ABAS-016: a janela do resultado da aba não fechou a tempo (o processo principal não confirmou em 3 segundos), e a aba vai com o resultado no painel; a

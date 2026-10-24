@@ -41,7 +41,8 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// um comando anterior fecha antes (RN-SQL-007), como antes de qualquer outra operação que fale com o banco.
     /// </summary>
     /// <param name="pageSize">RN-SQL-016: as linhas da primeira página e de cada "carregar mais" deste cursor. Quem valida a faixa é a rota.</param>
-    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken);
+    /// <param name="parameters">RN-VAR-032: os valores dos marcadores do comando (`$n` ou `?`), na ordem; a conexão os liga com o tipo do banco. O registro de sessões já conferiu que eles batem com o texto. Ausente ou vazio, o comando vai como está.</param>
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
 
     /// <summary>
     /// RN-PROT-002 e 006: o comando de uma conexão somente leitura, que quem chama já conferiu pelo texto (`ReadOnlySql`). Roda sempre como leitura
@@ -49,7 +50,7 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// (uma função que grava, chamada pelo `SELECT`) é a resposta, também no "carregar mais", e o comando nunca roda de novo fora dela. O
     /// <see cref="ExecuteAsync"/> seguinte, de quando a conexão deixa de ser somente leitura, tira a sessão do modo antes de rodar.
     /// </summary>
-    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken);
+    Task<Result<QueryOutcome, DatabaseFailure>> ExecuteReadOnlyAsync(string sql, int pageSize, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
 
     /// <summary>RN-SQL-005: as linhas seguintes do mesmo cursor, sem executar de novo, no tamanho com que ele foi aberto. Sem cursor aberto, `NoOpenCursor`.</summary>
     Task<Result<QueryPage, DatabaseFailure>> FetchNextAsync(CancellationToken cancellationToken);
@@ -58,7 +59,7 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// RN-SQL-006: `SELECT COUNT(*)` sobre o comando, como subconsulta, sem deixar que ele grave de novo. A posição do erro não vem:
     /// seria a do comando embrulhado.
     /// </summary>
-    Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken);
+    Task<Result<long, DatabaseFailure>> CountAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
 
     /// <summary>Fecha o cursor aberto, se houver, sem esperar o resto das linhas. Não falha.</summary>
     Task CloseCursorAsync();
@@ -193,10 +194,10 @@ public interface IDatabaseConnection : IAsyncDisposable
     /// exportação segue sem ele. A falha é a da conexão que não serve mais.
     /// </summary>
     /// <param name="required">RN-IMPORT-023: a contagem é obrigatória (a cópia de Db2 ou de Informix com a origem e o destino no mesmo banco): a recusa do banco é a falha, e não um total nulo.</param>
-    Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken);
+    Task<Result<long?, DatabaseFailure>> CountExportAsync(string sql, bool required, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
 
     /// <summary>RN-EXPORT-017: envia o comando da exportação e devolve as colunas do resultado, com o leitor aberto para o <see cref="ReadExportRowsAsync"/>.</summary>
-    Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken);
+    Task<Result<IReadOnlyList<QueryColumn>, DatabaseFailure>> StartExportReadAsync(string sql, CancellationToken cancellationToken, IReadOnlyList<QueryParameter>? parameters = null);
 
     /// <summary>
     /// RN-EXPORT-017: o lote seguinte de linhas da exportação, do leitor aberto pelo <see cref="StartExportReadAsync"/>, cada valor inteiro (sem o corte da

@@ -288,6 +288,16 @@ internal sealed class PostgresConnection(ConnectionSettings settings, ILogger lo
     }
 
     /// <summary>
+    /// RN-VAR-017 e 032: o parâmetro do comando do usuário vai como texto de tipo desconhecido (`unknown`), e o servidor o lê pelo lugar onde está (`WHERE id = $1`
+    /// vira o tipo de `id`, e o índice dela continua servindo), como na edição. Onde o lugar não diz o tipo (`SELECT $1`), o valor volta como texto.
+    /// </summary>
+    protected override void BindQueryParameter(DbParameter parameter, BoundQueryParameter bound)
+    {
+        ((NpgsqlParameter)parameter).NpgsqlDbType = NpgsqlDbType.Unknown;
+        parameter.Value = bound.Value ?? DBNull.Value;
+    }
+
+    /// <summary>
     /// RN-IMPORT-010 e 015: o texto canônico vai num parâmetro sem tipo, e o banco o converte pelo tipo da coluna, como na edição; o binário vai em bytes,
     /// num parâmetro `bytea`.
     /// </summary>

@@ -16,12 +16,14 @@ import { controlHeight, iconControlSize, type ControlSize } from "../_lib/result
 import { autoLoadArmed } from "../_lib/result-paging";
 import { platformScriptShortcut } from "../_lib/script-run";
 import { recall, remember } from "../_lib/tab-memory";
-import { isPersonBusy, type RowsState, type RunnerState } from "../_lib/use-query-runner";
+import { isPersonBusy, type RowsState, type RunnerState, type VariableErrorsState } from "../_lib/use-query-runner";
+import { variableRunCopy } from "../_lib/variable-run.copy";
 import { workbenchCopy } from "../_lib/workbench.copy";
 import { EditBar } from "./edit-bar";
 import { GridZoomControls } from "./grid-zoom-controls";
 import { ResultGrid } from "./result-grid";
 import { KeptResultNote } from "./script-tabs";
+import { SentSqlButton } from "./sent-sql-button";
 
 const copy = workbenchCopy.result;
 
@@ -145,6 +147,7 @@ export function collapsedSummary(state: RunnerState): string {
   if (state.status === "affected") return copy.affected(state.rowsAffected, state.elapsedMs);
   if (state.status === "cancelled") return copy.cancelled;
   if (state.status === "notice") return state.message;
+  if (state.status === "variableErrors") return `${variableRunCopy.errors.title} · ${state.errors.length.toLocaleString("pt-BR")}`;
   if (state.status === "error") return state.sqlState === null ? state.title : `${state.title} · ${copy.sqlState} ${state.sqlState}`;
   return copy.empty;
 }
@@ -237,6 +240,12 @@ type ResultPanelProps = {
   progress?: string | null;
   /** RN-SQL-020: as Estatísticas do script no corpo, no lugar do resultado; `summary` é o que a barra recolhida diz delas. */
   statistics?: { body: ReactNode; summary: string };
+  /** RN-VAR-024: o painel "Variáveis" no corpo, no lugar do resultado, como as Estatísticas; `summary` é o que a barra recolhida diz dele. */
+  variables?: { body: ReactNode; summary: string };
+  /** RN-VAR-012: um erro da lista "Erros nas variáveis" leva o cursor do editor ao lugar dele (a posição no texto do editor). */
+  onGoTo?: (offset: number) => void;
+  /** RN-VAR-018: o botão "SQL enviado", na barra do resultado de um comando que levou variáveis; o clique abre o diálogo. */
+  onViewSent?: () => void;
   /**
    * RN-SQL-020 e 023: uma aba guardada do script. As linhas lidas, que se editam como as do último comando (a faixa e a edição, com a barra dela, vêm de
    * quem usa a área), sem contar, sem "Carregar mais", sem filtro nem atualização automática, e a nota dela (`KeptResultNote`), com "Executar este comando",
@@ -254,11 +263,36 @@ type ResultPanelProps = {
 };
 
 /**
+ * RN-VAR-012: a lista "Erros nas variáveis", quando a conferência de antes de executar achou erros e nada foi executado: cada erro com a linha e a frase; o
+ * Enter e o clique levam o cursor do editor ao lugar dele.
+ */
+export function VariableErrorsView({ state, onGoTo }: { state: VariableErrorsState; onGoTo?: (offset: number) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="font-semibold text-danger">{variableRunCopy.errors.title}</h3>
+      <ul aria-label={variableRunCopy.errors.list} className="flex flex-col gap-1">
+        {state.errors.map((error, index) => (
+          <li key={index}>
+            <button type="button" onClick={() => onGoTo?.(error.offset)} className="flex w-full cursor-pointer items-baseline gap-2 rounded-sm px-1 py-0.5 text-left text-ink hover:bg-selected">
+              <span className="flex-none font-mono text-xs text-muted">{variableRunCopy.errors.line(error.line)}:</span>
+              <span className="min-w-0 break-words">{error.message}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="text-xs text-muted">{variableRunCopy.errors.hint}</p>
+    </div>
+  );
+}
+
+/**
  * A área de resultado da aba (RN-SQL-004 a 009): as linhas na grade, as linhas afetadas, ou o erro
  * do banco como ele veio. É estado da tela, e não aviso: fica até o próximo comando (RN-AVISO-005).
  * Tudo o que vem do banco entra como texto (RN-SHELL-002).
  */
-export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, follow, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics, kept, exporter, importer }: ResultPanelProps) {
+export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, collapsed = false, actions, placeControl, id, style, records, follow, nullText, autoLoadMore = false, tabId, editing, banner, filter, autoRefresh, tabs, progress = null, statistics: scriptStatistics, variables, onGoTo, onViewSent, kept, exporter, importer }: ResultPanelProps) {
+  // As Estatísticas e o painel Variáveis tomam o corpo da área da mesma forma: nem grade, nem resumo das linhas na barra.
+  const statistics = scriptStatistics ?? variables;
   // O comando que a área mostra rodando ("Executando…", a grade esmaecida). A execução da atualização automática (RN-GRADE-014) não: a cada 5 s a grade
   // piscaria; o controle dela diz "atualizando…". Ela também não ocupa a área para a pessoa (`busy`, abaixo).
   const running = state.status === "running" && state.auto !== true;
@@ -377,6 +411,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
         {records || kept !== undefined || statistics !== undefined ? null : (autoRefresh ?? null)}
         {/* Os controles do zoom só existem com a grade no corpo da área (as linhas, inclusive esmaecidas enquanto outro comando roda) e a área aberta. */}
         {rows !== null && !collapsed ? <GridZoomControls zoom={zoom} onZoom={zoomTo} size={barSize} /> : null}
+        {/* RN-VAR-018: o resultado de um comando que levou variáveis mostra o SQL enviado, com os valores. */}
+        {records || onViewSent === undefined || rows?.target.sent === undefined ? null : <SentSqlButton onClick={onViewSent} />}
         {records || exporter === undefined ? null : <ExportButton exporter={exporter} hint={dataExportCopy.entry.resultHint} size="bar" />}
         {placeControl}
         {actions}
@@ -491,6 +527,8 @@ export function ResultPanel({ state, connected, onLoadMore, onCount, onRerun, co
                 <span aria-hidden className="size-2 flex-none rounded-full bg-accent" />
                 {copy.cancelled}
               </p>
+            ) : shown.status === "variableErrors" ? (
+              <VariableErrorsView state={shown} onGoTo={onGoTo} />
             ) : shown.status === "error" ? (
               <div className="flex flex-col gap-2">
                 <h3 className="font-semibold text-danger">{shown.title}</h3>

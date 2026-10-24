@@ -1,5 +1,6 @@
 #if PRISM_IBM_DRIVER
 using IBM.Data.Db2;
+using IBM.Data.DB2Types;
 using Prism.Infrastructure.Databases.Models;
 using System.Data.Common;
 using System.Runtime.InteropServices;
@@ -51,6 +52,34 @@ internal abstract class IbmDatabaseConnection(ConnectionSettings settings, ILogg
     }
 
     protected abstract ESqlDialect Dialect { get; }
+
+    protected override ESqlDialect QueryDialect => Dialect;
+
+    /// <summary>
+    /// RN-VAR-017 e 032: o parâmetro do comando do usuário, com o tipo do driver que a sonda S-VAR-1 provou (<see cref="QueryParameterBinding"/>): o decimal pelo
+    /// `DB2Decimal` do driver (até 31 dígitos, exato, que o `System.Decimal` não guarda), o `bool` do Db2 como `DbType.Boolean` (o `DB2Type.Boolean` lança), o
+    /// resto com o `DB2Type` do nome. O `DbType` vai antes do valor, e o `DB2Type` depois.
+    /// </summary>
+    protected override void BindQueryParameter(DbParameter parameter, BoundQueryParameter bound)
+    {
+        var ibm = (DB2Parameter)parameter;
+        if (bound.DbType is { } dbType)
+            ibm.DbType = dbType;
+
+        ibm.Value = bound.Ibm == EIbmParameterType.Decimal ? DB2Decimal.Parse((string)bound.Value!) : bound.Value ?? DBNull.Value;
+        if (bound.Ibm != EIbmParameterType.None)
+            ibm.DB2Type = bound.Ibm switch
+            {
+                EIbmParameterType.BigInt => DB2Type.BigInt,
+                EIbmParameterType.Decimal => DB2Type.Decimal,
+                EIbmParameterType.Double => DB2Type.Double,
+                EIbmParameterType.LongVarChar => DB2Type.LongVarChar,
+                EIbmParameterType.Clob => DB2Type.Clob,
+                EIbmParameterType.Date => DB2Type.Date,
+                EIbmParameterType.Timestamp => DB2Type.Timestamp,
+                _ => DB2Type.VarChar
+            };
+    }
 
     protected override string? BeginReadOnlySql => null;
 

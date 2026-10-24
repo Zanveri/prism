@@ -90,6 +90,9 @@ export const settingsCopy = {
     // RN-SQL-018 (issue #7): como o "Smart" do DBeaver, com o cuidado de não executar metade de um comando.
     blankLineSeparates: "A linha em branco separa os comandos",
     blankLineSeparatesHint: "Sem seleção, o Ctrl+Enter executa só o comando do cursor, até o ponto e vírgula ou até uma linha em branco, como no DBeaver. A linha em branco só separa quando a de baixo começa outro comando (SELECT, INSERT, UPDATE…) e a de cima não ficou pela metade; nunca dentro de texto, comentário ou rotina. Desligada, só o ponto e vírgula separa.",
+    // RN-CONFIG-004 e RN-VAR-025 (seção 41): o valor que a declaração tem na aba, apagado, depois do texto da linha.
+    showVariableValues: "Mostrar o valor das variáveis no fim da linha",
+    showVariableValuesHint: "Depois que uma declaração (let ou const) é avaliada, o editor escreve o valor dela, apagado, no fim da linha. Não é texto do script: não se seleciona, não se copia e não vai para o arquivo. Some quando você muda a declaração, até a próxima avaliação.",
   },
 
   // RN-ATUALIZA-007: o que a ponte do processo principal guarda e a tela lê e muda.

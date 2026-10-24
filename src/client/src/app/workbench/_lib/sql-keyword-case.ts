@@ -4,6 +4,7 @@ import { EditorState, Transaction, type Extension } from "@codemirror/state";
 import type { Engine } from "@/components/ui";
 
 import { isInsideComment } from "./sql-statements";
+import { scriptItemAt } from "./variables/script-items";
 
 /**
  * As palavras que "converter palavras-chave para maiúsculas" (RN-CONFIG-004) escreve em maiúsculas: as reservadas e as que montam
@@ -43,6 +44,13 @@ const convertible = new Set(["Keyword", "Null", "Bool"]);
  */
 const nameChar = /[\p{L}\p{M}\p{N}_$.@#]/u;
 
+/** Se `offset` está numa declaração ou numa reatribuição do script (RN-VAR-001): um texto sem `let` nem `const` não tem nenhuma. */
+function insideDeclaration(sql: string, offset: number, engine: Engine | undefined, blankLines: () => boolean): boolean {
+  if (!/\b(?:let|const)\b/.test(sql)) return false;
+  const item = scriptItemAt(sql, offset, engine, { blankLines: blankLines() });
+  return item !== null && item.kind !== "statement";
+}
+
 /**
  * Converte a palavra-chave que a pessoa acabou de digitar. Só age numa inserção pura que o teclado fez (`input.type`, e `input` do Enter e do
  * Tab) cujo primeiro caractere termina uma palavra: o espaço, a vírgula, o parêntese, o ponto e vírgula, a quebra de linha. Colar, aceitar uma
@@ -52,8 +60,12 @@ const nameChar = /[\p{L}\p{M}\p{N}_$.@#]/u;
  * entre aspas duplas nunca é `Keyword`. A exceção é o `{ ... }` do Informix, que a gramática não lê: o banco da aba (`engine`) diz se as
  * chaves abrem comentário, e a palavra dentro delas fica como foi digitada. A mudança entra na MESMA transação da tecla (um único desfazer
  * devolve a palavra e o caractere), tem o mesmo tamanho (o cursor não se mexe) e fica antes do ponto da inserção.
+ *
+ * Dentro de uma declaração (`let`, `const` e a reatribuição, seção 41) a palavra nunca é convertida (RN-CONFIG-004): `null`, `true` e `false` são da linguagem das
+ * variáveis em minúsculas, e `NULL` e `TRUE` não existem nela. Quem diz onde há uma declaração é o leitor do script (`scriptItemAt`), no banco da aba; `blankLines` é a
+ * preferência "A linha em branco separa os comandos", lida na hora (ela decide onde a reatribuição `b = 2` é um item).
  */
-export function keywordCase(engine: Engine | undefined): Extension {
+export function keywordCase(engine: Engine | undefined, blankLines: () => boolean = () => true): Extension {
   return EditorState.transactionFilter.of((transaction) => {
     const event = transaction.annotation(Transaction.userEvent);
     if (!transaction.docChanged || (event !== "input" && event !== "input.type")) return transaction;
@@ -83,6 +95,9 @@ export function keywordCase(engine: Engine | undefined): Extension {
     // A gramática do `lang-sql` não conhece o `{ ... }` do Informix: o que está escrito ali parece código a ela, e é texto de comentário.
     // Por último, porque é a única pergunta que lê o texto desde o começo.
     if (isInsideComment(transaction.startState.doc.toString(), word.from, engine)) return transaction;
+
+    // A declaração: o texto que não tem `let` nem `const` nem chega a perguntar.
+    if (insideDeclaration(transaction.startState.doc.toString(), word.from, engine, blankLines)) return transaction;
 
     // `sequential`: a posição é a do texto depois da tecla; a palavra fica antes dela, e a posição é a mesma nos dois.
     return [transaction, { changes: { from: word.from, to: word.to, insert: upper }, sequential: true }];

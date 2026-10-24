@@ -1,6 +1,8 @@
 import type { Engine } from "@/components/ui";
 
 import { integerIn, type DataFormat, type FormatOptions } from "./export-options";
+import { requestParams, type BoundParameter, type ParameterType } from "../variables/bind";
+import { limits } from "../variables/variables.copy";
 import type { ExportOrigin } from "./export-source";
 
 /**
@@ -10,7 +12,7 @@ import type { ExportOrigin } from "./export-source";
 
 export type ExportRequestSource =
   | { kind: "table"; connectionID: string; database?: string; schema: string; table: string }
-  | { kind: "query"; connectionID: string; database?: string; sql: string; filter?: string; name?: string };
+  | { kind: "query"; connectionID: string; database?: string; sql: string; filter?: string; name?: string; params?: { type: ParameterType; value: string | null }[] };
 
 export type ExportRequest = {
   source: ExportRequestSource;
@@ -74,6 +76,9 @@ export function requestOptions(format: DataFormat, options: FormatOptions, engin
   }
 }
 
+/** RN-VAR-032 e RN-EXPORT-016: os `source.params` do comando com variáveis (só `type` e `value`); sem variáveis, o pedido não leva a chave. */
+const paramsOf = (params: readonly BoundParameter[] | undefined) => (params === undefined || params.length === 0 ? {} : { params: requestParams(params) });
+
 /** A origem como a API a lê: a tabela pelo navegador, ou o comando dos Registros e do resultado (com o filtro do resultado e o nome da tabela nos Registros). */
 export function requestSource(connectionId: string, database: string | undefined, origin: ExportOrigin): ExportRequestSource {
   const place = { connectionID: connectionId, ...(database === undefined ? {} : { database }) };
@@ -81,9 +86,9 @@ export function requestSource(connectionId: string, database: string | undefined
     case "table":
       return { kind: "table", ...place, schema: origin.schema, table: origin.name };
     case "records":
-      return { kind: "query", ...place, sql: origin.sql, name: origin.name };
+      return { kind: "query", ...place, sql: origin.sql, name: origin.name, ...paramsOf(origin.params) };
     case "result":
-      return { kind: "query", ...place, sql: origin.sql, ...(origin.filter === null || origin.filter === "" ? {} : { filter: origin.filter }) };
+      return { kind: "query", ...place, sql: origin.sql, ...(origin.filter === null || origin.filter === "" ? {} : { filter: origin.filter }), ...paramsOf(origin.params) };
   }
 }
 
@@ -103,8 +108,8 @@ export function exportRequest(draft: ExportDraft): ExportRequest {
   };
 }
 
-/** O limite do corpo do pedido (RN-EXPORT-015): 8 MiB em UTF-8. A tela confere antes de mandar e não manda o que passa. */
-export const maxRequestBytes = 8 * 1024 * 1024;
+/** O limite do corpo do pedido (RN-EXPORT-015): 16 MiB em UTF-8, por causa dos valores dos parâmetros (era 8 MiB). A tela confere antes de mandar e não manda o que passa. */
+export const maxRequestBytes = limits.transferBodyBytes;
 
 export function requestBytes(request: ExportRequest): number {
   return new TextEncoder().encode(JSON.stringify(request)).length;

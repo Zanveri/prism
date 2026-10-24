@@ -156,7 +156,7 @@ public sealed class DatabaseSessionValidatorsTests
         //Arrange
         var sessionID = Guid.CreateVersion7();
         var databaseSessionService = new Mock<IDatabaseSessionService>();
-        databaseSessionService.Setup(s => s.FilterRefusal(sessionID, "a = 1;")).Returns("O filtro não pode ter ponto e vírgula.");
+        databaseSessionService.Setup(s => s.FilterRefusal(sessionID, "a = 1;", false)).Returns("O filtro não pode ter ponto e vírgula.");
         var validator = new ExecuteQueryValidator(databaseSessionService.Object);
 
         //Act
@@ -169,7 +169,7 @@ public sealed class DatabaseSessionValidatorsTests
         refused.ShouldNotHaveValidationErrorFor(command => command.Sql);
         accepted.ShouldNotHaveAnyValidationErrors();
         without.ShouldNotHaveAnyValidationErrors();
-        databaseSessionService.Verify(s => s.FilterRefusal(sessionID, "a = 1;"), Times.Once);
+        databaseSessionService.Verify(s => s.FilterRefusal(sessionID, "a = 1;", false), Times.Once);
     }
 
     [Trait("GetSchemaObjectsValidator", "GetSchemaObjectsCommand")]

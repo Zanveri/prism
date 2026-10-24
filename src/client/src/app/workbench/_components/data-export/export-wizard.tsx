@@ -17,7 +17,7 @@ import { readExportChoices, writeExportChoices } from "../../_lib/data-export/ex
 import { closeExportWizard, exportTracker, type ExportWizardRequest } from "../../_lib/data-export/data-exports";
 import { defaultOptions, formatSentence, isTextFormat, type FormatOptions } from "../../_lib/data-export/export-options";
 import { exportRequest, maxRequestBytes, requestBytes } from "../../_lib/data-export/export-request";
-import { initialChecked, knowsGenerated, originName, originSchema, progressName, sourceTitle, targetDefaults, toastSubject, type SourceColumn } from "../../_lib/data-export/export-source";
+import { initialChecked, knowsGenerated, originCommandText, originName, originSchema, progressName, sourceTitle, targetDefaults, toastSubject, type SourceColumn } from "../../_lib/data-export/export-source";
 import {
   choicesToRemember,
   chosenColumns,
@@ -53,7 +53,9 @@ import { columnsQuery } from "../../_lib/table-structure.service";
 import { unsavedEdits } from "../../_lib/unsaved-edits";
 import { useCommandConfirmation } from "../../_lib/use-command-confirmation";
 import { useWorkbench } from "../../_lib/workbench-state";
+import { sentSqlCopy } from "../../_lib/sent-sql.copy";
 import { ConfirmCommandDialog } from "../confirm-command-dialog";
+import { SentSqlDialog } from "../sent-sql-dialog";
 import { CopyTargetStep } from "../data-import/copy-target-step";
 import { LoadStep, MappingStep } from "../data-import/import-wizard-steps";
 import { useCopyWizard } from "../data-import/use-copy-wizard";
@@ -128,6 +130,8 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
   const copy = useCopyWizard({ source, sourceEngine: engine, sourceColumns: columns, chosen, active: database, step });
   const confirmation = useCommandConfirmation(copy.target.connectionId, copy.target.database);
   const [asking, setAsking] = useState(false);
+  // RN-EXPORT-015: o "SQL enviado" do comando com variáveis, aberto pela Origem da Confirmação.
+  const [sentOpen, setSentOpen] = useState(false);
   const busy = exporting || asking;
   const { tabs } = useWorkbench();
 
@@ -362,6 +366,7 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
         </div>
       </Dialog>
       {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} />}
+      {sentOpen && origin.kind === "result" && origin.bound !== undefined ? <SentSqlDialog command={origin.bound} engine={engine} onClose={() => setSentOpen(false)} /> : null}
     </>
   );
 
@@ -373,6 +378,7 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
         return (
           <ExtractionStep
             origin={origin}
+            engine={engine}
             columns={columns}
             loadError={loadError}
             onRetry={() => void catalog.refetch()}
@@ -486,7 +492,22 @@ export function ExportWizard({ request }: { request: ExportWizardRequest }) {
       ? { label: c.origin, value: c.allRowsOf(origin.schema, origin.name) }
       : origin.kind === "records"
         ? { label: c.origin, value: origin.filter === "" ? c.allRowsOf(origin.schema, origin.name) : c.recordsOf(origin.schema, origin.name), hint: origin.filter === "" ? undefined : origin.filter }
-        : { label: c.origin, value: `${sourceTitle(origin)} · ${origin.sql.slice(0, 80)}${origin.sql.length > 80 ? "…" : ""}`, hint: origin.sql };
+        : resultOriginLine(origin);
+  }
+
+  /** O resultado (RN-EXPORT-015): o começo do comando e o texto inteiro na dica; com variáveis, o texto com os valores no lugar e o botão "Ver o SQL enviado". */
+  function resultOriginLine(result: Extract<typeof origin, { kind: "result" }>): SummaryLine {
+    const text = originCommandText(result, engine) ?? result.sql;
+    const line: SummaryLine = { label: c.origin, value: `${sourceTitle(result)} · ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`, hint: text };
+    if (result.bound === undefined) return line;
+    return {
+      ...line,
+      action: (
+        <Button type="button" variant="secondary" size="compact" className="ml-2" onClick={() => setSentOpen(true)}>
+          {sentSqlCopy.view}
+        </Button>
+      ),
+    };
   }
 
   /** O resumo da cópia (RN-IMPORT-025): a origem e a conexão, como na exportação, com a contagem; o destino; as colunas; e a carga. */

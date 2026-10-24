@@ -10,6 +10,11 @@ import { cn } from "@/lib/utils/cn";
 import { resultWindowNameOf } from "../../../../electron/result-window-messages";
 
 import { autoRefreshQuestion, commandQuestion, saveQuestion, scriptQuestion, type WholeColumnQuestion } from "../_lib/command-confirmation";
+import { confirmedOf } from "../_lib/command-wire";
+import { goToOffset } from "../_lib/editor-goto";
+import { liveEditors } from "../_lib/live-editors";
+import { declarationOffset, useEditorVariables, useTabVariables } from "../_lib/use-tab-variables";
+import { readScript } from "../_lib/variables/script";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
 import { useCopyAs } from "../_lib/copy-as/use-copy-as";
 import { openExportWizard } from "../_lib/data-export/data-exports";
@@ -26,7 +31,7 @@ import { entryAt, scriptProgress, scriptShortcut, scriptShortcutLabel, shownScri
 import { scriptsCopy } from "../_lib/scripts.copy";
 import { connectionChoices, connectionShortcut } from "../_lib/tab-connection";
 import { recall, remember } from "../_lib/tab-memory";
-import { isPersonBusy, useQueryRunner, useScriptRun, type QueryRunner, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
+import { isPersonBusy, useQueryRunner, useScriptRun, type DocRange, type QueryRunner, type RunHooks, type RunnerState, type RunTarget } from "../_lib/use-query-runner";
 import { conditionOf, sortOf, withOrder } from "../_lib/table-sql";
 import { canClear } from "../_lib/table-view";
 import { useRecordEdits, type GridFilterSource, type GridFollowSource, type GridSortSource, type SavedEdits } from "../_lib/use-record-edits";
@@ -52,9 +57,12 @@ import { ResultSplitter } from "./result-splitter";
 import { NoConnectionBarView, type NoConnectionReason } from "./script-dialogs";
 import { ScriptErrorDialog } from "./script-error-dialog";
 import { ScriptStatistics } from "./script-statistics";
-import { ScriptTabs, ScriptWaitingMark, scriptTabId } from "./script-tabs";
+import { ResultTabs, ScriptTabs, ScriptWaitingMark, scriptTabId } from "./script-tabs";
+import { SentSqlDialog } from "./sent-sql-dialog";
+import { VariablesPanel } from "./variables-panel";
+import { variablesPanelCopy } from "../_lib/variables-panel.copy";
 import { RecordsFilter } from "./table-tab/records-filter";
-import { SqlEditor, type SqlEditorHandle } from "./sql-editor";
+import { SqlEditor, type FlashRun, type SqlEditorHandle } from "./sql-editor";
 
 type QueryTabPanelProps = {
   tab: QueryTab;
@@ -166,6 +174,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const { preferences } = usePreferences();
   const editor = useRef<SqlEditorHandle>(null);
   const area = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const resultId = useId();
   const [runnable, setRunnable] = useState(false);
   const [layout, dispatch] = useReducer(layoutReducer, tab.id, (tabId) => recall(tabId, "layout") ?? initialLayout);
@@ -223,6 +232,27 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const [pinned, setPinned] = useState<RunTarget | null>(null);
   // RN-SQL-020: a aba do resultado à frente, depois de um script. A escolha da pessoa vale para aquele script (pelo `id`); o seguinte volta às Estatísticas.
   const [chosenTab, setChosenTab] = useState<{ run: number; tab: ScriptTab } | null>(null);
+  // RN-VAR-024: sem script, mas com variáveis avaliadas, a área tem as abas "Resultado" e "Variáveis"; esta é a que está à frente.
+  const [plainTab, setPlainTab] = useState<"result" | "variables">("result");
+  // RN-VAR-018: o "SQL enviado" aberto, do comando que levou variáveis.
+  const [sentView, setSentView] = useState<RunTarget | null>(null);
+  const variables = useTabVariables(runner, liveEditors.snapshot(tab.id)?.sql ?? tab.sql, engine, preferences.editor.blankLineSeparates);
+  // RN-VAR-025: os mesmos valores, para o editor (a dica do ponteiro e o valor no fim da linha).
+  const editorVariables = useEditorVariables(variables);
+  // O pedido de trazer o painel à frente (o Ctrl+Enter numa declaração, o script sem comando): ajuste durante a renderização, uma vez por pedido.
+  const [revealSeen, setRevealSeen] = useState(variables.reveal.serial);
+  if (revealSeen !== variables.reveal.serial) {
+    setRevealSeen(variables.reveal.serial);
+    setPlainTab("variables");
+    if (script !== null) setChosenTab({ run: script.id, tab: "variables" });
+  }
+  // RN-VAR-024: só o pedido de trazer o painel o põe à frente. O comando novo da pessoa (e a lista "Erros nas variáveis" que o recusa) mostra o resultado dele: sem isto
+  // o "Executando…", as linhas e o erro ficavam atrás do painel até a pessoa clicar em "Resultado". A atualização automática, que roda sozinha, não tira o painel.
+  const [stateSeen, setStateSeen] = useState(state);
+  if (stateSeen !== state) {
+    setStateSeen(state);
+    if ((state.status === "running" && stateSeen.status !== "running" && state.auto !== true) || (state.status === "variableErrors" && !(stateSeen.status === "variableErrors" && stateSeen.errors === state.errors))) setPlainTab("result");
+  }
   // O filtro é do resultado do executor da aba. Trocar o banco (RN-ARVORE-007) ou a conexão (RN-ARVORE-008) da aba, e o bloqueio por inatividade, dão a ela
   // um executor novo, sem resultado: o filtro do resultado anterior sai junto. Sem isso o campo ficava à vista com o comando fixado (`pinned`) do resultado
   // anterior, e "Aplicar" o executava, com o filtro, no banco ou na conexão novos. Ajuste durante a renderização: o campo velho não chega a aparecer.
@@ -233,6 +263,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     setFilterRunner(runner);
     clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
     setChosenTab(null);
+    setPlainTab("result");
   }
   const base = filterBaseOf(state, pinned);
   const filterNow = useRef({ base, draft: filterDraft, applied: filterApplied });
@@ -248,7 +279,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         if (before === null || isPersonBusy(runner.getState())) return;
         const filter = conditionOf(draft);
         confirm(
-          (protections) => commandQuestion(protections, filter === "" ? before : { ...before, filter }),
+          (protections) => commandQuestion(protections, confirmedOf(filter === "" ? before : { ...before, filter })),
           () => {
             const { base: target, applied } = filterNow.current;
             // RN-SQL-020: o filtro do resultado do último comando de um script muda só ele; as outras abas do script ficam.
@@ -286,14 +317,18 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   const exportRef = useRef<{ blocker: string | null; open: () => void }>({ blocker: null, open: () => {} });
   const menuExport = useMemo(() => ({ blocker: () => exportRef.current.blocker, open: () => exportRef.current.open() }), []);
 
-  const shownTab = script === null ? null : shownScriptTab(script, chosenTab !== null && chosenTab.run === script.id ? chosenTab.tab : null);
-  // O resultado do executor está à vista: sem script, ou com a aba do último comando à frente (a do cursor aberto).
-  const liveShown = script === null || shownTab === script.live;
+  const shownTab = script === null ? null : shownScriptTab(script, chosenTab !== null && chosenTab.run === script.id ? chosenTab.tab : null, variables.shown);
+  // Sem script, o painel Variáveis só vale com variáveis avaliadas no texto.
+  const plainShown = script === null && variables.shown ? plainTab : "result";
+  // O resultado do executor está à vista: sem script, ou com a aba do último comando à frente (a do cursor aberto); o painel Variáveis não é o resultado.
+  const liveShown = script === null ? plainShown === "result" : shownTab === script.live;
   const tabIds = useId();
   // A aba guardada à frente (não a do último comando): as linhas dela, que se editam como as do último (RN-SQL-023).
   const kept = script === null || typeof shownTab !== "number" || shownTab === script.live ? null : (script.results.find((result) => result.entry === shownTab) ?? null);
   // RN-EDIT-022: a nota da aba guardada à frente, depois de salvar a coluna inteira nela.
   const keptNote = kept === null ? null : (keptNotes.get(kept.rows.resultId ?? "") ?? null);
+  // RN-VAR-024: o painel Variáveis está à frente (na aba do script ou, sem script, na lista de duas abas).
+  const showVariables = variables.shown && (script === null ? plainShown === "variables" : shownTab === "variables");
   // RN-SQL-019: o comando do script em execução, que o editor marca.
   const runningAt = script !== null && script.phase === "running" && script.current !== null ? entryAt(script, script.current).target : null;
 
@@ -305,7 +340,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     (proceed: () => void) => {
       const target = rowsTargetOf(runner.getState());
       if (target === null) return proceed();
-      confirm((protections) => autoRefreshQuestion(protections, target), proceed);
+      confirm((protections) => autoRefreshQuestion(protections, confirmedOf(target)), proceed);
     },
     [runner, confirm],
   );
@@ -381,8 +416,44 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
   // RN-EDIT-007: o comando que vai ser enviado, com alterações não salvas, espera a resposta da pergunta; o que o executor recusaria não pergunta nada.
   // RN-SQL-018: o destaque do comando enviado acende só aqui, quando ele vai mesmo ao banco: sem conexão o executor só pede uma (RN-SCRIPT-003).
   const hasConnection = tab.connectionId !== null;
+  const blankLines = preferences.editor.blankLineSeparates;
+  /**
+   * RN-VAR-019 e 020: o texto do editor agora, com a seleção, quando ele declara variáveis. Nesse caso o Ctrl+Enter e o Alt+X vão pelo executor com variáveis
+   * (`runItem`, `runScriptDoc`), que lê o texto inteiro (as declarações de cima valem) e faz a pergunta da proteção no meio, com os valores calculados. Sem
+   * declarações, o caminho é o de sempre.
+   */
+  const variableRange = useCallback(
+    (wholeScript: boolean): DocRange | null => {
+      const live = liveEditors.snapshot(tab.id);
+      if (live === null) return null;
+      if (readScript(live.sql, engine, { blankLines }).declarations.size === 0) return null;
+      const from = Math.min(live.anchor, live.head);
+      const to = Math.max(live.anchor, live.head);
+      // Sem seleção, o Alt+X leva o texto inteiro, e o Ctrl+Enter o item do cursor.
+      return { doc: { text: live.sql, blankLines }, engine, ...(wholeScript && from === to ? { from: 0, to: live.sql.length } : { from, to }) };
+    },
+    [tab.id, engine, blankLines],
+  );
+  // RN-PROT-001: a pergunta no meio da execução, pela proteção da conexão da aba; e o que sai quando ela vai mesmo começar.
+  const runHooks = useCallback(
+    (flash?: FlashRun): RunHooks => ({
+      confirm: (make) => confirmed(make),
+      begin: () => {
+        if (inPanel) dispatch({ type: "run" });
+        clearResultFilter({ setDraft: setFilterDraft, setApplied: setFilterApplied, setProblem: setFilterProblem, setPinned });
+      },
+      // O destaque é do item que o executor com variáveis escolheu (a declaração também), e não do comando que o leitor sem declarações acharia no cursor.
+      flash: (item) => {
+        if (hasConnection) flash?.(item);
+      },
+    }),
+    [confirmed, inPanel, hasConnection],
+  );
   const handleRun = useCallback(
-    (target: RunTarget, flash: () => void) => {
+    (target: RunTarget, flash: FlashRun) => {
+      const range = variableRange(false);
+      if (range !== null) return guard(() => void runner.runItem(range, runHooks(flash)));
+
       const go = () => {
         if (commandWillRun(target, isPersonBusy(runner.getState()))) {
           // RN-PAINEL-001: executar com a área recolhida a restaura, no painel; numa aba ou numa janela o que o painel tinha fica guardado como estava.
@@ -394,15 +465,17 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         void runner.run(target);
       };
       // RN-PROT-001: o aviso vem depois da pergunta das alterações não salvas, logo antes de o comando sair; cancelado, nada sai.
-      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, target), go));
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, confirmedOf(target)), go));
       else go();
     },
-    [runner, guard, hasConnection, confirm, inPanel],
+    [runner, guard, hasConnection, confirm, inPanel, variableRange, runHooks],
   );
   // RN-SQL-019: "Executar script" (o botão e o Alt+X): as mesmas regras de uma execução (a pergunta das alterações não salvas, o filtro que sai, a área
   // recolhida que volta), e o executor roda os comandos um por vez.
   const handleRunScript = useCallback(
     (targets: RunTarget[]) => {
+      const range = variableRange(true);
+      if (range !== null) return guard(() => void runner.runScriptDoc(range, runHooks()));
       const go = () => {
         if (scriptWillRun(targets, isPersonBusy(runner.getState()))) {
           if (inPanel) dispatch({ type: "run" });
@@ -414,7 +487,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
       if (scriptWillRun(targets, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => scriptQuestion(protections, targets), go));
       else go();
     },
-    [runner, guard, confirm, inPanel],
+    [runner, guard, confirm, inPanel, variableRange, runHooks],
   );
   // RN-SQL-020: "Executar este comando", numa aba guardada do script: como o Ctrl+Enter nele. O que o executor recusaria (a aba ocupada) não pergunta, não
   // limpa o filtro nem mexe na área.
@@ -427,7 +500,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         }
         void runner.runCommand(target);
       };
-      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, target), go));
+      if (commandWillRun(target, isPersonBusy(runner.getState()))) guard(() => confirm((protections) => commandQuestion(protections, confirmedOf(target)), go));
       else go();
     },
     [runner, guard, confirm, inPanel],
@@ -439,7 +512,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
         const target = rowsTargetOf(runner.getState());
         if (target === null || isPersonBusy(runner.getState())) return void runner.rerun();
         confirm(
-          (protections) => commandQuestion(protections, target),
+          (protections) => commandQuestion(protections, confirmedOf(target)),
           () => void runner.rerun(),
         );
       }),
@@ -474,7 +547,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
    * script rodando ou parado na pergunta de erro), também; a execução da atualização automática não desabilita, e a origem é a grade que está na tela.
    */
   const exportShown = kept === null ? exportRows(state) : kept.rows;
-  const exportReason = exportBlocker(exportShown, { busy: busy || scriptBusy || edits.banner.saving, statistics: script !== null && shownTab === "statistics" });
+  const exportReason = exportBlocker(exportShown, { busy: busy || scriptBusy || edits.banner.saving, statistics: script !== null ? shownTab === "statistics" || shownTab === "variables" : plainShown === "variables" });
   const exportNumber = script !== null && typeof shownTab === "number" ? shownTab + 1 : null;
   const { singleTable, chosenColumns } = edits;
   const openExport = useCallback(() => {
@@ -575,6 +648,28 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
     onSave(tab.id, mode);
   }
 
+  /**
+   * RN-VAR-012 e 024: leva o cursor do editor ao `offset` (o clique num erro das variáveis, "Ir para a declaração"). Com o resultado numa aba ou numa janela, traz
+   * antes o editor à frente, como o F6 (RN-ABAS-014); na aba de execução, que não tem editor, ainda não existe (a aba chega com a segunda parte da seção 41).
+   */
+  const goToEditor = useCallback(
+    (offset: number) => {
+      if (place === "tab") onToggleEntry?.(tab.id, "query");
+      else if (place === "window") onFocusWindow?.(tab.id, "opener");
+      // O editor volta à frente no quadro seguinte (a aba ou a janela ainda estão trocando).
+      if (place === "panel") goToOffset(root.current, offset);
+      else requestAnimationFrame(() => goToOffset(root.current, offset));
+    },
+    [place, onToggleEntry, onFocusWindow, tab.id],
+  );
+  const goToDeclaration = useCallback(
+    (name: string) => {
+      const offset = declarationOffset(variables.model, name);
+      if (offset !== null) goToEditor(offset);
+    },
+    [variables.model, goToEditor],
+  );
+
   // A edição desfaz a posição do erro (o executor) e acende o ponto da aba de um script (o provedor).
   const handleEdited = useCallback(() => {
     runner.textEdited();
@@ -586,7 +681,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
 
   return (
     <>
-      <div onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
+      <div ref={root} onKeyDown={handleKeyDown} className="flex min-h-0 flex-1 flex-col text-sm">
         {tab.connectionId === null ? <NoConnectionBar reason={tab.script === undefined ? "restored" : tab.script.generic === true ? "generic" : "scriptMissing"} onAssign={handleChooseConnection} /> : null}
         <EditorToolbar
           busy={busy}
@@ -620,6 +715,7 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
               onRunnableChange={setRunnable}
               onEdited={handleEdited}
               onOpenTable={openTable}
+              variables={editorVariables}
             />
           </div>
   
@@ -670,9 +766,18 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
             }
             // RN-ABAS-015: na janela do resultado o ponto vermelho do script parado na pergunta de erro fica na barra dela, ao lado das abas do script: sem o foco nela, a
             // pergunta não abre sozinha.
-            tabs={script === null || shownTab === null ? undefined : { list: <ScriptTabs run={script} shown={shownTab} idPrefix={tabIds} panelId={`${tabIds}-panel`} onChoose={chooseScriptTab} />, ...(place === "window" ? { mark: <ScriptWaitingMark runner={runner} /> } : {}), panelId: `${tabIds}-panel`, labelledBy: scriptTabId(tabIds, shownTab) }}
+            tabs={
+              script !== null && shownTab !== null
+                ? { list: <ScriptTabs run={script} shown={shownTab} idPrefix={tabIds} panelId={`${tabIds}-panel`} variables={variables.shown} onChoose={chooseScriptTab} />, ...(place === "window" ? { mark: <ScriptWaitingMark runner={runner} /> } : {}), panelId: `${tabIds}-panel`, labelledBy: scriptTabId(tabIds, shownTab) }
+                : script === null && variables.shown
+                  ? { list: <ResultTabs shown={plainShown} idPrefix={tabIds} panelId={`${tabIds}-panel`} onChoose={setPlainTab} />, panelId: `${tabIds}-panel`, labelledBy: `${tabIds}-${plainShown}` }
+                  : undefined
+            }
             progress={scriptProgress(script)}
-            statistics={script === null || shownTab !== "statistics" ? undefined : { body: <ScriptStatistics run={script} />, summary: statisticsSummary(script) }}
+            statistics={script === null || shownTab !== "statistics" ? undefined : { body: <ScriptStatistics run={script} onViewSent={setSentView} />, summary: statisticsSummary(script) }}
+            variables={showVariables ? { body: <VariablesPanel model={variables.model} values={variables.values} select={variables.reveal} onGoTo={goToDeclaration} />, summary: variablesPanelCopy.tab } : undefined}
+            onGoTo={goToEditor}
+            onViewSent={() => setSentView(kept === null ? (shownRows?.target ?? null) : kept.rows.target)}
             kept={kept === null ? undefined : { busy, onRunAlone: () => handleRunAlone(kept.rows.target), note: keptNote }}
             exporter={{ blocker: exportReason, onExport: openExport }}
           />
@@ -691,7 +796,9 @@ export const QueryTabPanel = memo(function QueryTabPanel({ tab, runner, engine, 
           tirava o foco de quem digitava. O script de outra aba espera, com a marca na faixa (`ScriptWaitingMark`), e a pergunta aparece quando a pessoa vai até ela.
           Com as duas valendo, abre na janela do resultado se ela tem o foco, e senão na da aba; sem o foco na janela do resultado, ela só mostra o ponto vermelho.
         */}
-        {(active && onScreen) || resultWindowFocused ? (script !== null && script.phase === "paused" && script.current !== null ? <ScriptErrorDialog entry={entryAt(script, script.current)} number={script.current + 1} total={script.size} onChoose={runner.script.decide} /> : null) : null}
+        {(active && onScreen) || resultWindowFocused ? (script !== null && script.phase === "paused" && script.current !== null ? <ScriptErrorDialog entry={entryAt(script, script.current)} number={script.current + 1} total={script.size} onChoose={runner.script.decide} onViewSent={setSentView} /> : null) : null}
+        {/* RN-VAR-018: o "SQL enviado" do comando que levou variáveis, no resultado, nas Estatísticas e na pergunta de erro. */}
+        {sentView?.sent === undefined ? null : <SentSqlDialog command={sentView.sent} engine={sentView.engine} onClose={() => setSentView(null)} />}
         {auto.asking === null ? null : <AutoRefreshDialog everyMs={auto.state.status === "on" ? auto.state.everyMs : null} error={auto.asking.error} onSubmit={auto.submitCustom} onCancel={auto.closeCustom} />}
         {/* RN-PROT-001: o aviso antes de executar; no Salvar, com o "Ver SQL", que abre os comandos por cima dele. */}
         {confirmation.open === null ? null : <ConfirmCommandDialog {...confirmation.open} onViewSql={confirmation.open.question.kind === "save" || confirmation.open.question.kind === "wholeColumn" ? edits.banner.onViewSql : undefined} />}

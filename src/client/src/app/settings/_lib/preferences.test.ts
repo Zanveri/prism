@@ -15,7 +15,7 @@ function fakeStorage(initial: Record<string, string> = {}) {
 const saved = {
   theme: "light",
   ui: { fontFamily: "Noto Sans", navigatorDensity: "compact" },
-  editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false },
+  editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false, showVariableValues: false },
   results: { nullText: "∅", autoLoadMore: true, showColumnTypes: false, gridZoom: 125, resultPlace: "tab" },
   security: { lockEnabled: false, lockAfterMinutes: 45 },
 };
@@ -25,7 +25,7 @@ describe("o padrão das preferências", () => {
     expect(defaultPreferences).toEqual({
       theme: "dark",
       ui: { fontFamily: "IBM Plex Sans", navigatorDensity: "comfortable" },
-      editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true },
+      editor: { fontFamily: "IBM Plex Mono", fontSize: 13, tabSize: 4, autocomplete: true, uppercaseKeywords: false, blankLineSeparates: true, showVariableValues: true },
       results: { nullText: "NULL", autoLoadMore: false, showColumnTypes: true, gridZoom: 100, resultPlace: "panel" },
       security: { lockEnabled: true, lockAfterMinutes: 10 },
     });
@@ -93,6 +93,8 @@ describe("a leitura tolerante", () => {
     ["maiúsculas que não é booleano", { editor: { uppercaseKeywords: 1 } }, ["editor", "uppercaseKeywords"]],
     ["linha em branco que não é booleano", { editor: { blankLineSeparates: "false" } }, ["editor", "blankLineSeparates"]],
     ["linha em branco nula", { editor: { blankLineSeparates: null } }, ["editor", "blankLineSeparates"]],
+    ["valor das variáveis que não é booleano", { editor: { showVariableValues: "sim" } }, ["editor", "showVariableValues"]],
+    ["valor das variáveis nulo", { editor: { showVariableValues: null } }, ["editor", "showVariableValues"]],
     ["texto do nulo vazio", { results: { nullText: "" } }, ["results", "nullText"]],
     ["texto do nulo só de espaços", { results: { nullText: "   " } }, ["results", "nullText"]],
     ["texto do nulo com 13 caracteres", { results: { nullText: "1234567890123" } }, ["results", "nullText"]],
@@ -438,7 +440,7 @@ describe("a linha em branco separa os comandos (RN-SQL-018)", () => {
     const before = JSON.stringify({ ...saved, editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true } });
 
     expect(defaultPreferences.editor.blankLineSeparates).toBe(true);
-    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, blankLineSeparates: true });
+    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, blankLineSeparates: true, showVariableValues: true });
   });
 
   it("desligada, fica desligada ao abrir de novo, sem mexer no resto do grupo", () => {
@@ -449,6 +451,25 @@ describe("a linha em branco separa os comandos (RN-SQL-018)", () => {
     store.set("ana", { editor: { blankLineSeparates: false } });
 
     expect(createPreferencesStore(() => storage).get("ana").editor).toEqual({ ...defaultPreferences.editor, fontSize: 15, blankLineSeparates: false });
+  });
+});
+
+describe("o valor das variáveis no fim da linha (RN-CONFIG-004 e RN-VAR-025)", () => {
+  it("é ligado por padrão, e quem gravou as preferências antes dela existir a recebe ligada, sem mexer no resto do editor", () => {
+    const before = JSON.stringify({ ...saved, editor: { fontFamily: "Consolas", fontSize: 16, tabSize: 2, autocomplete: false, uppercaseKeywords: true, blankLineSeparates: false } });
+
+    expect(defaultPreferences.editor.showVariableValues).toBe(true);
+    expect(parsePreferences(before).editor).toEqual({ ...saved.editor, showVariableValues: true });
+  });
+
+  it("desligada, fica desligada ao abrir de novo, sem mexer no resto do grupo", () => {
+    const { storage } = fakeStorage();
+    const store = createPreferencesStore(() => storage);
+    store.set("ana", { editor: { fontSize: 15 } });
+
+    store.set("ana", { editor: { showVariableValues: false } });
+
+    expect(createPreferencesStore(() => storage).get("ana").editor).toEqual({ ...defaultPreferences.editor, fontSize: 15, showVariableValues: false });
   });
 });
 

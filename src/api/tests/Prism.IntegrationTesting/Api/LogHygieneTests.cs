@@ -31,6 +31,8 @@ public sealed class LogHygieneTests
     private static readonly string MarkedTable = $"TABELA-MARCADA-{Run}";
     private static readonly string MarkedFilter = $"FILTRO-MARCADO-{Run}";
     private static readonly string MarkedFilterColumn = $"coluna_do_filtro_{Run}";
+    private static readonly string MarkedParameter = $"PARAMETRO-MARCADO-{Run}";
+    private static readonly string MarkedParameterNumber = $"73{Random.Shared.Next(1_000_000, 9_999_999)}";
 
     /// <summary>A conexão que não abre: usuário e senha marcados. A mensagem do banco ("password authentication failed for user ...") leva o usuário, e é ela que não pode ir para o log.</summary>
     private static readonly string MarkedWrongUser = $"usuariomarcado{Run}";
@@ -80,6 +82,16 @@ public sealed class LogHygieneTests
             Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT 1 AS a", filter = $"{MarkedFilterColumn} = 1" })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
             Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT 1 AS a", filter = $"a = '{MarkedFilter}" })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
 
+            // RN-VAR-036: os valores dos `params` (texto, número, e os recusados por forma ou por não casar com os marcadores) ficam só na memória da sessão, e o log
+            // registra a quantidade.
+            var parameterized = await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT n FROM generate_series(1, 300) AS n WHERE $1 <> 'x' AND n::text <> $2", @params = new object[] { new { type = "text", value = MarkedParameter }, new { type = "number", value = MarkedParameterNumber } } });
+            Assert.That(parameterized.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That((await api.Client.PostAsync($"{PrismCalls.SessionsPath}/{sessionID}/queries/next", null)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That((await api.Client.PostAsync($"{PrismCalls.SessionsPath}/{sessionID}/queries/count", null)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT $1, $2", @params = new object[] { new { type = "text", value = MarkedParameter } } })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+            Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT $1", @params = new object[] { new { type = "number", value = $"{MarkedParameter}-nao-e-numero" } } })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+            Assert.That((await api.Client.PostAsJsonAsync(queries, new { sql = "SELECT $1::int", @params = new object[] { new { type = "text", value = MarkedParameter } } })).StatusCode, Is.EqualTo(HttpStatusCode.UnprocessableEntity));
+
             // ...e as demais rotas que falam com o banco, inclusive as que recebem nomes na rota e a que recusa a conexão.
             await api.Client.ExecuteAsync(sessionID, "SELECT n FROM generate_series(1, 300) AS n");
             Assert.That((await api.Client.PostAsync($"{PrismCalls.SessionsPath}/{sessionID}/queries/next", null)).StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -107,8 +119,11 @@ public sealed class LogHygieneTests
             Assert.That(logs.Values.Any(log => log.Contains("A sessão com o banco não abriu", StringComparison.Ordinal)), Is.True, "O log não registra a conexão que não abriu.");
             Assert.That(logs.Values.Any(log => log.Contains("duplicada; a cópia é a conexão", StringComparison.Ordinal)), Is.True, "O log não registra a conexão duplicada.");
             Assert.That(logs.Values.Any(log => log.Contains("1 células pedidas, 0 sem valor completo", StringComparison.Ordinal)), Is.True, "O log não registra o pedido dos valores completos.");
+            Assert.That(logs.Values.Any(log => log.Contains("levou 2 parâmetros", StringComparison.Ordinal)), Is.True, "O log não registra a quantidade de parâmetros.");
             foreach (var (file, log) in logs)
             {
+                Assert.That(log, Does.Not.Contain(MarkedParameter), $"{file} tem o valor de um parâmetro ou a mensagem do banco sobre ele.");
+                Assert.That(log, Does.Not.Contain(MarkedParameterNumber), $"{file} tem o valor numérico de um parâmetro.");
                 Assert.That(log, Does.Not.Contain(MarkedPassword), $"{file} tem a senha do banco.");
                 Assert.That(log, Does.Not.Contain(MarkedWrongPassword), $"{file} tem a senha de uma conexão que não abriu.");
                 Assert.That(log, Does.Not.Contain(MarkedWrongUser), $"{file} tem a mensagem de erro do banco ao conectar, que leva o usuário.");

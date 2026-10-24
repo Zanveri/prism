@@ -179,7 +179,15 @@ type SqlCompletionOptions = {
   engine: Engine | undefined;
   /** Os níveis da árvore da conexão da aba, lidos a cada pedido. */
   levels: () => readonly CachedLevel[];
+  /**
+   * As variáveis (seção 41, RN-CONFIG-004): as fontes dos nomes declarados e, onde o SQL não completa (dentro de uma declaração, depois do `@` de uma variável), a
+   * pergunta que cala as palavras-chave e os nomes da árvore.
+   */
+  variables?: { sources: readonly CompletionSource[]; quietsSql: (state: EditorState, position: number) => boolean };
 };
+
+/** A fonte que se cala onde `quiet` diz que o SQL não completa. */
+const unlessQuiet = (source: CompletionSource, quiet: (state: EditorState, position: number) => boolean): CompletionSource => (context) => (quiet(context.state, context.pos) ? null : source(context));
 
 /** A palavra em que o cursor está: letras (com acento ou não), números, `_` e `$`. Vazia logo depois de um ponto ou de um espaço. */
 const wordBeforeCursor = /[\p{L}\p{N}_$]*/u;
@@ -205,12 +213,14 @@ function keywordsSource(dialect: SQLDialect): CompletionSource {
  * pessoa descer com as setas até uma sugestão; Esc fecha a lista, e Ctrl+Espaço a abre. Sem ícones: o texto da sugestão (esquema, tabela, tipo
  * da coluna) já diz o que é, e o leitor de tela o lê.
  */
-export function sqlCompletion({ dialect, engine, levels }: SqlCompletionOptions): Extension {
+export function sqlCompletion({ dialect, engine, levels, variables }: SqlCompletionOptions): Extension {
+  const sql = [keywordsSource(dialect), namesSource(levels, dialect, engine)];
+
   return [
     autocompletion({
       // As palavras-chave do dialeto da aba (`lang-sql`, por baixo dos nomes: `boost` negativo; nenhuma depois de um ponto) e os nomes da árvore. Aceitar `select`
       // escreve em minúsculas; com a conversão para maiúsculas ligada, a palavra vira `SELECT` quando a pessoa digita o que vem depois (`sql-keyword-case.ts`).
-      override: [keywordsSource(dialect), namesSource(levels, dialect, engine)],
+      override: variables === undefined ? sql : [...sql.map((source) => unlessQuiet(source, variables.quietsSql)), ...variables.sources],
       selectOnOpen: false,
       // Só o que começa com o que foi digitado: a busca aproximada traria `var_pop` e `snapshot` para `apo`, e ruído demais para quem sabe o que escreve.
       filterStrict: true,

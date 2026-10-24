@@ -19,6 +19,9 @@ namespace Prism.Infrastructure.Databases.Clients;
 /// estão, e valem depois da ordem nova. O resto do texto (os comentários, o `;` do fim) fica onde estava, e o que se acrescenta entra
 /// logo depois do último pedaço de código da cláusula: um `-- comentário` no fim não engole o filtro.
 ///
+/// Quando a ordem do filtro trocaria um `ORDER BY` que tem marcador de parâmetro (RN-VAR-032), o comando também vai por fora, com os marcadores e os
+/// valores como estavam.
+///
 /// Os outros comandos (as uniões, `GROUP BY`, `HAVING`, `WITH`, o `SELECT` sem `FROM`, o que começa por parêntese, o `INTO` e o que
 /// não é `SELECT`) vão por fora (<see cref="EFilterApplied.Wrapped"/>): `SELECT * FROM (<comando>) prism_filtro WHERE <condição>
 /// ORDER BY <ordem>`. Conferido nos três bancos: a tabela derivada aceita `ORDER BY` e limites de linhas dentro (no Db2, `FETCH
@@ -78,7 +81,7 @@ internal static class SqlFilter
         if (tokens.Any(token => token.Is(";")))
             return new DatabaseFailure(EDatabaseFailure.MultipleStatementsNotSupported, SeveralStatements);
 
-        return Merge(sql, tokens, condition, order) is { } merged
+        return Merge(sql, tokens, condition, order, dialect) is { } merged
             ? new FilteredSql(merged, EFilterApplied.Merged)
             : new FilteredSql(Wrap(sql, tokens, condition, order), EFilterApplied.Wrapped);
     }
@@ -129,7 +132,7 @@ internal static class SqlFilter
     /// O comando com o filtro dentro, ou nulo quando ele não é um `SELECT` cujas cláusulas de fora a junção conhece, na ordem em que o
     /// banco as quer: `FROM`, `WHERE`, `WINDOW`, `ORDER BY` e o fim (limites, travas, isolamento).
     /// </summary>
-    private static string? Merge(string sql, List<Token> tokens, string? condition, string? order)
+    private static string? Merge(string sql, List<Token> tokens, string? condition, string? order, ESqlDialect dialect)
     {
         if (tokens.Count == 0 || !tokens[0].IsWord("SELECT"))
             return null;
@@ -183,6 +186,12 @@ internal static class SqlFilter
         // O `FROM` sem tabela, e o `WHERE` sem condição, não são comandos que se completem: o banco diz o que falta, no embrulho.
         var afterWhere = First(window, orderBy, tail, tokens.Count);
         if (from < 0 || First(where, afterWhere) == from + 1 || where >= 0 && afterWhere == where + 1)
+            return null;
+
+        // RN-VAR-032: o `ORDER BY` que a ordem do filtro trocaria tem marcador de parâmetro: trocá-lo tiraria um marcador do meio do comando, e os valores
+        // (que são da ordem dos marcadores) não bateriam mais. O comando vai por fora, inteiro, com os marcadores e os valores como estavam.
+        var afterOrderBy = First(tail, tokens.Count);
+        if (order is not null && orderBy >= 0 && Enumerable.Range(orderBy, afterOrderBy - orderBy).Any(position => ParameterMarkers.IsMarkerAt(tokens, position, dialect)))
             return null;
 
         var edits = new List<(int Position, int Length, string Text)>();

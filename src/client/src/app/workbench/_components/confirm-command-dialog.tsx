@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils/cn";
 import type { AskedCommand, CommandQuestion, ConfirmationContext, WholeColumnQuestion } from "../_lib/command-confirmation";
 import { commandConfirmationCopy as copy } from "../_lib/command-confirmation.copy";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
+import { HighlightedSql } from "./highlighted-sql";
 
 type ConfirmCommandDialogProps = {
   question: CommandQuestion;
@@ -70,7 +71,7 @@ function CommandBlock({ command, ids }: { command: AskedCommand; ids?: string })
         </p>
       )}
       <code id={ids === undefined ? undefined : `${ids}-comando`} className="block max-h-40 overflow-auto rounded-md border border-border bg-background px-3 py-2.5 font-mono text-sm leading-5 whitespace-pre text-ink">
-        {command.sql}
+        {command.ranges === undefined ? command.sql : <HighlightedSql text={command.sql} ranges={command.ranges} />}
       </code>
       {command.filter === undefined ? null : <p className="text-xs text-muted">{copy.filter(command.filter)}</p>}
     </div>

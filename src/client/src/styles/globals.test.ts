@@ -18,6 +18,8 @@ const neutralText = ["ink", "body", "muted", "subtle"] as const;
 const toneText = ["accent", "postgres", "db2", "informix", "danger", "success"] as const;
 /** As cores de sintaxe do editor (RN-CONFIG-003): palavra-chave, texto entre aspas, número e comentário. O canvas as define em cada tema. */
 const syntaxText = ["syntax-keyword", "syntax-string", "syntax-number", "syntax-comment"] as const;
+/** RN-VAR-025: a cor da variável (o nome declarado e o `@nome` no SQL). O canvas não a desenha: cada tema traz a sua, e ela passa no mesmo contraste da sintaxe. */
+const variableText = ["syntax-variable"] as const;
 /** O que o editor pinta por cima da seleção: o texto e o que o erro de SQL marca (a sintaxe é conferida à parte, em cada superfície). */
 const editorOnSelection = { texto: "ink", erro: "danger" } as const;
 /** `FormMessage` (e o aviso): o texto do tom sobre 10% do próprio tom por cima da superfície (`bg-<tom>/10`). */
@@ -47,6 +49,7 @@ describe("os tokens de cor (tema escuro e tema claro)", () => {
       "syntax-string": "#5ed3a3",
       "syntax-number": "#f2b644",
       "syntax-comment": "#8e99a8",
+      "syntax-variable": "#c9a8ff",
       link: "#7db2ff",
     });
     expect(Object.keys(light).sort()).toEqual(Object.keys(dark).sort());
@@ -173,7 +176,7 @@ describe("os outros quatro temas do canvas (RN-CONFIG-003)", () => {
   const ownLink = { monokai: "#66d9ef", dracula: "#8be9fd", nord: "#88c0d0", "github-light": "#0967d7", kanagawa: "#7e9cd8" } as const;
 
   it.each(extraThemes)("o bloco do tema %s troca as fichas do canvas, o azul de link e as da lista de trocadas, nem uma a mais", (id) => {
-    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...Object.keys(paletteColors[id] ?? {}), ...swapped[id]].sort());
+    expect(Object.keys(themeBlock(id).overrides).sort()).toEqual([...fromCanvas, "link", ...variableText, ...Object.keys(paletteColors[id] ?? {}), ...swapped[id]].sort());
   });
 
   it.each(Object.entries(paletteColors.kanagawa))("Kanagawa usa o tom %s da paleta", (token, color) => {
@@ -218,13 +221,18 @@ describe.each(themes)("contraste do tema $name (WCAG AA: 4,5:1 para texto, sem e
 
   // O editor pinta o código sobre o fundo; a lista de sugestões, sobre a superfície elevada e a selecionada; a seleção, por cima de tudo.
   // Selecionar para executar é a interação central do editor: o que está selecionado tem de continuar legível.
-  it.each(syntaxText.flatMap((text) => ([...surfaces, "selection"] as const).map((surface) => [text, surface] as const)))("sintaxe %s sobre %s", (text, surface) => {
+  it.each([...syntaxText, ...variableText].flatMap((text) => ([...surfaces, "selection"] as const).map((surface) => [text, surface] as const)))("sintaxe %s sobre %s", (text, surface) => {
     expect(contrast(palette[text], palette[surface])).toBeGreaterThanOrEqual(4.5);
   });
 
   // RN-LINK-001: o nome da tabela com o Ctrl apertado, no editor (sobre o fundo, a linha do cursor e a seleção) e onde mais um link aparecer.
   it.each(([...surfaces, "selection"] as const).map((surface) => [surface] as const))("o azul de link sobre %s", (surface) => {
     expect(contrast(palette.link, palette[surface])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // RN-VAR-025: a variável tem a própria cor, e nenhuma é igual a uma das outras de sintaxe (se fosse, o nome declarado se perderia no SQL).
+  it("a cor da variável não é a de nenhuma outra de sintaxe nem a do texto", () => {
+    for (const other of [...syntaxText, "ink"] as const) expect(palette["syntax-variable"], other).not.toBe(palette[other]);
   });
 
   it.each(Object.entries(editorOnSelection))("no editor, %s por cima da seleção", (_what, token) => {

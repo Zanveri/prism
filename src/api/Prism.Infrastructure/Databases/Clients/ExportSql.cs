@@ -29,9 +29,10 @@ public static class ExportSql
 
     /// <summary>
     /// Os Registros e o resultado: o comando como foi executado, com o filtro do resultado junto como no `queries` (RN-GRADE-011). Mais de um comando,
-    /// o filtro que não se junta e o comando montado que não é uma leitura são recusados, nessa ordem.
+    /// o filtro que não se junta e o comando montado que não é uma leitura são recusados, nessa ordem. `hasParameters` (RN-VAR-032): com `params`, o filtro não tem
+    /// marcador de parâmetro (`FILTER_INVALID`, a mesma frase do `queries`), porque os marcadores e os valores ficam na ordem do comando.
     /// </summary>
-    public static Result<string, ExportSqlRefusal> Query(string sql, string? filter, EDatabaseEngine engine)
+    public static Result<string, ExportSqlRefusal> Query(string sql, string? filter, EDatabaseEngine engine, bool hasParameters = false)
     {
         if (ReadOnlySql.HasSeveralStatements(sql, engine))
             return new ExportSqlRefusal(EExportSqlRefusal.MultipleStatements, SeveralStatementsMessage);
@@ -39,6 +40,9 @@ public static class ExportSql
         var sent = sql;
         if (!string.IsNullOrWhiteSpace(filter))
         {
+            if (hasParameters && QueryParameterRules.FilterHasMarker(filter, engine))
+                return new ExportSqlRefusal(EExportSqlRefusal.FilterInvalid, QueryParameterRules.FilterMarker);
+
             var filtered = SqlFilter.Apply(sql, filter, ReadOnlySql.DialectOf(engine));
             if (filtered.IsFailure)
                 return new ExportSqlRefusal(filtered.Error.Kind == EDatabaseFailure.FilterInvalid ? EExportSqlRefusal.FilterInvalid : EExportSqlRefusal.MultipleStatements, filtered.Error.Message);

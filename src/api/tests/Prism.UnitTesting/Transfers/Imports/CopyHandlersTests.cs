@@ -191,6 +191,116 @@ public sealed class CopyHandlersTests
         _transferService.Verify(service => service.StartCopy(It.IsAny<CopyJob>()), Times.Never);
     }
 
+    /// <summary>RN-VAR-032 e RN-GRADE-011: o filtro do resultado não tem marcador quando o comando leva `source.params`, como no `queries` e na exportação.</summary>
+    [Trait("StartCopyHandler", "StartCopyCommand")]
+    [Fact(DisplayName = "Erro o filtro com marcador de parâmetro, com source.params, é FILTER_INVALID, e a cópia não começa")]
+    public async Task Start_FilterWithMarkerAndParameters_ShouldBeRefused()
+    {
+        //Arrange
+        var source = new ExportSourceDto { Kind = "query", ConnectionID = _source.ID, Sql = "SELECT id FROM loja.pedido WHERE a = $1", Filter = "b = $2", Params = JsonDocument.Parse("""[{"type":"number","value":"1"},{"type":"number","value":"2"}]""").RootElement.Clone() };
+
+        //Act
+        var result = await CreateStart().Handle(Start(source: source), CancellationToken.None);
+
+        //Assert
+        Assert.Equal("FILTER_INVALID", result.Error.Type);
+        _transferService.Verify(service => service.StartCopy(It.IsAny<CopyJob>()), Times.Never);
+    }
+
+    private static JsonElement Json(string json)
+        => JsonDocument.Parse(json).RootElement.Clone();
+
+    private ExportSourceDto QuerySource(string sql, string? parameters)
+        => new() { Kind = "query", ConnectionID = _source.ID, Sql = sql, Params = parameters is null ? null : Json(parameters) };
+
+    /// <summary>RN-VAR-032 e 033: o comando do resultado com variáveis vai à cópia com os `source.params`, e o trabalho leva os valores, na ordem, para a contagem e a leitura.</summary>
+    [Trait("StartCopyHandler", "SourceParams")]
+    [Fact(DisplayName = "OK o trabalho da cópia leva o texto enviado e os valores do source.params, na ordem")]
+    public async Task Start_ShouldStartTheJobWithTheParameters()
+    {
+        //Arrange
+        var source = QuerySource("SELECT id, nome FROM loja.pedido WHERE status = $1 AND total > $2", "[{\"type\":\"text\",\"value\":\"aberta\"},{\"type\":\"number\",\"value\":\"10.5\"}]");
+
+        //Act
+        var result = await CreateStart().Handle(Start(source: source, count: true), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Detail : null);
+        Assert.Equal([new QueryParameter(EQueryParameterType.Text, "aberta"), new QueryParameter(EQueryParameterType.Number, "10.5")], _job!.Parameters);
+        Assert.Equal("SELECT id, nome FROM loja.pedido WHERE status = $1 AND total > $2", _job.Sql);
+        Assert.True(_job.CheckColumns);
+    }
+
+    /// <summary>RN-VAR-032: sem `source.params` a cópia não leva valores, e o `$1` do texto vai como está.</summary>
+    [Trait("StartCopyHandler", "SourceParams")]
+    [Fact(DisplayName = "OK sem source.params o trabalho da cópia leva a lista vazia")]
+    public async Task Start_WithoutSourceParams_ShouldStartTheJobWithoutParameters()
+    {
+        //Act
+        var result = await CreateStart().Handle(Start(source: QuerySource("SELECT id FROM loja.pedido WHERE a = $1", null)), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Detail : null);
+        Assert.Empty(_job!.Parameters!);
+    }
+
+    /// <summary>RN-VAR-032: os marcadores do comando contra os valores, pelo dialeto da conexão de origem, antes do trabalho e sem tocar no destino.</summary>
+    [Trait("StartCopyHandler", "SourceParams")]
+    [Fact(DisplayName = "Erro os marcadores do comando que não batem com o source.params são 422 QUERY_PARAMETERS_MISMATCH, e a cópia não começa")]
+    public async Task Start_ShouldRefuse_WhenTheMarkersDoNotMatch()
+    {
+        //Arrange
+        _source = _source with { Engine = EDatabaseEngine.Db2 };
+        var source = QuerySource("SELECT id FROM loja.pedido WHERE a = ? AND b = ?", "[{\"type\":\"number\",\"value\":\"1\"}]");
+
+        //Act
+        var result = await CreateStart().Handle(Start(source: source), CancellationToken.None);
+
+        //Assert
+        Assert.Equal(("QUERY_PARAMETERS_MISMATCH", HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+        Assert.Equal((2, 1), ((int)result.Error.Extensions["markers"]!, (int)result.Error.Extensions["values"]!));
+        Assert.Null(_job);
+        _transferService.Verify(service => service.StartCopy(It.IsAny<CopyJob>()), Times.Never);
+    }
+
+    /// <summary>RN-VAR-032 e RN-IMPORT-027: o valor que o banco da origem não guarda é IMPORT_OPTIONS_INVALID no campo `source.params[i].value`, e a cópia não começa.</summary>
+    [Trait("StartCopyHandler", "SourceParams")]
+    [Fact(DisplayName = "Erro o valor que o banco da origem não guarda é IMPORT_OPTIONS_INVALID no campo source.params[i].value")]
+    public async Task Start_ShouldRefuse_AValueTheDatabaseDoesNotHold()
+    {
+        //Arrange
+        _source = _source with { Engine = EDatabaseEngine.Informix };
+        var source = QuerySource("SELECT id FROM pedido WHERE a = ?", "[{\"type\":\"number\",\"value\":\"123456789012345678901234567890123\"}]");
+
+        //Act
+        var result = await CreateStart().Handle(Start(source: source), CancellationToken.None);
+
+        //Assert
+        Assert.Equal(("IMPORT_OPTIONS_INVALID", HttpStatusCode.UnprocessableEntity), (result.Error.Type, result.Error.StatusCode));
+        var errors = (Dictionary<string, string[]>)result.Error.Extensions["errors"]!;
+        Assert.Equal(["O número tem 33 dígitos, e o Informix guarda até 31 pelo driver."], errors["source.params[0].value"]);
+        Assert.Null(_job);
+        _transferService.Verify(service => service.StartCopy(It.IsAny<CopyJob>()), Times.Never);
+    }
+
+    /// <summary>RN-VAR-032 e RN-GRADE-011: o filtro sem marcador entra no comando com `source.params`, depois dos marcadores do comando, e o trabalho leva os valores do comando.</summary>
+    [Trait("StartCopyHandler", "SourceParams")]
+    [Fact(DisplayName = "OK o filtro sem marcador junto com o source.params entra no comando, e o trabalho leva os valores")]
+    public async Task Start_ShouldJoinAFilterWithoutMarkerToTheParameterizedCommand()
+    {
+        //Arrange
+        _source = _source with { Engine = EDatabaseEngine.Db2 };
+        var source = QuerySource("SELECT id FROM loja.pedido WHERE a = ? ORDER BY c", "[{\"type\":\"number\",\"value\":\"1\"}]") with { Filter = "b = 2" };
+
+        //Act
+        var result = await CreateStart().Handle(Start(source: source), CancellationToken.None);
+
+        //Assert
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Detail : null);
+        Assert.Equal("SELECT id FROM loja.pedido WHERE (a = ?) AND (b = 2) ORDER BY c", _job!.Sql);
+        Assert.Equal([new QueryParameter(EQueryParameterType.Number, "1")], _job.Parameters);
+    }
+
     [Trait("StartCopyHandler", "StartCopyCommand")]
     [Fact(DisplayName = "Erro a tabela ocupada por outra cópia é 409")]
     public async Task Start_Busy_ShouldBeConflict()

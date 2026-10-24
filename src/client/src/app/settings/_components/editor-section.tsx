@@ -10,7 +10,7 @@ const copy = settingsCopy.editor;
 
 /**
  * Editor SQL (RN-CONFIG-001 e RN-CONFIG-004): o tamanho da fonte e o da tabulação, o autocompletar, a conversão das palavras-chave
- * para maiúsculas e a linha em branco que separa os comandos (RN-SQL-018). Valem para todas as abas de SQL, na hora: a área de trabalho fica montada por baixo desta tela (`WorkbenchSlot`), e cada
+ * para maiúsculas, a linha em branco que separa os comandos (RN-SQL-018) e o valor das variáveis no fim da linha (RN-CONFIG-004 e RN-VAR-025). Valem para todas as abas de SQL, na hora: a área de trabalho fica montada por baixo desta tela (`WorkbenchSlot`), e cada
  * editor recebe o que muda aqui sem ser recriado (o texto, o cursor e o desfazer ficam). A fonte do editor fica em Aparência (RN-CONFIG-008), ao lado da
  * fonte da interface; a prévia daqui a desenha também.
  */
@@ -47,6 +47,12 @@ export function EditorSection({ anchor }: { anchor: string }) {
         <span>{copy.blankLineSeparates}</span>
       </label>
       <p className="-mt-2 text-xs text-muted">{copy.blankLineSeparatesHint}</p>
+
+      <label className="flex items-center gap-2.5">
+        <input type="checkbox" id="cfg-valor-variaveis" checked={preferences.editor.showVariableValues} onChange={(event) => update({ editor: { showVariableValues: event.target.checked } })} className="m-0 size-[18px] flex-none cursor-pointer accent-accent" />
+        <span>{copy.showVariableValues}</span>
+      </label>
+      <p className="-mt-2 text-xs text-muted">{copy.showVariableValuesHint}</p>
     </SettingsCard>
   );
 }

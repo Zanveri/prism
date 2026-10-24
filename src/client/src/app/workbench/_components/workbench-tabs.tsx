@@ -368,7 +368,7 @@ export function WorkbenchTabs() {
         // `alive` acabou de achá-la na lista de agora.
         const tab = tabNow() ?? asked;
         const state = saved && isTableTab(tab) && !isBusyState(current) ? { status: "idle" as const } : current;
-        return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId) });
+        return isBusyState(state) ? null : serializeTab({ tab, sessionId: runner.sessionOf(), editor: liveEditors.snapshot(tabId), state, memory: recallForTransfer(tabId), values: runner.values.snapshot() });
       },
       send: async (transfer) => {
         // RN-ABAS-016: a janela do resultado da aba fecha (pelo Prism) e reabre a partir da outra janela; a aba só vai depois de o processo principal confirmar.
