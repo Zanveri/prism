@@ -1700,7 +1700,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
     é uma célula: a clicada ou, depois do clique no número da linha, a célula ativa que ele deixa. Um retângulo é
     sempre um retângulo, também quando cobre todas as colunas das linhas dele (numa grade de uma coluna, a célula
     ativa sozinha já cobre a linha): só o número da linha, o canto da grade, o Shift+Espaço e o Ctrl+A escolhem
-    linhas inteiras, e só elas valem para o Delete (RN-EDIT-015). Só o nome da coluna, no cabeçalho, e o Ctrl+Espaço
+    linhas inteiras (o Delete age nas linhas de qualquer célula escolhida, menos de colunas inteiras, RN-EDIT-015). Só o nome da coluna, no cabeçalho, e o Ctrl+Espaço
     escolhem colunas inteiras (RN-GRADE-021 e 022).
   - Com o ponteiro:
     - o clique numa célula a faz ativa, e a seleção passa a ser ela, que vira a âncora;
@@ -1736,7 +1736,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
       da grade e segue adiante, e assim o Ctrl+Shift+PageUp e o Ctrl+Shift+PageDown, que movem a aba ativa
       (RN-ABAS-001), chegam à barra de abas também com o foco na grade;
     - Shift+Espaço escolhe as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver: é o
-      caminho do teclado até o Delete (RN-EDIT-015). Por isso o Shift+Espaço deixa de abrir o campo de edição com um
+      caminho do teclado até as linhas inteiras (RN-EDIT-014 e 015). Por isso o Shift+Espaço deixa de abrir o campo de edição com um
       espaço (RN-EDIT-001);
     - Ctrl+Espaço (Control+Espaço no macOS) escolhe as colunas inteiras das células escolhidas, e, com colunas
       inteiras, o Shift+Espaço escolhe a linha inteira da célula ativa (RN-GRADE-022);
@@ -1778,7 +1778,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
       colunas (RN-GRADE-006);
     - "Duplicar linha" e "Excluir linha", do menu, da barra de edição e dos atalhos, agem em todas as linhas da
       seleção, e passam a "Duplicar linhas" e "Excluir linhas" quando elas são mais de uma (RN-EDIT-014 a 016); a
-      tecla Delete sozinha exclui as linhas inteiras escolhidas, e só elas (RN-EDIT-015); com colunas inteiras, não
+      tecla Delete sozinha marca para exclusão, na hora, as linhas das células escolhidas (RN-EDIT-015); com colunas inteiras, não
       valem (RN-GRADE-022);
     - "Desfazer alteração" tira as pendências das células escolhidas (RN-EDIT-004);
     - "Filtrar", "Ordenar" e "Ir para o registro referenciado" agem na célula ativa; "Colar" também, e fica
@@ -2436,10 +2436,14 @@ até lá, o que depende delas está a provar.
   inteiras); com outras células escolhidas na coluna da célula ativa, a edição vale para todas elas (RN-EDIT-017 e
   018). O campo de edição fica na
   própria célula, com "Confirmar edição (Enter)" e "Cancelar edição (Esc)", como no canvas; Tab e Shift+Tab
-  confirmam e passam para a próxima célula editável. O menu de contexto (RN-GRADE-004) tem "Colar", sem atalho, que
+  confirmam e passam para a próxima célula editável. Aberto por F2, Enter, duplo clique ou "Editar célula" (e pelo
+  Tab, na célula seguinte), o campo traz o texto TODO selecionado e mostra o começo dele: Delete apaga, digitar
+  escreve por cima, e as setas desfazem a seleção, como em qualquer campo. Começar a digitar continua substituindo o
+  valor pelo caractere digitado, com o cursor depois dele. Vale também para a edição de várias células da coluna
+  (RN-EDIT-017) e para o valor com quebra de linha. O menu de contexto (RN-GRADE-004) tem "Colar", sem atalho, que
   cola o texto da área de transferência na célula ativa como alteração pendente, "Editar célula" (F2), "Definir como
   nulo", "Desfazer alteração", "Adicionar linha" (Alt+Insert), "Duplicar linha" (Ctrl+Alt+Insert, RN-EDIT-016) e
-  "Excluir linha" (Alt+Delete; e também Delete, com linhas inteiras escolhidas, RN-EDIT-015). "Duplicar linha" e
+  "Excluir linha" (Alt+Delete; e também Delete, RN-EDIT-015). "Duplicar linha" e
   "Excluir linha" agem em todas as linhas da seleção e passam a "Duplicar linhas" e "Excluir linhas" quando elas são
   mais de uma; "Desfazer alteração" age nas células escolhidas (RN-EDIT-004); "Definir como nulo" age, como a
   edição, nas células escolhidas da coluna da célula ativa (RN-EDIT-017); "Colar" vale com uma célula só
@@ -2450,7 +2454,9 @@ até lá, o que depende delas está a provar.
   Alterada a pedido do dono em 2026-10-17 (seção 37): as ações de linha agem na seleção, o Delete passou a valer com as
   linhas inteiras escolhidas, o "Colar" que a tela já tinha entrou na regra, sem atalho, e entrou o Shift+Espaço.
   Alterada a pedido do dono em 2026-10-19 (seção 38): a edição e o "Definir como nulo" valem para as células
-  escolhidas da coluna da célula ativa, também a coluna inteira, e o Ctrl+Espaço não abre o campo.*
+  escolhidas da coluna da célula ativa, também a coluna inteira, e o Ctrl+Espaço não abre o campo. Alterada a pedido
+  do dono em 2026-10-24: o campo de edição abre com o texto todo selecionado, para o Delete apagar ou a digitação
+  escrever por cima, e o Delete passou a valer com qualquer célula escolhida (RN-EDIT-015).*
 - **RN-EDIT-002.** **Quando um resultado é editável.** A edição vale **coluna por coluna, na tabela de onde a coluna veio**,
   também num resultado de junção.
 
@@ -4205,13 +4211,18 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     também casa com o Ctrl+Alt+Insert e com o Shift+Alt+Insert). Com Shift nada acontece: o Shift+Alt+Insert e o
     Ctrl+Shift+Alt+Insert que o DBeaver ganhou na 26.1 (a linha nova e a duplicada antes da atual) ficam para
     depois.
-  - O Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, exclui as linhas inteiras escolhidas (pelo número da linha, pelo
-    Shift+Espaço ou pelo Ctrl+A, RN-GRADE-001), como o "Excluir linhas", com os mesmos motivos e a mesma faixa
-    quando não vale (RN-EDIT-014). Com um retângulo de células escolhido, com colunas inteiras (RN-GRADE-022), ou
-    só com a célula ativa, o Delete não faz nada, também quando o retângulo cobre todas as colunas (numa grade de uma coluna, a célula ativa já cobre a
-    linha): ali ele não apaga o valor (isso é o "Definir como nulo"), e uma tecla sem modificador não marca para
-    exclusão linhas que não foram escolhidas como linhas inteiras. O Shift+Espaço faz do retângulo as linhas
-    inteiras dele (RN-GRADE-001).
+  - O Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, com o foco na grade e alguma célula escolhida (a célula ativa, um
+    retângulo ou linhas inteiras, RN-GRADE-001), marca na hora para exclusão as linhas da seleção, sem pergunta
+    nenhuma: as mesmas que o Alt+Delete marca, com as mesmas recusas, o mesmo limite e a mesma faixa quando não vale
+    (RN-EDIT-014); uma linha nova ainda não salva simplesmente sai da grade. As linhas ficam pintadas com a marca de
+    exclusão de sempre (a linha riscada, em vermelho). Com colunas inteiras escolhidas (RN-GRADE-022), o Delete não faz
+    nada. Ele não apaga o valor da célula (isso é o "Definir como nulo").
+  - **A confirmação do Delete é a de sempre**: a exclusão é uma pendência, e nada vai ao banco antes do "Salvar" (e do
+    Commit, no Commit manual, RN-EDIT-004 e 005); o "Desfazer alteração" e o "Descartar" valem. Não há diálogo nem
+    texto de pergunta. Onde a edição não vale (a conexão somente leitura, a tabela sem chave, o resultado não
+    editável, a aba ocupada), o Delete dá o mesmo motivo que o Alt+Delete dá, na faixa. Vale nos Registros, no
+    resultado da aba de consulta e nas abas de resultado do script guardado, em qualquer lugar (painel, aba ou janela,
+    RN-ABAS-013).
   - No Windows, o Alt da direita do teclado ABNT2 (e dos outros teclados que têm AltGr) é o AltGr, e chega como
     Ctrl+Alt: com ele, Insert duplica, e Delete não faz nada. Os atalhos valem com o Alt da esquerda; os botões e o
     menu cobrem o resto. O Insert não escreve caractere, e por isso o Ctrl+Alt+Insert não deixa o AltGr de fora,
@@ -4222,12 +4233,14 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     deles escreve caractere (o foco está na grade, não num campo de texto, e o Insert e o Delete não são teclas de
     caractere), então não há troca de tecla. A tecla "delete" do Mac é a de apagar para trás: Option+delete exclui
     as linhas da seleção, e Option+fn+delete (apagar para a frente) também; sozinhas, a "delete" e a fn+delete são o
-    Delete das linhas inteiras escolhidas. O teclado do Mac não tem Insert: ali "Adicionar linha" e "Duplicar linha"
+    Delete, que marca as linhas para exclusão na hora. O teclado do Mac não tem Insert: ali "Adicionar linha" e "Duplicar linha"
     ficam na barra e no menu, e o atalho vale para quem usa um teclado que tem a tecla.
   - *Alterada a pedido do dono em 2026-10-17 (seção 37): o Delete sozinho passou a excluir as linhas inteiras
     escolhidas, e nunca um retângulo, e os atalhos das linhas agem na seleção. Alterada a pedido do dono em
     2026-10-19 (seção 38): o F2 e o Enter editam as células escolhidas da coluna, e o Delete não faz nada com
-    colunas inteiras.*
+    colunas inteiras. Alterada a pedido do dono em 2026-10-24: o Delete sozinho vale com qualquer célula escolhida
+    (menos colunas inteiras) e marca na hora as linhas para exclusão, como o Alt+Delete, sem pergunta: o dono não quis o
+    diálogo, e a confirmação é o "Salvar".*
 
 ### Duplicar linha
 
@@ -8592,7 +8605,7 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
     - "Desfazer alteração" tira as pendências das colunas escolhidas em todas as linhas, e a alteração da coluna
       inteira delas (RN-EDIT-018);
     - "Duplicar linha" e "Excluir linha" não valem: os itens do menu, os botões da barra de edição e os atalhos ficam
-      desabilitados com "Escolha as linhas pelo número da linha.", e a tecla Delete não faz nada, como num retângulo
+      desabilitados com "Escolha as linhas pelo número da linha.", e a tecla Delete não faz nada
       (RN-EDIT-015). "Adicionar linha" continua valendo, e depois dela a seleção passa à célula da linha nova
       (RN-EDIT-014);
     - "Filtrar", "Ordenar" e "Ir para o registro referenciado" agem na célula ativa, como sempre.
@@ -8652,8 +8665,8 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
     "Cancelar edição" não aplicam nada a nenhuma. Confirmar sem ter mexido no texto (nenhuma tecla, colar ou apagar
     mudou o campo desde que ele abriu) não aplica nada, nem à célula ativa: abrir e fechar o campo nunca faz uma
     alteração em várias células. Quando o campo valia para mais de uma célula, a faixa diz "O valor não mudou: nada
-    foi alterado. Para levar o valor desta célula às outras escolhidas, mexa no texto antes de confirmar (apague
-    um caractere e escreva-o de novo).". Mexido no texto, a confirmação aplica o texto final a todas, também quando
+    foi alterado. Para levar o valor desta célula às outras escolhidas, digite o valor por cima, ou mova o cursor e
+    apague e escreva um caractere.". Mexido no texto, a confirmação aplica o texto final a todas, também quando
     ele é igual ao de abertura; a célula ativa, que já tinha aquele valor, fica sem pendência. Depois do Enter, a
     seleção fica (RN-GRADE-001); o Tab e o Shift+Tab passam à próxima célula editável, e a seleção passa a ser ela.
   - "Definir como nulo" faz o mesmo com o nulo, sem abrir o campo. Com uma célula só, o item continua "Definir como
