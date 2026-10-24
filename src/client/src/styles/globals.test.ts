@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { themeModes } from "@/app/settings/_lib/preferences";
 import { themeSchemes, type ThemeId } from "@/app/settings/_lib/theme";
 import { markColors } from "@/components/layout/prism-mark";
+import { rowMarkClasses } from "@/app/workbench/_lib/grid-editing";
 import { contrast, over } from "@/lib/testing/contrast";
 import { css, dark, light, paletteOf, themeBlock, type Palette } from "@/lib/testing/theme-palettes";
 
@@ -24,6 +25,38 @@ const variableText = ["syntax-variable"] as const;
 const editorOnSelection = { texto: "ink", erro: "danger" } as const;
 /** `FormMessage` (e o aviso): o texto do tom sobre 10% do próprio tom por cima da superfície (`bg-<tom>/10`). */
 const messageTones = { erro: "danger", atenção: "accent", sucesso: "success" } as const;
+
+/** Separa os argumentos de uma função CSS na vírgula de fora dos parênteses. */
+function splitArguments(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let at = 0; at < text.length; at++) {
+    if (text[at] === "(") depth++;
+    else if (text[at] === ")") depth--;
+    else if (text[at] === "," && depth === 0) {
+      parts.push(text.slice(start, at));
+      start = at + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+/**
+ * A cor que o navegador compõe para um `color-mix(in_srgb,var(--color-a)_N%,<fundo>)` de classe do Tailwind (o `<fundo>` é `var(--color-b)` ou outra mistura),
+ * pelas fichas da paleta. Só o formato que a grade usa.
+ */
+function resolveMix(expression: string, palette: Palette): string {
+  const token = /^var\(--color-([\w-]+)\)$/.exec(expression);
+  if (token) return palette[token[1]];
+  const mix = /^color-mix\((.*)\)$/.exec(expression);
+  if (!mix) throw new Error(`mistura que o teste não entende: ${expression}`);
+  const [space, top, bottom] = splitArguments(mix[1]);
+  const share = /^(.+)_(\d+)%$/.exec(top);
+  if (space !== "in_srgb" || !share || bottom === undefined) throw new Error(`mistura que o teste não entende: ${expression}`);
+  return over(resolveMix(share[1], palette), resolveMix(bottom, palette), Number(share[2]) / 100);
+}
 
 describe("os tokens de cor (tema escuro e tema claro)", () => {
   it("cada token tem as duas colunas, e o tema escuro é o que o app sempre teve", () => {
@@ -243,6 +276,20 @@ describe.each(themes)("contraste do tema $name (WCAG AA: 4,5:1 para texto, sem e
   it.each(["background", "panel"] as const)("o raio e o contorno da marca sobre %s (3:1)", (surface) => {
     expect(contrast(markColors.ray[kind], palette[surface])).toBeGreaterThanOrEqual(3);
     expect(contrast(markColors.rim[kind], palette[surface])).toBeGreaterThanOrEqual(3);
+  });
+
+  // RN-EDIT-004 e 015: a linha marcada para exclusão (`rowMarkClasses`, em grid-editing.ts) tem o texto em `danger` sobre o próprio vermelho por cima da
+  // superfície da grade (o painel do resultado; o fundo também, por segurança), e o passar do mouse troca o fundo por outra mistura. Os tons vêm das próprias
+  // classes que a grade usa (mudar um tom lá muda o que se confere aqui). A escolha (`selected`) cobre o tom, e o texto vermelho sobre ela já é conferido em "tom danger sobre selected".
+  it.each([["a excluída", { deleted: true, failed: false }], ["a excluída que também falhou", { deleted: true, failed: true }]] as const)("o texto de %s: danger sobre o tom do repouso e do passar do mouse", (_what, flags) => {
+    const row = rowMarkClasses({ kind: "read", deleted: flags.deleted, pending: new Map(), failed: flags.failed }, false).row;
+    const rest = Number(/(?:^| )bg-danger\/(\d+)(?: |$)/.exec(row)?.[1]) / 100;
+    const hover = /hover:bg-\[(color-mix\(.+\))\]/.exec(row)?.[1];
+    expect(rest, "o tom do repouso").toBeGreaterThan(0);
+    expect(hover, "o fundo do passar do mouse").toBeDefined();
+
+    for (const surface of ["background", "panel"] as const) expect(contrast(palette.danger, over(palette.danger, palette[surface], rest))).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(palette.danger, resolveMix(hover!, palette))).toBeGreaterThanOrEqual(4.5);
   });
 
   // `FormMessage`: `border-<tom>/40 bg-<tom>/10 text-<tom>`. O fundo real é o tom a 10% sobre a superfície onde a mensagem está.

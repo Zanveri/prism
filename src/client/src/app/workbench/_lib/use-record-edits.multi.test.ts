@@ -146,11 +146,25 @@ describe("editar várias células da mesma coluna (RN-EDIT-017)", () => {
 
     expect(view.show().pending).toBe(0);
     expect(view.show().banner.notice).toBe(multi.untouched);
+    // O campo abre com o texto todo selecionado: o conselho é digitar por cima, não apagar um caractere (que apagaria o valor).
+    expect(multi.untouched).toContain("digite o valor por cima");
+    expect(multi.untouched).not.toContain("apague um caractere");
 
     await openAt(view, cell);
     view.show().editing!.onDraft("x");
     view.show().editing!.onCancel();
     expect(view.show().pending).toBe(0);
+  });
+
+  it("F2, Enter e o duplo clique abrem o campo com o valor, sem mexer nele (a tela o seleciona todo); digitar abre com o caractere no lugar do valor, já mexido (RN-EDIT-001)", async () => {
+    const view = mount(fakeRunner(rowsState()));
+
+    expect(await openAt(view, { row: 0, column: 1 })).toMatchObject({ draft: "n1", touched: false });
+    view.show().editing!.onCancel();
+    view.show().editing!.onEdit({ row: 0, column: 1 }, "k");
+    await settle();
+
+    expect(view.show().editing!.editor).toMatchObject({ draft: "k", touched: true });
   });
 
   it("começar a digitar já é mexer no texto: confirmar leva o que foi digitado a todas", async () => {

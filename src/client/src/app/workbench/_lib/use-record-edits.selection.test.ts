@@ -311,24 +311,133 @@ describe("as ações de linha agem nas linhas da seleção (RN-EDIT-013 a 016)",
     expect([remove.label, remove.title, remove.description]).toEqual(["Excluir linhas", "Excluir as 2 linhas escolhidas (Alt+Delete)", "Excluir as 2 linhas escolhidas"]);
   });
 
-  it("\"Excluir linhas\" marca todas as lidas da seleção; o Delete sozinho só com linhas inteiras", async () => {
+  it("\"Excluir linhas\" (Alt+Delete e o menu) marca todas as lidas da seleção", async () => {
     const view = mount(fakeRunner(rowsState()));
     view.show().editing!.onActivate({ row: 0, column: 0 });
     view.show().editing!.onSelection((held, grid) => extend(held, { row: 1, column: 1 }, grid));
 
-    // Um retângulo, mesmo de linhas inteiras de largura, não vale para o Delete.
-    view.show().editing!.onDeleteRows();
+    view.show().editing!.onDeleteRow();
     await settle();
-    expect(view.show().editing!.marks.size).toBe(0);
 
-    view.show().editing!.onSelection((held, grid) => extend(selectRow(held, 0, grid), { row: 1, column: 0 }, grid));
-    view.show().editing!.onSelection((held, grid) => toggleRow(selectRow(held, 0, grid), 1, grid));
-    view.show().editing!.onDeleteRows();
-    await settle();
     expect([...view.show().editing!.marks].map(([row, mark]) => [row, mark.deleted])).toEqual([
       [0, true],
       [1, true],
     ]);
+  });
+
+  describe("o Delete sozinho marca na hora para exclusão as linhas das células escolhidas, sem perguntar (RN-EDIT-015)", () => {
+    const marked = (view: ReturnType<typeof mount>) => [...view.show().editing!.marks].filter(([, mark]) => mark.deleted).map(([row]) => row);
+
+    it("com uma célula só, marca a linha dela de uma vez, a mesma que o Alt+Delete marcaria", async () => {
+      const view = mount(fakeRunner(rowsState()));
+      view.show().editing!.onActivate({ row: 1, column: 2 });
+
+      view.show().editing!.onDeleteRows();
+      await settle();
+
+      expect(marked(view)).toEqual([1]);
+      expect(view.show().pending).toBe(1);
+      expect(view.show().banner.notice).toBeNull();
+    });
+
+    it("com um retângulo, marca todas as linhas dele; com linhas inteiras também", async () => {
+      const view = mount(fakeRunner(rowsState()));
+      view.show().editing!.onActivate({ row: 0, column: 0 });
+      view.show().editing!.onSelection((held, grid) => extend(held, { row: 1, column: 1 }, grid));
+
+      view.show().editing!.onDeleteRows();
+      await settle();
+      expect(marked(view)).toEqual([0, 1]);
+
+      view.show().editing!.onSelection((held, grid) => selectRow(held, 2, grid));
+      view.show().editing!.onDeleteRows();
+      await settle();
+      expect(marked(view)).toEqual([0, 1, 2]);
+    });
+
+    it("dá o mesmo resultado do Alt+Delete na mesma seleção, e é uma pendência: nada vai ao banco antes do Salvar", async () => {
+      const byKey = mount(fakeRunner(rowsState()));
+      byKey.show().editing!.onSelection((held, grid) => toggleRow(selectRow(held, 0, grid), 2, grid));
+      byKey.show().editing!.onDeleteRows();
+      await settle();
+      const keyMarks = marked(byKey);
+      expect(byKey.show().pending).toBe(2);
+      expect(rt.service.saveEditsOrRefuse).not.toHaveBeenCalled();
+
+      rt.unmount();
+      const byAlt = mount(fakeRunner(rowsState()));
+      byAlt.show().editing!.onSelection((held, grid) => toggleRow(selectRow(held, 0, grid), 2, grid));
+      byAlt.show().editing!.onDeleteRow();
+      await settle();
+
+      expect(keyMarks).toEqual([0, 2]);
+      expect(marked(byAlt)).toEqual(keyMarks);
+    });
+
+    it("sem nenhuma célula escolhida, nada acontece", async () => {
+      const view = mount(fakeRunner(rowsState()));
+
+      view.show().editing!.onDeleteRows();
+      await settle();
+
+      expect(marked(view)).toEqual([]);
+      expect(rt.service.editTargetOrRefuse).not.toHaveBeenCalled();
+    });
+
+    it("a linha nova não salva simplesmente sai da grade", async () => {
+      remember("t1", "edits", { resultId: "r1", edits: addRow(noEdits, { 1: "N1" }).edits });
+      const view = mount(fakeRunner(rowsState()));
+      view.show().editing!.onSelection((held, grid) => selectRow(held, 3, grid));
+
+      view.show().editing!.onDeleteRows();
+      await settle();
+
+      expect(view.show().editing!.rows).toHaveLength(3);
+      expect(view.show().pending).toBe(0);
+    });
+
+    it("com linhas lidas e novas juntas, marca as lidas e tira as novas", async () => {
+      remember("t1", "edits", { resultId: "r1", edits: addRow(noEdits, { 1: "N1" }).edits });
+      const view = mount(fakeRunner(rowsState()));
+      view.show().editing!.onSelection((held, grid) => toggleRow(selectRow(held, 0, grid), 3, grid));
+
+      view.show().editing!.onDeleteRows();
+      await settle();
+
+      expect(view.show().editing!.rows).toHaveLength(3);
+      expect(marked(view)).toEqual([0]);
+    });
+
+    it("onde a exclusão não vale, a faixa dá o mesmo motivo do Alt+Delete e nada é marcado", async () => {
+      const refused = mount(fakeRunner(rowsState({ truncated: new Map([[1, new Set([0])]]) })));
+      refused.show().editing!.onActivate({ row: 1, column: 1 });
+      refused.show().editing!.onDeleteRow();
+      await settle();
+      const reason = refused.show().banner.notice;
+      expect(reason).toBe(edit.readOnly("a chave desta linha chegou cortada"));
+
+      rt.unmount();
+      const view = mount(fakeRunner(rowsState({ truncated: new Map([[1, new Set([0])]]) })));
+      view.show().editing!.onActivate({ row: 1, column: 1 });
+      view.show().editing!.onDeleteRows();
+      await settle();
+
+      expect(view.show().banner.notice).toBe(reason);
+      expect(marked(view)).toEqual([]);
+    });
+
+    it("na conexão somente leitura, o motivo da conexão, e nada é marcado", async () => {
+      rt.client.getQueryData.mockImplementation((key: unknown) => (Array.isArray(key) && key[0] === "connections" ? [{ id: "c1", protections: { readOnly: true } }] : undefined));
+      const view = mount(fakeRunner(rowsState({ readOnly: edit.reasons.connectionReadOnly })));
+      view.show().editing!.onActivate({ row: 0, column: 0 });
+
+      view.show().editing!.onDeleteRows();
+      await settle();
+
+      expect(view.show().banner.notice).toBe(edit.readOnly(edit.reasons.connectionReadOnly));
+      expect(marked(view)).toEqual([]);
+      rt.client.getQueryData.mockImplementation(() => undefined);
+    });
   });
 
   it("uma linha cuja chave não se sabe impede a exclusão de todas, e a faixa diz qual, pelo número", async () => {

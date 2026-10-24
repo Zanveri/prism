@@ -173,3 +173,18 @@ export function planDist(args, env, hostPlatform, hostArch) {
 
   return { platform, arch, nodePlatform, builderArgs, skipped: limited ? needHomepage : [], updateOrigin: origin !== undefined };
 }
+
+/**
+ * O ambiente do electron-builder e dos passos que o `dist` roda. No macOS tira as `CSC_*` (`CSC_LINK`, `CSC_KEY_PASSWORD`,
+ * `CSC_NAME`, `CSC_KEYCHAIN`…): o pacote de macOS leva a assinatura ad hoc (`identity: "-"` no `electron-builder.yml`), que não usa
+ * certificado, e com `CSC_LINK` o electron-builder criaria uma keychain com ele e poderia escolhê-lo no lugar da identidade ad hoc.
+ * Nas outras plataformas o ambiente segue como está. Devolve uma cópia; não altera `env`.
+ *
+ * @param {string} platform `win`, `linux` ou `mac`
+ * @param {Record<string, string | undefined>} env o ambiente (`process.env`)
+ * @returns {Record<string, string | undefined>}
+ */
+export function builderEnvironment(platform, env) {
+  if (platform !== "mac") return { ...env };
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !name.toUpperCase().startsWith("CSC_")));
+}

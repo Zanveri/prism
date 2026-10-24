@@ -33,7 +33,7 @@ export const updateCopy = {
     sums: "Somas de verificação",
     noSums: "As notas desta versão não trazem somas SHA-256: o Prism não instala uma atualização sem elas.",
     // RN-ATUALIZA-009: o que a tela diz sobre a confiança.
-    trust: "A atualização é baixada das releases do projeto no GitHub e conferida por duas somas SHA-256, e uma release publicada não pode ser trocada. Os pacotes ainda não são assinados.",
+    trust: "A atualização é baixada das releases do projeto no GitHub e conferida por duas somas SHA-256, e uma release publicada não pode ser trocada. Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.",
     noStartupCheck: "Não verificar ao abrir",
 
     update: "Atualizar agora",

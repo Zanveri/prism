@@ -281,10 +281,12 @@ describe("Editor SQL", () => {
       expect(checked(box(html, "cfg-maiusculas"))).toBe(true);
     });
 
-    it("diz o que cada uma faz, sem prometer o que o editor não faz: nomes da árvore sem consultar o banco; só as reservadas, só ao digitar", () => {
+    it("diz o que cada uma faz, sem prometer o que o editor não faz: nomes da árvore, e só a coluna de tabela e a chave estrangeira buscadas no banco; só as reservadas, só ao digitar", () => {
       const html = editor(render().markup);
 
-      expect(html).toContain("Nunca consulta o banco.");
+      expect(html).toContain("também busca as colunas de uma tabela que você começa a escrever");
+      expect(html).toContain("as chaves estrangeiras que completam o JOIN");
+      expect(html).not.toContain("Nunca consulta o banco");
       expect(html).toContain("esquemas, tabelas, visões e colunas");
       expect(html).toContain("o que você cola ficam como estão");
     });
@@ -369,7 +371,7 @@ describe("Atualizações (RN-ATUALIZA-007)", () => {
   });
 
   it("diz o que a atualização garante: o que a tela de versão nova já diz (soma SHA-256, pacotes sem assinatura)", () => {
-    expect(updates(render({}, { updates: defaults }).markup)).toContain("Os pacotes ainda não são assinados.");
+    expect(updates(render({}, { updates: defaults }).markup)).toContain("Os pacotes ainda não têm a assinatura de um desenvolvedor identificado.");
   });
 });
 

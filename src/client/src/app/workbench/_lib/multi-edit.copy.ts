@@ -24,7 +24,7 @@ export const multiEditCopy = {
     all: (column: string) => `Vale para todas as linhas do resultado (coluna ${column}).`,
   },
   // Confirmar o campo que valia para várias sem ter mexido no texto não aplica nada.
-  untouched: "O valor não mudou: nada foi alterado. Para levar o valor desta célula às outras escolhidas, mexa no texto antes de confirmar (apague um caractere e escreva-o de novo).",
+  untouched: "O valor não mudou: nada foi alterado. Para levar o valor desta célula às outras escolhidas, digite o valor por cima, ou mova o cursor e apague e escreva um caractere.",
   // O "Definir como nulo" diz para quantas vale.
   setNull: {
     cells: (count: number) => `Definir as ${number(count)} células como nulo`,

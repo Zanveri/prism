@@ -84,7 +84,7 @@ export const settingsCopy = {
     preview: "Prévia do editor",
     // RN-CONFIG-004: os dois rótulos são os do canvas; as dicas dizem o que o editor faz de fato.
     autocomplete: "Autocompletar ao digitar",
-    autocompleteHint: "Sugere as palavras-chave do banco da aba e os nomes que a árvore já carregou: esquemas, tabelas, visões e colunas. Nunca consulta o banco. As setas escolhem uma sugestão, e só então o Enter a aceita.",
+    autocompleteHint: "Sugere as palavras-chave do banco da aba e os nomes que a árvore já carregou: esquemas, tabelas, visões e colunas. Com a conexão aberta, também busca as colunas de uma tabela que você começa a escrever (tabela. ou apelido.) e as chaves estrangeiras que completam o JOIN; fora isso, não consulta o banco. As setas escolhem uma sugestão, e só então o Enter a aceita.",
     uppercaseKeywords: "Converter palavras-chave para maiúsculas",
     uppercaseKeywordsHint: "Só as palavras reservadas (SELECT, FROM, WHERE…), quando você as termina com espaço, vírgula, parêntese ou Enter. Nomes de colunas, texto entre aspas, comentários e o que você cola ficam como estão.",
     // RN-SQL-018 (issue #7): como o "Smart" do DBeaver, com o cuidado de não executar metade de um comando.

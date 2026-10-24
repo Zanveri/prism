@@ -947,7 +947,8 @@ Aba de registros e de estrutura da tabela, salto por chave estrangeira, diagrama
 leitura, confirmação de comando irreversível, verificação periódica e encerramento por ociosidade, ambiente por pasta, configurações e temas,
 troca de senha, explicar plano, formatar SQL, exportar CSV, salvar e abrir arquivos `.sql`
 (o texto das abas se perde ao fechar o app), trocar de banco dentro da mesma conexão,
-atualização automática, assinatura de código, roteiro de aceite completo em macOS e Linux
+atualização automática, assinatura de código com Developer ID e notarização (a do macOS é ad hoc,
+RN-ABERTO-006), roteiro de aceite completo em macOS e Linux
 (a seção 14 cobre só a geração dos pacotes), mais de uma janela.
 
 ## 14. Código aberto
@@ -998,10 +999,18 @@ a infraestrutura da Zanveri, com pacotes para todas as plataformas gerados na pi
   os minutos da pipeline, em que o de macOS é o mais caro): os dois jobs de macOS só rodam no merge
   em `main`, e um beta sai com Windows e Linux. **Cada plataforma é independente:** o pacote de uma
   que falha, é cancelada ou fica sem máquina não segura o lançamento das outras (RN-VERSAO-008).
-  Nenhum pacote é assinado nesta fatia, e o README diz o que isso implica em cada sistema. Onde
-  o driver da IBM não existir para a plataforma, o pacote sai sem Db2 e Informix naquela
-  plataforma, e o README e a tela dizem isso; PostgreSQL funciona em todas. *Alterada a pedido do
-  dono em 2026-10-20: a falha do pacote de uma plataforma não segura o lançamento das outras.*
+  Os pacotes de Windows e de Linux não são assinados nesta fatia; o de macOS leva **assinatura
+  ad hoc, sem Developer ID nem notarização** (não pede certificado nem conta da Apple), e o README
+  diz o que isso implica em cada sistema: com ela o macOS deixa de dar o app como "danificado" e
+  diz só que não pode verificá-lo, e a pessoa o libera uma vez em Ajustes do Sistema › Privacidade
+  e Segurança › "Abrir Mesmo Assim" (macOS 15 em diante) ou pelo clique com o botão direito ›
+  Abrir (até o macOS 14). Onde o driver da IBM não existir para a plataforma, o pacote sai sem
+  Db2 e Informix naquela plataforma, e o README e a tela dizem isso; PostgreSQL funciona em todas.
+  *Alterada a pedido do dono em 2026-10-20: a falha do pacote de uma plataforma não segura o lançamento das outras.
+  Alterada a pedido do dono em 2026-10-24 (issue #33): o pacote de macOS sem nenhuma assinatura era
+  dado como danificado e só abria com `xattr` no Terminal; agora leva a assinatura ad hoc. Ainda
+  não foi aberto num Mac de verdade (o pacote de macOS só sai na estável), e as versões até a
+  0.4.x continuam precisando do `xattr`, que o README mantém para elas.*
 - **RN-ABERTO-007.** Runner próprio: nenhum. O projeto usa só os runners hospedados pelo GitHub,
   e nenhum runner próprio é ligado ao repositório. A proteção que cabe à configuração do
   repositório fica numa lista de conferência em `docs/ci.md`: o token padrão dos workflows só de
@@ -1129,7 +1138,8 @@ com as fontes, está em os registros internos do projeto.
   `docs/versionamento.md`, escritos para quem nunca lançou uma versão.
 
 Fica para depois, por depender de assinatura de código ou de infraestrutura que o projeto ainda
-não tem: assinatura e notarização dos pacotes, repositórios apt e rpm, automação que abre o
+não tem: assinatura com Developer ID e notarização dos pacotes (o de macOS já leva a ad hoc,
+RN-ABERTO-006), repositórios apt e rpm, automação que abre o
 pull request de lançamento, apagar pré-lançamentos antigos, e a conferência de versão entre a interface e a API na partida. A
 verificação e a instalação de atualizações estão na seção 17.
 
@@ -1326,10 +1336,13 @@ dia.
   validação do certificado nunca é desligada. A tela não ganha nenhuma permissão de rede. A
   consulta não envia identificador do usuário nem da máquina; o servidor vê o que qualquer
   requisição HTTP mostra (o endereço de rede e a versão do Prism).
-- **RN-ATUALIZA-009.** Sem assinatura de código (seção 14), a garantia de uma atualização é a do
-  HTTPS do GitHub somada às duas somas da RN-ATUALIZA-005 e às releases imutáveis (um pacote
+- **RN-ATUALIZA-009.** Sem assinatura de código de um desenvolvedor (seção 14: assinatura ad hoc
+  no macOS, sem Developer ID nem notarização, e nada assinado no Windows e no Linux), a garantia de
+  uma atualização é a do HTTPS do GitHub somada às duas somas da RN-ATUALIZA-005 e às releases imutáveis (um pacote
   publicado não pode ser trocado). O README e a tela dizem isso. Assinar as releases com uma
-  chave do projeto fica para depois.
+  chave do projeto fica para depois. *Alterada a pedido do dono em 2026-10-24 (issue #33): a
+  assinatura ad hoc do macOS não muda a garantia, nem a instalação: no macOS a RN-ATUALIZA-006 só
+  deixa o pacote conferido na pasta de downloads, e o app não verifica assinatura nenhuma.*
 - **RN-ATUALIZA-010.** Canal beta (decisão do dono em 2026-10-12): Configurações › Atualizações
   ganha "Receber versões beta", desligado por padrão, guardado com as outras preferências de
   atualização (vale para a instalação, RN-ATUALIZA-007). Ligado, a consulta considera também os
@@ -1432,12 +1445,55 @@ Só da tela:
   derivadas das que ele define, e todo par de texto e fundo do tema passa no contraste (4,5:1
   para texto, 3:1 para texto grande e ícone), conferido por teste.
 - **RN-CONFIG-004.** Editor de SQL: autocompletar ao digitar (palavras-chave do banco da aba e os
-  nomes já carregados na árvore daquela conexão: esquemas, tabelas, visões e colunas; nunca
-  dispara consulta ao banco) e converter palavras-chave para maiúsculas ao digitar. Os dois têm
+  nomes já carregados na árvore daquela conexão: esquemas, tabelas, visões e colunas; só busca no
+  banco o que o segundo item abaixo diz) e converter palavras-chave para maiúsculas ao digitar. Os dois têm
   chave de ligar e desligar. Com as variáveis (seção 41), o autocompletar completa também os nomes declarados,
   depois de `@` e dentro das declarações, e as funções da linguagem; a conversão para maiúsculas não muda nada
   dentro das declarações; e o Editor de SQL ganha "Mostrar o valor das variáveis no fim da linha", ligada por
   padrão (RN-VAR-025). *Alterada a pedido do dono em 2026-10-20 (seção 41).*
+  - As colunas de `nome.`: depois de `nome.` (também com letras depois do ponto), onde `nome` é uma tabela ou
+    visão do catálogo que a árvore já carregou (com ou sem o esquema, com ou sem aspas) ou o apelido de uma
+    tabela no comando em que o cursor está (`FROM pedidos p`, `JOIN clientes AS c`, `UPDATE pedidos p`, a
+    lista com vírgulas, o `OUTER` do Informix e o `USING` do `DELETE`; as subconsultas e os apelidos delas não
+    contam, e numa subconsulta vale também o apelido das consultas de fora, o de dentro escondendo o de fora),
+    a lista mostra as colunas dela, com o tipo, sem repetir nenhuma. Se as colunas ainda não estão no cache, são buscadas, e a lista abre quando
+    chegam, se o cursor ainda está lá. Dentro de texto, de comentário e de declaração de variável, nada.
+  - O que o autocompletar busca no banco é só isto: as colunas de uma tabela ou visão e as chaves
+    estrangeiras de uma tabela (RN-SQL-025), e só quando a sessão da árvore daquela conexão e daquele banco já
+    está aberta (nada conecta nem reconecta sozinho; com a conexão desconectada, fica o que já foi carregado).
+    Cada lista é buscada uma vez, pela mesma consulta que o navegador e a Estrutura usam, e fica no mesmo
+    cache: eles passam a mostrá-la sem perguntar de novo, e o "Atualizar" deles a refaz (a lista que o
+    "Atualizar" tornou velha é buscada de novo na vez seguinte, e a velha segue valendo se a busca falha).
+    Uma busca que falha não mostra nada e não avisa, e não se repete enquanto a sessão for a mesma, ou até o
+    "Atualizar" mandar tentar de novo.
+  - *Alterada a pedido do dono em 2026-10-24: o autocompletar deixa de ser só o cache da árvore (antes,
+    "nunca dispara consulta ao banco" e as colunas só saíam de tabelas que a pessoa já tinha aberto no
+    navegador); a tabela que a pessoa começa a escrever, e que ainda não foi aberta, já completa as colunas.*
+
+- **RN-SQL-025.** Completar a junção. *Pedido do dono em 2026-10-24, como no DBeaver.*
+  - Depois de `JOIN ` (também `INNER JOIN`, `LEFT`, `RIGHT` e `FULL`, com ou sem `OUTER`; não o `CROSS JOIN`
+    nem o `NATURAL JOIN`, que não têm `ON`), a lista sugere, no topo, as tabelas ligadas por chave
+    estrangeira, nos dois sentidos (as que a tabela do comando referencia e as que a referenciam), a alguma
+    tabela que já está no `FROM`/`JOIN`/`UPDATE` do comando, escrita antes do cursor (no nível dele: a subconsulta em
+    que ele está, ou o comando; o alvo do `INSERT INTO` e as tabelas escritas adiante não contam), com a condição pronta: `clientes c ON c.id = p.cliente_id`. A chave composta junta as colunas
+    com `AND`, na ordem da chave. O nome da tabela é escrito como o autocompletar escreve (RN-CONFIG-004:
+    `sqlName`, com o esquema quando não é o padrão da sessão). A sugestão mostra, ao lado, o nome da chave.
+  - O apelido da tabela nova: se alguma tabela do comando tem apelido (a subconsulta com apelido conta), a
+    nova ganha um: as iniciais das partes do nome separadas por `_` (`itens_pedido` → `ip`), em minúsculas, com
+    2, 3… quando o apelido já está em uso no comando ou é palavra reservada (`ordem_nota` → `on2`). Sem
+    apelidos no comando, a tabela nova entra pelo nome inteiro (`clientes ON clientes.id = pedidos.cliente_id`),
+    e só ganha apelido quando o nome já é de uma tabela do comando.
+  - Uma sugestão por chave; primeiro as que ligam à última tabela escrita, depois as das outras, na ordem do
+    comando; em cada tabela, as chaves dela e depois as que a referenciam. A tabela que já está no comando não
+    volta, menos a que se liga a si mesma, que ganha outro apelido (e, com a chave em dois sentidos, traz as
+    duas condições: a da linha pai e a das filhas).
+  - Depois de `JOIN tabela [AS] [apelido] ON `, a lista sugere as condições que ligam essa tabela às outras do
+    comando que vêm antes dela (`c.id = p.cliente_id`), as da última tabela escrita primeiro, com o nome da chave ao lado.
+  - Os dados: as chaves da tabela vêm da consulta da Estrutura (`foreign-keys`) e as que a referenciam, da rota
+    `GET …/tables/{table}/referenced-by` (RN-CAT-004), no mesmo cache da Estrutura; só se buscam as das tabelas
+    do comando que o catálogo da árvore conhece, e pela regra de busca da RN-CONFIG-004 (sessão da árvore já
+    aberta, uma vez por lista, falha sem aviso). Uma tabela cujas chaves não chegaram não liga nada. Dentro de
+    texto, de comentário e de declaração de variável, nada.
 - **RN-CONFIG-005.** Resultados: o texto que representa o valor nulo na grade, e "buscar mais
   linhas ao rolar até o fim da grade" (a grade pede a página seguinte sozinha, uma por vez, e
   para se o usuário cancelar; com a atualização automática do resultado ligada, RN-GRADE-014, a
@@ -1687,7 +1743,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
     é uma célula: a clicada ou, depois do clique no número da linha, a célula ativa que ele deixa. Um retângulo é
     sempre um retângulo, também quando cobre todas as colunas das linhas dele (numa grade de uma coluna, a célula
     ativa sozinha já cobre a linha): só o número da linha, o canto da grade, o Shift+Espaço e o Ctrl+A escolhem
-    linhas inteiras, e só elas valem para o Delete (RN-EDIT-015). Só o nome da coluna, no cabeçalho, e o Ctrl+Espaço
+    linhas inteiras (o Delete age nas linhas de qualquer célula escolhida, menos de colunas inteiras, RN-EDIT-015). Só o nome da coluna, no cabeçalho, e o Ctrl+Espaço
     escolhem colunas inteiras (RN-GRADE-021 e 022).
   - Com o ponteiro:
     - o clique numa célula a faz ativa, e a seleção passa a ser ela, que vira a âncora;
@@ -1723,7 +1779,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
       da grade e segue adiante, e assim o Ctrl+Shift+PageUp e o Ctrl+Shift+PageDown, que movem a aba ativa
       (RN-ABAS-001), chegam à barra de abas também com o foco na grade;
     - Shift+Espaço escolhe as linhas inteiras das células escolhidas, como o "Selecionar linha(s)" do DBeaver: é o
-      caminho do teclado até o Delete (RN-EDIT-015). Por isso o Shift+Espaço deixa de abrir o campo de edição com um
+      caminho do teclado até as linhas inteiras (RN-EDIT-014 e 015). Por isso o Shift+Espaço deixa de abrir o campo de edição com um
       espaço (RN-EDIT-001);
     - Ctrl+Espaço (Control+Espaço no macOS) escolhe as colunas inteiras das células escolhidas, e, com colunas
       inteiras, o Shift+Espaço escolhe a linha inteira da célula ativa (RN-GRADE-022);
@@ -1765,7 +1821,7 @@ Grade de resultado (da aba de consulta e dos Registros da tabela):
       colunas (RN-GRADE-006);
     - "Duplicar linha" e "Excluir linha", do menu, da barra de edição e dos atalhos, agem em todas as linhas da
       seleção, e passam a "Duplicar linhas" e "Excluir linhas" quando elas são mais de uma (RN-EDIT-014 a 016); a
-      tecla Delete sozinha exclui as linhas inteiras escolhidas, e só elas (RN-EDIT-015); com colunas inteiras, não
+      tecla Delete sozinha marca para exclusão, na hora, as linhas das células escolhidas (RN-EDIT-015); com colunas inteiras, não
       valem (RN-GRADE-022);
     - "Desfazer alteração" tira as pendências das células escolhidas (RN-EDIT-004);
     - "Filtrar", "Ordenar" e "Ir para o registro referenciado" agem na célula ativa; "Colar" também, e fica
@@ -2423,10 +2479,14 @@ até lá, o que depende delas está a provar.
   inteiras); com outras células escolhidas na coluna da célula ativa, a edição vale para todas elas (RN-EDIT-017 e
   018). O campo de edição fica na
   própria célula, com "Confirmar edição (Enter)" e "Cancelar edição (Esc)", como no canvas; Tab e Shift+Tab
-  confirmam e passam para a próxima célula editável. O menu de contexto (RN-GRADE-004) tem "Colar", sem atalho, que
+  confirmam e passam para a próxima célula editável. Aberto por F2, Enter, duplo clique ou "Editar célula" (e pelo
+  Tab, na célula seguinte), o campo traz o texto TODO selecionado e mostra o começo dele: Delete apaga, digitar
+  escreve por cima, e as setas desfazem a seleção, como em qualquer campo. Começar a digitar continua substituindo o
+  valor pelo caractere digitado, com o cursor depois dele. Vale também para a edição de várias células da coluna
+  (RN-EDIT-017) e para o valor com quebra de linha. O menu de contexto (RN-GRADE-004) tem "Colar", sem atalho, que
   cola o texto da área de transferência na célula ativa como alteração pendente, "Editar célula" (F2), "Definir como
   nulo", "Desfazer alteração", "Adicionar linha" (Alt+Insert), "Duplicar linha" (Ctrl+Alt+Insert, RN-EDIT-016) e
-  "Excluir linha" (Alt+Delete; e também Delete, com linhas inteiras escolhidas, RN-EDIT-015). "Duplicar linha" e
+  "Excluir linha" (Alt+Delete; e também Delete, RN-EDIT-015). "Duplicar linha" e
   "Excluir linha" agem em todas as linhas da seleção e passam a "Duplicar linhas" e "Excluir linhas" quando elas são
   mais de uma; "Desfazer alteração" age nas células escolhidas (RN-EDIT-004); "Definir como nulo" age, como a
   edição, nas células escolhidas da coluna da célula ativa (RN-EDIT-017); "Colar" vale com uma célula só
@@ -2437,7 +2497,9 @@ até lá, o que depende delas está a provar.
   Alterada a pedido do dono em 2026-10-17 (seção 37): as ações de linha agem na seleção, o Delete passou a valer com as
   linhas inteiras escolhidas, o "Colar" que a tela já tinha entrou na regra, sem atalho, e entrou o Shift+Espaço.
   Alterada a pedido do dono em 2026-10-19 (seção 38): a edição e o "Definir como nulo" valem para as células
-  escolhidas da coluna da célula ativa, também a coluna inteira, e o Ctrl+Espaço não abre o campo.*
+  escolhidas da coluna da célula ativa, também a coluna inteira, e o Ctrl+Espaço não abre o campo. Alterada a pedido
+  do dono em 2026-10-24: o campo de edição abre com o texto todo selecionado, para o Delete apagar ou a digitação
+  escrever por cima, e o Delete passou a valer com qualquer célula escolhida (RN-EDIT-015).*
 - **RN-EDIT-002.** **Quando um resultado é editável.** A edição vale **coluna por coluna, na tabela de onde a coluna veio**,
   também num resultado de junção.
 
@@ -2497,7 +2559,9 @@ até lá, o que depende delas está a provar.
 - **RN-EDIT-004.** **Pendências** (dois passos: "Salvar" e, no Commit manual, Commit). Editar, definir nulo, criar
   linha, duplicar linha e excluir linha não vão ao banco: ficam pendentes na tela e destacados — a célula alterada
   mostra o valor lido riscado ao lado do novo (como no canvas), a linha nova (também a duplicada, RN-EDIT-016) é marcada
-  no número da linha, e a linha excluída aparece riscada. Uma faixa sobre a grade diz quantas alterações há ("3
+  no número da linha, e a linha excluída aparece riscada e pintada de vermelho (o texto das células e o número da linha em
+  vermelho e riscados, e um tom de vermelho no fundo; a que falhou no último "Salvar" tem o tom mais forte e o número em
+  negrito, e a excluída que falhou mostra as duas coisas). Uma faixa sobre a grade diz quantas alterações há ("3
   alterações não salvas", em que a da coluna inteira conta uma, com a linha "Em todas as linhas do resultado: preco =
   10.00." embaixo, RN-EDIT-018) e tem "Ver SQL", "Descartar" e "Salvar" (Ctrl+S com o foco na grade). "Descartar" joga
   fora só o que não foi salvo, sem mexer na transação. "Desfazer alteração" tira a pendência da célula ativa, ou, com
@@ -2510,7 +2574,8 @@ até lá, o que depende delas está a provar.
   pendências: "Salvar", "Descartar" e "Ver SQL" ficam nesta faixa, que não muda. *Alterada a pedido do dono em
   2026-10-16 (seção 33): entraram o duplicar e a barra de edição. Alterada a pedido do dono em 2026-10-17 (seção 37):
   "Desfazer alteração" age nas células escolhidas. Alterada a pedido do dono em 2026-10-19 (seção 38): a coluna inteira
-  conta como uma alteração, com a linha dela na faixa, e o "Desfazer alteração" a tira com a coluna escolhida.*
+  conta como uma alteração, com a linha dela na faixa, e o "Desfazer alteração" a tira com a coluna escolhida. Alterada a
+  pedido do dono em 2026-10-24: a linha marcada para exclusão fica riscada e pintada de vermelho.*
 - **RN-EDIT-005.** **Salvar** executa todas as pendências **numa transação só**, na sessão da aba: primeiro a alteração da
   coluna inteira, quando há (RN-EDIT-021), depois as exclusões, depois as alterações, depois as linhas novas, cada grupo
   na ordem em que foi feito. Cada alteração e cada exclusão é um
@@ -4122,7 +4187,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     edição na célula ativa (RN-GRADE-001), com o valor, como o F2, e, com outras células escolhidas na coluna
     dela, vale para todas, depois de conferi-las (RN-EDIT-017 e 018); "Adicionar linha" cria uma linha nova em branco;
     "Duplicar linha" duplica as linhas da seleção (RN-EDIT-016); "Excluir linha" marca para exclusão as linhas da
-    seleção, que ficam riscadas, e tira da grade as que são linhas novas. As linhas da seleção são as que têm uma
+    seleção, que ficam riscadas e vermelhas (RN-EDIT-004), e tira da grade as que são linhas novas. As linhas da seleção são as que têm uma
     célula escolhida (RN-GRADE-001); sem nada escolhido além da célula ativa, a linha dela. Com mais de uma, os dois
     últimos passam a "Duplicar linhas" e "Excluir linhas" (RN-EDIT-013).
   - Habilitar não custa consulta (RN-EDIT-010): enquanto o Prism não perguntou ao catálogo o que se edita naquele
@@ -4172,7 +4237,7 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     - "Duplicar linha" põe as cópias no fim da grade, na ordem das linhas de origem; a grade rola até a primeira, a
       seleção passa a ser as cópias, inteiras, e a célula ativa vai para a primeira delas, na primeira coluna
       editável (na duplicada que copiou a chave, na coluna da chave mais à esquerda na grade, RN-EDIT-016).
-    - "Excluir linha" deixa a seleção e a célula ativa onde estavam, com as linhas lidas riscadas. Tiradas linhas
+    - "Excluir linha" deixa a seleção e a célula ativa onde estavam, com as linhas lidas riscadas e vermelhas. Tiradas linhas
       novas, a seleção passa a ser a célula ativa, que vai para a linha que ficou no lugar da primeira tirada, ou
       para a de cima, quando não ficou nenhuma depois dela; sem linha nenhuma, não há célula ativa.
   - A atualização automática fica em pausa desde o começo da ação, como no menu, e a ação cujo resultado mudou no
@@ -4180,7 +4245,8 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
   - *Alterada a pedido do dono em 2026-10-17 (seção 37): "Duplicar linha" e "Excluir linha" agem nas linhas da
     seleção, com os motivos de várias linhas, o limite do duplicar e o que acontece depois. Alterada a pedido do
     dono em 2026-10-19 (seção 38): os botões das linhas com colunas inteiras, e o "Editar célula" com várias
-    células escolhidas na coluna.*
+    células escolhidas na coluna. Alterada a pedido do dono em 2026-10-24: a linha marcada para exclusão fica riscada e
+    pintada de vermelho.*
 - **RN-EDIT-015.** Os atalhos, com o foco na grade (e não no campo de edição de uma célula, que fica com as teclas
   dele).
   - F2 (e Enter) edita a célula ativa (e as outras escolhidas da coluna dela, RN-EDIT-017); Alt+Insert adiciona uma
@@ -4192,13 +4258,18 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     também casa com o Ctrl+Alt+Insert e com o Shift+Alt+Insert). Com Shift nada acontece: o Shift+Alt+Insert e o
     Ctrl+Shift+Alt+Insert que o DBeaver ganhou na 26.1 (a linha nova e a duplicada antes da atual) ficam para
     depois.
-  - O Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, exclui as linhas inteiras escolhidas (pelo número da linha, pelo
-    Shift+Espaço ou pelo Ctrl+A, RN-GRADE-001), como o "Excluir linhas", com os mesmos motivos e a mesma faixa
-    quando não vale (RN-EDIT-014). Com um retângulo de células escolhido, com colunas inteiras (RN-GRADE-022), ou
-    só com a célula ativa, o Delete não faz nada, também quando o retângulo cobre todas as colunas (numa grade de uma coluna, a célula ativa já cobre a
-    linha): ali ele não apaga o valor (isso é o "Definir como nulo"), e uma tecla sem modificador não marca para
-    exclusão linhas que não foram escolhidas como linhas inteiras. O Shift+Espaço faz do retângulo as linhas
-    inteiras dele (RN-GRADE-001).
+  - O Delete sozinho, sem Ctrl, Alt, Shift nem Cmd, com o foco na grade e alguma célula escolhida (a célula ativa, um
+    retângulo ou linhas inteiras, RN-GRADE-001), marca na hora para exclusão as linhas da seleção, sem pergunta
+    nenhuma: as mesmas que o Alt+Delete marca, com as mesmas recusas, o mesmo limite e a mesma faixa quando não vale
+    (RN-EDIT-014); uma linha nova ainda não salva simplesmente sai da grade. As linhas ficam pintadas com a marca de
+    exclusão de sempre (a linha riscada e pintada de vermelho, RN-EDIT-004). Com colunas inteiras escolhidas (RN-GRADE-022), o Delete não faz
+    nada. Ele não apaga o valor da célula (isso é o "Definir como nulo").
+  - **A confirmação do Delete é a de sempre**: a exclusão é uma pendência, e nada vai ao banco antes do "Salvar" (e do
+    Commit, no Commit manual, RN-EDIT-004 e 005); o "Desfazer alteração" e o "Descartar" valem. Não há diálogo nem
+    texto de pergunta. Onde a edição não vale (a conexão somente leitura, a tabela sem chave, o resultado não
+    editável, a aba ocupada), o Delete dá o mesmo motivo que o Alt+Delete dá, na faixa. Vale nos Registros, no
+    resultado da aba de consulta e nas abas de resultado do script guardado, em qualquer lugar (painel, aba ou janela,
+    RN-ABAS-013).
   - No Windows, o Alt da direita do teclado ABNT2 (e dos outros teclados que têm AltGr) é o AltGr, e chega como
     Ctrl+Alt: com ele, Insert duplica, e Delete não faz nada. Os atalhos valem com o Alt da esquerda; os botões e o
     menu cobrem o resto. O Insert não escreve caractere, e por isso o Ctrl+Alt+Insert não deixa o AltGr de fora,
@@ -4209,12 +4280,14 @@ de scripts (seção 9). O cofre passa ao formato 4 (RN-SCRIPT-011).
     deles escreve caractere (o foco está na grade, não num campo de texto, e o Insert e o Delete não são teclas de
     caractere), então não há troca de tecla. A tecla "delete" do Mac é a de apagar para trás: Option+delete exclui
     as linhas da seleção, e Option+fn+delete (apagar para a frente) também; sozinhas, a "delete" e a fn+delete são o
-    Delete das linhas inteiras escolhidas. O teclado do Mac não tem Insert: ali "Adicionar linha" e "Duplicar linha"
+    Delete, que marca as linhas para exclusão na hora. O teclado do Mac não tem Insert: ali "Adicionar linha" e "Duplicar linha"
     ficam na barra e no menu, e o atalho vale para quem usa um teclado que tem a tecla.
   - *Alterada a pedido do dono em 2026-10-17 (seção 37): o Delete sozinho passou a excluir as linhas inteiras
     escolhidas, e nunca um retângulo, e os atalhos das linhas agem na seleção. Alterada a pedido do dono em
     2026-10-19 (seção 38): o F2 e o Enter editam as células escolhidas da coluna, e o Delete não faz nada com
-    colunas inteiras.*
+    colunas inteiras. Alterada a pedido do dono em 2026-10-24: o Delete sozinho vale com qualquer célula escolhida
+    (menos colunas inteiras) e marca na hora as linhas para exclusão, como o Alt+Delete, sem pergunta: o dono não quis o
+    diálogo, e a confirmação é o "Salvar". A linha marcada para exclusão fica riscada e pintada de vermelho.*
 
 ### Duplicar linha
 
@@ -8579,7 +8652,7 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
     - "Desfazer alteração" tira as pendências das colunas escolhidas em todas as linhas, e a alteração da coluna
       inteira delas (RN-EDIT-018);
     - "Duplicar linha" e "Excluir linha" não valem: os itens do menu, os botões da barra de edição e os atalhos ficam
-      desabilitados com "Escolha as linhas pelo número da linha.", e a tecla Delete não faz nada, como num retângulo
+      desabilitados com "Escolha as linhas pelo número da linha.", e a tecla Delete não faz nada
       (RN-EDIT-015). "Adicionar linha" continua valendo, e depois dela a seleção passa à célula da linha nova
       (RN-EDIT-014);
     - "Filtrar", "Ordenar" e "Ir para o registro referenciado" agem na célula ativa, como sempre.
@@ -8639,8 +8712,8 @@ da edição, e passa a guardar o texto do comando de cada resultado. O canvas n�
     "Cancelar edição" não aplicam nada a nenhuma. Confirmar sem ter mexido no texto (nenhuma tecla, colar ou apagar
     mudou o campo desde que ele abriu) não aplica nada, nem à célula ativa: abrir e fechar o campo nunca faz uma
     alteração em várias células. Quando o campo valia para mais de uma célula, a faixa diz "O valor não mudou: nada
-    foi alterado. Para levar o valor desta célula às outras escolhidas, mexa no texto antes de confirmar (apague
-    um caractere e escreva-o de novo).". Mexido no texto, a confirmação aplica o texto final a todas, também quando
+    foi alterado. Para levar o valor desta célula às outras escolhidas, digite o valor por cima, ou mova o cursor e
+    apague e escreva um caractere.". Mexido no texto, a confirmação aplica o texto final a todas, também quando
     ele é igual ao de abertura; a célula ativa, que já tinha aquele valor, fica sem pendência. Depois do Enter, a
     seleção fica (RN-GRADE-001); o Tab e o Shift+Tab passam à próxima célula editável, e a seleção passa a ser ela.
   - "Definir como nulo" faz o mesmo com o nulo, sem abrir o campo. Com uma célula só, o item continua "Definir como
@@ -9755,6 +9828,37 @@ RN-SQL-021, a RN-VERSAO-002 e as seções 9 e 24. A API ganha só o campo `resul
   - A ordem de entrega: "Numa aba" primeiro, que não depende de nada do outro documento, e depois "Numa janela". Se as
     sondas S-JANELA-1 a 3 mostrarem, numa plataforma, uma falha sem conserto barato, "Numa janela" não sai nela, a
     decisão volta para o dono com o que a sonda mostrou, e "Numa aba" sai do mesmo jeito.
+- **RN-ABAS-018.** Voltar e Avançar entre as abas, como no DBeaver. *Pedido do dono em 2026-10-24, como no DBeaver: o
+  botão "voltar" do mouse levava às Configurações (o Chromium voltava no histórico das rotas da janela, e a entrada
+  anterior era a delas) em vez de voltar à aba de antes.* Cada janela de abas guarda, só na memória, a ordem em que as
+  abas dela ficaram ativas (o histórico de navegação do DBeaver):
+  - Entra uma entrada a cada vez que a aba ativa da janela muda por qualquer caminho (o clique na aba,
+    as setas da faixa, abrir uma tabela pelo navegador, abrir um script, a aba nova, seguir uma chave estrangeira
+    nos Registros ou no resultado, a aba que fica ativa quando outra fecha), menos o próprio Voltar e Avançar. A mesma
+    aba duas vezes seguidas é uma entrada só. No máximo 50 entradas: sai a mais velha.
+  - **Voltar** ativa a entrada anterior; **Avançar**, a seguinte. Uma aba que fechou ou foi para outra janela sai do
+    histórico e é pulada. Ativar outra aba depois de voltar descarta as entradas à frente, como no navegador. Sem
+    entrada para onde ir, nada acontece (sem som, sem aviso).
+  - Voltar e Avançar ativam a aba como o clique nela a ativa (o mesmo caminho, e o foco na aba, como no clique). O
+    filtro que um seguir de chave estrangeira pôs na aba de destino continua lá. O histórico guarda a aba, e não a
+    vista: voltar a uma aba cujo resultado está numa aba mostra a consulta.
+  - **Os botões e as teclas.** Os botões "voltar" e "avançar" do mouse (os botões 4 e 5; `MouseEvent.button` 3 e 4),
+    em qualquer lugar da janela. Alt+← e Alt+→ no Windows e no Linux, com o foco em qualquer lugar da janela, inclusive
+    no editor de SQL (onde o Alt+← do CodeMirror, que anda pela sintaxe, deixa de valer, como no DBeaver), e menos num
+    campo de texto de uma linha ou área de texto (`input`, `textarea`, o campo de edição da célula, o filtro), onde a
+    tecla segue para o campo. No macOS, Cmd+[ e Cmd+], menos no editor de SQL e nos campos de texto, onde continuam o
+    que são (no editor, recuar e avançar o recuo). As teclas são tratadas na fase de captura da janela, antes do
+    componente com o foco: as setas são de muitos componentes (a faixa de abas, a grade, as árvores), e nenhum confere
+    o Alt. Com um diálogo, um menu ou uma lista aberta, ou com o cofre bloqueado, nada disto age (a tecla segue para
+    quem a tem).
+  - **Nunca o histórico das rotas.** Nenhum botão do mouse e nenhuma tecla volta ou avança uma rota da janela: o
+    Chromium não navega com eles (o clique é seguro em `mousedown`, `mouseup` e `auxclick`, na fase de captura). Nas
+    Configurações, Voltar (o botão do mouse, Alt+←, Cmd+[) volta à área de trabalho, como o "Voltar" da página, e
+    Avançar não faz nada. No login, no desbloqueio e nas demais telas fora da área de trabalho os botões do mouse não
+    fazem nada. A janela do resultado (RN-ABAS-013) não é uma janela de abas: é uma página em branco sem histórico, e
+    os botões não fazem nada nela.
+  - O histórico zera quando o cofre bloqueia e quando a janela sai do cofre, e não é guardado no espaço de trabalho
+    (RN-ABAS-006): na próxima entrada ele começa vazio.
 - **RN-CONFIG-010.** Configurações › Resultados ganha "Onde o resultado das abas novas aparece", com "No painel" (o
   padrão), "Numa aba" e "Numa janela", no mesmo controle de escolha da densidade do navegador (RN-NAV-011), e a ajuda
   "Vale para as abas de consulta abertas daqui em diante. Cada aba guarda o lugar dela, que o botão 'Onde mostrar o
@@ -11744,7 +11848,7 @@ SELECT p.id, p.criado, p.valor
 
 - **RN-VAR-030.** A inferência.
   - Quando: ao abrir o "Executar com valores…" e a pergunta dos valores (RN-VAR-021), para as variáveis que viram
-    campos, e nunca ao digitar (o editor não consulta o banco, RN-CONFIG-004). O Prism lê o SQL do script com o leitor
+    campos, e nunca ao digitar (a inferência não roda no editor; o que o autocompletar busca, as colunas de `tabela.` e as chaves da junção, é outra coisa, RN-CONFIG-004 e RN-SQL-025). O Prism lê o SQL do script com o leitor
     da tela e o catálogo das tabelas que ele cita (as consultas de colunas e de chaves estrangeiras que a tela já faz,
     RN-TABELA-003 e RN-ARVORE-003, pela sessão da árvore da conexão e do banco do diálogo, no mesmo cache da Estrutura).
   - **O tipo de coluna** (`let c: pedido.cliente_id`, RN-VAR-004) diz a coluna, e a inferência não é feita para ela.

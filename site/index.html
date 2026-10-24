@@ -82,7 +82,7 @@
         </div>
         <div class="aviso">
           <span class="aviso-titulo">Early days</span>
-          <p>Prism is just starting out: the latest stable version is the recommended one, and betas may have defects. The packages are not signed: <a href="#unsigned">see how to open them</a>. The interface is currently in Brazilian Portuguese, so this guide gives the labels as they appear on screen, with a translation in parentheses.</p>
+          <p>Prism is just starting out: the latest stable version is the recommended one, and betas may have defects. The packages have no developer signature: <a href="#unsigned">see how to open them</a>. The interface is currently in Brazilian Portuguese, so this guide gives the labels as they appear on screen, with a translation in parentheses.</p>
         </div>
         <figure>
           <a href="img/editor-resultado.png"><img src="img/editor-resultado.png" width="1280" height="800" alt="Prism with the object browser of a PostgreSQL server on the left, a SQL command in the editor and, below, the result in a grid with the first 200 rows and the command time"></a>
@@ -155,7 +155,7 @@
           <li><strong>Linux, rpm:</strong> <code>sudo dnf install ./Prism-&lt;version&gt;-linux-x86_64.rpm</code></li>
           <li><strong>Linux, tar.gz:</strong> extract it and open <code>prism</code>, inside the folder.</li>
         </ul>
-        <p>On first launch the system warns that the package is not signed. <a href="#unsigned">See below</a> how to proceed.</p>
+        <p>On first launch the system warns about the package. <a href="#unsigned">See below</a> how to proceed.</p>
 
         <h3 id="checksum">Check the checksum</h3>
         <p>Every version ships a <code>SHA256SUMS</code> file, with the SHA-256 checksum of all packages, and the same checksums at the end of the release notes. Compute the SHA-256 of the file you downloaded and compare it with its line in <code>SHA256SUMS</code> <strong>and</strong> in the “Somas SHA-256” block (SHA-256 checksums) of the notes. If it doesn't match, delete the file and download it again.</p>
@@ -172,12 +172,12 @@
           </table>
         </div>
 
-        <h3 id="unsigned">No package is signed</h3>
-        <p>Signing the packages comes later. Until then, Windows and macOS warn you on first launch. The warning is expected: check the checksum and go ahead.</p>
+        <h3 id="unsigned">The packages have no developer signature</h3>
+        <p>The Windows and Linux packages are not signed, and the macOS ones carry only an ad-hoc signature (no Apple Developer ID, not notarized). Signing with a developer certificate comes later. Until then, Windows and macOS warn you on first launch. The warning is expected: check the checksum and go ahead.</p>
         <ul>
           <li><strong>Windows:</strong> SmartScreen shows “Windows protected your PC”. Click <strong>More info</strong> and then <strong>Run anyway</strong>.</li>
-          <li><strong>macOS:</strong> Gatekeeper blocks unsigned apps. With Prism in the Applications folder, right-click it, choose <strong>Open</strong> and confirm with <strong>Open</strong>. On macOS 15 (Sequoia) or newer that is not enough: try to open it once, go to <strong>System Settings › Privacy &amp; Security</strong> and click <strong>Open Anyway</strong>.</li>
-          <li><strong>macOS, from the Terminal:</strong> works on any version.
+          <li><strong>macOS, from the next stable release:</strong> with Prism in the Applications folder, open it once; macOS says it cannot verify the app. Then go to <strong>System Settings › Privacy &amp; Security</strong>, scroll to “Security” and click <strong>Open Anyway</strong> (macOS 15, Sequoia, or newer). Up to macOS 14, right-click the app, choose <strong>Open</strong> and confirm with <strong>Open</strong>. You only do this once, and no Terminal command is needed.</li>
+          <li><strong>macOS, versions up to 0.4.x:</strong> the system says the app is damaged. From the Terminal, on any macOS version:
             <pre><code>xattr -dr com.apple.quarantine /Applications/Prism.app</code></pre>
           </li>
           <li><strong>Linux:</strong> nothing depends on a signature. The AppImage and the tar.gz open without one, and the deb and the rpm install through the package manager.</li>
@@ -362,7 +362,7 @@
         <ul>
           <li><strong>Conta</strong> (Account). Change the password. Prism re-encrypts your vault with the new password.</li>
           <li><strong>Aparência</strong> (Appearance). The theme. Prism ships six: Prism Escuro (Dark), Prism Claro (Light), Monokai, Dracula, Nord and GitHub Claro (Light). The theme applies to the whole interface, and you can follow the system's light or dark mode.</li>
-          <li><strong>Editor SQL</strong> (SQL editor). The font, the font size, the tab size, “Autocompletar ao digitar” (Autocomplete as you type) and “Converter palavras-chave para maiúsculas” (Convert keywords to uppercase). Autocomplete uses the database's keywords and the names the tree has already loaded, and never queries the database.</li>
+          <li><strong>Editor SQL</strong> (SQL editor). The font, the font size, the tab size, “Autocompletar ao digitar” (Autocomplete as you type) and “Converter palavras-chave para maiúsculas” (Convert keywords to uppercase). Autocomplete uses the database's keywords and the names the tree has already loaded; with the connection open, it also fetches the columns of a table you start typing and the foreign keys that complete a JOIN.</li>
           <li><strong>Resultados</strong> (Results). The null value text (1 to 12 characters) and “Buscar mais linhas ao rolar até o fim da grade”.</li>
           <li><strong>Segurança</strong> (Security). “Bloquear o Prism após” (Lock Prism after) a number of minutes of inactivity. It is on by default, at 10 minutes, and accepts 1 to 240. When locked, the vault closes, and only your password reopens it.</li>
           <li><strong>Atualizações</strong> (Updates). Below.</li>
@@ -425,7 +425,7 @@
             </thead>
             <tbody>
               <tr><td>I forgot my Prism password.</td><td>There is no recovery. The vault does not open. Create another user and add the connections again.</td></tr>
-              <tr><td>Windows or macOS blocks the launch.</td><td>The package is not signed. See <a href="#unsigned">how to open it</a>.</td></tr>
+              <tr><td>Windows or macOS blocks the launch.</td><td>The package has no developer signature. See <a href="#unsigned">how to open it</a>.</td></tr>
               <tr><td>“Driver não instalado” (Driver not installed) on Db2 or Informix.</td><td>Download the driver in Configurações › Drivers. See <a href="#drivers">Db2 and Informix</a>.</td></tr>
               <tr><td>On Linux, the IBM driver does not load.</td><td>It needs the <code>libxml2</code> library (file <code>libxml2.so.2</code>). Install it with the package manager.</td></tr>
               <tr><td>Informix does not connect.</td><td>Use the server's DRDA port (Prism suggests 9089), not the native protocol's.</td></tr>
@@ -457,7 +457,7 @@
           <li>Schema and database tabs.</li>
           <li>Read-only mode and confirmation before an irreversible command.</li>
           <li>A custom window bar and zoom of the whole program.</li>
-          <li>Package signing.</li>
+          <li>Developer ID signing and notarization of the packages.</li>
         </ul>
       </section>
 

@@ -1,8 +1,9 @@
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AlertIcon, CheckIcon, CloseIcon } from "@/components/ui";
 import { cn } from "@/lib/utils/cn";
 
+import { selectEditorText } from "../_lib/cell-editing";
 import { recordsCopy } from "../_lib/records.copy";
 
 const copy = recordsCopy.edit;
@@ -19,6 +20,8 @@ type CellEditorProps = {
   hint?: string | null;
   /** Coluna numérica: o texto fica à direita, como na grade. */
   number: boolean;
+  /** RN-EDIT-001: o campo abriu pelo primeiro caractere digitado (e então o cursor fica depois dele); senão abre com o texto todo selecionado. Vale só ao abrir. */
+  typed?: boolean;
   onDraft: (text: string) => void;
   /** Confirmar; com Tab (`1`) e Shift+Tab (`-1`), passar à próxima célula editável. */
   onCommit: (move?: 1 | -1) => void;
@@ -29,11 +32,17 @@ type CellEditorProps = {
  * O campo de edição dentro da célula (RN-EDIT-001), como no canvas: o texto, "Confirmar edição (Enter)" e "Cancelar edição (Esc)". Enter
  * confirma (Shift+Enter quebra a linha, para o texto que tem quebra), Esc desfaz, Tab e Shift+Tab confirmam e passam à próxima célula
  * editável, e sair do campo confirma. É uma área de texto de uma linha, e não um `input`: o `input` tira as quebras de linha do valor.
+ * Ao abrir, o texto vem todo selecionado e à mostra desde o começo, e começar a digitar põe o caractere no lugar do valor (`selectEditorText`).
  * As teclas não sobem para a grade nem para a faixa das abas (o Ctrl+W dentro do campo não fecha a aba). Os botões não tiram o foco do
  * campo ao serem apertados (`mouseDown`), senão o clique em "Cancelar" chegaria depois de o campo ter confirmado ao perder o foco.
  */
-export function CellEditor({ label, draft, hint = null, number, onDraft, onCommit, onCancel }: CellEditorProps) {
+export function CellEditor({ label, draft, hint = null, number, typed = false, onDraft, onCommit, onCancel }: CellEditorProps) {
   const hintId = useId();
+  // RN-EDIT-001: a seleção é feita uma vez, quando o campo entra na tela (a referência não muda de função, então o React só a chama ao montar e ao desmontar).
+  const opened = useRef(typed);
+  const place = useCallback((element: HTMLTextAreaElement | null) => {
+    if (element !== null) selectEditorText(element, opened.current);
+  }, []);
   const hintRef = useRef<HTMLParagraphElement>(null);
   // A dica vai abaixo do campo; quando o fim dela passaria do fim da grade (a célula na última linha à vista), vai acima. A medida é a da caixa que rola.
   const [above, setAbove] = useState(false);
@@ -67,6 +76,7 @@ export function CellEditor({ label, draft, hint = null, number, onDraft, onCommi
       <textarea
         // O campo nasce com o foco: é o que a pessoa pediu ao abrir a edição.
         autoFocus
+        ref={place}
         aria-label={label}
         aria-describedby={hint === null ? undefined : hintId}
         value={draft}

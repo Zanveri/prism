@@ -60,3 +60,22 @@ export const foreignKeySchema = z.object({ name: z.string(), columns: z.array(z.
 export type ForeignKey = z.infer<typeof foreignKeySchema>;
 
 export const foreignKeysSchema = z.array(foreignKeySchema);
+
+/**
+ * RN-CAT-004: uma chave estrangeira de outra tabela (ou da própria) que aponta para a tabela pedida: `columns` são as colunas da tabela de origem
+ * (`referencingSchema.referencingTable`) e `referencedColumns`, as da tabela pedida, na ordem da chave. A API devolve também as duas regras (`onDelete`,
+ * `onUpdate`), que a tela não usa.
+ */
+export const referencingForeignKeySchema = z.object({
+  name: z.string(),
+  referencingSchema: z.string(),
+  referencingTable: z.string(),
+  columns: z.array(z.string()),
+  referencedColumns: z.array(z.string()),
+  onDelete: z.string().nullish(),
+  onUpdate: z.string().nullish(),
+});
+
+export type ReferencingForeignKey = z.infer<typeof referencingForeignKeySchema>;
+
+export const referencingForeignKeysSchema = z.array(referencingForeignKeySchema);

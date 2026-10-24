@@ -971,6 +971,32 @@ nada de `src/`), e quem as mantém juntas é o TypeScript: `readTransfer` devolv
   `window.prism.windows.id`. Para provar que nada foi executado de novo, conte as linhas `ExecuteAsync` do log da API (`<dados>/logs/`); o
   "Carregar mais" aparece como `FetchNextAsync` na MESMA sessão.
 
+## Voltar e Avançar entre as abas (RN-ABAS-018)
+
+Pedido do dono, como no DBeaver: o botão "voltar" do mouse levava às Configurações, porque o Chromium andava no histórico das ROTAS da janela (`createHashRouter`) e a
+entrada anterior era a delas. A janela de abas passou a ter o histórico das ABAS, e nenhum botão nem tecla anda pelo das rotas.
+
+- **A conta é pura** (`_lib/tab-history.ts`, com teste de tabela): `recordTab` (uma entrada por mudança de aba ativa, a mesma duas vezes seguidas é uma só, no máximo 50, a
+  ativação depois de voltar descarta o que está à frente), `pruneHistory` (tira a aba que fechou ou foi para outra janela e junta as iguais que ficam lado a lado) e
+  `stepHistory` (Voltar e Avançar, depois de podar; sem entrada para ir, `tabId` nulo). O histórico é só memória, zera no bloqueio, e não vai ao espaço de trabalho.
+  `mouseHistoryAction` (botões 3 e 4 do `MouseEvent`) e `keyHistoryAction` (Alt+←/→ no Windows e no Linux, Cmd+[ e Cmd+] no macOS, e onde cada um vale conforme o foco) estão no
+  mesmo arquivo.
+- **O controlador** (`_lib/tab-history-controller.ts`, sem React): guarda o histórico e decide o que cada botão e tecla faz em cada tela (`HistoryScreen`): na área de trabalho,
+  ativa a aba; nas Configurações, o Voltar volta à área de trabalho (`navigate`, como o "Voltar" da página) e o Avançar não faz nada; nas outras telas, nada. Com um diálogo, menu ou lista
+  aberta, ou o cofre bloqueado, nada age (no mouse, vale o que havia ao APERTAR o botão: o menu e a lista fecham no `pointerdown` de qualquer botão, e ao soltar já não estariam no DOM;
+  `onPointerDown` guarda isso). `focusKindOf` separa o editor de SQL (`data-sql-editor`, posto nos atributos do conteúdo do CodeMirror), os campos de texto
+  (`input`, `textarea`, o que é editável, também o filtro) e o resto.
+- **O gancho** (`_lib/use-tab-history.ts`, montado por `TabHistory`, em `_components/tab-history.tsx`, ao lado do `SettingsShortcut` em `routes.tsx`): observa `activeTabId` e as abas
+  da janela do provedor (poda e registra, nessa ordem), zera quando a época do bloqueio muda, ativa a aba por `setActiveTab` (o caminho do clique na faixa) e põe o foco no
+  elemento da aba depois de ativa (`takeFocus`, como o clique deixa). **Os ouvintes (`keydown`, `pointerdown` e `mouseup`) são da fase de captura da `window`**: as setas são de muitos componentes (a faixa de abas, a
+  grade, as árvores, o CodeMirror), e nenhum confere o Alt; na bolha a tecla já teria sido gasta por quem tem o foco (sob o Xvfb, o Alt+→ com o foco numa aba andava para a aba do lado
+  e o histórico não via a tecla). A tecla tratada leva `preventDefault` e `stopPropagation`, então o Alt+← do CodeMirror não chega a valer; por isso não há tecla no mapa do editor.
+- **O Chromium não pode navegar** (`app/_lib/history-buttons.ts`, ligado por `HistoryButtonsGuard`, em `app.tsx` ao lado do roteador, valendo no login, no desbloqueio e em toda tela): `mousedown`, `mouseup` e `auxclick` dos botões 3 e 4 levam
+  `preventDefault` na captura. O gancho age no `mouseup`.
+- **Como conferir sob o Xvfb**: `xdotool click 8` é o "voltar" e `click 9` o "avançar", com o ponteiro sobre a janela (o `mousemove` do `xdotool` não andou neste Xvfb: `XWarpPointer`
+  com `ctypes`); `xdotool key alt+Left` e `alt+Right` são as teclas. As abas das sondas foram trocadas pelo `click()` do protocolo de depuração (o clique esquerdo de verdade do `xdotool` não ativou a aba nas tentativas), e para ver o defeito de antes basta abrir Configurações, fechá-las pelo "Voltar" da página e apertar o "voltar" do mouse: a rota ia para `#/settings`, e agora
+  nada muda na rota. Não conferido: o Windows (o `app-command` `browser-backward` que o Chromium pode receber do sistema; o processo principal não trata nada) e o macOS.
+
 ## Abas que voltam na próxima entrada (RN-ABAS-006)
 
 Seção 24 da especificação (issue 2 do repositório público). As abas de TODAS as janelas vão para o cofre do usuário pela API (`PUT api/user/workspace`, ver o
@@ -1695,8 +1721,14 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
     abaixo). A grade rola até a célula ativa quando ela muda (a linha nova entra depois das lidas). O campo (`cell-editor.tsx`, como
     no canvas) é uma área de texto de uma linha (o `input` tiraria as quebras de linha do valor): Enter confirma, Shift+Enter quebra a linha, Esc
     desfaz, Tab e Shift+Tab confirmam e passam à próxima editável, sair do campo confirma, e as teclas não sobem (o Ctrl+W no campo não fecha a aba).
+    **Ao abrir** (RN-EDIT-001), o texto vem todo selecionado e à mostra desde o começo (F2, Enter, duplo clique, "Editar célula", também a edição de várias
+    células e o valor com quebra de linha; o Tab, na célula seguinte): `selectEditorText` (`cell-editing.ts`, pura sobre o que o campo expõe) faz
+    `setSelectionRange(0, fim, "backward")`, com o cursor no começo, e zera `scrollLeft` e `scrollTop` (o Chromium rola até o fim da seleção). Aberto pelo primeiro
+    caractere digitado, o cursor fica depois dele (`typed`, que a grade tira de `touched` no momento de abrir). Quem chama é a referência (callback) da área de
+    texto, estável (`useCallback` sem dependências), então roda só ao entrar na tela e não a cada tecla; a `key` do `CellEditor` é a célula, para o campo do Tab
+    ser outro. Sem DOM nos testes: o teste chama a referência com um campo falso. Conferido só nos testes, não numa janela.
   - **O que a grade desenha**: a célula pendente com o valor lido riscado (11 px, `text-muted`) ao lado do novo, em `bg-accent/20`; a linha nova
-    com `+` no número; a excluída riscada; a que falhou no Salvar em `bg-danger/15`; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
+    com `+` no número; a excluída riscada e vermelha (texto e número `text-danger line-through`, fundo `bg-danger/10`, 12% se também falhou, com o tom mantido no passar do mouse; `rowMarkClasses`, em `grid-editing.ts`, decide as classes, e `globals.test.ts` confere o contraste do vermelho sobre o tom em cada tema); a que falhou no Salvar em `bg-danger/15` e o número em negrito vermelho; a coluna que não se edita diz o motivo na dica do cabeçalho (na aba de consulta, também a marca "somente leitura" depois do tipo; ver "Num resultado de junção").
   - **A faixa** (`_components/edits-banner.tsx`), sobre a grade: "N alterações não salvas" com "Ver SQL", "Descartar" e "Salvar"; o aviso do banco sem log; o
     erro do último Salvar (`role="alert"`), que fica até o próximo; e o motivo de só leitura, à vista. Salvar que gravou tudo avisa "N alterações
     salvas." e chama `onSaved`: os Registros leem de novo. Sem o alvo (as pendências lembradas voltam sem ele), o Salvar e o "Ver SQL" o perguntam
@@ -1782,8 +1814,12 @@ Seção 18 (RN-TABELA-001 a 004 e RN-PAINEL-001).
       papel do Alt e o Cmd o do Ctrl: Option+Insert, Cmd+Option+Insert, Control+Option+Insert (o do DBeaver) e Option+Delete, que é também o Backspace (a
       tecla "delete" do Mac). O menu da célula e as dicas da barra escrevem os mesmos (`editShortcuts`, com o nome das teclas da web no
       `aria-keyshortcuts`). Ctrl+Alt+Insert e Alt+Delete que a barra mostraria desabilitados (sem célula ativa, a aba ocupada…) dizem o motivo dela na faixa
-      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) exclui as linhas inteiras escolhidas, e só elas
-      (`choseWholeRows`): com um retângulo, também o que cobre todas as colunas, ou só com a célula ativa, não faz nada (RN-EDIT-015).
+      (`rowAction`). O Delete sozinho (`deletesRows`; no macOS também a "delete", o `Backspace`) marca na hora, sem pergunta, as linhas das células escolhidas
+      (RN-EDIT-015): `deleteKeyRows` (as `selectedRows`, as do Alt+Delete; nenhuma com colunas inteiras ou sem seleção, e então a tecla segue sem `preventDefault`)
+      → `onDeleteRows` → `deleteKey`, que confere o mesmo motivo da barra que o Alt+Delete dá (a faixa) e chama `removeRows` com essas linhas, o mesmo do
+      Alt+Delete e do menu. Não há diálogo, estado de pergunta nem texto de pergunta: o dono não quis (2026-10-24); a confirmação é a de sempre, a exclusão é
+      uma pendência e nada sai do banco antes do "Salvar" (o "Desfazer alteração" e o "Descartar" valem). As linhas ficam pintadas pela marca de exclusão que
+      já existe.
     - **Duplicar linha(s)** (`duplicateRows`, no menu, na barra e no Ctrl+Alt+Insert): onde "Adicionar linha" vale (`newRowAccess`), até 1.000 linhas de uma
       vez (`duplicateLimit`), uma linha nova no fim da grade para cada linha da seleção, na ordem da grade (`addRow` com as colunas copiadas; a busca dos
       valores completos é uma só, para todas; o que não vem não duplica nenhuma, com a coluna e o número da linha na frase do plural; depois, a seleção é das
@@ -1881,7 +1917,7 @@ desenha e avisa.
   - **As perguntas**: `activeCell`, `selectedRows` (as linhas da seleção, as que têm uma célula escolhida, pela posição, em ordem: é sobre elas que agem o
     copiar, o "Gerar SQL", "Duplicar/Excluir linhas" e "Copiar número de linha(s)"), `selectedColumns`, `selectedCells` (um gerador, linha a linha),
     `rowSpan` e `columnSpan` (o que a grade desenha em cada linha à vista e no cabeçalho), `isSelected`, `selectionSize` (`{ rows, cells, whole }`, a
-    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `choseWholeRows` (o Delete).
+    contagem da barra), `hasSeveralCells` (a pausa da atualização automática e o "Colar" de uma célula só; o "Definir como nulo" vale para as escolhidas da coluna da ativa, seção 38) e `deleteKeyRows` (as linhas do Delete sozinho, RN-EDIT-015).
   - **O recorte** (`sliceOf(selection, layout, source, scope)`, `scope` `cells` (o padrão), `rows` ou `loaded`, os três do "O que copiar" da RN-GRADE-003):
     um `SelectionSlice`, que é o `GridSlice` dos formatos (`grid-export`) com `positions` e `columnIndexes` (de volta à grade), `newRows` (as linhas novas
     ainda não salvas, pelo índice no recorte: não têm número na grade, e o "Copiar como SQL" as deixa de fora) e `generated` (as células "gerado pelo
@@ -1894,7 +1930,7 @@ desenha e avisa.
 - **O que a grade recebe** (`GridEditing`): `selection` e `layout` (para desenhar), `onSelection(change)` (cada gesto, pela função pura), `onSelecting(on)`
   (o arraste e a tecla com Shift presa: a contagem só muda quando a seleção para), `status` (a contagem, "3 linhas escolhidas" ou "12 células escolhidas",
   nula com uma célula ou nenhuma; a `ResultPanel` a põe ao lado do resumo, num `role="status"` que fica na página também vazio), `onCopy()` (a seleção),
-  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho) e `onRowMenu(row, point)` (o botão direito no
+  `onCopyAdvanced?` (Ctrl+Shift+C, só com a frente do "Copiar avançado"), `onDeleteRows()` (o Delete sozinho, que marca as linhas na hora) e `onRowMenu(row, point)` (o botão direito no
   número da linha). `onActivate(cell)` continua sendo o clique (`select`), e `onMenu` escolhe antes a célula de fora da seleção.
 - **A grade** (`result-grid.tsx`): `aria-multiselectable`, `aria-selected` em cada célula desenhada (escolhida, e não só a ativa), o fundo de escolha
   (`bg-selected`, o do item escolhido do navegador; a pendente escolhida, `bg-accent/35`), o número da linha (`data-rowheader`, que o clique e o botão direito
@@ -1907,7 +1943,7 @@ desenha e avisa.
   `movementOf` (`grid-cursor.ts`) diz se a tecla é de movimento, se estende e se é vertical; o PageUp e o PageDown andam `pageRows` linhas e, com Ctrl, Alt ou
   Cmd, não são da grade (o Ctrl+Shift+PageUp/PageDown move a aba, RN-ABAS-001); `selectsAll`, `selectsRows` (Shift+Espaço, antes do "começar a digitar"),
   `copiesAdvanced` e `deletesRows` estão em `grid-editing.ts`; o Esc é da grade quando a seleção não é só a célula ativa (`escapeCollapses`, pela forma, e não
-  pela contagem: a linha inteira de uma coluna só é uma célula, e o Delete a excluiria), e com a célula ativa só segue para quem está acima. O cabeçalho e o
+  pela contagem: a linha inteira de uma coluna só é uma célula), e com a célula ativa só segue para quem está acima. O cabeçalho e o
   número da linha, presos, são o `scrollPaddingStart` dos dois virtualizadores: o `scrollToIndex` da célula ativa (Ctrl+Home, PageUp, Home) a deixa logo
   depois deles, e não por baixo. Nada disto foi conferido numa janela:
   o vitest não tem DOM, e o arraste, a rolagem sozinha e o foco são para conferir sob Xvfb.
@@ -3262,8 +3298,9 @@ fechar não apaga as abas.
   foco do campo (`mousedown` cancelado).
 - **Autocompletar** (RN-CONFIG-004; `_lib/sql-completion.ts`; a única dependência nova foi o `@codemirror/autocomplete`, em 6.20.3 exato, a
   versão que a trava já resolvia): as palavras-chave do dialeto da aba e os **nomes que a árvore já carregou** daquela conexão (esquemas,
-  tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: o que a árvore
-  não abriu não existe para o autocompletar, e nenhuma chamada à API sai por causa dele. Depois de `esquema.` saem as tabelas; depois de
+  tabelas, visões e colunas). Os nomes vêm do cache (`cachedLevels`: `getQueriesData(["tree", conexão])`), que **nunca busca**: `sql-completion.ts` só
+  lê; o que a árvore não abriu não existe para ele, e as duas buscas que o autocompletar faz, as colunas de `tabela.` e as chaves estrangeiras da junção
+  (`sql-catalog-completion.ts`, logo abaixo), são de outro módulo. Depois de `esquema.` saem as tabelas; depois de
   `tabela.` ou de um apelido, as colunas com o tipo; as tabelas de qualquer esquema carregado aparecem também sem o esquema (o `public` do
   PostgreSQL sem ele, os outros com `esquema.`). A lista abre sem nada escolhido (`selectOnOpen: false`: Enter e Tab seguem como eram),
   filtra por prefixo, Esc a fecha e Ctrl+Espaço a abre. **Depois de um ponto não entra palavra-chave nenhuma** (`keywordsSource`): a fonte de
@@ -3277,6 +3314,39 @@ fechar não apaga as abas.
   PostgreSQL, as "reservadas" e as "reservadas, podem ser função ou tipo" (`verbose`, `freeze`, `isnull`…): o teste as confere contra o que um
   PostgreSQL 18 devolve em `pg_get_keywords()`, categorias R e T; ao subir de versão do PostgreSQL, rode a consulta de novo. Db2 e Informix usam
   as palavras-chave do SQL padrão.
+- **As colunas de `nome.` e a junção** (RN-CONFIG-004 e RN-SQL-025; pedido do dono em 2026-10-24): as duas únicas coisas que o autocompletar busca no banco,
+  em três módulos puros e uma fonte fina. `_lib/sql-references.ts` lê o comando do cursor (`statementAt` + `sqlTokens`, o leitor do projeto, então texto,
+  comentário e `$tag$` nunca são nome): `analyzeAt` devolve as tabelas e os apelidos do `FROM`/`JOIN`/`UPDATE`/`INTO` **do nível do cursor** (a subconsulta
+  `SELECT`/`WITH` mais de dentro em que ele está, ou o comando; os grupos entre parênteses viram um item e o que está dentro não conta; a chamada de função e a
+  subconsulta da lista não são tabela, mas o apelido delas entra em `used`; `OUTER` do Informix vem antes da tabela e o `USING` só traz tabela em `DELETE`/`MERGE`), os níveis de fora
+  (`outerReferences`, um grupo por subconsulta que contém o cursor, do mais de dentro ao comando: só `resolveQualifier` os usa, para o `p.` de uma subconsulta correlacionada
+  achar o apelido de fora; a junção e `used` ficam no nível do cursor), o que o cursor pede (`member`, `join`, `on` ou `none`) e `usesAliases`. A palavra
+  do cursor é tirada do texto antes de ler (a aspa aberta, e a que a tela fechou, também), e o `;` antes do cursor, fora de parênteses, faz o comando ser outro.
+  `resolveQualifier`/`resolveReference` acham a tabela pelo catálogo da árvore (`linkCatalog` e o esquema padrão de `defaultSchemasOf`, como o link da
+  RN-LINK-001; o apelido vale mais que o nome do catálogo). `_lib/sql-join.ts` monta as sugestões a partir de `TableLink` (`linksOf`: a chave vista de cada
+  lado, `own` e `other` na ordem da chave): `joinSuggestions` (depois de `JOIN`), `onSuggestions` (depois de `ON`), `aliasFor` (as iniciais das partes do nome
+  por `_`, só letras, 2, 3… quando em uso ou reservada) e `writtenTable` (`sqlName`, com o esquema fora da lista padrão; no Informix, sempre com ele). O apelido
+  gerado vai cru e em minúsculas (nunca por `sqlName`, que no Db2 o poria entre aspas); o já escrito no comando vai como está. A chave que liga uma tabela a si
+  mesma sai nos dois sentidos, com apelido novo. **O escopo da junção**: `joinScope` (em `sql-references.ts`; `Reference.start` é onde o nome da tabela começa) dá à fonte só as tabelas escritas ANTES
+  do cursor, sem o alvo do `INSERT INTO` (`via: "into"`); depois de `ON`, só as que vêm antes da tabela do `JOIN`. As escritas adiante continuam em `used` (o apelido novo
+  não as repete), mas não ligam nada nem pedem as chaves delas. `_lib/sql-catalog-completion.ts` (`catalogCompletion`) é a fonte: `sources` (colunas e junção) e `owns`, que
+  cala a fonte de nomes do `lang-sql` onde as colunas são das novas (`unlessOwned` em `sqlCompletion`), para nenhuma coluna sair duas vezes; as colunas do
+  cache saem de `columnOptions` (a mesma montagem do `completionNamespace`) e as aspas abertas voltam por `requoted`. As fontes usam `unlessQuiet` das
+  variáveis como as outras. **A busca**: só com a sessão da árvore da conexão e do banco já aberta (`getQueryData(databaseSessionKey(...))`; nada abre nem
+  reabre sessão), uma vez por lista (`fetchQuery` divide a requisição em andamento), com `meta: { silent: true }` (sem aviso). As colunas vão pela
+  `columnsQuery` (a chave `table-structure` da Estrutura, o dado cru) e a lista pronta é posta também na chave `tree` do nível `columns` (`columnNodes`, o mesmo mapa da
+  árvore); a que uma das duas já tem em dia vale e vai para a outra (`cachedColumns`), então o navegador e a Estrutura não perguntam de novo. As chaves vão por
+  `foreignKeysQuery` e `referencedByQuery` (`table-structure.service.ts`, a rota `referenced-by` da RN-CAT-004, `referencingForeignKeySchema`), na mesma chave da
+  Estrutura. **O "Atualizar"**: o `invalidateQueries` só busca de novo a consulta que alguém observa, e a lista que o autocompletar buscou sozinho não tem
+  observador; por isso `listOf` olha `isInvalidated` (`peek`), busca de novo a invalidada (o `fetchQuery` busca mesmo com `staleTime` infinito) e, se a busca falha
+  ou não há sessão, responde a velha (e, na falha, devolve a consulta ao estado de antes, velha e sem o erro, com `invalidateQueries({ refetchType: "none" })`).
+  O "Atualizar" do navegador também invalida a família da Estrutura sob o nó (`invalidateStructure`/`structureScopes`, `table-structure.service.ts`), porque o
+  `treePrefixes` só conhece a `tree`. A lista que falha vira nada, entra nas marcas de `catalog-fetch-failures.ts` (por conexão e sessão, para não repetir a cada tecla;
+  o "Atualizar" do navegador e o da Estrutura as esquecem por `forgetFailedLists`) e sai do cache se ninguém a observa e nunca veio, para a árvore não mostrar um erro que a pessoa não
+  pediu. O resultado é síncrono quando tudo está no cache (a lista não pisca) e uma promessa quando falta algo, descartada se `context.aborted`. Sem conexão
+  na aba ou com o texto de mais de 200.000 caracteres, nada. A conferência rápida `mayAsk` (um ponto, ou `JOIN`/`ON` e o espaço, antes do cursor) poupa a
+  leitura do comando a cada tecla. O editor cria um `catalogCompletion` por editor e lê a conexão, o banco e o usuário na hora (`useEffectEvent`), como o
+  `readLevels`; a `boost` das junções cai na ordem (a lista abre com elas no topo).
 - **Converter palavras-chave para maiúsculas** (RN-CONFIG-004; `_lib/sql-keyword-case.ts`): converte a palavra que a pessoa acabou de digitar, na
   MESMA transação da tecla (um Ctrl+Z desfaz a palavra e o caractere), só numa inserção do teclado cujo primeiro caractere termina a palavra
   (espaço, vírgula, parêntese, ponto e vírgula, quebra de linha); colar, aceitar uma sugestão e desfazer não convertem. Só o que está na lista
@@ -3696,8 +3766,13 @@ passa endereço, caminho nem nome de arquivo ao processo principal.
   `Prism-<versão>-<sistema>-<arquitetura>.<extensão>` (o `${arch}` do electron-builder vira `x64`, `x86_64` ou `amd64`, conforme
   o formato). **O macOS sai uma arquitetura por vez**, porque há uma API só em `resources/api`: `build:api -- osx-arm64` e
   `dist -- mac arm64`, depois `build:api -- osx-x64` e `dist -- mac x64` (sem arquitetura, a da máquina). Os alvos de macOS no
-  `electron-builder.yml` não declaram `arch` de propósito: com `arch` lá, o `--arm64` não restringe e as duas saem de uma vez. Sem assinatura
-  e sem publicação: nenhum token, certificado ou variável de segredo. Windows e Linux são só x64.
+  `electron-builder.yml` não declaram `arch` de propósito: com `arch` lá, o `--arm64` não restringe e as duas saem de uma vez. Sem publicação e
+  sem certificado: nenhum token ou variável de segredo. Windows e Linux saem sem assinatura; o macOS sai com **assinatura ad hoc**
+  (issue #33): `identity: "-"`, `hardenedRuntime: false` e `notarize: false` no `electron-builder.yml`, que não pedem certificado nem
+  keychain (o comentário do arquivo diz o que cada linha faz e que não foi aberto num Mac de verdade). O `dist` tira as `CSC_*` do
+  ambiente no macOS (`builderEnvironment`, em `dist-plan.mjs`), para um certificado esquecido ali não mudar a assinatura. A atualização
+  no macOS não depende da assinatura: o app só baixa o `dmg`, confere as somas e o deixa na pasta de downloads (RN-ATUALIZA-006), sem
+  verificar assinatura nem mexer em quarentena. Windows e Linux são só x64.
 - **`PRISM_HOMEPAGE`** (só no `dist -- linux`): o `.deb` e o `.rpm` exigem a URL pública do projeto ("Please specify project
   homepage"), que não está no repositório; a pipeline a preenche. O `dist` valida a variável (`parseHomepage`: `https://` bem
   formada, sem usuário nem senha, senão falha dizendo só que é inválida) e a passa ao electron-builder em

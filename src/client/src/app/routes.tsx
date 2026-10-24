@@ -1,6 +1,7 @@
 import { Navigate, Outlet, type RouteObject } from "react-router";
 
 import { RemountOnLock } from "@/app/_components/remount-on-lock";
+import { TabHistory } from "@/app/_components/tab-history";
 import { VaultGuard } from "@/app/_components/vault-guard";
 import { WorkbenchSlot } from "@/app/_components/workbench-slot";
 import { LegacyConnectionsRedirect } from "@/app/connections/page";
@@ -51,6 +52,7 @@ export const routes: RouteObject[] = [
             <ThemeSync />
             <FontSync />
             <SettingsShortcut />
+            <TabHistory />
             <ConnectionChecks />
             <WorkbenchSlot>
               <WorkbenchPage />

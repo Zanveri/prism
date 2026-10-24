@@ -34,6 +34,7 @@ import { rememberedTreeScroll } from "../_lib/navigator-layout";
 import { importArrived, importRevealOf, revealOf } from "../_lib/navigator-reveal";
 import { cachedTree, loadedLevels, searchTree, type MatchRange } from "../_lib/navigator-search";
 import { refreshesSelection, selectionConnectionId, targetFolderId, toolbarFor, type ToolbarActionId } from "../_lib/navigator-toolbar";
+import { invalidateStructure } from "../_lib/table-structure.service";
 import { refreshKey } from "../_lib/grid-editing";
 import { importedReveal, type TransferRequest } from "../_lib/transfer-requests";
 import { measureRendered, observeRenderedOffset, remeasureRendered } from "../_lib/row-measure";
@@ -425,6 +426,8 @@ export function Navigator({ onNewConnection, onEditConnection, onTransfer, onRev
     const lost = lostSessionsUnder(prefixes);
     for (const database of lost) void reopen(path.connectionId, database);
     for (const queryKey of prefixes) void queryClient.invalidateQueries({ queryKey, predicate: (query) => !lost.has(databaseOfKey(query.queryKey)) });
+    // As colunas e as chaves que o autocompletar buscou sozinho estão na família da Estrutura (RN-CONFIG-004): ninguém as mostra, então só a invalidação as faz velhas.
+    invalidateStructure(queryClient, path, lost);
   }
 
   /** Na tela filtrada, abrir e fechar é só do que se vê: recolher um ancestral não mexe nos nós abertos da árvore (`expanded`). */

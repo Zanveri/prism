@@ -1,6 +1,6 @@
 # Empacotamento do app: `pnpm dist -- <plataforma>` (`win`, `linux` ou `mac`) gera os pacotes da RN-ABERTO-006, e
-# `pnpm dist:dir` só a pasta sem instalador (`--dir`), para conferir. Sem assinatura de código e sem publicação
-# (`--publish never`): nenhum token, certificado ou segredo entra aqui.
+# `pnpm dist:dir` só a pasta sem instalador (`--dir`), para conferir. Sem publicação (`--publish never`) e sem certificado:
+# nenhum token, certificado ou segredo entra aqui. Só o macOS leva assinatura, a ad hoc (veja o bloco `mac`), que não usa nenhum.
 appId: com.zanveri.prism
 productName: Prism
 # O mesmo padrão em todos os alvos: `Prism-<versão>-<sistema>-<arquitetura>.<extensão>`, sem espaço no nome.
@@ -116,13 +116,38 @@ rpm:
 
 # macOS: `dmg` e `zip`, para Apple Silicon e Intel. Sem `arch` nos alvos de propósito: a arquitetura vem do `--arm64` ou do
 # `--x64` que o `dist.mjs` passa (um por vez, porque há uma API só em `resources/api`); com `arch` aqui o electron-builder
-# gera as duas de uma vez, e uma levaria a API da arquitetura errada. Sem assinatura nem notarização (`identity: null`).
-# NÃO VERIFICADO: nenhum pacote de macOS foi aberto. Um app arm64 sem assinatura pode ser recusado pelo macOS como danificado; a
-# decisão sobre assinatura ad-hoc fica para quando houver um Mac. O ícone é o do pacote.
+# gera as duas de uma vez, e uma levaria a API da arquitetura errada. O ícone é o do pacote.
+#
+# ASSINATURA AD HOC (issue #33), sem conta de desenvolvedor da Apple, sem Developer ID e sem notarização. Antes era `identity: null`
+# (nada assinado), e o macOS dá como "danificado" um app baixado da internet sem assinatura válida, o que só o `sudo xattr -cr` resolvia.
+# O que cada linha faz, conferido no `app-builder-lib` 26.15 e no `@electron/osx-sign` 1.3 instalados:
+#   `identity: "-"` é o pedido explícito de assinatura ad hoc (sem ele, o electron-builder procura um certificado e, não achando,
+#     pula a assinatura). O `-` vira `codesign --sign -`: não lê certificado nem chave, e no runner sem certificado a
+#     busca na keychain (`security find-identity`) volta vazia e cai na identidade ad hoc. O `@electron/osx-sign` assina todo
+#     arquivo binário de dentro do app, do mais fundo para o mais raso (a API .NET e as bibliotecas dela em `Resources/api`,
+#     o Electron Framework, os helpers), e depois o `.app`, e confere o conjunto com `codesign --verify --deep --strict`.
+#   `hardenedRuntime: false`: o padrão é ligado. Sem `entitlements` neste arquivo, o electron-builder aplica ao app e a cada arquivo de
+#     dentro o modelo dele (`templates/entitlements.mac.plist`), que já traz `disable-library-validation` (e os direitos de JIT e de
+#     memória executável do V8 e do .NET), então a validação de bibliotecas não recusaria o Electron Framework nem com o Hardened
+#     Runtime ligado. Ele fica desligado porque, sem notarização, nada precisa dele. Um arquivo de entitlements próprio teria de manter
+#     `disable-library-validation` enquanto a assinatura for ad hoc (o `app-builder-lib` avisa quando falta). Conferido só na leitura
+#     da fonte: não foi visto num Mac.
+#   `notarize: false`: a notarização nunca roda aqui, nem se `APPLE_ID` e companhia estiverem no ambiente (ela exige Developer ID).
+# O `dist.mjs` tira `CSC_*` do ambiente do electron-builder no macOS: com `CSC_LINK` ele importaria um certificado numa keychain
+# temporária, e com um certificado na keychain cujo nome tivesse `-` ele o escolheria no lugar do ad hoc. A assinatura é pulada
+# pelo electron-builder só em pull request (`GITHUB_BASE_REF`); a pipeline só empacota em `push`, então não é o caso.
+# O QUE ISSO DÁ: o macOS deixa de dizer "danificado". Na primeira abertura diz que não pode verificar o app, e a pessoa o abre uma vez,
+# por Ajustes do Sistema › Privacidade e Segurança › "Abrir Mesmo Assim" (macOS 15 em diante), ou pelo clique com o botão direito
+# › Abrir (até o macOS 14). Não é identidade de desenvolvedor: o Gatekeeper continua avisando, e só a notarização tira o aviso.
+# NÃO VERIFICADO: não há Mac aqui e o pacote de macOS só sai na estável, então nenhum pacote assinado desta forma foi aberto
+# num Mac de verdade (nem o `codesign --verify --deep --strict` do fim do `@electron/osx-sign` foi visto passar com a API .NET
+# dentro). A primeira estável com este arquivo é o teste; se o `--strict` recusar o pacote, `strictVerify: false` é o ajuste.
 mac:
   target:
     - dmg
     - zip
   icon: build/icon.icns
   category: public.app-category.developer-tools
-  identity: null
+  identity: "-"
+  hardenedRuntime: false
+  notarize: false

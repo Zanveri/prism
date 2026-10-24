@@ -1,6 +1,6 @@
 // Gera os pacotes de uma plataforma (`pnpm dist -- <plataforma> [arquitetura]`): `win`, `linux` ou `mac`; sem argumento, a
-// da máquina. Os alvos de cada uma estão em `electron-builder.yml` (RN-ABERTO-006). Sem assinatura e sem publicação: nada de
-// token ou certificado.
+// da máquina. Os alvos de cada uma estão em `electron-builder.yml` (RN-ABERTO-006). Sem publicação e sem certificado: nada de
+// token ou segredo. O pacote de macOS leva a assinatura ad hoc do `electron-builder.yml`, que não pede certificado.
 //
 // No Linux, o `.deb` e o `.rpm` pedem a URL pública do projeto, que não está no repositório: a variável de ambiente
 // `PRISM_HOMEPAGE` (https://…) a traz. Sem ela, saem o AppImage e o `tar.gz`, o `dist` diz o que ficou de fora e termina com 0.
@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 
 import { apiExecutable, distPlatforms } from "./api-layout.mjs";
-import { planDist } from "./dist-plan.mjs";
+import { builderEnvironment, planDist } from "./dist-plan.mjs";
 import { dotnetNotices, dotnetStaging, fontLicenses, missingFiles, projectNotices, stageDotnetNotices } from "./licenses.mjs";
 
 const clientDir = join(import.meta.dirname, "..");
@@ -33,6 +33,8 @@ try {
   process.exit(1);
 }
 const { platform, arch, builderArgs, skipped, updateOrigin } = plan;
+// No macOS sem `CSC_*`: a assinatura é a ad hoc, e um certificado no ambiente não pode mudá-la sem querer.
+const childEnv = builderEnvironment(platform, process.env);
 
 if (skipped.length > 0) console.warn(`${skipped.join(" e ")} precisam da URL do projeto: defina PRISM_HOMEPAGE (https://…). Sem ela, ficam de fora.`);
 // RN-ATUALIZA-001: a origem é gravada no pacote aqui, e só aqui. Um pacote gerado à mão não procura atualização.
@@ -48,7 +50,7 @@ function binOf(name) {
 }
 
 function run(script, ...args) {
-  const result = spawnSync(process.execPath, [script, ...args], { cwd: clientDir, stdio: "inherit" });
+  const result = spawnSync(process.execPath, [script, ...args], { cwd: clientDir, stdio: "inherit", env: childEnv });
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

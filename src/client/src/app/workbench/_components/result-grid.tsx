@@ -9,9 +9,9 @@ import { isMacPlatform } from "@/lib/utils/platform";
 
 import { baseWidths, cellPadding, charWidth, fitWidth } from "../_lib/grid-columns";
 import { movementOf, moveCell, type GridCell } from "../_lib/grid-cursor";
-import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
+import { copiesAdvanced, copiesCell, deletesRows, filterKey, rowMarkClasses, rowShortcut, savesEdits, selectsAll, selectsColumns, selectsRows, type GridEditing, type RowMark } from "../_lib/grid-editing";
 import { cellAtPoint, columnStarts, edgeScroll, pageRows, type GridBox } from "../_lib/grid-pointer";
-import { choseWholeColumns, choseWholeRows, collapse, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
+import { choseWholeColumns, collapse, deleteKeyRows, dragColumns, dragRows, escapeCollapses, extend, extendByKey, extendColumns, extendRows, headerChosen, rowSpan, select, selectAll, selectColumn, selectRow, toggleColumn, toggleRow, wholeColumns, wholeColumnSet, wholeRows } from "../_lib/grid-selection";
 import { gridSelectionCopy } from "../_lib/grid-selection.copy";
 import { multiEditCopy } from "../_lib/multi-edit.copy";
 import type { EditValue } from "../_lib/record-edits";
@@ -94,17 +94,18 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
   const role = cellIdOf === undefined ? "cell" : "gridcell";
   const deleted = mark?.deleted === true;
   const rowChosen = selectedFrom >= 0;
+  const markClasses = rowMarkClasses(mark, rowChosen);
 
   return (
     // A linha com o campo de edição aberto fica por cima das outras (cada linha é um contexto de empilhamento, pelo `transform`): a dica do campo
     // (RN-EDIT-017) passa por cima da linha de baixo, e continua por baixo do cabeçalho preso.
-    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row) hover:bg-raised", mark?.failed && "bg-danger/15", editor !== null && "z-[15]")} style={{ transform: `translateY(${start}px)` }}>
+    <div role="row" aria-rowindex={index + 2} className={cn("group absolute top-0 left-0 h-(--grid-row) w-full border-b border-selected leading-(--grid-row)", markClasses.row, editor !== null && "z-[15]")} style={{ transform: `translateY(${start}px)` }}>
       <div
         role="rowheader"
         // Só na grade editável: a posição que o clique, o arraste e o botão direito no número da linha leem (RN-GRADE-001).
         {...(cellIdOf === undefined ? {} : { "data-rowheader": index })}
         title={mark?.kind === "new" ? editCopy.newRowMark : deleted ? editCopy.deletedMark : undefined}
-        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised", rowChosen && "bg-selected font-semibold text-ink group-hover:bg-selected", deleted && "line-through", mark?.failed && "font-semibold text-danger")}
+        className={cn("sticky left-0 z-10 h-full w-(--grid-gutter) border-r border-selected bg-panel px-2 text-right text-subtle group-hover:bg-raised", markClasses.number)}
       >
         {mark?.kind === "new" ? (
           <>
@@ -125,7 +126,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
         // pendência, da exclusão e da célula ativa. A escolhida tem o fundo de escolha do tema, o do item escolhido do navegador.
         const chosen = (rowChosen && item.index >= selectedFrom && item.index <= selectedTo) || wholeColumns?.has(item.index) === true;
         const cell = cellIdOf === undefined ? {} : { id: cellIdOf(index, item.index), "data-row": index, "data-col": item.index, "aria-selected": chosen };
-        const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", deleted && "text-subtle line-through");
+        const marked = cn(chosen && "bg-selected", activeColumn === item.index && "outline-2 -outline-offset-2 outline-accent", markClasses.cell);
 
         if (editor?.column === item.index) {
           return (
@@ -202,7 +203,7 @@ export const GridRow = memo(function GridRow({ index, start, row, columns, virtu
                 onClick={() => onFollow(item.index, value)}
                 title={copy.followTitle(link.table.name, link.column)}
                 aria-label={copy.followLabel(link.table.name, link.column, value)}
-                className="max-w-full cursor-pointer truncate text-left text-postgres underline underline-offset-[3px] hover:brightness-125"
+                className={cn("max-w-full cursor-pointer truncate text-left text-postgres underline underline-offset-[3px] hover:brightness-125", markClasses.cell)}
               >
                 {value}
               </button>
@@ -758,9 +759,10 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
       else editing.onDeleteRow();
       return;
     }
-    // RN-EDIT-015: o Delete sozinho exclui as linhas inteiras escolhidas, e só elas; com um retângulo, colunas inteiras ou só a célula ativa, a tecla não faz nada.
+    // RN-EDIT-015: o Delete sozinho marca na hora para exclusão as linhas das células escolhidas (a ativa, um retângulo, linhas inteiras), como o Alt+Delete;
+    // com colunas inteiras, a tecla não faz nada.
     if (deletesRows(event, platform)) {
-      if (choseWholeRows(editing.selection, editing.layout)) {
+      if (deleteKeyRows(editing.selection, editing.layout).length > 0) {
         event.preventDefault();
         editing.onDeleteRows();
       }
@@ -837,6 +839,8 @@ export const ResultGrid = memo(function ResultGrid({ columns, rows: read, trunca
   const editorElement =
     editor === null ? null : (
       <CellEditor
+        key={`${editor.row}:${editor.column}`}
+        typed={editor.touched === true}
         label={editCopy.editorLabel(columns[editor.column]?.name ?? "", editor.row < read.length ? editCopy.rowLabel(editor.row + 1) : editCopy.newRowMark)}
         draft={editor.draft}
         hint={editor.hint ?? null}

@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createHashRouter, RouterProvider } from "react-router";
 
 import { ApiGate } from "@/app/_components/api-gate";
+import { HistoryButtonsGuard } from "@/app/_components/history-buttons-guard";
 import { PeerSession } from "@/app/_components/peer-session";
 import { routes } from "@/app/routes";
 import { ToastProvider, useToast } from "@/components/ui";
@@ -38,6 +39,7 @@ export function App() {
       <ApiGate>
         <Queries>
           <PeerSession pathname={currentPath} navigate={navigateTo} />
+          <HistoryButtonsGuard />
           <RouterProvider router={router} />
         </Queries>
       </ApiGate>
